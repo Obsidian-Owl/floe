@@ -106,7 +106,7 @@ floe/
 ### Data Flow
 
 ```
-floe.yaml + platform-manifest.yaml
+floe.yaml + manifest.yaml
     │
     ▼
 floe-core (compile, enforce)

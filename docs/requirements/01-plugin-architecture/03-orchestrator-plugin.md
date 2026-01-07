@@ -96,7 +96,7 @@ OrchestratorPlugin defines the interface for all orchestration engines (Dagster,
 **Acceptance Criteria**:
 - [ ] Returns K8s ResourceRequirements dict with requests and limits
 - [ ] Default values appropriate for orchestrator (webserver, workers)
-- [ ] User can override via platform-manifest.yaml
+- [ ] User can override via manifest.yaml
 - [ ] Accounts for expected job concurrency
 
 **Enforcement**: Resource requirement tests, K8s deployment validation

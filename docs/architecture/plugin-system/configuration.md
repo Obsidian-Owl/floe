@@ -108,7 +108,7 @@ metadata:
 ```bash
 uv add floe-compute-trino
 
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute:
     type: trino

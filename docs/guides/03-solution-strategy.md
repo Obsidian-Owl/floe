@@ -45,7 +45,7 @@ floe uses a **platform enforcement architecture** where:
 
 | File | Owner | Purpose | Changes |
 |------|-------|---------|---------|
-| `platform-manifest.yaml` | Platform Team | Define guardrails (plugins, governance, naming) | Rarely (quarterly) |
+| `manifest.yaml` | Platform Team | Define guardrails (plugins, governance, naming) | Rarely (quarterly) |
 | `floe.yaml` | Data Engineers | Define pipelines (transforms, schedules) | Frequently (daily) |
 
 ### 2.3 Workflow
@@ -54,7 +54,7 @@ floe uses a **platform enforcement architecture** where:
 Platform Team                         Data Team
      │                                     │
      ▼                                     ▼
-platform-manifest.yaml              floe.yaml (pipelines)
+manifest.yaml              floe.yaml (pipelines)
      │                                     │
      ▼                                     ▼
 floe platform compile               floe compile
@@ -100,11 +100,11 @@ These define floe's core identity and are NOT pluggable:
 - **FusionDBTPlugin**: dbt Fusion (Rust-based, 30x faster parsing)
 - **CloudDBTPlugin**: dbt Cloud API (deferred to Epic 8+)
 
-Platform teams select the execution environment in `platform-manifest.yaml`. Data engineers use dbt framework features regardless of execution environment. See [ADR-0043](../architecture/adr/0043-dbt-runtime-abstraction.md) for details.
+Platform teams select the execution environment in `manifest.yaml`. Data engineers use dbt framework features regardless of execution environment. See [ADR-0043](../architecture/adr/0043-dbt-runtime-abstraction.md) for details.
 
 ### 3.2 Pluggable Components (Platform Team Choice)
 
-Platform Team selects these ONCE in `platform-manifest.yaml`. Data engineers inherit them:
+Platform Team selects these ONCE in `manifest.yaml`. Data engineers inherit them:
 
 | Component | Default | Alternatives |
 |-----------|---------|--------------|

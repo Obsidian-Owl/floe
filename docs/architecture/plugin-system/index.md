@@ -22,7 +22,7 @@ floe uses a plugin architecture for all configurable components:
 
 **Total:** 11 plugin types (per ADR-0037 Composability Principle)
 
-> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. Policy enforcement tooling is provided via DBTPlugin, and rules are configured via platform-manifest.yaml. Data contracts use ODCS v3 as an enforced standard.
+> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. Policy enforcement tooling is provided via DBTPlugin, and rules are configured via manifest.yaml. Data contracts use ODCS v3 as an enforced standard.
 
 > **Canonical Registry**: This table is the authoritative source for plugin type counts and entry points. All documentation references should link here.
 

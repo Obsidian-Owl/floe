@@ -451,7 +451,7 @@ resource "vault_kubernetes_auth_backend_role" "floe_runtime" {
 ### Compile-Time: Manifest → Profile
 
 ```
-platform-manifest.yaml                floe compile              profiles.yml
+manifest.yaml                floe compile              profiles.yml
        │                                   │                          │
        ▼                                   ▼                          ▼
 ┌──────────────────────┐           ┌─────────────────┐      ┌─────────────────────┐
@@ -614,7 +614,7 @@ def vend_credentials(
 ### AWS Secrets Manager + ESO
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   secrets:
     type: external-secrets
@@ -654,7 +654,7 @@ spec:
 ### GCP Secret Manager + ESO
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   secrets:
     type: external-secrets
@@ -684,7 +684,7 @@ spec:
 ### Azure Key Vault + ESO
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   secrets:
     type: external-secrets
@@ -716,7 +716,7 @@ spec:
 ## Configuration Schema
 
 ```yaml
-# platform-manifest.yaml - full secrets configuration
+# manifest.yaml - full secrets configuration
 plugins:
   secrets:
     type: k8s | external-secrets | vault
@@ -791,7 +791,7 @@ floe secrets rotate snowflake-credentials --restart-deployments
 # Validate secret references
 floe secrets validate
 # Output:
-# Validating secret references in platform-manifest.yaml...
+# Validating secret references in manifest.yaml...
 # ✓ snowflake-credentials: exists, 3 keys
 # ✓ catalog-credentials: exists, 2 keys
 # ✗ salesforce-credentials: NOT FOUND

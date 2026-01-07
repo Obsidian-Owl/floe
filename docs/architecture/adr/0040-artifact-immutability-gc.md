@@ -76,7 +76,7 @@ Adopt **registry-native tag immutability** with **configurable garbage collectio
 **Platform Requirement:**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     type: harbor  # MUST be: harbor | ecr | acr | gar
@@ -128,7 +128,7 @@ def push_artifact(version: str, environment: str) -> None:
 
 **Default Policy (Conservative):**
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   retention:
     keep_last_versions: 10          # Latest 10 releases (user-selected: conservative)
@@ -235,7 +235,7 @@ active → deprecated → eol → deleted
 **Lifecycle Configuration:**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   lifecycle:
     deprecation_policy:
@@ -396,7 +396,7 @@ harbor:
 **Cloud Registry Setup:**
 
 ```yaml
-# platform-manifest.yaml (AWS ECR)
+# manifest.yaml (AWS ECR)
 artifacts:
   registry:
     type: ecr
@@ -432,14 +432,14 @@ spec:
             - platform
             - gc
             - --apply
-            - --config=/etc/floe/platform-manifest.yaml
+            - --config=/etc/floe/manifest.yaml
           restartPolicy: OnFailure
 ```
 
 ### Configuration Schema
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     type: harbor | ecr | acr | gar  # MUST have native immutability

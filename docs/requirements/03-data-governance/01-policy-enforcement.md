@@ -8,7 +8,7 @@
 
 This group of requirements defines the PolicyEnforcer **core module** (not plugin), compile-time validation hooks, and enforcement mechanisms that ensure data products comply with platform-defined policies before runtime.
 
-> **Note:** PolicyEnforcer is now a **core module** in floe-core, not a plugin. Policy enforcement tooling is provided via DBTPlugin (linting), and rules are configured via platform-manifest.yaml.
+> **Note:** PolicyEnforcer is now a **core module** in floe-core, not a plugin. Policy enforcement tooling is provided via DBTPlugin (linting), and rules are configured via manifest.yaml.
 
 **Key Principle**: Non-compliant pipelines fail before runtime (ADR-0016)
 
@@ -24,7 +24,7 @@ This group of requirements defines the PolicyEnforcer **core module** (not plugi
 - [ ] PolicyEnforcer module defined in floe-core
 - [ ] Methods: validate_data_product, enforce_naming, validate_data_contracts, check_classification_compliance, validate_product_identity
 - [ ] PolicyEnforcer is a core module (not pluggable)
-- [ ] Configuration via platform-manifest.yaml governance section
+- [ ] Configuration via manifest.yaml governance section
 - [ ] Default implementation provided
 
 **Enforcement**:
@@ -198,7 +198,7 @@ This group of requirements defines the PolicyEnforcer **core module** (not plugi
 - [ ] Supports structure rules: check-model-has-tests, check-model-has-description, check-source-has-freshness
 - [ ] Validates test coverage >= platform-configured threshold (e.g., 80%)
 - [ ] Validates column documentation completeness
-- [ ] Configuration via platform-manifest.yaml (enforcement level: off, warn, strict)
+- [ ] Configuration via manifest.yaml (enforcement level: off, warn, strict)
 - [ ] dbt-checkpoint violations block compilation (when enforcement=strict)
 - [ ] Reports detailed structure violations with suggestions
 
@@ -254,7 +254,7 @@ This group of requirements defines the PolicyEnforcer **core module** (not plugi
 
 **Acceptance Criteria**:
 - [ ] PolicyEnforcer.validate_sql_linting_policy() checks DBTPlugin linting was executed
-- [ ] Validates linting results against platform-manifest.yaml policy (error/warning/disabled)
+- [ ] Validates linting results against manifest.yaml policy (error/warning/disabled)
 - [ ] If policy=error and linting errors exist → block compilation
 - [ ] If policy=warning and linting errors exist → log warnings, continue
 - [ ] If policy=disabled → skip linting validation
@@ -271,7 +271,7 @@ This group of requirements defines the PolicyEnforcer **core module** (not plugi
 - FORBIDDEN to bypass linting when policy=error
 - MUST support platform-configured enforcement levels
 
-**Example Configuration (platform-manifest.yaml)**:
+**Example Configuration (manifest.yaml)**:
 ```yaml
 plugins:
   dbt_compiler:
@@ -500,7 +500,7 @@ def validate_sql_linting_policy(
 
 ### REQ-212: Policy Configuration via platform-manifest **[New]**
 
-**Requirement**: Platform team MUST define all policies in platform-manifest.yaml (governance section).
+**Requirement**: Platform team MUST define all policies in manifest.yaml (governance section).
 
 **Rationale**: Single source of truth for platform policies.
 

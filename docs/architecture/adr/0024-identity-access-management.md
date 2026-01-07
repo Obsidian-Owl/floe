@@ -487,7 +487,7 @@ For Data Mesh deployments, Keycloak realms map to domains:
 
 **Realm-to-Namespace Mapping:**
 ```yaml
-# platform-manifest.yaml (Data Mesh mode)
+# manifest.yaml (Data Mesh mode)
 identity:
   type: keycloak
   config:
@@ -685,7 +685,7 @@ class ExternalIdPPlugin(IdentityPlugin):
 ## Configuration Schema
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   identity:
     type: keycloak | dex | authentik | zitadel | external

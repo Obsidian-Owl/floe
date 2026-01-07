@@ -33,7 +33,7 @@ floe init my-product --domain oci://registry.example.com/sales-domain:v1.0.0
 
 ```
 my-product/
-├── data-product.yaml          # Data product definition
+├── floe.yaml          # Data product definition
 ├── datacontract.yaml          # Optional: explicit data contract
 ├── models/
 │   ├── bronze/
@@ -47,7 +47,7 @@ my-product/
 └── README.md
 ```
 
-### data-product.yaml
+### floe.yaml
 
 ```yaml
 apiVersion: floe.dev/v1
@@ -174,7 +174,7 @@ slaProperties:
 ```bash
 $ floe validate
 
-[1/4] Validating data-product.yaml
+[1/4] Validating floe.yaml
       ✓ Schema valid
       ✓ Platform reference resolved
 
@@ -199,7 +199,7 @@ Validation PASSED
 
 | Check | Description |
 |-------|-------------|
-| Schema | data-product.yaml matches Pydantic schema |
+| Schema | floe.yaml matches Pydantic schema |
 | Platform | Manifest reference resolves |
 | dbt | Models compile without errors |
 | Naming | Models follow naming conventions |
@@ -287,7 +287,7 @@ $ floe compile
 Compilation FAILED
 ```
 
-The `repository` field in `data-product.yaml` is used to verify ownership:
+The `repository` field in `floe.yaml` is used to verify ownership:
 
 ```yaml
 metadata:

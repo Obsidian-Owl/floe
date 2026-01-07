@@ -40,7 +40,7 @@ schedule:
   cron: "0 6 * * *"
 ```
 
-The platform configuration (compute target, governance, naming conventions) is defined separately in `platform-manifest.yaml` by the Platform Team. See [03-solution-strategy](03-solution-strategy.md) for details on the two-file configuration model.
+The platform configuration (compute target, governance, naming conventions) is defined separately in `manifest.yaml` by the Platform Team. See [03-solution-strategy](03-solution-strategy.md) for details on the two-file configuration model.
 
 ---
 

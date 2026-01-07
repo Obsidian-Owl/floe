@@ -11,8 +11,8 @@ Data products in floe currently lack a mechanism to prevent naming collisions in
 ### The Problem
 
 **Scenario**: Two teams independently create data products:
-- Team A: `data-product.yaml` with `name: sales-customers`
-- Team B: `data-product.yaml` with `name: sales-customers`
+- Team A: `floe.yaml` with `name: sales-customers`
+- Team B: `floe.yaml` with `name: sales-customers`
 
 Both compile and deploy successfully, but:
 - Tables overwrite each other
@@ -272,7 +272,7 @@ Identity validation occurs during `floe compile`:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         floe compile                                         │
 │                                                                              │
-│  1. Parse data-product.yaml                                                  │
+│  1. Parse floe.yaml                                                  │
 │     └── Extract: name, domain, version, repository                          │
 │                                                                              │
 │  2. Generate Product ID                                                      │
@@ -415,12 +415,12 @@ registered_products:              # Auto-updated by compile
 | Catalog-Only | Iceberg namespace properties | Compile-time check | Simple deployments |
 | Domain + Catalog | Domain manifest + catalog | Two-phase validation | Data Mesh governance |
 
-### data-product.yaml Extension
+### floe.yaml Extension
 
 Add `repository` field for ownership verification:
 
 ```yaml
-# data-product.yaml
+# floe.yaml
 apiVersion: floe.dev/v1
 kind: DataProduct
 metadata:
@@ -490,7 +490,7 @@ For existing deployments without namespace registration:
 3. **Phase 3 (Enforce)**: Require registration, fail on conflicts
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 identity:
   enforcement: warn    # off | warn | register | enforce
   auto_register: true  # Auto-register unregistered products

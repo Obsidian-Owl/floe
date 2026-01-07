@@ -439,7 +439,7 @@ models/
 For Kimball dimensional models, dimensions are the natural place for SCD:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_architecture:
   pattern: kimball
 

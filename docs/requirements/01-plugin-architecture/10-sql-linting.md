@@ -76,7 +76,7 @@ The LocalDBTPlugin implementation SHALL delegate SQL linting to SQLFluff with di
 5. Supports auto-fix via `--fix` flag when `fix=True`
 6. Returns empty `ProjectLintResult` if SQLFluff not installed (logs warning)
 7. Reads `.sqlfluff` config file if exists in project root
-8. Allows platform team to override SQLFluff rules in `platform-manifest.yaml`
+8. Allows platform team to override SQLFluff rules in `manifest.yaml`
 
 ### Implementation Notes
 
@@ -187,7 +187,7 @@ dbt Fusion's Rust-based static analysis provides superior performance and dialec
 
 ### Requirement Statement
 
-The `platform-manifest.yaml` SHALL allow platform teams to configure SQL linting enforcement level (error/warning/disabled) and linting rules.
+The `manifest.yaml` SHALL allow platform teams to configure SQL linting enforcement level (error/warning/disabled) and linting rules.
 
 ### Acceptance Criteria
 

@@ -6,7 +6,7 @@
 
 ## Overview
 
-This group of requirements defines the `floe compile` workflow that transforms data-product.yaml + platform-manifest into compiled artifacts ready for execution.
+This group of requirements defines the `floe compile` workflow that transforms floe.yaml + platform-manifest into compiled artifacts ready for execution.
 
 **Key Principle**: Compile-time validation prevents runtime failures
 

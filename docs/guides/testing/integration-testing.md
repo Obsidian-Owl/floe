@@ -157,7 +157,7 @@ metadata:
   version: "1.0"
 
 platform:
-  ref: file://./platform-manifest.yaml  # Local platform config for testing
+  ref: file://./manifest.yaml  # Local platform config for testing
 
 transforms:
   - type: dbt

@@ -126,7 +126,7 @@ schema = Model.model_json_schema()  # NOT .schema()
 ## Contract-Based Architecture (REFERENCE)
 
 **See `docs/architecture/` for**:
-- Two-tier configuration (platform-manifest.yaml + floe.yaml)
+- Two-tier configuration (manifest.yaml + floe.yaml)
 - CompiledArtifacts schema design
 - Contract versioning (MAJOR/MINOR/PATCH rules)
 - Backward compatibility patterns

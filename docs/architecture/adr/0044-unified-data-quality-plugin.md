@@ -314,7 +314,7 @@ custom = "floe_dq_custom:CustomPlugin"
 ### Platform Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 apiVersion: floe.dev/v1
 kind: Manifest
 metadata:

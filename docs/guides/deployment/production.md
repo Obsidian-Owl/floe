@@ -159,7 +159,7 @@ spec:
 The Dagster daemon is a single-instance service by design. floe provides configurable daemon modes:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 orchestrator:
   type: dagster
   daemon:

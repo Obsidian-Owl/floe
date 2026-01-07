@@ -402,7 +402,7 @@ class CubeSemanticLayerPlugin(SemanticLayerPlugin):
 ### Platform Manifest
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute:
     type: duckdb  # or snowflake, spark

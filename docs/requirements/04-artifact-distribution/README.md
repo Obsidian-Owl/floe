@@ -29,7 +29,7 @@ Without artifact distribution, platform teams cannot:
 ```
 Platform Team                    OCI Registry                Data Teams
      │                               │                            │
-     │  platform-manifest.yaml       │                            │
+     │  manifest.yaml       │                            │
      │         │                     │                            │
      │         ▼                     │                            │
      │  [floe platform compile]      │                            │

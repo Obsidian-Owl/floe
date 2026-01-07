@@ -23,7 +23,7 @@ floe needs to support these patterns while enforcing consistency within each pat
 
 ## Decision
 
-Support multiple data architecture patterns via `platform-manifest.yaml`, with **medallion** as the default. Additionally, support **Data Mesh** as an organizational pattern that can be layered on top of any modeling pattern.
+Support multiple data architecture patterns via `manifest.yaml`, with **medallion** as the default. Additionally, support **Data Mesh** as an organizational pattern that can be layered on top of any modeling pattern.
 
 ### Supported Patterns
 
@@ -102,7 +102,7 @@ Support multiple data architecture patterns via `platform-manifest.yaml`, with *
 ### Platform Manifest
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_architecture:
   pattern: medallion  # medallion | kimball | data_vault | hybrid
 
@@ -278,7 +278,7 @@ Fix naming and quality violations, then re-run `floe compile`
 When changing patterns, a migration is required:
 
 ```bash
-# 1. Update platform-manifest.yaml
+# 1. Update manifest.yaml
 data_architecture:
   pattern: kimball  # Changed from medallion
 
@@ -329,7 +329,7 @@ Each layer maps to a catalog namespace:
 | gold | `gold` | Analysts: READ, BI Tools: READ |
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 catalog_structure:
   namespaces:
     - name: bronze
@@ -560,7 +560,7 @@ services:
 Data Products are the unit of deployment in Data Mesh:
 
 ```yaml
-# domains/sales/products/customer-360/data-product.yaml
+# domains/sales/products/customer-360/floe.yaml
 apiVersion: floe.dev/v1
 kind: DataProduct
 metadata:

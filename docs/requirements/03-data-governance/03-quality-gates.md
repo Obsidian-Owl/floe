@@ -57,7 +57,7 @@ This group of requirements defines quality gate validation, runtime SLA monitori
 **Rationale**: Prevents non-compliant pipelines from being deployed through early validation.
 
 **Acceptance Criteria**:
-- [ ] Quality gates loaded from platform-manifest.yaml (plugins.data_quality.config)
+- [ ] Quality gates loaded from manifest.yaml (plugins.data_quality.config)
 - [ ] Compiler calls DataQualityPlugin.validate_quality_gates() after dbt manifest parsing
 - [ ] Stateless validation only (no data access at compile-time)
 - [ ] Gate violations reported with severity and remediation

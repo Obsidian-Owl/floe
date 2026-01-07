@@ -656,7 +656,7 @@ def customers(context):
 
 ### Configuration Schema
 
-**platform-manifest.yaml** extension:
+**manifest.yaml** extension:
 
 ```yaml
 # Platform Team selects dbt runtime
@@ -834,7 +834,7 @@ def test_local_dbt_compile_and_run(tmp_path: Path):
 ### Traceability
 
 - **Domain 01**: Plugin Architecture (NEW: DBTPlugin as 12th plugin type)
-- **Domain 02**: Configuration Management (platform-manifest.yaml extension)
+- **Domain 02**: Configuration Management (manifest.yaml extension)
 - **Domain 03**: Data Governance (no impact - PolicyEnforcer validates manifest.json regardless of runtime)
 
 ---

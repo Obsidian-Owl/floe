@@ -246,7 +246,7 @@ Polaris uses OAuth2 Client Credentials flow for service-to-service authenticatio
 **Configuration:**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   catalog:
     type: polaris
@@ -431,7 +431,7 @@ spec:
 | Air-gapped / regulated | Service mesh + mTLS + audit | Full service mesh with access logging |
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 security:
   telemetry:
     # Options: network_policy (default) | service_mesh
@@ -771,7 +771,7 @@ def audit_catalog_access(user: str, table: str, operation: str):
 ## Configuration Schema
 
 ```yaml
-# platform-manifest.yaml security section
+# manifest.yaml security section
 security:
   # Pod Security Standards enforcement
   pod_security:

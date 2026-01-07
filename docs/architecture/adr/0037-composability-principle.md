@@ -137,12 +137,12 @@ floe uses plugin interfaces for extensibility. 11 plugin types exist.
 
 ```yaml
 # ✅ Simple: 2-tier configuration (single-team)
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute: duckdb
   catalog: polaris
 
-# data-product.yaml
+# floe.yaml
 transforms:
   - type: dbt
     path: models/
@@ -158,7 +158,7 @@ plugins:
 scope: domain  # NEW FIELD - inherits enterprise defaults
 approved_products: [sales, marketing]
 
-# data-product.yaml
+# floe.yaml
 # Unchanged - same schema as 2-tier
 transforms:
   - type: dbt
@@ -296,7 +296,7 @@ datadog = "floe_observability_datadog:DatadogPlugin"
 **Before (Configuration Switch - Coupled):**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 observability:
   backend: jaeger  # Hardcoded if/else in core
   jaeger:
@@ -307,7 +307,7 @@ observability:
 **After (Plugin Interface - Composable):**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   observability: jaeger  # Plugin name
 

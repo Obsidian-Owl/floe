@@ -49,7 +49,7 @@ Policy enforcement fails these criteria:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 2: CONFIGURATION (platform-manifest.yaml)                │
+│  Layer 2: CONFIGURATION (manifest.yaml)                │
 │                                                                 │
 │  governance:                                                    │
 │    naming:                                                      │
@@ -97,7 +97,7 @@ class EnforcementEngine:
 
         Args:
             manifest: Parsed dbt manifest.json
-            config: Governance config from platform-manifest.yaml
+            config: Governance config from manifest.yaml
 
         Returns:
             EnforcementResult with violations and severity
@@ -136,7 +136,7 @@ class EnforcementEngine:
 ### Configuration Schema
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 governance:
   naming:
     enforcement: strict  # off | warn | strict

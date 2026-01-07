@@ -53,7 +53,7 @@ Options considered:
 Compute target is set ONCE at the **platform level**, not per-environment. This prevents drift between dev/staging/prod.
 
 ```yaml
-# platform-manifest.yaml (Platform Team)
+# manifest.yaml (Platform Team)
 plugins:
   compute:
     type: duckdb  # Set ONCE, inherited by all pipelines
@@ -117,7 +117,7 @@ type ComputeConfig struct {
 Valid configuration - Platform Team chooses DuckDB for all environments:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute:
     type: duckdb
@@ -286,7 +286,7 @@ class SparkComputePlugin(ComputePlugin):
 
 ## Compute Plugin Selection
 
-Platform Team selects compute ONCE in `platform-manifest.yaml`:
+Platform Team selects compute ONCE in `manifest.yaml`:
 
 ```yaml
 plugins:

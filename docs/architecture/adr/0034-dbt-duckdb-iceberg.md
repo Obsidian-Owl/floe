@@ -201,7 +201,7 @@ WHERE is_active = true
 ### Environment Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute:
     type: duckdb

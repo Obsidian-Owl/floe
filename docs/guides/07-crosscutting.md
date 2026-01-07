@@ -261,7 +261,7 @@ class LineageEmitter:
 │   4. floe.yaml (project configuration)                                      │
 │      └── floe.yaml                                                          │
 │                                                                              │
-│   5. platform-manifest.yaml (platform constraints)                          │
+│   5. manifest.yaml (platform constraints)                          │
 │      └── Inherited, cannot override                                         │
 │                                                                              │
 │   6. Default values (built-in)                                              │
@@ -315,7 +315,7 @@ For Data Mesh deployments, configuration inheritance follows the three-tier hier
 ### 2.3 Secret Management
 
 ```yaml
-# platform-manifest.yaml - Compute and secret configuration (Platform Team)
+# manifest.yaml - Compute and secret configuration (Platform Team)
 plugins:
   compute:
     type: snowflake

@@ -73,7 +73,7 @@ metadata:
   version: "1.0"
 
 platform:
-  ref: oci://registry.example.com/floe-platform:v1.0.0  # Or file://./platform-manifest.yaml
+  ref: oci://registry.example.com/floe-platform:v1.0.0  # Or file://./manifest.yaml
 
 transforms:
   - type: dbt

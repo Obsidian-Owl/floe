@@ -42,7 +42,7 @@ This group of requirements defines artifact signing using cosign and signature v
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   signing:
     enabled: true
@@ -151,7 +151,7 @@ floe platform publish v1.2.3 --key cosign.key
 
 **Configuration**:
 ```yaml
-# floe.yaml or platform-manifest.yaml
+# floe.yaml or manifest.yaml
 artifacts:
   signing:
     enforcement: warn | enforce | off  # Default: warn
@@ -264,7 +264,7 @@ security:
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml (optional)
+# manifest.yaml (optional)
 artifacts:
   signing:
     rekor:
@@ -380,7 +380,7 @@ Debug:
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   signing:
     certificate_rotation:

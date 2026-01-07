@@ -36,7 +36,7 @@ oci://registry.example.com/
 ### Amazon ECR
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     uri: oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe
@@ -74,7 +74,7 @@ artifacts:
 ### Azure Container Registry
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     uri: oci://myregistry.azurecr.io/floe
@@ -85,7 +85,7 @@ artifacts:
 ### Google Artifact Registry
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     uri: oci://us-central1-docker.pkg.dev/my-project/floe
@@ -96,7 +96,7 @@ artifacts:
 ### GitHub Container Registry
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     uri: oci://ghcr.io/my-org/floe
@@ -108,7 +108,7 @@ artifacts:
 ### Harbor (Air-Gapped)
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     uri: oci://harbor.internal.company.com/floe
@@ -130,7 +130,7 @@ floe supports artifact signing via [cosign](https://github.com/sigstore/cosign) 
 Signature verification is **configurable per environment**:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   signing:
     enabled: true
@@ -293,7 +293,7 @@ Registry unavailability can block platform deployments and compilations. This se
 All OCI operations use exponential backoff with jitter:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     uri: oci://ghcr.io/my-org/floe
@@ -506,7 +506,7 @@ Docker Hub has rate limits (100 pulls/6 hours for anonymous). **Not recommended 
 Configure registry mirror for rate-limited or slow registries:
 
 ```yaml
-# platform-manifest.yaml (optional)
+# manifest.yaml (optional)
 artifacts:
   registry:
     uri: oci://ghcr.io/my-org/floe

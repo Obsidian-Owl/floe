@@ -266,7 +266,7 @@ Examples:
 ### Ingress
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 services:
   orchestrator:
     ingress:

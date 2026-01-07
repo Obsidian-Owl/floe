@@ -50,7 +50,7 @@ MinIO is the recommended object storage for local development and self-hosted de
 - Supports versioning for backup/recovery
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 storage:
   type: minio
   warehouse_path: s3://floe-warehouse/iceberg
@@ -65,7 +65,7 @@ storage:
 For production on AWS, use IAM Roles for Service Accounts (IRSA):
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 storage:
   type: s3
   warehouse_path: s3://my-company-data-lake/floe/iceberg
@@ -101,7 +101,7 @@ storage:
 For production on GCP, use Workload Identity:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 storage:
   type: gcs
   warehouse_path: gs://my-company-data-lake/floe/iceberg
@@ -115,7 +115,7 @@ storage:
 For production on Azure, use Managed Identity:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 storage:
   type: azure
   warehouse_path: abfss://data@mystorageaccount.dfs.core.windows.net/floe/iceberg
@@ -244,7 +244,7 @@ Not all compute engines support all storage backends. The PolicyEnforcer validat
 For GCP/Azure deployments, use MinIO as the storage layer, which provides S3-compatible access for DuckDB while running on cloud-native infrastructure:
 
 ```yaml
-# platform-manifest.yaml (GCP deployment with MinIO)
+# manifest.yaml (GCP deployment with MinIO)
 storage:
   type: minio
   warehouse_path: s3://floe-warehouse/iceberg
@@ -276,7 +276,7 @@ mc version enable minio/floe-warehouse
 Iceberg maintains table history via snapshots. Configure retention in the Manifest:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_architecture:
   iceberg:
     snapshot_retention_days: 7
@@ -314,7 +314,7 @@ backups:
 Iceberg target file size affects query performance:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_architecture:
   iceberg:
     target_file_size_mb: 512  # 512 MB files (default)
@@ -327,7 +327,7 @@ data_architecture:
 Configure automatic compaction to merge small files:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_architecture:
   iceberg:
     compaction:

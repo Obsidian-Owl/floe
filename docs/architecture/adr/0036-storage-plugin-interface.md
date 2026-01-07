@@ -263,7 +263,7 @@ minio = "floe_storage_minio:MinIOPlugin"
 ### Platform Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   storage: s3  # Plugin name (discovered via entry points)
 

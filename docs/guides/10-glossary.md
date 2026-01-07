@@ -85,7 +85,7 @@ A deployment context (dev, preview, staging, production). Each environment can h
 ## F
 
 ### floe.yaml
-The declarative configuration file that defines a data pipeline (Data Team). Specifies transforms and schedules. Inherits platform configuration from `platform-manifest.yaml`.
+The declarative configuration file that defines a data pipeline (Data Team). Specifies transforms and schedules. Inherits platform configuration from `manifest.yaml`.
 
 ### DataProduct
 See [Shared Glossary](../contracts/glossary.md#dataproduct).
@@ -186,7 +186,7 @@ OpenTelemetry Protocol—the wire format for exporting telemetry data.
 
 ## P
 
-### platform-manifest.yaml
+### manifest.yaml
 The platform configuration file (Platform Team). Defines compute target, plugins, governance policies, naming conventions, and quality gates. Compiled to immutable OCI artifacts.
 
 ### Pipeline

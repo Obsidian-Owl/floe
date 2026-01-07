@@ -201,7 +201,7 @@ spec:
 
 ### REQ-429: No Hardcoded Secrets in Configuration **[New]**
 
-**Requirement**: System MUST prevent hardcoded secrets in configuration files (platform-manifest.yaml, floe.yaml, Helm values). All secrets MUST be referenced via SecretReference (Kubernetes Secrets, External Secrets, or Vault).
+**Requirement**: System MUST prevent hardcoded secrets in configuration files (manifest.yaml, floe.yaml, Helm values). All secrets MUST be referenced via SecretReference (Kubernetes Secrets, External Secrets, or Vault).
 
 **Rationale**: Prevents accidental secret exposure in logs, diffs, and version control.
 
@@ -587,7 +587,7 @@ spec:
 **Rationale**: Catches secret configuration errors before deployment.
 
 **Acceptance Criteria**:
-- [ ] CI/CD job validates secret references in platform-manifest.yaml
+- [ ] CI/CD job validates secret references in manifest.yaml
 - [ ] CI/CD job runs secret scanning (truffleHog, gitGuardian, Aikido)
 - [ ] CI/CD job validates secret naming convention: {service}-{environment}-credentials
 - [ ] CI/CD job checks referenced secrets exist in K8s cluster
@@ -611,7 +611,7 @@ spec:
 floe secrets validate
 
 # Output:
-# Validating secret references in platform-manifest.yaml...
+# Validating secret references in manifest.yaml...
 # ✓ snowflake-credentials: exists, 3 keys
 # ✓ catalog-credentials: exists, 2 keys
 # ✗ salesforce-credentials: NOT FOUND

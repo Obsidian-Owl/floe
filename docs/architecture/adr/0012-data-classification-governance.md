@@ -214,7 +214,7 @@ Quality gates integrate with the governance model to enforce data quality at com
 
 ### Quality Gate Configuration
 
-Defined in `platform-manifest.yaml` by Platform Team:
+Defined in `manifest.yaml` by Platform Team:
 
 ```yaml
 governance:

@@ -24,7 +24,7 @@ We need an architecture that:
 Adopt a **platform enforcement architecture** with:
 
 1. **Two-File Configuration Model**
-   - `platform-manifest.yaml` - Platform Team defines guardrails (immutable)
+   - `manifest.yaml` - Platform Team defines guardrails (immutable)
    - `floe.yaml` - Data Engineers define pipelines (inherits platform constraints)
 
 2. **Immutable Platform Artifacts**
@@ -67,7 +67,7 @@ Adopt a **platform enforcement architecture** with:
 
 ## Configuration Model
 
-### platform-manifest.yaml (Platform Team)
+### manifest.yaml (Platform Team)
 
 ```yaml
 apiVersion: floe.dev/v1
@@ -178,7 +178,7 @@ The platform enforcement model defines four distinct layers with clear ownership
 │  LAYER 2: CONFIGURATION (Enforcement)                                        │
 │  Owner: Platform Engineers                                                   │
 │  Storage: OCI Registry (immutable, versioned)                               │
-│  Config: platform-manifest.yaml                                             │
+│  Config: manifest.yaml                                             │
 │                                                                              │
 │  • Plugin selection (compute, orchestrator, catalog, semantic, ingestion)  │
 │  • Governance policies (classification, access control, retention)         │
@@ -242,7 +242,7 @@ oci://registry.example.com/floe-platform:v1.2.3
 
 ```bash
 # 1. Edit platform configuration
-vim platform-manifest.yaml
+vim manifest.yaml
 
 # 2. Validate and build artifacts
 floe platform compile
@@ -300,7 +300,7 @@ Enterprise Platform (enterprise-manifest.yaml)
 Domain Platform (domain-manifest.yaml)
        │ Domain-specific choices, domain namespace
        ▼
-Data Products (data-product.yaml)
+Data Products (floe.yaml)
        │ Input/output ports, SLAs, contracts
 ```
 

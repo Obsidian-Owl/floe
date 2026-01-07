@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Platform artifacts (platform-manifest.yaml + policies) need to progress through environments with validation gates and approval workflows:
+Platform artifacts (manifest.yaml + policies) need to progress through environments with validation gates and approval workflows:
 
 ```
 dev → staging → production
@@ -97,10 +97,10 @@ floe platform promote v1.2.3 --from=staging --to=prod
 
 ### Validation Gates
 
-**Configurable per environment in platform-manifest.yaml:**
+**Configurable per environment in manifest.yaml:**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   promotion:
     gates:
@@ -223,7 +223,7 @@ platform:
 **REQ-337: Multi-region and DR scenarios**
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     primary:
@@ -347,7 +347,7 @@ floe platform list --env=<env>
 ### Configuration Schema
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   promotion:
     gates:  # Per-environment validation gates

@@ -44,7 +44,7 @@ These standards define floe's core identity:
 
 ### PLUGGABLE Components (Platform Team Choice)
 
-Platform Team selects these ONCE in `platform-manifest.yaml`. Data Engineers inherit them:
+Platform Team selects these ONCE in `manifest.yaml`. Data Engineers inherit them:
 
 | Component | Default | Alternatives |
 |-----------|---------|--------------|
@@ -192,7 +192,7 @@ backend = registry.discover("floe.observability")[config["type"]]
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  platform-manifest.yaml                                                  │
+│  manifest.yaml                                                  │
 │                                                                          │
 │  plugins:                                                                │
 │    compute:                                                              │
@@ -244,7 +244,7 @@ transforms:
 
 ```yaml
 # BAD: Different compute per environment causes drift
-# platform-manifest.yaml
+# manifest.yaml
 environments:
   development:
     compute: duckdb      # ❌ Causes "works in dev, fails in prod"
@@ -256,7 +256,7 @@ environments:
 
 ```yaml
 # GOOD: Single compute target, no drift
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute:
     type: snowflake  # ✓ Same for dev, staging, prod

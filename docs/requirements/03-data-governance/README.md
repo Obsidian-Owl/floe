@@ -60,7 +60,7 @@ Data Product (Pipeline execution)
 
 ## Configuration Model
 
-### platform-manifest.yaml (Platform Team)
+### manifest.yaml (Platform Team)
 
 Defines governance policies that ALL data products must follow:
 

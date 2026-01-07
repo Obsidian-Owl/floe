@@ -571,13 +571,13 @@ This group of requirements defines the data contract model, ODCS v3 adoption (en
 
 ### REQ-238: Explicit Contract Files (datacontract.yaml) **[New]**
 
-**Requirement**: Data products MAY provide explicit datacontract.yaml alongside data-product.yaml.
+**Requirement**: Data products MAY provide explicit datacontract.yaml alongside floe.yaml.
 
 **Rationale**: Allows teams to define detailed contracts beyond auto-generation.
 
 **Acceptance Criteria**:
-- [ ] datacontract.yaml parsed alongside data-product.yaml
-- [ ] File location: same directory as data-product.yaml
+- [ ] datacontract.yaml parsed alongside floe.yaml
+- [ ] File location: same directory as floe.yaml
 - [ ] Explicit contract overrides generated contract
 - [ ] Merging applies: generated base, explicit overrides
 - [ ] Validation ensures merged contract is valid ODCS v3

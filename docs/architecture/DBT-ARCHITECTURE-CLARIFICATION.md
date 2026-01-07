@@ -250,11 +250,11 @@ dbt.invoke(["run", "--select", "customers"])
 ### Layer 2: CONFIGURATION (Immutable Artifacts)
 
 **Components**:
-- `platform-manifest.yaml`: Platform governance (plugins, policies, approved products)
+- `manifest.yaml`: Platform governance (plugins, policies, approved products)
 - `floe.yaml`: Data product definition (transforms, schedules, dependencies)
 - **CompiledArtifacts**: Immutable contract (manifest.json, profiles.yml, configs)
 
-**Plugin Selection** (in platform-manifest.yaml):
+**Plugin Selection** (in manifest.yaml):
 
 ```yaml
 plugins:
@@ -307,7 +307,7 @@ plugins:
   - Performance optimizations
   - Local execution (no cloud dependency)
 
-**Platform Team Decision**: Select runtime in `platform-manifest.yaml`
+**Platform Team Decision**: Select runtime in `manifest.yaml`
 **Data Team Input**: None (transparent to data engineers)
 ```
 
@@ -395,7 +395,7 @@ from floe_core.plugin_interfaces import DBTRuntimePlugin
 def dbt_runtime_resource() -> DBTRuntimePlugin:
     """Dagster resource for DBTRuntimePlugin.
 
-    Resolves plugin from platform-manifest.yaml configuration.
+    Resolves plugin from manifest.yaml configuration.
     """
     registry = PluginRegistry()
     return registry.get_plugin("dbt_runtimes", "local")  # Read from config

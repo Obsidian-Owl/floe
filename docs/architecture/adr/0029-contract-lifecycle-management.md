@@ -249,7 +249,7 @@ class ContractMonitor:
 
 Contracts are discoverable via:
 
-1. **Git repository**: `datacontract.yaml` alongside `data-product.yaml`
+1. **Git repository**: `datacontract.yaml` alongside `floe.yaml`
 2. **Compiled artifacts**: `CompiledArtifacts.data_contracts[]`
 3. **Catalog integration**: Registered in Polaris/Unity Catalog metadata
 

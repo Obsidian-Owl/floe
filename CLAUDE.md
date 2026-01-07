@@ -57,7 +57,7 @@ make demo-e2e          # End-to-end validation
 
 ```
 Layer 1: FOUNDATION     → PyPI packages, plugin interfaces
-Layer 2: CONFIGURATION  → OCI registry artifacts (platform-manifest.yaml)
+Layer 2: CONFIGURATION  → OCI registry artifacts (manifest.yaml)
 Layer 3: SERVICES       → K8s Deployments (Dagster, Polaris, Cube)
 Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 ```
@@ -70,7 +70,7 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 | File | Owner | Changes |
 |------|-------|---------|
-| `platform-manifest.yaml` | Platform Team | Rarely (governance, plugin selection) |
+| `manifest.yaml` | Platform Team | Rarely (governance, plugin selection) |
 | `floe.yaml` | Data Engineers | Frequently (pipelines, schedules) |
 
 ### Plugin Architecture

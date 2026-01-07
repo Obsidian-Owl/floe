@@ -8,12 +8,12 @@ This document describes how floe enforces platform constraints on data pipelines
 
 ```
 Platform Team (Define Once)     →     Data Team (Consume & Inherit)
-platform-manifest.yaml                 floe.yaml
+manifest.yaml                 floe.yaml
 ```
 
 ## Two-File Configuration Model
 
-### platform-manifest.yaml (Platform Team)
+### manifest.yaml (Platform Team)
 
 Defines what is allowed and how it must be done:
 
@@ -186,7 +186,7 @@ naming:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  PLATFORM TEAM                                                           │
 │                                                                          │
-│  platform-manifest.yaml                                                  │
+│  manifest.yaml                                                  │
 │         │                                                                │
 │         ▼                                                                │
 │  [floe platform compile]                                                 │
@@ -512,7 +512,7 @@ Violations are emitted as OpenLineage FAIL events with the `contractViolation` f
 #### Platform Manifest Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_contracts:
   enforcement: alert_only   # off | warn | alert_only | block
   standard: odcs_v3         # ODCS v3.x
@@ -555,7 +555,7 @@ Example: If enterprise sets freshness minimum as 24h, domain can require 6h, and
 #### Example: ODCS Data Contract
 
 ```yaml
-# datacontract.yaml (alongside data-product.yaml)
+# datacontract.yaml (alongside floe.yaml)
 apiVersion: v3.0.2
 kind: DataContract
 name: sales-customer-360-customers
@@ -849,7 +849,7 @@ Product identity is stored in Iceberg catalog namespace properties:
 | `floe.product.registered_at` | Registration timestamp |
 | `floe.contracts` | JSON array of registered contracts |
 
-### data-product.yaml Repository Field
+### floe.yaml Repository Field
 
 Products must declare their source repository:
 
@@ -867,7 +867,7 @@ metadata:
 ### Platform Manifest Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 identity:
   enforcement: enforce   # off | warn | register | enforce
   auto_register: true    # Auto-register unregistered products

@@ -364,7 +364,7 @@ Deleting v1.0.0...
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     primaries:
@@ -640,7 +640,7 @@ oci://registry.example.com/floe-platform:v1.2.3
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   registry:
     immutable_tag_patterns:

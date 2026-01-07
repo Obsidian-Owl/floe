@@ -30,7 +30,7 @@ floe uses a four-layer architecture separating framework code, platform configur
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  LAYER 2: PLATFORM CONFIGURATION (Enforcement)                               │
 │  Owner: Platform Team | Lifecycle: Versioned artifacts in OCI Registry      │
-│  • platform-manifest.yaml → immutable policies                              │
+│  • manifest.yaml → immutable policies                              │
 │  • Governance, naming conventions, quality gates                            │
 └────────────────────────────────────┬────────────────────────────────────────┘
                                      │ Built on
@@ -385,7 +385,7 @@ floe supports **11 plugin types** (see [plugin-system/index.md](../architecture/
 
 ### 7.1 floe-platform
 
-Meta-chart that assembles selected plugin charts based on `platform-manifest.yaml`.
+Meta-chart that assembles selected plugin charts based on `manifest.yaml`.
 
 ```yaml
 # charts/floe-platform/Chart.yaml

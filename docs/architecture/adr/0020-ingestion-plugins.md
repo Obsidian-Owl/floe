@@ -226,7 +226,7 @@ class AirbyteIngestionPlugin(IngestionPlugin):
 ### Platform Manifest
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   ingestion:
     type: dlt  # Default: dlt
@@ -400,7 +400,7 @@ class IngestionResult:
 ### Retry Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   ingestion:
     type: dlt

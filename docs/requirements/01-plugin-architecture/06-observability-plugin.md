@@ -491,7 +491,7 @@ Telemetry and Lineage Backend Plugin Standards (REQ-051 to REQ-060) complete whe
 The original `ObservabilityPlugin` (floe 0.1.0-0.3.0) coupled telemetry and lineage configuration. This has been split into two independent plugin types:
 
 **Migration Steps**:
-1. Replace `observability:` in platform-manifest.yaml with `telemetry_backend:` and `lineage_backend:`
+1. Replace `observability:` in manifest.yaml with `telemetry_backend:` and `lineage_backend:`
 2. Update entry points from `floe.observability` to `floe.telemetry_backends` and `floe.lineage_backends`
 3. Implement TelemetryBackendPlugin and LineageBackendPlugin separately
 4. Update tests to use BaseTelemetryBackendPluginTests and BaseLineageBackendPluginTests

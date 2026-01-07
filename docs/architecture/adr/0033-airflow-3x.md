@@ -285,7 +285,7 @@ def my_task():
 ## Platform Manifest Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   orchestrator:
     type: airflow  # Targets Airflow 3.x

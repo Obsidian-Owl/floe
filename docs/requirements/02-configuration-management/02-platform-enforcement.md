@@ -16,9 +16,9 @@ This group of requirements defines the enforcement mechanisms that validate data
 
 **Requirement**: System MUST define PolicyEnforcer module in `floe_core/enforcement/policy_enforcer.py` with required methods: validate_naming, validate_classification, validate_quality_gates, validate_governance.
 
-**Rationale**: PolicyEnforcer is a core module (not plugin) that validates against rules configured in platform-manifest.yaml.
+**Rationale**: PolicyEnforcer is a core module (not plugin) that validates against rules configured in manifest.yaml.
 
-> **Note:** PolicyEnforcer is now a **core module** in floe-core, not a plugin. Policy enforcement tooling is provided via DBTPlugin (linting), and rules are configured via platform-manifest.yaml.
+> **Note:** PolicyEnforcer is now a **core module** in floe-core, not a plugin. Policy enforcement tooling is provided via DBTPlugin (linting), and rules are configured via manifest.yaml.
 
 **Acceptance Criteria**:
 - [ ] PolicyEnforcer module defined with required methods
@@ -26,7 +26,7 @@ This group of requirements defines the enforcement mechanisms that validate data
 - [ ] validate_classification(model: DbtModel, manifest: Manifest) → list[PolicyViolation]
 - [ ] validate_quality_gates(model: DbtModel, manifest: Manifest) → list[PolicyViolation]
 - [ ] validate_governance(product: DataProduct, manifest: Manifest) → list[PolicyViolation]
-- [ ] Configuration via platform-manifest.yaml governance section
+- [ ] Configuration via manifest.yaml governance section
 - [ ] Core module (not pluggable via entry points)
 
 **Enforcement**:
@@ -484,7 +484,7 @@ This group of requirements defines the enforcement mechanisms that validate data
 - [ ] Output: detailed report of all policies
 - [ ] Exit code: non-zero on validation failure
 - [ ] Supports manifest URL: --manifest=oci://...
-- [ ] Supports local files: --manifest=./platform-manifest.yaml
+- [ ] Supports local files: --manifest=./manifest.yaml
 
 **Enforcement**:
 - Validation command tests

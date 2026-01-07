@@ -60,7 +60,7 @@ Layer 3: SERVICES (Long-lived)
 Layer 2: CONFIGURATION (Enforcement)
     │ Owner: Platform Engineers
     │ Storage: OCI Registry (immutable)
-    │ Config: platform-manifest.yaml
+    │ Config: manifest.yaml
     ▼
 Layer 1: FOUNDATION (Framework Code)
     │ Owner: floe Maintainers
@@ -71,7 +71,7 @@ Layer 1: FOUNDATION (Framework Code)
 
 | File | Owner | Purpose |
 |------|-------|---------|
-| `platform-manifest.yaml` | Platform Team | Define guardrails (rarely changes) |
+| `manifest.yaml` | Platform Team | Define guardrails (rarely changes) |
 | `floe.yaml` | Data Engineers | Define pipelines (changes frequently) |
 
 ### Opinionation Boundaries

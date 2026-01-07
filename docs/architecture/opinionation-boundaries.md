@@ -56,7 +56,7 @@ These standards define floe and cannot be changed:
 
 ## PLUGGABLE Components
 
-Platform Team selects these once in `platform-manifest.yaml`:
+Platform Team selects these once in `manifest.yaml`:
 
 | Component | Default | Alternatives |
 |-----------|---------|--------------|
@@ -154,7 +154,7 @@ Platform Team selects these once in `platform-manifest.yaml`:
 ## Configuration Example
 
 ```yaml
-# platform-manifest.yaml (Platform Team)
+# manifest.yaml (Platform Team)
 apiVersion: floe.dev/v1
 kind: Manifest
 metadata:

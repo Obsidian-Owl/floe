@@ -103,7 +103,7 @@ This group of requirements defines OpenTelemetry (OTel) SDK integration for dist
 
 **Traceability**:
 - ADR-0006 section "Semantic Conventions"
-- platform-manifest.yaml validation (namespace field required)
+- manifest.yaml validation (namespace field required)
 
 ---
 
@@ -473,7 +473,7 @@ This group of requirements defines OpenTelemetry (OTel) SDK integration for dist
 **Acceptance Criteria**:
 - [ ] ObservabilityPlugin ABC defines get_exporter() method
 - [ ] OTLP Collector configured with backend-specific exporter
-- [ ] Plugin selected via plugins.observability in platform-manifest.yaml
+- [ ] Plugin selected via plugins.observability in manifest.yaml
 - [ ] Example plugins: JaegerPlugin, DatadogPlugin, GrafanaCloudPlugin
 - [ ] Plugin initialization happens before first span creation
 - [ ] Plugin failure logs warning but does not crash system (OTel SDK continues with console exporter)
@@ -504,7 +504,7 @@ This group of requirements defines OpenTelemetry (OTel) SDK integration for dist
 **Rationale**: Ensures all pipelines emit telemetry (non-optional).
 
 **Acceptance Criteria**:
-- [ ] floe compile validates observability configuration in platform-manifest.yaml
+- [ ] floe compile validates observability configuration in manifest.yaml
 - [ ] Compilation fails if observability plugin not selected
 - [ ] floe run enforces OTEL_EXPORTER_OTLP_ENDPOINT before job start
 - [ ] Compilation includes observability SDK initialization code in generated artifacts

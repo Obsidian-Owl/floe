@@ -48,7 +48,7 @@ This document provides a comprehensive overview of floe's four-layer architectur
 │  LAYER 2: CONFIGURATION LAYER (Enforcement)                                  │
 │  Owner: Platform Engineers                                                   │
 │  Storage: OCI Registry (immutable, versioned)                               │
-│  Config: platform-manifest.yaml                                             │
+│  Config: manifest.yaml                                             │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │  • Plugin selection (compute, orchestrator, catalog, semantic)      │    │

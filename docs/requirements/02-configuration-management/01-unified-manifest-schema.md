@@ -347,12 +347,12 @@ This group of requirements defines the unified Manifest schema that supports bot
 
 ### REQ-110: Backward Compatibility with 2-Tier Manifests **[New]**
 
-**Requirement**: System MUST support existing 2-tier configurations (platform-manifest.yaml with scope: None or missing) without breaking changes.
+**Requirement**: System MUST support existing 2-tier configurations (manifest.yaml with scope: None or missing) without breaking changes.
 
 **Rationale**: Allows incremental adoption of 3-tier without forcing migration.
 
 **Acceptance Criteria**:
-- [ ] Existing platform-manifest.yaml loads without scope field
+- [ ] Existing manifest.yaml loads without scope field
 - [ ] Existing floe.yaml loads unchanged
 - [ ] platform.ref resolves to 2-tier manifest
 - [ ] parent_manifest field optional

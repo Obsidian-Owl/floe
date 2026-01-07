@@ -35,12 +35,12 @@ Data Mesh is an organizational pattern with four principles (Zhamak Dehghani):
 floe currently supports two-tier configuration:
 
 ```yaml
-# platform-manifest.yaml (Platform Team)
+# manifest.yaml (Platform Team)
 plugins:
   compute: snowflake
   catalog: polaris
 
-# data-product.yaml (Data Team)
+# floe.yaml (Data Team)
 transforms:
   - type: dbt
     path: models/
@@ -163,7 +163,7 @@ class Manifest(BaseModel):
 └───────────────────────────┬─────────────────────────────────────┘
                             │ Inherits ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  data-product.yaml (NO scope field)                              │
+│  floe.yaml (NO scope field)                              │
 │                                                                  │
 │  platform:                                                       │
 │    ref: oci://registry/sales-domain-manifest:v2.1.0             │
@@ -196,12 +196,12 @@ class Manifest(BaseModel):
 **Two-Tier (No Data Mesh):**
 
 ```yaml
-# platform-manifest.yaml (scope: None - default)
+# manifest.yaml (scope: None - default)
 plugins:
   compute: duckdb
   observability: jaeger
 
-# data-product.yaml
+# floe.yaml
 platform:
   ref: oci://registry/platform-manifest:v1.0.0
 transforms:
@@ -226,7 +226,7 @@ plugins:
   compute: snowflake  # From enterprise whitelist
 approved_products: ["customer-360"]
 
-# data-product.yaml (same as 2-tier!)
+# floe.yaml (same as 2-tier!)
 platform:
   ref: oci://registry/sales-domain-manifest:v2.0.0
 transforms:
@@ -234,7 +234,7 @@ transforms:
     path: models/
 ```
 
-**Key insight:** data-product.yaml is IDENTICAL in 2-tier and 3-tier. Scaling is transparent.
+**Key insight:** floe.yaml is IDENTICAL in 2-tier and 3-tier. Scaling is transparent.
 
 ## Consequences
 
@@ -353,7 +353,7 @@ def merge_manifests(
 ### 2. Data as a Product
 
 **Enabled by:**
-- data-product.yaml defines transforms, schedules, dependencies
+- floe.yaml defines transforms, schedules, dependencies
 - Platform enforces product contracts (ODCS v3 via DataContractPlugin)
 - Product metadata (name, version, description) required
 
@@ -377,11 +377,11 @@ def merge_manifests(
 ### Phase 1: Two-Tier (Current State)
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   compute: duckdb
 
-# data-product.yaml
+# floe.yaml
 platform:
   ref: oci://registry/platform-manifest:v1.0.0
 ```
@@ -396,18 +396,18 @@ approved_plugins:
 plugins:
   observability: datadog
 
-# platform-manifest.yaml (UPDATED to reference enterprise)
+# manifest.yaml (UPDATED to reference enterprise)
 scope: domain  # Added scope field
 parent_manifest: oci://registry/enterprise-manifest:v1.0.0
 plugins:
   compute: duckdb  # Must be in enterprise whitelist
 
-# data-product.yaml (UNCHANGED)
+# floe.yaml (UNCHANGED)
 platform:
   ref: oci://registry/platform-manifest:v1.0.0
 ```
 
-**Key:** data-product.yaml does NOT change. Backward compatible.
+**Key:** floe.yaml does NOT change. Backward compatible.
 
 ### Phase 3: Add Domain Manifests (Data Mesh)
 
@@ -431,7 +431,7 @@ plugins:
   compute: duckdb
 approved_products: ["campaign-analytics"]
 
-# data-product.yaml (UPDATED ref only)
+# floe.yaml (UPDATED ref only)
 platform:
   ref: oci://registry/sales-domain-manifest:v2.0.0  # Changed ref
 transforms:
@@ -439,7 +439,7 @@ transforms:
     path: models/
 ```
 
-**Key:** Only `platform.ref` changes. No structural changes to data-product.yaml.
+**Key:** Only `platform.ref` changes. No structural changes to floe.yaml.
 
 ## Anti-Patterns
 

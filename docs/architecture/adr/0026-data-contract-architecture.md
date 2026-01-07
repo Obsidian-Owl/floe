@@ -130,7 +130,7 @@ Contracts define expectations for Iceberg tables:
 ### Contract Resolution Flow
 
 ```
-1. Parse data-product.yaml
+1. Parse floe.yaml
    -> Extract output_ports, metadata
 
 2. Check for datacontract.yaml
@@ -152,7 +152,7 @@ Contracts define expectations for Iceberg tables:
 
 ### Enforcement Levels
 
-Platform teams configure enforcement in `platform-manifest.yaml`:
+Platform teams configure enforcement in `manifest.yaml`:
 
 ```yaml
 data_contracts:

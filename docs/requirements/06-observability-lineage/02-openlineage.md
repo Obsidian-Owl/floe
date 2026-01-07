@@ -317,7 +317,7 @@ This group of requirements defines OpenLineage integration for data lineage trac
 - [ ] Events sent as JSON-LD with Content-Type: application/json
 - [ ] HTTP endpoint configurable via environment variable OPENLINEAGE_URL
 - [ ] Default endpoint: http://localhost:5000 (Marquez) for dev
-- [ ] Endpoint configurable via platform-manifest.yaml for prod
+- [ ] Endpoint configurable via manifest.yaml for prod
 - [ ] Retry logic on transient failures (3 retries, exponential backoff)
 
 **Enforcement**:
@@ -372,7 +372,7 @@ This group of requirements defines OpenLineage integration for data lineage trac
 
 **Configuration Example**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   lineage_backend:
     provider: marquez  # or atlan, openmetadata
@@ -412,7 +412,7 @@ OTLP transport for OpenLineage requires:
 **Acceptance Criteria**:
 - [ ] LineageBackendPlugin.get_transport_config() returns configured OpenLineageTransport
 - [ ] LineageEmitter endpoint determined by plugin (Marquez HTTP, Atlan HTTP, etc.)
-- [ ] Plugin configuration in platform-manifest.yaml: plugins.lineage_backend
+- [ ] Plugin configuration in manifest.yaml: plugins.lineage_backend
 - [ ] LineageEmitter initialized during platform startup with plugin transport config
 - [ ] Example implementations: MarquezLineagePlugin, AtlanLineagePlugin
 
@@ -425,11 +425,11 @@ OTLP transport for OpenLineage requires:
 - MUST use PluginRegistry for backend selection (entry point: floe.lineage_backends)
 - MUST support HTTP transport (OTLP deferred to Epic 8+)
 - MUST NOT hardcode lineage endpoints
-- MUST configure via platform-manifest.yaml (NOT separate config file)
+- MUST configure via manifest.yaml (NOT separate config file)
 
 **Configuration Example**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   lineage_backend:  # NOT observability
     provider: marquez  # or atlan, openmetadata
@@ -519,7 +519,7 @@ plugins:
 **Rationale**: Ensures all pipelines emit lineage events (non-optional).
 
 **Acceptance Criteria**:
-- [ ] floe compile validates lineage configuration in platform-manifest.yaml
+- [ ] floe compile validates lineage configuration in manifest.yaml
 - [ ] Compilation fails if lineage backend not configured
 - [ ] floe run enforces OPENLINEAGE_URL or OTEL_EXPORTER_OTLP_ENDPOINT before job start
 - [ ] LineageEmitter initialization happens before first job event emission

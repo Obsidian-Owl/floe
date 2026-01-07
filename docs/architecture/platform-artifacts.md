@@ -9,7 +9,7 @@ Platform artifacts are immutable, versioned configuration bundles stored in OCI-
 ```
 Platform Team                        OCI Registry                         Data Team
      │                                    │                                    │
-     │  platform-manifest.yaml            │                                    │
+     │  manifest.yaml            │                                    │
      │         │                          │                                    │
      │         ▼                          │                                    │
      │  [floe platform compile]           │                                    │
@@ -111,7 +111,7 @@ oci://registry.example.com/floe-platform:v1.2.3
 ### 1. Create Platform Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 apiVersion: floe.dev/v1
 kind: Manifest
 metadata:
@@ -143,7 +143,7 @@ governance:
 ```bash
 $ floe platform compile
 
-[1/4] Validating platform-manifest.yaml
+[1/4] Validating manifest.yaml
       ✓ Schema validation passed
       ✓ Plugin references valid
 
@@ -291,7 +291,7 @@ cosign verify oci://registry.example.com/floe-platform:v1.2.3
 ### Require Signatures
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 security:
   require_signed_artifacts: true
   trusted_keys:

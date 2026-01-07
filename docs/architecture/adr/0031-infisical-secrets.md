@@ -216,7 +216,7 @@ spec:
 ### Platform Manifest Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   secrets:
     type: infisical  # Default OSS
@@ -414,7 +414,7 @@ floe secrets status
 # Validate secret references
 floe secrets validate
 # Output:
-# Validating secret references in platform-manifest.yaml...
+# Validating secret references in manifest.yaml...
 # ✓ snowflake-credentials: exists, 3 keys
 # ✓ catalog-credentials: exists, 2 keys
 ```

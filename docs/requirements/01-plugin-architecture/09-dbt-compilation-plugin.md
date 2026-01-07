@@ -199,10 +199,10 @@ def get_runtime_metadata(self) -> dict[str, Any]:
 **Constraints**:
 - MUST use httpx client with connection pooling and timeouts
 - MUST validate API responses with Pydantic models
-- MUST NOT hardcode job IDs (configure via platform-manifest.yaml)
+- MUST NOT hardcode job IDs (configure via manifest.yaml)
 - FORBIDDEN: Direct Git operations (dbt Cloud handles Git sync)
 
-**Configuration Schema** (platform-manifest.yaml):
+**Configuration Schema** (manifest.yaml):
 ```yaml
 plugins:
   dbt_runtime: cloud
@@ -311,11 +311,11 @@ def customers(context):
 
 ### REQ-091: Configuration Schema Extension **[New]**
 
-**Requirement**: System MUST extend `platform-manifest.yaml` schema to support dbt runtime selection.
+**Requirement**: System MUST extend `manifest.yaml` schema to support dbt runtime selection.
 
 **Schema Addition**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   dbt_runtime: local  # or cloud, fusion
 
@@ -380,7 +380,7 @@ plugins:
 
 **Acceptance Criteria**:
 - [ ] `DBTCloudPlugin.get_manifest()` checks cache before API request
-- [ ] Cache TTL: 24 hours (configurable via `platform-manifest.yaml`)
+- [ ] Cache TTL: 24 hours (configurable via `manifest.yaml`)
 - [ ] Cache invalidation on explicit `floe compile --no-cache` flag
 - [ ] Cache metadata includes:
   ```json
@@ -565,7 +565,7 @@ def customers(context):
 
 ## Platform Configuration
 
-**platform-manifest.yaml**:
+**manifest.yaml**:
 ```yaml
 plugins:
   dbt_runtime: local  # Start with local for backward compatibility
@@ -581,7 +581,7 @@ plugins:
 **Acceptance Criteria**:
 - [ ] All documentation files created
 - [ ] Migration guide tested against real codebase
-- [ ] Examples use actual platform-manifest.yaml snippets
+- [ ] Examples use actual manifest.yaml snippets
 - [ ] Troubleshooting section covers common errors:
   - "dbtRunner not found" → Install dbt-core
   - "dbt Cloud API 401 Unauthorized" → Check api_token_ref
@@ -604,7 +604,7 @@ Domain 01 Plugin Architecture (dbt Compilation) is complete when:
 - [ ] REQ-088: DBTCloudPlugin implemented and tested
 - [ ] REQ-089: DBTFusionPlugin stub created
 - [ ] REQ-090: OrchestratorPlugin updated to use DBTPlugin
-- [ ] REQ-091: platform-manifest.yaml schema extended
+- [ ] REQ-091: manifest.yaml schema extended
 - [ ] REQ-092: Artifact caching strategy implemented
 - [ ] REQ-093: Parallel execution safety enforced
 - [ ] REQ-094: Compliance tests pass with >90% coverage

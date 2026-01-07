@@ -39,7 +39,7 @@ This group of requirements defines how environment context (dev/staging/prod) is
 
 **Configuration Example**:
 ```yaml
-# platform-manifest.yaml (environment-agnostic)
+# manifest.yaml (environment-agnostic)
 plugins:
   compute:
     type: snowflake

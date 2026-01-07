@@ -427,7 +427,7 @@ atlan = "floe_lineage_atlan:AtlanPlugin"
 ### Platform Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   telemetry_backend: jaeger        # Discovered via floe.telemetry_backends
   lineage_backend: marquez          # Discovered via floe.lineage_backends
@@ -889,7 +889,7 @@ class LineageBackendPlugin(ABC):
 ### Credential Management
 
 - **API Keys** (Datadog, Atlan): Use K8s Secrets, environment variables
-- **NEVER** hardcode credentials in platform-manifest.yaml
+- **NEVER** hardcode credentials in manifest.yaml
 - Plugins access credentials via `${env:VAR_NAME}` syntax
 - `validate_connection()` method checks presence before deployment
 
@@ -917,15 +917,15 @@ class EnterpriseTelemetryPlugin(TelemetryBackendPlugin):
 
 ### Q: Can we use different backends per environment (dev vs prod)?
 
-**A:** Yes, platform-manifest.yaml is environment-specific. Use different manifests:
+**A:** Yes, manifest.yaml is environment-specific. Use different manifests:
 
 ```yaml
-# dev/platform-manifest.yaml
+# dev/manifest.yaml
 plugins:
   telemetry_backend: jaeger  # Self-hosted for dev
   lineage_backend: marquez
 
-# prod/platform-manifest.yaml
+# prod/manifest.yaml
 plugins:
   telemetry_backend: datadog  # SaaS for production
   lineage_backend: atlan

@@ -47,7 +47,7 @@ slaProperties:
 ### 2. Enable Monitoring in Platform Manifest
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_contracts:
   enforcement: alert_only
   monitoring:
@@ -282,7 +282,7 @@ all_violations = await monitor.check_all_contracts()
 ### Configure Alerting
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_contracts:
   alerting:
     openlineage_events: true

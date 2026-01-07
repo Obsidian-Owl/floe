@@ -150,7 +150,7 @@ class ContractMonitor:
 | Quality | 6 hours | Quality checks are expensive |
 | Availability | 5 minutes | Quick health checks |
 
-These defaults can be overridden in `platform-manifest.yaml`:
+These defaults can be overridden in `manifest.yaml`:
 
 ```yaml
 data_contracts:

@@ -222,7 +222,7 @@ An Abstract Base Class (ABC) defining methods a plugin must implement. All plugi
 ### Platform Team
 
 The team responsible for:
-- Writing and versioning `platform-manifest.yaml`
+- Writing and versioning `manifest.yaml`
 - Selecting plugins (compute, orchestrator, catalog, etc.)
 - Deploying platform services (Layer 3)
 - Defining governance policies
@@ -257,7 +257,7 @@ An ephemeral Kubernetes Job (Layer 4) that runs to completion. Examples: dbt run
 
 ### Compliance
 
-Adherence to governance policies defined in platform-manifest.yaml. Enforced at compile-time, monitored at runtime.
+Adherence to governance policies defined in manifest.yaml. Enforced at compile-time, monitored at runtime.
 
 ### Namespace Isolation
 

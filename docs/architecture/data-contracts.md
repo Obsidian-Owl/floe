@@ -14,7 +14,7 @@ Data contracts provide a mechanism for:
                           COMPILE TIME                         RUNTIME
                           ──────────────                       ───────
                                 │                                  │
-data-product.yaml ─────────────►│                                  │
+floe.yaml ─────────────►│                                  │
        +                        │                                  │
 datacontract.yaml (optional) ──►│  PolicyEnforcer                  │
                                 │  (compile-time)                  │
@@ -36,7 +36,7 @@ Floe uses a **hybrid contract model**:
 
 | Model | Description |
 |-------|-------------|
-| **Auto-generated** | Contracts derived from `data-product.yaml` output ports |
+| **Auto-generated** | Contracts derived from `floe.yaml` output ports |
 | **Explicit** | Contracts defined in `datacontract.yaml` (ODCS format) |
 | **Merged** | Explicit overrides auto-generated (default) |
 
@@ -44,7 +44,7 @@ Floe uses a **hybrid contract model**:
 
 ```
 data-product/
-├── data-product.yaml          # Required - defines ports, transforms
+├── floe.yaml          # Required - defines ports, transforms
 ├── datacontract.yaml          # Optional - explicit ODCS contract
 ├── models/
 │   └── *.sql
@@ -54,7 +54,7 @@ data-product/
 ### Contract Resolution Flow
 
 ```
-1. Parse data-product.yaml
+1. Parse floe.yaml
    └── Extract output_ports, input_ports, metadata
 
 2. Generate base contract
@@ -234,7 +234,7 @@ At runtime, the ContractMonitor performs:
 Violations are emitted as alerts but do not block processing:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_contracts:
   enforcement: alert_only  # off | warn | alert_only | block
 ```
@@ -360,7 +360,7 @@ Data Product Contract (implementation)
 ## Platform Manifest Configuration
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 data_contracts:
   enforcement: alert_only  # off | warn | alert_only | block
   standard: odcs_v3

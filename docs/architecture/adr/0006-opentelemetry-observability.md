@@ -138,11 +138,11 @@ OpenTelemetry observability in floe follows a three-layer architecture:
 
 ### Backend Plugin Examples
 
-Platform teams select one observability backend via `plugins.observability` in platform-manifest.yaml:
+Platform teams select one observability backend via `plugins.observability` in manifest.yaml:
 
 **Example: Jaeger (self-hosted OSS)**
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   observability: jaeger
 
@@ -153,7 +153,7 @@ plugins:
 
 **Example: Datadog (SaaS)**
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   observability: datadog
 
@@ -164,7 +164,7 @@ plugins:
 
 **Example: Grafana Cloud (SaaS)**
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 plugins:
   observability: grafana-cloud
 

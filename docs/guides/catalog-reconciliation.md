@@ -61,10 +61,10 @@ sales.gold     legacy_dim      unregistered     2024-01-03
 
 ### Automated Detection (Scheduled Job)
 
-Configure a reconciliation job in `platform-manifest.yaml`:
+Configure a reconciliation job in `manifest.yaml`:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 reconciliation:
   enabled: true
   schedule: "0 2 * * 0"  # Weekly at 2 AM Sunday
@@ -201,7 +201,7 @@ floe catalog reconcile --namespace sales --confirm
 Always create tables within floe's compile/deploy flow:
 
 ```yaml
-# data-product.yaml - Tables created through proper flow
+# floe.yaml - Tables created through proper flow
 output_ports:
   - name: customers
     table: sales.gold.customers
@@ -213,7 +213,7 @@ output_ports:
 Mark tables for deletion before removing:
 
 ```yaml
-# data-product.yaml
+# floe.yaml
 deprecation:
   tables:
     - name: sales.gold.old_customers
@@ -226,7 +226,7 @@ deprecation:
 Enable orphan detection during compile:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 compile:
   validations:
     check_orphaned_tables: true  # Fail if orphans found
@@ -425,7 +425,7 @@ Reconciliation jobs emit lineage events:
 Orphaned data is subject to governance:
 
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 governance:
   orphan_handling:
     quarantine_days: 30        # Days to keep in quarantine before deletion

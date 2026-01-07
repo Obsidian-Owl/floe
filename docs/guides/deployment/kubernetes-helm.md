@@ -41,7 +41,7 @@ floe/
         +-- chart/                        # Cube server + Redis
 ```
 
-**Key Design**: The `floe-platform` meta-chart assembles plugin charts based on `platform-manifest.yaml` selections.
+**Key Design**: The `floe-platform` meta-chart assembles plugin charts based on `manifest.yaml` selections.
 
 ---
 
@@ -110,7 +110,7 @@ helm install floe floe/floe \
 ## 4. values.yaml
 
 ```yaml
-# values.yaml - Generated from platform-manifest.yaml
+# values.yaml - Generated from manifest.yaml
 global:
   # Compute configuration (inherited from platform)
   compute:

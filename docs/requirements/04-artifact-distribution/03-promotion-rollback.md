@@ -42,7 +42,7 @@ This group of requirements defines multi-environment promotion workflows and rol
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 environments:
   dev:
     registry: oci://dev-registry.example.com/floe
@@ -165,7 +165,7 @@ oci://registry.example.com/floe-platform:latest-prod    # Latest prod
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 promotion:
   validation_gates:
     - name: policy_compliance
@@ -240,7 +240,7 @@ To override: floe platform promote --force v1.2.3-dev staging
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 environments:
   prod:
     require_approval: true
@@ -361,7 +361,7 @@ Promoting to prod...
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 promotion:
   rollback:
     require_approval: true
@@ -480,7 +480,7 @@ Continue? (y/n): y
 - [ ] Latest: `latest` (mutable, always newest)
 - [ ] Range: `>=v1.0.0,<v2.0.0`
 - [ ] Prerelease: `v1.2.3-rc1`
-- [ ] Configuration: pin in platform-manifest.yaml or floe.yaml
+- [ ] Configuration: pin in manifest.yaml or floe.yaml
 - [ ] Update check: show available updates
 
 **Enforcement**:
@@ -562,7 +562,7 @@ Updating from v1.2.3 to v1.2.5...
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   retention:
     keep_last_versions: 10          # Keep latest 10 releases
@@ -692,7 +692,7 @@ prod
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 promotion:
   policies:
     - name: auto-promote-staging-to-prod
@@ -851,7 +851,7 @@ To proceed: floe platform promote v1.2.3-dev staging
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 notifications:
   channels:
     email:
@@ -931,7 +931,7 @@ Request ID: req-12345
 
 **Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   lifecycle:
     v1.0.0:

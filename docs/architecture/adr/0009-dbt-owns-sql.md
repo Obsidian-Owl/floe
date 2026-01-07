@@ -74,7 +74,7 @@ While dbt framework is enforced for SQL transformation DSL, the **execution envi
 - **dbt Framework** (ENFORCED): SQL transformation DSL, models, tests, macros, Jinja templating
 - **dbt Execution Environment** (PLUGGABLE): WHERE dbt compiles (local dbt-core, dbt Fusion, dbt Cloud)
 
-Platform teams select the execution environment in `platform-manifest.yaml`:
+Platform teams select the execution environment in `manifest.yaml`:
 
 ```yaml
 plugins:

@@ -9,7 +9,7 @@
 This domain defines the configuration management system that enables platform teams to define standards, enforce governance, and manage secrets across single-team and multi-team (Data Mesh) deployments.
 
 **Core Architectural Principles**:
-- Two-File Configuration Model (platform-manifest.yaml + floe.yaml)
+- Two-File Configuration Model (manifest.yaml + floe.yaml)
 - Unified Manifest Schema with Three-Tier Inheritance (Enterprise → Domain → Product)
 - Compile-Time Enforcement of Platform Constraints
 - Environment-Specific Configuration Management
@@ -30,12 +30,12 @@ This domain defines the configuration management system that enables platform te
 ### Two-Tier (Single Platform, No Data Mesh)
 
 ```yaml
-# platform-manifest.yaml (scope: None - default)
+# manifest.yaml (scope: None - default)
 plugins:
   compute: duckdb
   observability: jaeger
 
-# floe.yaml (data-product.yaml)
+# floe.yaml (floe.yaml)
 platform:
   ref: oci://registry/platform-manifest:v1.0.0
 transforms:
@@ -61,14 +61,14 @@ plugins:
   compute: snowflake
 approved_products: ["customer-360"]
 
-# floe.yaml (data-product.yaml - SAME as 2-tier!)
+# floe.yaml (floe.yaml - SAME as 2-tier!)
 platform:
   ref: oci://registry/domain-manifest:v2.0.0
 ```
 
 **Use Case**: Enterprise with Data Mesh, federated autonomy
 
-**Key Insight**: data-product.yaml is identical in both models. Scaling 2-tier → 3-tier requires zero changes to data team files.
+**Key Insight**: floe.yaml is identical in both models. Scaling 2-tier → 3-tier requires zero changes to data team files.
 
 ## Three-Tier Inheritance Rules
 

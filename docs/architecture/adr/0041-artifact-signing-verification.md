@@ -159,7 +159,7 @@ harbor.acme.com/floe-artifacts/
 
 **Trusted Identities**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   signing:
     mode: keyless
@@ -348,7 +348,7 @@ floe-platform/signing/cosign.pub
 
 **Verification Configuration**:
 ```yaml
-# platform-manifest.yaml
+# manifest.yaml
 artifacts:
   signing:
     mode: key-based

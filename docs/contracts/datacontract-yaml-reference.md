@@ -14,7 +14,7 @@ A data contract is a formal agreement between data producers and consumers that 
 
 ```
 data-product/
-├── data-product.yaml          # Data product definition
+├── floe.yaml          # Data product definition
 ├── datacontract.yaml          # Optional: explicit contract
 ├── models/
 │   └── *.sql
