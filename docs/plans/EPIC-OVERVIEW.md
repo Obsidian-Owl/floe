@@ -25,112 +25,199 @@ All Epics fall within the optimal or acceptable range.
 ## Dependency Graph
 
 ```
-                    ┌─────────────────────────────────────────────────────────────┐
-                    │                    Epic 1: Plugin Registry                   │
-                    │                    (FOUNDATION - Blocking)                   │
-                    └─────────────────────────────────────────────────────────────┘
-                                                   │
-           ┌───────────────────────────────────────┼───────────────────────────────────────┐
-           │                                       │                                       │
-           ▼                                       ▼                                       ▼
-   ┌───────────────┐                     ┌─────────────────┐                     ┌─────────────────┐
-   │ Epic 2A       │                     │ Epics 4A-4D     │                     │ Epics 6A, 6B    │
-   │ Manifest      │                     │ Core Plugins    │                     │ Observability   │
-   └───────┬───────┘                     │ (Parallel)      │                     │ (Parallel)      │
-           │                             └────────┬────────┘                     └─────────────────┘
-           ▼                                      │
-   ┌───────────────┐                              │
-   │ Epic 2B       │                              │
-   │ Compilation   │◄─────────────────────────────┘
-   └───────┬───────┘
-           │
-           ├─────────────────────────────────────────────────────────────────────┐
-           │                                                                      │
-           ▼                                                                      ▼
-   ┌───────────────┐                                                     ┌───────────────┐
-   │ Epic 3A       │                                                     │ Epic 8A       │
-   │ Policy Core   │                                                     │ OCI Client    │
-   └───────┬───────┘                                                     └───────┬───────┘
-           │                                                                      │
-     ┌─────┴─────┐                                                               ▼
-     │           │                                                       ┌───────────────┐
-     ▼           ▼                                                       │ Epic 8B       │
-┌─────────┐ ┌─────────┐                                                  │ Signing       │
-│ Epic 3B │ │ Epic 3C │                                                  └───────┬───────┘
-│ Validate│ │ Contract│                                                          │
-└─────────┘ └────┬────┘                                                          ▼
-                 │                                                       ┌───────────────┐
-                 ▼                                                       │ Epic 8C       │
-           ┌─────────┐                                                   │ Promotion     │
-           │ Epic 3D │ ◄──── (Also depends on Epic 6B)                   └───────────────┘
-           │ Monitor │
-           └─────────┘
-
-   ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
-   │ Epic 7A       │     │ Epic 7B       │────►│ Epic 7C       │
-   │ Identity      │     │ K8s RBAC      │     │ Network/Pod   │
-   └───────────────┘     └───────────────┘     └───────────────┘
-
-   ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
-   │ Epic 9A       │────►│ Epic 9B       │────►│ Epic 9C       │
-   │ K8s Deploy    │     │ Helm Charts   │     │ Testing Infra │
-   └───────────────┘     └───────────────┘     └───────────────┘
-         ▲
-         │
-   (Depends on Epics 4A-4D)
+                              WAVE 1
+                    ┌─────────────────────────┐
+                    │   Epic 1: Plugin Registry│
+                    │   (FOUNDATION - Blocking)│
+                    └────────────┬────────────┘
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        │                        │                        │
+        ▼                        ▼                        ▼
+ ┌──────────────┐        ┌──────────────┐        ┌──────────────┐
+ │  Epic 2A     │        │  Epic 4A     │        │  Epic 6A     │
+ │  Manifest    │        │  Compute     │        │  OpenTelemetry│
+ └──────┬───────┘        └──────────────┘        └──────────────┘
+        │                        │                       │
+        │    ┌──────────────┐    │                       │
+        │    │  Epic 4C     │    │                       │
+        │    │  Catalog     │    │                       │
+        │    └──────┬───────┘    │                       │
+        │           │            │                       │
+        │           ▼            │                       │
+        │    ┌──────────────┐    │                       │
+        │    │  Epic 4D     │    │                       │
+        │    │  Storage     │    │                       │
+        │    └──────┬───────┘    │                       │
+        │           │            │                       │
+        ├───────────┤            │                       │
+        │           │            │                       │
+        ▼           │            │                       │
+ ┌──────────────┐   │            │                       │
+ │  Epic 7A     │   │            │                       │
+ │  Identity    │   │            │                       │
+ └──────┬───────┘   │            │                       │
+        │           │            │                       │
+        ├───────────┼────────────┘                       │
+        │           │                                    │
+        ▼           │                                    │
+ ┌──────────────┐   │                                    │
+ │  Epic 2B     │◄──┘                                    │
+ │  Compilation │                                        │
+ └──────┬───────┘                                        │
+        │                                                │
+        ├────────────────────────┬───────────────────────┤
+        │                        │                       │
+        ▼                        ▼                       │
+ ┌──────────────┐        ┌──────────────┐               │
+ │  Epic 4B     │        │  Epic 8A     │◄──(7A)        │
+ │  Orchestrator│        │  OCI Client  │               │
+ └──────┬───────┘        └──────┬───────┘               │
+        │                        │                       │
+        │                        ▼                       │
+        │                ┌──────────────┐               │
+        │                │  Epic 8B     │               │
+        │                │  Signing     │               │
+        │                └──────┬───────┘               │
+        │                        │                       │
+        ▼                        │                       │
+ ┌──────────────┐               │                       │
+ │  Epic 3A     │◄──(2A,2B)     │                       │
+ │  Policy Core │               │                       │
+ └──────┬───────┘               │                       │
+        │                        │                       │
+        ├─────────┐              │                       │
+        │         │              │                       │
+        ▼         ▼              │                       │
+ ┌─────────┐ ┌─────────┐        │                       │
+ │Epic 3B  │ │Epic 3C  │◄──(4D) │                       │
+ │Validate │ │Contract │        │                       │
+ └────┬────┘ └────┬────┘        │                       │
+      │           │              │                       │
+      │           │              │                       │
+      │           │              ▼                       │
+      │           │      ┌──────────────┐               │
+      └───────────┼─────►│  Epic 8C     │◄──(8A,8B)     │
+                  │      │  Promotion   │               │
+                  │      └──────────────┘               │
+                  │                                      │
+        ┌─────────┴───────────────────────┐             │
+        │                                  │             │
+        ▼                                  ▼             │
+ ┌──────────────┐                 ┌──────────────┐      │
+ │  Epic 5A     │◄──(4A,4B,2B)    │  Epic 7B     │◄──(7A)
+ │  dbt Plugin  │                 │  K8s RBAC    │      │
+ └──────┬───────┘                 └──────┬───────┘      │
+        │                                 │             │
+        │                                 ▼             │
+        │                         ┌──────────────┐      │
+        │                         │  Epic 7C     │      │
+        │                         │  Network/Pod │      │
+        │                         └──────┬───────┘      │
+        │                                 │             │
+        ├─────────────────────────────────┤             │
+        │                                 │             │
+        ▼                                 │             │
+ ┌──────────────┐                        │             │
+ │  Epic 5B     │                        │             │
+ │  DataQuality │                        │             │
+ └──────┬───────┘                        │             │
+        │                                 │             │
+        ▼                                 │             │
+ ┌──────────────┐                        │             │
+ │  Epic 6B     │◄──(4B,5A)              │             │
+ │  OpenLineage │                        │             │
+ └──────┬───────┘                        │             │
+        │                                 │             │
+        │                                 │             │
+        ▼                                 ▼             ▼
+ ┌──────────────┐                ┌───────────────────────┐
+ │  Epic 3D     │◄──(3C,6A)      │     Epic 9A           │
+ │  Monitoring  │                │ K8s Deploy            │
+ └──────────────┘                │ ◄──(4A-D,7B,7C,8A,8B) │
+                                 └───────────┬───────────┘
+                                             │
+                                             ▼
+                                 ┌───────────────────────┐
+                                 │     Epic 9B           │
+                                 │ Helm Charts           │
+                                 │ ◄──(6A,7B,7C,9A)      │
+                                 └───────────┬───────────┘
+                                             │
+                                             ▼
+                                 ┌───────────────────────┐
+                                 │     Epic 9C           │
+                                 │ Testing Infrastructure│
+                                 └───────────────────────┘
 ```
+
+**Key**: Arrows show "blocked by" direction. Labels like `◄──(4D)` show additional dependencies.
 
 ---
 
 ## Parallelization Matrix
 
+> **Note**: Waves are based on actual "Blocked By" dependencies from individual Epic files.
+
 ### Wave 1 (No Dependencies)
-| Epic | Name | Req Count | Can Start Immediately |
-|------|------|-----------|----------------------|
-| 1 | Plugin Registry | 10 | Yes (blocking) |
+| Epic | Name | Req Count | Notes |
+|------|------|-----------|-------|
+| 1 | Plugin Registry | 10 | Foundation - blocks everything |
 
 ### Wave 2 (Depends on Epic 1 only)
 | Epic | Name | Req Count | Parallel With |
 |------|------|-----------|---------------|
-| 2A | Manifest Schema | 16 | 4A, 4B, 4C, 4D, 5B, 6A, 6B, 7A, 7B |
-| 4A | Compute Plugin | 10 | 2A, 4B, 4C, 4D, 5B, 6A, 6B, 7A, 7B |
-| 4B | Orchestrator Plugin | 10 | 2A, 4A, 4C, 4D, 5B, 6A, 6B, 7A, 7B |
-| 4C | Catalog Plugin | 10 | 2A, 4A, 4B, 4D, 5B, 6A, 6B, 7A, 7B |
-| 4D | Storage Plugin | 10 | 2A, 4A, 4B, 4C, 5B, 6A, 6B, 7A, 7B |
-| 5B | Data Quality | 10 | 2A, 4A-D, 6A, 6B, 7A, 7B |
-| 6A | OpenTelemetry | 20 | 2A, 4A-D, 5B, 6B, 7A, 7B |
-| 6B | OpenLineage | 21 | 2A, 4A-D, 5B, 6A, 7A, 7B |
-| 7A | Identity/Secrets | 25 | 2A, 4A-D, 5B, 6A, 6B, 7B |
-| 7B | K8s RBAC | 16 | 2A, 4A-D, 5B, 6A, 6B, 7A |
+| 2A | Manifest Schema | 16 | 4A, 4C, 6A |
+| 4A | Compute Plugin | 10 | 2A, 4C, 6A |
+| 4C | Catalog Plugin | 10 | 2A, 4A, 6A |
+| 6A | OpenTelemetry | 20 | 2A, 4A, 4C |
 
 ### Wave 3 (Depends on Wave 2)
 | Epic | Name | Req Count | Depends On |
 |------|------|-----------|------------|
 | 2B | Compilation | 13 | 1, 2A |
-| 5A | dbt Plugin | 15 | 1, 4B |
-| 7C | Network/Pod Security | 27 | 7B |
-| 9A | K8s Deployment | 21 | 4A-D |
+| 4D | Storage Plugin | 10 | 1, 4C |
+| 7A | Identity/Secrets | 25 | 1, 2A |
 
 ### Wave 4 (Depends on Wave 3)
 | Epic | Name | Req Count | Depends On |
 |------|------|-----------|------------|
 | 3A | Policy Enforcer | 15 | 2A, 2B |
-| 8A | OCI Client | 16 | 2B |
-| 9B | Helm Charts | 15 | 9A, 6A |
+| 4B | Orchestrator Plugin | 10 | 1, 2B |
+| 7B | K8s RBAC | 16 | 1, 7A |
+| 8A | OCI Client | 16 | 2B, 7A |
 
 ### Wave 5 (Depends on Wave 4)
 | Epic | Name | Req Count | Depends On |
 |------|------|-----------|------------|
 | 3B | Policy Validation | 21 | 3A |
-| 3C | Data Contracts | 20 | 3A |
+| 3C | Data Contracts | 20 | 3A, 4D |
+| 5A | dbt Plugin | 15 | 1, 2B, 4A, 4B |
+| 7C | Network/Pod Security | 27 | 7B |
 | 8B | Artifact Signing | 10 | 8A |
-| 9C | Testing Infra | 15 | 9B |
 
-### Wave 6 (Final)
+### Wave 6 (Depends on Wave 5)
 | Epic | Name | Req Count | Depends On |
 |------|------|-----------|------------|
-| 3D | Contract Monitoring | 15 | 3C, 6B |
-| 8C | Promotion Lifecycle | 14 | 8B |
+| 5B | Data Quality | 10 | 1, 5A |
+| 6B | OpenLineage | 21 | 1, 4B, 5A |
+| 8C | Promotion Lifecycle | 14 | 3B, 8A, 8B |
+
+### Wave 7 (Depends on Wave 6)
+| Epic | Name | Req Count | Depends On |
+|------|------|-----------|------------|
+| 3D | Contract Monitoring | 15 | 3C, 6A, 6B |
+| 9A | K8s Deployment | 21 | 4A-D, 7B, 7C, 8A, 8B |
+
+### Wave 8 (Depends on Wave 7)
+| Epic | Name | Req Count | Depends On |
+|------|------|-----------|------------|
+| 9B | Helm Charts | 15 | 6A, 7B, 7C, 9A |
+
+### Wave 9 (Final)
+| Epic | Name | Req Count | Depends On |
+|------|------|-----------|------------|
+| 9C | Testing Infrastructure | 15 | 9B |
 
 ---
 
@@ -139,14 +226,34 @@ All Epics fall within the optimal or acceptable range.
 The critical path determines the minimum time to complete all Epics:
 
 ```
-Epic 1 → Epic 2A → Epic 2B → Epic 3A → Epic 3C → Epic 3D
-   │
-   └──→ Epic 4A-D → Epic 9A → Epic 9B → Epic 9C
+Deployment Chain (longest path - 9 waves):
+Epic 1 → 2A → 2B → 4B → 5A → 6B ─┐
+   │                               │
+   └→ 4A ─────────────────────────┤
+   │                               ├─→ 9A → 9B → 9C
+   └→ 4C → 4D ────────────────────┤
+   │                               │
+   └→ 7A → 7B → 7C ───────────────┤
+   │                               │
+   └→ 2B → 8A → 8B ───────────────┘
+
+Governance Chain (parallel, 7 waves):
+Epic 1 → 2A → 2B → 3A → 3B/3C → 5A → 5B/6B → 3D
+                         │
+                         └→ 8C (requires 3B, 8A, 8B)
 ```
 
-**Critical Path Epics**: 1, 2A, 2B, 3A, 3C, 3D, 4A-D, 9A, 9B, 9C
+**Critical Path (Deployment)**: 1 → 2A → 2B → 4B → 5A → 6B → 9A → 9B → 9C (9 waves)
 
-**Optimization**: Parallelize Wave 2 Epics aggressively to minimize total delivery time.
+**Key Bottlenecks**:
+- **Epic 9A (K8s Deployment)**: Blocked by 4A-D, 7B, 7C, 8A, 8B (most dependencies)
+- **Epic 5A (dbt Plugin)**: Blocked by 2B, 4A, 4B (gates 5B, 6B)
+- **Epic 6B (OpenLineage)**: Blocked by 4B, 5A (gates 3D)
+
+**Optimization Strategy**:
+1. Parallelize Wave 2 aggressively (2A, 4A, 4C, 6A)
+2. Prioritize 4B early (gates 5A, 6B)
+3. Complete 7A → 7B → 7C chain early (gates 9A)
 
 ---
 
