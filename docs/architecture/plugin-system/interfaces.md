@@ -47,26 +47,100 @@ class ComputePlugin(ABC):
 
 ```python
 class OrchestratorPlugin(ABC):
-    """Interface for orchestration platforms."""
+    """Interface for orchestration platforms (Dagster, Airflow, etc.)."""
 
     name: str
     version: str
+    floe_api_version: str
 
     @abstractmethod
-    def create_definitions(self, artifacts: CompiledArtifacts) -> any:
-        """Generate orchestrator-specific definitions."""
+    def create_definitions(self, artifacts: CompiledArtifacts) -> Any:
+        """Generate orchestrator-specific definitions from compiled artifacts.
+
+        For Dagster: Returns Dagster Definitions object
+        For Airflow: Returns DAG object
+        """
         pass
 
     @abstractmethod
     def create_assets_from_transforms(self, transforms: list[TransformConfig]) -> list:
-        """Create orchestrator assets from dbt transforms."""
+        """Create orchestrator assets from dbt transforms.
+
+        For Dagster: Returns list of @asset decorated functions
+        For Airflow: Returns list of tasks
+        """
         pass
 
     @abstractmethod
-    def emit_lineage_event(self, event_type: str, job: str, inputs: list, outputs: list):
-        """Emit OpenLineage event."""
+    def get_helm_values(self) -> dict[str, Any]:
+        """Return Helm chart values for deploying orchestration services.
+
+        Returns:
+            Dictionary matching Helm chart schema with resource
+            requests/limits and service configuration.
+        """
+        pass
+
+    @abstractmethod
+    def validate_connection(self) -> ValidationResult:
+        """Test connectivity to orchestration service.
+
+        Returns:
+            ValidationResult with success status and actionable error messages.
+            Must complete within 10 seconds.
+        """
+        pass
+
+    @abstractmethod
+    def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
+        """Return K8s ResourceRequirements for orchestration workloads.
+
+        Args:
+            workload_size: "small", "medium", "large"
+
+        Returns:
+            ResourceSpec with CPU/memory requests and limits.
+        """
+        pass
+
+    @abstractmethod
+    def emit_lineage_event(
+        self,
+        event_type: str,
+        job: str,
+        inputs: list[Dataset],
+        outputs: list[Dataset]
+    ) -> None:
+        """Emit OpenLineage event for data lineage tracking.
+
+        Args:
+            event_type: "START" | "COMPLETE" | "FAIL"
+            job: Job name (e.g., "dbt_run")
+            inputs: Input datasets
+            outputs: Output datasets
+        """
+        pass
+
+    @abstractmethod
+    def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
+        """Schedule a job for recurring execution.
+
+        Args:
+            job_name: Name of the job to schedule
+            cron: Cron expression (e.g., "0 8 * * *")
+            timezone: IANA timezone (e.g., "America/New_York")
+        """
         pass
 ```
+
+**Entry points:**
+```toml
+[project.entry-points."floe.orchestrators"]
+dagster = "floe_orchestrator_dagster:DagsterPlugin"
+airflow = "floe_orchestrator_airflow:AirflowPlugin"
+```
+
+**Requirements Traceability:** REQ-021 to REQ-030 (OrchestratorPlugin Standards)
 
 ## CatalogPlugin
 
@@ -175,6 +249,18 @@ class IngestionPlugin(ABC):
 Per ADR-0043, dbt **execution environment** (WHERE dbt compiles) is pluggable, while dbt **framework** (SQL transformation DSL) is enforced:
 
 ```python
+class DBTRunResult(BaseModel):
+    """Result of a dbt command execution."""
+    success: bool
+    manifest_path: Path
+    run_results_path: Path
+    catalog_path: Path | None = None
+    execution_time_seconds: float
+    models_run: int
+    tests_run: int
+    failures: int
+    metadata: dict[str, Any] = {}
+
 class DBTPlugin(ABC):
     """Interface for dbt compilation environment plugins.
 
@@ -216,11 +302,12 @@ class DBTPlugin(ABC):
         target: str,
         select: str | None = None,
         exclude: str | None = None,
-    ) -> RunResult:
+        full_refresh: bool = False,
+    ) -> DBTRunResult:
         """Execute dbt models.
 
         Returns:
-            RunResult with success status and executed model count
+            DBTRunResult with success status and executed model count
         """
         pass
 
@@ -231,11 +318,11 @@ class DBTPlugin(ABC):
         profiles_dir: Path,
         target: str,
         select: str | None = None,
-    ) -> TestResult:
+    ) -> DBTRunResult:
         """Execute dbt tests.
 
         Returns:
-            TestResult with pass/fail status and test results
+            DBTRunResult with pass/fail status and test results
         """
         pass
 
@@ -246,14 +333,14 @@ class DBTPlugin(ABC):
         profiles_dir: Path,
         target: str,
         fix: bool = False,
-    ) -> ProjectLintResult:
+    ) -> LintResult:
         """Lint SQL files with dialect-aware validation.
 
         Args:
             fix: If True, auto-fix issues (if linter supports it)
 
         Returns:
-            ProjectLintResult with all detected linting issues
+            LintResult with all detected linting issues
 
         Raises:
             DBTLintError: If linting process fails (not if SQL has issues)
@@ -261,12 +348,28 @@ class DBTPlugin(ABC):
         pass
 
     @abstractmethod
-    def supports_sql_linting(self) -> bool:
-        """Indicate whether this compilation environment provides SQL linting.
+    def get_manifest(self, project_dir: Path) -> dict[str, Any]:
+        """Retrieve dbt manifest.json (filesystem or API)."""
+        pass
 
-        Returns:
-            True if lint_project() is functional, False otherwise
-        """
+    @abstractmethod
+    def get_run_results(self, project_dir: Path) -> dict[str, Any]:
+        """Retrieve dbt run_results.json."""
+        pass
+
+    @abstractmethod
+    def supports_parallel_execution(self) -> bool:
+        """Indicate whether runtime supports parallel execution."""
+        pass
+
+    @abstractmethod
+    def supports_sql_linting(self) -> bool:
+        """Indicate whether this compilation environment provides SQL linting."""
+        pass
+
+    @abstractmethod
+    def get_runtime_metadata(self) -> dict[str, Any]:
+        """Return runtime-specific metadata for observability."""
         pass
 ```
 
@@ -279,11 +382,13 @@ cloud = "floe_dbt_cloud:CloudDBTPlugin"
 ```
 
 **Implementation Priority:**
-- **LocalDBTPlugin** (Epic 3): dbt-core via CLI subprocess, SQLFluff linting
-- **FusionDBTPlugin** (Epic 3): dbt Fusion via CLI subprocess, built-in static analysis
+- **LocalDBTPlugin** (Epic 3): dbt-core via dbtRunner, SQLFluff linting
+- **FusionDBTPlugin** (Epic 3): dbt Fusion CLI, built-in static analysis
 - **CloudDBTPlugin** (Epic 8+): dbt Cloud API (deferred)
 
-**See ADR-0043** for complete specification, SQL linting requirements (REQ-096 to REQ-100), and implementation examples.
+**Requirements Traceability:** REQ-086 to REQ-095 (DBT Runtime Plugin), REQ-096 to REQ-100 (SQL Linting)
+
+**See**: [interfaces/dbt-plugin.md](../interfaces/dbt-plugin.md) for canonical interface definition, [ADR-0043](../adr/0043-dbt-plugin.md) for architecture rationale.
 
 ## DataQualityPlugin
 

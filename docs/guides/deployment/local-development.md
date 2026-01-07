@@ -1,6 +1,8 @@
 # Local Development
 
-This document covers local development options for floe: using uv directly and Docker Compose.
+This document covers local development for floe using uv and Kind (Kubernetes in Docker).
+
+**Note**: Docker Compose is NOT supported. All development uses Kubernetes-native tooling to ensure parity between local development and production (ADR-0017).
 
 ---
 
@@ -68,215 +70,88 @@ floe run --env dev
 
 ---
 
-## 2. Docker Compose
+## 2. Local Kubernetes (Kind)
+
+For full-featured local development with all platform services, use Kind (Kubernetes in Docker).
 
 ### 2.1 Quick Start
 
 ```bash
-# Start full development environment
-floe dev
+# Create Kind cluster
+make kind-create
 
-# Or manually with Docker Compose
-docker compose up -d
+# Deploy platform services
+make deploy-local
+
+# Verify deployment
+kubectl get pods -n floe-dev
 ```
 
 ### 2.2 Architecture
 
 ```
 +---------------------------------------------------------------------------+
-|                           DOCKER HOST                                      |
+|                           KIND CLUSTER                                      |
 |                                                                            |
 |  +---------------------------------------------------------------------+  |
-|  |  docker-compose network: floe                                        |  |
+|  |  namespace: floe-dev                                                 |  |
 |  |                                                                      |  |
 |  |  +---------------+   +---------------+   +---------------+           |  |
-|  |  |   dagster     |   |   postgres    |   |   marquez     |           |  |
-|  |  |   :3000       |-->|   :5432       |<--|   :5000/:5001 |           |  |
+|  |  |   dagster     |   |   postgres    |   |   polaris     |           |  |
+|  |  |  (Deployment) |-->| (StatefulSet) |<--|  (Deployment) |           |  |
 |  |  +---------------+   +---------------+   +---------------+           |  |
-|  |         |                                        ^                   |  |
-|  |         |                                        |                   |  |
-|  |         v                                        |                   |  |
-|  |  +---------------+   +---------------+           |                   |  |
-|  |  | otel-collector|-->|    jaeger     |-----------+                   |  |
-|  |  |   :4317       |   |   :16686      |                               |  |
-|  |  +---------------+   +---------------+                               |  |
+|  |         |                   |                    |                   |  |
+|  |         v                   v                    v                   |  |
+|  |  +---------------+   +---------------+   +---------------+           |  |
+|  |  | otel-collector|   |  localstack   |   |     cube      |           |  |
+|  |  |  (DaemonSet)  |   | (StatefulSet) |   |  (Deployment) |           |  |
+|  |  +---------------+   +---------------+   +---------------+           |  |
 |  |                                                                      |  |
 |  +---------------------------------------------------------------------+  |
 |                                                                            |
 |  +---------------------------------------------------------------------+  |
-|  |  volumes                                                             |  |
-|  |  +-- postgres_data (persistent)                                      |  |
-|  |  +-- ./models (bind mount, live reload)                              |  |
-|  |  +-- ./.floe/artifacts.json (bind mount)                             |  |
+|  |  PersistentVolumeClaims                                              |  |
+|  |  +-- postgres-data (10Gi)                                            |  |
+|  |  +-- localstack-data (10Gi)                                          |  |
 |  +---------------------------------------------------------------------+  |
 +---------------------------------------------------------------------------+
 ```
 
-### 2.3 docker-compose.yml
-
-```yaml
-version: "3.8"
-
-services:
-  # PostgreSQL - Dagster metadata + Marquez storage
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: floe
-      POSTGRES_PASSWORD: floe
-      POSTGRES_DB: dagster
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "floe"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - floe
-
-  # Dagster - Orchestration
-  dagster:
-    image: ghcr.io/floe/dagster:latest
-    ports:
-      - "3000:3000"
-    environment:
-      DAGSTER_HOME: /opt/dagster/dagster_home
-      DAGSTER_POSTGRES_HOST: postgres
-      DAGSTER_POSTGRES_USER: floe
-      DAGSTER_POSTGRES_PASSWORD: floe
-      DAGSTER_POSTGRES_DB: dagster
-      FLOE_ARTIFACTS_PATH: /app/artifacts.json
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_SERVICE_NAME: floe-dagster
-      OPENLINEAGE_URL: http://marquez-api:5000
-      OPENLINEAGE_NAMESPACE: floe
-    volumes:
-      - ./.floe/artifacts.json:/app/artifacts.json:ro
-      - ./models:/app/models:ro
-      - ./seeds:/app/seeds:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - floe
-
-  # OpenTelemetry Collector
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config", "/etc/otel/config.yaml"]
-    volumes:
-      - ./otel-config.yaml:/etc/otel/config.yaml:ro
-    ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
-      - "8888:8888"   # Prometheus metrics
-    networks:
-      - floe
-
-  # Jaeger - Distributed Tracing
-  jaeger:
-    image: jaegertracing/all-in-one:1.53
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686"  # UI
-      - "14250:14250"  # gRPC
-    networks:
-      - floe
-
-  # Marquez API - Data Lineage
-  marquez-api:
-    image: marquezproject/marquez:0.47.0
-    environment:
-      MARQUEZ_PORT: 5000
-      MARQUEZ_ADMIN_PORT: 5001
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: marquez
-      POSTGRES_USER: floe
-      POSTGRES_PASSWORD: floe
-    ports:
-      - "5000:5000"   # API
-      - "5001:5001"   # Admin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - floe
-
-  # Marquez Web - Lineage UI
-  marquez-web:
-    image: marquezproject/marquez-web:0.47.0
-    environment:
-      MARQUEZ_HOST: marquez-api
-      MARQUEZ_PORT: 5000
-    ports:
-      - "3001:3000"
-    depends_on:
-      - marquez-api
-    networks:
-      - floe
-
-networks:
-  floe:
-    driver: bridge
-
-volumes:
-  postgres_data:
-```
-
-### 2.4 OTel Collector Configuration
-
-```yaml
-# otel-config.yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
-      http:
-        endpoint: 0.0.0.0:4318
-
-processors:
-  batch:
-    timeout: 1s
-    send_batch_size: 1024
-
-exporters:
-  otlp/jaeger:
-    endpoint: jaeger:4317
-    tls:
-      insecure: true
-
-  logging:
-    verbosity: detailed
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp/jaeger, logging]
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [logging]
-    logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [logging]
-```
-
-### 2.5 Service URLs
+### 2.3 Service URLs
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| Dagster UI | http://localhost:3000 | Asset management, runs |
-| Jaeger UI | http://localhost:16686 | Distributed tracing |
-| Marquez Web | http://localhost:3001 | Data lineage |
-| Marquez API | http://localhost:5000 | Lineage API |
+| Dagster UI | http://localhost:30000 | Asset management, runs |
+| Polaris | http://localhost:30181 | Iceberg catalog |
+| Cube | http://localhost:30400 | Semantic layer API |
+| LocalStack | http://localhost:30566 | S3-compatible storage |
+
+### 2.4 Development Workflow
+
+```bash
+# Run tests in K8s
+make test
+
+# View logs
+kubectl logs -f deployment/dagster-webserver -n floe-dev
+
+# Port-forward for debugging
+kubectl port-forward svc/dagster-webserver 3000:3000 -n floe-dev
+
+# Clean up
+make kind-delete
+```
+
+### 2.5 Why Not Docker Compose?
+
+Docker Compose is **explicitly prohibited** (REQ-621) because:
+
+1. **No K8s-specific testing**: Cannot test probes, resource limits, network policies
+2. **No parity**: Docker Compose ≠ production K8s environment
+3. **Hidden bugs**: Issues only discovered in production
+4. **No RBAC testing**: Cannot test service accounts, secrets access
+
+Kind provides full Kubernetes compatibility while running locally.
 
 ---
 

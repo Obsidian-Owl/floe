@@ -50,7 +50,7 @@ def run_models(
     pass
 
 @abstractmethod
-def run_tests(
+def test_models(
     self,
     project_dir: Path,
     profiles_dir: Path,

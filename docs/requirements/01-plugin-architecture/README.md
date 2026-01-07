@@ -1,7 +1,7 @@
 # Domain 01: Plugin Architecture
 
 **Priority**: CRITICAL
-**Total Requirements**: 100
+**Total Requirements**: 110
 **Status**: Complete specification
 
 ## Overview
@@ -14,7 +14,7 @@ This domain defines the plugin architecture that enables floe extensibility. The
 - Progressive Disclosure
 - Opt-in Complexity
 
-## Plugin Types (11 Total)
+## Plugin Types (12 Total)
 
 | Plugin Type | Entry Point | Purpose | Requirements |
 |-------------|-------------|---------|--------------|
@@ -28,9 +28,10 @@ This domain defines the plugin architecture that enables floe extensibility. The
 | IngestionPlugin | `floe.ingestion` | Data loading (dlt, Airbyte) | REQ-066 to REQ-070 |
 | IdentityPlugin | `floe.identity` | Authentication (OIDC, OAuth2, JWT) | REQ-071 to REQ-075 |
 | SecretsPlugin | `floe.secrets` | Credential management (Infisical, ESO, Vault) | REQ-076 to REQ-080 |
-| DBTPlugin | `floe.dbt` | dbt compilation (dbt-core, dbt Fusion, dbt Cloud) | REQ-086 to REQ-100 |
+| DBTPlugin | `floe.dbt` | dbt compilation (dbt-core, dbt Fusion, dbt Cloud) | REQ-086 to REQ-095 |
+| DataQualityPlugin | `floe.data_quality` | Data quality (Great Expectations, Soda, dbt Expectations) | REQ-101 to REQ-110 |
 
-> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. See Domain 03 for requirements. DataQualityPlugin (Great Expectations, Soda) exists but is tracked separately in ADR-0044.
+> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. See Domain 03 for requirements.
 
 ## Key Architectural Decisions
 
@@ -47,26 +48,29 @@ This domain defines the plugin architecture that enables floe extensibility. The
 - [02-compute-plugin.md](02-compute-plugin.md) - REQ-011 to REQ-020: ComputePlugin ABC and compliance
 - [03-orchestrator-plugin.md](03-orchestrator-plugin.md) - REQ-021 to REQ-030: OrchestratorPlugin ABC
 - [04-catalog-plugin.md](04-catalog-plugin.md) - REQ-031 to REQ-040: CatalogPlugin ABC
-- [05-storage-plugin.md](05-storage-plugin.md) - REQ-041 to REQ-050: StoragePlugin ABC (**NEW**)
-- [06-observability-plugin.md](06-observability-plugin.md) - REQ-051 to REQ-060: ObservabilityPlugin ABC (**NEW**)
+- [05-storage-plugin.md](05-storage-plugin.md) - REQ-041 to REQ-050: StoragePlugin ABC
+- [06-observability-plugin.md](06-observability-plugin.md) - REQ-051 to REQ-060: TelemetryBackend + LineageBackend
 - [07-semantic-ingestion-plugins.md](07-semantic-ingestion-plugins.md) - REQ-061 to REQ-070: SemanticLayer + Ingestion
-- [08-identity-secrets-plugins.md](08-identity-secrets-plugins.md) - REQ-071 to REQ-085: Identity + Secrets (**NEW**)
-- [09-dbt-compilation-plugin.md](09-dbt-compilation-plugin.md) - REQ-086 to REQ-095: dbt Compilation Plugin (**NEW**)
-- [10-sql-linting.md](10-sql-linting.md) - REQ-096 to REQ-100: SQL Linting (**NEW**)
+- [08-identity-secrets-plugins.md](08-identity-secrets-plugins.md) - REQ-071 to REQ-085: Identity + Secrets
+- [09-dbt-compilation-plugin.md](09-dbt-compilation-plugin.md) - REQ-086 to REQ-095: DBTPlugin
+- [10-sql-linting.md](10-sql-linting.md) - REQ-096 to REQ-100: SQL Linting
+- [11-data-quality-plugin.md](11-data-quality-plugin.md) - REQ-101 to REQ-110: DataQualityPlugin (**NEW**)
 
 ## Traceability Matrix
 
 | Requirement Range | ADR | Architecture Doc | Test Spec |
 |------------------|-----|------------------|-----------|
 | REQ-001 to REQ-010 | ADR-0008, ADR-0037 | plugin-architecture.md | tests/unit/test_plugin_registry.py |
-| REQ-011 to REQ-020 | ADR-0010 | plugin-architecture.md:103-142 | tests/contract/test_compute_plugin.py |
-| REQ-021 to REQ-030 | ADR-0033 | plugin-architecture.md:144-167 | tests/contract/test_orchestrator_plugin.py |
-| REQ-031 to REQ-040 | ADR-0008 | plugin-architecture.md:169-192 | tests/contract/test_catalog_plugin.py |
-| REQ-041 to REQ-050 | ADR-0036 | plugin-architecture.md (NEW) | tests/contract/test_storage_plugin.py |
-| REQ-051 to REQ-060 | ADR-0035 | plugin-architecture.md (NEW) | tests/contract/test_observability_plugin.py |
-| REQ-061 to REQ-070 | ADR-0001, ADR-0020 | plugin-architecture.md:194-269 | tests/contract/test_semantic_ingestion.py |
-| REQ-071 to REQ-085 | ADR-0022, ADR-0031 | plugin-architecture.md (NEW) | tests/contract/test_identity_secrets.py |
-| REQ-086 to REQ-095 | ADR-0043 | plugin-architecture.md (NEW) | tests/contract/test_dbt_runtime_plugin.py |
+| REQ-011 to REQ-020 | ADR-0010 | plugin-architecture.md | tests/contract/test_compute_plugin.py |
+| REQ-021 to REQ-030 | ADR-0033 | plugin-architecture.md | tests/contract/test_orchestrator_plugin.py |
+| REQ-031 to REQ-040 | ADR-0005 | plugin-architecture.md | tests/contract/test_catalog_plugin.py |
+| REQ-041 to REQ-050 | ADR-0036 | plugin-architecture.md | tests/contract/test_storage_plugin.py |
+| REQ-051 to REQ-060 | ADR-0035 | plugin-architecture.md | tests/contract/test_observability_plugin.py |
+| REQ-061 to REQ-070 | ADR-0001, ADR-0020 | plugin-architecture.md | tests/contract/test_semantic_ingestion.py |
+| REQ-071 to REQ-085 | ADR-0022, ADR-0031 | plugin-architecture.md | tests/contract/test_identity_secrets.py |
+| REQ-086 to REQ-095 | ADR-0043 | plugin-architecture.md | tests/contract/test_dbt_plugin.py |
+| REQ-096 to REQ-100 | ADR-0043 | plugin-architecture.md | tests/contract/test_sql_linting.py |
+| REQ-101 to REQ-110 | ADR-0044 | plugin-architecture.md | tests/contract/test_data_quality_plugin.py |
 
 ## Epic Mapping (Refactoring Roadmap)
 
@@ -90,9 +94,9 @@ This domain's requirements are satisfied across multiple Epics:
 
 Domain 01 is complete when:
 
-- [ ] All 95 requirements documented with complete template fields
-- [ ] All plugin ABCs defined in `floe-core/src/floe_core/plugin_interfaces.py`
-- [ ] Plugin discovery tests pass (PluginRegistry, entry points)
+- [ ] All 110 requirements documented with complete template fields
+- [ ] All 12 plugin ABCs defined in `floe-core/src/floe_core/plugin_interfaces.py`
+- [ ] Plugin discovery tests pass (PluginRegistry, 12 entry point groups)
 - [ ] All plugin compliance tests pass (ABC method signatures)
 - [ ] Contract tests validate cross-package plugin usage
 - [ ] ADRs backreference requirements

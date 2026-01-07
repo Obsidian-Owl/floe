@@ -300,8 +300,8 @@ This domain's requirements are satisfied across multiple Epics:
 Domain 03 is complete when:
 
 - [ ] All 50 requirements documented with complete template fields
-- [ ] PolicyEnforcer ABC defined in `floe-core/src/floe_core/plugin_interfaces.py`
-- [ ] DataContractPlugin ABC defined in `floe-core/src/floe_core/plugin_interfaces.py`
+- [ ] PolicyEnforcer core module defined in `floe-core/src/floe_core/enforcement/policy_enforcer.py`
+- [ ] DataContract core module defined in `floe-core/src/floe_core/contracts/data_contract.py`
 - [ ] Compile-time policy validation implemented
 - [ ] dbt-checkpoint integration for SQL validation
 - [ ] SQLFluff integration for style checking
@@ -326,7 +326,7 @@ Domain 03 is complete when:
 
 ## Related Domains
 
-- **Domain 01: Plugin Architecture** - PolicyEnforcer and DataContractPlugin are pluggable
+- **Domain 01: Plugin Architecture** - PolicyEnforcer and DataContract are **core modules** (not plugins); DataQualityPlugin is pluggable
 - **Domain 02: Configuration and Compilation** - Manifest parsing, compilation hooks
 - **Domain 04: Artifact Distribution** - OCI artifact signing for policy immutability
 - **Domain 05: Orchestration** - ContractMonitor deployed as K8s service

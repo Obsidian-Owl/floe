@@ -350,14 +350,38 @@ This group of requirements defines OpenTelemetry (OTel) SDK integration for dist
 - [ ] Sampling rate set to 100% when using console/file exporters
 - [ ] No error on startup if OTLP Collector unreachable (dev mode)
 
+**Graceful Degradation Behavior** (per ACCEPTANCE-CRITERIA-STANDARDS.md):
+
+| Condition | Behavior | Buffer | Log Level | Recovery |
+|-----------|----------|--------|-----------|----------|
+| OTLP Collector slow (P99 > 500ms) | Buffer spans | 1000 spans | WARN | Exponential backoff |
+| OTLP Collector unavailable | Export to console/file | 10000 spans | ERROR | Retry every 30s |
+| Buffer full | Drop oldest spans | N/A | ERROR | Continue processing |
+| Connection timeout | Retry with backoff | 1000 spans | WARN | Max 3 retries |
+
+**Configuration**:
+```yaml
+telemetry:
+  degradation:
+    buffer_size: 10000
+    drop_policy: oldest_first
+    connection_timeout_ms: 5000
+    retry:
+      initial_delay_ms: 1000
+      max_delay_ms: 30000
+      max_retries: 3
+```
+
 **Enforcement**:
 - Local development tests (run without OTLP Collector)
 - Console exporter output validation
 - File export validation
+- Degradation behavior tests (buffer overflow, retry behavior)
 
 **Constraints**:
 - MUST gracefully degrade (not fail) if OTLP Collector unavailable
-- MUST log warning if running without OTLP export
+- MUST log warning (level=WARN) if running without OTLP export
+- MUST buffer up to 10000 spans before dropping
 - FORBIDDEN to throw exception on OTLP Collector unreachable during startup
 
 **Test Coverage**: `tests/unit/test_observability_local_dev.py`
@@ -464,16 +488,16 @@ This group of requirements defines OpenTelemetry (OTel) SDK integration for dist
 
 ---
 
-### REQ-514: Observability Plugin Initialization **[New]**
+### REQ-514: TelemetryBackendPlugin Initialization **[Updated]**
 
-**Requirement**: System MUST initialize ObservabilityPlugin during platform startup to configure backend-specific exporter.
+**Requirement**: System MUST initialize TelemetryBackendPlugin during platform startup to configure backend-specific OTLP exporter.
 
-**Rationale**: Enables switching observability backends (Jaeger, Datadog, Grafana Cloud) via plugin system.
+**Rationale**: Enables switching telemetry backends (Jaeger, Datadog, Grafana Cloud) via plugin system. TelemetryBackendPlugin is independent from LineageBackendPlugin per ADR-0035 split architecture.
 
 **Acceptance Criteria**:
-- [ ] ObservabilityPlugin ABC defines get_exporter() method
+- [ ] TelemetryBackendPlugin ABC defines get_otlp_exporter_config() method
 - [ ] OTLP Collector configured with backend-specific exporter
-- [ ] Plugin selected via plugins.observability in manifest.yaml
+- [ ] Plugin selected via plugins.telemetry_backend in manifest.yaml
 - [ ] Example plugins: JaegerPlugin, DatadogPlugin, GrafanaCloudPlugin
 - [ ] Plugin initialization happens before first span creation
 - [ ] Plugin failure logs warning but does not crash system (OTel SDK continues with console exporter)
@@ -481,19 +505,27 @@ This group of requirements defines OpenTelemetry (OTel) SDK integration for dist
 **Enforcement**:
 - Plugin discovery and initialization tests
 - Backend-specific exporter configuration tests
-- Contract tests validate ObservabilityPlugin ABC compliance
+- Contract tests validate TelemetryBackendPlugin ABC compliance
 
 **Constraints**:
-- MUST use PluginRegistry for discovery
+- MUST use PluginRegistry for discovery (entry point: floe.telemetry_backends)
 - MUST NOT hardcode exporter configuration
-- FORBIDDEN to require control plane for observability backend selection
+- FORBIDDEN to require control plane for telemetry backend selection
 
-**Test Coverage**: `tests/contract/test_observability_plugin.py`
+**Configuration Example**:
+```yaml
+# manifest.yaml
+plugins:
+  telemetry_backend: jaeger  # or datadog, grafana-cloud
+```
+
+**Test Coverage**: `tests/contract/test_telemetry_backend_plugin.py`
 
 **Traceability**:
 - ADR-0006 section "Backend Configuration"
-- ADR-0035 (Observability Plugin Interface)
-- plugin-architecture.md (ObservabilityPlugin ABC)
+- ADR-0035 (Telemetry and Lineage Backend Plugins)
+- interfaces/telemetry-backend-plugin.md
+- **Cross-reference**: REQ-051 to REQ-055 (TelemetryBackendPlugin requirements)
 
 ---
 

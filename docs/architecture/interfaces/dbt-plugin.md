@@ -1,9 +1,9 @@
 # DBTPlugin
 
 **Purpose**: dbt compilation environment (local, fusion, cloud)
-**Location**: `floe_core/interfaces/dbt.py`
+**Location**: `floe_core/plugin_interfaces.py`
 **Entry Point**: `floe.dbt`
-**ADR**: [ADR-0043: DBT Plugin](../adr/0043-dbt-plugin.md)
+**ADR**: [ADR-0043: dbt Compilation Abstraction Layer](../adr/0043-dbt-plugin.md)
 
 DBTPlugin abstracts dbt compilation and execution environments, enabling platform teams to choose between local dbt-core, dbt Cloud, or dbt Fusion based on scale and operational requirements.
 
@@ -12,82 +12,113 @@ DBTPlugin abstracts dbt compilation and execution environments, enabling platfor
 ## Interface Definition
 
 ```python
-# floe_core/interfaces/dbt.py
+# floe_core/plugin_interfaces.py
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from pydantic import BaseModel
 
-@dataclass
-class DBTConfig:
-    """Configuration for dbt execution environment."""
-    project_dir: Path
-    profiles_dir: Path
-    target: str
-    vars: dict[str, Any] | None = None
-
-@dataclass
-class DBTRunResult:
+class DBTRunResult(BaseModel):
     """Result of a dbt command execution."""
     success: bool
-    command: str
-    elapsed_time: float
-    results: list[dict[str, Any]]
-    logs: list[str]
-    error: str | None = None
+    manifest_path: Path
+    run_results_path: Path
+    catalog_path: Path | None = None
+    execution_time_seconds: float
+    models_run: int
+    tests_run: int
+    failures: int
+    metadata: dict[str, Any] = {}
 
 class DBTPlugin(ABC):
-    """Interface for dbt execution environments."""
+    """Interface for dbt execution environments.
+
+    Responsibilities:
+    - Compile dbt projects (Jinja -> SQL)
+    - Execute dbt commands (run, test, snapshot)
+    - Provide SQL linting (optional, dialect-aware)
+
+    Note: This plugins WHERE dbt executes (local/cloud/fusion),
+    NOT the SQL transformation framework itself (enforced).
+    """
 
     name: str
     version: str
-    is_cloud: bool  # True for dbt Cloud, False for local/fusion
+    floe_api_version: str
 
     @abstractmethod
-    def compile(self, config: DBTConfig, select: str | None = None) -> DBTRunResult:
-        """Compile dbt models without executing.
-
-        Args:
-            config: dbt configuration
-            select: Optional model selection (dbt --select syntax)
+    def compile_project(
+        self,
+        project_dir: Path,
+        profiles_dir: Path,
+        target: str,
+    ) -> Path:
+        """Compile dbt project and return path to manifest.json.
 
         Returns:
-            DBTRunResult with compiled SQL in manifest
+            Path to compiled manifest.json (typically target/manifest.json)
+
+        Raises:
+            CompilationError: If dbt compilation fails
         """
         pass
 
     @abstractmethod
-    def run(self, config: DBTConfig, select: str | None = None) -> DBTRunResult:
+    def run_models(
+        self,
+        project_dir: Path,
+        profiles_dir: Path,
+        target: str,
+        select: str | None = None,
+        exclude: str | None = None,
+        full_refresh: bool = False,
+    ) -> DBTRunResult:
         """Execute dbt run command.
 
-        Args:
-            config: dbt configuration
-            select: Optional model selection
-
         Returns:
-            DBTRunResult with execution results
+            DBTRunResult with success status and executed model count
         """
         pass
 
     @abstractmethod
-    def test(self, config: DBTConfig, select: str | None = None) -> DBTRunResult:
+    def test_models(
+        self,
+        project_dir: Path,
+        profiles_dir: Path,
+        target: str,
+        select: str | None = None,
+    ) -> DBTRunResult:
         """Execute dbt test command.
 
-        Args:
-            config: dbt configuration
-            select: Optional model/test selection
-
         Returns:
-            DBTRunResult with test results
+            DBTRunResult with pass/fail status and test results
         """
         pass
 
     @abstractmethod
-    def get_manifest(self, config: DBTConfig) -> dict[str, Any]:
-        """Get the dbt manifest.json.
+    def lint_project(
+        self,
+        project_dir: Path,
+        profiles_dir: Path,
+        target: str,
+        fix: bool = False,
+    ) -> "LintResult":
+        """Lint SQL files with dialect-aware validation.
 
         Args:
-            config: dbt configuration
+            fix: If True, auto-fix issues (if linter supports it)
+
+        Returns:
+            LintResult with all detected linting issues
+
+        Raises:
+            DBTLintError: If linting process fails (not if SQL has issues)
+        """
+        pass
+
+    @abstractmethod
+    def get_manifest(self, project_dir: Path) -> dict[str, Any]:
+        """Retrieve dbt manifest.json (filesystem or API).
 
         Returns:
             Parsed manifest.json content
@@ -95,24 +126,66 @@ class DBTPlugin(ABC):
         pass
 
     @abstractmethod
-    def get_required_packages(self) -> list[str]:
-        """Return list of Python packages required for this dbt environment.
+    def get_run_results(self, project_dir: Path) -> dict[str, Any]:
+        """Retrieve dbt run_results.json.
 
-        Example: ["dbt-core>=1.7.0", "dbt-duckdb>=1.7.0"]
+        Returns:
+            Parsed run_results.json content
+        """
+        pass
+
+    @abstractmethod
+    def supports_parallel_execution(self) -> bool:
+        """Indicate whether runtime supports parallel execution.
+
+        Returns:
+            True for cloud runtimes (remote isolation), False for local (dbtRunner not thread-safe)
+        """
+        pass
+
+    @abstractmethod
+    def supports_sql_linting(self) -> bool:
+        """Indicate whether this compilation environment provides SQL linting.
+
+        Returns:
+            True if lint_project() is functional, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def get_runtime_metadata(self) -> dict[str, Any]:
+        """Return runtime-specific metadata for observability.
+
+        Returns:
+            Metadata dict with runtime type, version, etc.
         """
         pass
 ```
 
+## Entry Points
+
+```toml
+[project.entry-points."floe.dbt"]
+local = "floe_dbt_local:LocalDBTPlugin"
+fusion = "floe_dbt_fusion:FusionDBTPlugin"
+cloud = "floe_dbt_cloud:CloudDBTPlugin"
+```
+
 ## Reference Implementations
 
-| Plugin | Description | Cloud |
-|--------|-------------|-------|
-| `LocalDBTPlugin` | Local dbt-core execution | No |
-| `FusionDBTPlugin` | dbt Fusion (experimental) | No |
-| `CloudDBTPlugin` | dbt Cloud API integration | Yes |
+| Plugin | Description | Parallel | Linting |
+|--------|-------------|----------|---------|
+| `LocalDBTPlugin` | dbt-core via dbtRunner | No | SQLFluff |
+| `FusionDBTPlugin` | dbt Fusion CLI (experimental) | Yes | Built-in |
+| `CloudDBTPlugin` | dbt Cloud API (Epic 8+) | Yes | No |
+
+## Requirements Traceability
+
+- REQ-086 to REQ-095 (DBT Runtime Plugin)
+- REQ-096 to REQ-100 (SQL Linting)
 
 ## Related Documents
 
-- [ADR-0043: DBT Plugin](../adr/0043-dbt-plugin.md)
+- [ADR-0043: dbt Compilation Abstraction Layer](../adr/0043-dbt-plugin.md)
 - [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For dbt profile generation

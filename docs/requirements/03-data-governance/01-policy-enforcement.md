@@ -46,7 +46,7 @@ This group of requirements defines the PolicyEnforcer **core module** (not plugi
 - ADR-0012 (Data Classification)
 
 **Files to Create**:
-- `floe-core/src/floe_core/plugin_interfaces.py` - Add PolicyEnforcer ABC
+- `floe-core/src/floe_core/enforcement/policy_enforcer.py` - PolicyEnforcer core module (NOT in plugin_interfaces.py)
 
 ---
 
@@ -62,17 +62,33 @@ This group of requirements defines the PolicyEnforcer **core module** (not plugi
 - [ ] Kimball pattern enforces dim_*, fact_* prefixes
 - [ ] Lakehouse pattern allows custom rules
 - [ ] Enforcement levels: off, warn, strict
-- [ ] Clear error messages with suggestions
+
+**Error Message Format** (per ACCEPTANCE-CRITERIA-STANDARDS.md):
+
+Error messages MUST include all fields:
+```json
+{
+  "error_code": "FLOE-E201",
+  "message": "Model name violates medallion naming convention",
+  "field_name": "model_name",
+  "expected": "^(bronze|silver|gold)_[a-z][a-z0-9_]*$",
+  "actual": "stg_payments",
+  "suggestion": "Rename to bronze_payments (raw data), silver_payments (cleaned), or gold_payments (aggregated)",
+  "severity": "error",
+  "documentation": "https://floe.dev/docs/naming-conventions#medallion"
+}
+```
 
 **Enforcement**:
 - Naming validation tests for each pattern
 - Enforcement level tests (off/warn/strict)
 - Migration path tests (stg_* → bronze_*)
+- Error message format validation tests
 
 **Constraints**:
 - MUST support 3 patterns: medallion, kimball, lakehouse
-- MUST provide actionable error messages
-- FORBIDDEN to reject valid names without alternatives
+- MUST include all error message fields (error_code, message, field_name, expected, actual, suggestion)
+- FORBIDDEN to reject valid names without suggestion field populated
 - MUST allow configuration of custom patterns
 
 **Test Coverage**: `tests/unit/test_naming_enforcement.py`

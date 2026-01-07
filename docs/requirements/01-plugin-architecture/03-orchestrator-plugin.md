@@ -14,38 +14,38 @@ OrchestratorPlugin defines the interface for all orchestration engines (Dagster,
 
 ### REQ-021: OrchestratorPlugin ABC Definition **[New]**
 
-**Requirement**: OrchestratorPlugin MUST define abstract methods: create_assets_from_artifacts(), get_helm_values(), validate_connection(), get_resource_requirements().
+**Requirement**: OrchestratorPlugin MUST define abstract methods: `create_definitions()`, `create_assets_from_transforms()`, `get_helm_values()`, `validate_connection()`, `get_resource_requirements()`, `emit_lineage_event()`, `schedule_job()`.
 
 **Rationale**: Enforces consistent interface across all orchestration implementations.
 
 **Acceptance Criteria**:
 - [ ] ABC defined in `floe-core/src/floe_core/plugin_interfaces.py`
-- [ ] All 4 abstract methods defined with type hints
+- [ ] All 7 abstract methods defined with type hints
 - [ ] Docstrings explain purpose, parameters, return values
 - [ ] mypy --strict passes on interface definition
 
 **Enforcement**: ABC enforcement tests, mypy strict mode, plugin compliance test suite
 **Test Coverage**: `tests/contract/test_orchestrator_plugin.py::test_abc_compliance`
-**Traceability**: plugin-architecture.md, ADR-0011
+**Traceability**: interfaces/orchestrator-plugin.md, ADR-0033
 
 ---
 
-### REQ-022: OrchestratorPlugin Asset Creation **[New]**
+### REQ-022: OrchestratorPlugin Definition Creation **[New]**
 
-**Requirement**: OrchestratorPlugin.create_assets_from_artifacts() MUST generate platform-specific asset definitions from CompiledArtifacts that pass platform validation.
+**Requirement**: OrchestratorPlugin.create_definitions() MUST generate platform-specific definitions from CompiledArtifacts that pass platform validation.
 
 **Rationale**: Bridges floe-core compilation to orchestration platform assets/jobs.
 
 **Acceptance Criteria**:
 - [ ] Accepts CompiledArtifacts as input
-- [ ] Returns platform-specific asset/job definitions (dict or list)
-- [ ] All dbt models converted to platform assets
+- [ ] Returns platform-specific definitions (Dagster Definitions, Airflow DAG, etc.)
+- [ ] All dbt models converted to platform assets via create_assets_from_transforms()
 - [ ] All schedules and sensors converted to platform triggers
 - [ ] Asset lineage preserved from artifacts
 
 **Enforcement**: Asset generation tests, lineage validation tests
-**Test Coverage**: `tests/integration/test_orchestrator_asset_creation.py`
-**Traceability**: plugin-architecture.md:142-165
+**Test Coverage**: `tests/integration/test_orchestrator_definition_creation.py`
+**Traceability**: interfaces/orchestrator-plugin.md, ADR-0033
 
 ---
 

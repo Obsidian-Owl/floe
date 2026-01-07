@@ -65,7 +65,7 @@ Policy enforcement fails these criteria:
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 1: FOUNDATION (floe-core)                                │
 │                                                                 │
-│  EnforcementEngine (core module)                                │
+│  PolicyEnforcer (core module, NOT a plugin)                     │
 │  ├── apply_naming_rules(manifest, config)                       │
 │  ├── apply_coverage_rules(manifest, config)                     │
 │  └── apply_documentation_rules(manifest, config)                │
@@ -76,16 +76,18 @@ Policy enforcement fails these criteria:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### EnforcementEngine Interface
+### PolicyEnforcer Interface
 
 ```python
+# floe_core/enforcement/policy_enforcer.py
 from floe_core.schemas import GovernanceConfig
 
-class EnforcementEngine:
+class PolicyEnforcer:
     """Core module for compile-time policy enforcement.
 
     NOT a plugin - organizational rules are configuration,
-    not swappable implementations.
+    not swappable implementations. Located in floe_core/enforcement/,
+    NOT in plugin_interfaces.py.
     """
 
     def enforce(

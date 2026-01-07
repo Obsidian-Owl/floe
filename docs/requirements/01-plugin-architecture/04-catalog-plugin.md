@@ -8,7 +8,7 @@
 
 CatalogPlugin defines the interface for all data catalogs (Polaris, AWS Glue, Hive, Bigquery Dataplex). This enables data governance enforcement at the catalog layer while maintaining flexibility in catalog implementation choice.
 
-**Key ADR**: ADR-0018 (Iceberg Catalog Integration)
+**Key ADR**: ADR-0005 (Apache Iceberg as Enforced Table Format) - CatalogPlugin manages Iceberg catalog metadata
 
 ## Requirements
 
@@ -26,7 +26,7 @@ CatalogPlugin defines the interface for all data catalogs (Polaris, AWS Glue, Hi
 
 **Enforcement**: ABC enforcement tests, mypy strict mode, plugin compliance test suite
 **Test Coverage**: `tests/contract/test_catalog_plugin.py::test_abc_compliance`
-**Traceability**: plugin-architecture.md, ADR-0018
+**Traceability**: interfaces/catalog-plugin.md, ADR-0005
 
 ---
 

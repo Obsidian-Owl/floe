@@ -699,3 +699,37 @@ This group of requirements defines the Kubernetes resource model, networking, re
 **Traceability**:
 - Kubernetes Node Selection documentation
 - Kubernetes Taints and Tolerations documentation
+
+---
+
+### REQ-621: Docker Compose Prohibition **[New]**
+
+**Requirement**: System MUST NOT support Docker Compose for any deployment scenario including local development.
+
+**Rationale**: Kubernetes-native testing ensures parity between CI, local development, and production. Docker Compose cannot test K8s-specific behaviors (DNS resolution, probes, resource limits, network policies, RBAC). Bugs discovered only in production are expensive—fail fast with K8s-native testing.
+
+**Acceptance Criteria**:
+- [ ] No `docker-compose.yml` or `docker-compose.yaml` files in repository
+- [ ] No `compose.yml` or `compose.yaml` files in repository
+- [ ] CI pipeline fails if any Docker Compose file is detected
+- [ ] Documentation explicitly states K8s-only deployment (local: Kind, CI: Kind, prod: K8s)
+- [ ] `floe dev` command uses Kind cluster, not Docker Compose
+- [ ] Pre-commit hook rejects Docker Compose files
+
+**Enforcement**:
+- Pre-commit hook: `find . -name "docker-compose*.yml" -o -name "compose*.yml" | grep -q . && exit 1`
+- CI check: Repository scan for Docker Compose files
+- Documentation review: All guides reference Kind for local development
+
+**Constraints**:
+- MUST use Kind for local development (not Docker Compose)
+- MUST use Kubernetes for CI/CD testing (not Docker Compose)
+- MUST NOT include Docker Compose examples in documentation
+- FORBIDDEN to create, commit, or document Docker Compose workflows
+
+**Test Coverage**: `tests/ci/test_no_docker_compose.py`
+
+**Traceability**:
+- ADR-0017 (Kubernetes-Native Architecture)
+- TESTING.md (K8s-native testing requirements)
+- docs/guides/deployment/local-development.md (Kind setup)

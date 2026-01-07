@@ -542,9 +542,74 @@ This group of requirements defines the unified Manifest schema that supports bot
 
 ---
 
+### REQ-153: DataProduct Schema (floe.yaml) **[New]**
+
+**Requirement**: System MUST define DataProduct as a Pydantic v2 model for floe.yaml with required fields (`platform.ref`, `transforms`) and optional fields (`schedule`, `metadata`, `quality`).
+
+**Rationale**: Standardizes data product configuration, enables IDE autocomplete, and ensures consistent validation across all data engineer workflows.
+
+**Acceptance Criteria**:
+- [ ] DataProduct schema defined in `floe_core/schemas/data_product.py`
+- [ ] Required fields: `platform.ref` (OCI URI), `transforms` (list of dbt transforms)
+- [ ] Optional fields: `schedule`, `metadata`, `quality`, `ingestion`
+- [ ] Pydantic v2 syntax with model_config and field_validator
+- [ ] platform.ref format: `oci://registry/manifest:version`
+- [ ] transforms validation: at least one transform required
+- [ ] JSON Schema exportable for IDE autocomplete
+- [ ] Validation error messages include field path and expected format
+
+**Schema Definition**:
+```python
+class DataProduct(BaseModel):
+    """Data product configuration (floe.yaml)."""
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    api_version: Literal["floe.dev/v1"] = Field(default="floe.dev/v1")
+    kind: Literal["DataProduct"] = Field(default="DataProduct")
+
+    platform: PlatformRef  # Required: oci://registry/manifest:version
+    transforms: list[TransformConfig]  # Required: at least one transform
+
+    schedule: ScheduleConfig | None = None  # Optional
+    metadata: ProductMetadata | None = None  # Optional
+    quality: QualityConfig | None = None  # Optional
+    ingestion: list[IngestionConfig] | None = None  # Optional
+
+class PlatformRef(BaseModel):
+    """Reference to platform manifest."""
+    ref: str = Field(..., pattern=r"^oci://")
+
+class TransformConfig(BaseModel):
+    """dbt transform configuration."""
+    type: Literal["dbt"] = "dbt"
+    path: str  # Path to dbt project
+    target: str | None = None  # Optional target override
+```
+
+**Enforcement**:
+- Schema validation tests
+- Required field validation tests
+- OCI URI format tests
+- JSON Schema export tests
+
+**Constraints**:
+- MUST use Pydantic v2 syntax
+- MUST require platform.ref (no inline platform config)
+- MUST require at least one transform
+- FORBIDDEN to allow transforms without dbt type
+
+**Test Coverage**: `tests/contract/test_data_product_schema.py`
+
+**Traceability**:
+- ADR-0016 (Platform Enforcement Architecture)
+- ADR-0037 (Composability Principle)
+- four-layer-overview.md (Layer 4: Data)
+
+---
+
 ## Domain Acceptance Criteria
 
-Unified Manifest Schema (REQ-100 to REQ-115) is complete when:
+Unified Manifest Schema (REQ-100 to REQ-115, REQ-153) is complete when:
 
 - [ ] All 16 requirements have complete template fields
 - [ ] Manifest schema implemented in Pydantic v2 with scope field
