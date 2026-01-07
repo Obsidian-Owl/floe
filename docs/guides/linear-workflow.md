@@ -23,7 +23,8 @@ bd ready
 bd linear sync --pull
 
 # 5. Check Linear for team progress
-# Visit: https://linear.app/floe
+# Initiative: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
+# Epic docs: docs/plans/epics/
 ```
 
 **Core Principle**: Linear is the source of truth. Beads is the local cache.
@@ -41,7 +42,10 @@ This project uses a **Linear-first** architecture where Linear is the source of 
 - Linear MCP provides real-time status via API
 - All status updates happen in Linear first
 - Team collaboration via Linear web/app
-- Epic organization via Linear labels (epic-1 through epic-9)
+- Epic organization via Linear Initiative > Projects hierarchy
+  - Initiative: "floe Platform Delivery" (all Epics)
+  - Projects: Individual Epics (21 Projects, e.g., floe-01-plugin-registry)
+  - Issues: Tasks under each Project
 
 **Beads (Local Cache)**:
 - Cached copy of Linear issues for offline work
@@ -64,8 +68,8 @@ Linear (source)
 - **Team Collaboration**: Shared source of truth in Linear
 - **Offline Work**: Beads cache enables local queries
 - **Dependency Tracking**: Linear relations (blocks, blockedBy)
-- **Epic Organization**: Linear labels for visual grouping
-- **Full Traceability**: Requirements → Linear → Beads → Git → Tests
+- **Epic Organization**: Linear Initiative > Projects for visual grouping and progress tracking
+- **Full Traceability**: Requirements → Linear Projects → Issues → Beads → Git → Tests
 
 ---
 
@@ -76,13 +80,15 @@ This workflow maintains full traceability from original requirements through to 
 ```
 Combined Requirements (REQ-042 or 003#FR-015)
   ↓
-Tasks (T001 in specs/epic-3/tasks.md)
+Linear Projects (floe-03a-policy-enforcer, floe-04a-compute-plugin, etc.)
   ↓
-Linear Issues (FLO-123, epic-3-abc123)
+Tasks (T001 in specs/epic-3a/tasks.md)
+  ↓
+Linear Issues (FLO-123, under Project floe-03a-policy-enforcer)
   ↓
 Beads Cache (floe-abc123)
   ↓
-Git Commits (feat(plugin-api): add PluginMetadata ABC (T001, epic-3-abc123))
+Git Commits (feat(plugin-api): add PluginMetadata ABC (T001, FLO-123))
   ↓
 Tests (@pytest.mark.requirement("REQ-042"))
 ```
@@ -99,10 +105,11 @@ Tests (@pytest.mark.requirement("REQ-042"))
 - Example: `Requirements: REQ-042, 003#FR-015`
 
 **3. Linear Issue Creation** (`/speckit.taskstolinear`):
-- Creates Linear issues with Epic labels (epic-1 to epic-9)
+- Creates Linear issues under the appropriate Project (e.g., floe-03a-policy-enforcer)
 - Includes requirements in issue description
-- Example: Linear issue "Add PluginMetadata ABC" → Description includes "Requirements: REQ-042 (replaces 001#FR-002)"
+- Example: Linear issue "Add PluginMetadata ABC" → Description includes "Requirements: REQ-042"
 - Maps dependencies via Linear relations (blocks, blockedBy)
+- Project mapping via `.linear-mapping.json` or automatic Epic → Project resolution
 
 **4. Beads Sync** (`bd linear sync --pull`):
 - Syncs Linear issues to Beads cache
@@ -142,11 +149,12 @@ grep -r "@pytest.mark.requirement(\"REQ-042\")" packages/*/tests/
 ### Audit Compliance
 
 The full chain enables auditing:
-- Requirement (REQ-XXX or spec#FR-XXX) → Task → Linear issue → Beads issue → Commit → Test
+- Requirement (REQ-XXX or spec#FR-XXX) → Project → Task → Linear issue → Beads issue → Commit → Test
 - Every requirement has a test (via @pytest.mark.requirement)
-- Every commit traceable to requirement (via Linear identifier in commit message)
-- Every Linear issue traceable to Epic (via epic-N label)
-- Requirements documented in ADRs and feature specs
+- Every commit traceable to requirement (via Linear issue ID in commit message)
+- Every Linear issue traceable to Epic (via Project membership)
+- All Projects visible under "floe Platform Delivery" Initiative
+- Requirements documented in ADRs and `docs/plans/epics/` documentation
 
 ---
 
@@ -158,9 +166,9 @@ The full chain enables auditing:
 # 1. Generate tasks from plan
 /speckit.tasks
 
-# 2. Create Linear issues from tasks (with Epic labels and requirements)
+# 2. Create Linear issues from tasks (under Project with requirements)
 /speckit.taskstolinear
-# Creates Linear issues with epic-1 to epic-9 labels
+# Creates Linear issues under appropriate Project (e.g., floe-03a-policy-enforcer)
 # Syncs to Beads via bd linear sync --pull
 
 # 3. Show what's ready to work on
@@ -339,12 +347,14 @@ You rarely need manual sync.
 ### 7. Check Linear for Team Progress
 
 Use Linear app/web to see full Epic view:
-- Visual kanban board
+- Visual kanban board per Project
 - Team member assignments
-- Epic progress (epic-1 through epic-9 labels)
-- Dependency graphs
+- Initiative progress (all 21 Projects under "floe Platform Delivery")
+- Project dependency graphs
+- Milestone tracking
 
-**Linear URL**: https://linear.app/floe
+**Initiative URL**: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
+**Epic Documentation**: `docs/plans/epics/` for detailed context
 
 **Why**: Linear provides richer team collaboration features than CLI.
 
@@ -537,32 +547,38 @@ The `.linear-mapping.json` file stores task ↔ Linear ↔ Beads mappings:
 
 ```json
 {
-  "feature": "epic-3-plugin-interface-foundation",
-  "epic_label": "epic-3",
+  "feature": "epic-3a-policy-enforcer-core",
+  "project_id": "08a4f4df-013c-xxxx-xxxx-xxxxxxxxxxxx",
+  "project_name": "floe-03a-policy-enforcer",
+  "project_url": "https://linear.app/obsidianowl/project/floe-03a-policy-enforcer-08a4f4df013c",
+  "initiative_id": "25020298-255a-xxxx-xxxx-xxxxxxxxxxxx",
+  "initiative_name": "floe Platform Delivery",
   "created_at": "2026-01-05T10:30:00Z",
   "last_sync": "2026-01-05T11:45:00Z",
   "mappings": {
     "T001": {
       "linear_id": "FLO-123",
-      "linear_identifier": "epic-3-abc123",
       "bead_id": "floe-abc123",
       "status": "completed",
-      "title": "Add PluginMetadata ABC",
-      "url": "https://linear.app/floe/issue/FLO-123",
-      "requirements": ["REQ-042", "001#FR-002"]
+      "title": "Add PolicyEnforcer ABC",
+      "url": "https://linear.app/obsidianowl/issue/FLO-123",
+      "requirements": ["REQ-200", "REQ-201"]
     }
   }
 }
 ```
 
 **Fields**:
-- `feature`: Feature directory name
-- `epic_label`: Linear Epic label (epic-1 to epic-9)
+- `feature`: Feature directory name (matches Epic)
+- `project_id`: Linear Project UUID
+- `project_name`: Linear Project name (e.g., floe-03a-policy-enforcer)
+- `project_url`: Direct link to Project in Linear
+- `initiative_id`: Parent Initiative UUID ("floe Platform Delivery")
+- `initiative_name`: Initiative name
 - `created_at`: Mapping creation timestamp
 - `last_sync`: Last sync with Linear
 - `mappings`: Task ID → issue details
   - `linear_id`: Linear issue ID (FLO-123)
-  - `linear_identifier`: Linear short identifier (epic-3-abc123)
   - `bead_id`: Beads issue ID (floe-abc123)
   - `status`: Current Linear status
   - `title`: Issue title
@@ -583,7 +599,38 @@ linear:
   hash_length: 6
   id_mode: hash
 
-  # Label mapping
+  # Initiative and Project configuration
+  initiative_id: 25020298-255a-xxxx-xxxx-xxxxxxxxxxxx  # "floe Platform Delivery"
+
+  # Project mapping (Epic → Linear Project)
+  # Projects are created under the Initiative
+  project_map:
+    epic-1: floe-01-plugin-registry
+    epic-2a: floe-02a-manifest-schema
+    epic-2b: floe-02b-compilation
+    epic-3a: floe-03a-policy-enforcer
+    epic-3b: floe-03b-policy-validation
+    epic-3c: floe-03c-data-contracts
+    epic-3d: floe-03d-contract-monitoring
+    epic-4a: floe-04a-compute-plugin
+    epic-4b: floe-04b-orchestrator-plugin
+    epic-4c: floe-04c-catalog-plugin
+    epic-4d: floe-04d-storage-plugin
+    epic-5a: floe-05a-dbt-plugin
+    epic-5b: floe-05b-dataquality-plugin
+    epic-6a: floe-06a-opentelemetry
+    epic-6b: floe-06b-openlineage
+    epic-7a: floe-07a-identity-secrets
+    epic-7b: floe-07b-k8s-rbac
+    epic-7c: floe-07c-network-pod-security
+    epic-8a: floe-08a-oci-client
+    epic-8b: floe-08b-artifact-signing
+    epic-8c: floe-08c-promotion-lifecycle
+    epic-9a: floe-09a-k8s-deployment
+    epic-9b: floe-09b-helm-charts
+    epic-9c: floe-09c-testing-infra
+
+  # Label mapping (for type categorization)
   label_type_map:
     bug: bug
     epic: epic
@@ -615,58 +662,12 @@ linear:
 
 **Key Points**:
 - `team_id`: floe Linear team UUID
+- `initiative_id`: "floe Platform Delivery" Initiative containing all Projects
+- `project_map`: Maps Epic directories to Linear Project names
 - `id_mode: hash`: Use 6-character hash IDs (consistent with Linear identifiers)
 - Mappings handle priority/status translation between Linear and Beads
 
----
-
-## Mapping File Format
-
-The `.linear-mapping.json` file tracks task ID ↔ Linear issue relationships:
-
-```json
-{
-  "feature": "epic-3-plugin-interface-foundation",
-  "epic_label": "epic-3",
-  "epic_url": "https://linear.app/floe/label/epic-3",
-  "created_at": "2026-01-05T10:30:00Z",
-  "last_sync": "2026-01-05T11:45:00Z",
-  "mappings": {
-    "T001": {
-      "linear_id": "FLO-123",
-      "linear_identifier": "epic-3-abc123",
-      "bead_id": "floe-abc123",
-      "status": "completed",
-      "title": "Setup project structure",
-      "url": "https://linear.app/floe/issue/FLO-123"
-    },
-    "T002": {
-      "linear_id": "FLO-124",
-      "linear_identifier": "epic-3-def456",
-      "bead_id": "floe-def456",
-      "status": "started",
-      "title": "Create authentication middleware",
-      "url": "https://linear.app/floe/issue/FLO-124"
-    }
-  }
-}
-```
-
-**Fields**:
-- `feature`: Feature directory name
-- `epic_label`: Linear label for this epic (e.g., "epic-3")
-- `epic_url`: Link to Linear label view
-- `created_at`: Initial mapping creation timestamp
-- `last_sync`: Last reconciliation timestamp
-- `mappings`: Task ID → Linear issue details
-
-**Per-Task Mapping**:
-- `linear_id`: Linear issue UUID (e.g., "FLO-123")
-- `linear_identifier`: Human-readable identifier (e.g., "epic-3-abc123")
-- `bead_id`: Beads issue ID (synced from Linear)
-- `status`: Current status ("todo", "started", "completed", "canceled")
-- `title`: Issue title (includes Task ID prefix)
-- `url`: Direct link to Linear issue
+**Initiative URL**: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
 
 ---
 
@@ -681,13 +682,12 @@ All Linear issues created from tasks.md follow this structure:
 **Description Template**:
 ```markdown
 **Task ID**: T001
-**Epic**: epic-3
+**Project**: floe-03a-policy-enforcer
 **Phase**: Phase 3: User Story Implementation
 **Parallel**: Yes/No
 
 **Requirements Mapping**:
-- Replaces: 003#FR-015 (old spec requirement)
-- Implements: REQ-042 (combined requirement)
+- Implements: REQ-200, REQ-201
 
 **Description**:
 {Full task description from tasks.md}
@@ -699,7 +699,7 @@ All Linear issues created from tasks.md follow this structure:
 ```
 
 **Metadata**:
-- **Labels**: Epic label (e.g., "epic-3") for organization
+- **Project**: Linear Project (e.g., "floe-03a-policy-enforcer") - issues belong to Projects
 - **Priority**: Extracted from task markers ([P0], [P1], etc.) or description keywords
 - **State**: "Todo" (pending), "Done" (completed), or "In Progress"
 
@@ -707,12 +707,12 @@ All Linear issues created from tasks.md follow this structure:
 
 **tasks.md → Linear** (Create new issues):
 - Parse tasks.md for new task IDs
-- Create Linear issues with epic label
+- Create Linear issues under appropriate Project
 - Store mapping in `.linear-mapping.json`
 - Sync to Beads via `bd linear sync --pull`
 
 **Linear → tasks.md** (Mark completed):
-- Query Linear for issues with epic label
+- Query Linear for issues in the Project
 - Find tasks marked "Done" in Linear but `[ ]` in tasks.md
 - Update tasks.md: `- [ ]` → `- [x]`
 - Preserve all formatting and structure
@@ -744,8 +744,8 @@ All Linear issues created from tasks.md follow this structure:
 Check for Linear issues without corresponding tasks:
 
 ```bash
-# Get all Linear issues for epic
-ISSUES=$(mcp__plugin_linear_linear__list_issues --label="epic-3")
+# Get all Linear issues for Project
+ISSUES=$(mcp__plugin_linear_linear__list_issues --project="floe-03a-policy-enforcer")
 
 # Compare with .linear-mapping.json
 # Orphans = Linear issues not in mapping
@@ -799,7 +799,13 @@ Check dependency integrity:
 ## References
 
 - **ADR**: [ADR-0042: Linear + Beads Traceability](../architecture/adr/0042-linear-beads-traceability.md)
+- **Epic Documentation**: [docs/plans/epics/](../plans/epics/) - All 21 Epic specifications
+- **Initiative Overview**: [docs/plans/EPIC-OVERVIEW.md](../plans/EPIC-OVERVIEW.md) - Dependency graph, parallelization
+- **Requirements Traceability**: [docs/plans/REQUIREMENTS-TRACEABILITY.md](../plans/REQUIREMENTS-TRACEABILITY.md) - Full REQ→Epic mapping
 - **Commands**:
   - [speckit.taskstolinear](../../.claude/commands/speckit.taskstolinear.md)
   - [speckit.implement](../../.claude/commands/speckit.implement.md)
+- **Linear Resources**:
+  - Initiative: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
+  - Team: floe-runtime
 - **Beads Documentation**: Run `bd --help` or `bd onboard`

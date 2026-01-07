@@ -118,6 +118,7 @@ Copy this checklist when starting any session where bd is available:
 
 ```
 Session Start:
+- [ ] If Linear configured: bd linear sync --pull (get team updates)
 - [ ] Run bd ready --json to see available work
 - [ ] Run bd list --status in_progress --json for active work
 - [ ] If in_progress exists: bd show <issue-id> to read notes
@@ -125,6 +126,8 @@ Session Start:
 - [ ] If using global ~/.beads, mention this in report
 - [ ] If nothing ready: bd blocked --json to check blockers
 ```
+
+**Check Linear status**: `bd linear status` (shows "Not configured" or sync status)
 
 **Pattern**: Always check both `bd ready` AND `bd list --status in_progress`. Read notes field first to understand where previous session left off.
 
