@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Git pre-push hook - runs CI checks locally before push
+# Install with: git config core.hooksPath .githooks
+
+set -e
+
+echo "🔍 Running pre-push validation..."
+
+# Run the check script
+if [ -x "scripts/check.sh" ]; then
+    ./scripts/check.sh
+else
+    echo "⚠️  scripts/check.sh not found, running inline checks..."
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run mypy --strict packages/*/src/
+
+    # Helm chart validation (required)
+    if command -v helm &> /dev/null; then
+        echo "⎈ Linting Helm charts..."
+        helm lint charts/floe-dagster/
+        helm lint charts/floe-cube/
+    else
+        echo "ERROR: helm CLI not found. Install with: brew install helm" >&2
+        exit 1
+    fi
+
+    uv run pytest packages/*/tests/ -q
+fi
+
+echo "✅ Pre-push checks passed!"

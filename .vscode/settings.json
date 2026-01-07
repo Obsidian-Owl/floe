@@ -1,0 +1,6 @@
+{
+    "sonarlint.connectedMode.project": {
+        "connectionId": "obsidian-owl",
+        "projectKey": "Obsidian-Owl_floe"
+    }
+}

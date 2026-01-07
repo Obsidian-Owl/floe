@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "PYTEST_TIMEOUT": "300",
+    "PYTHON_VERSION": "3.10",
+    "ENABLE_LSP_TOOL": "1"
+  },
+  "attribution": {
+    "commit": "🤖 Generated with Claude Code\n\n<noreply@anthropic.com>",
+    "pr": "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+  },
+  "model": "claude-opus-4-5-20251101",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m black --line-length 100 \"$FILE_PATH\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "python -m isort \"$FILE_PATH\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  },
+  "companyAnnouncements": [
+    "🔒 Security: Never commit secrets or use eval()/exec()",
+    "📝 Type Safety: Use Pydantic for ALL data validation",
+    "✅ Quality: Maintain > 80% test coverage",
+    "📚 Skills: Invoke skills from .claude/skills/ for component work"
+  ],
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true
+  }
+}
