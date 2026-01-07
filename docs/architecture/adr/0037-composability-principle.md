@@ -119,7 +119,7 @@ plugins = registry.discover("floe.computes")
 # ✅ GOOD: Pointer to detailed docs
 ## Plugin Architecture
 floe uses plugin interfaces for extensibility. 11 plugin types exist.
-**See:** docs/architecture/plugin-architecture.md
+**See:** docs/architecture/plugin-system/index.md
 ```
 
 **Application:**
@@ -380,7 +380,7 @@ config = backend_plugin.get_otlp_exporter_config()
 - [ADR-0018: Opinionation Boundaries](0018-opinionation-boundaries.md) - When to enforce vs allow plugins
 - [ADR-0035: Observability Plugin Interface](0035-observability-plugin-interface.md) - Reference implementation
 - [ADR-0036: Storage Plugin Interface](0036-storage-plugin-interface.md) - Reference implementation
-- [plugin-architecture.md](../plugin-architecture.md) - Complete plugin patterns
+- [plugin-system/](../plugin-system/index.md) - Complete plugin patterns
 - [interfaces/](../interfaces/index.md) - All plugin ABCs
 - [03-solution-strategy.md](../../guides/03-solution-strategy.md) - Solution strategy
 - **Industry References:**

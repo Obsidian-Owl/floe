@@ -26,7 +26,7 @@ When adding features, composability guides the decision:
 | Scaling from single-team to Data Mesh | Unified Manifest schema with `scope` field | Separate schemas requiring migration |
 | Adding observability backends | TelemetryBackendPlugin + LineageBackendPlugin ABCs | Configuration enum of backends |
 
-**Outcome**: 11 plugin types enable flexibility while maintaining enforced standards (see [plugin-architecture.md](../architecture/plugin-architecture.md)).
+**Outcome**: 11 plugin types enable flexibility while maintaining enforced standards (see [plugin-system/index.md](../architecture/plugin-system/index.md)).
 
 **See**: [ADR-0037: Composability Principle](../architecture/adr/0037-composability-principle.md) for detailed rationale.
 

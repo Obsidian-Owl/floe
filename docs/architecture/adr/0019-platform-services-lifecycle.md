@@ -256,4 +256,5 @@ resources:
 
 - [ADR-0016: Platform Enforcement Architecture](0016-platform-enforcement-architecture.md) - Four-layer architecture
 - [ADR-0017: K8s Testing Infrastructure](0017-k8s-testing-infrastructure.md) - Testing approach
-- [06-deployment-view.md](../../guides/06-deployment-view.md) - Deployment details
+- [Deployment View](../../guides/deployment/index.md) - Deployment overview
+- [Production](../../guides/deployment/production.md) - Production deployment details

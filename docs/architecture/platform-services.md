@@ -282,4 +282,5 @@ services:
 
 - [ADR-0019: Platform Services Lifecycle](adr/0019-platform-services-lifecycle.md)
 - [Four-Layer Overview](four-layer-overview.md)
-- [06-deployment-view.md](../guides/06-deployment-view.md)
+- [Deployment View](../guides/deployment/index.md)
+- [Two-Layer Model](../guides/deployment/two-layer-model.md)

@@ -72,5 +72,5 @@ class OrchestratorPlugin(ABC):
 ## Related Documents
 
 - [ADR-0033: Orchestrator Plugin](../adr/0033-orchestrator-plugin.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [LineageBackendPlugin](lineage-backend-plugin.md) - For lineage event destinations

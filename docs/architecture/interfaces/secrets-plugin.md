@@ -73,5 +73,5 @@ class SecretsPlugin(ABC):
 
 - [ADR-0023: Secrets Management](../adr/0023-secrets-management.md)
 - [ADR-0031: Secret References](../adr/0031-secret-references.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For credential injection into dbt profiles

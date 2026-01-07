@@ -89,5 +89,5 @@ class IngestionPlugin(ABC):
 ## Related Documents
 
 - [ADR-0020: Ingestion Plugins](../adr/0020-ingestion-plugins.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [CatalogPlugin](catalog-plugin.md) - For destination table registration

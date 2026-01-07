@@ -256,4 +256,4 @@ This enables:
 - [ADR-0038: Data Mesh Architecture](adr/0038-data-mesh-architecture.md) - Three-tier inheritance
 - [Four-Layer Overview](four-layer-overview.md)
 - [Platform Enforcement](platform-enforcement.md)
-- [Plugin Architecture](plugin-architecture.md)
+- [Plugin Architecture](plugin-system/index.md)

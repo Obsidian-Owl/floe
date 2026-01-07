@@ -23,7 +23,7 @@ Each interface defines the methods that plugin implementations must provide, ena
 | [SecretsPlugin](secrets-plugin.md) | Credential management | `floe_core/interfaces/secrets.py` | [ADR-0023](../adr/0023-secrets-management.md) |
 | [IdentityPlugin](identity-plugin.md) | User authentication (OIDC) | `floe_core/interfaces/identity.py` | [ADR-0024](../adr/0024-identity-access-management.md) |
 
-**Total:** 12 plugin interfaces (see [plugin-architecture.md](../plugin-architecture.md) for canonical registry)
+**Total:** 12 plugin interfaces (see [plugin-system/index.md](../plugin-system/index.md) for canonical registry)
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugin interfaces. See [ADR-0015](../adr/0015-policy-enforcer.md) and [ADR-0026](../adr/0026-data-contract-architecture.md).
 
@@ -51,6 +51,6 @@ class PluginMetadata:
 
 ## Related Documents
 
-- [Plugin Architecture](../plugin-architecture.md) - Plugin structure, discovery, and registration
+- [Plugin Architecture](../plugin-system/index.md) - Plugin structure, discovery, and registration
 - [ADR-0037: Composability Model](../adr/0037-composability-model.md) - How plugins compose together
 - [ADR-0008: Repository Split](../adr/0008-repository-split.md) - Plugin architecture origins

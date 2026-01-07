@@ -134,5 +134,5 @@ class ComputePlugin(ABC):
 ## Related Documents
 
 - [ADR-0010: Target-Agnostic Compute](../adr/0010-target-agnostic-compute.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [CatalogPlugin](catalog-plugin.md) - For catalog attachment

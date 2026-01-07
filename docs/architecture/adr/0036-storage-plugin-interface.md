@@ -719,7 +719,7 @@ warehouse = storage_plugin.get_warehouse_uri("bronze")
 
 - [ADR-0005: Apache Iceberg Table Format](0005-iceberg-table-format.md) - Iceberg as enforced standard
 - [ADR-0037: Composability Principle](0037-composability-principle.md) - Plugin architecture rationale
-- [plugin-architecture.md](../plugin-architecture.md) - Plugin patterns
+- [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/storage-plugin.md](../interfaces/storage-plugin.md) - StoragePlugin ABC definition
 - **Industry References:**
   - [PyIceberg FileIO Documentation](https://py.iceberg.apache.org/api/#fileio)

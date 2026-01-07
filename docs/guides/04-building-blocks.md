@@ -167,7 +167,7 @@ See [ADR-0021](../architecture/adr/0021-data-architecture-patterns.md) and [Cont
 
 ### 3.3 Plugin Interfaces (ABCs)
 
-floe defines **11 plugin interfaces** for extensibility (see [plugin-architecture.md](../architecture/plugin-architecture.md) for canonical registry):
+floe defines **11 plugin interfaces** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for canonical registry):
 
 | Plugin Type | Entry Point | Purpose | ADR |
 |-------------|-------------|---------|-----|
@@ -361,7 +361,7 @@ dagster = "floe_orchestrator_dagster:chart"
 
 ### 6.3 Available Plugins
 
-floe supports **11 plugin types** (see [plugin-architecture.md](../architecture/plugin-architecture.md) for canonical registry):
+floe supports **11 plugin types** (see [plugin-system/index.md](../architecture/plugin-system/index.md) for canonical registry):
 
 | Category | Default | Alternatives | ADR |
 |----------|---------|--------------|-----|

@@ -669,7 +669,7 @@ Each plugin registers its error codes:
 ## References
 
 - [Plugin Interfaces](../interfaces/index.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [ADR-0010: Target-Agnostic Compute](./0010-target-agnostic-compute.md)
 - [OpenLineage Run Events](https://openlineage.io/docs/spec/run-events)
 - [Rust Result Pattern](https://doc.rust-lang.org/std/result/) (inspiration)

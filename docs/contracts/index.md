@@ -200,5 +200,5 @@ Contracts follow semantic versioning:
 
 - [Four-Layer Overview](../architecture/four-layer-overview.md) - Architecture context
 - [Platform Artifacts](../architecture/platform-artifacts.md) - OCI storage
-- [Plugin Architecture](../architecture/plugin-architecture.md) - Plugin system
+- [Plugin Architecture](../architecture/plugin-system/index.md) - Plugin system
 - [Opinionation Boundaries](../architecture/opinionation-boundaries.md) - Defaults

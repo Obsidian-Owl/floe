@@ -110,5 +110,5 @@ class DataQualityPlugin(ABC):
 ## Related Documents
 
 - [ADR-0044: Data Quality Plugin](../adr/0044-data-quality-plugin.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [CatalogPlugin](catalog-plugin.md) - For quality metadata storage

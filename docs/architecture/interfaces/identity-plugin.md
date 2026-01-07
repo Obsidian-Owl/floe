@@ -128,5 +128,5 @@ class IdentityPlugin(ABC):
 ## Related Documents
 
 - [ADR-0024: Identity and Access Management](../adr/0024-identity-access-management.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [SecretsPlugin](secrets-plugin.md) - For client secret storage

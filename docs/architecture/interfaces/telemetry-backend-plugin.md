@@ -73,5 +73,5 @@ class TelemetryBackendPlugin(ABC):
 ## Related Documents
 
 - [ADR-0035: Observability Plugin Interface](../adr/0035-observability-plugin-interface.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [LineageBackendPlugin](lineage-backend-plugin.md) - Companion observability plugin

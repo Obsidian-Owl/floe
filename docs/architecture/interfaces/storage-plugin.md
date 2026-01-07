@@ -129,5 +129,5 @@ class StoragePlugin(ABC):
 ## Related Documents
 
 - [ADR-0036: Storage Plugin Interface](../adr/0036-storage-plugin-interface.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [CatalogPlugin](catalog-plugin.md) - For catalog-storage coordination

@@ -498,5 +498,5 @@ Each catalog plugin implements the interface using the catalog's native property
 
 - [ADR-0008: Repository Split](../adr/0008-repository-split.md)
 - [ADR-0030: Namespace-Based Identity](../adr/0030-namespace-identity.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [StoragePlugin](storage-plugin.md) - For storage layer integration

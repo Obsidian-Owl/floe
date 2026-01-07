@@ -346,7 +346,7 @@ def create_assets(spec: FloeSpec):  # NO! Use CompiledArtifacts
 - Use `SecretReference` for credentials (NEVER hardcoded secrets)
 - Have >80% test coverage (discovery, compliance, functional)
 
-**See**: `docs/architecture/plugin-architecture.md`
+**See**: `docs/architecture/plugin-system/index.md`
 
 ### 4. Testing Standards
 
@@ -498,7 +498,7 @@ floe/
 ### Progressive Disclosure
 
 **Don't dump everything into context**:
-- ✅ Point to detailed docs (`docs/architecture/plugin-architecture.md`)
+- ✅ Point to detailed docs (`docs/architecture/plugin-system/index.md`)
 - ✅ Read specific sections when needed
 - ❌ Copy entire architecture docs into conversation
 

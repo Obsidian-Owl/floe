@@ -274,5 +274,5 @@ kubectl logs -f job/integration-tests
 - [Kind Documentation](https://kind.sigs.k8s.io/)
 - [helm/kind-action](https://github.com/helm/kind-action)
 - [Testing Kubernetes Operators](https://sdk.operatorframework.io/docs/building-operators/golang/testing/)
-- [08-quality.md](../../guides/08-quality.md) - Testing strategy documentation
+- [Testing Guide](../../guides/testing/index.md) - Testing strategy documentation
 - [ADR-0016: Platform Enforcement Architecture](0016-platform-enforcement-architecture.md)

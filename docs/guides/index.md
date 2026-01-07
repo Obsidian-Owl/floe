@@ -12,9 +12,9 @@ This directory contains the implementation guides for floe, following the [Arc42
 | 03 | [Solution Strategy](03-solution-strategy.md) | Technology decisions and patterns |
 | 04 | [Building Blocks](04-building-blocks.md) | Core components and schemas |
 | 05 | [Runtime View](05-runtime-view.md) | CLI workflows and execution flows |
-| 06 | [Deployment View](06-deployment-view.md) | Kubernetes deployment patterns |
+| 06 | [Deployment View](deployment/index.md) | Kubernetes deployment patterns ([split](deployment/)) |
 | 07 | [Crosscutting](07-crosscutting.md) | Observability, security, configuration |
-| 08 | [Quality](08-quality.md) | Testing strategy and quality requirements |
+| 08 | [Quality](08-quality.md) | Testing strategy and quality requirements ([split](testing/)) |
 | 09 | [Risks](09-risks.md) | Risks and technical debt |
 | 10 | [Glossary](10-glossary.md) | Terminology and definitions |
 
@@ -27,8 +27,8 @@ This directory contains the implementation guides for floe, following the [Arc42
 
 ### Implementation
 - [Runtime View](05-runtime-view.md) - CLI commands and workflows
-- [Deployment View](06-deployment-view.md) - Kubernetes deployment
-- [Quality](08-quality.md) - Testing patterns
+- [Deployment View](deployment/index.md) - Kubernetes deployment
+- [Quality](testing/index.md) - Testing patterns
 
 ### Reference
 - [Solution Strategy](03-solution-strategy.md) - Technology rationale

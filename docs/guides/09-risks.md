@@ -73,7 +73,7 @@ Dagster and Polaris both depend on PostgreSQL for metadata storage. In productio
    - Configure synchronous replication for zero data loss
    - Test failover quarterly
 3. Document connection string updates during manual failover
-4. Backup PostgreSQL daily with retention per `06-deployment-view.md`
+4. Backup PostgreSQL daily with retention per [deployment/production.md](deployment/production.md)
 
 **Status:** Partially mitigated (HA mentioned in deployment view, procedures not documented)
 
@@ -229,5 +229,6 @@ Upgrading floe (Python packages, Helm charts, or platform manifests) may introdu
 
 - [ADR-0022: Security & RBAC Model](../architecture/adr/0022-security-rbac-model.md) - Network policies
 - [ADR-0023: Secrets Management](../architecture/adr/0023-secrets-management.md) - Credential handling
-- [06-Deployment View](06-deployment-view.md) - Backup procedures
+- [Deployment View](deployment/index.md) - Deployment overview
+- [Production](deployment/production.md) - Backup procedures
 - [07-Crosscutting](07-crosscutting.md) - Error handling patterns

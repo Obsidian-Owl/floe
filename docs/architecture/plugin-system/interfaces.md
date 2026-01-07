@@ -1,150 +1,8 @@
-# Plugin Architecture
+# Plugin Interfaces
 
-This document describes the plugin system that enables floe's flexibility.
+This document describes all plugin interface ABCs.
 
-## Overview
-
-floe uses a plugin architecture for all configurable components:
-
-| Plugin Type | Default | Purpose | ADR |
-|-------------|---------|---------|-----|
-| **Compute** | DuckDB | Where dbt transforms execute | ADR-0010 |
-| **Orchestrator** | Dagster | Job scheduling and execution | ADR-0033 |
-| **Catalog** | Polaris | Iceberg table catalog | ADR-0008 |
-| **Storage** | MinIO (local), S3 (prod) | Object storage for Iceberg data | ADR-0036 |
-| **TelemetryBackend** | Jaeger (local), Datadog (prod) | OTLP telemetry backend (traces, metrics, logs) | ADR-0035 |
-| **LineageBackend** | Marquez (local), Atlan (prod) | OpenLineage backend (data lineage) | ADR-0035 |
-| **DBT** | dbt-core (local) | dbt compilation environment (local/fusion/cloud) | ADR-0043 |
-| **Semantic Layer** | Cube | Business intelligence API | ADR-0001 |
-| **Ingestion** | dlt | Data loading from sources | ADR-0020 |
-| **Secrets** | K8s Secrets | Credential management | ADR-0023/0031 |
-| **Identity** | Keycloak | Authentication provider | ADR-0024 |
-
-**Total:** 11 plugin types (per ADR-0037 Composability Principle)
-
-> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. Policy enforcement tooling is provided via DBTPlugin, and rules are configured via platform-manifest.yaml. Data contracts use ODCS v3 as an enforced standard.
-
-> **Canonical Registry**: This table is the authoritative source for plugin type counts and entry points. All documentation references should link here.
-
-### Plugin Type History
-
-| Version | Count | Changes |
-|---------|-------|---------|
-| floe-core 2.1 | 11 | Moved PolicyEnforcer + DataContract to core modules (not plugins) |
-| floe-core 2.0 | 13 | Split ObservabilityPlugin → TelemetryBackendPlugin + LineageBackendPlugin (ADR-0035) |
-| floe-core 1.5 | 12 | Added DBTPlugin (ADR-0043) |
-| floe-core 1.4 | 11 | Added DataQualityPlugin (ADR-0044) |
-| floe-core 1.0 | 11 | Initial plugin architecture |
-
-## Plugin Structure
-
-Each plugin is a self-contained package:
-
-```
-plugins/floe-orchestrator-dagster/
-├── src/
-│   ├── __init__.py
-│   └── plugin.py           # DagsterOrchestratorPlugin class
-├── chart/                   # Helm chart (if service deployment needed)
-│   ├── Chart.yaml
-│   ├── values.yaml
-│   └── templates/
-│       ├── deployment.yaml
-│       ├── service.yaml
-│       └── configmap.yaml
-├── tests/
-│   ├── test_plugin.py
-│   └── conftest.py
-└── pyproject.toml          # Entry point registration
-```
-
-## Plugin Discovery
-
-Plugins register via Python entry points:
-
-```toml
-# pyproject.toml
-[project]
-name = "floe-orchestrator-dagster"
-version = "1.0.0"
-dependencies = [
-    "floe-core>=1.0.0",
-    "dagster>=1.6.0",
-]
-
-[project.entry-points."floe.orchestrators"]
-dagster = "floe_orchestrator_dagster:DagsterOrchestratorPlugin"
-
-[project.entry-points."floe.charts"]
-dagster = "floe_orchestrator_dagster:chart"
-```
-
-## Plugin Registry
-
-```python
-# floe_core/registry.py
-from importlib.metadata import entry_points
-
-class PluginRegistry:
-    """Discovers and loads plugins via entry points."""
-
-    def __init__(self):
-        self._orchestrators: dict[str, type[OrchestratorPlugin]] = {}
-        self._computes: dict[str, type[ComputePlugin]] = {}
-        self._catalogs: dict[str, type[CatalogPlugin]] = {}
-        self._storage: dict[str, type[StoragePlugin]] = {}
-        self._telemetry_backends: dict[str, type[TelemetryBackendPlugin]] = {}
-        self._lineage_backends: dict[str, type[LineageBackendPlugin]] = {}
-        self._dbt: dict[str, type[DBTPlugin]] = {}
-        self._semantic_layers: dict[str, type[SemanticLayerPlugin]] = {}
-        self._ingestion: dict[str, type[IngestionPlugin]] = {}
-        self._secrets: dict[str, type[SecretsPlugin]] = {}
-        self._identity: dict[str, type[IdentityPlugin]] = {}
-
-    def discover_all(self) -> None:
-        """Scan all installed packages for floe.* entry points."""
-        for group in [
-            "floe.orchestrators",
-            "floe.computes",
-            "floe.catalogs",
-            "floe.storage",
-            "floe.telemetry_backends",
-            "floe.lineage_backends",
-            "floe.dbt",
-            "floe.semantic_layers",
-            "floe.ingestion",
-            "floe.secrets",
-            "floe.identity",
-        ]:
-            eps = entry_points(group=group)
-            for ep in eps:
-                plugin_class = ep.load()
-                self._register(group, ep.name, plugin_class)
-
-    def get_orchestrator(self, name: str) -> OrchestratorPlugin:
-        """Get orchestrator plugin by name."""
-        return self._orchestrators[name]()
-
-    def list_available(self) -> dict[str, list[str]]:
-        """List all available plugins by type (11 types total)."""
-        return {
-            "orchestrators": list(self._orchestrators.keys()),
-            "computes": list(self._computes.keys()),
-            "catalogs": list(self._catalogs.keys()),
-            "storage": list(self._storage.keys()),
-            "telemetry_backends": list(self._telemetry_backends.keys()),
-            "lineage_backends": list(self._lineage_backends.keys()),
-            "dbt": list(self._dbt.keys()),
-            "semantic_layers": list(self._semantic_layers.keys()),
-            "ingestion": list(self._ingestion.keys()),
-            "secrets": list(self._secrets.keys()),
-            "identity": list(self._identity.keys()),
-        }
-```
-
-## Plugin Interfaces
-
-### ComputePlugin
+## ComputePlugin
 
 ```python
 class ComputePlugin(ABC):
@@ -185,7 +43,7 @@ class ComputePlugin(ABC):
         return None
 ```
 
-### OrchestratorPlugin
+## OrchestratorPlugin
 
 ```python
 class OrchestratorPlugin(ABC):
@@ -210,7 +68,7 @@ class OrchestratorPlugin(ABC):
         pass
 ```
 
-### CatalogPlugin
+## CatalogPlugin
 
 ```python
 class CatalogPlugin(ABC):
@@ -235,7 +93,7 @@ class CatalogPlugin(ABC):
         pass
 ```
 
-### SemanticLayerPlugin
+## SemanticLayerPlugin
 
 ```python
 class SemanticLayerPlugin(ABC):
@@ -286,7 +144,7 @@ class SemanticLayerPlugin(ABC):
         pass
 ```
 
-### IngestionPlugin
+## IngestionPlugin
 
 ```python
 class IngestionPlugin(ABC):
@@ -312,7 +170,7 @@ class IngestionPlugin(ABC):
         pass
 ```
 
-### DBTPlugin
+## DBTPlugin
 
 Per ADR-0043, dbt **execution environment** (WHERE dbt compiles) is pluggable, while dbt **framework** (SQL transformation DSL) is enforced:
 
@@ -321,7 +179,7 @@ class DBTPlugin(ABC):
     """Interface for dbt compilation environment plugins.
 
     Responsibilities:
-    - Compile dbt projects (Jinja → SQL)
+    - Compile dbt projects (Jinja -> SQL)
     - Execute dbt commands (run, test, snapshot)
     - Provide SQL linting (optional, dialect-aware)
 
@@ -427,7 +285,7 @@ cloud = "floe_dbt_cloud:CloudDBTPlugin"
 
 **See ADR-0043** for complete specification, SQL linting requirements (REQ-096 to REQ-100), and implementation examples.
 
-### DataQualityPlugin
+## DataQualityPlugin
 
 Per ADR-0044, data quality frameworks (Great Expectations, Soda, custom) are pluggable through a unified interface. The DataQualityPlugin handles both compile-time validation (config syntax, quality gates) and runtime execution (live data checks, quality scoring).
 
@@ -535,7 +393,7 @@ plugins:
 
 **See ADR-0044** for complete specification, quality gate requirements (REQ-241-244), and Great Expectations integration (REQ-207, REQ-248).
 
-### TelemetryBackendPlugin
+## TelemetryBackendPlugin
 
 Per ADR-0035, telemetry backends (Jaeger, Datadog, Grafana Cloud) are pluggable for OTLP traces, metrics, and logs. The TelemetryBackendPlugin wraps the three-layer architecture:
 - **Layer 1** (Enforced): OpenTelemetry SDK emission
@@ -615,7 +473,7 @@ grafana-cloud = "floe_telemetry_grafana:GrafanaCloudPlugin"
 
 **See ADR-0035** for complete specification and reference implementations.
 
-### LineageBackendPlugin
+## LineageBackendPlugin
 
 Per ADR-0035, lineage backends (Marquez, Atlan, OpenMetadata) are pluggable for OpenLineage events. The LineageBackendPlugin is architecturally independent from TelemetryBackendPlugin (uses direct HTTP transport, not OTLP Collector).
 
@@ -697,7 +555,7 @@ openmetadata = "floe_lineage_openmetadata:OpenMetadataPlugin"
 
 **See ADR-0035** for complete specification, split architecture rationale, and reference implementations (JaegerPlugin, MarquezPlugin, DatadogPlugin, AtlanPlugin).
 
-### StoragePlugin
+## StoragePlugin
 
 Per ADR-0036, storage backends (S3, GCS, Azure, MinIO) are pluggable via the PyIceberg FileIO pattern:
 
@@ -775,233 +633,9 @@ gcs = "floe_storage_gcs:GCSPlugin"
 
 **See ADR-0036** for complete specification and PyIceberg FileIO integration examples.
 
-## Plugin API Versioning
-
-```python
-# floe_core/plugin_api.py
-from typing import Final
-
-FLOE_PLUGIN_API_VERSION: Final[str] = "1.0"
-FLOE_PLUGIN_API_MIN_VERSION: Final[str] = "1.0"
-
-@dataclass
-class PluginMetadata:
-    name: str
-    version: str
-    floe_api_version: str  # Required
-    description: str
-    author: str
-```
-
-### Compatibility Check
-
-```python
-def load_plugin(self, entry_point) -> Plugin:
-    plugin_class = entry_point.load()
-    metadata = plugin_class.metadata
-
-    if not is_compatible(metadata.floe_api_version, FLOE_PLUGIN_API_MIN_VERSION):
-        raise PluginIncompatibleError(
-            f"Plugin {metadata.name} requires API v{metadata.floe_api_version}, "
-            f"but minimum supported is v{FLOE_PLUGIN_API_MIN_VERSION}"
-        )
-
-    return plugin_class()
-```
-
-## Plugin CLI Commands
-
-```bash
-# List installed plugins
-floe plugins list
-
-# Output:
-Installed plugins:
-  orchestrators:
-    - dagster (1.0.0) [default]
-    - airflow (1.0.0)
-  computes:
-    - duckdb (1.0.0) [default]
-    - snowflake (1.0.0)
-    - spark (1.0.0)
-  catalogs:
-    - polaris (1.0.0) [default]
-    - glue (1.0.0)
-  dbt:
-    - local (1.0.0) [default]
-    - fusion (1.0.0)
-  semantic_layers:
-    - cube (1.0.0) [default]
-    - none (1.0.0)
-  ingestion:
-    - dlt (1.0.0) [default]
-    - airbyte (1.0.0)
-
-# List available (installable) plugins
-floe plugins available
-```
-
-## Creating a Custom Plugin
-
-### 1. Create Package Structure
-
-```bash
-mkdir floe-compute-trino
-cd floe-compute-trino
-```
-
-### 2. Implement Interface
-
-```python
-# src/floe_compute_trino/plugin.py
-from floe_core.interfaces.compute import ComputePlugin, ComputeConfig
-
-class TrinoComputePlugin(ComputePlugin):
-    name = "trino"
-    version = "1.0.0"
-    is_self_hosted = True
-
-    metadata = PluginMetadata(
-        name="trino",
-        version="1.0.0",
-        floe_api_version="1.0",
-        description="Trino compute plugin for floe",
-        author="Your Name",
-    )
-
-    def generate_dbt_profile(self, config: ComputeConfig) -> dict:
-        return {
-            "type": "trino",
-            "method": "none",
-            "host": config.properties.get("host", "trino.default.svc.cluster.local"),
-            "port": config.properties.get("port", 8080),
-            "catalog": config.properties.get("catalog", "iceberg"),
-            "schema": config.properties.get("schema", "default"),
-        }
-
-    def get_required_dbt_packages(self) -> list[str]:
-        return ["dbt-trino>=1.7.0"]
-
-    # ... implement other methods
-```
-
-### 3. Register Entry Point
-
-```toml
-# pyproject.toml
-[project.entry-points."floe.computes"]
-trino = "floe_compute_trino:TrinoComputePlugin"
-```
-
-### 4. Add Helm Chart (if needed)
-
-```yaml
-# chart/Chart.yaml
-apiVersion: v2
-name: floe-compute-trino
-version: 1.0.0
-description: Trino compute for floe
-
-# chart/templates/deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: trino-coordinator
-# ...
-```
-
-### 5. Install and Use
-
-```bash
-uv add floe-compute-trino
-
-# platform-manifest.yaml
-plugins:
-  compute:
-    type: trino
-    config:
-      host: trino.example.com
-```
-
-## Compute-Catalog Integration
-
-Some compute engines require explicit SQL statements to connect to the Iceberg catalog before dbt models can execute. The `get_catalog_attachment_sql()` method handles this.
-
-### DuckDB Catalog Integration Example
-
-DuckDB v1.4+ has native Iceberg REST catalog support. The DuckDB plugin generates ATTACH statements that connect to Polaris before model execution:
-
-```python
-# floe-compute-duckdb/src/floe_compute_duckdb/plugin.py
-from floe_core.interfaces.compute import ComputePlugin, ComputeConfig
-from floe_core.interfaces.catalog import CatalogConfig
-
-class DuckDBComputePlugin(ComputePlugin):
-    name = "duckdb"
-    version = "1.0.0"
-    is_self_hosted = True
-
-    def generate_dbt_profile(self, config: ComputeConfig) -> dict:
-        return {
-            "type": "duckdb",
-            "path": config.properties.get("path", "/data/floe.duckdb"),
-            "extensions": ["iceberg", "httpfs"],
-        }
-
-    def get_required_dbt_packages(self) -> list[str]:
-        return ["dbt-duckdb>=1.9.0"]
-
-    def get_catalog_attachment_sql(
-        self, catalog_config: CatalogConfig
-    ) -> list[str]:
-        """Generate DuckDB SQL to attach to Polaris Iceberg catalog.
-
-        These statements are added as dbt on-run-start hooks.
-        DuckDB will use the catalog for all table operations.
-        """
-        return [
-            "LOAD iceberg;",
-            """CREATE SECRET IF NOT EXISTS polaris_secret (
-                TYPE iceberg,
-                CLIENT_ID '{{ env_var("POLARIS_CLIENT_ID") }}',
-                CLIENT_SECRET '{{ env_var("POLARIS_CLIENT_SECRET") }}'
-            );""",
-            f"""ATTACH IF NOT EXISTS '{catalog_config.warehouse}' AS ice (
-                TYPE iceberg,
-                ENDPOINT '{{{{ env_var("POLARIS_URI") }}}}'
-            );"""
-        ]
-
-    # ... other methods
-```
-
-The floe-dbt package uses these statements to generate dbt project configuration:
-
-```yaml
-# Generated dbt_project.yml
-on-run-start:
-  - "LOAD iceberg;"
-  - "CREATE SECRET IF NOT EXISTS polaris_secret (...)"
-  - "ATTACH IF NOT EXISTS '...' AS ice (TYPE iceberg, ...)"
-```
-
-Models then write directly to the attached Iceberg catalog:
-
-```sql
--- models/gold/customers.sql
-{{ config(materialized='iceberg_table') }}
-
-SELECT * FROM {{ ref('silver_customers') }}
--- Creates table: ice.gold.customers
-```
-
 ## Related Documents
 
-- [ADR-0008: Repository Split](adr/0008-repository-split.md) - Plugin architecture details
-- [ADR-0010: Target-Agnostic Compute](adr/0010-target-agnostic-compute.md) - ComputePlugin
-- [ADR-0020: Ingestion Plugins](adr/0020-ingestion-plugins.md) - IngestionPlugin
-- [ADR-0031: Infisical as Default Secrets Management](adr/0031-infisical-secrets.md) - SecretsPlugin
-- [ADR-0032: Semantic Layer Compute Plugin Integration](adr/0032-cube-compute-integration.md) - SemanticLayerPlugin delegation
-- [ADR-0033: Target Airflow 3.x](adr/0033-airflow-3x.md) - OrchestratorPlugin for Airflow
-- [ADR-0034: dbt-duckdb Iceberg Catalog Workaround](adr/0034-dbt-duckdb-iceberg.md) - ComputePlugin Iceberg integration
-- [Interfaces](interfaces/index.md) - Full interface definitions
+- [Plugin Architecture Overview](index.md)
+- [Discovery and Registry](discovery.md)
+- [Lifecycle and Versioning](lifecycle.md)
+- [Integration Patterns](integration-patterns.md)

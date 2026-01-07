@@ -940,7 +940,7 @@ plugins:
 - [ADR-0006: OpenTelemetry Observability](0006-opentelemetry-observability.md) - Establishes OTel standard (Layer 1 + Layer 2)
 - [ADR-0007: OpenLineage Data Lineage](0007-openlineage-data-lineage.md) - Establishes OpenLineage standard
 - [ADR-0037: Composability Principle](0037-composability-principle.md) - Plugin architecture rationale
-- [plugin-architecture.md](../plugin-architecture.md) - Plugin patterns
+- [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/telemetry-backend-plugin.md](../interfaces/telemetry-backend-plugin.md) + [lineage-backend-plugin.md](../interfaces/lineage-backend-plugin.md) - ABC definitions
 - **Requirements Traceability:**
   - [REQ-051 to REQ-055](../../plan/requirements/01-plugin-architecture/06-observability-plugin.md) - TelemetryBackendPlugin requirements

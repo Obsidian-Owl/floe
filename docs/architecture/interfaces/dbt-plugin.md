@@ -114,5 +114,5 @@ class DBTPlugin(ABC):
 ## Related Documents
 
 - [ADR-0043: DBT Plugin](../adr/0043-dbt-plugin.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For dbt profile generation

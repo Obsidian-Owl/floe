@@ -36,7 +36,7 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
 - **Opt-in Complexity**: Start simple (2-tier), scale to Data Mesh (3-tier) without rewrites
 
-**11 Plugin Types** enable flexibility while maintaining enforced standards (see [plugin-architecture.md](plugin-architecture.md) for canonical registry):
+**11 Plugin Types** enable flexibility while maintaining enforced standards (see [plugin-system/index.md](plugin-system/index.md) for canonical registry):
 - Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend
 - DBT, Semantic Layer, Ingestion, Data Quality, Secrets, Identity
 
@@ -121,14 +121,14 @@ Layer 1: FOUNDATION (Framework Code)
 | `four-layer-overview.md` | Comprehensive layer diagram and details |
 | `platform-enforcement.md` | How platform constraints are enforced |
 | `platform-services.md` | Layer 3 services (orchestrator, catalog, etc.) |
-| `plugin-architecture.md` | Plugin structure and discovery |
+| `plugin-system/` | Plugin structure and discovery |
 | `interfaces/` | Abstract Base Classes for all plugins |
 | `opinionation-boundaries.md` | What's enforced vs pluggable |
 | `platform-artifacts.md` | OCI registry storage model |
 
 ## Key Interfaces
 
-floe defines **11 plugin interfaces** (ABCs) for extensibility (see [plugin-architecture.md](plugin-architecture.md) for canonical registry):
+floe defines **11 plugin interfaces** (ABCs) for extensibility (see [plugin-system/index.md](plugin-system/index.md) for canonical registry):
 
 | Plugin Type | Purpose | Entry Point | ADR |
 |-------------|---------|-------------|-----|

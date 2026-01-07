@@ -28,7 +28,7 @@ floe is an Apache 2.0 licensed Python framework that provides:
 | [four-layer-overview](./architecture/four-layer-overview.md) | Four-layer architecture |
 | [platform-enforcement](./architecture/platform-enforcement.md) | Platform enforcement model |
 | [platform-services](./architecture/platform-services.md) | Long-lived services |
-| [plugin-architecture](./architecture/plugin-architecture.md) | Plugin system design |
+| [plugin-architecture](./architecture/plugin-system/index.md) | Plugin system design |
 | [interfaces](./architecture/interfaces/index.md) | Plugin interface definitions |
 | [opinionation-boundaries](./architecture/opinionation-boundaries.md) | Enforced vs pluggable |
 | [platform-artifacts](./architecture/platform-artifacts.md) | OCI artifact storage |
@@ -44,7 +44,7 @@ floe is an Apache 2.0 licensed Python framework that provides:
 | [03-solution-strategy](./guides/03-solution-strategy.md) | Solution strategy |
 | [04-building-blocks](./guides/04-building-blocks.md) | Building blocks |
 | [05-runtime-view](./guides/05-runtime-view.md) | Runtime behavior |
-| [06-deployment-view](./guides/06-deployment-view.md) | Deployment |
+| [06-deployment-view](./guides/deployment/index.md) | Deployment ([split](./guides/deployment/)) |
 | [07-crosscutting](./guides/07-crosscutting.md) | Cross-cutting concerns |
 | [10-glossary](./guides/10-glossary.md) | Terminology |
 

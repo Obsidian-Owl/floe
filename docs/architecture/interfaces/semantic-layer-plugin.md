@@ -77,5 +77,5 @@ class SemanticLayerPlugin(ABC):
 ## Related Documents
 
 - [ADR-0001: Semantic Layer](../adr/0001-semantic-layer.md)
-- [Plugin Architecture](../plugin-architecture.md)
+- [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For database connections
