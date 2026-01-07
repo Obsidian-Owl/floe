@@ -1,0 +1,537 @@
+# floe Development Guide
+
+**For**: Claude Code and AI developers
+**Purpose**: Guide development toward target state architecture
+**Philosophy**: Build the future, not maintain the past
+
+---
+
+## Vision
+
+**floe** is an open platform (Apache 2.0) for building internal data platforms.
+
+Choose your stack from 11 plugin types. Define your standards once. Data teams get opinionated workflows with governance built-in.
+
+**Start with a single platform. Scale to Data Mesh.**
+
+---
+
+## Quick Reference
+
+### Essential Commands
+
+```bash
+# Testing (K8s-native)
+make test              # All tests in K8s (Kind cluster)
+make test-unit         # Unit tests only (fast, no K8s)
+
+# Quality
+make check             # Full CI checks (lint, type, security, test)
+make lint              # Ruff linting + formatting
+make typecheck         # mypy --strict
+
+# Pre-PR Review
+/speckit.test-review   # Validate test quality before PR
+
+# Deployment
+make deploy-local      # Deploy platform services to Kind
+make demo-e2e          # End-to-end validation
+```
+
+### Where to Find Things
+
+| Topic | Location |
+|-------|----------|
+| **Architecture** | `docs/architecture/` - Four-layer model, plugin system, OCI registry |
+| **Testing Strategy** | `TESTING.md` - K8s-native testing, test organization |
+| **Workflow Integration** | `docs/guides/linear-workflow.md` - SpecKit + Beads + Linear |
+| **ADRs** | `docs/architecture/adr/` - Architectural decisions |
+
+---
+
+## Target State Architecture
+
+> **Reference**: `docs/architecture/` contains authoritative design. Use progressive disclosure - read details when needed.
+
+### Four-Layer Model
+
+```
+Layer 1: FOUNDATION     → PyPI packages, plugin interfaces
+Layer 2: CONFIGURATION  → OCI registry artifacts (platform-manifest.yaml)
+Layer 3: SERVICES       → K8s Deployments (Dagster, Polaris, Cube)
+Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
+```
+
+**Key Principle**: Configuration flows DOWNWARD ONLY (1→2→3→4).
+
+**FORBIDDEN**: Layer 4 modifying Layer 2 configuration.
+
+### Two-File Configuration
+
+| File | Owner | Changes |
+|------|-------|---------|
+| `platform-manifest.yaml` | Platform Team | Rarely (governance, plugin selection) |
+| `floe.yaml` | Data Engineers | Frequently (pipelines, schedules) |
+
+### Plugin Architecture
+
+**ENFORCED** (non-negotiable):
+- Apache Iceberg (storage format)
+- dbt (transformation framework) - SQL compilation via dbt ENFORCED; execution environment PLUGGABLE (DBTPlugin)
+- OpenTelemetry (observability)
+- OpenLineage (lineage)
+- Kubernetes-native (deployment)
+
+**PLUGGABLE** (platform team selects):
+- Compute: DuckDB, Snowflake, Databricks, Spark, BigQuery
+- Orchestrator: Dagster, Airflow 3.x
+- Catalog: Polaris, AWS Glue, Hive
+- Semantic Layer: Cube, dbt Semantic Layer
+- Ingestion: dlt, Airbyte
+
+**See**: `docs/architecture/opinionation-boundaries.md` for complete list.
+
+---
+
+## Development Workflow
+
+### SpecKit + Beads + Linear Integration
+
+**Source of Truth**: Linear (issue tracking)
+**Local Cache**: Beads (offline work)
+**Planning**: SpecKit (feature breakdown)
+
+```bash
+# 1. Sync from Linear
+bd linear sync --pull
+
+# 2. See available work
+/speckit.implement
+
+# 3. Auto-implement next ready task
+/speckit.implement  # Claims task, updates Linear, commits
+
+# 4. Review test quality before PR
+/speckit.test-review
+
+# 5. Create PR (if tests pass)
+# Commit and push handled by /speckit.implement
+```
+
+**Complete Workflow**: See `docs/guides/linear-workflow.md`
+
+### Development Cycle
+
+```bash
+# 1. Planning (Epic → Tasks → Linear issues)
+/speckit.specify    # Create spec.md
+/speckit.plan       # Generate plan.md
+/speckit.tasks      # Break down to tasks
+/speckit.taskstolinear  # Create Linear issues with Epic labels
+
+# 2. Implementation (Linear-coordinated)
+/speckit.implement  # Auto-selects ready task, syncs Linear
+
+# 3. Test Quality Review
+/speckit.test-review  # Pre-PR validation
+
+# 4. PR Creation
+# Code committed by /speckit.implement
+# Tests validated by /speckit.test-review
+```
+
+---
+
+## Code Navigation & Understanding (LSP-First)
+
+**CRITICAL**: Always understand existing code before making changes. Use LSP tools proactively.
+
+### Navigation Workflow
+
+```bash
+# 1. Find files by pattern
+Glob("packages/*/tests/unit/test_*.py")
+
+# 2. Search for specific code
+Grep("class ComputePlugin", pattern="class ComputePlugin")
+
+# 3. Read before editing
+Read("packages/floe-core/src/floe_core/schemas.py")
+
+# 4. Then make changes
+Edit(...)
+```
+
+### Best Practices (LSP-First)
+
+**Priority 1: LSP for Precise Navigation**
+
+| Scenario | LSP Feature | Why |
+|----------|-------------|-----|
+| Find where something is defined | Go to Definition | Jump directly to source |
+| Find all usages of a symbol | Find References | See every usage across codebase |
+| Get documentation and type info | Hover | See docstrings, types, examples inline |
+| List all symbols in a file | Document Symbols | Fast file navigation |
+
+**Priority 2: Text-Based Tools (When LSP Unavailable)**
+
+| Scenario | Tool | When to Use |
+|----------|------|-------------|
+| Pattern matching across files | `Grep` | Regex searches, multi-file patterns |
+| File discovery by name/path | `Glob` | Finding files matching patterns |
+| Understanding full file context | `Read` | **MANDATORY before Edit** |
+| Complex codebase exploration | `Task(Explore)` | Multi-step discovery workflows |
+
+**NEVER**:
+- ❌ Edit files you haven't read (Edit tool requires prior Read)
+- ❌ Use `Bash(cat)` when `Read` tool exists
+- ❌ Use `Bash(find)` when `Glob` tool exists
+- ❌ Use `Bash(grep)` when `Grep` tool exists
+- ❌ Guess at code structure without LSP/search
+
+**ALWAYS**:
+- ✅ Use LSP "Go to Definition" before Grep for finding definitions
+- ✅ Use LSP "Find References" before Grep for finding usages
+- ✅ Use LSP "Hover" to read documentation inline
+- ✅ Read files before editing (understand context first)
+- ✅ Delegate complex exploration to `Task(Explore)` agent
+
+**Note on Finding Implementations**: Pyright doesn't support "Find Implementations". Use **Find References** on the base class/Protocol to see all usages, or use **Grep**: `Grep("class.*\(ProfileGenerator\)", type="py")`
+
+**Example Workflow**:
+```python
+# 1. Find where ComputePlugin is defined (LSP Go to Definition)
+# → Navigate to packages/floe-core/src/floe_core/plugin_interfaces.py
+
+# 2. Hover over ComputePlugin (LSP Hover)
+# → See full docstring, attributes, example usage
+
+# 3. Find all usages of ComputePlugin (LSP Find References)
+# → See where it's imported and subclassed across the codebase
+
+# 4. Read implementation before modifying
+Read("plugins/floe-compute-duckdb/src/floe_compute_duckdb/plugin.py")
+# Review: Understand existing implementation, dependencies, patterns
+
+# 5. Make informed changes
+Edit("plugins/floe-compute-duckdb/src/floe_compute_duckdb/plugin.py",
+     old_string="...", new_string="...")
+```
+
+### Writing Effective Docstrings
+
+**Why This Matters for LSP**: Good docstrings directly improve LSP features (Hover, autocomplete, IntelliSense). When you hover over a function, LSP shows the docstring—make it count.
+
+**Standard**: Google-style docstrings (consistent across the codebase)
+
+```python
+def generate_profiles(
+    artifacts: CompiledArtifacts,
+    environment: str = "dev"
+) -> dict[str, Any]:
+    """Generate dbt profiles.yml from compiled artifacts.
+
+    Resolves credentials at runtime from environment variables or K8s secrets.
+    Supports multiple compute targets (DuckDB, Snowflake, BigQuery, etc.).
+
+    Args:
+        artifacts: Compiled artifacts containing resolved platform configuration.
+        environment: Target environment (dev, staging, prod). Defaults to "dev".
+
+    Returns:
+        Dictionary containing dbt profiles.yml structure with resolved credentials.
+
+    Raises:
+        CredentialError: If required credentials are missing or invalid.
+        ValidationError: If artifacts schema validation fails.
+
+    Examples:
+        >>> artifacts = CompiledArtifacts.from_json_file("compiled.json")
+        >>> profiles = generate_profiles(artifacts, environment="production")
+        >>> profiles["floe"]["target"]
+        'production'
+    """
+    pass
+```
+
+**What Makes a Good Docstring**:
+- **Summary line**: One-line description (what, not how)
+- **Detailed description**: When needed, explain why and context
+- **Args**: Every parameter, with type info if not in type hints
+- **Returns**: What the function returns and its meaning
+- **Raises**: All exceptions that can be raised
+- **Examples**: Doctest-style examples showing typical usage
+
+**Bad vs Good**:
+
+```python
+# ❌ BAD - No value to LSP users
+def process(data):
+    """Process data."""
+    pass
+
+# ✅ GOOD - LSP Hover shows useful information
+def process(data: dict[str, Any]) -> ProcessedData:
+    """Transform raw data into validated ProcessedData model.
+
+    Applies validation rules, normalizes field names, and converts
+    types according to the schema. Invalid records are logged and skipped.
+
+    Args:
+        data: Raw data dictionary from external source.
+
+    Returns:
+        ProcessedData instance with validated and normalized fields.
+
+    Raises:
+        ValidationError: If required fields are missing.
+    """
+    pass
+```
+
+**See**: `.claude/rules/python-standards.md` for complete docstring examples and standards
+
+---
+
+## Core Principles
+
+### 1. Technology Ownership (NON-NEGOTIABLE)
+
+Each technology owns its domain exclusively:
+
+| Technology | Owns | Python Code MUST NOT |
+|------------|------|---------------------|
+| **dbt** | ALL SQL compilation, dialect translation | Parse, validate, or transform SQL |
+| **Dagster** | Orchestration, assets, schedules | Execute SQL, manage Iceberg tables |
+| **Iceberg** | Storage format, ACID, time travel | Define orchestration, execute SQL |
+| **Polaris** | Catalog management (REST API) | Write to storage directly |
+| **Cube** | Semantic layer, consumption APIs | Execute SQL directly, orchestrate |
+
+**Plugin Delegation**: SemanticLayerPlugin → ComputePlugin for database connection.
+
+**See**: `.claude/rules/component-ownership.md`
+
+### 2. Contract-Driven Integration
+
+**CompiledArtifacts** is the SOLE contract between packages:
+
+```python
+# ✅ CORRECT - floe-core compiles
+artifacts = compile_data_product(product_yaml, platform_manifest)
+artifacts.to_json_file("target/compiled_artifacts.json")
+
+# ✅ CORRECT - floe-dagster loads
+artifacts = CompiledArtifacts.from_json_file("target/compiled_artifacts.json")
+assets = create_assets_from_artifacts(artifacts)
+
+# ❌ FORBIDDEN - direct FloeSpec passing
+def create_assets(spec: FloeSpec):  # NO! Use CompiledArtifacts
+    ...
+```
+
+**Contract Versioning**:
+- MAJOR: Breaking changes (remove field, change type)
+- MINOR: Additive changes (add optional field)
+- PATCH: Documentation, internal refactoring
+
+**See**: `.claude/rules/pydantic-contracts.md`
+
+### 3. Plugin Development Standards
+
+**All plugins MUST**:
+- Register via entry points (`floe.orchestrators`, `floe.computes`, etc.)
+- Inherit from appropriate ABC (ComputePlugin, OrchestratorPlugin, etc.)
+- Declare `PluginMetadata` (name, version, floe_api_version)
+- Use Pydantic models for configuration (NO hardcoded values)
+- Use `SecretReference` for credentials (NEVER hardcoded secrets)
+- Have >80% test coverage (discovery, compliance, functional)
+
+**See**: `docs/architecture/plugin-architecture.md`
+
+### 4. Testing Standards
+
+**K8s-Native ONLY**:
+- All tests run in Kubernetes (Kind cluster locally)
+- Integration tests use real services (Polaris, S3, PostgreSQL)
+- No Docker Compose (deprecated in target state)
+
+**Test Organization**:
+- `packages/*/tests/unit/` - Package-specific, fast, mocked
+- `packages/*/tests/integration/` - Real services, K8s
+- `tests/contract/` - Cross-package contracts (ROOT level)
+
+**Pre-PR Review**:
+```bash
+/speckit.test-review  # Validates quality, traceability, security
+```
+
+**See**: `TESTING.md` for complete testing guide
+
+### 5. Security First
+
+**NEVER**:
+- Use `eval()`, `exec()`, `pickle.loads()` on untrusted data
+- Use `subprocess.run(..., shell=True)`
+- Hardcode secrets (use `SecretStr` + environment variables)
+- Log secrets or PII
+
+**See**: `.claude/rules/security.md`
+
+---
+
+## Target State Package Structure
+
+```
+floe/
+├── floe-core/           # Schemas, interfaces, enforcement engine
+├── floe-cli/            # CLI for Platform Team and Data Team
+├── floe-dbt/            # ENFORCED: dbt integration
+├── floe-iceberg/        # ENFORCED: Iceberg utilities
+│
+├── plugins/             # ALL PLUGGABLE COMPONENTS (Epic 5)
+│   ├── floe-compute-duckdb/
+│   │   ├── src/floe_compute_duckdb/
+│   │   └── tests/       # Package-specific tests ONLY
+│   │       ├── conftest.py  # NO __init__.py (namespace collision)
+│   │       ├── unit/        # Fast, mocked, host execution
+│   │       ├── integration/ # Real services, K8s execution
+│   │       └── e2e/         # Package-specific workflows (rare)
+│   ├── floe-orchestrator-dagster/
+│   ├── floe-catalog-polaris/
+│   └── ...
+│
+├── tests/               # Cross-package tests ONLY (ROOT LEVEL)
+│   ├── conftest.py
+│   ├── contract/        # MANDATORY: CompiledArtifacts, plugin ABCs
+│   │   ├── test_compiled_artifacts_schema.py
+│   │   ├── test_core_to_dagster_contract.py
+│   │   └── test_core_to_dbt_contract.py
+│   └── e2e/             # OPTIONAL: Full platform workflows
+│       └── test_demo_flow.py
+│
+├── charts/
+│   ├── floe-platform/   # Meta-chart for platform services
+│   └── floe-jobs/       # Base chart for pipeline jobs
+│
+├── demo/                # Demo data engineering project
+├── testing/
+│   ├── base_classes/    # IntegrationTestBase, BaseProfileGeneratorTests
+│   ├── fixtures/        # Shared test fixtures
+│   ├── k8s/             # Kind configuration, Helm values
+│   └── traceability/    # Test quality analysis (/speckit.test-review)
+└── docs/
+```
+
+### Test Organization Rules (CRITICAL)
+
+**Decision Tree**: Where should my test go?
+
+| Question | Answer → Location |
+|----------|-------------------|
+| Imports from MULTIPLE packages? | **YES** → `tests/contract/` or `tests/e2e/` |
+| Validates cross-package contract? | **YES** → `tests/contract/test_X_to_Y_contract.py` |
+| Full platform workflow? | **YES** → `tests/e2e/test_X_flow.py` |
+| Single package only? | **YES** → `plugins/floe-X/tests/{tier}/test_*.py` |
+
+**Test Tier Selection**:
+
+| Tier | Location | Needs Services? | Execution |
+|------|----------|----------------|-----------|
+| **Unit** | `tests/unit/` | No (mocks only) | Host (fast) |
+| **Contract** | `tests/contract/` (ROOT) | No (schema only) | Host (fast) |
+| **Integration** | `tests/integration/` | Yes (Polaris, S3, DB) | K8s (Kind) |
+| **E2E** | `tests/e2e/` | Yes (full stack) | K8s (Kind) |
+
+**Examples**:
+- ✅ `floe-core/tests/unit/test_compiler.py` - Tests ONLY floe-core
+- ✅ `tests/contract/test_core_to_dagster_contract.py` - Tests floe-core + floe-dagster
+- ❌ `tests/integration/test_polaris_catalog.py` - Should be `plugins/floe-catalog-polaris/tests/integration/`
+
+**See**: `.claude/rules/test-organization.md` for complete decision tree and anti-patterns
+
+---
+
+## Target State Architecture
+
+**Philosophy**: Build the future. Quality over speed. Nuclear changes acceptable.
+
+**Principle**: Build toward target state architecture documented in `docs/`, never compromise on quality.
+
+---
+
+## Code Quality Standards
+
+**Pre-commit checklist**:
+- Type hints on ALL functions (`mypy --strict` passes)
+- Pydantic v2 syntax (`@field_validator`, `model_config`)
+- Ruff linting passes
+- No dangerous constructs (`eval`, `exec`, `shell=True`)
+- No secrets in code (environment variables only)
+- Tests pass with >80% coverage
+- Layer boundary verification (no cross-layer violations)
+
+**Automated Enforcement**:
+- Pre-commit hooks (formatting, linting)
+- CI pipeline (type checking, security scans, tests)
+- SonarQube quality gates
+
+**See**: `.claude/rules/python-standards.md`, `.claude/rules/sonarqube-quality.md`
+
+---
+
+## Context Management
+
+### Subagent Delegation (MANDATORY)
+
+**ALWAYS delegate to preserve main context**:
+
+| Task | Delegate To | Why |
+|------|-------------|-----|
+| Docker/container logs | `docker-log-analyser` | Extracts errors only |
+| K8s pod debugging | `helm-debugger` | Targeted extraction |
+| Helm chart issues | `helm-debugger` | Validates charts first |
+| dbt work | `dbt-skill` | Domain expertise |
+| Pydantic models | `pydantic-skill` | Contract patterns |
+
+**See**: `.claude/rules/agent-delegation.md`, `.claude/rules/context-management.md`
+
+### Progressive Disclosure
+
+**Don't dump everything into context**:
+- ✅ Point to detailed docs (`docs/architecture/plugin-architecture.md`)
+- ✅ Read specific sections when needed
+- ❌ Copy entire architecture docs into conversation
+
+---
+
+## Getting Help
+
+```bash
+# Documentation
+/help                           # Claude Code help
+make help                       # Makefile targets
+
+# Testing
+/speckit.test-review            # Pre-PR test quality review
+make test                       # Run all tests (K8s)
+
+# Debugging
+bd stats                        # Beads issue statistics
+bd ready                        # See available work
+Linear app                      # Team progress view
+```
+
+**Issue Reporting**: https://github.com/anthropics/claude-code/issues (for Claude Code feedback)
+
+---
+
+## Key References
+
+- **Architecture**: `docs/architecture/ARCHITECTURE-SUMMARY.md`
+- **Testing**: `TESTING.md`
+- **Linear Workflow**: `docs/guides/linear-workflow.md`
+- **Constitution**: `.specify/memory/constitution.md` (8 core principles)
+
+---
+
+**Remember**: Build toward the target state architecture documented in `docs/`. Quality over speed. Nuclear changes acceptable.
