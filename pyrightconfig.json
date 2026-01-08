@@ -15,13 +15,6 @@
   ],
   "extraPaths": [
     "packages/floe-core/src",
-    "packages/floe-cli/src",
-    "packages/floe-dbt/src",
-    "packages/floe-iceberg/src",
-    "plugins/floe-compute-duckdb/src",
-    "plugins/floe-orchestrator-dagster/src",
-    "plugins/floe-catalog-polaris/src",
-    "plugins/floe-semantic-cube/src",
     "testing"
   ],
   "pythonVersion": "3.10",
