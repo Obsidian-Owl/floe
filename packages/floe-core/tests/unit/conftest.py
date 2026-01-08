@@ -16,8 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
-    from importlib.metadata import EntryPoint
+    from collections.abc import Callable
 
 
 @pytest.fixture

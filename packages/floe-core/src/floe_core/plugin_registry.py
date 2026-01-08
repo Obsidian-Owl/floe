@@ -518,7 +518,7 @@ def get_registry() -> PluginRegistry:
         return _registry
 
 
-def _reset_registry() -> None:
+def _reset_registry() -> None:  # pyright: ignore[reportUnusedFunction]
     """Reset the global registry singleton (for testing only).
 
     This clears the singleton instance, allowing a fresh registry

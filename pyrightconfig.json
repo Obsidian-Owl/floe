@@ -32,5 +32,6 @@
   "reportMissingTypeStubs": false,
   "reportUnusedImport": true,
   "reportUnusedVariable": true,
-  "reportUnnecessaryTypeIgnoreComment": true
+  "reportUnnecessaryTypeIgnoreComment": true,
+  "reportPrivateUsage": false
 }
