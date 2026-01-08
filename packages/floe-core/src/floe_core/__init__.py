@@ -31,10 +31,12 @@ __version__ = "0.1.0"
 from floe_core.plugin_errors import (
     CircularDependencyError,
     DuplicatePluginError,
+    MissingDependencyError,
     PluginConfigurationError,
     PluginError,
     PluginIncompatibleError,
     PluginNotFoundError,
+    PluginStartupError,
 )
 
 # Health types and PluginMetadata ABC
@@ -81,12 +83,14 @@ __all__: list[str] = [
     # Plugin type categories
     "PluginType",
     # Error hierarchy
-    "PluginError",
-    "PluginNotFoundError",
-    "PluginIncompatibleError",
-    "PluginConfigurationError",
-    "DuplicatePluginError",
     "CircularDependencyError",
+    "DuplicatePluginError",
+    "MissingDependencyError",
+    "PluginConfigurationError",
+    "PluginError",
+    "PluginIncompatibleError",
+    "PluginNotFoundError",
+    "PluginStartupError",
     # Version compatibility
     "FLOE_PLUGIN_API_VERSION",
     "FLOE_PLUGIN_API_MIN_VERSION",

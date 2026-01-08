@@ -19,7 +19,7 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -84,10 +84,12 @@ class TestFloeCorePubicExports:
         from floe_core import (
             CircularDependencyError,
             DuplicatePluginError,
+            MissingDependencyError,
             PluginConfigurationError,
             PluginError,
             PluginIncompatibleError,
             PluginNotFoundError,
+            PluginStartupError,
         )
 
         # All should be Exception subclasses
@@ -97,6 +99,8 @@ class TestFloeCorePubicExports:
         assert issubclass(PluginConfigurationError, PluginError)
         assert issubclass(DuplicatePluginError, PluginError)
         assert issubclass(CircularDependencyError, PluginError)
+        assert issubclass(MissingDependencyError, PluginError)
+        assert issubclass(PluginStartupError, PluginError)
 
     @pytest.mark.requirement("FR-001")
     def test_version_compat_exports_available(self) -> None:
