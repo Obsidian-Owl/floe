@@ -227,7 +227,7 @@ class PluginMetadata(ABC):
         """
         return HealthStatus(state=HealthState.HEALTHY)
 
-    def startup(self) -> None:
+    def startup(self) -> None:  # noqa: B027
         """Lifecycle hook called when the plugin is activated.
 
         Override this method to perform initialization tasks such as:
@@ -237,10 +237,11 @@ class PluginMetadata(ABC):
 
         Should complete within 30 seconds (SC-006).
         Exceptions raised here will prevent plugin activation.
-        """
-        pass
 
-    def shutdown(self) -> None:
+        Note: Empty default implementation is intentional - subclasses override.
+        """
+
+    def shutdown(self) -> None:  # noqa: B027
         """Lifecycle hook called when the platform shuts down.
 
         Override this method to perform cleanup tasks such as:
@@ -250,5 +251,6 @@ class PluginMetadata(ABC):
 
         Should complete within 30 seconds (SC-006).
         Exceptions are logged but don't prevent shutdown.
+
+        Note: Empty default implementation is intentional - subclasses override.
         """
-        pass

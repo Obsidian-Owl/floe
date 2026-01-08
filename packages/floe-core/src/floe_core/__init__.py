@@ -16,8 +16,6 @@ __version__ = "0.1.0"
 # See tasks.md for implementation order
 
 # T006: PluginType enum
-from floe_core.plugin_types import PluginType
-
 # T007: Exception hierarchy
 from floe_core.plugin_errors import (
     CircularDependencyError,
@@ -28,18 +26,19 @@ from floe_core.plugin_errors import (
     PluginNotFoundError,
 )
 
-# T008: Version compatibility
-from floe_core.version_compat import (
-    FLOE_PLUGIN_API_MIN_VERSION,
-    FLOE_PLUGIN_API_VERSION,
-    is_compatible,
-)
-
 # T009-T010: Health types and PluginMetadata
 from floe_core.plugin_metadata import (
     HealthState,
     HealthStatus,
     PluginMetadata,
+)
+from floe_core.plugin_types import PluginType
+
+# T008: Version compatibility
+from floe_core.version_compat import (
+    FLOE_PLUGIN_API_MIN_VERSION,
+    FLOE_PLUGIN_API_VERSION,
+    is_compatible,
 )
 
 __all__: list[str] = [

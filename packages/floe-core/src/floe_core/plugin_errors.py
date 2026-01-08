@@ -120,7 +120,7 @@ class PluginConfigurationError(PluginError):
         >>> raise PluginConfigurationError("my-plugin", errors)
         Traceback (most recent call last):
             ...
-        PluginConfigurationError: Configuration error for plugin 'my-plugin': [{'field': 'host', 'message': 'required field'}]
+        PluginConfigurationError: Configuration error for plugin 'my-plugin': ...
     """
 
     def __init__(self, name: str, errors: list[dict[str, Any]]) -> None:
