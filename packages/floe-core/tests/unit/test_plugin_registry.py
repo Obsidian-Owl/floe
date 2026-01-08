@@ -1777,3 +1777,251 @@ class TestPluginRegistryLifecycleHooks:
         # Should have timeout error
         assert "COMPUTE:slow-shutdown" in results
         assert isinstance(results["COMPUTE:slow-shutdown"], TimeoutError)
+
+
+# =============================================================================
+# T050: Unit tests for health checks
+# =============================================================================
+
+
+class TestPluginRegistryHealthChecks:
+    """Tests for health_check_all() method (T050)."""
+
+    @pytest.mark.requirement("FR-014")
+    def test_health_check_all_returns_healthy_for_healthy_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() returns HEALTHY for healthy plugins."""
+        from floe_core.plugin_metadata import HealthState, HealthStatus
+
+        class HealthyPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "healthy"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                return HealthStatus(state=HealthState.HEALTHY)
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, HealthyPlugin())
+
+        results = registry.health_check_all()
+
+        assert "COMPUTE:healthy" in results
+        assert results["COMPUTE:healthy"].state == HealthState.HEALTHY
+
+    @pytest.mark.requirement("FR-014")
+    def test_health_check_all_returns_degraded_status(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() propagates DEGRADED status."""
+        from floe_core.plugin_metadata import HealthState, HealthStatus
+
+        class DegradedPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "degraded"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                return HealthStatus(
+                    state=HealthState.DEGRADED,
+                    message="Connection pool low",
+                )
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, DegradedPlugin())
+
+        results = registry.health_check_all()
+
+        assert results["COMPUTE:degraded"].state == HealthState.DEGRADED
+        assert "Connection pool low" in results["COMPUTE:degraded"].message
+
+    @pytest.mark.requirement("FR-014")
+    def test_health_check_all_returns_unhealthy_on_exception(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() returns UNHEALTHY when health_check raises."""
+        from floe_core.plugin_metadata import HealthState, HealthStatus
+
+        class FailingHealthPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "failing-health"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                raise RuntimeError("Health check failed!")
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, FailingHealthPlugin())
+
+        results = registry.health_check_all()
+
+        assert results["COMPUTE:failing-health"].state == HealthState.UNHEALTHY
+        assert "RuntimeError" in results["COMPUTE:failing-health"].details.get(
+            "exception_type", ""
+        )
+
+    @pytest.mark.requirement("SC-007")
+    def test_health_check_all_returns_unhealthy_on_timeout(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() returns UNHEALTHY on timeout."""
+        import time
+
+        from floe_core.plugin_metadata import HealthState, HealthStatus
+
+        class SlowHealthPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "slow-health"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                time.sleep(2)  # Slow health check
+                return HealthStatus(state=HealthState.HEALTHY)
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, SlowHealthPlugin())
+
+        results = registry.health_check_all(timeout=0.1)
+
+        assert results["COMPUTE:slow-health"].state == HealthState.UNHEALTHY
+        assert "timed out" in results["COMPUTE:slow-health"].message
+
+    @pytest.mark.requirement("FR-014")
+    def test_health_check_all_checks_multiple_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() checks all loaded plugins."""
+        from floe_core.plugin_metadata import HealthState, HealthStatus
+
+        class PluginA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                return HealthStatus(state=HealthState.HEALTHY)
+
+        class PluginB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                return HealthStatus(state=HealthState.DEGRADED)
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, PluginA())
+        registry.register(PluginType.CATALOG, PluginB())
+
+        results = registry.health_check_all()
+
+        assert len(results) == 2
+        assert "COMPUTE:plugin-a" in results
+        assert "CATALOG:plugin-b" in results
+
+    @pytest.mark.requirement("FR-014")
+    def test_health_check_all_returns_empty_for_no_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() returns empty dict when no plugins loaded."""
+        registry = PluginRegistry()
+
+        results = registry.health_check_all()
+
+        assert results == {}
+
+    @pytest.mark.requirement("FR-014")
+    def test_health_check_all_only_checks_loaded_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test health_check_all() only checks loaded (not discovered) plugins."""
+        from floe_core.plugin_metadata import HealthState, HealthStatus
+
+        class LoadedPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "loaded"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def health_check(self) -> HealthStatus:
+                return HealthStatus(state=HealthState.HEALTHY)
+
+        registry = PluginRegistry()
+        # Register (loads immediately)
+        registry.register(PluginType.COMPUTE, LoadedPlugin())
+        # Add discovered but not loaded entry
+        from unittest.mock import MagicMock
+
+        mock_ep = MagicMock()
+        mock_ep.name = "discovered-only"
+        registry._discovered[(PluginType.CATALOG, "discovered-only")] = mock_ep
+
+        results = registry.health_check_all()
+
+        # Should only have the loaded plugin
+        assert len(results) == 1
+        assert "COMPUTE:loaded" in results
+        assert "CATALOG:discovered-only" not in results

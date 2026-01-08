@@ -28,6 +28,9 @@ from typing import TYPE_CHECKING, Any, Callable
 # Default timeout for lifecycle hooks (SC-006: 30 seconds)
 DEFAULT_LIFECYCLE_TIMEOUT: float = 30.0
 
+# Default timeout for health checks (SC-007: 5 seconds)
+DEFAULT_HEALTH_CHECK_TIMEOUT: float = 5.0
+
 import structlog
 
 from floe_core.plugin_errors import (
@@ -753,18 +756,122 @@ class PluginRegistry:
             future = executor.submit(func)
             future.result(timeout=timeout)
 
-    def health_check_all(self) -> dict[str, HealthStatus]:
+    def health_check_all(
+        self,
+        timeout: float | None = None,
+    ) -> dict[str, HealthStatus]:
         """Check health of all loaded plugins.
+
+        Calls health_check() on each loaded plugin with timeout protection.
+        Plugins that fail or timeout are reported as UNHEALTHY.
+
+        Args:
+            timeout: Per-plugin timeout in seconds (default: 5s per SC-007).
 
         Returns:
             Dict mapping "type:name" to HealthStatus.
 
         Note:
             Only checks LOADED plugins (not discovered-only).
-            Implementation details in T046-T049.
+
+        Example:
+            >>> registry = get_registry()
+            >>> results = registry.health_check_all()
+            >>> unhealthy = {k: v for k, v in results.items()
+            ...              if v.state != HealthState.HEALTHY}
         """
-        # Implementation in T046
-        raise NotImplementedError("health_check_all() not yet implemented (T046)")
+        from floe_core.plugin_metadata import HealthState
+
+        if timeout is None:
+            timeout = DEFAULT_HEALTH_CHECK_TIMEOUT
+
+        results: dict[str, HealthStatus] = {}
+
+        logger.debug(
+            "health_check_all.starting",
+            plugin_count=len(self._loaded),
+            timeout_per_plugin=timeout,
+        )
+
+        for (plugin_type, name), plugin in self._loaded.items():
+            key_str = f"{plugin_type.name}:{name}"
+
+            try:
+                # Run health_check with timeout protection
+                status = self._run_health_check_with_timeout(
+                    plugin.health_check,
+                    timeout,
+                )
+                results[key_str] = status
+
+                logger.debug(
+                    "health_check_all.plugin_checked",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    state=status.state.value,
+                )
+
+            except FutureTimeoutError:
+                # Timeout - return UNHEALTHY
+                results[key_str] = HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message=f"health_check() timed out after {timeout}s",
+                )
+                logger.warning(
+                    "health_check_all.plugin_timeout",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    timeout=timeout,
+                )
+
+            except Exception as e:
+                # Exception - return UNHEALTHY with error details
+                results[key_str] = HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message=f"health_check() raised exception: {e}",
+                    details={"exception_type": type(e).__name__},
+                )
+                logger.error(
+                    "health_check_all.plugin_error",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    error=str(e),
+                )
+
+        # Log summary
+        healthy_count = sum(
+            1 for s in results.values() if s.state == HealthState.HEALTHY
+        )
+        logger.info(
+            "health_check_all.completed",
+            total=len(results),
+            healthy=healthy_count,
+            unhealthy=len(results) - healthy_count,
+        )
+
+        return results
+
+    def _run_health_check_with_timeout(
+        self,
+        func: Callable[[], HealthStatus],
+        timeout: float,
+    ) -> HealthStatus:
+        """Run a health_check function with timeout protection.
+
+        Args:
+            func: Health check function to run.
+            timeout: Maximum time in seconds to wait.
+
+        Returns:
+            HealthStatus from the function.
+
+        Raises:
+            FutureTimeoutError: If function exceeds timeout.
+            Exception: Any exception raised by the function.
+        """
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(func)
+            return future.result(timeout=timeout)
 
 
 def get_registry() -> PluginRegistry:
