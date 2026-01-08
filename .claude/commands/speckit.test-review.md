@@ -1,5 +1,5 @@
 ---
-description: Review test quality, coverage, and compliance before PR creation (read-only analysis)
+description: Review test quality before PR - semantic analysis of test design, not just linting
 handoffs:
   - label: "Commit changes"
     agent: git-commit
@@ -17,180 +17,211 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Goal
 
-Perform a comprehensive pre-PR test quality review that validates:
-- Test quality standards (no skips, no hardcoded sleep, type hints, docstrings)
-- Requirement traceability (100% marker coverage expected)
-- Security (no hardcoded secrets)
-- Contract regression (package interfaces stable)
-- Architecture compliance (framework patterns, not pipeline tests)
-- Directory structure (package vs root placement)
+Perform a comprehensive test quality review that answers: **Are these tests actually good tests?**
 
-This command runs **ONLY on changed test files** in the current feature branch and provides **informational feedback** to guide remediation.
+This is NOT linting. This is semantic analysis of test design:
+- Do tests actually test what they claim?
+- Could tests pass while the code is broken?
+- Are tests at the right level?
+- Are tests maintainable?
+
+Plus floe-specific checks:
+- Plugin testing completeness
+- Contract stability
+- Architecture compliance
 
 ## Operating Constraints
 
-**STRICTLY READ-ONLY**: Do **not** modify any files. Output a structured findings report. This is an analysis tool, not a blocking gate.
+**STRICTLY READ-ONLY**: Do **not** modify any files. Output analysis and recommendations.
 
-**Architecture Focus**: This command validates **framework testing patterns** (plugin interfaces, contracts, compilation logic), NOT data pipeline testing (SQL transformations, business metrics). Exception: `demo/tests/` are intentionally pipeline tests.
+**SEMANTIC ANALYSIS**: Read and understand tests, don't just grep for patterns.
 
-**Git-Aware**: Only analyzes test files changed vs base branch (default: `main`). If not in git repo or no changed files, gracefully inform user.
-
-**Target State ONLY**: This command validates the post-nuclear-delete testing structure (no legacy Docker Compose, K8s-native, contract tests at root level).
+**TIERED OUTPUT**: Full analysis for problems, brief summary for clean tests.
 
 ## Execution Steps
 
-### Phase 0: Git Context Detection (5s)
+### Phase 0: Identify Test Files
 
-**Verify git repository and branch:**
+**You handle this phase directly.**
 
-1. Run `git rev-parse --abbrev-ref HEAD` to get current branch name
-2. If not on `main` or `master`, proceed; otherwise warn: "Already on main branch - switch to feature branch first"
-3. Run `git diff --name-only main...HEAD | grep 'tests.*\.py$'` to identify changed test files
-4. If no changed test files, inform user: "No changed test files detected. Nothing to review."
-5. Extract changed packages by parsing file paths: `packages/{package-name}/tests/...`
+```bash
+# Get current branch
+git rev-parse --abbrev-ref HEAD
 
-**Output**: List of changed test files and affected packages.
+# Get changed test files
+git diff --name-only main...HEAD | grep -E 'tests.*\.py$'
 
-### Phase 1: Test Quality Checks (10-15s)
-
-**For each changed test file, run validation checks using `testing.traceability`:**
-
-You MUST use the traceability module programmatically, NOT via subprocess. Import and call directly:
-
-```python
-from pathlib import Path
-from testing.traceability.checks import TestQualityChecker
-
-checker = TestQualityChecker()
-issues = checker.check_file(Path("path/to/test_file.py"))
+# If no changed tests, check for specific file in user input
 ```
 
-**CRITICAL checks (MUST pass):**
-- **FAIL-001**: No `pytest.skip()` or `@pytest.mark.skip` (except `importorskip`, platform checks)
-- **FAIL-002**: No `time.sleep()` (use `wait_for_condition()`)
-- **FAIL-003**: All tests have `@pytest.mark.requirement("TR-XXX")`
-- **FAIL-004**: All tests have docstrings (>10 chars)
-- **FAIL-005**: Type hints on test functions (`-> None`)
+If no test files to review, inform user and stop.
 
-**MAJOR checks (should pass):**
-- **FAIL-006**: Float comparisons use `pytest.approx()`
-- **FAIL-010**: No hardcoded `localhost` (use `self.get_service_host()`)
-- **DIR-002**: Tests in correct tier directory (unit/contract/integration/e2e)
-- **DIR-003**: Integration tests inherit from `IntegrationTestBase`
+**Output**: List of test files to analyze, classified by type:
+- Unit: `*/tests/unit/*.py` or no marker
+- Integration: `*/tests/integration/*.py` or `@pytest.mark.integration`
+- Contract: `*/tests/contract/*.py` or `@pytest.mark.contract`
+- E2E: `*/tests/e2e/*.py` or `@pytest.mark.e2e`
 
-**MINOR checks (quality improvements):**
-- **QUAL-001**: Duplicate string literals (3+ occurrences)
+### Phase 1: Semantic Test Analysis
 
-**Aggregate all issues** from all changed files.
+**Invoke `test-reviewer` agent for each test file (or batch by type).**
 
-### Phase 2: Security & Code Quality (5s)
+```
+Task(test-reviewer, "Review the following test file for quality, correctness, and maintainability.
 
-**For each changed test file:**
+File: [path]
 
-- **SEC-001**: No hardcoded secrets (passwords, API keys, tokens)
-  - Check for patterns: `password = "..."`, `api_key = "..."`, `secret = "..."`
-  - Exclude: `test`, `mock`, `fake`, `placeholder`, `example` in value
+Apply your full analysis framework:
+1. For each test, evaluate Purpose, Correctness, Isolation, Maintainability, Type Appropriateness
+2. Apply type-specific checks based on test classification
+3. Full analysis for tests with issues, brief summary for clean tests
 
-**Aggregate security findings.**
+Return your structured analysis.")
+```
 
-### Phase 3: Requirement Traceability (5-10s)
+**Wait for test-reviewer to return.**
 
-**Calculate requirement coverage across ALL changed test files:**
+### Phase 2: floe-Specific Analysis (Parallel)
 
-**Report**:
-- Total test functions analyzed
-- Tests with `@pytest.mark.requirement()` markers
-- Coverage percentage (100% expected)
-- List of files missing markers (if any)
+**Invoke floe-specific agents IN PARALLEL (single message, multiple Task calls):**
 
-### Phase 4: Contract Regression Check (5-10s)
+```
+Task(plugin-quality, "Analyze plugin testing completeness.
+Changed files: [list]
+Return your Plugin Quality Report.")
 
-**Run contract tests to detect breaking changes:**
+Task(contract-stability, "Analyze contract stability.
+Changed files: [list]
+Return your Contract Stability Report.")
 
-Contract tests validate that package interfaces (CompiledArtifacts, plugin ABCs) remain stable.
+Task(architecture-compliance, "Analyze architecture compliance in tests.
+Changed files: [list]
+Return your Architecture Compliance Report.")
+```
 
-**Contract tests location**: `tests/contract/` (ROOT level, not package level)
+**Wait for all agents to return.**
 
-**Expected tests**:
-- `test_compiled_artifacts_schema.py` - Schema stability
-- `test_core_to_dagster_contract.py` - Integration contract
-- `test_core_to_dbt_contract.py` - Profile contract
-- `test_golden_artifacts.py` - Backwards compatibility
+### Phase 3: Strategic Synthesis
 
-**Failure = CRITICAL regression** (breaking change in package interfaces).
+**You handle this phase directly.**
 
-### Phase 5: Architecture Compliance (5-10s)
+Synthesize all reports into a unified strategic assessment:
 
-**Validate architecture compliance for changed files:**
-
-- **ARCH-001**: No data pipeline logic (SQL transformations, business metrics)
-  - Check for: `SELECT ... FROM`, `CREATE TABLE`, `revenue`, `profit`, `conversion_rate`
-  - Exception: `demo/tests/` are allowed to have pipeline tests
-
-- **ARCH-002**: Technology ownership boundaries (no cross-component violations)
-  - No SQL parsing in Python (dbt owns SQL)
-  - No manual catalog operations (Polaris owns catalog)
-
-- **ARCH-003**: Contract-driven integration (use `CompiledArtifacts`, not `FloeSpec`)
-
-**Aggregate architecture findings.**
-
-### Phase 6: Report Generation (1s)
-
-**Generate structured findings report:**
-
-**Markdown report format**:
+## Output Format
 
 ```markdown
-## Test Quality Review Report
+## Test Quality Review
 
-**Branch**: feature/polaris-oauth2-auth
-**Changed Tests**: 8 files
-**Changed Packages**: floe-polaris
+**Branch**: [branch]
+**Files Reviewed**: [N]
+**Tests Analyzed**: [N]
 
-### Summary
+---
 
-| Metric | Value |
-|--------|-------|
-| Total Issues | 5 |
-| CRITICAL | 2 |
-| MAJOR | 2 |
-| MINOR | 1 |
-| Requirement Coverage | 83.3% (10/12) |
-| Regressions Detected | 0 |
+### Executive Summary
 
-### Findings
+| Aspect | Status | Key Finding |
+|--------|--------|-------------|
+| Test Design Quality | ✅/⚠️/❌ | [summary from test-reviewer] |
+| Plugin Coverage | ✅/⚠️/❌ | [summary from plugin-quality] |
+| Contract Stability | ✅/⚠️/❌ | [summary from contract-stability] |
+| Architecture Compliance | ✅/⚠️/❌ | [summary from architecture-compliance] |
 
-| ID | Category | Severity | Location | Summary | Remediation |
-|----|----------|----------|----------|---------|-------------|
-| T001 | Test Standards | CRITICAL | packages/floe-polaris/tests/integration/test_oauth2.py:45 | Skipped test detected | Replace pytest.skip() with pytest.fail(). See: .claude/rules/testing-standards.md#tests-fail-never-skip |
-| ... | ... | ... | ... | ... | ... |
+**Overall**: [One sentence assessment]
 
-### Requirement Traceability
+---
 
-**Coverage**: 83.3% (10 of 12 tests have markers)
+### Test Design Analysis
 
-Missing markers:
-- packages/floe-polaris/tests/integration/test_oauth2.py
-- packages/floe-polaris/tests/integration/test_token_refresh.py
+[Include test-reviewer findings]
 
-### Contract Regression Check
+#### Tests Needing Attention
 
-**Result**: ✅ All contracts pass (no breaking changes)
+[Full analysis for each problematic test]
+
+#### Clean Tests
+
+[Summary table of tests that passed review]
+
+---
+
+### floe-Specific Findings
+
+#### Plugin Coverage
+[Key findings from plugin-quality agent]
+
+#### Contract Stability
+[Key findings from contract-stability agent]
+
+#### Architecture Compliance
+[Key findings from architecture-compliance agent]
+
+---
+
+### Priority Actions
+
+| Priority | Issue | Impact | Effort |
+|----------|-------|--------|--------|
+| P0 | [Must fix] | High | [estimate] |
+| P1 | [Should fix] | Medium | [estimate] |
+| P2 | [Consider] | Low | [estimate] |
+
+---
+
+### Recommendations
+
+1. **Immediate** (this PR):
+   - [Specific action with file:line]
+
+2. **Follow-up** (next PR):
+   - [Action item]
+
+---
 
 ### Next Steps
 
-1. **Fix CRITICAL issues** (2 findings)
-2. **Address MAJOR issues** (2 findings)
-3. **Optional improvements** (1 finding)
-4. **Ready to proceed**: Once CRITICAL issues resolved, commit and create PR
+- [ ] Address P0 issues
+- [ ] Re-run `/speckit.test-review` to verify
+- [ ] Proceed to PR when clean
 ```
 
-**Total execution time**: 40-60 seconds
+## What This Review Checks
 
-## Examples
+### From test-reviewer (Semantic Analysis)
+- **Purpose**: Is it clear what's being tested?
+- **Correctness**: Could test pass while code is broken?
+- **Isolation**: Deterministic? Independent?
+- **Maintainability**: Brittle to implementation changes?
+- **Type Appropriateness**: Right level of test?
 
-### Example 1: Clean Review (No Issues)
+### From floe-specific agents
+- **Plugin Quality**: All 11 types tested? Lifecycle coverage?
+- **Contract Stability**: Schema stable? Backwards compatible?
+- **Architecture**: K8s-native? Technology ownership respected?
 
+## What This Review Does NOT Check
+
+- **Linting/style**: ruff handles this
+- **Type safety**: mypy handles this
+- **Security**: Aikido/SonarQube handle this
+- **Coverage %**: pytest-cov handles this
+
+## When to Use
+
+- Before creating a PR with test changes
+- After writing new tests
+- When investigating test failures
+- When asked "are my tests good?"
+
+## Example Usage
+
+```bash
+# Review all changed tests
+/speckit.test-review
+
+# Review specific file
+/speckit.test-review packages/floe-core/tests/unit/test_plugin_registry.py
+
+# Focus on a specific concern
+/speckit.test-review --focus design-quality
 ```
-User: /speckit.test-review
