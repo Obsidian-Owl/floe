@@ -57,6 +57,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Decision: [what was chosen]
    - Rationale: [why chosen]
    - Alternatives considered: [what else evaluated]
+   - Clarify any ambiguities or questions by using the AskUserQuestion Tool
 
 **Output**: research.md with all NEEDS CLARIFICATION resolved
 

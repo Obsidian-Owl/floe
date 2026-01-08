@@ -97,23 +97,6 @@ issues = checker.check_file(Path("path/to/test_file.py"))
 
 **Calculate requirement coverage across ALL changed test files:**
 
-```python
-from testing.traceability.parser import TestFileParser
-
-parser = TestFileParser()
-total_tests = 0
-tests_with_markers = 0
-
-for file_path in changed_files:
-    functions = parser.parse_file(file_path)
-    for func in functions:
-        total_tests += 1
-        if func.requirement_markers:
-            tests_with_markers += 1
-
-coverage_percent = (tests_with_markers / total_tests) * 100.0
-```
-
 **Report**:
 - Total test functions analyzed
 - Tests with `@pytest.mark.requirement()` markers
@@ -125,18 +108,6 @@ coverage_percent = (tests_with_markers / total_tests) * 100.0
 **Run contract tests to detect breaking changes:**
 
 Contract tests validate that package interfaces (CompiledArtifacts, plugin ABCs) remain stable.
-
-```python
-from testing.traceability.contracts import ContractTestRunner
-
-runner = ContractTestRunner()
-result = runner.run_contract_tests(timeout=60)
-
-if not result.passed:
-    print(f"CRITICAL: {result.failed_tests} contract tests FAILED (BREAKING CHANGE)")
-    for failure in result.failures:
-        print(f"  - {failure}")
-```
 
 **Contract tests location**: `tests/contract/` (ROOT level, not package level)
 
@@ -167,24 +138,6 @@ if not result.passed:
 ### Phase 6: Report Generation (1s)
 
 **Generate structured findings report:**
-
-```python
-from testing.traceability.models import TestReviewReport, SummaryMetrics, RequirementCoverage
-
-report = TestReviewReport(
-    branch_name=current_branch,
-    changed_files=changed_files,
-    changed_packages=changed_packages,
-    summary=SummaryMetrics(...),
-    issues=all_issues,
-    requirement_coverage=RequirementCoverage(...),
-    contract_test_output=contract_result.output,
-    contract_tests_passed=contract_result.passed
-)
-
-# Output markdown
-print(report.to_markdown())
-```
 
 **Markdown report format**:
 

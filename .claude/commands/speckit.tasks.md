@@ -30,7 +30,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 2. **Load design documents**: Read from FEATURE_DIR:
    - **Required**: plan.md (tech stack, libraries, structure), spec.md (user stories with priorities)
    - **Optional**: data-model.md (entities), contracts/ (API endpoints), research.md (decisions), quickstart.md (test scenarios)
-   - Note: Not all projects have all documents. Generate tasks based on what's available.
+   - ALL projects have all documents. Ensure you have traced back to all requirement and design documents.
 
 3. **Execute task generation workflow**:
    - Load plan.md and extract tech stack, libraries, project structure
@@ -54,14 +54,13 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Clear file paths for each task
    - Dependencies section showing story completion order
    - Parallel execution examples per story
-   - Implementation strategy section (MVP first, incremental delivery)
+   - Implementation strategy section (incremental delivery)
 
 5. **Report**: Output path to generated tasks.md and summary:
    - Total task count
    - Task count per user story
    - Parallel opportunities identified
    - Independent test criteria for each story
-   - Suggested MVP scope (typically just User Story 1)
    - Format validation: Confirm ALL tasks follow the checklist format (checkbox, ID, labels, file paths)
 
 Context for task generation: $ARGUMENTS
@@ -72,7 +71,7 @@ The tasks.md should be immediately executable - each task must be specific enoug
 
 **CRITICAL**: Tasks MUST be organized by user story to enable independent implementation and testing.
 
-**Tests are OPTIONAL**: Only generate test tasks if explicitly requested in the feature specification or if user requests TDD approach.
+**Tests are NOT OPTIONAL**: Always generate tests using the TDD approach.
 
 ### Checklist Format (REQUIRED)
 

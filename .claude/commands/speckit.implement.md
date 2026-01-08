@@ -62,6 +62,7 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
    - Load `spec.md` and `plan.md` from FEATURE_DIR
    - Load `.specify/memory/constitution.md` for project principles
    - Display: phase, user story, task description, Linear URL
+   - Validate any ambiguity with the AskUserQuestions tool
 
 6. **Implementation**
    - Follow constitution principles: TDD (tests first), SOLID, atomic commits (300-600 LOC)
