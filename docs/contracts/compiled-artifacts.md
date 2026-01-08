@@ -132,7 +132,7 @@ class ManifestRef(BaseModel):
 class PluginConfig(BaseModel):
     """Resolved plugin configuration after inheritance."""
 
-    compute: ComputeConfig
+    compute_registry: ComputeRegistry  # All approved computes (multi-compute support)
     orchestrator: OrchestratorConfig
     catalog: CatalogConfig
     semantic_layer: SemanticLayerConfig
@@ -140,10 +140,22 @@ class PluginConfig(BaseModel):
     secrets: SecretsConfig
 
 
-class ComputeConfig(BaseModel):
-    """Compute plugin configuration."""
+class ComputeRegistry(BaseModel):
+    """Registry of all approved compute configurations.
 
-    type: str  # "duckdb" | "spark" | "snowflake" | etc.
+    Platform teams define N approved compute targets. Data engineers
+    select per-transform from this approved list.
+    See ADR-0010 (Multi-Compute Pipeline Architecture).
+    """
+
+    configs: dict[str, ComputeConfig]  # name → config (e.g., {"duckdb": ..., "spark": ...})
+    default: str  # Fallback compute when transform doesn't specify
+
+
+class ComputeConfig(BaseModel):
+    """Configuration for a single compute target."""
+
+    name: str  # "duckdb" | "spark" | "snowflake" | etc.
     connection_secret_ref: str | None = None
     properties: dict = {}
 
@@ -184,15 +196,20 @@ class CompiledTransform(BaseModel):
     path: str
     models: list[str]
     manifest_path: str
+    compute: str | None = None  # Selected compute (None → uses default from registry)
 
 
 class DbtConfig(BaseModel):
-    """dbt-specific configuration."""
+    """dbt-specific configuration.
+
+    Note: In multi-compute pipelines, multiple dbt profiles may be generated
+    (one per approved compute). The `target` field maps to the compute name.
+    """
 
     manifest_path: str
     project_path: str
-    target: str  # dbt target name
     profiles_dir: str
+    # Note: target is resolved per-transform from CompiledTransform.compute
 ```
 
 ## Governance Configuration
@@ -404,7 +421,12 @@ class ContractMonitoringConfig(BaseModel):
   "mode": "simple",
   "inheritance_chain": [],
   "plugins": {
-    "compute": { "type": "duckdb" },
+    "compute_registry": {
+      "configs": {
+        "duckdb": { "name": "duckdb", "properties": { "threads": 8 } }
+      },
+      "default": "duckdb"
+    },
     "orchestrator": { "type": "dagster" },
     "catalog": { "type": "polaris", "uri": "http://polaris:8181/api/catalog" },
     "semantic_layer": { "type": "cube", "port": 4000 },
@@ -416,7 +438,8 @@ class ContractMonitoringConfig(BaseModel):
       "type": "dbt",
       "path": "./models",
       "models": ["bronze_customers", "silver_customers", "gold_revenue"],
-      "manifest_path": "/app/target/manifest.json"
+      "manifest_path": "/app/target/manifest.json",
+      "compute": null
     }
   ],
   "schedule": {
@@ -487,14 +510,23 @@ class ContractMonitoringConfig(BaseModel):
     }
   ],
   "plugins": {
-    "compute": { "type": "duckdb" },
+    "compute_registry": {
+      "configs": {
+        "duckdb": { "name": "duckdb", "properties": { "threads": 8 } },
+        "spark": { "name": "spark", "properties": { "cluster": "spark-thrift.svc" } }
+      },
+      "default": "duckdb"
+    },
     "orchestrator": { "type": "dagster" },
     "catalog": { "type": "polaris" },
     "semantic_layer": { "type": "cube" },
     "ingestion": { "type": "dlt" },
     "secrets": { "type": "k8s" }
   },
-  "transforms": [...],
+  "transforms": [
+    { "type": "dbt", "path": "./models/staging", "models": [...], "compute": "spark" },
+    { "type": "dbt", "path": "./models/marts", "models": [...], "compute": "duckdb" }
+  ],
   "governance": {
     "classification": {...},
     "quality_gates": {
@@ -543,14 +575,23 @@ class ContractMonitoringConfig(BaseModel):
     }
   ],
   "plugins": {
-    "compute": { "type": "spark" },
+    "compute_registry": {
+      "configs": {
+        "spark": { "name": "spark", "properties": { "cluster": "spark-thrift.svc" } },
+        "duckdb": { "name": "duckdb", "properties": { "threads": 8 } }
+      },
+      "default": "duckdb"
+    },
     "orchestrator": { "type": "dagster" },
     "catalog": { "type": "polaris" },
     "semantic_layer": { "type": "cube" },
     "ingestion": { "type": "dlt" },
     "secrets": { "type": "external-secrets" }
   },
-  "transforms": [...],
+  "transforms": [
+    { "type": "dbt", "path": "./models/ingest", "models": [...], "compute": "spark" },
+    { "type": "dbt", "path": "./models/marts", "models": [...], "compute": "duckdb" }
+  ],
   "governance": {...},
   "observability": {
     "traces": true,

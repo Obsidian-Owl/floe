@@ -2,7 +2,14 @@
 
 ## Summary
 
-The ComputePlugin ABC defines the interface for query execution engines. The reference implementation uses DuckDB for local development, with adapters for Snowflake, BigQuery, Databricks, and Spark for production workloads.
+The ComputePlugin ABC defines the interface for query execution engines with **multi-compute pipeline support**:
+
+- **Platform teams** approve N compute targets (DuckDB, Spark, Snowflake, etc.)
+- **Data engineers** select compute per-transform from the approved list
+- **Hierarchical governance** (Enterprise → Domain → Product) restricts available computes
+- **Environment parity** preserved - each transform uses the SAME compute across dev/staging/prod
+
+The reference implementation uses DuckDB for cost-effective analytics, with adapters for Snowflake, BigQuery, Databricks, and Spark.
 
 ## Status
 
@@ -22,15 +29,19 @@ The ComputePlugin ABC defines the interface for query execution engines. The ref
 | Requirement ID | Description | Priority |
 |----------------|-------------|----------|
 | REQ-011 | ComputePlugin ABC definition | CRITICAL |
-| REQ-012 | Connection pooling interface | HIGH |
-| REQ-013 | Query execution abstraction | CRITICAL |
-| REQ-014 | DuckDB reference implementation | CRITICAL |
-| REQ-015 | Snowflake adapter interface | HIGH |
-| REQ-016 | BigQuery adapter interface | MEDIUM |
-| REQ-017 | Spark adapter interface | MEDIUM |
-| REQ-018 | Connection health monitoring | HIGH |
-| REQ-019 | Query timeout handling | HIGH |
-| REQ-020 | Resource limit enforcement | MEDIUM |
+| REQ-012 | Profile generation interface | HIGH |
+| REQ-013 | Catalog attachment SQL | HIGH |
+| REQ-014 | Connection validation | CRITICAL |
+| REQ-015 | Resource requirements | HIGH |
+| REQ-016 | Credential delegation | HIGH |
+| REQ-017 | Package dependencies | MEDIUM |
+| REQ-018 | Error handling | HIGH |
+| REQ-019 | Type safety | HIGH |
+| REQ-020 | Compliance test suite | MEDIUM |
+| REQ-021 | **ComputeRegistry multi-compute support** | CRITICAL |
+| REQ-022 | **Per-transform compute selection** | CRITICAL |
+| REQ-023 | **Hierarchical compute governance** | HIGH |
+| REQ-024 | **Environment parity enforcement** | CRITICAL |
 
 ---
 
@@ -38,15 +49,17 @@ The ComputePlugin ABC defines the interface for query execution engines. The ref
 
 ### ADRs
 - [ADR-0001](../../../architecture/adr/0001-plugin-architecture.md) - Plugin architecture
-- [ADR-0004](../../../architecture/adr/0004-compute-abstraction.md) - Compute abstraction layer
+- [ADR-0010](../../../architecture/adr/0010-target-agnostic-compute.md) - **Multi-Compute Pipeline Architecture** (KEY ADR)
+- [ADR-0038](../../../architecture/adr/0038-data-mesh-architecture.md) - Data Mesh hierarchical governance
 
 ### Interface Docs
 - [plugin-interfaces.md](../../../architecture/plugin-system/plugin-interfaces.md) - Plugin interface definitions
 
 ### Contracts
 - `ComputePlugin` - Query execution ABC
+- `ComputeRegistry` - Multi-compute configuration holder
+- `ComputeConfig` - Single compute target configuration
 - `ConnectionConfig` - Connection configuration model
-- `QueryResult` - Query result wrapper
 
 ---
 
@@ -128,12 +141,48 @@ plugins/floe-compute-duckdb/
 - [ ] Graceful cancellation
 - [ ] Timeout events logged
 
+### US5: Multi-Compute Pipeline Support (P0)
+**As a** data engineer
+**I want** to select different compute engines for different pipeline steps
+**So that** I can use the right tool for each job (Spark for heavy processing, DuckDB for analytics)
+
+**Acceptance Criteria**:
+- [ ] `transforms[].compute` field in floe.yaml
+- [ ] Compute must be in platform's approved list
+- [ ] Default compute used when not specified
+- [ ] Compile-time validation of compute selection
+
+### US6: ComputeRegistry Multi-Compute Configuration (P0)
+**As a** platform engineer
+**I want** to define N approved compute targets with a default
+**So that** data engineers can choose from a governed set
+
+**Acceptance Criteria**:
+- [ ] `compute.approved[]` in manifest.yaml
+- [ ] `compute.default` specifies fallback
+- [ ] All approved computes are loaded and validated
+- [ ] Clear error when compute not in approved list
+
+### US7: Hierarchical Compute Governance (P1)
+**As an** enterprise architect
+**I want** domain teams to restrict available computes to a subset
+**So that** different business units can enforce different standards
+
+**Acceptance Criteria**:
+- [ ] Enterprise manifest defines global set
+- [ ] Domain manifest restricts to subset
+- [ ] Validation ensures subset constraint
+- [ ] Clear error messages on violation
+
 ---
 
 ## Technical Notes
 
 ### Key Decisions
 - DuckDB is the default (zero-config local development)
+- **Multi-compute pipelines**: Platform approves N computes, data engineers select per-transform
+- **Environment parity**: Each transform uses SAME compute across dev/staging/prod (no drift)
+- **Hierarchical governance**: Enterprise → Domain → Product restriction
 - Connection pooling managed per-plugin
 - Query results are lazy (streaming support)
 - Compute plugins are stateless (no query caching)

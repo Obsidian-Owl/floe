@@ -73,7 +73,12 @@ metadata:
   scope: enterprise
 
 plugins:
-  compute: { type: duckdb }
+  compute:
+    approved:
+      - name: duckdb
+      - name: spark
+      - name: snowflake
+    default: duckdb
   orchestrator: { type: dagster }
   catalog: { type: polaris }
   semantic_layer: { type: cube }
@@ -112,7 +117,9 @@ parent:
   ref: oci://registry.acme.com/enterprise:v1.0.0
 
 plugins:
-  compute: { type: spark }  # Override parent
+  compute:
+    approved: [duckdb, spark]  # Restrict to subset of enterprise
+    default: duckdb
 
 data_architecture:
   layers:
@@ -137,7 +144,12 @@ platform:
 
 transforms:
   - type: dbt
-    path: models/
+    path: models/staging/
+    compute: spark      # Heavy processing
+
+  - type: dbt
+    path: models/marts/
+    compute: duckdb     # Analytics (or uses default if omitted)
 
 schedule:
   cron: "0 6 * * *"

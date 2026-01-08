@@ -1,4 +1,4 @@
-# REQ-011 to REQ-020: ComputePlugin Standards
+# REQ-011 to REQ-024: ComputePlugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -6,9 +6,14 @@
 
 ## Overview
 
-ComputePlugin defines the interface for all compute engines (DuckDB, Snowflake, Spark, BigQuery, Databricks, Redshift, Trino). This enables platform teams to select a single compute target that all data engineers inherit.
+ComputePlugin defines the interface for all compute engines (DuckDB, Snowflake, Spark, BigQuery, Databricks, Redshift, Trino). The multi-compute architecture enables:
 
-**Key ADR**: ADR-0010 (Target-Agnostic Compute)
+1. **Platform teams** approve N compute targets (e.g., DuckDB, Spark, Snowflake)
+2. **Data engineers** select compute per-transform from the approved list
+3. **Hierarchical governance** (Enterprise → Domain → Product) restricts available computes
+4. **Environment parity** preserved - each transform uses the SAME compute across dev/staging/prod
+
+**Key ADR**: ADR-0010 (Multi-Compute Pipeline Architecture)
 
 ## Requirements
 
@@ -180,17 +185,127 @@ ComputePlugin defines the interface for all compute engines (DuckDB, Snowflake, 
 
 ---
 
+### REQ-021: ComputeRegistry Multi-Compute Support **[New]**
+
+**Requirement**: System MUST support ComputeRegistry with multiple approved compute configurations and a default selection.
+
+**Acceptance Criteria**:
+- [ ] ComputeRegistry holds N compute configurations (dict[str, ComputeConfig])
+- [ ] Default compute specified for fallback when transform doesn't specify
+- [ ] All approved computes load their respective ComputePlugin implementations
+- [ ] Validation ensures default is in approved list
+
+**Enforcement**: Schema validation, compile-time checking
+**Example**:
+```yaml
+plugins:
+  compute:
+    approved:
+      - name: duckdb
+        config: { threads: 8 }
+      - name: spark
+        config: { cluster: "spark.svc" }
+    default: duckdb
+```
+**Test Coverage**: `tests/unit/test_compute_registry.py`
+**Traceability**: ADR-0010, compiled-artifacts.md
+
+---
+
+### REQ-022: Per-Transform Compute Selection **[New]**
+
+**Requirement**: Data engineers MUST be able to select compute per-transform from the platform's approved list.
+
+**Acceptance Criteria**:
+- [ ] `transforms[].compute` field accepts compute name string
+- [ ] Compile-time validation ensures compute is in approved list
+- [ ] When not specified, transform uses platform default compute
+- [ ] InvalidComputeError raised when compute not in approved list
+
+**Enforcement**: Compile-time validation, schema validation
+**Example**:
+```yaml
+transforms:
+  - type: dbt
+    path: models/staging/
+    compute: spark  # Heavy processing
+
+  - type: dbt
+    path: models/marts/
+    compute: duckdb  # Analytics
+
+  - type: dbt
+    path: models/seeds/
+    # Uses default from platform
+```
+**Test Coverage**: `tests/unit/test_per_transform_compute.py`
+**Traceability**: ADR-0010, floe-yaml-schema.md
+
+---
+
+### REQ-023: Hierarchical Compute Governance **[New]**
+
+**Requirement**: System MUST support hierarchical compute governance where each level can restrict available computes.
+
+**Acceptance Criteria**:
+- [ ] Enterprise manifest defines global approved set
+- [ ] Domain manifest can restrict to subset of enterprise set
+- [ ] Data product cannot use compute not in effective approved list
+- [ ] Compile-time validation checks inheritance chain
+- [ ] Clear error messages when compute not in any ancestor's approved list
+
+**Enforcement**: Manifest inheritance validation, compile-time checking
+**Example**:
+```yaml
+# Enterprise: approved: [duckdb, spark, snowflake, bigquery]
+# Domain:     approved: [duckdb, spark]  # Subset only
+# Product:    compute: spark  # Must be in domain's approved list
+```
+**Test Coverage**: `tests/unit/test_hierarchical_compute_governance.py`
+**Traceability**: ADR-0010, ADR-0038 (Data Mesh Architecture)
+
+---
+
+### REQ-024: Environment Parity for Compute **[New]**
+
+**Requirement**: System MUST enforce that each transform uses the SAME compute across all environments (dev/staging/prod).
+
+**Acceptance Criteria**:
+- [ ] Per-environment compute selection is FORBIDDEN (prevents drift)
+- [ ] Validation fails if environments[].transforms.compute is specified
+- [ ] Each transform's compute is resolved ONCE, used across all environments
+- [ ] Clear error message explains why per-environment compute causes drift
+
+**Enforcement**: Schema validation, compile-time checking
+**Anti-Pattern** (FORBIDDEN):
+```yaml
+# ❌ This causes environment drift
+environments:
+  - name: development
+    transforms:
+      compute: duckdb
+  - name: production
+    transforms:
+      compute: snowflake
+```
+**Test Coverage**: `tests/unit/test_environment_parity.py`
+**Traceability**: ADR-0010
+
+---
+
 ## Domain Acceptance Criteria
 
-ComputePlugin Standards (REQ-011 to REQ-020) complete when:
+ComputePlugin Standards (REQ-011 to REQ-024) complete when:
 
-- [ ] All 10 requirements documented with complete fields
+- [ ] All 14 requirements documented with complete fields
 - [ ] ComputePlugin ABC defined in floe-core
 - [ ] At least 3 reference implementations (DuckDB, Snowflake, Spark)
 - [ ] Contract tests pass for all implementations
 - [ ] Integration tests validate dbt execution
+- [ ] Multi-compute pipeline execution validated end-to-end
+- [ ] Hierarchical governance validated (Enterprise → Domain → Product)
 - [ ] Documentation backreferences all requirements
 
 ## Epic Mapping
 
-**Epic 3: Plugin Interface Extraction** - Extract 7 MVP compute targets to plugins
+**Epic 4A: ComputePlugin Architecture** - Multi-compute pipeline support with hierarchical governance

@@ -89,9 +89,13 @@
 ```yaml
 # manifest.yaml (50 lines supports 200 pipelines)
 compute:
-  default: duckdb  # Or: snowflake, databricks, spark, bigquery
-orchestrator: dagster  # Or: airflow
-catalog: polaris       # Or: glue, unity-catalog
+  approved:
+    - name: duckdb      # Cost-effective analytics
+    - name: spark       # Heavy processing
+    - name: snowflake   # Enterprise warehouse
+  default: duckdb       # Used when transform doesn't specify
+orchestrator: dagster   # Or: airflow
+catalog: polaris        # Or: glue, unity-catalog
 
 governance:
   naming_pattern: medallion        # bronze/silver/gold layers
@@ -101,7 +105,7 @@ governance:
 
 ### 2. Data Teams Write Business Logic (Always)
 
-**Declarative config:** Same across all 50 teams
+**Declarative config:** Same across all 50 teams. Select compute per-step from approved list.
 
 ```yaml
 # floe.yaml (30 lines replaces 300 lines of boilerplate)
@@ -110,9 +114,12 @@ version: "0.1.0"
 
 transforms:
   - type: dbt
-    path: ./dbt
-    models:
-      - marts/mart_customer_orders.sql
+    path: ./dbt/staging
+    compute: spark      # Heavy processing on Spark
+
+  - type: dbt
+    path: ./dbt/marts
+    compute: duckdb     # Analytics on DuckDB
 
 schedule:
   cron: "0 6 * * *"
@@ -158,16 +165,29 @@ Compilation SUCCESS - ready to deploy
 
 **Choose from 12 plugin types.** Swap implementations without breaking pipelines.
 
-**Example:** Switch compute engines without touching pipeline code:
+**Multi-compute pipelines:** Platform teams approve N compute targets. Data engineers select per-step from the approved list. Different steps can use different engines:
 
 ```yaml
-# Change ONE line in manifest.yaml
+# manifest.yaml (Platform Team)
 compute:
-  default: snowflake  # Or: duckdb, databricks, spark, bigquery
+  approved:
+    - name: spark       # Heavy processing
+    - name: duckdb      # Cost-effective analytics
+    - name: snowflake   # Enterprise warehouse
+  default: duckdb
 
-# All 200 pipelines now run on the new engine
-# Zero pipeline code changes required
+# floe.yaml (Data Engineers)
+transforms:
+  - type: dbt
+    path: models/staging/
+    compute: spark      # Process 10TB raw data
+
+  - type: dbt
+    path: models/marts/
+    compute: duckdb     # Build metrics on 100GB result
 ```
+
+**Environment parity preserved:** Each step uses the SAME compute across dev/staging/prod. No "works in dev, fails in prod" surprises.
 
 **Real-world swap scenarios:**
 - DuckDB (embedded, cost-effective) ↔ Snowflake (managed, elastic)
@@ -233,62 +253,6 @@ Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical
 - Domain teams have autonomy within guardrails
 
 **Scale from single platform to federated Data Mesh without rebuilding.**
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- **Python 3.10+**
-- **Docker Desktop** or **OrbStack**
-- **uv** package manager: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-
-### Installation
-
-```bash
-# Clone and install
-git clone https://github.com/Obsidian-Owl/floe.git
-cd floe
-uv sync
-
-# Deploy to local Kubernetes
-make deploy-local-full
-
-# Verify deployment
-make demo-status
-make show-urls  # Access Dagster UI
-```
-
-### Create Your First Pipeline
-
-```yaml
-# floe.yaml
-name: customer-analytics
-version: "0.1.0"
-
-# Logical references (resolved by platform config)
-storage: default
-catalog: default
-compute: default
-
-transforms:
-  - type: dbt
-    path: ./dbt
-    models:
-      - marts/mart_customer_orders.sql
-
-observability:
-  traces: true
-  lineage: true
-```
-
-Run validation:
-
-```bash
-floe compile  # Validates against platform policies
-floe run      # Deploys to Kubernetes
-```
 
 ---
 
@@ -377,58 +341,10 @@ floe provides **batteries-included OSS defaults** that run on any Kubernetes clu
 
 ---
 
-## Development
-
-### Run Tests
-
-```bash
-make test-unit    # Fast unit tests (no infrastructure)
-make test         # Integration tests (Docker Compose)
-make test-k8s     # K8s-native tests (production parity)
-```
-
-### Code Quality
-
-```bash
-make check        # Run all quality checks (mirrors CI)
-make lint         # Ruff linting + formatting
-make typecheck    # mypy --strict
-make format       # Auto-format code
-```
-
-### Local Deployment
-
-```bash
-make deploy-local-full  # Deploy complete stack
-make show-urls          # Access services
-make demo-e2e           # Run E2E validation
-make demo-cleanup-full  # Cleanup
-```
-
----
-
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-### Development Setup
-
-```bash
-git clone https://github.com/Obsidian-Owl/floe.git
-cd floe
-uv sync
-make hooks  # Install git hooks
-
-# Run checks
-make check
-make test-all
-
-# Submit PR
-git checkout -b feature/your-feature
-# Make changes
-git commit -m "feat: your feature"
-git push origin feature/your-feature
-```
 
 ### Code Standards
 

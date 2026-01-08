@@ -43,6 +43,10 @@ FloeSpec
 ├── metadata: MetadataSpec (required)
 ├── platform: PlatformRef (required)
 ├── transforms: TransformSpec[] (required)
+│   ├── type: string (required)
+│   ├── path: string (required)
+│   ├── compute: string (optional) ← Select from platform's approved list
+│   └── profiles_dir: string (optional)
 ├── ingestion: IngestionSpec[] (optional)
 ├── schedule: ScheduleSpec (optional)
 ├── environments: EnvironmentOverride[] (optional)
@@ -238,19 +242,50 @@ transforms:
     profiles_dir: .dbt/
 ```
 
-### transforms[].target
+### transforms[].compute
 
 **Type:** `string`
 **Required:** No
-**Default:** From platform manifest
+**Default:** Platform's default compute
 
-Override the compute target for this transform.
+Select the compute engine for this transform from the platform's approved list. This enables multi-compute pipelines where different steps can use different compute engines.
+
+**Validation:** Must be a compute name from `manifest.yaml` `plugins.compute.approved[]`.
 
 ```yaml
+# manifest.yaml (Platform Team)
+plugins:
+  compute:
+    approved:
+      - name: duckdb
+        config: { threads: 8 }
+      - name: spark
+        config: { cluster: "spark-thrift.svc" }
+    default: duckdb
+
+# floe.yaml (Data Engineers)
 transforms:
+  # Heavy processing on Spark cluster
   - type: dbt
-    path: models/
-    target: duckdb  # Override platform default
+    path: models/staging/
+    compute: spark  # Select from approved list
+
+  # Analytical metrics on DuckDB
+  - type: dbt
+    path: models/marts/
+    compute: duckdb
+
+  # Simple transforms use default
+  - type: dbt
+    path: models/seeds/
+    # compute: (uses platform default → duckdb)
+```
+
+**Environment Parity:** Each transform uses the SAME compute across all environments (dev/staging/prod). This is NOT for per-environment compute selection (which would cause environment drift).
+
+```
+Step 1: dev=Spark, staging=Spark, prod=Spark     ✓ No drift
+Step 2: dev=DuckDB, staging=DuckDB, prod=DuckDB  ✓ No drift
 ```
 
 ---
@@ -446,13 +481,23 @@ environments:
 **Type:** `TransformOverride`
 **Required:** No
 
-Transform-specific overrides for this environment.
+Transform-specific overrides for this environment. **Note:** Per-environment compute selection is NOT allowed (would cause environment drift). Use `transforms[].compute` instead for per-transform compute selection.
 
 ```yaml
 environments:
   - name: development
     transforms:
-      target: duckdb  # Use DuckDB in dev
+      # Per-environment overrides (e.g., reduced parallelism)
+      threads: 4
+
+# ❌ FORBIDDEN: Per-environment compute (causes drift)
+# environments:
+#   - name: development
+#     transforms:
+#       compute: duckdb  # Different compute per env = drift
+#   - name: production
+#     transforms:
+#       compute: snowflake  # "Works in dev, fails in prod"
 ```
 
 ### environments[].schedule
@@ -523,8 +568,19 @@ platform:
   ref: oci://ghcr.io/acme/platform:v1.0.0
 
 transforms:
+  # Heavy processing on Spark (large datasets)
   - type: dbt
-    path: models/
+    path: models/staging/
+    compute: spark  # Select from platform's approved list
+
+  # Analytical metrics on DuckDB (smaller result set)
+  - type: dbt
+    path: models/marts/
+    compute: duckdb
+
+  # Seeds use platform default (no compute specified)
+  - type: dbt
+    path: models/seeds/
 
 ingestion:
   - name: salesforce_accounts
@@ -553,8 +609,6 @@ schedule:
 
 environments:
   - name: development
-    transforms:
-      target: duckdb
     schedule:
       enabled: false
 
@@ -625,6 +679,7 @@ Beyond schema validation, the following rules are enforced at compile time:
 | `platform_ref_resolvable` | Platform OCI ref must be pullable | `PlatformNotFoundError` |
 | `secret_refs_exist` | Secret refs must exist in cluster | `SecretNotFoundError` |
 | `naming_convention` | Model names must match platform pattern | `NamingViolationError` |
+| `compute_in_approved_list` | Transform compute must be in platform's approved list | `InvalidComputeError` |
 
 ---
 
@@ -634,7 +689,7 @@ Beyond schema validation, the following rules are enforced at compile time:
 |-------|---------------|--------|
 | `platform.cache` | `true` | Built-in |
 | `transforms[].profiles_dir` | `.floe/profiles` | Built-in |
-| `transforms[].target` | Platform manifest | Inherited |
+| `transforms[].compute` | `plugins.compute.default` | Platform manifest |
 | `schedule.timezone` | `UTC` | Built-in |
 | `schedule.enabled` | `true` | Built-in |
 | `quality.*` | Platform manifest | Inherited |
