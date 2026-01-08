@@ -28,6 +28,7 @@ import structlog
 
 from floe_core.plugin_errors import (
     DuplicatePluginError,
+    PluginConfigurationError,
     PluginIncompatibleError,
     PluginNotFoundError,
 )
@@ -433,23 +434,106 @@ class PluginRegistry:
         plugin_type: PluginType,
         name: str,
         config: dict[str, Any],
-    ) -> None:
+    ) -> BaseModel | None:
         """Configure a plugin with validated settings.
+
+        Loads the plugin if not already loaded, retrieves its configuration
+        schema, and validates the provided config. The validated configuration
+        is stored for later retrieval via get_config().
 
         Args:
             plugin_type: The plugin category.
             name: The plugin name.
             config: Configuration dictionary to validate.
 
+        Returns:
+            Validated Pydantic model instance, or None if plugin has no schema.
+
         Raises:
             PluginNotFoundError: If plugin not found.
-            PluginConfigurationError: If validation fails.
+            PluginConfigurationError: If validation fails with field-level errors.
 
-        Note:
-            Implementation details in T032-T036.
+        Example:
+            >>> registry = get_registry()
+            >>> config = registry.configure(
+            ...     PluginType.COMPUTE,
+            ...     "duckdb",
+            ...     {"threads": 4}
+            ... )
+            >>> config.threads
+            4
         """
-        # Implementation in T032
-        raise NotImplementedError("configure() not yet implemented (T032)")
+        from pydantic import ValidationError as PydanticValidationError
+
+        key = (plugin_type, name)
+
+        # Load plugin if not already loaded (may raise PluginNotFoundError)
+        plugin = self.get(plugin_type, name)
+
+        # Get the plugin's configuration schema
+        schema_class = plugin.get_config_schema()
+
+        if schema_class is None:
+            # Plugin has no configuration schema - store None
+            logger.debug(
+                "configure.no_schema",
+                plugin_type=plugin_type.name,
+                name=name,
+            )
+            self._configs[key] = None  # type: ignore[assignment]
+            return None
+
+        # Validate config using Pydantic
+        try:
+            validated_config = schema_class(**config)
+        except PydanticValidationError as e:
+            # Convert Pydantic errors to field-level error details
+            errors = self._convert_pydantic_errors(e)
+            logger.warning(
+                "configure.validation_failed",
+                plugin_type=plugin_type.name,
+                name=name,
+                error_count=len(errors),
+            )
+            raise PluginConfigurationError(name, errors) from e
+
+        # Store validated config
+        self._configs[key] = validated_config
+
+        logger.debug(
+            "configure.success",
+            plugin_type=plugin_type.name,
+            name=name,
+        )
+
+        return validated_config
+
+    def _convert_pydantic_errors(
+        self,
+        error: Any,  # PydanticValidationError
+    ) -> list[dict[str, Any]]:
+        """Convert Pydantic ValidationError to field-level error details.
+
+        Args:
+            error: Pydantic ValidationError instance.
+
+        Returns:
+            List of error dicts with 'field', 'message', and 'type' keys.
+        """
+        errors: list[dict[str, Any]] = []
+
+        for err in error.errors():
+            # Build field path from location tuple
+            loc = err.get("loc", ())
+            field_path = ".".join(str(part) for part in loc)
+
+            errors.append({
+                "field": field_path,
+                "message": err.get("msg", "Unknown error"),
+                "type": err.get("type", "unknown"),
+            })
+
+        return errors
 
     def get_config(
         self,

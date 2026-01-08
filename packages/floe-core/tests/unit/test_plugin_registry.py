@@ -1003,3 +1003,437 @@ class TestPluginRegistryDuplicateHandling:
         # Both should be accessible
         assert registry.get(PluginType.COMPUTE, "samename").name == "samename"
         assert registry.get(PluginType.ORCHESTRATOR, "samename").name == "samename"
+
+
+# =============================================================================
+# T037: Unit tests for config validation
+# =============================================================================
+
+
+class TestPluginRegistryConfiguration:
+    """Tests for PluginRegistry.configure() and get_config() methods."""
+
+    @pytest.mark.requirement("FR-006")
+    def test_configure_with_valid_config(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test configure() validates and stores valid configuration."""
+        from pydantic import BaseModel
+
+        class TestConfig(BaseModel):
+            host: str
+            port: int = 5432
+
+        class ConfigurablePlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "configurable"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return TestConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, ConfigurablePlugin())
+
+        config = registry.configure(
+            PluginType.COMPUTE,
+            "configurable",
+            {"host": "localhost", "port": 5433},
+        )
+
+        assert config is not None
+        assert config.host == "localhost"
+        assert config.port == 5433
+
+    @pytest.mark.requirement("FR-008")
+    def test_configure_applies_defaults(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test configure() applies default values from schema."""
+        from pydantic import BaseModel
+
+        class ConfigWithDefaults(BaseModel):
+            host: str
+            port: int = 5432
+            timeout: float = 30.0
+
+        class DefaultPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "default-plugin"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return ConfigWithDefaults
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, DefaultPlugin())
+
+        # Only provide required field
+        config = registry.configure(
+            PluginType.COMPUTE,
+            "default-plugin",
+            {"host": "localhost"},
+        )
+
+        assert config is not None
+        assert config.host == "localhost"
+        assert config.port == 5432  # Default
+        assert config.timeout == pytest.approx(30.0)  # Default
+
+    @pytest.mark.requirement("FR-006")
+    def test_configure_with_no_schema(
+        self,
+        reset_registry: None,
+        mock_plugin: PluginMetadata,
+    ) -> None:
+        """Test configure() returns None for plugins without config schema."""
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, mock_plugin)
+
+        config = registry.configure(
+            PluginType.COMPUTE,
+            mock_plugin.name,
+            {},
+        )
+
+        assert config is None
+
+    @pytest.mark.requirement("FR-006")
+    def test_configure_stores_config(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test configure() stores validated config for retrieval."""
+        from pydantic import BaseModel
+
+        class StoredConfig(BaseModel):
+            value: str
+
+        class StoringPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "storing"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return StoredConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, StoringPlugin())
+
+        registry.configure(PluginType.COMPUTE, "storing", {"value": "test"})
+
+        # Should be retrievable via get_config
+        retrieved = registry.get_config(PluginType.COMPUTE, "storing")
+        assert retrieved is not None
+        assert retrieved.value == "test"
+
+    @pytest.mark.requirement("FR-006")
+    def test_get_config_returns_none_if_not_configured(
+        self,
+        reset_registry: None,
+        mock_plugin: PluginMetadata,
+    ) -> None:
+        """Test get_config() returns None for unconfigured plugins."""
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, mock_plugin)
+
+        config = registry.get_config(PluginType.COMPUTE, mock_plugin.name)
+        assert config is None
+
+    @pytest.mark.requirement("FR-006")
+    def test_configure_raises_plugin_not_found(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test configure() raises PluginNotFoundError for unknown plugin."""
+        from floe_core.plugin_errors import PluginNotFoundError
+
+        registry = PluginRegistry()
+
+        with pytest.raises(PluginNotFoundError):
+            registry.configure(PluginType.COMPUTE, "nonexistent", {})
+
+
+# =============================================================================
+# T038: Unit tests for validation error messages
+# =============================================================================
+
+
+class TestPluginRegistryValidationErrors:
+    """Tests for validation error handling in configure()."""
+
+    @pytest.mark.requirement("FR-007")
+    def test_configure_raises_on_invalid_config(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test configure() raises PluginConfigurationError on invalid config."""
+        from pydantic import BaseModel
+
+        from floe_core.plugin_errors import PluginConfigurationError
+
+        class StrictConfig(BaseModel):
+            required_field: str
+
+        class StrictPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "strict"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return StrictConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, StrictPlugin())
+
+        with pytest.raises(PluginConfigurationError) as exc_info:
+            registry.configure(PluginType.COMPUTE, "strict", {})
+
+        assert exc_info.value.name == "strict"
+        assert len(exc_info.value.errors) > 0
+
+    @pytest.mark.requirement("FR-007")
+    def test_validation_error_includes_field_path(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test validation errors include field path."""
+        from pydantic import BaseModel, Field
+
+        from floe_core.plugin_errors import PluginConfigurationError
+
+        class TypedConfig(BaseModel):
+            port: int = Field(..., ge=1, le=65535)
+
+        class TypedPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "typed"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return TypedConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, TypedPlugin())
+
+        with pytest.raises(PluginConfigurationError) as exc_info:
+            registry.configure(PluginType.COMPUTE, "typed", {"port": "not-an-int"})
+
+        errors = exc_info.value.errors
+        assert any(err["field"] == "port" for err in errors)
+
+    @pytest.mark.requirement("FR-007")
+    def test_validation_error_includes_message(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test validation errors include error message."""
+        from pydantic import BaseModel, Field
+
+        from floe_core.plugin_errors import PluginConfigurationError
+
+        class BoundedConfig(BaseModel):
+            threads: int = Field(..., ge=1, le=128)
+
+        class BoundedPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "bounded"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return BoundedConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, BoundedPlugin())
+
+        with pytest.raises(PluginConfigurationError) as exc_info:
+            registry.configure(PluginType.COMPUTE, "bounded", {"threads": 0})
+
+        errors = exc_info.value.errors
+        assert len(errors) > 0
+        assert "message" in errors[0]
+        assert errors[0]["message"]  # Non-empty message
+
+    @pytest.mark.requirement("FR-007")
+    def test_validation_error_nested_field_path(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test validation errors include nested field paths (dot notation)."""
+        from pydantic import BaseModel
+
+        from floe_core.plugin_errors import PluginConfigurationError
+
+        class ConnectionConfig(BaseModel):
+            host: str
+            port: int
+
+        class NestedConfig(BaseModel):
+            connection: ConnectionConfig
+            timeout: float = 30.0
+
+        class NestedPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "nested"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return NestedConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, NestedPlugin())
+
+        with pytest.raises(PluginConfigurationError) as exc_info:
+            registry.configure(
+                PluginType.COMPUTE,
+                "nested",
+                {"connection": {"host": "localhost", "port": "invalid"}},
+            )
+
+        errors = exc_info.value.errors
+        # Should have nested path like "connection.port"
+        assert any("connection" in err["field"] for err in errors)
+
+    @pytest.mark.requirement("FR-007")
+    def test_validation_error_multiple_fields(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test validation errors capture all invalid fields."""
+        from pydantic import BaseModel
+
+        from floe_core.plugin_errors import PluginConfigurationError
+
+        class MultiFieldConfig(BaseModel):
+            host: str
+            port: int
+            timeout: float
+
+        class MultiFieldPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "multifield"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return MultiFieldConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, MultiFieldPlugin())
+
+        with pytest.raises(PluginConfigurationError) as exc_info:
+            # All fields invalid/missing
+            registry.configure(PluginType.COMPUTE, "multifield", {})
+
+        errors = exc_info.value.errors
+        # Should have errors for all three required fields
+        assert len(errors) >= 3
+        field_names = [err["field"] for err in errors]
+        assert "host" in field_names
+        assert "port" in field_names
+        assert "timeout" in field_names
+
+    @pytest.mark.requirement("FR-007")
+    def test_validation_error_includes_type(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test validation errors include error type."""
+        from pydantic import BaseModel
+
+        from floe_core.plugin_errors import PluginConfigurationError
+
+        class RequiredConfig(BaseModel):
+            required: str
+
+        class RequiredPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "required"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return RequiredConfig
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, RequiredPlugin())
+
+        with pytest.raises(PluginConfigurationError) as exc_info:
+            registry.configure(PluginType.COMPUTE, "required", {})
+
+        errors = exc_info.value.errors
+        assert len(errors) > 0
+        assert "type" in errors[0]
+        assert errors[0]["type"]  # Non-empty type
