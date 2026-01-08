@@ -525,7 +525,7 @@ class PluginRegistry:
     def _convert_pydantic_errors(
         self,
         error: Any,  # PydanticValidationError
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         """Convert Pydantic ValidationError to field-level error details.
 
         Args:
