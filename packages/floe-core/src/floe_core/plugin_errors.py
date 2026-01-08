@@ -10,7 +10,8 @@ Exception Hierarchy:
     ├── PluginConfigurationError # Config validation failed
     ├── PluginStartupError      # Startup hook failed
     ├── DuplicatePluginError    # Same type+name already registered
-    └── CircularDependencyError # Dependency cycle detected
+    ├── CircularDependencyError # Dependency cycle detected
+    └── MissingDependencyError  # Required dependency not available
 
 Example:
     >>> from floe_core.plugin_errors import PluginNotFoundError
@@ -230,3 +231,35 @@ class CircularDependencyError(PluginError):
         """
         self.cycle = cycle
         super().__init__(f"Circular dependency: {' -> '.join(cycle)}")
+
+
+class MissingDependencyError(PluginError):
+    """Raised when a plugin declares a dependency that is not available.
+
+    This error indicates that a plugin requires another plugin that
+    is not installed or not in the current plugin set.
+
+    Attributes:
+        plugin_name: The name of the plugin with missing dependencies.
+        missing_dependencies: List of dependency names that are missing.
+
+    Example:
+        >>> raise MissingDependencyError("my-plugin", ["duckdb", "polaris"])
+        Traceback (most recent call last):
+            ...
+        MissingDependencyError: Plugin 'my-plugin' has missing dependencies: duckdb, polaris
+    """
+
+    def __init__(self, plugin_name: str, missing_dependencies: list[str]) -> None:
+        """Initialize MissingDependencyError.
+
+        Args:
+            plugin_name: The name of the plugin with missing dependencies.
+            missing_dependencies: List of dependency names that are not available.
+        """
+        self.plugin_name = plugin_name
+        self.missing_dependencies = missing_dependencies
+        deps_str = ", ".join(missing_dependencies)
+        super().__init__(
+            f"Plugin '{plugin_name}' has missing dependencies: {deps_str}"
+        )

@@ -36,6 +36,7 @@ import structlog
 from floe_core.plugin_errors import (
     CircularDependencyError,
     DuplicatePluginError,
+    MissingDependencyError,
     PluginConfigurationError,
     PluginIncompatibleError,
     PluginNotFoundError,
@@ -893,16 +894,14 @@ class PluginRegistry:
 
         Raises:
             CircularDependencyError: If a circular dependency is detected.
+            MissingDependencyError: If a plugin declares a dependency that is
+                not in the provided plugin list.
 
         Example:
             >>> # Plugin A depends on B, B depends on C
             >>> sorted_plugins = registry.resolve_dependencies([A, B, C])
             >>> [p.name for p in sorted_plugins]
             ['C', 'B', 'A']
-
-        Note:
-            Missing dependencies are detected in T054 (separate task).
-            This method assumes all dependencies are present in the input list.
         """
         if not plugins:
             return []
@@ -910,6 +909,9 @@ class PluginRegistry:
         # Build name -> plugin mapping for fast lookup
         plugin_map: dict[str, PluginMetadata] = {p.name: p for p in plugins}
         plugin_names = set(plugin_map.keys())
+
+        # Check for missing dependencies before proceeding
+        self._check_missing_dependencies(plugins, plugin_names)
 
         # Build adjacency list and in-degree count
         # Graph: dependency -> dependents (edges point from dependency to dependent)
@@ -966,6 +968,30 @@ class PluginRegistry:
 
         # Return plugins in sorted order
         return [plugin_map[name] for name in sorted_names]
+
+    def _check_missing_dependencies(
+        self,
+        plugins: builtins.list[PluginMetadata],
+        available_names: set[str],
+    ) -> None:
+        """Check if any plugin has dependencies not in the available set.
+
+        Args:
+            plugins: List of plugins to check.
+            available_names: Set of plugin names that are available.
+
+        Raises:
+            MissingDependencyError: If any plugin has missing dependencies.
+        """
+        for plugin in plugins:
+            missing = [dep for dep in plugin.dependencies if dep not in available_names]
+            if missing:
+                logger.error(
+                    "resolve_dependencies.missing_dependency",
+                    plugin=plugin.name,
+                    missing=missing,
+                )
+                raise MissingDependencyError(plugin.name, missing)
 
     def _find_dependency_cycle(
         self,
