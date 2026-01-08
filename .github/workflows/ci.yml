@@ -1,5 +1,5 @@
 # Continuous Integration Pipeline
-# See .github/README.md for strategy documentation
+# See .github/CI.md for strategy documentation
 #
 # Security: All actions pinned to full SHA hashes
 # To update: gh api repos/OWNER/REPO/git/refs/tags/VERSION --jq '.object.sha'

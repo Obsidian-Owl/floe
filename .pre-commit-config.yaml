@@ -1,7 +1,7 @@
 # Pre-commit hooks for floe
 # Install: uv run pre-commit install && uv run pre-commit install --hook-type pre-push
 # Run all: uv run pre-commit run --all-files
-# See .github/README.md for CI strategy documentation
+# See .github/CI.md for CI strategy documentation
 
 default_language_version:
   python: python3.10
