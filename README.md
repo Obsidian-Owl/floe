@@ -158,21 +158,21 @@ Compilation SUCCESS - ready to deploy
 
 **Choose from 12 plugin types.** Swap implementations without breaking pipelines.
 
-**Example:** Start with DuckDB (local), scale to Snowflake (cloud):
+**Example:** Switch compute engines without touching pipeline code:
 
 ```yaml
 # Change ONE line in manifest.yaml
 compute:
-  default: snowflake  # Was: duckdb
+  default: snowflake  # Or: duckdb, databricks, spark, bigquery
 
-# All 200 pipelines now run on Snowflake
+# All 200 pipelines now run on the new engine
 # Zero pipeline code changes required
 ```
 
 **Real-world swap scenarios:**
-- DuckDB (local dev) → Snowflake (cloud prod)
-- Dagster (asset-centric) → Airflow 3.x (DAG-based)
-- Jaeger (local tracing) → Datadog (managed observability)
+- DuckDB (embedded, cost-effective) ↔ Snowflake (managed, elastic)
+- Dagster (asset-centric) ↔ Airflow 3.x (DAG-based)
+- Jaeger (self-hosted) ↔ Datadog (managed SaaS)
 
 **Plugin types:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, DataQuality, Secrets, Identity
 
@@ -216,11 +216,13 @@ Compilation FAILED - fix violations before deployment
 
 | Environment | Platform Config | Pipeline Config |
 |-------------|-----------------|-----------------|
-| **Dev** | Local DuckDB | `floe.yaml` (no changes) |
-| **Staging** | Shared Snowflake | `floe.yaml` (no changes) |
-| **Prod** | Production Snowflake | `floe.yaml` (no changes) |
+| **Dev** | DuckDB (local cluster) | `floe.yaml` (no changes) |
+| **Staging** | DuckDB (shared cluster) | `floe.yaml` (no changes) |
+| **Prod** | DuckDB (production cluster) | `floe.yaml` (no changes) |
 
-**Result:** No "works on my machine" issues. No config drift.
+Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical.
+
+**Result:** No "works on my machine" issues. No config drift. What you test is what you deploy.
 
 ### 🌐 Data Mesh Ready
 
