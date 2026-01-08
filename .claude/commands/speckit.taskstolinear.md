@@ -55,48 +55,79 @@ mcp__plugin_linear_linear__list_teams
 TEAM_ID=$(bd config list | grep linear.team_id | awk '{print $3}')
 ```
 
-### Step 2: Determine Epic Label (Dynamic Discovery)
+### Step 2: Determine Project and Epic Label (Dynamic Discovery)
 
 **Extract from feature directory path**:
 
 ```javascript
-// Example: /path/to/specs/epic-3-plugin-interface-foundation/
-// Extract: "epic-3"
+// Example: /path/to/specs/001-plugin-registry/
+// Extract: projectSlug = "floe-01-plugin-registry"
+// Extract: epicLabel = "epic-1" (optional, for filtering)
 
 featurePath = FEATURE_DIR
-epicMatch = featurePath.match(/epic-(\d+)/)
+featureMatch = path.basename(featurePath).match(/^(\d+)-(.+)$/)
 
-if (epicMatch) {
-  epicLabel = `epic-${epicMatch[1]}`
+if (featureMatch) {
+  featureNumber = featureMatch[1]  // "001"
+  featureSlug = featureMatch[2]    // "plugin-registry"
+  projectSlug = `floe-${featureNumber.padStart(2, '0').slice(-2)}-${featureSlug}`  // "floe-01-plugin-registry"
+  epicLabel = `epic-${parseInt(featureNumber)}`  // "epic-1" (optional label)
 } else {
-  // Fallback: Check spec.md
-  specContent = readFile(`${FEATURE_DIR}/spec.md`)
-  epicMatch = specContent.match(/Epic:\s*(\d+)/)
-  epicLabel = epicMatch ? `epic-${epicMatch[1]}` : null
-}
-
-if (!epicLabel) {
-  ERROR("Cannot determine Epic label from feature directory")
+  ERROR("Cannot parse feature directory. Expected format: NNN-feature-name")
 }
 ```
 
-**Validate epic label exists in Linear**:
+**Validate Project exists in Linear** (CRITICAL - issues must belong to a Project):
 
 ```javascript
-// Query Linear for all issue labels
-labels = mcp__plugin_linear_linear__list_issue_labels({team: TEAM_ID})
+// Query Linear for all projects
+projects = mcp__plugin_linear_linear__list_projects({team: TEAM_ID})
 
-// Check if epic label exists
+// Find matching project
+projectInfo = projects.find(p =>
+  p.name === projectSlug ||
+  p.slugId === projectSlug ||
+  p.name.toLowerCase().includes(featureSlug)
+)
+
+if (!projectInfo) {
+  ERROR(`Project '${projectSlug}' not found in Linear.\n` +
+        `Create it first via Linear UI or:\n` +
+        `mcp__plugin_linear_linear__create_project({` +
+        `team: "${TEAM_ID}", name: "${projectSlug}"})`)
+}
+
+PROJECT_ID = projectInfo.id
+```
+
+**Query Issue Statuses** (CRITICAL - never hardcode status names):
+
+```javascript
+// Get actual status names for this team
+statuses = mcp__plugin_linear_linear__list_issue_statuses({team: TEAM_ID})
+
+// Map by type for reliable status lookup
+todoStatus = statuses.find(s => s.type === 'unstarted')?.name || 'Todo'
+inProgressStatus = statuses.find(s => s.type === 'started')?.name || 'In Progress'
+doneStatus = statuses.find(s => s.type === 'completed')?.name || 'Done'
+```
+
+**Optionally validate epic label** (for filtering, not organization):
+
+```javascript
+// Epic labels are optional - used for filtering, not primary organization
+labels = mcp__plugin_linear_linear__list_issue_labels({team: TEAM_ID})
 epicExists = labels.find(l => l.name === epicLabel)
 
 if (!epicExists) {
-  ERROR(`Epic label '${epicLabel}' not found in Linear.\n` +
-        `Create it with: mcp__plugin_linear_linear__create_issue_label({` +
-        `team: "${TEAM_ID}", name: "${epicLabel}", color: "#3B82F6"})`)
+  WARN(`Epic label '${epicLabel}' not found. Creating it...`)
+  mcp__plugin_linear_linear__create_issue_label({
+    team: TEAM_ID,
+    name: epicLabel,
+    color: "#3B82F6"
+  })
 }
 ```
-
-**No hardcoded epic list** - dynamically discovers and validates against Linear.
 
 ### Step 3: Load Mapping File
 
@@ -180,11 +211,11 @@ for (task in tasks) {
 
 ### Step 5: Reconcile with Linear
 
-**Query existing issues**:
+**Query existing issues** (use Project, not just label):
 ```javascript
 linearIssues = mcp__plugin_linear_linear__list_issues({
   team: TEAM_ID,
-  label: epicLabel,
+  project: PROJECT_ID,    // CRITICAL: Query by Project (from Step 2)
   includeArchived: false
 })
 
@@ -211,6 +242,14 @@ for (issue in linearIssues) {
 
 ### Step 6: Create Linear Issues
 
+**GitHub base URL for documentation links**:
+
+```javascript
+// GitHub repository base URL for linking to spec docs
+const GITHUB_BASE = "https://github.com/Obsidian-Owl/floe/blob/main"
+const featureSlugFromDir = path.basename(FEATURE_DIR)  // e.g., "001-plugin-registry"
+```
+
 **Unified issue creation pattern**:
 
 ```javascript
@@ -227,16 +266,24 @@ for (task in tasks) {
 
   priority = extractPriority(task.description)  // [P0]=1, [P1]=2, default=2, [P4]=4
 
-  state = task.completed ? "Done" : "Todo"
+  // Use dynamic status names from Step 2 (CRITICAL - never hardcode!)
+  state = task.completed ? doneStatus : todoStatus
 
-  // Create in Linear
+  // Create in Linear with Project and Links (CRITICAL updates)
   linearIssue = mcp__plugin_linear_linear__create_issue({
     team: TEAM_ID,
+    project: PROJECT_ID,           // CRITICAL: Assign to Project (from Step 2)
     title: title,
     description: description,
-    labels: [epicLabel],
+    labels: [epicLabel],           // Optional: for filtering
     priority: priority,
-    state: state
+    state: state,
+    // GitHub links for traceability
+    links: [
+      {title: "Spec", url: `${GITHUB_BASE}/specs/${featureSlugFromDir}/spec.md`},
+      {title: "Plan", url: `${GITHUB_BASE}/specs/${featureSlugFromDir}/plan.md`},
+      {title: "Tasks", url: `${GITHUB_BASE}/specs/${featureSlugFromDir}/tasks.md`}
+    ]
   })
 
   // Store mapping
@@ -284,28 +331,72 @@ ${task.description}
 
 ### Step 7: Handle Dependencies
 
+**IMPORTANT**: Dependencies MUST be created AFTER all issues exist (Linear IDs required).
+
 **Automatic phase dependencies**:
 ```javascript
-// Foundational phase blocks all User Story phases
-if (task.phase.includes("Foundational")) {
-  blocksTaskIds = tasks
-    .filter(t => t.phase.includes("User Story"))
-    .map(t => t.id)
-}
+dependenciesCreated = []
+dependenciesFailed = []
 
-// Extract explicit dependencies: "Depends on T001"
-depMatches = task.description.match(/Depends on (T\d+)/g)
-if (depMatches) {
-  blockedByTaskIds = depMatches.map(m => m.match(/T\d+/)[0])
-}
+for (task of tasks) {
+  blockedByTaskIds = []
 
-// Update Linear relations
-if (blockedByTaskIds.length > 0) {
-  mcp__plugin_linear_linear__update_issue({
-    id: mapping.mappings[task.id].linear_id,
-    blockedBy: blockedByTaskIds.map(tid => mapping.mappings[tid].linear_id)
+  // Foundational phase blocks all User Story phases
+  if (task.phase.includes("Foundational")) {
+    blocksTaskIds = tasks
+      .filter(t => t.phase.includes("User Story"))
+      .map(t => t.id)
+  }
+
+  // Extract explicit dependencies: "Depends on T001"
+  depMatches = task.description.match(/Depends on (T\d+)/g)
+  if (depMatches) {
+    blockedByTaskIds = depMatches.map(m => m.match(/T\d+/)[0])
+  }
+
+  // Update Linear relations (only if dependencies exist)
+  if (blockedByTaskIds.length > 0) {
+    // Validate all dependency task IDs have Linear mappings
+    missingMappings = blockedByTaskIds.filter(tid => !mapping.mappings[tid]?.linear_id)
+    if (missingMappings.length > 0) {
+      WARN(`Task ${task.id}: Missing Linear mappings for dependencies: ${missingMappings.join(', ')}`)
+      dependenciesFailed.push({taskId: task.id, reason: 'missing_mappings', missing: missingMappings})
+      continue
+    }
+
+    try {
+      mcp__plugin_linear_linear__update_issue({
+        id: mapping.mappings[task.id].linear_id,
+        blockedBy: blockedByTaskIds.map(tid => mapping.mappings[tid].linear_id)
+      })
+      dependenciesCreated.push({taskId: task.id, blockedBy: blockedByTaskIds})
+      LOG(`Created dependency: ${task.id} blocked by ${blockedByTaskIds.join(', ')}`)
+    } catch (error) {
+      dependenciesFailed.push({taskId: task.id, reason: 'api_error', error: error.message})
+    }
+  }
+}
+```
+
+**Verify dependencies were created** (CRITICAL - spot check):
+```javascript
+// Verify at least one dependency relationship exists
+if (dependenciesCreated.length > 0) {
+  sampleTask = dependenciesCreated[0]
+  verification = mcp__plugin_linear_linear__get_issue({
+    id: mapping.mappings[sampleTask.taskId].linear_id,
+    includeRelations: true  // CRITICAL: Must be true to see blockedBy
   })
+
+  if (!verification.relations?.blockedBy?.length) {
+    WARN(`⚠️ Dependency verification failed for ${sampleTask.taskId}. blockedBy relations not found.`)
+  } else {
+    LOG(`✅ Dependency verification passed: ${sampleTask.taskId} has ${verification.relations.blockedBy.length} blockedBy relations`)
+  }
 }
+
+// Report dependency creation summary
+LOG(`Dependencies: ${dependenciesCreated.length} created, ${dependenciesFailed.length} failed`)
 ```
 
 **Dependency rules**: See [Linear Workflow Guide - Dependency Handling](../../../docs/guides/linear-workflow.md#dependency-handling)

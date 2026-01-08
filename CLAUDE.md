@@ -535,3 +535,10 @@ Linear app                      # Team progress view
 ---
 
 **Remember**: Build toward the target state architecture documented in `docs/`. Quality over speed. Nuclear changes acceptable.
+
+## Active Technologies
+- Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging) (001-plugin-registry)
+- N/A (in-memory registry, plugins are entry points in installed packages) (001-plugin-registry)
+
+## Recent Changes
+- 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)

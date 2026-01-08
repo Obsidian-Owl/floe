@@ -236,19 +236,24 @@ fi
 ```bash
 echo "🔄 Claiming task: ${selectedTask.linearIdentifier}..."
 
-# 1. Update Linear (source of truth)
+# 1. Query statuses to use correct names (CRITICAL - never hardcode!)
+statuses = mcp__plugin_linear_linear__list_issue_statuses({team: TEAM_ID})
+inProgressStatus = statuses.find(s => s.type === 'started')?.name || 'In Progress'
+
+# 2. Update Linear (source of truth) with assignee
 mcp__plugin_linear_linear__update_issue({
   id: "${selectedTask.linearId}",
-  state: "In Progress"
+  state: inProgressStatus,
+  assignee: "me"              // IMPORTANT: Take ownership of the task
 })
 
-# 2. Update Beads (cache)
+# 3. Update Beads (cache)
 bd update ${selectedTask.beadId} --status=in_progress
 
-# 3. Sync to ensure consistency
+# 4. Sync to ensure consistency
 bd linear sync --pull
 
-echo "✅ Task claimed successfully"
+echo "✅ Task claimed successfully (assigned to you in Linear)"
 echo ""
 ```
 
@@ -334,29 +339,38 @@ if (isComplete === "wait") {
 
 **Close task (Linear first, then Beads)**:
 
+**⚠️ MANDATORY: You MUST create a Linear comment when closing issues!**
+
+`bd close --reason` stores the reason in Beads ONLY. Without `create_comment`, team members viewing the Linear issue will see NO closure context.
+
 ```bash
 echo "🔄 Closing task: ${selectedTask.linearIdentifier}..."
 
-# 1. Close Linear (source of truth)
+# 1. Query statuses for correct Done status name (CRITICAL - never hardcode!)
+statuses = mcp__plugin_linear_linear__list_issue_statuses({team: TEAM_ID})
+doneStatus = statuses.find(s => s.type === 'completed')?.name || 'Done'
+
+# 2. Update Linear status (source of truth)
 mcp__plugin_linear_linear__update_issue({
   id: "${selectedTask.linearId}",
-  state: "Done"
+  state: doneStatus
 })
 
-# 2. Close Beads (cache) with reason
-bd close ${selectedTask.beadId} --reason "Implemented and verified"
-
-# 3. IMPORTANT: Add closure comment to Linear
-# bd close --reason does NOT sync to Linear automatically
+# 3. MANDATORY: Create closure comment in Linear
+#    This is the ONLY way team members see closure context!
+closureComment = buildClosureComment(selectedTask, implementationSummary, commitHash)
 mcp__plugin_linear_linear__create_comment({
   issueId: "${selectedTask.linearId}",
-  body: "**Completed**: Implemented and verified (${selectedTask.taskId})"
+  body: closureComment
 })
 
-# 4. Sync to ensure consistency
+# 4. Close Beads (cache) with reason
+bd close ${selectedTask.beadId} --reason "Implemented and verified"
+
+# 5. Sync to ensure consistency
 bd linear sync --pull
 
-# 5. Verify closure
+# 6. Verify closure (both Linear and Beads)
 status=$(bd show ${selectedTask.beadId} | grep "Status:" | awk '{print $2}')
 if [ "$status" = "closed" ]; then
   echo "✅ Task closed successfully"
@@ -371,7 +385,23 @@ fi
 echo ""
 ```
 
-**⚠️ Comment Syncing Limitation**: `bd close --reason` stores the reason in Beads but does NOT create a Linear comment. You must manually create the comment via `mcp__plugin_linear_linear__create_comment` to preserve closure context in Linear.
+**Closure Comment Template** (MANDATORY):
+```javascript
+function buildClosureComment(task, summary, commit) {
+  return `**Completed**: ${task.taskId}
+
+**Summary**: ${summary}
+
+**Commit**: ${commit || 'See latest commit'}
+
+**Files Changed**: [list key files]
+
+---
+*Closed via /speckit.implement*`
+}
+```
+
+**Why this matters**: Linear is the source of truth for the team. Without the `create_comment` call, closure reasons are invisible to team members reviewing progress in Linear.
 
 ### Step 7: Commit Changes
 
