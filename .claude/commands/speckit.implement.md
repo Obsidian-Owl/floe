@@ -113,21 +113,52 @@ const { metadata, mappings } = mapping
 
 **1b. Query Linear for Issue Status (Primary Method)**
 
-Use Linear MCP to get current status of all issues in the project:
+Use Linear MCP to get current status. Two approaches:
+
+**Approach A: Query individual issues from mapping (RECOMMENDED for large projects)**
 
 ```javascript
-// Query Linear directly for issue status (source of truth)
+// First, get team info and statuses to map status names to types
+const team = mcp__plugin_linear_linear__get_team({ query: "floe" })
+const statuses = mcp__plugin_linear_linear__list_issue_statuses({ team: team.id })
+
+// Build status name → type lookup
+const statusTypeMap = {}
+for (const s of statuses) {
+  statusTypeMap[s.name] = s.type  // e.g., "Backlog" → "backlog", "In Progress" → "started"
+}
+
+// For each task in mapping, query Linear for current status
+// This avoids large list_issues response (can be 90k+ chars)
+const statusMap = {}
+for (const [taskId, taskInfo] of Object.entries(mappings)) {
+  const issue = mcp__plugin_linear_linear__get_issue({ id: taskInfo.linear_id })
+  statusMap[taskInfo.linear_id] = {
+    state: issue.status,  // String like "Backlog", "In Progress", "Done"
+    stateType: statusTypeMap[issue.status],
+    assignee: issue.assignee
+  }
+}
+```
+
+**Approach B: Query all project issues (for small projects <50 issues)**
+
+```javascript
+// Query Linear directly for all issues in project
+// WARNING: Response can be very large (90k+ chars for 76 issues)
 const projectIssues = mcp__plugin_linear_linear__list_issues({
   project: metadata.project,
   limit: 250
 })
 
 // Build status map from Linear response
+// NOTE: list_issues returns `status` as string (e.g., "Backlog"), not nested object
 const statusMap = {}
 for (const issue of projectIssues) {
+  const statusName = issue.status  // String like "Backlog", "In Progress", "Done"
   statusMap[issue.id] = {
-    state: issue.state,
-    stateType: issue.state.type,  // 'unstarted', 'started', 'completed', 'canceled'
+    state: statusName,
+    stateType: statusTypeMap[statusName],  // 'unstarted', 'backlog', 'started', 'completed', 'canceled'
     assignee: issue.assignee
   }
 }
@@ -142,11 +173,10 @@ const readyTasks = []
 for (const [taskId, taskInfo] of Object.entries(mappings)) {
   const linearStatus = statusMap[taskInfo.linear_id]
 
-  // Task is ready if: unstarted (not in progress, not completed)
-  if (linearStatus?.stateType === 'unstarted') {
-    // TODO: Check blockedBy relations for dependency ordering
-    // For now, assume Phase 1 tasks have no blockers
-
+  // Task is ready if: unstarted or backlog (not in progress, not completed)
+  // Types: 'unstarted' (Todo), 'backlog' (Backlog), 'started', 'completed', 'canceled'
+  if (linearStatus?.stateType === 'unstarted' || linearStatus?.stateType === 'backlog') {
+    // Dependency checking is done in Step 2 via get_issue with includeRelations
     readyTasks.push({
       number: readyTasks.length + 1,
       taskId: taskId,
@@ -248,9 +278,10 @@ if (issueDetails.blockedBy && issueDetails.blockedBy.length > 0) {
 console.log(`🔄 Claiming task: ${selectedTask.linearIdentifier}...`)
 
 // 1. Query team statuses to use correct status names (CRITICAL - never hardcode!)
-const team = mcp__plugin_linear_linear__get_team({ query: "floe-runtime" })
+// NOTE: Team name is "floe", not "floe-runtime"
+const team = mcp__plugin_linear_linear__get_team({ query: "floe" })
 const statuses = mcp__plugin_linear_linear__list_issue_statuses({ team: team.id })
-const inProgressStatus = statuses.find(s => s.type === 'started')?.name || 'In Progress'
+const inProgressStatus = statuses.find(s => s.type === 'started' && s.name === 'In Progress')?.name || 'In Progress'
 
 // 2. Update Linear (source of truth) with status and assignee
 mcp__plugin_linear_linear__update_issue({
