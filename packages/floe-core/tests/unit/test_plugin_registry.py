@@ -160,14 +160,24 @@ class TestPluginRegistryDiscovery:
                 return [ep1, ep2]
             return []
 
-        with patch(
-            "floe_core.plugin_registry.entry_points", side_effect=mock_eps
+        with (
+            patch(
+                "floe_core.plugin_registry.entry_points", side_effect=mock_eps
+            ),
+            patch("floe_core.plugin_registry.logger") as mock_logger,
         ):
             registry.discover_all()
 
             # Only first entry point should be stored
             key = (PluginType.COMPUTE, "duckdb")
             assert registry._discovered[key] == ep1
+
+            # Verify warning was logged for duplicate
+            mock_logger.warning.assert_called()
+            call_args = mock_logger.warning.call_args_list
+            assert any(
+                "discover_group.duplicate" in str(call) for call in call_args
+            ), "Expected warning log for duplicate plugin"
 
     @pytest.mark.requirement("FR-001")
     def test_discover_multiple_plugin_types(
@@ -300,15 +310,22 @@ class TestPluginRegistryErrorHandling:
         """Test discovery continues after an entry point processing error."""
         registry = PluginRegistry()
 
-        # Create good entry points
-        good_ep = mock_entry_point("good", "floe.computes", "pkg:Good")
-        good_ep2 = mock_entry_point("good2", "floe.computes", "pkg:Good2")
+        # Create a bad entry point that raises when accessing its value
+        # (name must work so the error handler can log it)
+        bad_ep = MagicMock()
+        bad_ep.name = "bad-plugin"
+        # Make value property raise an exception when accessed
+        type(bad_ep).value = property(
+            lambda self: (_ for _ in ()).throw(RuntimeError("Bad entry point"))
+        )
 
-        # The inner exception handler catches errors during entry point processing.
-        # We test that by having multiple good eps, ensuring all are processed.
+        # Create a good entry point that should still be discovered
+        good_ep = mock_entry_point("good", "floe.computes", "pkg:Good")
+
         def mock_eps(group: str) -> list[MagicMock]:
             if group == "floe.computes":
-                return [good_ep, good_ep2]
+                # Bad EP first, then good EP - tests that processing continues
+                return [bad_ep, good_ep]
             return []
 
         with patch(
@@ -316,10 +333,11 @@ class TestPluginRegistryErrorHandling:
         ):
             registry.discover_all()
 
-            # Both entry points should be discovered
+            # Good entry point should still be discovered despite bad one
             assert (PluginType.COMPUTE, "good") in registry._discovered
-            assert (PluginType.COMPUTE, "good2") in registry._discovered
-            assert len(registry._discovered) == 2
+            # Bad entry point IS stored because the error happens during logging
+            # (after the entry point is added to _discovered at line 174)
+            # This tests graceful degradation - we continue processing
 
     @pytest.mark.requirement("FR-011")
     def test_discover_logs_errors(

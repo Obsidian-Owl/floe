@@ -85,12 +85,22 @@ class TestHealthStatusContract:
         Type annotations define the contract for health status data.
         Uses get_type_hints() to resolve forward references.
         """
+        from typing import Any, get_args, get_origin
+
         hints = get_type_hints(HealthStatus)
 
         assert hints.get("state") is HealthState
         assert hints.get("message") is str
-        # dict[str, Any] is represented as different types, check it works
-        assert "dict" in str(hints.get("details")).lower()
+
+        # Validate dict[str, Any] using proper type introspection
+        details_type = hints.get("details")
+        assert get_origin(details_type) is dict, (
+            f"details should be dict, got {get_origin(details_type)}"
+        )
+        args = get_args(details_type)
+        assert len(args) == 2, f"dict should have 2 type args, got {len(args)}"
+        assert args[0] is str, f"dict key type should be str, got {args[0]}"
+        assert args[1] is Any, f"dict value type should be Any, got {args[1]}"
 
     @pytest.mark.requirement("SC-001")
     def test_health_status_defaults(self) -> None:
