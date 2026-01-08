@@ -52,7 +52,7 @@ def mock_plugin() -> PluginMetadata:
 
         @property
         def floe_api_version(self) -> str:
-            return "1.0"
+            return "0.1"  # Current platform API version
 
     return TestPlugin()
 
@@ -494,7 +494,7 @@ class TestPluginRegistryGet:
 
             @property
             def floe_api_version(self) -> str:
-                return "1.0"
+                return "0.1"
 
         ep = mock_entry_point("lazy", "floe.computes", "pkg:LazyPlugin")
         ep.load.return_value = LazyPlugin
@@ -545,7 +545,7 @@ class TestPluginRegistryGet:
 
             @property
             def floe_api_version(self) -> str:
-                return "1.0"
+                return "0.1"
 
         ep = mock_entry_point("cached", "floe.computes", "pkg:CachedPlugin")
         ep.load.return_value = CachedPlugin
@@ -585,7 +585,7 @@ class TestPluginRegistryList:
 
             @property
             def floe_api_version(self) -> str:
-                return "1.0"
+                return "0.1"
 
         class Plugin2(PluginMetadata):
             @property
@@ -598,7 +598,7 @@ class TestPluginRegistryList:
 
             @property
             def floe_api_version(self) -> str:
-                return "1.0"
+                return "0.1"
 
         ep1 = mock_entry_point("plugin1", "floe.computes", "pkg:Plugin1")
         ep1.load.return_value = Plugin1
@@ -680,6 +680,263 @@ class TestPluginRegistryList:
 # =============================================================================
 
 
+# =============================================================================
+# T031: Unit tests for incompatible plugin rejection
+# =============================================================================
+
+
+class TestPluginRegistryVersionCompatibility:
+    """Tests for version compatibility checking in plugin registry."""
+
+    @pytest.mark.requirement("FR-003")
+    def test_register_rejects_incompatible_major_version(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test register() rejects plugin with incompatible major version."""
+        from floe_core.plugin_errors import PluginIncompatibleError
+        from floe_core.version_compat import FLOE_PLUGIN_API_VERSION
+
+        class IncompatibleMajorPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "incompatible-major"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "99.0"  # Major version mismatch
+
+        registry = PluginRegistry()
+        plugin = IncompatibleMajorPlugin()
+
+        with pytest.raises(PluginIncompatibleError) as exc_info:
+            registry.register(PluginType.COMPUTE, plugin)
+
+        assert exc_info.value.name == "incompatible-major"
+        assert exc_info.value.required_version == "99.0"
+        assert exc_info.value.platform_version == FLOE_PLUGIN_API_VERSION
+
+    @pytest.mark.requirement("FR-004")
+    def test_register_rejects_incompatible_minor_version(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test register() rejects plugin requiring newer minor version."""
+        from floe_core.plugin_errors import PluginIncompatibleError
+
+        # Plugin needs 0.99 but platform is 0.1
+        class IncompatibleMinorPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "incompatible-minor"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.99"  # Minor too high for platform 0.1
+
+        registry = PluginRegistry()
+        plugin = IncompatibleMinorPlugin()
+
+        with pytest.raises(PluginIncompatibleError) as exc_info:
+            registry.register(PluginType.COMPUTE, plugin)
+
+        assert "incompatible-minor" in str(exc_info.value)
+
+    @pytest.mark.requirement("FR-004")
+    def test_register_accepts_compatible_plugin(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test register() accepts plugin with compatible version."""
+        from floe_core.version_compat import FLOE_PLUGIN_API_VERSION
+
+        class CompatiblePlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "compatible"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return FLOE_PLUGIN_API_VERSION  # Exact match
+
+        registry = PluginRegistry()
+        plugin = CompatiblePlugin()
+
+        # Should not raise
+        registry.register(PluginType.COMPUTE, plugin)
+
+        # Plugin should be registered
+        assert registry.get(PluginType.COMPUTE, "compatible") is plugin
+
+    @pytest.mark.requirement("FR-005")
+    def test_get_rejects_incompatible_lazy_loaded_plugin(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test get() rejects incompatible plugin during lazy loading."""
+        from floe_core.plugin_errors import PluginIncompatibleError
+
+        class IncompatibleLazyPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "lazy-incompatible"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "99.0"  # Major version mismatch
+
+        registry = PluginRegistry()
+
+        # Set up discovered entry point
+        ep = mock_entry_point(
+            "lazy-incompatible", "floe.computes", "pkg:IncompatibleLazyPlugin"
+        )
+        ep.load.return_value = IncompatibleLazyPlugin
+        registry._discovered[(PluginType.COMPUTE, "lazy-incompatible")] = ep
+
+        # get() should fail during lazy load
+        with pytest.raises(PluginIncompatibleError) as exc_info:
+            registry.get(PluginType.COMPUTE, "lazy-incompatible")
+
+        assert exc_info.value.name == "lazy-incompatible"
+        ep.load.assert_called_once()
+
+    @pytest.mark.requirement("FR-005")
+    def test_incompatible_plugin_not_cached(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test that incompatible plugins are not added to _loaded cache."""
+        from floe_core.plugin_errors import PluginIncompatibleError
+
+        class BadPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "bad-plugin"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "99.0"
+
+        registry = PluginRegistry()
+
+        ep = mock_entry_point("bad-plugin", "floe.computes", "pkg:BadPlugin")
+        ep.load.return_value = BadPlugin
+        registry._discovered[(PluginType.COMPUTE, "bad-plugin")] = ep
+
+        with pytest.raises(PluginIncompatibleError):
+            registry.get(PluginType.COMPUTE, "bad-plugin")
+
+        # Plugin should NOT be in _loaded
+        assert (PluginType.COMPUTE, "bad-plugin") not in registry._loaded
+
+    @pytest.mark.requirement("SC-004")
+    def test_list_skips_incompatible_plugins(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test list() skips incompatible plugins gracefully."""
+
+        class GoodPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "good-plugin"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"  # Compatible
+
+        class BadPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "bad-plugin"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "99.0"  # Incompatible
+
+        registry = PluginRegistry()
+
+        good_ep = mock_entry_point("good-plugin", "floe.computes", "pkg:GoodPlugin")
+        good_ep.load.return_value = GoodPlugin
+
+        bad_ep = mock_entry_point("bad-plugin", "floe.computes", "pkg:BadPlugin")
+        bad_ep.load.return_value = BadPlugin
+
+        registry._discovered[(PluginType.COMPUTE, "good-plugin")] = good_ep
+        registry._discovered[(PluginType.COMPUTE, "bad-plugin")] = bad_ep
+
+        # list() should return only compatible plugins
+        plugins = registry.list(PluginType.COMPUTE)
+
+        names = [p.name for p in plugins]
+        assert "good-plugin" in names
+        assert "bad-plugin" not in names
+        assert len(plugins) == 1
+
+    @pytest.mark.requirement("FR-003")
+    def test_plugin_incompatible_error_message(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test PluginIncompatibleError has informative message."""
+        from floe_core.plugin_errors import PluginIncompatibleError
+
+        class TestPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "test-error-msg"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "99.0"
+
+        registry = PluginRegistry()
+
+        with pytest.raises(PluginIncompatibleError) as exc_info:
+            registry.register(PluginType.COMPUTE, TestPlugin())
+
+        error_msg = str(exc_info.value)
+        assert "test-error-msg" in error_msg
+        assert "99.0" in error_msg
+        assert "0.1" in error_msg  # Platform version
+
+
 class TestPluginRegistryDuplicateHandling:
     """Tests for duplicate plugin registration handling."""
 
@@ -722,7 +979,7 @@ class TestPluginRegistryDuplicateHandling:
 
             @property
             def floe_api_version(self) -> str:
-                return "1.0"
+                return "0.1"
 
         class Plugin2(PluginMetadata):
             @property
@@ -735,7 +992,7 @@ class TestPluginRegistryDuplicateHandling:
 
             @property
             def floe_api_version(self) -> str:
-                return "1.0"
+                return "0.1"
 
         registry = PluginRegistry()
 
