@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import builtins
 import threading
+from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -93,12 +94,92 @@ class PluginRegistry:
 
         Entry points with errors are logged but do not prevent discovery
         of other plugins (graceful degradation).
-
-        Note:
-            This is implemented in T012. This skeleton just sets the flag.
         """
-        # Implementation in T012
+        if self._discovered_all:
+            logger.debug("discover_all.skipped", reason="already_discovered")
+            return
+
+        logger.info("discover_all.started")
+        total_discovered = 0
+
+        # Scan all 11 plugin type entry point groups
+        for plugin_type in PluginType:
+            group = plugin_type.entry_point_group
+            discovered_count = self._discover_group(plugin_type, group)
+            total_discovered += discovered_count
+
         self._discovered_all = True
+        logger.info(
+            "discover_all.completed",
+            total_discovered=total_discovered,
+            plugin_types_scanned=len(PluginType),
+        )
+
+    def _discover_group(self, plugin_type: PluginType, group: str) -> int:
+        """Discover plugins from a single entry point group.
+
+        Args:
+            plugin_type: The PluginType for this group.
+            group: The entry point group name (e.g., "floe.computes").
+
+        Returns:
+            Number of plugins discovered in this group.
+        """
+        discovered_count = 0
+
+        try:
+            eps = entry_points(group=group)
+        except Exception as e:
+            # Graceful degradation - log error but continue with other groups
+            logger.error(
+                "discover_group.failed",
+                plugin_type=plugin_type.name,
+                group=group,
+                error=str(e),
+            )
+            return 0
+
+        for ep in eps:
+            try:
+                key = (plugin_type, ep.name)
+
+                if key in self._discovered:
+                    logger.warning(
+                        "discover_group.duplicate",
+                        plugin_type=plugin_type.name,
+                        name=ep.name,
+                        group=group,
+                    )
+                    continue
+
+                self._discovered[key] = ep
+                discovered_count += 1
+
+                logger.debug(
+                    "discover_group.found",
+                    plugin_type=plugin_type.name,
+                    name=ep.name,
+                    value=ep.value,
+                )
+            except Exception as e:
+                # Graceful degradation - log error but continue with other entry points
+                # Error handling details in T013
+                logger.error(
+                    "discover_group.entry_point_error",
+                    plugin_type=plugin_type.name,
+                    name=getattr(ep, "name", "unknown"),
+                    error=str(e),
+                )
+
+        if discovered_count > 0:
+            logger.debug(
+                "discover_group.completed",
+                plugin_type=plugin_type.name,
+                group=group,
+                count=discovered_count,
+            )
+
+        return discovered_count
 
     def register(self, plugin: PluginMetadata) -> None:
         """Manually register a plugin instance.
@@ -238,11 +319,27 @@ def get_registry() -> PluginRegistry:
     Returns:
         The singleton PluginRegistry instance.
 
-    Note:
-        Implementation details in T014.
+    Example:
+        >>> registry = get_registry()
+        >>> plugins = registry.list(PluginType.COMPUTE)
     """
-    # Implementation in T014
-    raise NotImplementedError("get_registry() not yet implemented (T014)")
+    global _registry
+
+    # Fast path: registry already initialized
+    if _registry is not None:
+        return _registry
+
+    # Slow path: thread-safe initialization
+    with _registry_lock:
+        # Double-check after acquiring lock (another thread may have initialized)
+        if _registry is not None:
+            return _registry
+
+        logger.debug("get_registry.initializing")
+        _registry = PluginRegistry()
+        _registry.discover_all()
+        logger.info("get_registry.initialized")
+        return _registry
 
 
 def _reset_registry() -> None:
@@ -251,12 +348,19 @@ def _reset_registry() -> None:
     This clears the singleton instance, allowing a fresh registry
     to be created on next get_registry() call.
 
+    Thread-safe reset that acquires the registry lock.
+
     Warning:
         Only use in tests. Not for production use.
 
-    Note:
-        Implementation details in T015.
+    Example:
+        >>> # In test teardown
+        >>> _reset_registry()
+        >>> # Next get_registry() call creates fresh instance
     """
-    # Implementation in T015
     global _registry
-    _registry = None
+
+    with _registry_lock:
+        if _registry is not None:
+            logger.debug("_reset_registry.clearing")
+        _registry = None
