@@ -26,13 +26,14 @@
       }
     ]
   },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true,
+    "linear@claude-plugins-official": true
+  },
   "companyAnnouncements": [
     "🔒 Security: Never commit secrets or use eval()/exec()",
     "📝 Type Safety: Use Pydantic for ALL data validation",
     "✅ Quality: Maintain > 80% test coverage",
     "📚 Skills: Invoke skills from .claude/skills/ for component work"
-  ],
-  "enabledPlugins": {
-    "security-guidance@claude-plugins-official": true
-  }
+  ]
 }
