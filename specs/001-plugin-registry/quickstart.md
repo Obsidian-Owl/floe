@@ -100,14 +100,22 @@ for key, status in statuses.items():
 
 ```python
 # my_plugin/plugin.py
-from floe_core.plugin_metadata import PluginMetadata
-from floe_core.plugins.compute import ComputePlugin
+from typing import Any
+
+from floe_core.plugins.compute import (
+    ComputeConfig,
+    ComputePlugin,
+    ConnectionResult,
+    ResourceSpec,
+)
 from pydantic import BaseModel, Field
+
 
 class MyComputeConfig(BaseModel):
     """Configuration for my custom compute plugin."""
     connection_string: str = Field(..., description="Database connection")
     max_workers: int = Field(default=4, ge=1, le=32)
+
 
 class MyComputePlugin(ComputePlugin):
     """Custom compute plugin implementation."""
@@ -122,23 +130,33 @@ class MyComputePlugin(ComputePlugin):
 
     @property
     def floe_api_version(self) -> str:
-        return "1.0"
+        return "0.1"  # Must match FLOE_PLUGIN_API_VERSION
 
     @property
     def description(self) -> str:
         return "My custom compute engine"
 
+    @property
+    def is_self_hosted(self) -> bool:
+        return True
+
     def get_config_schema(self) -> type[BaseModel]:
         return MyComputeConfig
 
-    def generate_dbt_profile(self, config: MyComputeConfig) -> dict:
+    def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
         return {
             "type": "my_adapter",
-            "connection_string": config.connection_string,
-            "threads": config.max_workers,
+            "threads": 4,
         }
 
-    # ... implement other abstract methods
+    def get_required_dbt_packages(self) -> list[str]:
+        return ["dbt-my-adapter>=1.0.0"]
+
+    def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
+        return ConnectionResult(success=True, message="Connected")
+
+    def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
+        return ResourceSpec(cpu_request="500m", memory_request="1Gi")
 ```
 
 Register in `pyproject.toml`:
@@ -203,14 +221,15 @@ else:
 ### Manual Plugin Registration (Testing)
 
 ```python
-from floe_core.plugin_registry import get_registry
+from floe_core.plugin_registry import PluginRegistry
+from floe_core.plugin_types import PluginType
 from my_plugin.plugin import MyComputePlugin
 
-registry = get_registry()
+registry = PluginRegistry()
 
 # Register programmatically (useful for testing)
 plugin = MyComputePlugin()
-registry.register(plugin)
+registry.register(PluginType.COMPUTE, plugin)
 ```
 
 ## Troubleshooting
@@ -234,8 +253,8 @@ try:
     config = registry.configure(PluginType.COMPUTE, "duckdb", {"threads": -1})
 except PluginConfigurationError as e:
     for error in e.errors:
-        print(f"Field: {error['loc']}")
-        print(f"Error: {error['msg']}")
+        print(f"Field: {error['field']}")
+        print(f"Error: {error['message']}")
 ```
 
 ### Entry Point Not Loading
