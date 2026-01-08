@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/pyright/main/packages/vscode-pylance/schemas/pyrightconfig.schema.json",
+  "include": [
+    "packages/*/src",
+    "packages/*/tests",
+    "plugins/*/src",
+    "plugins/*/tests",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules",
+    "**/.venv",
+    "**/build",
+    "**/dist"
+  ],
+  "extraPaths": [
+    "packages/floe-core/src",
+    "packages/floe-cli/src",
+    "packages/floe-dbt/src",
+    "packages/floe-iceberg/src",
+    "plugins/floe-compute-duckdb/src",
+    "plugins/floe-orchestrator-dagster/src",
+    "plugins/floe-catalog-polaris/src",
+    "plugins/floe-semantic-cube/src",
+    "testing"
+  ],
+  "pythonVersion": "3.10",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "strict",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportUnusedImport": true,
+  "reportUnusedVariable": true,
+  "reportUnnecessaryTypeIgnoreComment": true
+}
