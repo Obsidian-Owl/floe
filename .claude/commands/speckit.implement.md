@@ -34,46 +34,60 @@ This command bridges SpecKit planning with Linear/Beads execution tracking, enab
 
 ### Step 0: Startup & Sync
 
-**0a. Run Startup Checks**
+**0a. Run Prerequisite Checks**
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-STARTUP_SCRIPT="$REPO_ROOT/.specify/scripts/bash/startup-checks.sh"
+PREREQ_SCRIPT="$REPO_ROOT/.specify/scripts/bash/check-prerequisites.sh"
 
-if [ ! -f "$STARTUP_SCRIPT" ]; then
-  echo "❌ ERROR: Startup checks script not found"
+# Run prerequisite checks (requires tasks.md for implementation)
+PREREQ_RESULT=$("$PREREQ_SCRIPT" --json --require-tasks --include-tasks 2>&1)
+PREREQ_EXIT=$?
+
+if [ $PREREQ_EXIT -ne 0 ]; then
+  echo "❌ ERROR: Prerequisites not met"
+  echo "$PREREQ_RESULT"
   exit 1
 fi
 
-# Run checks: Beads installed, issues exist, Linear MCP available, feature dir exists
-STARTUP_RESULT=$("$STARTUP_SCRIPT")
-STARTUP_EXIT=$?
+# Parse JSON output
+FEATURE_DIR=$(echo "$PREREQ_RESULT" | jq -r '.FEATURE_DIR')
+MAPPING_FILE="$FEATURE_DIR/.linear-mapping.json"
 
-if [ $STARTUP_EXIT -ne 0 ]; then
-  echo "$STARTUP_RESULT"
-  exit $STARTUP_EXIT
+# Check Linear mapping exists
+if [ ! -f "$MAPPING_FILE" ]; then
+  echo "❌ ERROR: No Linear mapping found at $MAPPING_FILE"
+  echo "   Run /speckit.taskstolinear first to create Linear issues"
+  exit 1
 fi
 
-# Parse JSON output
-BEADS_VERSION=$(echo "$STARTUP_RESULT" | tail -1 | jq -r '.beads_version')
-ISSUE_COUNT=$(echo "$STARTUP_RESULT" | tail -1 | jq -r '.issue_count')
-FEATURE_DIR=$(echo "$STARTUP_RESULT" | tail -1 | jq -r '.feature_dir')
-MAPPING_FILE=$(echo "$STARTUP_RESULT" | tail -1 | jq -r '.mapping_file')
+echo "✅ Prerequisites verified"
+echo "   Feature: $FEATURE_DIR"
+echo "   Mapping: $MAPPING_FILE"
 ```
 
-**0b. Sync from Linear (CRITICAL)**
+**0b. Check Beads Installation (Optional)**
 
 ```bash
-echo "🔄 Syncing from Linear (source of truth)..."
+# Check if Beads CLI is available
+if command -v bd &> /dev/null; then
+  BEADS_AVAILABLE=true
+  BEADS_VERSION=$(bd --version 2>/dev/null || echo "unknown")
+  echo "✅ Beads CLI: $BEADS_VERSION"
 
-bd linear sync --pull
-
-SYNC_EXIT=$?
-if [ $SYNC_EXIT -ne 0 ]; then
-  echo "⚠️  Warning: Linear sync failed (network issue or Linear down)"
-  echo "   Proceeding with cached Beads data"
+  # Sync from Linear if Beads is available
+  echo "🔄 Syncing from Linear (source of truth)..."
+  bd linear sync --pull 2>/dev/null
+  SYNC_EXIT=$?
+  if [ $SYNC_EXIT -ne 0 ]; then
+    echo "⚠️  Warning: Linear sync failed (network issue or not configured)"
+    echo "   Proceeding with Linear MCP only"
+  else
+    echo "✅ Linear sync complete (Beads cache updated)"
+  fi
 else
-  echo "✅ Linear sync complete (Beads cache updated)"
+  BEADS_AVAILABLE=false
+  echo "ℹ️  Beads CLI not installed - using Linear MCP directly"
 fi
 ```
 
@@ -91,19 +105,32 @@ if (!fs.existsSync(mappingPath)) {
 }
 
 const mapping = JSON.parse(fs.readFileSync(mappingPath, 'utf8'))
-const { feature, epic_label, mappings } = mapping
+const { metadata, mappings } = mapping
+// metadata contains: feature, project, project_id, created_at, total_issues
 ```
 
 **Mapping format**: See [linear-workflow.md#mapping-file-format](../../../docs/guides/linear-workflow.md#mapping-file-format)
 
-**1b. Query Beads for Ready Tasks**
+**1b. Query Linear for Issue Status (Primary Method)**
 
-```bash
-# Get all open issues for this feature
-BEADS_READY=$(bd ready 2>/dev/null)
+Use Linear MCP to get current status of all issues in the project:
 
-# Get all issue details
-BEADS_LIST=$(bd list --status=open --format=json 2>/dev/null)
+```javascript
+// Query Linear directly for issue status (source of truth)
+const projectIssues = mcp__plugin_linear_linear__list_issues({
+  project: metadata.project,
+  limit: 250
+})
+
+// Build status map from Linear response
+const statusMap = {}
+for (const issue of projectIssues) {
+  statusMap[issue.id] = {
+    state: issue.state,
+    stateType: issue.state.type,  // 'unstarted', 'started', 'completed', 'canceled'
+    assignee: issue.assignee
+  }
+}
 ```
 
 **1c. Build Ready Tasks List**
@@ -111,35 +138,29 @@ BEADS_LIST=$(bd list --status=open --format=json 2>/dev/null)
 ```javascript
 const readyTasks = []
 
-// For each task in mapping
+// For each task in mapping, check Linear status
 for (const [taskId, taskInfo] of Object.entries(mappings)) {
-  const beadId = taskInfo.bead_id
+  const linearStatus = statusMap[taskInfo.linear_id]
 
-  // Check if task is ready (not blocked, not in progress, not completed)
-  const beadStatus = getBeadStatus(beadId, BEADS_LIST)
+  // Task is ready if: unstarted (not in progress, not completed)
+  if (linearStatus?.stateType === 'unstarted') {
+    // TODO: Check blockedBy relations for dependency ordering
+    // For now, assume Phase 1 tasks have no blockers
 
-  if (beadStatus === 'open') {
-    // Check dependencies - task is ready if no blockers
-    const isBlocked = checkIfBlocked(beadId, BEADS_READY)
-
-    if (!isBlocked) {
-      readyTasks.push({
-        number: readyTasks.length + 1,
-        taskId: taskId,
-        beadId: beadId,
-        linearId: taskInfo.linear_id,
-        linearIdentifier: taskInfo.linear_identifier,
-        title: taskInfo.title,
-        status: taskInfo.status,
-        url: taskInfo.url
-      })
-    }
+    readyTasks.push({
+      number: readyTasks.length + 1,
+      taskId: taskId,
+      linearId: taskInfo.linear_id,
+      linearIdentifier: taskInfo.linear_identifier,
+      title: taskInfo.title,
+      url: `https://linear.app/issue/${taskInfo.linear_identifier}`
+    })
   }
 }
 
 if (readyTasks.length === 0) {
-  // No ready tasks - show guidance
-  showNoReadyTasksMessage(epic_label, mapping.epic_url)
+  console.log("✅ No ready tasks - all tasks either in progress or completed!")
+  console.log(`   View project: https://linear.app/project/${metadata.project}`)
   exit(0)
 }
 ```
@@ -151,8 +172,7 @@ console.log(`📋 Ready Tasks (${readyTasks.length} available):\n`)
 
 for (const task of readyTasks) {
   console.log(`  ${task.number}. [${task.taskId}] ${task.title}`)
-  console.log(`     Linear: ${task.linearIdentifier} (${task.url})`)
-  console.log(`     Beads: ${task.beadId}`)
+  console.log(`     Linear: ${task.linearIdentifier}`)
   console.log()
 }
 ```
@@ -172,7 +192,7 @@ if (selector === "") {
   console.log(`🎯 Auto-selected: ${selectedTask.taskId} - ${selectedTask.title}\n`)
 }
 else if (selector.match(/^\d+$/)) {
-  // Number selector (1-based index)
+  // Number selector (1-based index from displayed list)
   const index = parseInt(selector) - 1
   if (index < 0 || index >= readyTasks.length) {
     ERROR(`Invalid selection: ${selector}. Choose 1-${readyTasks.length}`)
@@ -180,84 +200,73 @@ else if (selector.match(/^\d+$/)) {
   selectedTask = readyTasks[index]
 }
 else if (selector.match(/^T\d+$/)) {
-  // Task ID selector
+  // Task ID selector (e.g., T001, T042)
   selectedTask = readyTasks.find(t => t.taskId === selector)
   if (!selectedTask) {
     ERROR(`Task ${selector} not found in ready tasks`)
   }
 }
 else if (selector.match(/^FLO-\d+$/)) {
-  // Linear ID selector
-  selectedTask = readyTasks.find(t => t.linearId === selector)
+  // Linear identifier selector (e.g., FLO-33)
+  selectedTask = readyTasks.find(t => t.linearIdentifier === selector)
   if (!selectedTask) {
     ERROR(`Linear issue ${selector} not found in ready tasks`)
   }
 }
-else if (selector.match(/^epic-\d+-[a-z0-9]+$/)) {
-  // Linear identifier selector
-  selectedTask = readyTasks.find(t => t.linearIdentifier === selector)
-  if (!selectedTask) {
-    ERROR(`Linear identifier ${selector} not found in ready tasks`)
-  }
-}
-else if (selector.match(/^floe-runtime-[a-zA-Z0-9]+$/)) {
-  // Beads ID selector
-  selectedTask = readyTasks.find(t => t.beadId === selector)
-  if (!selectedTask) {
-    ERROR(`Beads issue ${selector} not found in ready tasks`)
-  }
-}
 else {
-  ERROR(`Invalid selector: ${selector}. Use number, Task ID (T###), Linear ID (FLO-###), Linear identifier (epic-#-xxx), or Beads ID (floe-runtime-xxx)`)
+  ERROR(`Invalid selector: ${selector}. Use number (1-${readyTasks.length}), Task ID (T###), or Linear ID (FLO-###)`)
 }
 ```
 
-**Selector types**: See [linear-workflow.md#task-selection-methods](../../../docs/guides/linear-workflow.md#task-selection-methods)
+**Selector types supported**:
+- **Number**: `1`, `2`, `3` - position in displayed ready tasks list
+- **Task ID**: `T001`, `T042` - from tasks.md
+- **Linear ID**: `FLO-33`, `FLO-108` - Linear issue identifier
 
-**Verify task not blocked**:
+**Verify task not blocked** (optional - check Linear relations):
 
-```bash
-# Double-check task isn't blocked (Linear may have updated)
-BLOCKED_CHECK=$(bd show ${selectedTask.beadId} | grep -i "blocked by")
+```javascript
+// Query Linear for blocking relations
+const issueDetails = mcp__plugin_linear_linear__get_issue({
+  id: selectedTask.linearId,
+  includeRelations: true
+})
 
-if [ ! -z "$BLOCKED_CHECK" ]; then
-  echo "❌ ERROR: Task ${selectedTask.taskId} is blocked"
-  echo "$BLOCKED_CHECK"
-  echo ""
-  echo "View in Linear: ${selectedTask.url}"
-  exit 1
-fi
+if (issueDetails.blockedBy && issueDetails.blockedBy.length > 0) {
+  const blockers = issueDetails.blockedBy.map(b => b.identifier).join(", ")
+  console.log(`❌ ERROR: Task ${selectedTask.taskId} is blocked by: ${blockers}`)
+  console.log(`   Complete blockers first, or select a different task`)
+  exit(1)
+}
 ```
 
 ### Step 3: Claim Task
 
-**Update Linear first, then Beads**:
+**Update Linear (source of truth)**:
 
-```bash
-echo "🔄 Claiming task: ${selectedTask.linearIdentifier}..."
+```javascript
+console.log(`🔄 Claiming task: ${selectedTask.linearIdentifier}...`)
 
-# 1. Query statuses to use correct names (CRITICAL - never hardcode!)
-statuses = mcp__plugin_linear_linear__list_issue_statuses({team: TEAM_ID})
-inProgressStatus = statuses.find(s => s.type === 'started')?.name || 'In Progress'
+// 1. Query team statuses to use correct status names (CRITICAL - never hardcode!)
+const team = mcp__plugin_linear_linear__get_team({ query: "floe-runtime" })
+const statuses = mcp__plugin_linear_linear__list_issue_statuses({ team: team.id })
+const inProgressStatus = statuses.find(s => s.type === 'started')?.name || 'In Progress'
 
-# 2. Update Linear (source of truth) with assignee
+// 2. Update Linear (source of truth) with status and assignee
 mcp__plugin_linear_linear__update_issue({
-  id: "${selectedTask.linearId}",
+  id: selectedTask.linearId,
   state: inProgressStatus,
-  assignee: "me"              // IMPORTANT: Take ownership of the task
+  assignee: "me"  // IMPORTANT: Take ownership of the task
 })
 
-# 3. Update Beads (cache)
-bd update ${selectedTask.beadId} --status=in_progress
-
-# 4. Sync to ensure consistency
-bd linear sync --pull
-
-echo "✅ Task claimed successfully (assigned to you in Linear)"
-echo ""
+console.log(`✅ Task claimed successfully`)
+console.log(`   Status: ${inProgressStatus}`)
+console.log(`   Assignee: You`)
+console.log(`   Linear: ${selectedTask.linearIdentifier}`)
+console.log()
 ```
 
-**Pattern**: Always Linear first, then Beads, then sync. See [linear-workflow.md#architecture](../../../docs/guides/linear-workflow.md#architecture)
+**Pattern**: Linear is the source of truth. Update Linear directly via MCP. See [linear-workflow.md#architecture](../../../docs/guides/linear-workflow.md#architecture)
 
 ### Step 4: Show Task Context
 
@@ -267,16 +276,16 @@ const tasksPath = `${FEATURE_DIR}/tasks.md`
 const tasksContent = fs.readFileSync(tasksPath, 'utf8')
 
 // Parse task details (phase, requirements, description)
+// Look for: "- [ ] T001 [US1] Description" pattern
 const taskDetails = parseTaskFromTasksMd(tasksContent, selectedTask.taskId)
 
 console.log(`📋 Task Context:`)
 console.log(`   Phase: ${taskDetails.phase}`)
-console.log(`   Requirements: ${taskDetails.requirements.join(", ") || "N/A"}`)
-console.log(`   Parallel: ${taskDetails.hasParallelMarker ? "Yes" : "No"}`)
+console.log(`   User Story: ${taskDetails.userStory || "N/A"}`)
+console.log(`   Parallel: ${taskDetails.hasParallelMarker ? "Yes (can run with other [P] tasks)" : "No"}`)
 console.log(`   Description: ${taskDetails.fullDescription}`)
 console.log()
 console.log(`📍 Linear: ${selectedTask.url}`)
-console.log(`📍 Beads: ${selectedTask.beadId}`)
 console.log()
 ```
 
@@ -337,52 +346,38 @@ if (isComplete === "wait") {
 }
 ```
 
-**Close task (Linear first, then Beads)**:
+**Close task in Linear**:
 
 **⚠️ MANDATORY: You MUST create a Linear comment when closing issues!**
 
-`bd close --reason` stores the reason in Beads ONLY. Without `create_comment`, team members viewing the Linear issue will see NO closure context.
+Comments preserve closure context for team members viewing the Linear issue.
 
-```bash
-echo "🔄 Closing task: ${selectedTask.linearIdentifier}..."
+```javascript
+console.log(`🔄 Closing task: ${selectedTask.linearIdentifier}...`)
 
-# 1. Query statuses for correct Done status name (CRITICAL - never hardcode!)
-statuses = mcp__plugin_linear_linear__list_issue_statuses({team: TEAM_ID})
-doneStatus = statuses.find(s => s.type === 'completed')?.name || 'Done'
+// 1. Query statuses for correct Done status name (CRITICAL - never hardcode!)
+const statuses = mcp__plugin_linear_linear__list_issue_statuses({ team: team.id })
+const doneStatus = statuses.find(s => s.type === 'completed')?.name || 'Done'
 
-# 2. Update Linear status (source of truth)
+// 2. Update Linear status (source of truth)
 mcp__plugin_linear_linear__update_issue({
-  id: "${selectedTask.linearId}",
+  id: selectedTask.linearId,
   state: doneStatus
 })
 
-# 3. MANDATORY: Create closure comment in Linear
-#    This is the ONLY way team members see closure context!
-closureComment = buildClosureComment(selectedTask, implementationSummary, commitHash)
+// 3. MANDATORY: Create closure comment in Linear
+//    This preserves context for team members!
+const closureComment = buildClosureComment(selectedTask, implementationSummary, commitHash)
 mcp__plugin_linear_linear__create_comment({
-  issueId: "${selectedTask.linearId}",
+  issueId: selectedTask.linearId,
   body: closureComment
 })
 
-# 4. Close Beads (cache) with reason
-bd close ${selectedTask.beadId} --reason "Implemented and verified"
-
-# 5. Sync to ensure consistency
-bd linear sync --pull
-
-# 6. Verify closure (both Linear and Beads)
-status=$(bd show ${selectedTask.beadId} | grep "Status:" | awk '{print $2}')
-if [ "$status" = "closed" ]; then
-  echo "✅ Task closed successfully"
-  echo "   Linear: Done (comment added)"
-  echo "   Beads: closed (synced)"
-  echo "   URL: ${selectedTask.url}"
-else
-  echo "⚠️  Warning: Task may not have closed properly"
-  echo "   Run: bd linear sync --pull"
-fi
-
-echo ""
+console.log(`✅ Task closed successfully`)
+console.log(`   Status: ${doneStatus}`)
+console.log(`   Comment: Added`)
+console.log(`   Linear: ${selectedTask.linearIdentifier}`)
+console.log()
 ```
 
 **Closure Comment Template** (MANDATORY):
@@ -401,7 +396,7 @@ function buildClosureComment(task, summary, commit) {
 }
 ```
 
-**Why this matters**: Linear is the source of truth for the team. Without the `create_comment` call, closure reasons are invisible to team members reviewing progress in Linear.
+**Why this matters**: Linear is the source of truth for the team. Comments preserve closure context for team members reviewing progress.
 
 ### Step 7: Commit Changes
 
@@ -450,30 +445,33 @@ echo ""
 
 **Check for more ready tasks**:
 
-```bash
-echo "🔄 Syncing from Linear before checking for next task..."
-bd linear sync --pull
+```javascript
+// Re-query Linear for remaining unstarted tasks
+const remainingIssues = mcp__plugin_linear_linear__list_issues({
+  project: metadata.project,
+  state: "Todo",  // Or query by type: 'unstarted'
+  limit: 10
+})
 
-# Re-query ready tasks
-READY_COUNT=$(bd ready | wc -l)
+const readyCount = remainingIssues.length
 
-if [ $READY_COUNT -gt 0 ]; then
-  echo "📋 ${READY_COUNT} more tasks ready to implement"
-  echo ""
-  echo "Continue? (yes/no)"
-  read CONTINUE_RESPONSE
+if (readyCount > 0) {
+  console.log(`📋 ${readyCount} more tasks ready to implement`)
+  console.log()
 
-  if [ "$CONTINUE_RESPONSE" = "yes" ]; then
-    echo "♻️  Continuing to next task..."
-    exec /speckit.implement  # Recursive call
-  else
-    echo "✅ Session complete. Run /speckit.implement when ready to continue."
-  fi
-else
-  echo "✅ All tasks complete! 🎉"
-  echo ""
-  echo "Check Linear for Epic progress: ${mapping.epic_url}"
-fi
+  const continueResponse = await askUser("Continue to next task?", ["Yes", "No"])
+
+  if (continueResponse === "Yes") {
+    console.log("♻️  Continuing to next task...")
+    // Re-run /speckit.implement
+  } else {
+    console.log("✅ Session complete. Run /speckit.implement when ready to continue.")
+  }
+} else {
+  console.log("✅ All tasks complete! 🎉")
+  console.log()
+  console.log(`Check Linear for project progress: https://linear.app/project/${metadata.project}`)
+}
 ```
 
 ## Error Handling
@@ -482,10 +480,10 @@ fi
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| Prerequisites failed | Missing spec.md or tasks.md | Run `/speckit.tasks` |
-| No Linear issues | Haven't created Linear issues | Run `/speckit.taskstolinear` |
+| Prerequisites failed | Missing plan.md or tasks.md | Run `/speckit.plan` then `/speckit.tasks` |
+| No Linear mapping | Haven't created Linear issues | Run `/speckit.taskstolinear` |
 | Linear MCP unavailable | MCP not configured | Check `mcp__plugin_linear_linear__list_teams` |
-| No ready tasks | All blocked or completed | Check `bd blocked` or Linear app |
+| No ready tasks | All in progress or completed | Check Linear project view |
 | Task blocked | Dependency not complete | Work on blocker first, or select different task |
 | Commit rejected | Constitutional violation | Fix TDD/SOLID/atomic/no-skip violation |
 
@@ -504,7 +502,6 @@ fi
   - Architecture explanation
   - Traceability chain details
   - Workflow examples
-  - Parallel workflow patterns
   - Best practices
   - Troubleshooting guide
 
@@ -513,9 +510,5 @@ fi
 - [speckit.taskstolinear](./speckit.taskstolinear.md) - Create Linear issues
 
 **Configuration**:
-- `.beads/config.yaml` - Beads + Linear integration config
 - `.specify/memory/constitution.md` - Constitutional requirements (TDD, SOLID, atomic commits)
-- `docs/plan/COMBINED-REQUIREMENTS.md` - Requirements for traceability
-
-**ADR**:
-- [ADR-0042: Linear + Beads Traceability](../../../docs/adr/0042-linear-beads-traceability.md)
+- `specs/{feature}/.linear-mapping.json` - Task to Linear issue mapping
