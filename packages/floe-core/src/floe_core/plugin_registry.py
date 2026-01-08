@@ -21,17 +21,21 @@ from __future__ import annotations
 
 import builtins
 import threading
-from importlib.metadata import entry_points
+from importlib.metadata import EntryPoint, entry_points
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from floe_core.plugin_errors import (
+    DuplicatePluginError,
+    PluginIncompatibleError,
+    PluginNotFoundError,
+)
 from floe_core.plugin_metadata import HealthStatus, PluginMetadata
 from floe_core.plugin_types import PluginType
+from floe_core.version_compat import FLOE_PLUGIN_API_VERSION, is_compatible
 
 if TYPE_CHECKING:
-    from importlib.metadata import EntryPoint
-
     from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
@@ -86,7 +90,7 @@ class PluginRegistry:
     def discover_all(self) -> None:
         """Discover all plugins from entry points.
 
-        Scans all 11 plugin type entry point groups defined in PluginType.
+        Scans all plugin type entry point groups defined in PluginType.
         Does NOT load/import plugin classes - only discovers entry points.
 
         This method is idempotent - calling it multiple times has no effect
@@ -102,7 +106,7 @@ class PluginRegistry:
         logger.info("discover_all.started")
         total_discovered = 0
 
-        # Scan all 11 plugin type entry point groups
+        # Scan all plugin type entry point groups
         for plugin_type in PluginType:
             group = plugin_type.entry_point_group
             discovered_count = self._discover_group(plugin_type, group)
@@ -181,24 +185,62 @@ class PluginRegistry:
 
         return discovered_count
 
-    def register(self, plugin: PluginMetadata) -> None:
+    def register(self, plugin_type: PluginType, plugin: PluginMetadata) -> None:
         """Manually register a plugin instance.
 
         Use this for testing or for plugins that aren't installed via
         entry points.
 
         Args:
+            plugin_type: The plugin category (e.g., PluginType.COMPUTE).
             plugin: Plugin instance to register.
 
         Raises:
             DuplicatePluginError: If plugin with same type+name exists.
             PluginIncompatibleError: If version check fails.
 
-        Note:
-            Implementation details in T018-T022.
+        Example:
+            >>> class MyPlugin(PluginMetadata):
+            ...     name = "my-plugin"
+            ...     version = "1.0.0"
+            ...     floe_api_version = "1.0"
+            >>> registry.register(PluginType.COMPUTE, MyPlugin())
         """
-        # Implementation in T018
-        raise NotImplementedError("register() not yet implemented (T018)")
+        key = (plugin_type, plugin.name)
+
+        # Check for duplicate registration (T022)
+        if key in self._loaded:
+            logger.warning(
+                "register.duplicate",
+                plugin_type=plugin_type.name,
+                name=plugin.name,
+            )
+            raise DuplicatePluginError(plugin_type, plugin.name)
+
+        # Check version compatibility (T018)
+        if not is_compatible(plugin.floe_api_version, FLOE_PLUGIN_API_VERSION):
+            logger.warning(
+                "register.incompatible",
+                plugin_type=plugin_type.name,
+                name=plugin.name,
+                plugin_version=plugin.floe_api_version,
+                platform_version=FLOE_PLUGIN_API_VERSION,
+            )
+            raise PluginIncompatibleError(
+                plugin.name,
+                plugin.floe_api_version,
+                FLOE_PLUGIN_API_VERSION,
+            )
+
+        # Store in loaded dict
+        self._loaded[key] = plugin
+
+        logger.debug(
+            "register.success",
+            plugin_type=plugin_type.name,
+            name=plugin.name,
+            version=plugin.version,
+        )
 
     def get(self, plugin_type: PluginType, name: str) -> PluginMetadata:
         """Get a plugin by type and name.
@@ -216,17 +258,99 @@ class PluginRegistry:
             PluginNotFoundError: If plugin not found.
             PluginIncompatibleError: If version check fails during load.
 
-        Note:
-            Implementation details in T019.
+        Example:
+            >>> registry = get_registry()
+            >>> duckdb = registry.get(PluginType.COMPUTE, "duckdb")
+            >>> duckdb.name
+            'duckdb'
         """
-        # Implementation in T019
-        raise NotImplementedError("get() not yet implemented (T019)")
+        key = (plugin_type, name)
+
+        # Fast path: already loaded
+        if key in self._loaded:
+            return self._loaded[key]
+
+        # Check if discovered (entry point exists)
+        if key not in self._discovered:
+            logger.debug(
+                "get.not_found",
+                plugin_type=plugin_type.name,
+                name=name,
+            )
+            raise PluginNotFoundError(plugin_type, name)
+
+        # Lazy load: import and instantiate the plugin
+        entry_point = self._discovered[key]
+        plugin = self._load_plugin(plugin_type, name, entry_point)
+
+        return plugin
+
+    def _load_plugin(
+        self,
+        plugin_type: PluginType,
+        name: str,
+        entry_point: EntryPoint,
+    ) -> PluginMetadata:
+        """Load a plugin from an entry point.
+
+        Args:
+            plugin_type: The plugin category.
+            name: The plugin name.
+            entry_point: The entry point to load.
+
+        Returns:
+            The loaded plugin instance.
+
+        Raises:
+            PluginIncompatibleError: If version check fails.
+        """
+        key = (plugin_type, name)
+
+        logger.debug(
+            "load_plugin.started",
+            plugin_type=plugin_type.name,
+            name=name,
+            entry_point=entry_point.value,
+        )
+
+        # Load the plugin class from entry point
+        plugin_class = entry_point.load()
+
+        # Instantiate the plugin
+        plugin: PluginMetadata = plugin_class()
+
+        # Check version compatibility
+        if not is_compatible(plugin.floe_api_version, FLOE_PLUGIN_API_VERSION):
+            logger.warning(
+                "load_plugin.incompatible",
+                plugin_type=plugin_type.name,
+                name=name,
+                plugin_version=plugin.floe_api_version,
+                platform_version=FLOE_PLUGIN_API_VERSION,
+            )
+            raise PluginIncompatibleError(
+                name,
+                plugin.floe_api_version,
+                FLOE_PLUGIN_API_VERSION,
+            )
+
+        # Cache the loaded plugin
+        self._loaded[key] = plugin
+
+        logger.debug(
+            "load_plugin.success",
+            plugin_type=plugin_type.name,
+            name=name,
+            version=plugin.version,
+        )
+
+        return plugin
 
     def list(self, plugin_type: PluginType) -> builtins.list[PluginMetadata]:
         """List all plugins of a specific type.
 
-        Returns discovered plugins for the given type. Does NOT load
-        plugins - returns metadata only.
+        Loads and returns all plugins for the given type. Each plugin
+        is lazy-loaded on first access if not already loaded.
 
         Args:
             plugin_type: The plugin category to list.
@@ -234,23 +358,75 @@ class PluginRegistry:
         Returns:
             List of plugin instances for that type (may be empty).
 
-        Note:
-            Implementation details in T020.
+        Example:
+            >>> registry = get_registry()
+            >>> compute_plugins = registry.list(PluginType.COMPUTE)
+            >>> [p.name for p in compute_plugins]
+            ['duckdb', 'snowflake']
         """
-        # Implementation in T020
-        raise NotImplementedError("list() not yet implemented (T020)")
+        plugins: builtins.list[PluginMetadata] = []
 
-    def list_all(self) -> dict[PluginType, builtins.list[PluginMetadata]]:
-        """List all plugins grouped by type.
+        # Collect all discovered plugins of this type
+        for (pt, name) in self._discovered.keys():
+            if pt != plugin_type:
+                continue
+
+            try:
+                # Use get() to leverage lazy loading and caching
+                plugin = self.get(plugin_type, name)
+                plugins.append(plugin)
+            except Exception as e:
+                # Log but continue with other plugins (graceful degradation)
+                logger.warning(
+                    "list.plugin_load_failed",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    error=str(e),
+                )
+
+        logger.debug(
+            "list.completed",
+            plugin_type=plugin_type.name,
+            count=len(plugins),
+        )
+
+        return plugins
+
+    def list_all(self) -> dict[PluginType, builtins.list[str]]:
+        """List all available plugins by type.
+
+        Returns plugin names grouped by type. Does NOT load plugins -
+        returns only discovered plugin names.
 
         Returns:
-            Dict mapping PluginType to list of plugins.
+            Dict mapping PluginType to list of plugin names.
 
-        Note:
-            Implementation details in T021.
+        Example:
+            >>> registry = get_registry()
+            >>> all_plugins = registry.list_all()
+            >>> all_plugins[PluginType.COMPUTE]
+            ['duckdb', 'snowflake']
         """
-        # Implementation in T021
-        raise NotImplementedError("list_all() not yet implemented (T021)")
+        result: dict[PluginType, builtins.list[str]] = {}
+
+        # Initialize all plugin types with empty lists
+        for plugin_type in PluginType:
+            result[plugin_type] = []
+
+        # Populate with discovered plugin names
+        for (plugin_type, name) in self._discovered.keys():
+            result[plugin_type].append(name)
+
+        # Sort names for consistent output
+        for plugin_type in result:
+            result[plugin_type].sort()
+
+        logger.debug(
+            "list_all.completed",
+            total_plugins=sum(len(names) for names in result.values()),
+        )
+
+        return result
 
     def configure(
         self,

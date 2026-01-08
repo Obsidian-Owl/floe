@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from floe_core.plugin_metadata import PluginMetadata
 from floe_core.plugin_registry import (
     PluginRegistry,
     _reset_registry,
@@ -23,6 +24,37 @@ from floe_core.plugin_types import PluginType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+# =============================================================================
+# Test Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def mock_plugin() -> PluginMetadata:
+    """Create a mock plugin that properly implements PluginMetadata.
+
+    Returns:
+        A PluginMetadata instance for testing.
+    """
+
+    class TestPlugin(PluginMetadata):
+        """Test plugin implementation."""
+
+        @property
+        def name(self) -> str:
+            return "test-plugin"
+
+        @property
+        def version(self) -> str:
+            return "1.0.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+    return TestPlugin()
 
 
 # =============================================================================
@@ -370,3 +402,347 @@ class TestPluginRegistryErrorHandling:
         # All threads got the same instance
         assert len(results) == 10
         assert all(r is results[0] for r in results)
+
+
+# =============================================================================
+# T024: Unit tests for register/get/list
+# =============================================================================
+
+
+class TestPluginRegistryRegister:
+    """Tests for PluginRegistry.register() method."""
+
+    @pytest.mark.requirement("FR-002")
+    def test_register_adds_plugin_to_loaded(
+        self,
+        reset_registry: None,
+        mock_plugin: PluginMetadata,
+    ) -> None:
+        """Test register() adds plugin to _loaded dict."""
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, mock_plugin)
+
+        key = (PluginType.COMPUTE, mock_plugin.name)
+        assert key in registry._loaded
+        assert registry._loaded[key] is mock_plugin
+
+    @pytest.mark.requirement("FR-002")
+    def test_register_checks_version_compatibility(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test register() checks API version compatibility."""
+        from floe_core.plugin_errors import PluginIncompatibleError
+
+        # Create incompatible plugin (major version mismatch)
+        class IncompatiblePlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "incompatible"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "99.0"  # Way higher than platform version
+
+        registry = PluginRegistry()
+        plugin = IncompatiblePlugin()
+
+        with pytest.raises(PluginIncompatibleError) as exc_info:
+            registry.register(PluginType.COMPUTE, plugin)
+
+        assert "incompatible" in str(exc_info.value)
+
+
+class TestPluginRegistryGet:
+    """Tests for PluginRegistry.get() method."""
+
+    @pytest.mark.requirement("FR-009")
+    def test_get_returns_registered_plugin(
+        self,
+        reset_registry: None,
+        mock_plugin: PluginMetadata,
+    ) -> None:
+        """Test get() returns a previously registered plugin."""
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, mock_plugin)
+
+        result = registry.get(PluginType.COMPUTE, mock_plugin.name)
+        assert result is mock_plugin
+
+    @pytest.mark.requirement("FR-009")
+    def test_get_lazy_loads_discovered_plugin(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test get() lazy loads from discovered entry points."""
+        registry = PluginRegistry()
+
+        # Create mock entry point that returns a plugin class
+        class LazyPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "lazy"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        ep = mock_entry_point("lazy", "floe.computes", "pkg:LazyPlugin")
+        ep.load.return_value = LazyPlugin
+
+        # Manually add to discovered (simulating discover_all)
+        registry._discovered[(PluginType.COMPUTE, "lazy")] = ep
+
+        # get() should load and cache the plugin
+        result = registry.get(PluginType.COMPUTE, "lazy")
+        assert result.name == "lazy"
+        assert (PluginType.COMPUTE, "lazy") in registry._loaded
+        ep.load.assert_called_once()
+
+    @pytest.mark.requirement("FR-011")
+    def test_get_raises_not_found_error(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test get() raises PluginNotFoundError for unknown plugin."""
+        from floe_core.plugin_errors import PluginNotFoundError
+
+        registry = PluginRegistry()
+
+        with pytest.raises(PluginNotFoundError) as exc_info:
+            registry.get(PluginType.COMPUTE, "nonexistent")
+
+        assert "nonexistent" in str(exc_info.value)
+        assert exc_info.value.plugin_type == PluginType.COMPUTE
+        assert exc_info.value.name == "nonexistent"
+
+    @pytest.mark.requirement("SC-002")
+    def test_get_caches_loaded_plugin(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test get() caches plugin and returns same instance."""
+        registry = PluginRegistry()
+
+        class CachedPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "cached"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        ep = mock_entry_point("cached", "floe.computes", "pkg:CachedPlugin")
+        ep.load.return_value = CachedPlugin
+        registry._discovered[(PluginType.COMPUTE, "cached")] = ep
+
+        # First call loads
+        result1 = registry.get(PluginType.COMPUTE, "cached")
+        # Second call should return cached instance
+        result2 = registry.get(PluginType.COMPUTE, "cached")
+
+        assert result1 is result2
+        # load() should only be called once
+        ep.load.assert_called_once()
+
+
+class TestPluginRegistryList:
+    """Tests for PluginRegistry.list() and list_all() methods."""
+
+    @pytest.mark.requirement("FR-002")
+    def test_list_returns_plugins_of_type(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test list() returns all plugins of specified type."""
+        registry = PluginRegistry()
+
+        # Create two compute plugins
+        class Plugin1(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin1"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        class Plugin2(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin2"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        ep1 = mock_entry_point("plugin1", "floe.computes", "pkg:Plugin1")
+        ep1.load.return_value = Plugin1
+        ep2 = mock_entry_point("plugin2", "floe.computes", "pkg:Plugin2")
+        ep2.load.return_value = Plugin2
+
+        registry._discovered[(PluginType.COMPUTE, "plugin1")] = ep1
+        registry._discovered[(PluginType.COMPUTE, "plugin2")] = ep2
+
+        result = registry.list(PluginType.COMPUTE)
+
+        assert len(result) == 2
+        names = [p.name for p in result]
+        assert "plugin1" in names
+        assert "plugin2" in names
+
+    @pytest.mark.requirement("FR-002")
+    def test_list_returns_empty_for_no_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test list() returns empty list when no plugins of type exist."""
+        registry = PluginRegistry()
+
+        result = registry.list(PluginType.COMPUTE)
+
+        assert result == []
+
+    @pytest.mark.requirement("FR-002")
+    def test_list_all_returns_all_plugin_names(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test list_all() returns plugin names grouped by type."""
+        registry = PluginRegistry()
+
+        # Add some discovered plugins
+        ep1 = MagicMock()
+        ep2 = MagicMock()
+        ep3 = MagicMock()
+
+        registry._discovered[(PluginType.COMPUTE, "duckdb")] = ep1
+        registry._discovered[(PluginType.COMPUTE, "spark")] = ep2
+        registry._discovered[(PluginType.ORCHESTRATOR, "dagster")] = ep3
+
+        result = registry.list_all()
+
+        # Should have all plugin types as keys
+        assert len(result) == len(PluginType)
+
+        # Check specific entries
+        assert "duckdb" in result[PluginType.COMPUTE]
+        assert "spark" in result[PluginType.COMPUTE]
+        assert "dagster" in result[PluginType.ORCHESTRATOR]
+
+        # Other types should have empty lists
+        assert result[PluginType.CATALOG] == []
+
+    @pytest.mark.requirement("FR-002")
+    def test_list_all_sorts_names(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test list_all() returns sorted plugin names."""
+        registry = PluginRegistry()
+
+        # Add plugins in unsorted order
+        registry._discovered[(PluginType.COMPUTE, "zebra")] = MagicMock()
+        registry._discovered[(PluginType.COMPUTE, "alpha")] = MagicMock()
+        registry._discovered[(PluginType.COMPUTE, "middle")] = MagicMock()
+
+        result = registry.list_all()
+
+        assert result[PluginType.COMPUTE] == ["alpha", "middle", "zebra"]
+
+
+# =============================================================================
+# T025: Unit tests for duplicate registration
+# =============================================================================
+
+
+class TestPluginRegistryDuplicateHandling:
+    """Tests for duplicate plugin registration handling."""
+
+    @pytest.mark.requirement("FR-010")
+    def test_register_raises_on_duplicate(
+        self,
+        reset_registry: None,
+        mock_plugin: PluginMetadata,
+    ) -> None:
+        """Test register() raises DuplicatePluginError for duplicate registration."""
+        from floe_core.plugin_errors import DuplicatePluginError
+
+        registry = PluginRegistry()
+
+        # First registration succeeds
+        registry.register(PluginType.COMPUTE, mock_plugin)
+
+        # Second registration should fail
+        with pytest.raises(DuplicatePluginError) as exc_info:
+            registry.register(PluginType.COMPUTE, mock_plugin)
+
+        assert exc_info.value.plugin_type == PluginType.COMPUTE
+        assert exc_info.value.name == mock_plugin.name
+
+    @pytest.mark.requirement("FR-010")
+    def test_same_name_different_type_allowed(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test plugins with same name but different types are allowed."""
+
+        class Plugin1(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "samename"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        class Plugin2(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "samename"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        registry = PluginRegistry()
+
+        # Register same name under different types
+        registry.register(PluginType.COMPUTE, Plugin1())
+        registry.register(PluginType.ORCHESTRATOR, Plugin2())
+
+        # Both should be accessible
+        assert registry.get(PluginType.COMPUTE, "samename").name == "samename"
+        assert registry.get(PluginType.ORCHESTRATOR, "samename").name == "samename"
