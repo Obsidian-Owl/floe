@@ -1437,3 +1437,343 @@ class TestPluginRegistryValidationErrors:
         assert len(errors) > 0
         assert "type" in errors[0]
         assert errors[0]["type"]  # Non-empty type
+
+
+# =============================================================================
+# T045: Unit tests for lifecycle hooks
+# =============================================================================
+
+
+class TestPluginRegistryLifecycleHooks:
+    """Tests for activate_plugin() and shutdown_all() methods (T045)."""
+
+    @pytest.mark.requirement("FR-013")
+    def test_activate_plugin_calls_startup_hook(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_plugin() calls plugin's startup() method."""
+        startup_called = False
+
+        class StartupPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "startup-test"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                nonlocal startup_called
+                startup_called = True
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, StartupPlugin())
+
+        assert not startup_called
+        registry.activate_plugin(PluginType.COMPUTE, "startup-test")
+        assert startup_called
+
+    @pytest.mark.requirement("FR-013")
+    def test_activate_plugin_is_idempotent(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_plugin() skips if already activated."""
+        startup_count = 0
+
+        class CountingPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "counting"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                nonlocal startup_count
+                startup_count += 1
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, CountingPlugin())
+
+        registry.activate_plugin(PluginType.COMPUTE, "counting")
+        registry.activate_plugin(PluginType.COMPUTE, "counting")
+        registry.activate_plugin(PluginType.COMPUTE, "counting")
+
+        # Should only be called once despite multiple activate calls
+        assert startup_count == 1
+
+    @pytest.mark.requirement("FR-013")
+    def test_activate_plugin_raises_on_startup_failure(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_plugin() raises PluginStartupError on failure."""
+        from floe_core.plugin_errors import PluginStartupError
+
+        class FailingPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "failing"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                raise ValueError("Startup failed!")
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, FailingPlugin())
+
+        with pytest.raises(PluginStartupError) as exc_info:
+            registry.activate_plugin(PluginType.COMPUTE, "failing")
+
+        assert exc_info.value.plugin_type == PluginType.COMPUTE
+        assert exc_info.value.name == "failing"
+        assert isinstance(exc_info.value.cause, ValueError)
+
+    @pytest.mark.requirement("SC-006")
+    def test_activate_plugin_raises_on_timeout(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_plugin() raises PluginStartupError on timeout."""
+        import time
+
+        from floe_core.plugin_errors import PluginStartupError
+
+        class SlowPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "slow"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                time.sleep(2)  # Sleep longer than timeout
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, SlowPlugin())
+
+        with pytest.raises(PluginStartupError) as exc_info:
+            # Use short timeout for test
+            registry.activate_plugin(PluginType.COMPUTE, "slow", timeout=0.1)
+
+        assert exc_info.value.name == "slow"
+        assert isinstance(exc_info.value.cause, TimeoutError)
+
+    @pytest.mark.requirement("FR-013")
+    def test_activate_plugin_raises_plugin_not_found(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_plugin() raises PluginNotFoundError for unknown plugin."""
+        from floe_core.plugin_errors import PluginNotFoundError
+
+        registry = PluginRegistry()
+
+        with pytest.raises(PluginNotFoundError):
+            registry.activate_plugin(PluginType.COMPUTE, "nonexistent")
+
+    @pytest.mark.requirement("FR-013")
+    def test_shutdown_all_calls_shutdown_hooks(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test shutdown_all() calls shutdown() on all activated plugins."""
+        shutdown_order: list[str] = []
+
+        class ShutdownPlugin(PluginMetadata):
+            def __init__(self, plugin_name: str) -> None:
+                self._name = plugin_name
+
+            @property
+            def name(self) -> str:
+                return self._name
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                shutdown_order.append(self._name)
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, ShutdownPlugin("plugin-a"))
+        registry.register(PluginType.CATALOG, ShutdownPlugin("plugin-b"))
+
+        # Activate in order
+        registry.activate_plugin(PluginType.COMPUTE, "plugin-a")
+        registry.activate_plugin(PluginType.CATALOG, "plugin-b")
+
+        results = registry.shutdown_all()
+
+        # Both should have been called
+        assert "plugin-a" in shutdown_order
+        assert "plugin-b" in shutdown_order
+        # Both should succeed (no exceptions)
+        assert all(v is None for v in results.values())
+
+    @pytest.mark.requirement("FR-013")
+    def test_shutdown_all_continues_on_error(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test shutdown_all() continues after plugin shutdown fails."""
+
+        class FailingShutdownPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "failing-shutdown"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                raise RuntimeError("Shutdown failed!")
+
+        class GoodPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "good-plugin"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                pass  # Success
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, FailingShutdownPlugin())
+        registry.register(PluginType.CATALOG, GoodPlugin())
+
+        registry.activate_plugin(PluginType.COMPUTE, "failing-shutdown")
+        registry.activate_plugin(PluginType.CATALOG, "good-plugin")
+
+        results = registry.shutdown_all()
+
+        # Should have results for both plugins
+        assert len(results) == 2
+        # One failed, one succeeded
+        failed_count = sum(1 for v in results.values() if v is not None)
+        assert failed_count == 1
+
+    @pytest.mark.requirement("FR-013")
+    def test_shutdown_all_clears_activated_set(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test shutdown_all() clears the activated plugins set."""
+
+        class SimplePlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "simple"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                pass
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, SimplePlugin())
+        registry.activate_plugin(PluginType.COMPUTE, "simple")
+
+        # Verify plugin is activated
+        assert (PluginType.COMPUTE, "simple") in registry._activated
+
+        registry.shutdown_all()
+
+        # Should be cleared
+        assert len(registry._activated) == 0
+
+    @pytest.mark.requirement("SC-006")
+    def test_shutdown_all_handles_timeout(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test shutdown_all() handles slow shutdown with timeout."""
+        import time
+
+        class SlowShutdownPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "slow-shutdown"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                time.sleep(2)  # Slow shutdown
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, SlowShutdownPlugin())
+        registry.activate_plugin(PluginType.COMPUTE, "slow-shutdown")
+
+        results = registry.shutdown_all(timeout=0.1)
+
+        # Should have timeout error
+        assert "COMPUTE:slow-shutdown" in results
+        assert isinstance(results["COMPUTE:slow-shutdown"], TimeoutError)

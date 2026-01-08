@@ -8,6 +8,7 @@ Exception Hierarchy:
     ├── PluginNotFoundError     # Plugin not in registry
     ├── PluginIncompatibleError # API version mismatch
     ├── PluginConfigurationError # Config validation failed
+    ├── PluginStartupError      # Startup hook failed
     ├── DuplicatePluginError    # Same type+name already registered
     └── CircularDependencyError # Dependency cycle detected
 
@@ -133,6 +134,44 @@ class PluginConfigurationError(PluginError):
         self.name = name
         self.errors = errors
         super().__init__(f"Configuration error for plugin '{name}': {errors}")
+
+
+class PluginStartupError(PluginError):
+    """Raised when a plugin's startup hook fails.
+
+    This error indicates that the plugin's startup() method raised
+    an exception or timed out during activation.
+
+    Attributes:
+        plugin_type: The type of the plugin that failed.
+        name: The name of the plugin that failed.
+        cause: The original exception that caused the failure.
+
+    Example:
+        >>> raise PluginStartupError(PluginType.COMPUTE, "duckdb", ValueError("bad"))
+        Traceback (most recent call last):
+            ...
+        PluginStartupError: Plugin startup failed: COMPUTE:duckdb - bad
+    """
+
+    def __init__(
+        self,
+        plugin_type: PluginType,
+        name: str,
+        cause: Exception | None = None,
+    ) -> None:
+        """Initialize PluginStartupError.
+
+        Args:
+            plugin_type: The type of the plugin that failed.
+            name: The name of the plugin that failed.
+            cause: The original exception, if any.
+        """
+        self.plugin_type = plugin_type
+        self.name = name
+        self.cause = cause
+        cause_msg = f" - {cause}" if cause else ""
+        super().__init__(f"Plugin startup failed: {plugin_type.name}:{name}{cause_msg}")
 
 
 class DuplicatePluginError(PluginError):

@@ -21,8 +21,12 @@ from __future__ import annotations
 
 import builtins
 import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from importlib.metadata import EntryPoint, entry_points
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
+
+# Default timeout for lifecycle hooks (SC-006: 30 seconds)
+DEFAULT_LIFECYCLE_TIMEOUT: float = 30.0
 
 import structlog
 
@@ -31,6 +35,7 @@ from floe_core.plugin_errors import (
     PluginConfigurationError,
     PluginIncompatibleError,
     PluginNotFoundError,
+    PluginStartupError,
 )
 from floe_core.plugin_metadata import HealthStatus, PluginMetadata
 from floe_core.plugin_types import PluginType
@@ -84,6 +89,10 @@ class PluginRegistry:
         # Validated configurations for plugins
         # Key: (PluginType, plugin_name), Value: BaseModel config instance
         self._configs: dict[tuple[PluginType, str], BaseModel] = {}
+
+        # Plugins that have been activated (startup() called)
+        # Key: (PluginType, plugin_name)
+        self._activated: set[tuple[PluginType, str]] = set()
 
         # Flag to track if discovery has been run
         self._discovered_all: bool = False
@@ -555,6 +564,194 @@ class PluginRegistry:
         # Implementation in T036
         key = (plugin_type, name)
         return self._configs.get(key)
+
+    def activate_plugin(
+        self,
+        plugin_type: PluginType,
+        name: str,
+        timeout: float | None = None,
+    ) -> None:
+        """Activate a plugin by calling its startup() hook.
+
+        Loads the plugin if not already loaded, then calls startup() with
+        timeout protection. The plugin is marked as activated on success.
+
+        Args:
+            plugin_type: The plugin category.
+            name: The plugin name.
+            timeout: Timeout in seconds (default: 30s per SC-006).
+
+        Raises:
+            PluginNotFoundError: If plugin not found.
+            PluginStartupError: If startup() fails or times out.
+
+        Example:
+            >>> registry = get_registry()
+            >>> registry.activate_plugin(PluginType.COMPUTE, "duckdb")
+        """
+        key = (plugin_type, name)
+
+        # Check if already activated
+        if key in self._activated:
+            logger.debug(
+                "activate_plugin.already_activated",
+                plugin_type=plugin_type.name,
+                name=name,
+            )
+            return
+
+        # Load plugin (may raise PluginNotFoundError)
+        plugin = self.get(plugin_type, name)
+
+        # Use default timeout if not specified
+        if timeout is None:
+            timeout = DEFAULT_LIFECYCLE_TIMEOUT
+
+        logger.debug(
+            "activate_plugin.starting",
+            plugin_type=plugin_type.name,
+            name=name,
+            timeout=timeout,
+        )
+
+        # Run startup() with timeout protection
+        try:
+            self._run_with_timeout(plugin.startup, timeout)
+        except FutureTimeoutError:
+            logger.error(
+                "activate_plugin.timeout",
+                plugin_type=plugin_type.name,
+                name=name,
+                timeout=timeout,
+            )
+            raise PluginStartupError(
+                plugin_type,
+                name,
+                TimeoutError(f"startup() timed out after {timeout}s"),
+            ) from None
+        except Exception as e:
+            logger.error(
+                "activate_plugin.failed",
+                plugin_type=plugin_type.name,
+                name=name,
+                error=str(e),
+            )
+            raise PluginStartupError(plugin_type, name, e) from e
+
+        # Mark as activated on success
+        self._activated.add(key)
+
+        logger.info(
+            "activate_plugin.success",
+            plugin_type=plugin_type.name,
+            name=name,
+        )
+
+    def shutdown_all(self, timeout: float | None = None) -> dict[str, Exception | None]:
+        """Shutdown all activated plugins.
+
+        Calls shutdown() on all plugins that have been activated, in reverse
+        activation order. Errors are logged but don't prevent other plugins
+        from shutting down (graceful degradation).
+
+        Args:
+            timeout: Per-plugin timeout in seconds (default: 30s per SC-006).
+
+        Returns:
+            Dict mapping "type:name" to exception (or None if success).
+
+        Example:
+            >>> registry = get_registry()
+            >>> results = registry.shutdown_all()
+            >>> failed = {k: v for k, v in results.items() if v is not None}
+        """
+        if timeout is None:
+            timeout = DEFAULT_LIFECYCLE_TIMEOUT
+
+        results: dict[str, Exception | None] = {}
+
+        # Shutdown in reverse activation order
+        activated_list = list(self._activated)
+        activated_list.reverse()
+
+        logger.info(
+            "shutdown_all.starting",
+            plugin_count=len(activated_list),
+            timeout_per_plugin=timeout,
+        )
+
+        for plugin_type, name in activated_list:
+            key_str = f"{plugin_type.name}:{name}"
+
+            # Get the loaded plugin
+            plugin = self._loaded.get((plugin_type, name))
+            if plugin is None:
+                logger.warning(
+                    "shutdown_all.plugin_not_loaded",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                )
+                continue
+
+            try:
+                self._run_with_timeout(plugin.shutdown, timeout)
+                results[key_str] = None
+                logger.debug(
+                    "shutdown_all.plugin_success",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                )
+            except FutureTimeoutError:
+                error = TimeoutError(f"shutdown() timed out after {timeout}s")
+                results[key_str] = error
+                logger.error(
+                    "shutdown_all.plugin_timeout",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    timeout=timeout,
+                )
+            except Exception as e:
+                results[key_str] = e
+                logger.error(
+                    "shutdown_all.plugin_failed",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    error=str(e),
+                )
+
+        # Clear activated set
+        self._activated.clear()
+
+        logger.info(
+            "shutdown_all.completed",
+            total=len(results),
+            failed=sum(1 for v in results.values() if v is not None),
+        )
+
+        return results
+
+    def _run_with_timeout(
+        self,
+        func: Callable[[], None],
+        timeout: float,
+    ) -> None:
+        """Run a function with timeout protection.
+
+        Uses ThreadPoolExecutor to run the function in a separate thread
+        with a timeout. This allows lifecycle hooks to be interrupted if
+        they take too long.
+
+        Args:
+            func: Function to run (no arguments, no return value).
+            timeout: Maximum time in seconds to wait.
+
+        Raises:
+            FutureTimeoutError: If function exceeds timeout.
+            Exception: Any exception raised by the function.
+        """
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(func)
+            future.result(timeout=timeout)
 
     def health_check_all(self) -> dict[str, HealthStatus]:
         """Check health of all loaded plugins.
