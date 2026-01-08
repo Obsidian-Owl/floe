@@ -102,8 +102,7 @@ class PluginIncompatibleError(PluginError):
         self.required_version = required
         self.platform_version = platform
         super().__init__(
-            f"Plugin '{name}' requires API v{required}, "
-            f"but platform provides v{platform}"
+            f"Plugin '{name}' requires API v{required}, but platform provides v{platform}"
         )
 
 
@@ -260,6 +259,4 @@ class MissingDependencyError(PluginError):
         self.plugin_name = plugin_name
         self.missing_dependencies = missing_dependencies
         deps_str = ", ".join(missing_dependencies)
-        super().__init__(
-            f"Plugin '{plugin_name}' has missing dependencies: {deps_str}"
-        )
+        super().__init__(f"Plugin '{plugin_name}' has missing dependencies: {deps_str}")

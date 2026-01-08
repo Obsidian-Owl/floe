@@ -1,28 +1,26 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# Workspace root - development dependencies only, no package to build
+# Individual packages are in packages/ directory
 
 [project]
-name = "floe"
-version = "0.1.0"
-description = "Open platform for building internal data platforms"
-readme = "README.md"
-license = "Apache-2.0"
+name = "floe-workspace"
+version = "0.0.0"
+description = "floe workspace root - not a distributable package"
 requires-python = ">=3.10"
-authors = [
-    { name = "Obsidian Owl", email = "team@obsidianowl.dev" }
-]
 
-# Root workspace - no direct code, references packages
-dependencies = []
-
-[project.optional-dependencies]
-dev = [
+# Development dependencies for the entire workspace
+dependencies = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "mypy>=1.8",
     "ruff>=0.3",
+    "pre-commit>=3.0",
+    "bandit[toml]>=1.7",
+    # Include floe-core for development
+    "floe-core",
 ]
+
+[tool.uv.sources]
+floe-core = { path = "packages/floe-core", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -57,3 +55,22 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
+
+[tool.bandit]
+exclude_dirs = ["tests", "packages/floe-core/tests"]
+skips = ["B101"]  # Allow assert statements (used in tests)
+
+[tool.coverage.run]
+source = ["packages/floe-core/src"]
+branch = true
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+fail_under = 80
+show_missing = true

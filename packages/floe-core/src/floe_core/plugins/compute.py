@@ -305,7 +305,8 @@ class ComputePlugin(PluginMetadata):
         ...
 
     def get_catalog_attachment_sql(
-        self, catalog_config: CatalogConfig  # noqa: ARG002
+        self,
+        catalog_config: CatalogConfig,  # noqa: ARG002
     ) -> list[str] | None:
         """Return SQL statements to attach compute engine to Iceberg catalog.
 

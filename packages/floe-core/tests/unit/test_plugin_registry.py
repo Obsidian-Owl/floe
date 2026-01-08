@@ -73,9 +73,7 @@ class TestPluginRegistryDiscovery:
         """Test discover_all() scans all 11 plugin type groups."""
         registry = PluginRegistry()
 
-        with patch(
-            "floe_core.plugin_registry.entry_points"
-        ) as mock_entry_points:
+        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
             registry.discover_all()
 
@@ -85,9 +83,7 @@ class TestPluginRegistryDiscovery:
             # Verify all groups were scanned
             expected_groups = {pt.entry_point_group for pt in PluginType}
             # Check via kwargs since entry_points is called with group=
-            actual_groups = {
-                call.kwargs["group"] for call in mock_entry_points.call_args_list
-            }
+            actual_groups = {call.kwargs["group"] for call in mock_entry_points.call_args_list}
             assert actual_groups == expected_groups
 
     @pytest.mark.requirement("FR-001")
@@ -98,9 +94,7 @@ class TestPluginRegistryDiscovery:
         """Test discover_all() only runs once (idempotent)."""
         registry = PluginRegistry()
 
-        with patch(
-            "floe_core.plugin_registry.entry_points"
-        ) as mock_entry_points:
+        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
 
             # First call should scan
@@ -129,9 +123,7 @@ class TestPluginRegistryDiscovery:
                 return [ep1, ep2]
             return []
 
-        with patch(
-            "floe_core.plugin_registry.entry_points", side_effect=mock_eps
-        ):
+        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             # Verify entry points were stored
@@ -161,9 +153,7 @@ class TestPluginRegistryDiscovery:
             return []
 
         with (
-            patch(
-                "floe_core.plugin_registry.entry_points", side_effect=mock_eps
-            ),
+            patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps),
             patch("floe_core.plugin_registry.logger") as mock_logger,
         ):
             registry.discover_all()
@@ -175,9 +165,9 @@ class TestPluginRegistryDiscovery:
             # Verify warning was logged for duplicate
             mock_logger.warning.assert_called()
             call_args = mock_logger.warning.call_args_list
-            assert any(
-                "discover_group.duplicate" in str(call) for call in call_args
-            ), "Expected warning log for duplicate plugin"
+            assert any("discover_group.duplicate" in str(call) for call in call_args), (
+                "Expected warning log for duplicate plugin"
+            )
 
     @pytest.mark.requirement("FR-001")
     def test_discover_multiple_plugin_types(
@@ -189,9 +179,7 @@ class TestPluginRegistryDiscovery:
         registry = PluginRegistry()
 
         compute_ep = mock_entry_point("duckdb", "floe.computes", "pkg:DuckDB")
-        orchestrator_ep = mock_entry_point(
-            "dagster", "floe.orchestrators", "pkg:Dagster"
-        )
+        orchestrator_ep = mock_entry_point("dagster", "floe.orchestrators", "pkg:Dagster")
         catalog_ep = mock_entry_point("polaris", "floe.catalogs", "pkg:Polaris")
 
         def mock_eps(group: str) -> list[MagicMock]:
@@ -202,9 +190,7 @@ class TestPluginRegistryDiscovery:
             }
             return mapping.get(group, [])
 
-        with patch(
-            "floe_core.plugin_registry.entry_points", side_effect=mock_eps
-        ):
+        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             assert (PluginType.COMPUTE, "duckdb") in registry._discovered
@@ -240,9 +226,7 @@ class TestGetRegistrySingleton:
         reset_registry: None,
     ) -> None:
         """Test get_registry() automatically calls discover_all()."""
-        with patch(
-            "floe_core.plugin_registry.entry_points"
-        ) as mock_entry_points:
+        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
 
             registry = get_registry()
@@ -328,9 +312,7 @@ class TestPluginRegistryErrorHandling:
                 return [bad_ep, good_ep]
             return []
 
-        with patch(
-            "floe_core.plugin_registry.entry_points", side_effect=mock_eps
-        ):
+        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             # Good entry point should still be discovered despite bad one
@@ -365,9 +347,7 @@ class TestPluginRegistryErrorHandling:
             mock_logger.error.assert_called()
             # Check it was called with expected event name
             call_args = mock_logger.error.call_args_list
-            assert any(
-                "discover_group.failed" in str(call) for call in call_args
-            )
+            assert any("discover_group.failed" in str(call) for call in call_args)
 
     @pytest.mark.requirement("FR-011")
     def test_empty_discovery_succeeds(
@@ -377,9 +357,7 @@ class TestPluginRegistryErrorHandling:
         """Test discovery succeeds when no plugins are found."""
         registry = PluginRegistry()
 
-        with patch(
-            "floe_core.plugin_registry.entry_points", return_value=[]
-        ):
+        with patch("floe_core.plugin_registry.entry_points", return_value=[]):
             registry.discover_all()
 
             assert registry._discovered_all is True
@@ -823,9 +801,7 @@ class TestPluginRegistryVersionCompatibility:
         registry = PluginRegistry()
 
         # Set up discovered entry point
-        ep = mock_entry_point(
-            "lazy-incompatible", "floe.computes", "pkg:IncompatibleLazyPlugin"
-        )
+        ep = mock_entry_point("lazy-incompatible", "floe.computes", "pkg:IncompatibleLazyPlugin")
         ep.load.return_value = IncompatibleLazyPlugin
         registry._discovered[(PluginType.COMPUTE, "lazy-incompatible")] = ep
 
@@ -1902,9 +1878,7 @@ class TestPluginRegistryHealthChecks:
         results = registry.health_check_all()
 
         assert results["COMPUTE:failing-health"].state == HealthState.UNHEALTHY
-        assert "RuntimeError" in results["COMPUTE:failing-health"].details.get(
-            "exception_type", ""
-        )
+        assert "RuntimeError" in results["COMPUTE:failing-health"].details.get("exception_type", "")
 
     @pytest.mark.requirement("SC-007")
     def test_health_check_all_returns_unhealthy_on_timeout(

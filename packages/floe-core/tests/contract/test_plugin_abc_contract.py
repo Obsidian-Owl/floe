@@ -156,9 +156,7 @@ class TestPluginMetadataContract:
         # Check that these are defined as properties
         for prop_name in ["name", "version", "floe_api_version"]:
             prop = getattr(PluginMetadata, prop_name)
-            assert isinstance(prop, property), (
-                f"{prop_name} should be a property, not {type(prop)}"
-            )
+            assert isinstance(prop, property), f"{prop_name} should be a property, not {type(prop)}"
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_metadata_has_optional_properties(self) -> None:
@@ -170,15 +168,11 @@ class TestPluginMetadataContract:
         """
         # description property exists
         assert hasattr(PluginMetadata, "description")
-        assert isinstance(
-            inspect.getattr_static(PluginMetadata, "description"), property
-        )
+        assert isinstance(inspect.getattr_static(PluginMetadata, "description"), property)
 
         # dependencies property exists
         assert hasattr(PluginMetadata, "dependencies")
-        assert isinstance(
-            inspect.getattr_static(PluginMetadata, "dependencies"), property
-        )
+        assert isinstance(inspect.getattr_static(PluginMetadata, "dependencies"), property)
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_metadata_has_lifecycle_methods(self) -> None:
@@ -232,9 +226,7 @@ class TestPluginMetadataContract:
         assert hints.get("return") is HealthStatus
         sig = inspect.signature(PluginMetadata.health_check)
         params = list(sig.parameters.keys())
-        assert params == ["self"], (
-            f"health_check params should be ['self'], got {params}"
-        )
+        assert params == ["self"], f"health_check params should be ['self'], got {params}"
 
 
 class TestPluginMetadataImplementation:

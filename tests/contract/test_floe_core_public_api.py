@@ -249,9 +249,8 @@ class TestPluginImplementationContract:
         Plugins should be able to provide a configuration schema
         for validation.
         """
-        from pydantic import BaseModel, Field
-
         from floe_core import PluginMetadata
+        from pydantic import BaseModel, Field
 
         class TestConfig(BaseModel):
             """Test plugin configuration."""
@@ -349,9 +348,8 @@ class TestRegistryIntegrationContract:
         Consumer packages should be able to configure plugins
         using the registry's configure() method.
         """
-        from pydantic import BaseModel, Field
-
         from floe_core import PluginMetadata, PluginRegistry, PluginType
+        from pydantic import BaseModel, Field
 
         class PluginConfig(BaseModel):
             threads: int = Field(default=4, ge=1)

@@ -21,15 +21,11 @@ from __future__ import annotations
 
 import builtins
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from importlib.metadata import EntryPoint, entry_points
-from typing import TYPE_CHECKING, Any, Callable
-
-# Default timeout for lifecycle hooks (SC-006: 30 seconds)
-DEFAULT_LIFECYCLE_TIMEOUT: float = 30.0
-
-# Default timeout for health checks (SC-007: 5 seconds)
-DEFAULT_HEALTH_CHECK_TIMEOUT: float = 5.0
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -50,6 +46,12 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
+
+# Default timeout for lifecycle hooks (SC-006: 30 seconds)
+DEFAULT_LIFECYCLE_TIMEOUT: float = 30.0
+
+# Default timeout for health checks (SC-007: 5 seconds)
+DEFAULT_HEALTH_CHECK_TIMEOUT: float = 5.0
 
 # Module-level singleton instance and lock
 _registry: PluginRegistry | None = None
@@ -382,7 +384,7 @@ class PluginRegistry:
         plugins: builtins.list[PluginMetadata] = []
 
         # Collect all discovered plugins of this type
-        for (pt, name) in self._discovered.keys():
+        for pt, name in self._discovered.keys():
             if pt != plugin_type:
                 continue
 
@@ -429,7 +431,7 @@ class PluginRegistry:
             result[plugin_type] = []
 
         # Populate with discovered plugin names
-        for (plugin_type, name) in self._discovered.keys():
+        for plugin_type, name in self._discovered.keys():
             result[plugin_type].append(name)
 
         # Sort names for consistent output
@@ -541,11 +543,13 @@ class PluginRegistry:
             loc = err.get("loc", ())
             field_path = ".".join(str(part) for part in loc)
 
-            errors.append({
-                "field": field_path,
-                "message": err.get("msg", "Unknown error"),
-                "type": err.get("type", "unknown"),
-            })
+            errors.append(
+                {
+                    "field": field_path,
+                    "message": err.get("msg", "Unknown error"),
+                    "type": err.get("type", "unknown"),
+                }
+            )
 
         return errors
 
@@ -721,7 +725,7 @@ class PluginRegistry:
         # Build reverse lookup: plugin name -> plugin type
         # This is needed because PluginMetadata doesn't store its type
         plugin_type_lookup: dict[str, PluginType] = {}
-        for (pt, pname), plugin in self._loaded.items():
+        for (pt, pname), _plugin in self._loaded.items():
             plugin_type_lookup[pname] = pt
 
         # Activate in dependency order
@@ -949,9 +953,7 @@ class PluginRegistry:
                 )
 
         # Log summary
-        healthy_count = sum(
-            1 for s in results.values() if s.state == HealthState.HEALTHY
-        )
+        healthy_count = sum(1 for s in results.values() if s.state == HealthState.HEALTHY)
         logger.info(
             "health_check_all.completed",
             total=len(results),
@@ -1035,9 +1037,7 @@ class PluginRegistry:
                     dependents[dep_name].append(plugin.name)
 
         # Kahn's algorithm: start with plugins that have no dependencies
-        queue: builtins.list[str] = [
-            name for name, degree in in_degree.items() if degree == 0
-        ]
+        queue: builtins.list[str] = [name for name, degree in in_degree.items() if degree == 0]
         sorted_names: builtins.list[str] = []
 
         logger.debug(
