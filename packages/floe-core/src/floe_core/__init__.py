@@ -14,12 +14,53 @@ __version__ = "0.1.0"
 
 # Public API - exports will be added as modules are implemented
 # See tasks.md for implementation order
+
+# T006: PluginType enum
+from floe_core.plugin_types import PluginType
+
+# T007: Exception hierarchy
+from floe_core.plugin_errors import (
+    CircularDependencyError,
+    DuplicatePluginError,
+    PluginConfigurationError,
+    PluginError,
+    PluginIncompatibleError,
+    PluginNotFoundError,
+)
+
+# T008: Version compatibility
+from floe_core.version_compat import (
+    FLOE_PLUGIN_API_MIN_VERSION,
+    FLOE_PLUGIN_API_VERSION,
+    is_compatible,
+)
+
+# T009-T010: Health types and PluginMetadata
+from floe_core.plugin_metadata import (
+    HealthState,
+    HealthStatus,
+    PluginMetadata,
+)
+
 __all__: list[str] = [
     "__version__",
     # T006: PluginType enum
-    # T007: Errors (PluginError, PluginNotFoundError, etc.)
-    # T008: FLOE_PLUGIN_API_VERSION, is_compatible
+    "PluginType",
+    # T007: Errors
+    "PluginError",
+    "PluginNotFoundError",
+    "PluginIncompatibleError",
+    "PluginConfigurationError",
+    "DuplicatePluginError",
+    "CircularDependencyError",
+    # T008: Version compatibility
+    "FLOE_PLUGIN_API_VERSION",
+    "FLOE_PLUGIN_API_MIN_VERSION",
+    "is_compatible",
     # T009-T010: HealthState, HealthStatus, PluginMetadata
+    "HealthState",
+    "HealthStatus",
+    "PluginMetadata",
     # T011-T015: PluginRegistry, get_registry
     # T058-T068: Plugin ABCs (ComputePlugin, etc.)
 ]
