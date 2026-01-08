@@ -64,26 +64,21 @@ repos:
 
   # ==========================================================
   # Pre-push hooks (slower, run before push)
+  # Uses local hooks to match CI exactly (reads pyproject.toml)
   # ==========================================================
 
-  # Type checking with mypy
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
-    hooks:
-      - id: mypy
-        name: mypy (strict)
-        args: [--strict]
-        stages: [pre-push]
-        additional_dependencies:
-          - pydantic>=2.0
-          - structlog>=24.0
-          - pytest>=8.0
-        pass_filenames: false
-        entry: mypy --strict packages/
-
-  # Unit tests (fast subset)
   - repo: local
     hooks:
+      # Type checking with mypy (matches CI)
+      - id: mypy-strict
+        name: mypy (strict)
+        entry: uv run mypy --strict packages/
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
+      # Unit tests (fast subset)
       - id: pytest-unit
         name: pytest (unit tests)
         entry: uv run pytest packages/floe-core/tests/unit/ -v --tb=short -x
