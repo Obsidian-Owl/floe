@@ -34,6 +34,7 @@ DEFAULT_HEALTH_CHECK_TIMEOUT: float = 5.0
 import structlog
 
 from floe_core.plugin_errors import (
+    CircularDependencyError,
     DuplicatePluginError,
     PluginConfigurationError,
     PluginIncompatibleError,
@@ -872,6 +873,156 @@ class PluginRegistry:
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(func)
             return future.result(timeout=timeout)
+
+    def resolve_dependencies(
+        self,
+        plugins: builtins.list[PluginMetadata],
+    ) -> builtins.list[PluginMetadata]:
+        """Resolve plugin dependencies and return plugins in load order.
+
+        Uses Kahn's algorithm for topological sorting to determine the
+        correct order to load plugins based on their declared dependencies.
+        Plugins with no dependencies are returned first, followed by plugins
+        whose dependencies have already been resolved.
+
+        Args:
+            plugins: List of plugin instances to sort by dependencies.
+
+        Returns:
+            Plugins sorted in dependency order (load dependencies first).
+
+        Raises:
+            CircularDependencyError: If a circular dependency is detected.
+
+        Example:
+            >>> # Plugin A depends on B, B depends on C
+            >>> sorted_plugins = registry.resolve_dependencies([A, B, C])
+            >>> [p.name for p in sorted_plugins]
+            ['C', 'B', 'A']
+
+        Note:
+            Missing dependencies are detected in T054 (separate task).
+            This method assumes all dependencies are present in the input list.
+        """
+        if not plugins:
+            return []
+
+        # Build name -> plugin mapping for fast lookup
+        plugin_map: dict[str, PluginMetadata] = {p.name: p for p in plugins}
+        plugin_names = set(plugin_map.keys())
+
+        # Build adjacency list and in-degree count
+        # Graph: dependency -> dependents (edges point from dependency to dependent)
+        # in_degree: count of dependencies for each plugin
+        in_degree: dict[str, int] = dict.fromkeys(plugin_names, 0)
+        dependents: dict[str, builtins.list[str]] = {name: [] for name in plugin_names}
+
+        for plugin in plugins:
+            for dep_name in plugin.dependencies:
+                # Only count dependencies that are in our plugin set
+                if dep_name in plugin_names:
+                    in_degree[plugin.name] += 1
+                    dependents[dep_name].append(plugin.name)
+
+        # Kahn's algorithm: start with plugins that have no dependencies
+        queue: builtins.list[str] = [
+            name for name, degree in in_degree.items() if degree == 0
+        ]
+        sorted_names: builtins.list[str] = []
+
+        logger.debug(
+            "resolve_dependencies.started",
+            plugin_count=len(plugins),
+            initial_queue_size=len(queue),
+        )
+
+        while queue:
+            # Process next plugin with no unresolved dependencies
+            current = queue.pop(0)
+            sorted_names.append(current)
+
+            # Reduce in-degree of dependents
+            for dependent in dependents[current]:
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    queue.append(dependent)
+
+        # Check for cycle: if not all plugins processed, there's a cycle
+        if len(sorted_names) != len(plugins):
+            # Find the cycle for error reporting
+            cycle = self._find_dependency_cycle(plugins, in_degree)
+            logger.error(
+                "resolve_dependencies.circular_dependency",
+                cycle=cycle,
+                processed=len(sorted_names),
+                total=len(plugins),
+            )
+            raise CircularDependencyError(cycle)
+
+        logger.debug(
+            "resolve_dependencies.completed",
+            order=list(sorted_names),
+        )
+
+        # Return plugins in sorted order
+        return [plugin_map[name] for name in sorted_names]
+
+    def _find_dependency_cycle(
+        self,
+        plugins: builtins.list[PluginMetadata],
+        in_degree: dict[str, int],
+    ) -> builtins.list[str]:
+        """Find a cycle in the dependency graph for error reporting.
+
+        Uses DFS to find a cycle starting from any node that wasn't
+        processed (has remaining in-degree > 0).
+
+        Args:
+            plugins: List of plugins in the graph.
+            in_degree: Remaining in-degree after Kahn's algorithm.
+
+        Returns:
+            List of plugin names forming the cycle (includes start twice).
+        """
+        # Build dependency map: plugin -> its dependencies
+        plugin_map = {p.name: p for p in plugins}
+        plugin_names = set(plugin_map.keys())
+
+        # Find a node that's part of the cycle (in_degree > 0)
+        cycle_nodes = [name for name, deg in in_degree.items() if deg > 0]
+        if not cycle_nodes:
+            return ["unknown"]
+
+        start = cycle_nodes[0]
+
+        # DFS to find the cycle
+        visited: set[str] = set()
+        path: builtins.list[str] = []
+
+        def dfs(node: str) -> builtins.list[str] | None:
+            if node in visited:
+                # Found cycle - extract it from path
+                if node in path:
+                    cycle_start = path.index(node)
+                    return path[cycle_start:] + [node]
+                return None
+
+            visited.add(node)
+            path.append(node)
+
+            plugin = plugin_map.get(node)
+            if plugin:
+                for dep in plugin.dependencies:
+                    if dep in plugin_names and in_degree.get(dep, 0) > 0:
+                        result = dfs(dep)
+                        if result:
+                            return result
+
+            path.pop()
+            return None
+
+        cycle = dfs(start)
+        return cycle if cycle else [start, "...", start]
 
 
 def get_registry() -> PluginRegistry:
