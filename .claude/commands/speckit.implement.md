@@ -363,7 +363,58 @@ console.log()
 
 **Constitutional requirements**: See [linear-workflow.md#best-practices](../../../docs/guides/linear-workflow.md#best-practices) and `.specify/memory/constitution.md`
 
-### Step 6: Verify & Close Task
+### Step 6: Validate Implementation
+
+**⚠️ MANDATORY: Validate before closing. All validation checks must pass.**
+
+After implementing, verify the work is correct and meets quality standards. The specific validation steps depend on what was implemented - use judgment to determine appropriate checks.
+
+**Validation goals**:
+1. **Code compiles/imports**: The code must be syntactically correct and importable
+2. **Type safety**: Type hints present and type checker passes (if applicable)
+3. **Linting**: Code style and quality checks pass
+4. **Tests pass**: Any tests covering the implementation must pass
+5. **Integration verified**: New code works with existing code
+
+**Example validation patterns** (adapt based on task):
+
+```bash
+# Python package work
+uv run mypy --strict src/           # Type checking
+uv run ruff check src/              # Linting
+uv run python -c "from package import NewThing"  # Import verification
+uv run pytest tests/unit/test_new_thing.py       # Relevant tests
+uv build                            # Package builds successfully
+
+# Helm/K8s work
+helm lint charts/my-chart/
+helm template charts/my-chart/ | kubectl apply --dry-run=client -f -
+
+# General
+# Build the artifact (wheel, container, etc.)
+# Verify integration with dependent code
+```
+
+**Validation is flexible**: You don't need to run ALL tests in the repo - focus on validating what was changed. Use the project's tooling and standards.
+
+**If validation fails**: Fix issues before proceeding. Do NOT close tasks with failing validation.
+
+```javascript
+console.log(`🔍 Validating implementation...`)
+
+// Run appropriate validation for the task
+// ... validation commands based on what was implemented ...
+
+if (validationFailed) {
+  console.log(`❌ Validation failed - fix issues before closing`)
+  // Show specific failures
+  exit(1)
+}
+
+console.log(`✅ Validation passed`)
+```
+
+### Step 7: Confirm & Close Task
 
 **Ask user if task is complete**:
 
@@ -429,7 +480,7 @@ function buildClosureComment(task, summary, commit) {
 
 **Why this matters**: Linear is the source of truth for the team. Comments preserve closure context for team members reviewing progress.
 
-### Step 7: Commit Changes
+### Step 8: Commit Changes
 
 **Generate commit message with Linear identifier**:
 
@@ -472,7 +523,7 @@ echo ""
 
 **Pre-commit hooks enforce constitution**: Tests before code, SOLID, atomic commits, no skips.
 
-### Step 8: Auto-Continue
+### Step 9: Auto-Continue
 
 **Check for more ready tasks**:
 
