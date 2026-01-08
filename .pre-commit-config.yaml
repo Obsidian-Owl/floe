@@ -1,0 +1,88 @@
+# Pre-commit hooks for floe
+# Install: uv run pre-commit install && uv run pre-commit install --hook-type pre-push
+# Run all: uv run pre-commit run --all-files
+# See .github/README.md for CI strategy documentation
+
+default_language_version:
+  python: python3.10
+
+repos:
+  # ==========================================================
+  # Pre-commit hooks (fast, run on every commit)
+  # ==========================================================
+
+  # Ruff: Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      # Linting (fast)
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+
+      # Formatting (fast)
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Trailing whitespace
+      - id: trailing-whitespace
+        exclude: ^\.beads/
+
+      # End of file newline
+      - id: end-of-file-fixer
+        exclude: ^\.beads/
+
+      # YAML syntax
+      - id: check-yaml
+        args: [--unsafe]  # Allow custom tags
+
+      # Large files
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+      # Merge conflict markers
+      - id: check-merge-conflict
+
+      # Debug statements
+      - id: debug-statements
+
+      # Case conflicts (important for cross-platform)
+      - id: check-case-conflict
+
+  # Security scanning
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.2
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^(tests/|packages/.*/tests/)
+
+  # ==========================================================
+  # Pre-push hooks (slower, run before push)
+  # Uses local hooks to match CI exactly (reads pyproject.toml)
+  # ==========================================================
+
+  - repo: local
+    hooks:
+      # Type checking with mypy (matches CI)
+      - id: mypy-strict
+        name: mypy (strict)
+        entry: uv run mypy --strict packages/
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
+      # Unit tests (fast subset)
+      - id: pytest-unit
+        name: pytest (unit tests)
+        entry: uv run pytest packages/floe-core/tests/unit/ -v --tb=short -x
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false

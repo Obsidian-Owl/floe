@@ -54,20 +54,26 @@ make check
 
 ```
 packages/floe-<name>/
-├── src/floe_<name>/          # Source code
+├── src/floe_<name>/          # Source code (src-layout)
 ├── tests/                    # NO __init__.py (namespace package)
 │   ├── conftest.py           # Package fixtures
 │   ├── unit/                 # Fast, isolated (host)
 │   │   ├── conftest.py
-│   │   └── test_*.py
-│   ├── contract/             # Interface stability (host)
 │   │   └── test_*.py
 │   ├── integration/          # Real services (K8s)
 │   │   ├── conftest.py
 │   │   └── test_*.py
 │   └── e2e/                  # Full workflows (K8s)
 │       └── test_*.py
-└── pyproject.toml
+└── pyproject.toml            # Must configure pythonpath
+```
+
+**Required pytest config** in `pyproject.toml` for src-layout packages:
+
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]          # Required for pytest to find src/floe_<name>
 ```
 
 ### Root-Level Tests (Cross-Package)

@@ -1,0 +1,29 @@
+{
+  "include": [
+    "packages/*/src",
+    "packages/*/tests",
+    "plugins/*/src",
+    "plugins/*/tests",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules",
+    "**/.venv",
+    "**/build",
+    "**/dist"
+  ],
+  "extraPaths": [
+    "packages/floe-core/src",
+    "testing"
+  ],
+  "pythonVersion": "3.10",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "strict",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportUnusedImport": true,
+  "reportUnusedVariable": true,
+  "reportUnnecessaryTypeIgnoreComment": true,
+  "reportPrivateUsage": false
+}

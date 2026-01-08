@@ -31,7 +31,42 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+**Principle I: Technology Ownership**
+- [ ] Code is placed in correct package (floe-core, floe-dbt, plugins/, etc.)
+- [ ] No SQL parsing/validation in Python (dbt owns SQL)
+- [ ] No orchestration logic outside floe-dagster
+
+**Principle II: Plugin-First Architecture**
+- [ ] New configurable component uses plugin interface (ABC)
+- [ ] Plugin registered via entry point (not direct import)
+- [ ] PluginMetadata declares name, version, floe_api_version
+
+**Principle III: Enforced vs Pluggable**
+- [ ] Enforced standards preserved (Iceberg, OTel, OpenLineage, dbt, K8s)
+- [ ] Pluggable choices documented in manifest.yaml
+
+**Principle IV: Contract-Driven Integration**
+- [ ] Cross-package data uses CompiledArtifacts (not direct coupling)
+- [ ] Pydantic v2 models for all schemas
+- [ ] Contract changes follow versioning rules
+
+**Principle V: K8s-Native Testing**
+- [ ] Integration tests run in Kind cluster
+- [ ] No `pytest.skip()` usage
+- [ ] `@pytest.mark.requirement()` on all integration tests
+
+**Principle VI: Security First**
+- [ ] Input validation via Pydantic
+- [ ] Credentials use SecretStr
+- [ ] No shell=True, no dynamic code execution on untrusted data
+
+**Principle VII: Four-Layer Architecture**
+- [ ] Configuration flows downward only
+- [ ] Layer ownership respected (Data Team vs Platform Team)
+
+**Principle VIII: Observability By Default**
+- [ ] OpenTelemetry traces emitted
+- [ ] OpenLineage events for data transformations
 
 ## Project Structure
 
