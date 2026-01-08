@@ -2025,3 +2025,680 @@ class TestPluginRegistryHealthChecks:
         assert len(results) == 1
         assert "COMPUTE:loaded" in results
         assert "CATALOG:discovered-only" not in results
+
+
+# =============================================================================
+# T056: Unit tests for dependency resolution
+# =============================================================================
+
+
+class TestPluginRegistryDependencyResolution:
+    """Tests for resolve_dependencies() and activate_all() methods (T056).
+
+    Tests Kahn's algorithm implementation for topological sorting of
+    plugins based on their declared dependencies.
+    """
+
+    @pytest.mark.requirement("FR-015")
+    def test_resolve_dependencies_empty_list(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() returns empty list for empty input."""
+        registry = PluginRegistry()
+
+        result = registry.resolve_dependencies([])
+
+        assert result == []
+
+    @pytest.mark.requirement("FR-015")
+    def test_resolve_dependencies_single_plugin_no_deps(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() handles single plugin with no dependencies."""
+
+        class SinglePlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "single"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+        registry = PluginRegistry()
+        plugin = SinglePlugin()
+
+        result = registry.resolve_dependencies([plugin])
+
+        assert len(result) == 1
+        assert result[0] is plugin
+
+    @pytest.mark.requirement("FR-015")
+    def test_resolve_dependencies_multiple_independent_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() handles multiple plugins without dependencies."""
+
+        class PluginA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+        class PluginB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+        registry = PluginRegistry()
+        plugins = [PluginA(), PluginB()]
+
+        result = registry.resolve_dependencies(plugins)
+
+        assert len(result) == 2
+        # Both should be returned (order doesn't matter for independent plugins)
+        names = [p.name for p in result]
+        assert "plugin-a" in names
+        assert "plugin-b" in names
+
+    @pytest.mark.requirement("FR-015")
+    def test_resolve_dependencies_simple_chain(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() handles A -> B -> C chain correctly."""
+
+        class PluginC(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-c"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+        class PluginB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-c"]
+
+        class PluginA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-b"]
+
+        registry = PluginRegistry()
+        # Provide in wrong order to test sorting
+        plugins = [PluginA(), PluginB(), PluginC()]
+
+        result = registry.resolve_dependencies(plugins)
+
+        assert len(result) == 3
+        names = [p.name for p in result]
+        # C must come before B, B must come before A
+        assert names.index("plugin-c") < names.index("plugin-b")
+        assert names.index("plugin-b") < names.index("plugin-a")
+
+    @pytest.mark.requirement("FR-015")
+    def test_resolve_dependencies_diamond_pattern(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() handles diamond dependency pattern.
+
+        Diamond: A depends on B and C, both B and C depend on D.
+        Expected order: D, then B and C (in any order), then A.
+        """
+
+        class PluginD(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-d"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+        class PluginC(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-c"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-d"]
+
+        class PluginB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-d"]
+
+        class PluginA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-b", "plugin-c"]
+
+        registry = PluginRegistry()
+        plugins = [PluginA(), PluginB(), PluginC(), PluginD()]
+
+        result = registry.resolve_dependencies(plugins)
+
+        assert len(result) == 4
+        names = [p.name for p in result]
+        # D must be first
+        assert names[0] == "plugin-d"
+        # A must be last
+        assert names[3] == "plugin-a"
+        # B and C must be between D and A
+        assert names.index("plugin-b") < names.index("plugin-a")
+        assert names.index("plugin-c") < names.index("plugin-a")
+
+    @pytest.mark.requirement("SC-008")
+    def test_resolve_dependencies_raises_on_missing_dependency(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() raises MissingDependencyError."""
+        from floe_core.plugin_errors import MissingDependencyError
+
+        class DependentPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "dependent"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["missing-plugin"]
+
+        registry = PluginRegistry()
+
+        with pytest.raises(MissingDependencyError) as exc_info:
+            registry.resolve_dependencies([DependentPlugin()])
+
+        assert exc_info.value.plugin_name == "dependent"
+        assert "missing-plugin" in exc_info.value.missing_dependencies
+
+    @pytest.mark.requirement("FR-015")
+    def test_activate_all_uses_dependency_order(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_all() activates plugins in dependency order."""
+        activation_order: list[str] = []
+
+        class BasePlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "base"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            def startup(self) -> None:
+                activation_order.append("base")
+
+        class DependentPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "dependent"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["base"]
+
+            def startup(self) -> None:
+                activation_order.append("dependent")
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, BasePlugin())
+        registry.register(PluginType.CATALOG, DependentPlugin())
+
+        # Activate all - should use dependency order
+        registry.activate_all()
+
+        # Base should be activated before dependent
+        assert activation_order.index("base") < activation_order.index("dependent")
+
+
+# =============================================================================
+# T057: Unit tests for circular dependency detection
+# =============================================================================
+
+
+class TestPluginRegistryCircularDependencyDetection:
+    """Tests for circular dependency detection in resolve_dependencies() (T057).
+
+    Tests that the Kahn's algorithm implementation properly detects and
+    reports circular dependencies in the plugin dependency graph.
+    """
+
+    @pytest.mark.requirement("FR-016")
+    def test_circular_dependency_self_reference(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() detects self-referencing dependency."""
+        from floe_core.plugin_errors import CircularDependencyError
+
+        class SelfRefPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "self-ref"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["self-ref"]  # Depends on itself
+
+        registry = PluginRegistry()
+
+        with pytest.raises(CircularDependencyError) as exc_info:
+            registry.resolve_dependencies([SelfRefPlugin()])
+
+        assert "self-ref" in exc_info.value.cycle
+
+    @pytest.mark.requirement("FR-016")
+    def test_circular_dependency_two_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() detects A -> B -> A cycle."""
+        from floe_core.plugin_errors import CircularDependencyError
+
+        class PluginA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-b"]
+
+        class PluginB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-a"]
+
+        registry = PluginRegistry()
+
+        with pytest.raises(CircularDependencyError) as exc_info:
+            registry.resolve_dependencies([PluginA(), PluginB()])
+
+        # Cycle should contain both plugins
+        cycle = exc_info.value.cycle
+        assert "plugin-a" in cycle
+        assert "plugin-b" in cycle
+
+    @pytest.mark.requirement("FR-016")
+    def test_circular_dependency_three_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test resolve_dependencies() detects A -> B -> C -> A cycle."""
+        from floe_core.plugin_errors import CircularDependencyError
+
+        class PluginA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-b"]
+
+        class PluginB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-c"]
+
+        class PluginC(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin-c"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["plugin-a"]
+
+        registry = PluginRegistry()
+
+        with pytest.raises(CircularDependencyError) as exc_info:
+            registry.resolve_dependencies([PluginA(), PluginB(), PluginC()])
+
+        # Cycle should contain all three plugins
+        cycle = exc_info.value.cycle
+        assert "plugin-a" in cycle
+        assert "plugin-b" in cycle
+        assert "plugin-c" in cycle
+
+    @pytest.mark.requirement("FR-016")
+    def test_circular_dependency_error_message_format(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test CircularDependencyError has informative message format."""
+        from floe_core.plugin_errors import CircularDependencyError
+
+        class CycleA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "cycle-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["cycle-b"]
+
+        class CycleB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "cycle-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["cycle-a"]
+
+        registry = PluginRegistry()
+
+        with pytest.raises(CircularDependencyError) as exc_info:
+            registry.resolve_dependencies([CycleA(), CycleB()])
+
+        # Error message should show the cycle with arrows
+        error_msg = str(exc_info.value)
+        assert "Circular dependency" in error_msg
+        assert " -> " in error_msg
+
+    @pytest.mark.requirement("FR-016")
+    def test_activate_all_raises_on_circular_dependency(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test activate_all() raises CircularDependencyError."""
+        from floe_core.plugin_errors import CircularDependencyError
+
+        class MutualA(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "mutual-a"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["mutual-b"]
+
+        class MutualB(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "mutual-b"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["mutual-a"]
+
+        registry = PluginRegistry()
+        registry.register(PluginType.COMPUTE, MutualA())
+        registry.register(PluginType.CATALOG, MutualB())
+
+        with pytest.raises(CircularDependencyError):
+            registry.activate_all()
+
+    @pytest.mark.requirement("SC-008")
+    def test_partial_cycle_with_independent_plugins(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test circular detection when only some plugins form a cycle."""
+        from floe_core.plugin_errors import CircularDependencyError
+
+        class IndependentPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "independent"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+        class CycleX(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "cycle-x"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["cycle-y"]
+
+        class CycleY(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "cycle-y"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "0.1"
+
+            @property
+            def dependencies(self) -> list[str]:
+                return ["cycle-x"]
+
+        registry = PluginRegistry()
+        # Mix independent plugin with cycle
+        plugins = [IndependentPlugin(), CycleX(), CycleY()]
+
+        with pytest.raises(CircularDependencyError) as exc_info:
+            registry.resolve_dependencies(plugins)
+
+        # Cycle should only contain the cyclic plugins
+        cycle = exc_info.value.cycle
+        assert "cycle-x" in cycle
+        assert "cycle-y" in cycle
+        # Independent plugin should not be in cycle
+        # (independent may or may not be in cycle list depending on implementation)
