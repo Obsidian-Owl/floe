@@ -36,7 +36,7 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 2. **Find Ready Tasks**
    - Load `$FEATURE_DIR/.linear-mapping.json` for task-to-Linear mappings
    - For each task in mapping, query Linear via `mcp__plugin_linear_linear__get_issue` for current status
-   - Build ready list: issues with status type `unstarted` or `backlog` (not `started`, `completed`, `canceled`)
+   - Build ready list: issues with status type`backlog`
    - Display ready tasks with: number, Task ID, Linear identifier, title
 
 3. **Task Selection**
@@ -50,10 +50,9 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 
 4. **Claim Task**
    - Query team statuses via `mcp__plugin_linear_linear__list_issue_statuses` (team: "floe")
-   - Find status with type `started` (usually "In Progress")
-   - Update Linear via `mcp__plugin_linear_linear__update_issue`:
+   - You MUST update Linear via `mcp__plugin_linear_linear__update_issue`:
      - `id`: Linear issue ID
-     - `state`: the "In Progress" status name
+     - `state`: "In Progress"
      - `assignee`: "me"
    - Display confirmation with Linear URL
 
@@ -80,7 +79,7 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 8. **Close Task**
    - Ask user confirmation via AskUserQuestion tool
    - Query statuses again, find status with type `completed` (usually "Done")
-   - Update Linear status via `mcp__plugin_linear_linear__update_issue`
+   - You MUST update Linear status via `mcp__plugin_linear_linear__update_issue`
    - **MANDATORY**: Create Linear comment via `mcp__plugin_linear_linear__create_comment`:
      ```
      **Completed**: {TaskID}
