@@ -652,6 +652,114 @@ class PluginRegistry:
             name=name,
         )
 
+    def activate_all(
+        self,
+        plugins: builtins.list[PluginMetadata] | None = None,
+        plugin_types: builtins.list[PluginType] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Exception | None]:
+        """Activate multiple plugins in dependency order.
+
+        Resolves dependencies between plugins and activates them in the
+        correct order (dependencies before dependents). This ensures plugins
+        can rely on their dependencies being available during startup.
+
+        Args:
+            plugins: Explicit list of plugins to activate. If not provided,
+                activates all loaded plugins or those matching plugin_types.
+            plugin_types: If plugins not provided, activate all plugins of
+                these types. If None, activates all loaded plugins.
+            timeout: Per-plugin timeout in seconds (default: 30s per SC-006).
+
+        Returns:
+            Dict mapping "type:name" to exception (or None if success).
+
+        Raises:
+            CircularDependencyError: If circular dependencies detected.
+            MissingDependencyError: If plugin has missing dependencies.
+
+        Example:
+            >>> registry = get_registry()
+            >>> # Activate all loaded plugins in dependency order
+            >>> results = registry.activate_all()
+            >>> # Activate specific plugin types
+            >>> results = registry.activate_all(
+            ...     plugin_types=[PluginType.COMPUTE, PluginType.CATALOG]
+            ... )
+        """
+        if timeout is None:
+            timeout = DEFAULT_LIFECYCLE_TIMEOUT
+
+        results: dict[str, Exception | None] = {}
+
+        # Determine which plugins to activate
+        if plugins is not None:
+            plugins_to_activate = plugins
+        elif plugin_types is not None:
+            # Load all plugins of specified types
+            plugins_to_activate = []
+            for pt in plugin_types:
+                plugins_to_activate.extend(self.list(pt))
+        else:
+            # Activate all loaded plugins
+            plugins_to_activate = list(self._loaded.values())
+
+        if not plugins_to_activate:
+            logger.debug("activate_all.no_plugins")
+            return results
+
+        logger.info(
+            "activate_all.starting",
+            plugin_count=len(plugins_to_activate),
+            timeout_per_plugin=timeout,
+        )
+
+        # Resolve dependencies to get correct activation order
+        # This may raise CircularDependencyError or MissingDependencyError
+        sorted_plugins = self.resolve_dependencies(plugins_to_activate)
+
+        # Build reverse lookup: plugin name -> plugin type
+        # This is needed because PluginMetadata doesn't store its type
+        plugin_type_lookup: dict[str, PluginType] = {}
+        for (pt, pname), plugin in self._loaded.items():
+            plugin_type_lookup[pname] = pt
+
+        # Activate in dependency order
+        for plugin in sorted_plugins:
+            plugin_type = plugin_type_lookup.get(plugin.name)
+            if plugin_type is None:
+                logger.warning(
+                    "activate_all.plugin_type_unknown",
+                    name=plugin.name,
+                )
+                continue
+
+            key_str = f"{plugin_type.name}:{plugin.name}"
+
+            try:
+                self.activate_plugin(plugin_type, plugin.name, timeout)
+                results[key_str] = None
+            except Exception as e:
+                results[key_str] = e
+                logger.error(
+                    "activate_all.plugin_failed",
+                    plugin_type=plugin_type.name,
+                    name=plugin.name,
+                    error=str(e),
+                )
+                # Continue with other plugins (graceful degradation)
+
+        # Log summary
+        failed_count = sum(1 for v in results.values() if v is not None)
+        logger.info(
+            "activate_all.completed",
+            total=len(results),
+            succeeded=len(results) - failed_count,
+            failed=failed_count,
+        )
+
+        return results
+
     def shutdown_all(self, timeout: float | None = None) -> dict[str, Exception | None]:
         """Shutdown all activated plugins.
 
