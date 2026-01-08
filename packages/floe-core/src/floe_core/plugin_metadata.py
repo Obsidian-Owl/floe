@@ -70,7 +70,7 @@ class HealthStatus:
 
     state: HealthState
     message: str = ""
-    details: dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=lambda: {})
 
 
 class PluginMetadata(ABC):
