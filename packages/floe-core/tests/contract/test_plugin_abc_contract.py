@@ -1,7 +1,8 @@
-"""Contract tests for PluginMetadata ABC stability.
+"""Contract tests for PluginMetadata ABC and PluginType enum stability.
 
-These tests ensure the PluginMetadata ABC interface remains stable across versions.
-Breaking changes to abstract methods or required properties should fail these tests.
+These tests ensure the plugin system interfaces remain stable across versions.
+Breaking changes to abstract methods, required properties, or enum values
+should fail these tests.
 
 Contract tests prevent accidental breaking changes to:
 - Abstract properties (name, version, floe_api_version)
@@ -9,9 +10,11 @@ Contract tests prevent accidental breaking changes to:
 - Lifecycle methods (startup, shutdown, health_check)
 - Configuration method (get_config_schema)
 - Supporting classes (HealthState, HealthStatus)
+- PluginType enum values and entry point groups
 
 Requirements Covered:
 - FR-001: Plugin metadata schema stability
+- FR-002: PluginType enum stability
 - SC-001: Contract stability for plugin implementations
 """
 
@@ -28,6 +31,7 @@ from floe_core.plugin_metadata import (
     HealthStatus,
     PluginMetadata,
 )
+from floe_core.plugin_types import PluginType
 
 
 class TestHealthStateContract:
@@ -283,3 +287,126 @@ class TestPluginMetadataImplementation:
 
         with pytest.raises(TypeError, match="abstract"):
             IncompletePlugin()  # type: ignore[abstract]
+
+
+class TestPluginTypeContract:
+    """Contract tests for PluginType enum stability.
+
+    PluginType defines the 11 plugin categories and their entry point groups.
+    Changes to this enum affect all plugin discovery and registration.
+    """
+
+    @pytest.mark.requirement("FR-002")
+    def test_plugin_type_has_all_11_categories(self) -> None:
+        """Verify PluginType has all 11 required categories.
+
+        The floe platform MUST support exactly these 11 plugin types.
+        Adding new types is allowed, but removing any breaks existing plugins.
+        """
+        required_types = {
+            "COMPUTE",
+            "ORCHESTRATOR",
+            "CATALOG",
+            "STORAGE",
+            "TELEMETRY_BACKEND",
+            "LINEAGE_BACKEND",
+            "DBT",
+            "SEMANTIC_LAYER",
+            "INGESTION",
+            "SECRETS",
+            "IDENTITY",
+        }
+        actual_types = {member.name for member in PluginType}
+
+        assert required_types.issubset(actual_types), (
+            f"PluginType missing required types: {required_types - actual_types}"
+        )
+
+    @pytest.mark.requirement("FR-002")
+    def test_plugin_type_entry_point_groups_are_stable(self) -> None:
+        """Verify entry point group names are stable.
+
+        Entry point groups are used in pyproject.toml and must not change.
+        Changing these would break all existing plugin packages.
+        """
+        expected_groups = {
+            "COMPUTE": "floe.computes",
+            "ORCHESTRATOR": "floe.orchestrators",
+            "CATALOG": "floe.catalogs",
+            "STORAGE": "floe.storage",
+            "TELEMETRY_BACKEND": "floe.telemetry_backends",
+            "LINEAGE_BACKEND": "floe.lineage_backends",
+            "DBT": "floe.dbt",
+            "SEMANTIC_LAYER": "floe.semantic_layers",
+            "INGESTION": "floe.ingestion",
+            "SECRETS": "floe.secrets",
+            "IDENTITY": "floe.identity",
+        }
+
+        for type_name, expected_group in expected_groups.items():
+            plugin_type = PluginType[type_name]
+            assert plugin_type.value == expected_group, (
+                f"{type_name} entry point group changed from "
+                f"'{expected_group}' to '{plugin_type.value}'"
+            )
+
+    @pytest.mark.requirement("FR-002")
+    def test_plugin_type_has_entry_point_group_property(self) -> None:
+        """Verify entry_point_group property exists and returns value.
+
+        The entry_point_group property is the standard way to get the
+        entry point group name for plugin discovery.
+        """
+        for plugin_type in PluginType:
+            assert hasattr(plugin_type, "entry_point_group")
+            assert plugin_type.entry_point_group == plugin_type.value
+
+    @pytest.mark.requirement("FR-002")
+    def test_plugin_type_has_all_entry_point_groups_method(self) -> None:
+        """Verify all_entry_point_groups class method exists.
+
+        This method is used to get all valid entry point groups at once.
+        """
+        assert hasattr(PluginType, "all_entry_point_groups")
+        groups = PluginType.all_entry_point_groups()
+
+        # Should return a list
+        assert isinstance(groups, list)
+
+        # Should have 11 groups (one per type)
+        assert len(groups) >= 11
+
+        # All should be strings
+        assert all(isinstance(g, str) for g in groups)
+
+        # All should start with 'floe.'
+        assert all(g.startswith("floe.") for g in groups)
+
+    @pytest.mark.requirement("FR-002")
+    def test_plugin_type_from_entry_point_group_method(self) -> None:
+        """Verify from_entry_point_group class method works.
+
+        This method is used to convert entry point group names back to
+        PluginType enum values during plugin discovery.
+        """
+        assert hasattr(PluginType, "from_entry_point_group")
+
+        # Test roundtrip for all types
+        for plugin_type in PluginType:
+            group = plugin_type.entry_point_group
+            recovered = PluginType.from_entry_point_group(group)
+            assert recovered is plugin_type
+
+    @pytest.mark.requirement("FR-002")
+    def test_plugin_type_from_entry_point_group_invalid(self) -> None:
+        """Verify from_entry_point_group raises ValueError for invalid groups.
+
+        Invalid entry point groups should raise ValueError with a helpful
+        message listing valid options.
+        """
+        with pytest.raises(ValueError, match="Unknown entry point group"):
+            PluginType.from_entry_point_group("invalid.group")
+
+        with pytest.raises(ValueError, match="floe.computes"):
+            # Error message should list valid groups
+            PluginType.from_entry_point_group("not.a.real.group")
