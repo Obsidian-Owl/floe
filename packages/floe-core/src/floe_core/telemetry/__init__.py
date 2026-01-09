@@ -83,6 +83,9 @@ from floe_core.telemetry.propagation import (
     set_floe_baggage,
 )
 
+# Tracing utilities
+from floe_core.telemetry.tracing import get_tracer, set_tracer, traced
+
 __all__: list[str] = [
     # Configuration models
     "TelemetryConfig",
@@ -123,4 +126,8 @@ __all__: list[str] = [
     "BAGGAGE_PRODUCT_NAME",
     "BAGGAGE_PRODUCT_VERSION",
     "BAGGAGE_MODE",
+    # Tracing
+    "traced",
+    "get_tracer",
+    "set_tracer",
 ]

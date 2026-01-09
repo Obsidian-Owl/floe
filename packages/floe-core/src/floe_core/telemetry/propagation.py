@@ -99,9 +99,9 @@ def inject_context(
     """
     propagator = get_global_textmap()
     if ctx is not None:
-        propagator.inject(carrier, context=ctx)  # type: ignore[arg-type]
+        propagator.inject(carrier, context=ctx)
     else:
-        propagator.inject(carrier)  # type: ignore[arg-type]
+        propagator.inject(carrier)
     return carrier
 
 
