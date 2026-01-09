@@ -14,7 +14,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 # Validation patterns
 NAME_PATTERN = r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$"
 """Pattern for manifest names: lowercase alphanumeric with hyphens, 1-63 chars."""

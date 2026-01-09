@@ -177,7 +177,9 @@ class TestPlatformManifestMissingFields:
                 },
                 plugins={},
             )
-        assert "api_version" in str(exc_info.value)
+        # Error message uses alias (apiVersion) - case-insensitive check
+        error_str = str(exc_info.value).lower()
+        assert "apiversion" in error_str or "api_version" in error_str
 
     @pytest.mark.requirement("001-FR-002")
     @pytest.mark.requirement("001-FR-013")
@@ -249,7 +251,9 @@ class TestPlatformManifestInvalidValues:
                 },
                 plugins={},
             )
-        assert "api_version" in str(exc_info.value)
+        # Error message uses alias (apiVersion) - case-insensitive check
+        error_str = str(exc_info.value).lower()
+        assert "apiversion" in error_str or "api_version" in error_str
 
     @pytest.mark.requirement("001-FR-002")
     def test_invalid_kind(self) -> None:
@@ -367,11 +371,17 @@ class TestPlatformManifestInvalidValues:
 
 
 class TestPlatformManifestForwardCompatibility:
-    """Tests for unknown field warning (T014)."""
+    """Tests for unknown field warning (T014).
 
-    @pytest.mark.requirement("001-FR-001")
+    Implements FR-012: Forward Compatibility (unknown fields warning).
+    """
+
+    @pytest.mark.requirement("001-FR-012")
     def test_unknown_field_allowed(self) -> None:
-        """Test that unknown fields are allowed (forward compatibility)."""
+        """Test that unknown fields are allowed (forward compatibility).
+
+        FR-012: System MUST issue warnings (not errors) for unknown fields.
+        """
         from floe_core.schemas.manifest import PlatformManifest
 
         # Should not raise an error
@@ -389,9 +399,9 @@ class TestPlatformManifestForwardCompatibility:
         # Unknown fields should be accessible via model_extra
         assert hasattr(manifest, "model_extra")
 
-    @pytest.mark.requirement("001-FR-001")
+    @pytest.mark.requirement("001-FR-012")
     def test_unknown_field_warning(self) -> None:
-        """Test that unknown fields emit a warning."""
+        """Test that unknown fields emit a warning (FR-012)."""
         from floe_core.schemas.manifest import PlatformManifest
 
         with warnings.catch_warnings(record=True) as w:

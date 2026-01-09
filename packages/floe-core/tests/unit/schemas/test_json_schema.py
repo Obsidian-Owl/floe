@@ -76,9 +76,9 @@ class TestJsonSchemaExport:
     def test_export_json_schema_includes_required_fields(self) -> None:
         """Test that exported schema includes required fields list.
 
-        Given the PlatformManifest model has required fields (api_version, kind, metadata, plugins),
+        Given the PlatformManifest model has required fields (apiVersion, kind, metadata, plugins),
         When exporting JSON Schema,
-        Then the 'required' array includes these fields.
+        Then the 'required' array includes these fields (using alias names).
         """
         from floe_core.schemas.json_schema import export_json_schema
 
@@ -86,7 +86,8 @@ class TestJsonSchemaExport:
 
         assert "required" in schema
         required = schema["required"]
-        assert "api_version" in required
+        # Note: JSON Schema uses alias (apiVersion) not field name (api_version)
+        assert "apiVersion" in required
         assert "kind" in required
         assert "metadata" in required
         assert "plugins" in required
@@ -101,8 +102,8 @@ class TestJsonSchemaExport:
         assert "properties" in schema
         props = schema["properties"]
 
-        # Core fields
-        assert "api_version" in props
+        # Core fields (Note: api_version uses alias apiVersion in JSON Schema)
+        assert "apiVersion" in props
         assert "kind" in props
         assert "metadata" in props
         assert "plugins" in props
@@ -114,11 +115,12 @@ class TestJsonSchemaExport:
 
     @pytest.mark.requirement("001-FR-009")
     def test_export_json_schema_api_version_enum(self) -> None:
-        """Test that api_version field has enum constraint."""
+        """Test that apiVersion field has enum constraint."""
         from floe_core.schemas.json_schema import export_json_schema
 
         schema = export_json_schema()
-        api_version = schema["properties"]["api_version"]
+        # Note: JSON Schema uses alias (apiVersion)
+        api_version = schema["properties"]["apiVersion"]
 
         # Should have const or enum for "floe.dev/v1"
         assert "const" in api_version or "enum" in api_version
@@ -205,8 +207,9 @@ class TestJsonSchemaIdeCompatibility:
 
         schema = export_json_schema()
 
+        # Note: JSON Schema expects apiVersion (alias) not api_version
         valid_manifest: dict[str, Any] = {
-            "api_version": "floe.dev/v1",
+            "apiVersion": "floe.dev/v1",
             "kind": "Manifest",
             "metadata": {
                 "name": "test-platform",
@@ -223,7 +226,7 @@ class TestJsonSchemaIdeCompatibility:
 
     @pytest.mark.requirement("001-FR-009")
     def test_schema_rejects_invalid_api_version(self) -> None:
-        """Test that schema rejects invalid api_version."""
+        """Test that schema rejects invalid apiVersion."""
         from floe_core.schemas.json_schema import (
             JsonSchemaValidationError,
             export_json_schema,
@@ -232,8 +235,9 @@ class TestJsonSchemaIdeCompatibility:
 
         schema = export_json_schema()
 
+        # Note: JSON Schema expects apiVersion (alias)
         invalid_manifest: dict[str, Any] = {
-            "api_version": "invalid/v99",  # Invalid
+            "apiVersion": "invalid/v99",  # Invalid
             "kind": "Manifest",
             "metadata": {
                 "name": "test",
@@ -246,7 +250,9 @@ class TestJsonSchemaIdeCompatibility:
         with pytest.raises(JsonSchemaValidationError) as exc_info:
             validate_against_schema(invalid_manifest, schema)
 
-        assert "api_version" in str(exc_info.value).lower()
+        # Error should reference apiVersion
+        error_str = str(exc_info.value).lower()
+        assert "apiversion" in error_str or "api_version" in error_str
 
     @pytest.mark.requirement("001-FR-009")
     def test_schema_rejects_missing_required_field(self) -> None:
@@ -259,9 +265,9 @@ class TestJsonSchemaIdeCompatibility:
 
         schema = export_json_schema()
 
-        # Missing 'metadata' field
+        # Missing 'metadata' field (Note: JSON Schema expects apiVersion)
         invalid_manifest: dict[str, Any] = {
-            "api_version": "floe.dev/v1",
+            "apiVersion": "floe.dev/v1",
             "kind": "Manifest",
             "plugins": {},
         }
@@ -269,7 +275,8 @@ class TestJsonSchemaIdeCompatibility:
         with pytest.raises(JsonSchemaValidationError) as exc_info:
             validate_against_schema(invalid_manifest, schema)
 
-        assert "metadata" in str(exc_info.value).lower() or "required" in str(exc_info.value).lower()
+        error_msg = str(exc_info.value).lower()
+        assert "metadata" in error_msg or "required" in error_msg
 
     @pytest.mark.requirement("001-FR-009")
     def test_schema_field_descriptions_present(self) -> None:
@@ -279,9 +286,9 @@ class TestJsonSchemaIdeCompatibility:
         schema = export_json_schema()
         props = schema["properties"]
 
-        # Key fields should have descriptions
-        for field_name in ["api_version", "kind", "metadata", "plugins", "scope"]:
-            assert field_name in props
+        # Key fields should have descriptions (Note: api_version uses alias apiVersion)
+        for field_name in ["apiVersion", "kind", "metadata", "plugins", "scope"]:
+            assert field_name in props, f"Field {field_name} not found in properties"
             field_def = props[field_name]
             # Description might be in the field or in a $ref target
             has_description = "description" in field_def

@@ -1,4 +1,4 @@
-"""floe-core: Core plugin registry and interfaces for the floe data platform.
+"""floe-core: Core plugin registry, schemas, and interfaces for the floe data platform.
 
 This package provides:
 - PluginRegistry: Singleton for discovering and managing plugins
@@ -6,6 +6,7 @@ This package provides:
 - PluginType: Enum defining the 11 plugin categories
 - Plugin ABCs: Type-specific interfaces (ComputePlugin, etc.)
 - Errors: Custom exceptions for plugin operations
+- Schemas: Pydantic models for manifest validation (floe_core.schemas)
 
 Example:
     >>> from floe_core import get_registry, PluginType
@@ -18,8 +19,12 @@ Example:
     ...     # Implement abstract methods
     ...     pass
 
+    >>> from floe_core.schemas import PlatformManifest
+    >>> manifest = PlatformManifest.model_validate(yaml_data)
+
 See Also:
     - floe_core.plugins: All plugin ABCs with supporting dataclasses
+    - floe_core.schemas: Manifest schema definitions
     - docs/architecture/plugin-system/: Full architecture documentation
 """
 
@@ -77,9 +82,14 @@ from floe_core.version_compat import (
     is_compatible,
 )
 
+# Schemas submodule (imported for explicit re-export)
+from floe_core import schemas as schemas  # noqa: PLC0414
+
 __all__: list[str] = [
     # Package version
     "__version__",
+    # Schemas submodule
+    "schemas",
     # Plugin type categories
     "PluginType",
     # Error hierarchy

@@ -90,8 +90,8 @@ POLICY_LEVEL_STRENGTH: dict[str, int] = {
 
 
 def validate_security_policy_not_weakened(
-    parent: "GovernanceConfig",
-    child: "GovernanceConfig",
+    parent: GovernanceConfig,
+    child: GovernanceConfig,
 ) -> None:
     """Validate that child does not weaken parent security policies.
 
@@ -143,10 +143,7 @@ def validate_security_policy_not_weakened(
             )
 
     # Check policy_enforcement_level
-    if (
-        parent.policy_enforcement_level is not None
-        and child.policy_enforcement_level is not None
-    ):
+    if parent.policy_enforcement_level is not None and child.policy_enforcement_level is not None:
         parent_strength = POLICY_LEVEL_STRENGTH.get(parent.policy_enforcement_level, 0)
         child_strength = POLICY_LEVEL_STRENGTH.get(child.policy_enforcement_level, 0)
         if child_strength < parent_strength:

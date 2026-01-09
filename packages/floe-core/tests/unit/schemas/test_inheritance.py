@@ -325,7 +325,7 @@ class TestListMerge:
         Then the parent's value is replaced entirely.
         """
         from floe_core.schemas import PlatformManifest
-        from floe_core.schemas.inheritance import MergeStrategy, merge_manifests
+        from floe_core.schemas.inheritance import merge_manifests
 
         parent = PlatformManifest(
             api_version="floe.dev/v1",

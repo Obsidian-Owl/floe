@@ -125,12 +125,10 @@ def validate_against_schema(
         >>> validate_against_schema(manifest, schema)  # OK or raises
     """
     try:
-        import jsonschema
-        from jsonschema import Draft202012Validator
+        from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
     except ImportError as e:
         raise ImportError(
-            "jsonschema package is required for validation. "
-            "Install with: pip install jsonschema"
+            "jsonschema package is required for validation. Install with: pip install jsonschema"
         ) from e
 
     # Create validator with the schema

@@ -19,7 +19,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from floe_core.schemas.secrets import SECRET_NAME_PATTERN
 
-
 # Known plugin types per category (built-in registry)
 # In production, this would be populated from entry points
 PLUGIN_REGISTRY: dict[str, list[str]] = {
@@ -144,16 +143,19 @@ class PluginSelection(BaseModel):
         default=None,
         description="Plugin-specific configuration options",
     )
-    connection_secret_ref: Annotated[
-        str,
-        Field(
-            min_length=1,
-            max_length=253,  # K8s Secret name limit
-            pattern=SECRET_NAME_PATTERN,
-            description="K8s Secret name for credentials (lowercase alphanumeric with hyphens)",
-            examples=["polaris-credentials", "snowflake-creds"],
-        ),
-    ] | None = None
+    connection_secret_ref: (
+        Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=253,  # K8s Secret name limit
+                pattern=SECRET_NAME_PATTERN,
+                description="K8s Secret name for credentials (lowercase alphanumeric with hyphens)",
+                examples=["polaris-credentials", "snowflake-creds"],
+            ),
+        ]
+        | None
+    ) = None
 
     @field_validator("type")
     @classmethod
@@ -304,8 +306,7 @@ def get_available_plugins(category: str) -> list[str]:
     if category not in PLUGIN_REGISTRY:
         valid_categories = ", ".join(sorted(PLUGIN_REGISTRY.keys()))
         raise ValueError(
-            f"Unknown plugin category '{category}'. "
-            f"Valid categories: [{valid_categories}]"
+            f"Unknown plugin category '{category}'. Valid categories: [{valid_categories}]"
         )
     return list(PLUGIN_REGISTRY[category])
 

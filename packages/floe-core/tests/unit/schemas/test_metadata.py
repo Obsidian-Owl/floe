@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from floe_core.schemas.metadata import ManifestMetadata, NAME_PATTERN, SEMVER_PATTERN
+from floe_core.schemas.metadata import NAME_PATTERN, SEMVER_PATTERN, ManifestMetadata
 
 
 class TestManifestMetadataValidation:

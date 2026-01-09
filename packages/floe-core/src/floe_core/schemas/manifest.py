@@ -6,6 +6,8 @@ governance configuration for platform manifests.
 Implements:
     - FR-001: Platform Configuration Definition
     - FR-011: Environment-Agnostic Configuration
+    - FR-012: Forward Compatibility (unknown fields warning)
+    - FR-013: Required Fields Enforcement
     - FR-015: Runtime Environment Resolution
     - FR-016: Manifest Immutability
     - FR-017: Governance Configuration
@@ -21,25 +23,26 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from floe_core.schemas.metadata import ManifestMetadata
 from floe_core.schemas.plugins import PluginsConfig
 
-
 # Manifest scope literals
 ManifestScope = Literal["enterprise", "domain"]
 """Valid scope values for 3-tier configuration mode."""
 
 # Environment-specific field names that are forbidden in manifests
 # Manifests are environment-agnostic; FLOE_ENV determines runtime behavior
-FORBIDDEN_ENVIRONMENT_FIELDS = frozenset({
-    "env_overrides",
-    "environments",
-    "environment",
-    "env",
-    "dev",
-    "staging",
-    "prod",
-    "production",
-    "target_env",
-    "floe_env",
-})
+FORBIDDEN_ENVIRONMENT_FIELDS = frozenset(
+    {
+        "env_overrides",
+        "environments",
+        "environment",
+        "env",
+        "dev",
+        "staging",
+        "prod",
+        "production",
+        "target_env",
+        "floe_env",
+    }
+)
 """Fields forbidden in manifests to enforce environment-agnostic design.
 
 Manifests MUST NOT contain environment-specific configuration.
@@ -166,10 +169,11 @@ class PlatformManifest(BaseModel):
     model_config = ConfigDict(
         frozen=True,
         extra="allow",  # Forward compatibility - allow unknown fields with warning
+        populate_by_name=True,  # Accept both alias (apiVersion) and field name (api_version)
         json_schema_extra={
             "examples": [
                 {
-                    "api_version": "floe.dev/v1",
+                    "apiVersion": "floe.dev/v1",
                     "kind": "Manifest",
                     "metadata": {
                         "name": "acme-platform",
@@ -186,6 +190,7 @@ class PlatformManifest(BaseModel):
     )
 
     api_version: Literal["floe.dev/v1"] = Field(
+        alias="apiVersion",
         description="API version (must be 'floe.dev/v1')",
     )
     kind: Literal["Manifest"] = Field(
@@ -248,17 +253,13 @@ class PlatformManifest(BaseModel):
         # C004: approved_plugins only for enterprise scope
         if self.approved_plugins is not None and self.scope != "enterprise":
             msg = (
-                f"approved_plugins is only valid for scope='enterprise', "
-                f"not scope={self.scope!r}."
+                f"approved_plugins is only valid for scope='enterprise', not scope={self.scope!r}."
             )
             raise ValueError(msg)
 
         # C005: approved_products only for domain scope
         if self.approved_products is not None and self.scope != "domain":
-            msg = (
-                f"approved_products is only valid for scope='domain', "
-                f"not scope={self.scope!r}."
-            )
+            msg = f"approved_products is only valid for scope='domain', not scope={self.scope!r}."
             raise ValueError(msg)
 
         return self
@@ -295,10 +296,9 @@ class PlatformManifest(BaseModel):
         environment-specific fields will have already been rejected.
         """
         if self.model_extra:
-            # Filter out any fields that would have been caught by reject_environment_specific_fields
+            # Filter out fields already handled by reject_environment_specific_fields
             unknown_fields = [
-                f for f in self.model_extra.keys()
-                if f not in FORBIDDEN_ENVIRONMENT_FIELDS
+                f for f in self.model_extra.keys() if f not in FORBIDDEN_ENVIRONMENT_FIELDS
             ]
             if unknown_fields:
                 warnings.warn(

@@ -32,54 +32,12 @@ from __future__ import annotations
 
 # Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
-    CircularInheritanceError,
     FIELD_MERGE_STRATEGIES,
+    CircularInheritanceError,
     InheritanceChain,
     MergeStrategy,
     detect_circular_inheritance,
     merge_manifests,
-)
-
-# Validation models (T031, T032, T036)
-from floe_core.schemas.validation import (
-    AUDIT_LOGGING_STRENGTH,
-    InheritanceError,
-    PII_ENCRYPTION_STRENGTH,
-    POLICY_LEVEL_STRENGTH,
-    SecurityPolicyViolationError,
-    validate_security_policy_not_weakened,
-)
-
-# Metadata models (T007)
-from floe_core.schemas.metadata import (
-    NAME_PATTERN,
-    SEMVER_PATTERN,
-    ManifestMetadata,
-)
-
-# Secret models (T005, T008)
-from floe_core.schemas.secrets import (
-    SECRET_NAME_PATTERN,
-    SecretReference,
-    SecretSource,
-)
-
-# Plugin models (T016, T017, T042-T046)
-from floe_core.schemas.plugins import (
-    PLUGIN_REGISTRY,
-    PluginSelection,
-    PluginsConfig,
-    PluginWhitelistError,
-    get_available_plugins,
-    validate_domain_plugin_whitelist,
-    validate_plugin_selection,
-)
-
-# Manifest models (T018, T019)
-from floe_core.schemas.manifest import (
-    GovernanceConfig,
-    ManifestScope,
-    PlatformManifest,
 )
 
 # JSON Schema export (T047, T048, T049)
@@ -90,6 +48,48 @@ from floe_core.schemas.json_schema import (
     export_json_schema,
     export_json_schema_to_file,
     validate_against_schema,
+)
+
+# Manifest models (T018, T019)
+from floe_core.schemas.manifest import (
+    GovernanceConfig,
+    ManifestScope,
+    PlatformManifest,
+)
+
+# Metadata models (T007)
+from floe_core.schemas.metadata import (
+    NAME_PATTERN,
+    SEMVER_PATTERN,
+    ManifestMetadata,
+)
+
+# Plugin models (T016, T017, T042-T046)
+from floe_core.schemas.plugins import (
+    PLUGIN_REGISTRY,
+    PluginsConfig,
+    PluginSelection,
+    PluginWhitelistError,
+    get_available_plugins,
+    validate_domain_plugin_whitelist,
+    validate_plugin_selection,
+)
+
+# Secret models (T005, T008)
+from floe_core.schemas.secrets import (
+    SECRET_NAME_PATTERN,
+    SecretReference,
+    SecretSource,
+)
+
+# Validation models (T031, T032, T036)
+from floe_core.schemas.validation import (
+    AUDIT_LOGGING_STRENGTH,
+    PII_ENCRYPTION_STRENGTH,
+    POLICY_LEVEL_STRENGTH,
+    InheritanceError,
+    SecurityPolicyViolationError,
+    validate_security_policy_not_weakened,
 )
 
 __all__: list[str] = [

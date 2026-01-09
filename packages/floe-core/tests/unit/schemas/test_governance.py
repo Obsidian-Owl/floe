@@ -24,7 +24,7 @@ class TestSecurityPolicyImmutability:
         When a domain manifest attempts to set pii_encryption=optional,
         Then the system rejects with "Cannot weaken security policy" error.
         """
-        from floe_core.schemas import GovernanceConfig, PlatformManifest
+        from floe_core.schemas import GovernanceConfig
         from floe_core.schemas.validation import (
             SecurityPolicyViolationError,
             validate_security_policy_not_weakened,

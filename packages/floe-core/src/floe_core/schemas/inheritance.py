@@ -125,18 +125,18 @@ class InheritanceChain(BaseModel):
 
     # Using Any type here to avoid circular import - actual type is PlatformManifest
     # The type checking is done at runtime via model_validator
-    enterprise: "PlatformManifest | None" = Field(
+    enterprise: PlatformManifest | None = Field(
         default=None,
         description="Enterprise-level manifest (scope=enterprise)",
     )
-    domain: "PlatformManifest | None" = Field(
+    domain: PlatformManifest | None = Field(
         default=None,
         description="Domain-level manifest (scope=domain)",
     )
-    product: "PlatformManifest" = Field(
+    product: PlatformManifest = Field(
         description="Product manifest being resolved",
     )
-    resolved: "PlatformManifest" = Field(
+    resolved: PlatformManifest = Field(
         description="Final merged configuration",
     )
     field_sources: dict[str, str] = Field(
@@ -197,9 +197,9 @@ def detect_circular_inheritance(
 
 
 def merge_manifests(
-    parent: "PlatformManifest",
-    child: "PlatformManifest",
-) -> "PlatformManifest":
+    parent: PlatformManifest,
+    child: PlatformManifest,
+) -> PlatformManifest:
     """Merge parent and child manifests according to merge strategies.
 
     Applies the merge strategies defined in FIELD_MERGE_STRATEGIES to combine
@@ -232,9 +232,17 @@ def merge_manifests(
     # Copy parent plugin selections
     if parent.plugins is not None:
         for category in [
-            "compute", "orchestrator", "catalog", "storage",
-            "semantic_layer", "ingestion", "secrets", "observability",
-            "identity", "dbt", "quality"
+            "compute",
+            "orchestrator",
+            "catalog",
+            "storage",
+            "semantic_layer",
+            "ingestion",
+            "secrets",
+            "observability",
+            "identity",
+            "dbt",
+            "quality",
         ]:
             parent_selection = getattr(parent.plugins, category, None)
             if parent_selection is not None:
@@ -243,9 +251,17 @@ def merge_manifests(
     # Override with child plugin selections
     if child.plugins is not None:
         for category in [
-            "compute", "orchestrator", "catalog", "storage",
-            "semantic_layer", "ingestion", "secrets", "observability",
-            "identity", "dbt", "quality"
+            "compute",
+            "orchestrator",
+            "catalog",
+            "storage",
+            "semantic_layer",
+            "ingestion",
+            "secrets",
+            "observability",
+            "identity",
+            "dbt",
+            "quality",
         ]:
             child_selection = getattr(child.plugins, category, None)
             if child_selection is not None:
@@ -259,16 +275,13 @@ def merge_manifests(
 
     # approved_plugins is enterprise-only, approved_products is domain-only
     # These are scope-specific and don't transfer across scopes
-    merged_approved_plugins = (
-        child.approved_plugins if child.scope == "enterprise" else None
-    )
-    merged_approved_products = (
-        child.approved_products if child.scope == "domain" else None
-    )
+    merged_approved_plugins = child.approved_plugins if child.scope == "enterprise" else None
+    merged_approved_products = child.approved_products if child.scope == "domain" else None
 
     # Create merged manifest with child's metadata (OVERRIDE strategy)
+    # Note: Using apiVersion (alias) because mypy expects the alias parameter name
     return PlatformManifest(
-        api_version=child.api_version,
+        apiVersion=child.api_version,  # alias for api_version
         kind=child.kind,
         metadata=child.metadata,  # Child's metadata takes precedence
         scope=child.scope,

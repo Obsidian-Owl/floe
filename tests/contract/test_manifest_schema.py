@@ -230,25 +230,28 @@ class TestManifestSchemaBackwardCompatibility:
         assert manifest.governance.pii_encryption == "required"
 
     @pytest.mark.requirement("001-FR-001")
+    @pytest.mark.requirement("001-FR-009")
     def test_json_schema_export_contract(self) -> None:
         """Contract: PlatformManifest can export JSON Schema.
 
         This is critical for IDE autocomplete support.
+        Note: JSON Schema uses aliases (apiVersion) for Kubernetes compatibility.
         """
         from floe_core.schemas import PlatformManifest
 
         schema = PlatformManifest.model_json_schema()
 
         # Schema must have expected structure
+        # Note: api_version uses alias 'apiVersion' in JSON Schema
         assert "properties" in schema
-        assert "api_version" in schema["properties"]
+        assert "apiVersion" in schema["properties"]
         assert "kind" in schema["properties"]
         assert "metadata" in schema["properties"]
         assert "plugins" in schema["properties"]
 
-        # Required fields must be marked
+        # Required fields must be marked (using alias name)
         assert "required" in schema
-        assert "api_version" in schema["required"]
+        assert "apiVersion" in schema["required"]
         assert "kind" in schema["required"]
         assert "metadata" in schema["required"]
         assert "plugins" in schema["required"]
