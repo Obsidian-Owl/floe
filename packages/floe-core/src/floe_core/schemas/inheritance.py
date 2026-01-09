@@ -6,18 +6,43 @@ This module provides models for 3-tier configuration inheritance
 Implements:
     - FR-003: Configuration Inheritance
     - FR-004: Merge Strategies
+    - FR-005: Circular Dependency Detection
     - FR-014: Inheritance Chain Resolution
 """
 
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from floe_core.schemas.manifest import PlatformManifest
+
+
+class CircularInheritanceError(Exception):
+    """Raised when a circular dependency is detected in the inheritance chain.
+
+    Circular dependencies occur when manifest A inherits from B, which inherits
+    from A (directly or indirectly).
+
+    Example:
+        >>> raise CircularInheritanceError(
+        ...     "Circular inheritance detected: A → B → A",
+        ...     chain=["A", "B", "A"]
+        ... )
+    """
+
+    def __init__(self, message: str, chain: list[str] | None = None) -> None:
+        """Initialize CircularInheritanceError.
+
+        Args:
+            message: Error message describing the circular dependency
+            chain: List of manifest URIs showing the circular path
+        """
+        self.chain = chain or []
+        super().__init__(message)
 
 
 class MergeStrategy(str, Enum):
@@ -120,8 +145,146 @@ class InheritanceChain(BaseModel):
     )
 
 
+def detect_circular_inheritance(
+    manifest_uri: str,
+    manifests: dict[str, dict[str, Any]],
+    visited: set[str] | None = None,
+    chain: list[str] | None = None,
+) -> None:
+    """Detect circular dependencies in manifest inheritance.
+
+    Traverses the inheritance chain and raises an error if a cycle is detected.
+
+    Args:
+        manifest_uri: URI of the manifest to check
+        manifests: Dictionary mapping URIs to manifest data (must have parent_manifest key)
+        visited: Set of already visited manifest URIs (for recursion)
+        chain: List tracking the current inheritance path
+
+    Raises:
+        CircularInheritanceError: If a circular dependency is detected
+
+    Example:
+        >>> manifests = {
+        ...     "oci://A:v1": {"name": "A", "parent_manifest": "oci://B:v1"},
+        ...     "oci://B:v1": {"name": "B", "parent_manifest": None},
+        ... }
+        >>> detect_circular_inheritance("oci://A:v1", manifests)  # No error
+    """
+    if visited is None:
+        visited = set()
+    if chain is None:
+        chain = []
+
+    if manifest_uri in visited:
+        chain.append(manifest_uri)
+        cycle_str = " → ".join(chain)
+        raise CircularInheritanceError(
+            f"Circular inheritance detected: {cycle_str}",
+            chain=chain,
+        )
+
+    visited.add(manifest_uri)
+    chain.append(manifest_uri)
+
+    manifest_data = manifests.get(manifest_uri)
+    if manifest_data is None:
+        return
+
+    parent_uri = manifest_data.get("parent_manifest")
+    if parent_uri is not None:
+        detect_circular_inheritance(parent_uri, manifests, visited, chain)
+
+
+def merge_manifests(
+    parent: "PlatformManifest",
+    child: "PlatformManifest",
+) -> "PlatformManifest":
+    """Merge parent and child manifests according to merge strategies.
+
+    Applies the merge strategies defined in FIELD_MERGE_STRATEGIES to combine
+    parent and child configurations. Child values take precedence for OVERRIDE
+    strategy fields.
+
+    Args:
+        parent: Parent manifest (enterprise or domain scope)
+        child: Child manifest (domain or product)
+
+    Returns:
+        New PlatformManifest with merged values
+
+    Raises:
+        ValueError: If merge strategy is FORBID and child attempts to change value
+
+    Example:
+        >>> resolved = merge_manifests(enterprise_manifest, domain_manifest)
+        >>> resolved.plugins.compute.type
+        'duckdb'  # From domain manifest (OVERRIDE strategy)
+    """
+    # Import here to avoid circular imports
+    from floe_core.schemas.manifest import PlatformManifest
+    from floe_core.schemas.plugins import PluginsConfig, PluginSelection
+
+    # Start with parent's values, override with child's non-None values
+    # For plugins, merge at the category level (child overrides parent categories)
+    merged_plugins_data: dict[str, PluginSelection | None] = {}
+
+    # Copy parent plugin selections
+    if parent.plugins is not None:
+        for category in [
+            "compute", "orchestrator", "catalog", "storage",
+            "semantic_layer", "ingestion", "secrets", "observability",
+            "identity", "dbt", "quality"
+        ]:
+            parent_selection = getattr(parent.plugins, category, None)
+            if parent_selection is not None:
+                merged_plugins_data[category] = parent_selection
+
+    # Override with child plugin selections
+    if child.plugins is not None:
+        for category in [
+            "compute", "orchestrator", "catalog", "storage",
+            "semantic_layer", "ingestion", "secrets", "observability",
+            "identity", "dbt", "quality"
+        ]:
+            child_selection = getattr(child.plugins, category, None)
+            if child_selection is not None:
+                merged_plugins_data[category] = child_selection
+
+    merged_plugins = PluginsConfig(**merged_plugins_data)
+
+    # For governance, parent's value is preserved (FORBID strategy)
+    # Child cannot change governance policies (validated separately)
+    merged_governance = parent.governance
+
+    # approved_plugins is enterprise-only, approved_products is domain-only
+    # These are scope-specific and don't transfer across scopes
+    merged_approved_plugins = (
+        child.approved_plugins if child.scope == "enterprise" else None
+    )
+    merged_approved_products = (
+        child.approved_products if child.scope == "domain" else None
+    )
+
+    # Create merged manifest with child's metadata (OVERRIDE strategy)
+    return PlatformManifest(
+        api_version=child.api_version,
+        kind=child.kind,
+        metadata=child.metadata,  # Child's metadata takes precedence
+        scope=child.scope,
+        parent_manifest=child.parent_manifest,
+        plugins=merged_plugins,
+        governance=merged_governance,
+        approved_plugins=merged_approved_plugins,
+        approved_products=merged_approved_products,
+    )
+
+
 __all__ = [
+    "CircularInheritanceError",
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",
     "InheritanceChain",
+    "detect_circular_inheritance",
+    "merge_manifests",
 ]

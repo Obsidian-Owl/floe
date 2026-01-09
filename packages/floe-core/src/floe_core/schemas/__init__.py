@@ -30,11 +30,24 @@ See Also:
 
 from __future__ import annotations
 
-# Inheritance models (T006)
+# Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
+    CircularInheritanceError,
     FIELD_MERGE_STRATEGIES,
     InheritanceChain,
     MergeStrategy,
+    detect_circular_inheritance,
+    merge_manifests,
+)
+
+# Validation models (T031, T032, T036)
+from floe_core.schemas.validation import (
+    AUDIT_LOGGING_STRENGTH,
+    InheritanceError,
+    PII_ENCRYPTION_STRENGTH,
+    POLICY_LEVEL_STRENGTH,
+    SecurityPolicyViolationError,
+    validate_security_policy_not_weakened,
 )
 
 # Metadata models (T007)
@@ -65,10 +78,20 @@ from floe_core.schemas.manifest import (
 )
 
 __all__: list[str] = [
-    # Inheritance (Phase 2)
+    # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",
     "InheritanceChain",
+    "CircularInheritanceError",
+    "detect_circular_inheritance",
+    "merge_manifests",
+    # Validation (Phase 4)
+    "SecurityPolicyViolationError",
+    "InheritanceError",
+    "PII_ENCRYPTION_STRENGTH",
+    "AUDIT_LOGGING_STRENGTH",
+    "POLICY_LEVEL_STRENGTH",
+    "validate_security_policy_not_weakened",
     # Metadata (Phase 2)
     "ManifestMetadata",
     "NAME_PATTERN",
