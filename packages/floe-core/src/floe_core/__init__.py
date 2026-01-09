@@ -5,7 +5,8 @@ This package provides:
 - PluginMetadata: Base ABC for all plugin types
 - PluginType: Enum defining the 12 plugin categories
 - Plugin ABCs: Type-specific interfaces (ComputePlugin, etc.)
-- Errors: Custom exceptions for plugin operations
+- Compute Config Models: Pydantic models for compute plugin configuration
+- Errors: Custom exceptions for plugin and compute operations
 - Schemas: Pydantic models for manifest validation (floe_core.schemas)
 
 Example:
@@ -22,9 +23,15 @@ Example:
     >>> from floe_core.schemas import PlatformManifest
     >>> manifest = PlatformManifest.model_validate(yaml_data)
 
+    >>> from floe_core import DuckDBConfig, ConnectionStatus
+    >>> config = DuckDBConfig(path=":memory:", memory_limit="4GB")
+    >>> status = ConnectionStatus.HEALTHY
+
 See Also:
     - floe_core.plugins: All plugin ABCs with supporting dataclasses
     - floe_core.schemas: Manifest schema definitions
+    - floe_core.compute_config: Compute configuration models
+    - floe_core.compute_errors: Compute error hierarchy
     - docs/architecture/plugin-system/: Full architecture documentation
 """
 
@@ -32,9 +39,10 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-# Error hierarchy
 # Schemas submodule (imported for explicit re-export)
 from floe_core import schemas as schemas  # noqa: PLC0414
+
+# Plugin error hierarchy
 from floe_core.plugin_errors import (
     CircularDependencyError,
     DuplicatePluginError,
@@ -44,6 +52,26 @@ from floe_core.plugin_errors import (
     PluginIncompatibleError,
     PluginNotFoundError,
     PluginStartupError,
+)
+
+# Compute configuration models
+from floe_core.compute_config import (
+    AttachConfig,
+    CatalogConfig,
+    ComputeConfig,
+    ConnectionResult,
+    ConnectionStatus,
+    DuckDBConfig,
+    ResourceSpec,
+    WORKLOAD_PRESETS,
+)
+
+# Compute error hierarchy
+from floe_core.compute_errors import (
+    ComputeConfigurationError,
+    ComputeConnectionError,
+    ComputeError,
+    ComputeTimeoutError,
 )
 
 # Health types and PluginMetadata ABC
@@ -92,7 +120,7 @@ __all__: list[str] = [
     "schemas",
     # Plugin type categories
     "PluginType",
-    # Error hierarchy
+    # Plugin error hierarchy
     "CircularDependencyError",
     "DuplicatePluginError",
     "MissingDependencyError",
@@ -101,6 +129,20 @@ __all__: list[str] = [
     "PluginIncompatibleError",
     "PluginNotFoundError",
     "PluginStartupError",
+    # Compute configuration models
+    "AttachConfig",
+    "CatalogConfig",
+    "ComputeConfig",
+    "ConnectionResult",
+    "ConnectionStatus",
+    "DuckDBConfig",
+    "ResourceSpec",
+    "WORKLOAD_PRESETS",
+    # Compute error hierarchy
+    "ComputeConfigurationError",
+    "ComputeConnectionError",
+    "ComputeError",
+    "ComputeTimeoutError",
     # Version compatibility
     "FLOE_PLUGIN_API_VERSION",
     "FLOE_PLUGIN_API_MIN_VERSION",
