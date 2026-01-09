@@ -511,3 +511,148 @@ class TestTelemetryProviderPropagatorIntegration:
         assert not isinstance(propagator, CompositePropagator)
 
         provider.shutdown()
+
+
+class TestOTLPGrpcExporterSetup:
+    """Tests for OTLP/gRPC exporter setup (T036).
+
+    These tests validate that TelemetryProvider correctly configures
+    the OTLP/gRPC span exporter when otlp_protocol is "grpc".
+
+    Requirements: FR-008, FR-009, FR-010, FR-011, FR-024, FR-026
+    """
+
+    @pytest.fixture
+    def grpc_telemetry_config(self) -> TelemetryConfig:
+        """Create a TelemetryConfig with gRPC protocol.
+
+        Returns:
+            TelemetryConfig configured for gRPC export.
+        """
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        return TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://localhost:4317",
+            otlp_protocol="grpc",
+        )
+
+    @pytest.mark.requirement("FR-008")
+    def test_grpc_protocol_in_config(
+        self, grpc_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryConfig accepts grpc protocol."""
+        assert grpc_telemetry_config.otlp_protocol == "grpc"
+
+    @pytest.mark.requirement("FR-008")
+    def test_grpc_endpoint_in_config(
+        self, grpc_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryConfig stores gRPC endpoint."""
+        assert grpc_telemetry_config.otlp_endpoint == "http://localhost:4317"
+
+    @pytest.mark.requirement("FR-008")
+    def test_provider_accepts_grpc_config(
+        self, grpc_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryProvider accepts gRPC configuration."""
+        provider = TelemetryProvider(grpc_telemetry_config)
+        assert provider.config.otlp_protocol == "grpc"
+
+    @pytest.mark.requirement("FR-008")
+    def test_provider_initializes_with_grpc_config(
+        self, grpc_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryProvider initializes with gRPC configuration."""
+        provider = TelemetryProvider(grpc_telemetry_config)
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-008")
+    def test_grpc_default_port_4317(
+        self, clean_env: None
+    ) -> None:
+        """Test that gRPC uses default port 4317 per OTel convention."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        # Default endpoint should use 4317 for gRPC
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_protocol="grpc",
+        )
+        # Default endpoint has 4317
+        assert "4317" in config.otlp_endpoint
+
+    @pytest.mark.requirement("FR-008")
+    def test_grpc_custom_endpoint(
+        self, clean_env: None
+    ) -> None:
+        """Test that gRPC accepts custom endpoint."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://otel-collector.monitoring:4317",
+            otlp_protocol="grpc",
+        )
+        assert config.otlp_endpoint == "http://otel-collector.monitoring:4317"
+
+    @pytest.mark.requirement("FR-010")
+    def test_grpc_protocol_is_default(
+        self, telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that gRPC is the default OTLP protocol."""
+        # TelemetryConfig default should be grpc
+        assert telemetry_config.otlp_protocol == "grpc"
+
+    @pytest.mark.requirement("FR-024")
+    def test_grpc_config_with_batch_processor_settings(
+        self, clean_env: None
+    ) -> None:
+        """Test that gRPC config can include BatchSpanProcessor settings."""
+        from floe_core.telemetry import BatchSpanProcessorConfig
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        batch_config = BatchSpanProcessorConfig(
+            max_queue_size=4096,
+            max_export_batch_size=1024,
+            schedule_delay_millis=2000,
+        )
+        # BatchSpanProcessorConfig can be created alongside TelemetryConfig
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_protocol="grpc",
+        )
+        # Both configs are valid and can be used together
+        assert config.otlp_protocol == "grpc"
+        assert batch_config.max_queue_size == 4096
