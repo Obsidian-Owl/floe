@@ -4,12 +4,16 @@ Tests cover:
 - T024: @traced decorator functionality (TestTracedDecorator, TestTracedDecoratorMethods, TestTracedDecoratorPreservesFunctionMetadata)
 - T025: create_span() context manager (TestCreateSpanContextManager)
 - T027: Error recording on spans (covered in both T024 and T025 test classes)
+- T033: Floe semantic attribute injection (TestFloeAttributeInjection)
 
 Requirements Covered:
 - FR-004: Spans for compilation operations
 - FR-005: Spans for dbt operations
 - FR-006: Spans for Dagster asset materializations
 - FR-007: floe.namespace attribute on ALL spans
+- FR-007b: floe.product.name attribute
+- FR-007c: floe.product.version attribute
+- FR-007d: floe.mode attribute
 - FR-019: OpenTelemetry semantic conventions
 - FR-020: Resource attributes
 - FR-022: Error recording with exception details
@@ -602,3 +606,332 @@ class TestCreateSpanContextManager:
         assert len(spans) == 1
         # UNSET is the default for successful operations per OTel spec
         assert spans[0].status.status_code in (StatusCode.UNSET, StatusCode.OK)
+
+
+class TestFloeAttributeInjection:
+    """Tests for Floe semantic attribute injection (T033).
+
+    Tests that @traced and create_span() support FloeSpanAttributes
+    for automatic injection of Floe semantic conventions.
+
+    Requirements Covered:
+    - FR-007: floe.namespace attribute on ALL spans
+    - FR-007b: floe.product.name attribute
+    - FR-007c: floe.product.version attribute
+    - FR-007d: floe.mode attribute
+    - FR-019: OpenTelemetry semantic conventions
+    """
+
+    @pytest.mark.requirement("FR-007")
+    def test_traced_with_floe_attributes(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test @traced decorator accepts FloeSpanAttributes."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import traced
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="2.1.0",
+            mode="prod",
+        )
+
+        @traced(floe_attributes=floe_attrs)
+        def compile_spec() -> None:
+            pass
+
+        compile_spec()
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("floe.product.name") == "customer-360"
+        assert attrs.get("floe.product.version") == "2.1.0"
+        assert attrs.get("floe.mode") == "prod"
+
+    @pytest.mark.requirement("FR-007")
+    def test_traced_with_floe_attributes_and_custom_attributes(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test @traced combines FloeSpanAttributes with custom attributes."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import traced
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="1.0.0",
+            mode="dev",
+        )
+
+        @traced(
+            floe_attributes=floe_attrs,
+            attributes={"custom.key": "custom_value"},
+        )
+        def my_operation() -> None:
+            pass
+
+        my_operation()
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+
+        # Both floe and custom attributes should be present
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("custom.key") == "custom_value"
+
+    @pytest.mark.requirement("FR-007")
+    def test_traced_with_floe_attributes_optional_fields(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test @traced includes optional FloeSpanAttributes fields."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import traced
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="2.1.0",
+            mode="prod",
+            pipeline_id="run-12345",
+            job_type="dbt_run",
+            model_name="stg_customers",
+            asset_key="customers/raw",
+        )
+
+        @traced(floe_attributes=floe_attrs)
+        def run_dbt() -> None:
+            pass
+
+        run_dbt()
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+
+        # All 8 attributes should be present
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("floe.product.name") == "customer-360"
+        assert attrs.get("floe.product.version") == "2.1.0"
+        assert attrs.get("floe.mode") == "prod"
+        assert attrs.get("floe.pipeline.id") == "run-12345"
+        assert attrs.get("floe.job.type") == "dbt_run"
+        assert attrs.get("floe.dbt.model") == "stg_customers"
+        assert attrs.get("floe.dagster.asset") == "customers/raw"
+
+    @pytest.mark.requirement("FR-007")
+    def test_create_span_with_floe_attributes(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span accepts FloeSpanAttributes."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="2.1.0",
+            mode="staging",
+        )
+
+        with create_span("pipeline_run", floe_attributes=floe_attrs):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("floe.product.name") == "customer-360"
+        assert attrs.get("floe.product.version") == "2.1.0"
+        assert attrs.get("floe.mode") == "staging"
+
+    @pytest.mark.requirement("FR-007")
+    def test_create_span_with_floe_attributes_and_custom_attributes(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span combines FloeSpanAttributes with custom attributes."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="1.0.0",
+            mode="dev",
+        )
+
+        with create_span(
+            "my_operation",
+            floe_attributes=floe_attrs,
+            attributes={"custom.key": "custom_value"},
+        ):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+
+        # Both floe and custom attributes should be present
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("custom.key") == "custom_value"
+
+    @pytest.mark.requirement("FR-007")
+    def test_create_span_with_floe_attributes_optional_fields(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span includes optional FloeSpanAttributes fields."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="2.1.0",
+            mode="prod",
+            pipeline_id="run-54321",
+            job_type="dagster_asset",
+            model_name="dim_customers",
+            asset_key="analytics/dim_customers",
+        )
+
+        with create_span("materialize_asset", floe_attributes=floe_attrs):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+
+        # All 8 attributes should be present
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("floe.product.name") == "customer-360"
+        assert attrs.get("floe.product.version") == "2.1.0"
+        assert attrs.get("floe.mode") == "prod"
+        assert attrs.get("floe.pipeline.id") == "run-54321"
+        assert attrs.get("floe.job.type") == "dagster_asset"
+        assert attrs.get("floe.dbt.model") == "dim_customers"
+        assert attrs.get("floe.dagster.asset") == "analytics/dim_customers"
+
+    @pytest.mark.requirement("FR-022")
+    def test_traced_with_floe_attributes_records_exception(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test @traced with FloeSpanAttributes still records exceptions."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import traced
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="failing-product",
+            product_version="1.0.0",
+            mode="dev",
+        )
+
+        @traced(floe_attributes=floe_attrs)
+        def failing_operation() -> None:
+            raise ValueError("Something went wrong")
+
+        with pytest.raises(ValueError, match="Something went wrong"):
+            failing_operation()
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        span = spans[0]
+
+        # Floe attributes should be present
+        attrs = dict(span.attributes or {})
+        assert attrs.get("floe.namespace") == "analytics"
+
+        # Exception should be recorded
+        assert span.status.status_code == StatusCode.ERROR
+
+    @pytest.mark.requirement("FR-022")
+    def test_create_span_with_floe_attributes_records_exception(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span with FloeSpanAttributes still records exceptions."""
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="failing-product",
+            product_version="1.0.0",
+            mode="dev",
+        )
+
+        with pytest.raises(ValueError, match="Test failure"):
+            with create_span("failing_op", floe_attributes=floe_attrs):
+                raise ValueError("Test failure")
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        span = spans[0]
+
+        # Floe attributes should be present
+        attrs = dict(span.attributes or {})
+        assert attrs.get("floe.namespace") == "analytics"
+
+        # Exception should be recorded
+        assert span.status.status_code == StatusCode.ERROR
+
+    @pytest.mark.requirement("FR-005")
+    def test_traced_async_with_floe_attributes(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test @traced works with async functions and FloeSpanAttributes."""
+        import asyncio
+
+        from floe_core.telemetry.conventions import FloeSpanAttributes
+        from floe_core.telemetry.tracing import traced
+
+        _, exporter = tracer_provider_with_exporter
+
+        floe_attrs = FloeSpanAttributes(
+            namespace="analytics",
+            product_name="async-product",
+            product_version="1.0.0",
+            mode="dev",
+        )
+
+        @traced(floe_attributes=floe_attrs)
+        async def async_operation() -> str:
+            return "async_result"
+
+        result = asyncio.run(async_operation())
+
+        assert result == "async_result"
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+        assert attrs.get("floe.namespace") == "analytics"
+        assert attrs.get("floe.product.name") == "async-product"

@@ -10,6 +10,9 @@ Requirements Covered:
 - FR-005: Spans for dbt operations
 - FR-006: Spans for Dagster asset materializations
 - FR-007: floe.namespace attribute on ALL spans
+- FR-007b: floe.product.name attribute
+- FR-007c: floe.product.version attribute
+- FR-007d: floe.mode attribute
 - FR-019: OpenTelemetry semantic conventions
 - FR-022: Error recording with exception details
 
@@ -33,6 +36,8 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from opentelemetry.trace import Span
+
+    from floe_core.telemetry.conventions import FloeSpanAttributes
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +83,7 @@ def traced(
     *,
     name: str | None = None,
     attributes: dict[str, str] | None = None,
+    floe_attributes: "FloeSpanAttributes | None" = None,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
@@ -86,6 +92,7 @@ def traced(
     *,
     name: str | None = None,
     attributes: dict[str, str] | None = None,
+    floe_attributes: "FloeSpanAttributes | None" = None,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to trace function execution with OpenTelemetry span.
 
@@ -103,6 +110,8 @@ def traced(
         func: The function to decorate (when used without parentheses).
         name: Optional custom span name. Defaults to function name.
         attributes: Optional span attributes to set.
+        floe_attributes: Optional FloeSpanAttributes to inject Floe semantic
+            conventions (floe.namespace, floe.product.name, etc.) onto the span.
 
     Returns:
         Decorated function that creates a span on each invocation.
@@ -117,19 +126,37 @@ def traced(
         >>> @traced(name="dbt.run", attributes={"dbt.command": "run"})
         ... def run_dbt():
         ...     pass
+
+        >>> from floe_core.telemetry.conventions import FloeSpanAttributes
+        >>> attrs = FloeSpanAttributes(
+        ...     namespace="analytics", product_name="customer-360",
+        ...     product_version="1.0.0", mode="prod"
+        ... )
+        >>> @traced(floe_attributes=attrs)
+        ... def pipeline_run():
+        ...     pass
     """
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
         span_name = name if name is not None else fn.__name__
+
+        def _set_span_attributes(span: "Span") -> None:
+            """Set all attributes on the span."""
+            # Set Floe semantic attributes first (if provided)
+            if floe_attributes is not None:
+                for key, value in floe_attributes.to_otel_dict().items():
+                    span.set_attribute(key, value)
+            # Set custom attributes (can override floe attributes if needed)
+            if attributes:
+                for key, value in attributes.items():
+                    span.set_attribute(key, value)
 
         if asyncio.iscoroutinefunction(fn):
             @functools.wraps(fn)
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 tracer = get_tracer()
                 with tracer.start_as_current_span(span_name) as span:
-                    if attributes:
-                        for key, value in attributes.items():
-                            span.set_attribute(key, value)
+                    _set_span_attributes(span)
                     try:
                         result = await fn(*args, **kwargs)
                         return cast(R, result)
@@ -144,9 +171,7 @@ def traced(
             def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 tracer = get_tracer()
                 with tracer.start_as_current_span(span_name) as span:
-                    if attributes:
-                        for key, value in attributes.items():
-                            span.set_attribute(key, value)
+                    _set_span_attributes(span)
                     try:
                         result = fn(*args, **kwargs)
                         return result
@@ -169,6 +194,7 @@ def traced(
 def create_span(
     name: str,
     attributes: dict[str, Any] | None = None,
+    floe_attributes: "FloeSpanAttributes | None" = None,
 ) -> "Generator[Span, None, None]":
     """Create a span as a context manager.
 
@@ -179,6 +205,8 @@ def create_span(
     Args:
         name: The name for the span.
         attributes: Optional dictionary of attributes to set on the span.
+        floe_attributes: Optional FloeSpanAttributes to inject Floe semantic
+            conventions (floe.namespace, floe.product.name, etc.) onto the span.
 
     Yields:
         The created span for additional attribute setting.
@@ -191,9 +219,22 @@ def create_span(
 
         >>> with create_span("operation", attributes={"op.type": "test"}):
         ...     pass
+
+        >>> from floe_core.telemetry.conventions import FloeSpanAttributes
+        >>> attrs = FloeSpanAttributes(
+        ...     namespace="analytics", product_name="customer-360",
+        ...     product_version="1.0.0", mode="prod"
+        ... )
+        >>> with create_span("pipeline_run", floe_attributes=attrs):
+        ...     pass
     """
     tracer = get_tracer()
     with tracer.start_as_current_span(name) as span:
+        # Set Floe semantic attributes first (if provided)
+        if floe_attributes is not None:
+            for key, value in floe_attributes.to_otel_dict().items():
+                span.set_attribute(key, value)
+        # Set custom attributes (can override floe attributes if needed)
         if attributes:
             for key, value in attributes.items():
                 span.set_attribute(key, value)
