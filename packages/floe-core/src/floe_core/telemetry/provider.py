@@ -9,6 +9,8 @@ Requirements Covered:
 - FR-001: Initialize OpenTelemetry SDK with TelemetryConfig
 - FR-002: W3C Trace Context propagation (via configure_propagators)
 - FR-003: W3C Baggage propagation (via configure_propagators)
+- FR-008: OTLP exporter configuration
+- FR-009: gRPC protocol selection
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -21,6 +23,13 @@ import logging
 import os
 from enum import Enum, auto
 from typing import TYPE_CHECKING
+
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from floe_core.telemetry.propagation import configure_propagators
 
@@ -90,6 +99,8 @@ class TelemetryProvider:
         self._config = config
         self._state = ProviderState.UNINITIALIZED
         self._noop_mode = self._check_noop_mode()
+        self._tracer_provider: TracerProvider | None = None
+        self._span_processor: BatchSpanProcessor | None = None
 
     @property
     def config(self) -> TelemetryConfig:
@@ -127,6 +138,11 @@ class TelemetryProvider:
         Configures the SDK with the provided TelemetryConfig.
         In no-op mode, this is a no-op.
 
+        For gRPC protocol (FR-009):
+        - Creates OTLPSpanExporter with configured endpoint
+        - Wraps in BatchSpanProcessor for async export
+        - Registers TracerProvider as global provider
+
         Raises:
             RuntimeError: If provider is not in UNINITIALIZED state.
         """
@@ -147,17 +163,43 @@ class TelemetryProvider:
         # Configure W3C Trace Context and Baggage propagators (FR-002, FR-003)
         configure_propagators()
 
-        # TODO: Initialize actual OpenTelemetry SDK (T040+)
-        # - Configure TracerProvider with resource attributes
-        # - Configure sampler based on environment
-        # - Set up OTLP exporter (gRPC or HTTP)
-        # - Register as global provider
+        # Create Resource with service attributes (FR-001)
+        resource = Resource.create(self._config.resource_attributes.to_otel_dict())
+
+        # Get sampling ratio for environment (FR-023)
+        environment = self._config.resource_attributes.deployment_environment
+        sampling_ratio = self._config.get_sampling_ratio(environment)
+
+        # Create TracerProvider with resource and sampler
+        self._tracer_provider = TracerProvider(
+            resource=resource,
+            sampler=TraceIdRatioBased(sampling_ratio),
+        )
+
+        # Configure OTLP exporter based on protocol (FR-008, FR-009)
+        if self._config.otlp_protocol == "grpc":
+            exporter = OTLPSpanExporter(endpoint=self._config.otlp_endpoint)
+        else:
+            # HTTP protocol will be implemented in T041
+            raise NotImplementedError(
+                f"Protocol '{self._config.otlp_protocol}' not yet implemented. "
+                "Use 'grpc' or wait for T041."
+            )
+
+        # Add BatchSpanProcessor for async export (FR-024)
+        self._span_processor = BatchSpanProcessor(exporter)
+        self._tracer_provider.add_span_processor(self._span_processor)
+
+        # Register as global tracer provider
+        trace.set_tracer_provider(self._tracer_provider)
+
         logger.info(
             "TelemetryProvider initialized",
             extra={
                 "endpoint": self._config.otlp_endpoint,
                 "protocol": self._config.otlp_protocol,
                 "service_name": self._config.resource_attributes.service_name,
+                "sampling_ratio": sampling_ratio,
             },
         )
         self._state = ProviderState.INITIALIZED
@@ -197,12 +239,15 @@ class TelemetryProvider:
 
         self._state = ProviderState.FLUSHING
         try:
-            # TODO: Call actual SDK force_flush (T015)
+            # Call SDK force_flush on tracer provider
+            result = True
+            if self._tracer_provider is not None:
+                result = self._tracer_provider.force_flush(timeout_millis)
             logger.debug(
                 "TelemetryProvider force_flush completed",
-                extra={"timeout_millis": timeout_millis},
+                extra={"timeout_millis": timeout_millis, "success": result},
             )
-            return True
+            return result
         finally:
             self._state = ProviderState.INITIALIZED
 
@@ -227,13 +272,19 @@ class TelemetryProvider:
         if not self.is_noop:
             # Force flush before shutdown
             self._state = ProviderState.FLUSHING
-            # TODO: Call actual SDK shutdown (T015)
+
+            # Shutdown the tracer provider (includes flushing)
+            if self._tracer_provider is not None:
+                self._tracer_provider.shutdown()
+
             logger.info(
                 "TelemetryProvider shutdown",
                 extra={"timeout_millis": timeout_millis},
             )
 
         self._state = ProviderState.SHUTDOWN
+        self._tracer_provider = None
+        self._span_processor = None
 
     def __enter__(self) -> TelemetryProvider:
         """Enter context manager, initializing the provider.
