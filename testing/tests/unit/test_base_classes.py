@@ -5,6 +5,7 @@ Tests for IntegrationTestBase, PluginTestBase, and AdapterTestBase.
 
 from __future__ import annotations
 
+from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
@@ -22,7 +23,7 @@ class TestIntegrationTestBase:
         """Test setup_method initializes _created_namespaces."""
 
         class TestClass(IntegrationTestBase):
-            required_services: list[tuple[str, int]] = []
+            required_services: ClassVar[list[tuple[str, int]]] = []
 
         instance = TestClass()
         instance.setup_method()
@@ -60,7 +61,7 @@ class TestIntegrationTestBase:
         """Test generate_unique_namespace returns unique values."""
 
         class TestClass(IntegrationTestBase):
-            required_services: list[tuple[str, int]] = []
+            required_services: ClassVar[list[tuple[str, int]]] = []
 
         instance = TestClass()
         instance.setup_method()
@@ -75,7 +76,7 @@ class TestIntegrationTestBase:
         """Test generate_unique_namespace adds to cleanup list."""
 
         class TestClass(IntegrationTestBase):
-            required_services: list[tuple[str, int]] = []
+            required_services: ClassVar[list[tuple[str, int]]] = []
 
         instance = TestClass()
         instance.setup_method()
@@ -89,7 +90,7 @@ class TestIntegrationTestBase:
         """Test check_infrastructure fails when service unavailable."""
 
         class TestClass(IntegrationTestBase):
-            required_services: list[tuple[str, int]] = []
+            required_services: ClassVar[list[tuple[str, int]]] = []
 
         instance = TestClass()
         instance.setup_method()
@@ -108,7 +109,7 @@ class TestIntegrationTestBase:
         """Test check_infrastructure passes when service available."""
 
         class TestClass(IntegrationTestBase):
-            required_services: list[tuple[str, int]] = []
+            required_services: ClassVar[list[tuple[str, int]]] = []
 
         instance = TestClass()
         instance.setup_method()
@@ -125,7 +126,7 @@ class TestIntegrationTestBase:
         """Test teardown_method clears created namespaces."""
 
         class TestClass(IntegrationTestBase):
-            required_services: list[tuple[str, int]] = []
+            required_services: ClassVar[list[tuple[str, int]]] = []
 
         instance = TestClass()
         instance.setup_method()

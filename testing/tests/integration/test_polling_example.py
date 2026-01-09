@@ -172,7 +172,7 @@ class TestPollingExamples:
 
         # Config is immutable (frozen=True)
         with pytest.raises(Exception):  # noqa: B017
-            config.timeout = 10.0  # type: ignore[misc]
+            config.timeout = 10.0
 
         assert config.timeout == pytest.approx(5.0)
         assert config.interval == pytest.approx(0.2)

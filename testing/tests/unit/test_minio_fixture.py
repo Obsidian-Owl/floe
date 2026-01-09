@@ -72,7 +72,7 @@ class TestMinIOConfig:
         """Test MinIOConfig is immutable."""
         config = MinIOConfig()
         with pytest.raises(Exception):  # noqa: B017
-            config.endpoint = "other:9000"  # type: ignore[misc]
+            config.endpoint = "other:9000"
 
     @pytest.mark.requirement("9c-FR-013")
     def test_config_from_env(self) -> None:

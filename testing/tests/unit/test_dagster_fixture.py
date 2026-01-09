@@ -71,7 +71,7 @@ class TestDagsterConfig:
         """Test DagsterConfig is immutable."""
         config = DagsterConfig()
         with pytest.raises(Exception):  # noqa: B017
-            config.host = "other-host"  # type: ignore[misc]
+            config.host = "other-host"
 
     @pytest.mark.requirement("9c-FR-014")
     def test_config_from_env(self) -> None:

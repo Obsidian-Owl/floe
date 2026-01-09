@@ -56,7 +56,7 @@ class TestDuckDBConfig:
         """Test DuckDBConfig is immutable."""
         config = DuckDBConfig()
         with pytest.raises(Exception):  # noqa: B017
-            config.database = "/tmp/other.duckdb"  # type: ignore[misc]
+            config.database = "/tmp/other.duckdb"
 
 
 class TestCreateDuckDBConnection:

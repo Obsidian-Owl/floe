@@ -75,7 +75,7 @@ class TestPostgresConfig:
         """Test PostgresConfig is immutable."""
         config = PostgresConfig()
         with pytest.raises(Exception):  # noqa: B017
-            config.host = "other-host"  # type: ignore[misc]
+            config.host = "other-host"
 
     @pytest.mark.requirement("9c-FR-010")
     def test_config_from_env(self) -> None:

@@ -76,7 +76,7 @@ class TestPolarisConfig:
         """Test PolarisConfig is immutable."""
         config = PolarisConfig()
         with pytest.raises(Exception):  # noqa: B017
-            config.uri = "http://other:8181"  # type: ignore[misc]
+            config.uri = "http://other:8181"
 
     @pytest.mark.requirement("9c-FR-012")
     def test_config_from_env(self) -> None:

@@ -42,7 +42,7 @@ class TestPollingConfig:
         """Test PollingConfig is immutable."""
         config = PollingConfig()
         with pytest.raises(Exception):  # noqa: B017  # ValidationError for frozen model
-            config.timeout = 100.0  # type: ignore[misc]
+            config.timeout = 100.0
 
     @pytest.mark.requirement("9c-FR-015")
     def test_validation_timeout_non_negative(self) -> None:
