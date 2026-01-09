@@ -5,10 +5,6 @@ handoffs:
     agent: speckit.test-review
     prompt: "Integration check passed. Review test quality?"
     send: false
-  - label: "Create PR"
-    agent: git-pr
-    prompt: "Create pull request for this Epic"
-    send: false
 ---
 
 ## User Input
@@ -44,7 +40,7 @@ This command answers: **Is this Epic safe to merge?**
 Determine the current branch and its relationship to main.
 
 **Information to collect:**
-- Current branch name (should match pattern `epic-*` or `NNN-*`)
+- Current branch name (typically a numbered feature branch like `001-plugin-registry` or `epic-1-*`)
 - Current commit hash
 - Main branch latest commit hash
 - Commits ahead of main (this Epic's changes)
@@ -62,8 +58,9 @@ Identify changes to cross-package contracts that may affect other Epics.
 **Contract files to check:**
 - `packages/floe-core/src/floe_core/schemas.py` (CompiledArtifacts)
 - `packages/floe-core/src/floe_core/plugin_interfaces.py` (Plugin ABCs)
-- Any file matching `**/schemas.py` or `**/models.py` in packages/
-- Any file in `tests/contract/`
+- Any file matching `packages/*/src/**/schemas.py` or `packages/*/src/**/models.py` (package contracts)
+- Any file matching `plugins/*/src/**/schemas.py` or `plugins/*/src/**/models.py` (plugin contracts)
+- Any file in `tests/contract/` (contract test changes)
 
 **For each contract file changed:**
 - Determine if change is ADDITIVE (new optional field) or BREAKING (removed field, type change, required field added)
@@ -81,7 +78,8 @@ Simulate merging main into the current branch to detect conflicts.
 
 **Process:**
 - Fetch latest main without switching branches
-- Use git merge-tree or equivalent to detect conflicts without modifying working directory
+- Use `git merge-tree` to detect conflicts without modifying working directory (requires Git 2.30+)
+- Alternative for older Git: create temporary worktree, attempt merge, report conflicts, clean up
 - Identify files with conflicts
 
 **For each conflict:**
@@ -104,11 +102,14 @@ Run validation checks as if the branch were rebased on latest main.
 - Run mypy on changed packages
 - Focus on interface compatibility, not internal implementation
 
-**Architecture Compliance:**
-- Invoke the architecture-compliance agent to validate:
-  - Technology ownership boundaries respected
-  - Layer dependencies correct (no Layer 4 modifying Layer 2)
-  - Plugin patterns followed
+**Architecture Compliance** (inline checks, not agent delegation):
+- Verify import boundaries in changed files:
+  - floe-core should not import from plugin packages
+  - Plugin packages should only import from floe-core interfaces
+  - No cross-plugin imports (plugin A importing from plugin B)
+- Check for layer violations in new code:
+  - No runtime config modification from data layer code
+  - Plugin implementations use ABC interfaces correctly
 
 ### 5. Assess Merge Readiness
 
@@ -200,7 +201,13 @@ No contract files modified in this branch.
 
 ### Architecture Compliance
 
-{Summary from architecture-compliance agent}
+{Summary of import boundary and layer violation checks}
+
+| Check | Status | Details |
+|-------|--------|---------|
+| Import boundaries | {status} | {violations found or "Clean"} |
+| Layer compliance | {status} | {violations found or "Clean"} |
+| Plugin patterns | {status} | {issues found or "Correct"} |
 
 ---
 
