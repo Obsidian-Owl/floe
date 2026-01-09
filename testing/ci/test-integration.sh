@@ -8,6 +8,7 @@
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
 #   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   WAIT_TIMEOUT        Service readiness timeout in seconds (default: 300)
+#   ALLOW_NO_TESTS      Set to "true" to allow running with no integration tests (default: false)
 #
 # Note: This script dynamically discovers all packages with integration tests.
 #       New packages are automatically included when they have a tests/integration/ directory.
@@ -18,6 +19,7 @@ set -euo pipefail
 KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-300}"
+ALLOW_NO_TESTS="${ALLOW_NO_TESTS:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -78,8 +80,14 @@ echo ""
 
 if [[ -z "${INTEGRATION_TEST_PATHS}" ]]; then
     echo "WARNING: No integration test directories found" >&2
-    echo "This is OK if no packages have integration tests yet." >&2
-    exit 0
+    if [[ "${ALLOW_NO_TESTS}" == "true" ]]; then
+        echo "ALLOW_NO_TESTS=true, exiting successfully." >&2
+        exit 0
+    else
+        echo "ERROR: No integration tests found. This may indicate missing tests." >&2
+        echo "Set ALLOW_NO_TESTS=true to skip this check during early development." >&2
+        exit 1
+    fi
 fi
 
 echo "Running integration tests..."

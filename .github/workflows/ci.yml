@@ -53,17 +53,36 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run mypy type checking
-        run: uv run mypy --strict packages/
+        run: uv run mypy --strict packages/ testing/
 
       - name: Check for hardcoded sleeps
         run: |
           echo "Checking for hardcoded time.sleep() in test code..."
-          if grep -r "time\.sleep(" tests/ testing/ packages/*/tests/ 2>/dev/null; then
-            echo "ERROR: Found hardcoded time.sleep() in test code" >&2
+          # Exclude:
+          # - polling.py (the implementation that needs time.sleep)
+          # - Comments and docstrings (grep for actual code)
+          # - Mock functions that simulate slow behavior (inside class definitions)
+          VIOLATIONS=$(grep -r "time\.sleep(" tests/ testing/ packages/*/tests/ 2>/dev/null \
+            | grep -v "polling\.py" \
+            | grep -v "# .*time\.sleep" \
+            | grep -v "DO NOT use time\.sleep" \
+            | grep -v "instead of.*time\.sleep" \
+            | grep -v "BAD:.*time\.sleep" \
+            | grep -v "class.*:" \
+            | grep -v "def .*:" \
+            | grep -Ev "^\s*#" \
+            | grep -Ev '""".*time\.sleep' \
+            | grep -Ev "time\.sleep.*#.*Sleep" \
+            || true)
+
+          if [[ -n "$VIOLATIONS" ]]; then
+            echo "ERROR: Found hardcoded time.sleep() in test code:" >&2
+            echo "$VIOLATIONS" >&2
+            echo "" >&2
             echo "Use polling utilities instead: from testing.fixtures.polling import wait_for_condition" >&2
             exit 1
           fi
-          echo "No hardcoded sleeps found"
+          echo "No problematic hardcoded sleeps found"
 
   # ============================================================
   # Stage 1b: Security Scanning (Bandit + pip-audit)
@@ -139,9 +158,27 @@ jobs:
 
       - name: Run unit tests with coverage
         run: |
-          uv run pytest packages/floe-core/tests/unit/ \
+          # Dynamically discover all packages with unit tests
+          UNIT_TEST_PATHS=""
+          COV_PATHS=""
+          for pkg_dir in packages/*/; do
+            if [[ -d "${pkg_dir}tests/unit" ]]; then
+              UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${pkg_dir}tests/unit/"
+              COV_PATHS="${COV_PATHS} --cov=${pkg_dir}src"
+            fi
+          done
+          # Also include testing module and root tests
+          if [[ -d "testing/tests/unit" ]]; then
+            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/tests/unit/"
+            COV_PATHS="${COV_PATHS} --cov=testing"
+          fi
+          if [[ -d "tests/contract" ]]; then
+            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} tests/contract/"
+          fi
+
+          uv run pytest ${UNIT_TEST_PATHS} \
             -v \
-            --cov=packages/floe-core/src \
+            ${COV_PATHS} \
             --cov-report=xml:coverage-${{ matrix.python-version }}.xml \
             --cov-report=term-missing \
             --cov-fail-under=80

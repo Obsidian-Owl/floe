@@ -77,7 +77,7 @@ class TestTraceabilityReport:
     @pytest.mark.requirement("9c-FR-018")
     def test_default_values(self) -> None:
         """Test TraceabilityReport has sensible defaults."""
-        report = TraceabilityReport()
+        report = TraceabilityReport()  # type: ignore[call-arg]
         assert report.total_requirements == 0
         assert report.covered_requirements == 0
         assert report.coverage_percentage == pytest.approx(0.0)

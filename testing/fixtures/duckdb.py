@@ -15,6 +15,7 @@ Example:
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -22,8 +23,11 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Valid DuckDB extension name pattern (alphanumeric and underscores only)
+_VALID_EXTENSION_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
 if TYPE_CHECKING:
-    import duckdb
+    import duckdb  # type: ignore[import-not-found]
 
 
 class DuckDBConfig(BaseModel):
@@ -79,10 +83,16 @@ def create_duckdb_connection(config: DuckDBConfig) -> duckdb.DuckDBPyConnection:
             config=config.config,
         )
 
-        # Load extensions
+        # Load extensions (with validation to prevent SQL injection)
         for ext in config.extensions:
-            conn.execute(f"INSTALL {ext}")
-            conn.execute(f"LOAD {ext}")
+            if not _VALID_EXTENSION_PATTERN.match(ext):
+                raise DuckDBConnectionError(
+                    f"Invalid extension name '{ext}': must contain only "
+                    "alphanumeric characters and underscores"
+                )
+            # Safe: ext is validated to be alphanumeric
+            conn.execute(f"INSTALL {ext}")  # noqa: S608
+            conn.execute(f"LOAD {ext}")  # noqa: S608
 
         return conn
     except Exception as e:

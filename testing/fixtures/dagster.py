@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
-    from dagster import DagsterInstance
+    from dagster import DagsterInstance  # type: ignore[import-not-found]
 
 
 class DagsterConfig(BaseModel):
@@ -167,7 +167,7 @@ def check_webserver_health(config: DagsterConfig) -> bool:
 
     try:
         with urllib.request.urlopen(health_url, timeout=5) as response:
-            return response.status == 200
+            return bool(response.status == 200)
     except (urllib.error.URLError, TimeoutError):
         return False
 

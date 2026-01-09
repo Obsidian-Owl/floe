@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 if TYPE_CHECKING:
-    from pyiceberg.catalog import Catalog
+    from pyiceberg.catalog import Catalog  # type: ignore[import-not-found]
 
 
 class PolarisConfig(BaseModel):

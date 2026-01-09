@@ -81,7 +81,7 @@ lint: ## Run linting (ruff check + format check)
 .PHONY: typecheck
 typecheck: ## Run type checking (mypy --strict)
 	@echo "Running type checking..."
-	@uv run mypy --strict packages/
+	@uv run mypy --strict packages/ testing/
 
 .PHONY: check
 check: lint typecheck test ## Run all CI checks (lint + typecheck + test)

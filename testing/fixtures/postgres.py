@@ -19,14 +19,15 @@ Example:
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-if TYPE_CHECKING:
-    import psycopg2
+# Type alias for psycopg2 connection (psycopg2 doesn't have great type stubs)
+PostgresConnection = Any
 
 
 class PostgresConfig(BaseModel):
@@ -68,7 +69,7 @@ class PostgresConnectionError(Exception):
     pass
 
 
-def create_connection(config: PostgresConfig) -> psycopg2.connection:
+def create_connection(config: PostgresConfig) -> PostgresConnection:
     """Create PostgreSQL connection from config.
 
     Args:
@@ -105,7 +106,7 @@ def create_connection(config: PostgresConfig) -> psycopg2.connection:
 @contextmanager
 def postgres_connection_context(
     config: PostgresConfig | None = None,
-) -> Generator[psycopg2.connection, None, None]:
+) -> Generator[PostgresConnection, None, None]:
     """Context manager for PostgreSQL connection.
 
     Creates a connection on entry, closes it on exit.
@@ -131,8 +132,38 @@ def postgres_connection_context(
         conn.close()
 
 
+# Valid PostgreSQL identifier pattern
+# (alphanumeric and underscores, must start with letter/underscore)
+_VALID_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_identifier(name: str, context: str = "identifier") -> str:
+    """Validate a PostgreSQL identifier to prevent SQL injection.
+
+    Args:
+        name: The identifier to validate.
+        context: Description for error messages (e.g., "database name").
+
+    Returns:
+        The validated identifier.
+
+    Raises:
+        ValueError: If the identifier is invalid.
+    """
+    if not name:
+        raise ValueError(f"Invalid {context}: cannot be empty")
+    if len(name) > 63:
+        raise ValueError(f"Invalid {context}: exceeds 63 character limit")
+    if not _VALID_IDENTIFIER_PATTERN.match(name):
+        raise ValueError(
+            f"Invalid {context} '{name}': must contain only alphanumeric "
+            "characters and underscores, and start with a letter or underscore"
+        )
+    return name
+
+
 def create_test_database(
-    admin_conn: psycopg2.connection,
+    admin_conn: PostgresConnection,
     database_name: str,
 ) -> None:
     """Create a test database.
@@ -141,22 +172,27 @@ def create_test_database(
         admin_conn: Admin connection to PostgreSQL.
         database_name: Name of database to create.
 
+    Raises:
+        ValueError: If database_name contains invalid characters.
+
     Note:
         Uses autocommit since CREATE DATABASE cannot run in transaction.
     """
+    # Validate to prevent SQL injection
+    validated_name = _validate_identifier(database_name, "database name")
+
     admin_conn.autocommit = True
     cursor = admin_conn.cursor()
     try:
-        cursor.execute(
-            f"CREATE DATABASE {database_name}"  # noqa: S608 - safe, validated input
-        )
+        # Safe: validated_name is guaranteed to be a valid identifier
+        cursor.execute(f"CREATE DATABASE {validated_name}")  # noqa: S608
     finally:
         cursor.close()
         admin_conn.autocommit = False
 
 
 def drop_test_database(
-    admin_conn: psycopg2.connection,
+    admin_conn: PostgresConnection,
     database_name: str,
 ) -> None:
     """Drop a test database.
@@ -165,13 +201,19 @@ def drop_test_database(
         admin_conn: Admin connection to PostgreSQL.
         database_name: Name of database to drop.
 
+    Raises:
+        ValueError: If database_name contains invalid characters.
+
     Note:
         Forces disconnection of other clients before dropping.
     """
+    # Validate to prevent SQL injection
+    validated_name = _validate_identifier(database_name, "database name")
+
     admin_conn.autocommit = True
     cursor = admin_conn.cursor()
     try:
-        # Force disconnect other clients
+        # Force disconnect other clients (uses parameterized query)
         cursor.execute(
             """
             SELECT pg_terminate_backend(pg_stat_activity.pid)
@@ -179,11 +221,10 @@ def drop_test_database(
             WHERE pg_stat_activity.datname = %s
             AND pid <> pg_backend_pid()
             """,
-            (database_name,),
+            (validated_name,),
         )
-        cursor.execute(
-            f"DROP DATABASE IF EXISTS {database_name}"  # noqa: S608 - safe, validated
-        )
+        # Safe: validated_name is guaranteed to be a valid identifier
+        cursor.execute(f"DROP DATABASE IF EXISTS {validated_name}")  # noqa: S608
     finally:
         cursor.close()
         admin_conn.autocommit = False
