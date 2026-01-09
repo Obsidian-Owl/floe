@@ -20,17 +20,13 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-# Public exports will be added as modules are implemented:
-# from floe_catalog_polaris.plugin import PolarisCatalogPlugin
-# from floe_catalog_polaris.config import PolarisCatalogConfig, OAuth2Config
-# from floe_catalog_polaris.models import VendedCredentials, HealthStatus
+# Public API exports
+from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
+from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
 __all__ = [
     "__version__",
-    # Future exports (uncomment as implemented):
-    # "PolarisCatalogPlugin",
-    # "PolarisCatalogConfig",
-    # "OAuth2Config",
-    # "VendedCredentials",
-    # "HealthStatus",
+    "PolarisCatalogPlugin",
+    "PolarisCatalogConfig",
+    "OAuth2Config",
 ]

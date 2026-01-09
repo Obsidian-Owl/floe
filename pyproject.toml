@@ -17,15 +17,19 @@ dependencies = [
     "bandit[toml]>=1.7",
     # Include floe-core for development
     "floe-core",
+    # Include plugins for development
+    "floe-catalog-polaris",
 ]
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
+floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    "plugins/floe-catalog-polaris/src",
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
