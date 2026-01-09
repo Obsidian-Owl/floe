@@ -10,7 +10,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from testing.fixtures.polaris import (
     PolarisConfig,
@@ -75,7 +75,7 @@ class TestPolarisConfig:
     def test_frozen_model(self) -> None:
         """Test PolarisConfig is immutable."""
         config = PolarisConfig()
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             config.uri = "http://other:8181"
 
     @pytest.mark.requirement("9c-FR-012")

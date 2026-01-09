@@ -65,6 +65,8 @@ See `.github/CI.md` for full CI strategy documentation.
 | REQ-659 | PluginTestBase class | HIGH |
 | REQ-660 | AdapterTestBase class | HIGH |
 
+> **Note**: Plugin-specific test fixtures (telemetry, lineage, semantic layer, ingestion, secrets, identity, quality) are delivered with their respective plugin epics (5A, 5B, 6A, 6B, 7A, etc.), not in this epic. Epic 9C provides the testing **framework** that those fixtures build upon.
+
 ---
 
 ## Architecture References
@@ -102,6 +104,8 @@ testing/
 │   ├── polaris.py                  # Polaris fixtures
 │   ├── minio.py                    # MinIO fixtures
 │   └── dagster.py                  # Dagster fixtures
+│   # Note: Plugin-specific fixtures (telemetry, lineage, etc.) are
+│   # added by their respective plugin epics using this framework
 ├── k8s/
 │   ├── kind-config.yaml            # Kind cluster config
 │   ├── services/                   # Raw K8s manifests (NOT Helm)

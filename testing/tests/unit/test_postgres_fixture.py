@@ -10,7 +10,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from testing.fixtures.postgres import (
     PostgresConfig,
@@ -65,16 +65,16 @@ class TestPostgresConfig:
     @pytest.mark.requirement("9c-FR-010")
     def test_port_validation(self) -> None:
         """Test port must be in valid range."""
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             PostgresConfig(port=0)
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             PostgresConfig(port=70000)
 
     @pytest.mark.requirement("9c-FR-010")
     def test_frozen_model(self) -> None:
         """Test PostgresConfig is immutable."""
         config = PostgresConfig()
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             config.host = "other-host"
 
     @pytest.mark.requirement("9c-FR-010")

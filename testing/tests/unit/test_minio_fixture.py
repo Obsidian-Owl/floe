@@ -10,7 +10,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from testing.fixtures.minio import (
     MinIOConfig,
@@ -71,7 +71,7 @@ class TestMinIOConfig:
     def test_frozen_model(self) -> None:
         """Test MinIOConfig is immutable."""
         config = MinIOConfig()
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             config.endpoint = "other:9000"
 
     @pytest.mark.requirement("9c-FR-013")

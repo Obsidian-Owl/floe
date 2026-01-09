@@ -9,6 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from testing.fixtures.polling import (
     PollingConfig,
@@ -41,7 +42,7 @@ class TestPollingConfig:
     def test_frozen_model(self) -> None:
         """Test PollingConfig is immutable."""
         config = PollingConfig()
-        with pytest.raises(Exception):  # noqa: B017  # ValidationError for frozen model
+        with pytest.raises(ValidationError):
             config.timeout = 100.0
 
     @pytest.mark.requirement("9c-FR-015")

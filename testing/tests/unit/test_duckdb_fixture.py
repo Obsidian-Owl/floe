@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from testing.fixtures.duckdb import (
     DuckDBConfig,
@@ -55,7 +56,7 @@ class TestDuckDBConfig:
     def test_frozen_model(self) -> None:
         """Test DuckDBConfig is immutable."""
         config = DuckDBConfig()
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             config.database = "/tmp/other.duckdb"
 
 

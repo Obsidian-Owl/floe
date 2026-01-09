@@ -10,6 +10,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from testing.fixtures.dagster import (
     DagsterConfig,
@@ -61,16 +62,16 @@ class TestDagsterConfig:
     @pytest.mark.requirement("9c-FR-014")
     def test_port_validation(self) -> None:
         """Test port must be in valid range."""
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             DagsterConfig(port=0)
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             DagsterConfig(port=70000)
 
     @pytest.mark.requirement("9c-FR-014")
     def test_frozen_model(self) -> None:
         """Test DagsterConfig is immutable."""
         config = DagsterConfig()
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             config.host = "other-host"
 
     @pytest.mark.requirement("9c-FR-014")

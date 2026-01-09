@@ -6,6 +6,7 @@ check_infrastructure(), and ServiceEndpoint.
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from unittest.mock import patch
 
 import pytest
@@ -51,7 +52,7 @@ class TestServiceEndpoint:
     def test_frozen(self) -> None:
         """Test ServiceEndpoint is immutable."""
         endpoint = ServiceEndpoint("polaris", 8181)
-        with pytest.raises(Exception):  # noqa: B017  # FrozenInstanceError
+        with pytest.raises(FrozenInstanceError):
             endpoint.name = "other"  # type: ignore[misc]
 
 

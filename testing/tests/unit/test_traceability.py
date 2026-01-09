@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from testing.traceability.checker import (
     RequirementCollector,
@@ -46,7 +47,7 @@ class TestRequirementCoverage:
     def test_frozen_model(self) -> None:
         """Test RequirementCoverage is immutable."""
         coverage = RequirementCoverage(requirement_id="FR-001", tests=[])
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             coverage.requirement_id = "FR-002"
 
 
