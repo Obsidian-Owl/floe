@@ -6,14 +6,12 @@ connection creation, and in-memory database operations.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from testing.fixtures.duckdb import (
     DuckDBConfig,
-    DuckDBConnectionError,
     create_duckdb_connection,
     create_file_connection,
     create_memory_connection,
@@ -57,7 +55,7 @@ class TestDuckDBConfig:
     def test_frozen_model(self) -> None:
         """Test DuckDBConfig is immutable."""
         config = DuckDBConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             config.database = "/tmp/other.duckdb"  # type: ignore[misc]
 
 
@@ -135,7 +133,7 @@ class TestDuckDBConnectionContext:
             conn.execute("SELECT 1")
         # After context, connection should be closed
         # Attempting to use it should fail
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             conn.execute("SELECT 1")
 
     @pytest.mark.requirement("9c-FR-011")
@@ -198,7 +196,7 @@ class TestCreateFileConnection:
             result = conn.execute("SELECT * FROM test").fetchone()
             assert result is not None
             # Write should fail
-            with pytest.raises(Exception):
+            with pytest.raises(Exception):  # noqa: B017
                 conn.execute("INSERT INTO test VALUES (2)")
         finally:
             conn.close()

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from testing.fixtures.data import (
     create_model_instance,

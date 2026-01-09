@@ -223,7 +223,7 @@ def _tcp_check(host: str, port: int, timeout: float = 5.0) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
-    except (OSError, socket.error):
+    except OSError:
         return False
 
 

@@ -65,16 +65,16 @@ class TestPostgresConfig:
     @pytest.mark.requirement("9c-FR-010")
     def test_port_validation(self) -> None:
         """Test port must be in valid range."""
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             PostgresConfig(port=0)
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             PostgresConfig(port=70000)
 
     @pytest.mark.requirement("9c-FR-010")
     def test_frozen_model(self) -> None:
         """Test PostgresConfig is immutable."""
         config = PostgresConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             config.host = "other-host"  # type: ignore[misc]
 
     @pytest.mark.requirement("9c-FR-010")

@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,7 +67,7 @@ class DagsterConnectionError(Exception):
     pass
 
 
-def create_dagster_instance(config: DagsterConfig) -> "DagsterInstance":
+def create_dagster_instance(config: DagsterConfig) -> DagsterInstance:
     """Create Dagster instance from config.
 
     Args:
@@ -103,7 +103,7 @@ def create_dagster_instance(config: DagsterConfig) -> "DagsterInstance":
 @contextmanager
 def dagster_instance_context(
     config: DagsterConfig | None = None,
-) -> Generator["DagsterInstance", None, None]:
+) -> Generator[DagsterInstance, None, None]:
     """Context manager for Dagster instance.
 
     Creates instance on entry, cleans up on exit.
@@ -131,7 +131,7 @@ def dagster_instance_context(
 
 
 @contextmanager
-def ephemeral_instance() -> Generator["DagsterInstance", None, None]:
+def ephemeral_instance() -> Generator[DagsterInstance, None, None]:
     """Create a temporary ephemeral Dagster instance.
 
     Convenience function for quick testing without configuration.
@@ -164,8 +164,8 @@ def check_webserver_health(config: DagsterConfig) -> bool:
     Returns:
         True if webserver responds to health check.
     """
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     health_url = f"http://{config.host}:{config.port}/server_info"
 

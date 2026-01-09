@@ -46,7 +46,7 @@ class TestRequirementCoverage:
     def test_frozen_model(self) -> None:
         """Test RequirementCoverage is immutable."""
         coverage = RequirementCoverage(requirement_id="FR-001", tests=[])
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             coverage.requirement_id = "FR-002"  # type: ignore[misc]
 
 

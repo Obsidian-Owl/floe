@@ -71,7 +71,7 @@ class TestMinIOConfig:
     def test_frozen_model(self) -> None:
         """Test MinIOConfig is immutable."""
         config = MinIOConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             config.endpoint = "other:9000"  # type: ignore[misc]
 
     @pytest.mark.requirement("9c-FR-013")

@@ -51,7 +51,7 @@ class TestServiceEndpoint:
     def test_frozen(self) -> None:
         """Test ServiceEndpoint is immutable."""
         endpoint = ServiceEndpoint("polaris", 8181)
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(Exception):  # noqa: B017  # FrozenInstanceError
             endpoint.name = "other"  # type: ignore[misc]
 
 
@@ -218,12 +218,11 @@ class TestTcpHealthCheck:
     @pytest.mark.requirement("9c-FR-005")
     def test_timeout_returns_false(self) -> None:
         """Test _tcp_health_check returns False on timeout."""
-        import socket as socket_module
 
         from testing.fixtures.services import _tcp_health_check
 
         with patch(
-            "socket.create_connection", side_effect=socket_module.timeout("timed out")
+            "socket.create_connection", side_effect=TimeoutError("timed out")
         ):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is False

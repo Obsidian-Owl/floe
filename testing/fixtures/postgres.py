@@ -19,8 +19,9 @@ Example:
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -75,7 +76,7 @@ class PostgresConnectionError(Exception):
     pass
 
 
-def create_connection(config: PostgresConfig) -> "psycopg2.connection":
+def create_connection(config: PostgresConfig) -> psycopg2.connection:
     """Create PostgreSQL connection from config.
 
     Args:
@@ -112,7 +113,7 @@ def create_connection(config: PostgresConfig) -> "psycopg2.connection":
 @contextmanager
 def postgres_connection_context(
     config: PostgresConfig | None = None,
-) -> Generator["psycopg2.connection", None, None]:
+) -> Generator[psycopg2.connection, None, None]:
     """Context manager for PostgreSQL connection.
 
     Creates a connection on entry, closes it on exit.
@@ -139,7 +140,7 @@ def postgres_connection_context(
 
 
 def create_test_database(
-    admin_conn: "psycopg2.connection",
+    admin_conn: psycopg2.connection,
     database_name: str,
 ) -> None:
     """Create a test database.
@@ -163,7 +164,7 @@ def create_test_database(
 
 
 def drop_test_database(
-    admin_conn: "psycopg2.connection",
+    admin_conn: psycopg2.connection,
     database_name: str,
 ) -> None:
     """Drop a test database.

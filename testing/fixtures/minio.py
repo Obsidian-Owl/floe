@@ -17,8 +17,9 @@ Example:
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -72,7 +73,7 @@ class MinIOConnectionError(Exception):
     pass
 
 
-def create_minio_client(config: MinIOConfig) -> "Minio":
+def create_minio_client(config: MinIOConfig) -> Minio:
     """Create MinIO client from config.
 
     Args:
@@ -109,7 +110,7 @@ def create_minio_client(config: MinIOConfig) -> "Minio":
 @contextmanager
 def minio_client_context(
     config: MinIOConfig | None = None,
-) -> Generator["Minio", None, None]:
+) -> Generator[Minio, None, None]:
     """Context manager for MinIO client.
 
     Creates client on entry, cleans up on exit (no explicit close needed).
@@ -133,7 +134,7 @@ def minio_client_context(
 
 
 def ensure_bucket(
-    client: "Minio",
+    client: Minio,
     bucket_name: str,
     region: str = "us-east-1",
 ) -> bool:
@@ -154,7 +155,7 @@ def ensure_bucket(
 
 
 def delete_bucket_contents(
-    client: "Minio",
+    client: Minio,
     bucket_name: str,
 ) -> int:
     """Delete all objects in a bucket.
@@ -180,7 +181,7 @@ def delete_bucket_contents(
 
 
 def cleanup_bucket(
-    client: "Minio",
+    client: Minio,
     bucket_name: str,
 ) -> None:
     """Delete bucket and all its contents.

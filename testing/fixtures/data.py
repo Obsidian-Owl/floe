@@ -159,15 +159,15 @@ def create_model_instance(
         else:
             # Generate value based on annotation for required fields
             annotation = field_info.annotation
-            if annotation == str:
+            if annotation is str:
                 field_data[field_name] = generate_random_string()
-            elif annotation == int:
+            elif annotation is int:
                 field_data[field_name] = random.randint(1, 1000)  # noqa: S311
-            elif annotation == float:
+            elif annotation is float:
                 field_data[field_name] = random.uniform(0.0, 100.0)  # noqa: S311
-            elif annotation == bool:
+            elif annotation is bool:
                 field_data[field_name] = True
-            elif annotation == datetime:
+            elif annotation is datetime:
                 field_data[field_name] = generate_test_timestamp()
 
     return model_class(**field_data)

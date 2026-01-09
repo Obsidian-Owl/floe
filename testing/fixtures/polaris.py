@@ -13,8 +13,9 @@ Example:
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -73,7 +74,7 @@ class PolarisConnectionError(Exception):
     pass
 
 
-def create_polaris_catalog(config: PolarisConfig) -> "Catalog":
+def create_polaris_catalog(config: PolarisConfig) -> Catalog:
     """Create Polaris REST catalog from config.
 
     Args:
@@ -111,7 +112,7 @@ def create_polaris_catalog(config: PolarisConfig) -> "Catalog":
 @contextmanager
 def polaris_catalog_context(
     config: PolarisConfig | None = None,
-) -> Generator["Catalog", None, None]:
+) -> Generator[Catalog, None, None]:
     """Context manager for Polaris catalog.
 
     Creates catalog on entry, no cleanup needed on exit.
@@ -135,7 +136,7 @@ def polaris_catalog_context(
 
 
 def create_test_namespace(
-    catalog: "Catalog",
+    catalog: Catalog,
     namespace: str | tuple[str, ...],
 ) -> tuple[str, ...]:
     """Create a test namespace in the catalog.
@@ -155,7 +156,7 @@ def create_test_namespace(
 
 
 def drop_test_namespace(
-    catalog: "Catalog",
+    catalog: Catalog,
     namespace: str | tuple[str, ...],
     *,
     cascade: bool = True,
@@ -179,7 +180,7 @@ def drop_test_namespace(
 
 
 def namespace_exists(
-    catalog: "Catalog",
+    catalog: Catalog,
     namespace: str | tuple[str, ...],
 ) -> bool:
     """Check if namespace exists in catalog.

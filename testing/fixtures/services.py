@@ -162,7 +162,7 @@ def _tcp_health_check(host: str, port: int, timeout: float) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
-    except (OSError, socket.error):
+    except OSError:
         return False
 
 

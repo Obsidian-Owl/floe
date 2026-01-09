@@ -29,25 +29,6 @@ Example:
 
 from __future__ import annotations
 
-# Phase 2 exports - Foundational utilities
-from testing.fixtures.namespaces import (
-    InvalidNamespaceError,
-    generate_unique_namespace,
-    validate_namespace,
-)
-from testing.fixtures.polling import (
-    PollingConfig,
-    PollingTimeoutError,
-    wait_for_condition,
-    wait_for_service,
-)
-from testing.fixtures.services import (
-    ServiceEndpoint,
-    ServiceUnavailableError,
-    check_infrastructure,
-    check_service_health,
-)
-
 # Phase 6 exports - Service fixtures
 from testing.fixtures.dagster import (
     DagsterConfig,
@@ -86,6 +67,13 @@ from testing.fixtures.minio import (
     ensure_bucket,
     minio_client_context,
 )
+
+# Phase 2 exports - Foundational utilities
+from testing.fixtures.namespaces import (
+    InvalidNamespaceError,
+    generate_unique_namespace,
+    validate_namespace,
+)
 from testing.fixtures.polaris import (
     PolarisConfig,
     PolarisConnectionError,
@@ -95,6 +83,12 @@ from testing.fixtures.polaris import (
     namespace_exists,
     polaris_catalog_context,
 )
+from testing.fixtures.polling import (
+    PollingConfig,
+    PollingTimeoutError,
+    wait_for_condition,
+    wait_for_service,
+)
 from testing.fixtures.postgres import (
     PostgresConfig,
     PostgresConnectionError,
@@ -102,6 +96,12 @@ from testing.fixtures.postgres import (
     create_test_database,
     drop_test_database,
     postgres_connection_context,
+)
+from testing.fixtures.services import (
+    ServiceEndpoint,
+    ServiceUnavailableError,
+    check_infrastructure,
+    check_service_health,
 )
 
 __all__ = [

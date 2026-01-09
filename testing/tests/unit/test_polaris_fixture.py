@@ -75,7 +75,7 @@ class TestPolarisConfig:
     def test_frozen_model(self) -> None:
         """Test PolarisConfig is immutable."""
         config = PolarisConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             config.uri = "http://other:8181"  # type: ignore[misc]
 
     @pytest.mark.requirement("9c-FR-012")

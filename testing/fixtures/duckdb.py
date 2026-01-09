@@ -15,9 +15,10 @@ Example:
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -56,7 +57,7 @@ class DuckDBConnectionError(Exception):
     pass
 
 
-def create_duckdb_connection(config: DuckDBConfig) -> "duckdb.DuckDBPyConnection":
+def create_duckdb_connection(config: DuckDBConfig) -> duckdb.DuckDBPyConnection:
     """Create DuckDB connection from config.
 
     Args:
@@ -97,7 +98,7 @@ def create_duckdb_connection(config: DuckDBConfig) -> "duckdb.DuckDBPyConnection
 @contextmanager
 def duckdb_connection_context(
     config: DuckDBConfig | None = None,
-) -> Generator["duckdb.DuckDBPyConnection", None, None]:
+) -> Generator[duckdb.DuckDBPyConnection, None, None]:
     """Context manager for DuckDB connection.
 
     Creates connection on entry, closes it on exit.
@@ -124,7 +125,7 @@ def duckdb_connection_context(
 
 def create_memory_connection(
     extensions: tuple[str, ...] = (),
-) -> "duckdb.DuckDBPyConnection":
+) -> duckdb.DuckDBPyConnection:
     """Create in-memory DuckDB connection.
 
     Convenience function for quick in-memory database.
@@ -144,7 +145,7 @@ def create_file_connection(
     *,
     read_only: bool = False,
     extensions: tuple[str, ...] = (),
-) -> "duckdb.DuckDBPyConnection":
+) -> duckdb.DuckDBPyConnection:
     """Create file-based DuckDB connection.
 
     Args:
@@ -164,7 +165,7 @@ def create_file_connection(
 
 
 def execute_script(
-    conn: "duckdb.DuckDBPyConnection",
+    conn: duckdb.DuckDBPyConnection,
     script: str,
 ) -> None:
     """Execute a SQL script (multiple statements).
