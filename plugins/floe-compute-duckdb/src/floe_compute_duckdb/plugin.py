@@ -20,11 +20,12 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from floe_core.plugins.compute import (
+from floe_core import (
     CatalogConfig,
     ComputeConfig,
     ComputePlugin,
     ConnectionResult,
+    ConnectionStatus,
     ResourceSpec,
 )
 
@@ -134,11 +135,11 @@ class DuckDBComputePlugin(ComputePlugin):
 
         Args:
             config: Compute configuration containing DuckDB-specific settings.
-                Expected extra keys:
+                Uses config.connection dict with keys:
                 - path: Database file path (default: ":memory:")
-                - threads: Number of threads (default from config.extra or 4)
                 - extensions: List of extensions to load
                 - settings: DuckDB settings dict (memory_limit, etc.)
+                Uses config.threads for thread count.
 
         Returns:
             Dictionary matching dbt-duckdb profile schema with keys:
@@ -150,27 +151,29 @@ class DuckDBComputePlugin(ComputePlugin):
 
         Example:
             >>> config = ComputeConfig(
-            ...     extra={"path": "/data/analytics.duckdb", "threads": 8}
+            ...     plugin="duckdb",
+            ...     threads=8,
+            ...     connection={"path": "/data/analytics.duckdb"}
             ... )
             >>> profile = plugin.generate_dbt_profile(config)
             >>> profile
             {'type': 'duckdb', 'path': '/data/analytics.duckdb', 'threads': 8}
         """
-        extra = config.extra
+        connection = config.connection
 
         profile: dict[str, Any] = {
             "type": "duckdb",
-            "path": extra.get("path", ":memory:"),
-            "threads": extra.get("threads", 4),
+            "path": connection.get("path", ":memory:"),
+            "threads": config.threads,
         }
 
         # Add optional extensions if specified
-        extensions = extra.get("extensions")
+        extensions = connection.get("extensions")
         if extensions:
             profile["extensions"] = extensions
 
         # Add optional settings if specified
-        settings = extra.get("settings")
+        settings = connection.get("settings")
         if settings:
             profile["settings"] = settings
 
@@ -199,18 +202,18 @@ class DuckDBComputePlugin(ComputePlugin):
             config: Compute configuration with DuckDB settings.
 
         Returns:
-            ConnectionResult with success status and latency.
+            ConnectionResult with status, latency_ms, and message.
 
         Example:
             >>> result = plugin.validate_connection(config)
-            >>> result.success
+            >>> result.status == ConnectionStatus.HEALTHY
             True
             >>> result.latency_ms < 100
             True
         """
         import duckdb
 
-        path = config.extra.get("path", ":memory:")
+        path = config.connection.get("path", ":memory:")
         start_time = time.perf_counter()
 
         try:
@@ -222,25 +225,24 @@ class DuckDBComputePlugin(ComputePlugin):
 
                 if result and result[0] == 1:
                     return ConnectionResult(
-                        success=True,
-                        message="Connected to DuckDB successfully",
+                        status=ConnectionStatus.HEALTHY,
                         latency_ms=latency_ms,
-                        details={"path": path},
+                        message=f"Connected to DuckDB successfully (path: {path})",
                     )
                 return ConnectionResult(
-                    success=False,
-                    message="DuckDB validation query returned unexpected result",
+                    status=ConnectionStatus.UNHEALTHY,
                     latency_ms=latency_ms,
+                    message="DuckDB validation query returned unexpected result",
                 )
             finally:
                 conn.close()
         except Exception as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
             return ConnectionResult(
-                success=False,
-                message=f"Failed to connect to DuckDB: {e}",
+                status=ConnectionStatus.UNHEALTHY,
                 latency_ms=latency_ms,
-                details={"error": str(e), "path": path},
+                message=f"Failed to connect to DuckDB: {e}",
+                warnings=[f"Error details: {e!s}"],
             )
 
     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
@@ -316,12 +318,18 @@ class DuckDBComputePlugin(ComputePlugin):
         if catalog_config.warehouse:
             attach_parts.append(f", WAREHOUSE '{catalog_config.warehouse}'")
 
-        # Add credentials if provided
+        # Add credentials if provided (extract secret values)
         creds = catalog_config.credentials
-        if creds.get("client_id"):
-            attach_parts.append(f", CLIENT_ID '{creds['client_id']}'")
-        if creds.get("client_secret"):
-            attach_parts.append(f", CLIENT_SECRET '{creds['client_secret']}'")
+        client_id = creds.get("client_id")
+        client_secret = creds.get("client_secret")
+
+        if client_id:
+            # SecretStr: use get_secret_value() to extract
+            value = client_id.get_secret_value()
+            attach_parts.append(f", CLIENT_ID '{value}'")
+        if client_secret:
+            value = client_secret.get_secret_value()
+            attach_parts.append(f", CLIENT_SECRET '{value}'")
 
         attach_parts.append(")")
 

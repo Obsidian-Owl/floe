@@ -12,7 +12,7 @@ import pytest
 
 if TYPE_CHECKING:
     from floe_compute_duckdb import DuckDBComputePlugin
-    from floe_core.plugins.compute import CatalogConfig, ComputeConfig
+    from floe_core import CatalogConfig, ComputeConfig
 
 
 class TestDuckDBComputePluginMetadata:
@@ -71,14 +71,15 @@ class TestGenerateDBTProfile:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation includes extensions when specified."""
-        from floe_core.plugins.compute import ComputeConfig
+        from floe_core import ComputeConfig
 
         config = ComputeConfig(
-            extra={
+            plugin="duckdb",
+            threads=8,
+            connection={
                 "path": "/data/analytics.duckdb",
-                "threads": 8,
                 "extensions": ["iceberg", "httpfs"],
-            }
+            },
         )
 
         profile = duckdb_plugin.generate_dbt_profile(config)
@@ -92,13 +93,14 @@ class TestGenerateDBTProfile:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation includes DuckDB settings."""
-        from floe_core.plugins.compute import ComputeConfig
+        from floe_core import ComputeConfig
 
         config = ComputeConfig(
-            extra={
+            plugin="duckdb",
+            connection={
                 "path": ":memory:",
                 "settings": {"memory_limit": "4GB"},
-            }
+            },
         )
 
         profile = duckdb_plugin.generate_dbt_profile(config)

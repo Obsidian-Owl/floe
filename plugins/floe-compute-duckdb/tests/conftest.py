@@ -40,15 +40,15 @@ def memory_config() -> Any:
     Example:
         >>> def test_memory_connection(duckdb_plugin, memory_config):
         ...     result = duckdb_plugin.validate_connection(memory_config)
-        ...     assert result.success
+        ...     assert result.status == ConnectionStatus.HEALTHY
     """
-    from floe_core.plugins.compute import ComputeConfig
+    from floe_core import ComputeConfig
 
     return ComputeConfig(
-        database="test",
-        extra={
+        plugin="duckdb",
+        threads=4,
+        connection={
             "path": ":memory:",
-            "threads": 4,
         },
     )
 
@@ -65,14 +65,17 @@ def catalog_config() -> Any:
         ...     sql = duckdb_plugin.get_catalog_attachment_sql(catalog_config)
         ...     assert sql is not None
     """
-    from floe_core.plugins.compute import CatalogConfig
+    from pydantic import SecretStr
+
+    from floe_core import CatalogConfig
 
     return CatalogConfig(
+        catalog_type="rest",
         catalog_name="ice",
         catalog_uri="http://polaris:8181/api/catalog",
         warehouse="floe_warehouse",
         credentials={
-            "client_id": "test_client",
-            "client_secret": "test_secret",
+            "client_id": SecretStr("test_client"),
+            "client_secret": SecretStr("test_secret"),
         },
     )
