@@ -7,6 +7,8 @@ Contract Version: 1.0.0
 
 Requirements Covered:
 - FR-001: Initialize OpenTelemetry SDK with TelemetryConfig
+- FR-002: W3C Trace Context propagation (via configure_propagators)
+- FR-003: W3C Baggage propagation (via configure_propagators)
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -19,6 +21,8 @@ import logging
 import os
 from enum import Enum, auto
 from typing import TYPE_CHECKING
+
+from floe_core.telemetry.propagation import configure_propagators
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -140,7 +144,10 @@ class TelemetryProvider:
             self._state = ProviderState.INITIALIZED
             return
 
-        # TODO: Initialize actual OpenTelemetry SDK (T015)
+        # Configure W3C Trace Context and Baggage propagators (FR-002, FR-003)
+        configure_propagators()
+
+        # TODO: Initialize actual OpenTelemetry SDK (T040+)
         # - Configure TracerProvider with resource attributes
         # - Configure sampler based on environment
         # - Set up OTLP exporter (gRPC or HTTP)

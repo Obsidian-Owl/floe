@@ -3,9 +3,12 @@
 Tests cover:
 - T013: TelemetryProvider initialization and shutdown lifecycle
 - T014: No-op mode detection via OTEL_SDK_DISABLED
+- T023: Propagator integration during initialization
 
 Requirements Covered:
 - FR-001: Initialize OpenTelemetry SDK with TelemetryConfig
+- FR-002: W3C Trace Context propagation
+- FR-003: W3C Baggage propagation
 - FR-023: Telemetry provider lifecycle management
 """
 
@@ -427,3 +430,84 @@ class TestTelemetryProviderNoopModeBehavior:
             assert provider.is_noop is True
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
+
+
+class TestTelemetryProviderPropagatorIntegration:
+    """Tests for propagator integration during initialization (T023).
+
+    Validates that W3C propagators are configured when provider initializes.
+    """
+
+    @pytest.mark.requirement("FR-002")
+    def test_initialize_configures_propagators(
+        self, telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that initialize() configures W3C propagators."""
+        from opentelemetry.propagate import get_global_textmap
+        from opentelemetry.propagators.composite import CompositePropagator
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        # After initialization, global propagator should be composite
+        propagator = get_global_textmap()
+        assert isinstance(propagator, CompositePropagator)
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-002")
+    def test_propagator_has_trace_context(
+        self, telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that propagator includes W3C Trace Context."""
+        from opentelemetry.propagate import get_global_textmap
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        propagator = get_global_textmap()
+        # CompositePropagator should have traceparent in fields
+        assert "traceparent" in propagator.fields
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-003")
+    def test_propagator_has_baggage(
+        self, telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that propagator includes W3C Baggage."""
+        from opentelemetry.propagate import get_global_textmap
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        propagator = get_global_textmap()
+        # CompositePropagator should have baggage in fields
+        assert "baggage" in propagator.fields
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-002")
+    def test_noop_mode_does_not_configure_propagators(
+        self, disabled_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that no-op mode skips propagator configuration."""
+        from opentelemetry.propagate import get_global_textmap, set_global_textmap
+        from opentelemetry.propagators.composite import CompositePropagator
+        from opentelemetry.trace.propagation.tracecontext import (
+            TraceContextTextMapPropagator,
+        )
+
+        # Set a known propagator before test
+        original = TraceContextTextMapPropagator()
+        set_global_textmap(original)
+
+        provider = TelemetryProvider(disabled_telemetry_config)
+        provider.initialize()
+
+        # In no-op mode, propagator should NOT be changed to composite
+        propagator = get_global_textmap()
+        # Should still be the original (not composite)
+        assert not isinstance(propagator, CompositePropagator)
+
+        provider.shutdown()
