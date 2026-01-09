@@ -279,42 +279,208 @@ class PolarisCatalogPlugin(CatalogPlugin):
     ) -> None:
         """Create a new namespace in the Polaris catalog.
 
+        Creates a namespace (database/schema) in the Iceberg catalog.
+        Namespaces organize tables into logical groups. Supports hierarchical
+        namespace paths using dot notation (e.g., "domain.product.bronze").
+
         Args:
-            namespace: Namespace name to create.
-            properties: Optional namespace properties.
+            namespace: Namespace name to create. Supports dot notation for
+                hierarchical namespaces (e.g., "bronze", "domain.product.silver").
+            properties: Optional namespace properties such as:
+                - location: Storage location (e.g., "s3://bucket/path")
+                - owner: Namespace owner
+                - description: Human-readable description
+                - Custom metadata key-value pairs
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            ConflictError: If namespace already exists.
+            AuthenticationError: If lacking permission to create namespaces.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> plugin.create_namespace("bronze", {"location": "s3://bucket/bronze"})
+            >>> plugin.create_namespace("domain.product.silver")
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("create_namespace() not yet implemented")
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "create_namespace",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            namespace=namespace,
+        ) as span:
+            log = logger.bind(
+                namespace=namespace,
+                uri=self._config.uri,
+            )
+            log.info("creating_namespace")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # Use empty dict if no properties provided
+                ns_properties = properties or {}
+
+                # Create the namespace via PyIceberg catalog
+                self._catalog.create_namespace(namespace, properties=ns_properties)
+
+                log.info("namespace_created", properties=list(ns_properties.keys()))
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("create_namespace_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="create_namespace",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("create_namespace_failed", error=str(e))
+                raise
 
     def list_namespaces(self, parent: str | None = None) -> list[str]:
         """List namespaces in the Polaris catalog.
 
+        Returns all namespaces, optionally filtered by parent namespace
+        for hierarchical catalogs. Namespaces are returned as dot-notation
+        strings for hierarchical namespaces.
+
         Args:
-            parent: Optional parent namespace to filter by.
+            parent: Optional parent namespace to filter by. If None,
+                returns top-level namespaces. If specified, returns
+                child namespaces under the parent.
 
         Returns:
-            List of namespace names.
+            List of namespace names as strings. Multi-level namespaces
+            are returned with dot notation (e.g., "domain.product.bronze").
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            AuthenticationError: If lacking permission to list namespaces.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> plugin.list_namespaces()
+            ['bronze', 'silver', 'gold']
+            >>> plugin.list_namespaces(parent="silver")
+            ['silver.customers', 'silver.orders']
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("list_namespaces() not yet implemented")
+        tracer = get_tracer()
+        extra_attrs = {"parent_namespace": parent} if parent else None
+        with catalog_span(
+            tracer,
+            "list_namespaces",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            extra_attributes=extra_attrs,
+        ) as span:
+            log = logger.bind(
+                parent=parent,
+                uri=self._config.uri,
+            )
+            log.info("listing_namespaces")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # PyIceberg returns list of tuples, e.g., [("bronze",), ("silver",)]
+                # or for hierarchical: [("domain", "product", "bronze")]
+                if parent:
+                    # Convert parent string to tuple for PyIceberg
+                    parent_tuple = tuple(parent.split("."))
+                    raw_namespaces = self._catalog.list_namespaces(parent_tuple)
+                else:
+                    raw_namespaces = self._catalog.list_namespaces()
+
+                # Convert tuples to dot-notation strings
+                namespaces = [".".join(ns) for ns in raw_namespaces]
+
+                log.info("namespaces_listed", count=len(namespaces))
+
+                return namespaces
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("list_namespaces_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="list_namespaces",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("list_namespaces_failed", error=str(e))
+                raise
 
     def delete_namespace(self, namespace: str) -> None:
         """Delete a namespace from the Polaris catalog.
 
+        Deletes an empty namespace from the catalog. The namespace must not
+        contain any tables - use drop_table() first to remove all tables.
+
         Args:
-            namespace: Namespace name to delete.
+            namespace: Namespace name to delete. Supports dot notation for
+                hierarchical namespaces (e.g., "domain.product.bronze").
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            NotFoundError: If namespace does not exist.
+            NotSupportedError: If namespace is not empty (contains tables).
+            AuthenticationError: If lacking permission to delete namespaces.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> plugin.delete_namespace("bronze")
+            >>> plugin.delete_namespace("domain.product.silver")
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("delete_namespace() not yet implemented")
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "delete_namespace",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            namespace=namespace,
+        ) as span:
+            log = logger.bind(
+                namespace=namespace,
+                uri=self._config.uri,
+            )
+            log.info("deleting_namespace")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # Drop the namespace via PyIceberg catalog
+                self._catalog.drop_namespace(namespace)
+
+                log.info("namespace_deleted")
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("delete_namespace_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="delete_namespace",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("delete_namespace_failed", error=str(e))
+                raise
 
     def create_table(
         self,
