@@ -13,6 +13,13 @@ Exception Hierarchy:
     ├── CircularDependencyError # Dependency cycle detected
     └── MissingDependencyError  # Required dependency not available
 
+    CatalogError (base for catalog operations)
+    ├── CatalogUnavailableError # Catalog service unreachable
+    ├── AuthenticationError     # Authentication/authorization failed
+    ├── NotSupportedError       # Operation not supported by catalog
+    ├── ConflictError           # Resource already exists
+    └── NotFoundError           # Resource not found
+
 Example:
     >>> from floe_core.plugin_errors import PluginNotFoundError
     >>> from floe_core.plugin_types import PluginType
@@ -20,6 +27,12 @@ Example:
     Traceback (most recent call last):
         ...
     PluginNotFoundError: Plugin not found: COMPUTE:missing-plugin
+
+    >>> from floe_core.plugin_errors import NotFoundError
+    >>> raise NotFoundError("namespace", "bronze")
+    Traceback (most recent call last):
+        ...
+    NotFoundError: namespace not found: bronze
 """
 
 from __future__ import annotations
@@ -260,3 +273,216 @@ class MissingDependencyError(PluginError):
         self.missing_dependencies = missing_dependencies
         deps_str = ", ".join(missing_dependencies)
         super().__init__(f"Plugin '{plugin_name}' has missing dependencies: {deps_str}")
+
+
+# =============================================================================
+# Catalog Error Hierarchy
+# =============================================================================
+# These exceptions are used by CatalogPlugin implementations (Polaris, Glue, etc.)
+# to report catalog-specific errors. They inherit from a separate base class
+# to distinguish catalog operations from plugin registry operations.
+
+
+class CatalogError(Exception):
+    """Base exception for all catalog operations.
+
+    All catalog-related exceptions inherit from this class, allowing callers
+    to catch all catalog errors with a single except clause.
+
+    This is separate from PluginError because catalog errors are operational
+    (e.g., namespace not found, authentication failed) while PluginError
+    covers plugin lifecycle issues (e.g., plugin not registered, incompatible).
+
+    Example:
+        >>> try:
+        ...     catalog.create_namespace("bronze")
+        ... except CatalogError as e:
+        ...     print(f"Catalog operation failed: {e}")
+    """
+
+    pass
+
+
+class CatalogUnavailableError(CatalogError):
+    """Raised when the catalog service is unreachable.
+
+    This error indicates network connectivity issues, service downtime,
+    or timeout waiting for catalog response.
+
+    Attributes:
+        catalog_uri: The URI of the unavailable catalog.
+        cause: The underlying exception (e.g., connection timeout).
+
+    Example:
+        >>> raise CatalogUnavailableError(
+        ...     "http://polaris:8181/api/catalog",
+        ...     cause=ConnectionError("Connection refused")
+        ... )
+        Traceback (most recent call last):
+            ...
+        CatalogUnavailableError: Catalog unavailable: http://polaris:8181/api/catalog
+    """
+
+    def __init__(self, catalog_uri: str, cause: Exception | None = None) -> None:
+        """Initialize CatalogUnavailableError.
+
+        Args:
+            catalog_uri: The URI of the unavailable catalog.
+            cause: The underlying exception that caused the unavailability.
+        """
+        self.catalog_uri = catalog_uri
+        self.cause = cause
+        cause_msg = f" - {cause}" if cause else ""
+        super().__init__(f"Catalog unavailable: {catalog_uri}{cause_msg}")
+
+
+class AuthenticationError(CatalogError):
+    """Raised when authentication or authorization fails.
+
+    This error indicates invalid credentials, expired tokens, or
+    insufficient permissions for the requested operation.
+
+    Attributes:
+        message: Description of the authentication failure.
+        operation: The operation that was attempted (optional).
+
+    Example:
+        >>> raise AuthenticationError("Invalid OAuth2 token")
+        Traceback (most recent call last):
+            ...
+        AuthenticationError: Authentication failed: Invalid OAuth2 token
+
+        >>> raise AuthenticationError(
+        ...     "Insufficient permissions",
+        ...     operation="create_namespace"
+        ... )
+        Traceback (most recent call last):
+            ...
+        AuthenticationError: Authentication failed for 'create_namespace': Insufficient permissions
+    """
+
+    def __init__(self, message: str, operation: str | None = None) -> None:
+        """Initialize AuthenticationError.
+
+        Args:
+            message: Description of the authentication failure.
+            operation: The operation that was attempted (optional).
+        """
+        self.message = message
+        self.operation = operation
+        if operation:
+            super().__init__(f"Authentication failed for '{operation}': {message}")
+        else:
+            super().__init__(f"Authentication failed: {message}")
+
+
+class NotSupportedError(CatalogError):
+    """Raised when an operation is not supported by the catalog implementation.
+
+    Different catalog backends support different features. This error
+    indicates that the requested operation is not available.
+
+    Attributes:
+        operation: The unsupported operation name.
+        catalog_name: The name of the catalog that doesn't support it.
+        reason: Optional explanation of why it's not supported.
+
+    Example:
+        >>> raise NotSupportedError(
+        ...     "vend_credentials",
+        ...     "hive",
+        ...     reason="Hive Metastore does not support credential vending"
+        ... )
+        Traceback (most recent call last):
+            ...
+        NotSupportedError: Operation 'vend_credentials' not supported by catalog 'hive': ...
+    """
+
+    def __init__(
+        self,
+        operation: str,
+        catalog_name: str,
+        reason: str | None = None,
+    ) -> None:
+        """Initialize NotSupportedError.
+
+        Args:
+            operation: The unsupported operation name.
+            catalog_name: The name of the catalog that doesn't support it.
+            reason: Optional explanation of why it's not supported.
+        """
+        self.operation = operation
+        self.catalog_name = catalog_name
+        self.reason = reason
+        msg = f"Operation '{operation}' not supported by catalog '{catalog_name}'"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg)
+
+
+class ConflictError(CatalogError):
+    """Raised when a resource already exists.
+
+    This error indicates that a create operation failed because
+    the namespace or table already exists in the catalog.
+
+    Attributes:
+        resource_type: The type of resource (e.g., "namespace", "table").
+        identifier: The identifier of the conflicting resource.
+
+    Example:
+        >>> raise ConflictError("namespace", "bronze")
+        Traceback (most recent call last):
+            ...
+        ConflictError: namespace already exists: bronze
+
+        >>> raise ConflictError("table", "bronze.raw_customers")
+        Traceback (most recent call last):
+            ...
+        ConflictError: table already exists: bronze.raw_customers
+    """
+
+    def __init__(self, resource_type: str, identifier: str) -> None:
+        """Initialize ConflictError.
+
+        Args:
+            resource_type: The type of resource (e.g., "namespace", "table").
+            identifier: The identifier of the conflicting resource.
+        """
+        self.resource_type = resource_type
+        self.identifier = identifier
+        super().__init__(f"{resource_type} already exists: {identifier}")
+
+
+class NotFoundError(CatalogError):
+    """Raised when a resource is not found.
+
+    This error indicates that an operation failed because the
+    namespace or table does not exist in the catalog.
+
+    Attributes:
+        resource_type: The type of resource (e.g., "namespace", "table").
+        identifier: The identifier of the missing resource.
+
+    Example:
+        >>> raise NotFoundError("namespace", "bronze")
+        Traceback (most recent call last):
+            ...
+        NotFoundError: namespace not found: bronze
+
+        >>> raise NotFoundError("table", "bronze.raw_customers")
+        Traceback (most recent call last):
+            ...
+        NotFoundError: table not found: bronze.raw_customers
+    """
+
+    def __init__(self, resource_type: str, identifier: str) -> None:
+        """Initialize NotFoundError.
+
+        Args:
+            resource_type: The type of resource (e.g., "namespace", "table").
+            identifier: The identifier of the missing resource.
+        """
+        self.resource_type = resource_type
+        self.identifier = identifier
+        super().__init__(f"{resource_type} not found: {identifier}")
