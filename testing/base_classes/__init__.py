@@ -21,5 +21,13 @@ Example:
 
 from __future__ import annotations
 
-# Exports will be added as classes are implemented in Phase 4
-__all__: list[str] = []
+# Phase 4 exports - Base classes for integration testing
+from testing.base_classes.adapter_test_base import AdapterTestBase
+from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.base_classes.plugin_test_base import PluginTestBase
+
+__all__ = [
+    "AdapterTestBase",
+    "IntegrationTestBase",
+    "PluginTestBase",
+]
