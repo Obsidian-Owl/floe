@@ -7,6 +7,9 @@
 # Environment:
 #   COVERAGE_THRESHOLD  Minimum coverage percentage (default: 80)
 #   COVERAGE_REPORT     Coverage report format: xml, html, term (default: xml)
+#
+# Note: This script dynamically discovers all packages with tests.
+#       New packages are automatically included when they have a tests/unit/ directory.
 
 set -euo pipefail
 
@@ -23,8 +26,40 @@ echo "Coverage threshold: ${COVERAGE_THRESHOLD}%"
 echo "Coverage report: ${COVERAGE_REPORT}"
 echo ""
 
+# Dynamically discover all packages with unit tests
+UNIT_TEST_PATHS=""
+COVERAGE_SOURCES=""
+
+for pkg_dir in packages/*/; do
+    pkg_name=$(basename "${pkg_dir}")
+    unit_test_dir="${pkg_dir}tests/unit"
+    if [[ -d "${unit_test_dir}" ]]; then
+        echo "  Found: ${unit_test_dir}"
+        UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${unit_test_dir}"
+        COVERAGE_SOURCES="${COVERAGE_SOURCES} --cov=${pkg_dir}src"
+    fi
+done
+
+# Always include testing module tests and contract tests
+if [[ -d "testing/tests/unit" ]]; then
+    echo "  Found: testing/tests/unit"
+    UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/tests/unit"
+fi
+
+if [[ -d "tests/contract" ]]; then
+    echo "  Found: tests/contract"
+    UNIT_TEST_PATHS="${UNIT_TEST_PATHS} tests/contract"
+fi
+
+echo ""
+
+if [[ -z "${UNIT_TEST_PATHS}" ]]; then
+    echo "ERROR: No test directories found" >&2
+    exit 1
+fi
+
 # Build coverage report flags
-COVERAGE_FLAGS="--cov=packages/floe-core/src"
+COVERAGE_FLAGS="${COVERAGE_SOURCES}"
 case "${COVERAGE_REPORT}" in
     xml)
         COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=xml:coverage.xml"
@@ -43,9 +78,7 @@ esac
 # Run unit tests
 # shellcheck disable=SC2086
 uv run pytest \
-    packages/floe-core/tests/unit/ \
-    testing/tests/unit/ \
-    tests/contract/ \
+    ${UNIT_TEST_PATHS} \
     -v \
     ${COVERAGE_FLAGS} \
     --cov-fail-under="${COVERAGE_THRESHOLD}" \

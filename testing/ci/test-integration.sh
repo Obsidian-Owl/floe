@@ -8,6 +8,9 @@
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
 #   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   WAIT_TIMEOUT        Service readiness timeout in seconds (default: 300)
+#
+# Note: This script dynamically discovers all packages with integration tests.
+#       New packages are automatically included when they have a tests/integration/ directory.
 
 set -euo pipefail
 
@@ -53,11 +56,38 @@ if ! kubectl wait --for=condition=ready pods --all -n "${TEST_NAMESPACE}" --time
 fi
 
 echo ""
+
+# Dynamically discover all packages with integration tests
+INTEGRATION_TEST_PATHS=""
+
+for pkg_dir in packages/*/; do
+    integration_test_dir="${pkg_dir}tests/integration"
+    if [[ -d "${integration_test_dir}" ]]; then
+        echo "  Found: ${integration_test_dir}"
+        INTEGRATION_TEST_PATHS="${INTEGRATION_TEST_PATHS} ${integration_test_dir}"
+    fi
+done
+
+# Also check for root-level integration tests
+if [[ -d "tests/integration" ]]; then
+    echo "  Found: tests/integration"
+    INTEGRATION_TEST_PATHS="${INTEGRATION_TEST_PATHS} tests/integration"
+fi
+
+echo ""
+
+if [[ -z "${INTEGRATION_TEST_PATHS}" ]]; then
+    echo "WARNING: No integration test directories found" >&2
+    echo "This is OK if no packages have integration tests yet." >&2
+    exit 0
+fi
+
 echo "Running integration tests..."
 
 # Run integration tests
+# shellcheck disable=SC2086
 uv run pytest \
-    packages/floe-core/tests/integration/ \
+    ${INTEGRATION_TEST_PATHS} \
     -v \
     --tb=short \
     -x \

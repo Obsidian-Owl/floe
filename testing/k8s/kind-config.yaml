@@ -4,6 +4,12 @@
 # Usage:
 #   kind create cluster --config testing/k8s/kind-config.yaml
 #   make kind-up
+#
+# Features:
+#   - Metrics server support (for Lens and kubectl top)
+#   - extraPortMappings for localhost service access
+#   - Control plane metrics exposed for Prometheus
+#   - Ingress-ready labels
 ---
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -14,6 +20,11 @@ nodes:
     image: kindest/node:v1.29.0
     kubeadmConfigPatches:
       - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+      - |
         kind: KubeletConfiguration
         # Resource reservations for system stability
         systemReserved:
@@ -22,10 +33,49 @@ nodes:
         kubeReserved:
           cpu: 50m
           memory: 50Mi
+      - |
+        kind: ClusterConfiguration
+        # Expose control plane metrics for Prometheus scraping
+        controllerManager:
+          extraArgs:
+            bind-address: 0.0.0.0
+        scheduler:
+          extraArgs:
+            bind-address: 0.0.0.0
+        etcd:
+          local:
+            extraArgs:
+              listen-metrics-urls: http://0.0.0.0:2381
     extraMounts:
       # Mount for test artifacts
       - hostPath: /tmp/floe-test-artifacts
         containerPath: /artifacts
+    # Port mappings for localhost access to services
+    extraPortMappings:
+      # Polaris API (NodePort 30181 -> localhost 8181)
+      - containerPort: 30181
+        hostPort: 8181
+        protocol: TCP
+      # Dagster Webserver (NodePort 30300 -> localhost 3000)
+      - containerPort: 30300
+        hostPort: 3000
+        protocol: TCP
+      # MinIO API (NodePort 30900 -> localhost 9000)
+      - containerPort: 30900
+        hostPort: 9000
+        protocol: TCP
+      # MinIO Console (NodePort 30901 -> localhost 9001)
+      - containerPort: 30901
+        hostPort: 9001
+        protocol: TCP
+      # Grafana (NodePort 30080 -> localhost 3001)
+      - containerPort: 30080
+        hostPort: 3001
+        protocol: TCP
+      # Prometheus (NodePort 30090 -> localhost 9090)
+      - containerPort: 30090
+        hostPort: 9090
+        protocol: TCP
 
 networking:
   # Pod network CIDR

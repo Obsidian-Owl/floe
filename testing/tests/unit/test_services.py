@@ -62,27 +62,21 @@ class TestCheckServiceHealth:
     @pytest.mark.requirement("9c-FR-005")
     def test_returns_true_for_healthy_service(self) -> None:
         """Test check_service_health returns True for healthy service."""
-        with patch(
-            "testing.fixtures.services._tcp_health_check", return_value=True
-        ):
+        with patch("testing.fixtures.services._tcp_health_check", return_value=True):
             result = check_service_health("polaris", 8181)
             assert result is True
 
     @pytest.mark.requirement("9c-FR-005")
     def test_returns_false_for_unhealthy_service(self) -> None:
         """Test check_service_health returns False for unhealthy service."""
-        with patch(
-            "testing.fixtures.services._tcp_health_check", return_value=False
-        ):
+        with patch("testing.fixtures.services._tcp_health_check", return_value=False):
             result = check_service_health("polaris", 8181)
             assert result is False
 
     @pytest.mark.requirement("9c-FR-005")
     def test_uses_custom_namespace(self) -> None:
         """Test check_service_health uses custom namespace."""
-        with patch(
-            "testing.fixtures.services._tcp_health_check"
-        ) as mock_check:
+        with patch("testing.fixtures.services._tcp_health_check") as mock_check:
             mock_check.return_value = True
             check_service_health("postgres", 5432, namespace="custom-ns")
 
@@ -93,9 +87,7 @@ class TestCheckServiceHealth:
     @pytest.mark.requirement("9c-FR-005")
     def test_uses_custom_timeout(self) -> None:
         """Test check_service_health passes timeout to TCP check."""
-        with patch(
-            "testing.fixtures.services._tcp_health_check"
-        ) as mock_check:
+        with patch("testing.fixtures.services._tcp_health_check") as mock_check:
             mock_check.return_value = True
             check_service_health("polaris", 8181, timeout=10.0)
 
@@ -110,14 +102,14 @@ class TestCheckInfrastructure:
     @pytest.mark.requirement("9c-FR-005")
     def test_all_services_healthy(self) -> None:
         """Test check_infrastructure returns all True for healthy services."""
-        with patch(
-            "testing.fixtures.services._tcp_health_check", return_value=True
-        ):
-            result = check_infrastructure([
-                ("polaris", 8181),
-                ("minio", 9000),
-                ("postgres", 5432),
-            ])
+        with patch("testing.fixtures.services._tcp_health_check", return_value=True):
+            result = check_infrastructure(
+                [
+                    ("polaris", 8181),
+                    ("minio", 9000),
+                    ("postgres", 5432),
+                ]
+            )
 
             assert result == {
                 "polaris": True,
@@ -128,29 +120,29 @@ class TestCheckInfrastructure:
     @pytest.mark.requirement("9c-FR-005")
     def test_raises_on_unhealthy_service(self) -> None:
         """Test check_infrastructure raises when service unhealthy."""
+
         def mock_check(host: str, port: int, timeout: float) -> bool:
             return "polaris" not in host
 
-        with patch(
-            "testing.fixtures.services._tcp_health_check", side_effect=mock_check
-        ):
+        with patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check):
             with pytest.raises(ServiceUnavailableError) as exc_info:
-                check_infrastructure([
-                    ("polaris", 8181),
-                    ("minio", 9000),
-                ])
+                check_infrastructure(
+                    [
+                        ("polaris", 8181),
+                        ("minio", 9000),
+                    ]
+                )
 
             assert "polaris" in str(exc_info.value)
 
     @pytest.mark.requirement("9c-FR-005")
     def test_no_raise_returns_all_statuses(self) -> None:
         """Test check_infrastructure returns all statuses with raise_on_failure=False."""
+
         def mock_check(host: str, port: int, timeout: float) -> bool:
             return "polaris" not in host
 
-        with patch(
-            "testing.fixtures.services._tcp_health_check", side_effect=mock_check
-        ):
+        with patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check):
             result = check_infrastructure(
                 [("polaris", 8181), ("minio", 9000)],
                 raise_on_failure=False,
@@ -210,9 +202,7 @@ class TestTcpHealthCheck:
         """Test _tcp_health_check returns False for failed connection."""
         from testing.fixtures.services import _tcp_health_check
 
-        with patch(
-            "socket.create_connection", side_effect=OSError("Connection refused")
-        ):
+        with patch("socket.create_connection", side_effect=OSError("Connection refused")):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is False
 
@@ -222,8 +212,6 @@ class TestTcpHealthCheck:
 
         from testing.fixtures.services import _tcp_health_check
 
-        with patch(
-            "socket.create_connection", side_effect=TimeoutError("timed out")
-        ):
+        with patch("socket.create_connection", side_effect=TimeoutError("timed out")):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is False

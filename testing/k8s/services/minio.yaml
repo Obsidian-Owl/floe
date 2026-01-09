@@ -82,11 +82,13 @@ spec:
   ports:
     - port: 9000
       targetPort: 9000
+      nodePort: 30900
       name: api
     - port: 9001
       targetPort: 9001
+      nodePort: 30901
       name: console
-  type: ClusterIP
+  type: NodePort
 ---
 # Job to create initial buckets
 apiVersion: batch/v1
@@ -101,7 +103,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: mc
-          image: minio/mc:RELEASE.2024-01-01T16-36-33Z
+          image: minio/mc:latest
           command:
             - /bin/sh
             - -c

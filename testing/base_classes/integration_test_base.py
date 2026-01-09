@@ -180,6 +180,32 @@ class IntegrationTestBase:
         self._created_namespaces.append(ns)
         return ns
 
+    def get_service_host(
+        self,
+        service_name: str,
+        namespace: str | None = None,
+    ) -> str:
+        """Get K8s DNS hostname for a service.
+
+        Constructs the fully-qualified K8s DNS name for a service. This is
+        useful for connecting to services in tests without hardcoding hostnames.
+
+        Args:
+            service_name: Name of the K8s service (e.g., "polaris", "postgres").
+            namespace: K8s namespace. Defaults to self.namespace.
+
+        Returns:
+            K8s DNS hostname like 'polaris.floe-test.svc.cluster.local'.
+
+        Example:
+            def test_with_polaris(self) -> None:
+                host = self.get_service_host("polaris")
+                # Returns: "polaris.floe-test.svc.cluster.local"
+                catalog_uri = f"http://{host}:8181/api/catalog"
+        """
+        effective_namespace = namespace or self.namespace
+        return f"{service_name}.{effective_namespace}.svc.cluster.local"
+
     def _cleanup_namespace(self, namespace: str) -> None:
         """Clean up a K8s namespace created during testing.
 

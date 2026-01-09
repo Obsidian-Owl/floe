@@ -7,14 +7,26 @@ metadata:
   name: dagster-config
   namespace: floe-test
 data:
-  # Dagster workspace configuration
+  # Empty workspace - code locations added during integration tests
   workspace.yaml: |
-    load_from:
-      - python_package: floe_dagster
-  # Dagster configuration
+    load_from: []
+  # Dagster configuration - uses PostgreSQL storage
   dagster.yaml: |
     telemetry:
       enabled: false
+    storage:
+      postgres:
+        postgres_db:
+          username:
+            env: DAGSTER_PG_USER
+          password:
+            env: DAGSTER_PG_PASSWORD
+          hostname:
+            env: DAGSTER_PG_HOST
+          db_name:
+            env: DAGSTER_PG_DB
+          port:
+            env: DAGSTER_PG_PORT
     run_coordinator:
       module: dagster.core.run_coordinator
       class: QueuedRunCoordinator
@@ -103,8 +115,13 @@ spec:
             - "0.0.0.0"
             - -p
             - "3000"
+            - -w
+            - /opt/dagster/dagster_home/workspace.yaml
           ports:
             - containerPort: 3000
+          env:
+            - name: DAGSTER_HOME
+              value: /opt/dagster/dagster_home
           envFrom:
             - secretRef:
                 name: dagster-secret
@@ -162,6 +179,11 @@ spec:
           command:
             - dagster-daemon
             - run
+            - -w
+            - /opt/dagster/dagster_home/workspace.yaml
+          env:
+            - name: DAGSTER_HOME
+              value: /opt/dagster/dagster_home
           envFrom:
             - secretRef:
                 name: dagster-secret
@@ -192,4 +214,5 @@ spec:
   ports:
     - port: 3000
       targetPort: 3000
-  type: ClusterIP
+      nodePort: 30300
+  type: NodePort

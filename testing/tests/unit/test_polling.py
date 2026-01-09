@@ -176,9 +176,7 @@ class TestWaitForService:
     def test_no_raise_returns_false(self) -> None:
         """Test wait_for_service returns False when raise_on_timeout=False."""
         with patch("testing.fixtures.polling._tcp_check", return_value=False):
-            result = wait_for_service(
-                "unavailable", 9999, timeout=0.2, raise_on_timeout=False
-            )
+            result = wait_for_service("unavailable", 9999, timeout=0.2, raise_on_timeout=False)
             assert result is False
 
 

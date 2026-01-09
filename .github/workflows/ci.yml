@@ -229,14 +229,10 @@ jobs:
           kubectl get pods -n floe-test
 
       - name: Run integration tests
-        run: |
-          uv run pytest packages/floe-core/tests/integration/ \
-            -v \
-            --tb=short \
-            -x \
-            || true
+        run: ./testing/ci/test-integration.sh
         env:
           KUBECONFIG: ${{ github.workspace }}/.kube/config
+          TEST_NAMESPACE: floe-test
 
       - name: Collect logs on failure
         if: failure()
@@ -343,9 +339,9 @@ jobs:
             echo "contract-tests failed" >&2
             exit 1
           fi
-          # Integration tests are optional (may not have K8s config)
-          if [[ "$INTEGRATION_RESULT" != "success" && "$INTEGRATION_RESULT" != "skipped" ]]; then
-            echo "::warning::integration-tests did not succeed: $INTEGRATION_RESULT"
+          if [[ "$INTEGRATION_RESULT" != "success" ]]; then
+            echo "integration-tests failed" >&2
+            exit 1
           fi
           if [[ "$TRACEABILITY_RESULT" != "success" ]]; then
             echo "traceability check failed" >&2

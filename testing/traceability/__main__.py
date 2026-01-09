@@ -86,7 +86,8 @@ Examples:
         help="Path to tests directory (default: tests)",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Verbose output",
     )
@@ -106,9 +107,12 @@ def run_pytest_collect(test_path: Path) -> dict[str, list[str]]:
     # Use pytest's collection to get test items
     result = subprocess.run(
         [
-            sys.executable, "-m", "pytest",
+            sys.executable,
+            "-m",
+            "pytest",
             str(test_path),
-            "--collect-only", "-q",
+            "--collect-only",
+            "-q",
             "--no-header",
         ],
         capture_output=True,
@@ -296,10 +300,7 @@ def format_json(
         "passes": percentage >= threshold,
         "uncovered_requirements": uncovered,
         "tests_without_markers_count": len(tests_without_markers),
-        "requirements": {
-            req_id: requirement_map.get(req_id, [])
-            for req_id in all_requirements
-        },
+        "requirements": {req_id: requirement_map.get(req_id, []) for req_id in all_requirements},
     }
 
     return json.dumps(report, indent=2)
@@ -358,6 +359,7 @@ def main(args: list[str] | None = None) -> int:
         print(f"Error: {e}", file=sys.stderr)
         if parsed.verbose:
             import traceback
+
             traceback.print_exc()
         return 2
 

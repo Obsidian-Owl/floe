@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
         - name: polaris
-          image: apache/polaris:0.1.0
+          image: apache/polaris:1.0.0-incubating
           ports:
             - containerPort: 8181
               name: api
@@ -112,8 +112,9 @@ spec:
   ports:
     - port: 8181
       targetPort: 8181
+      nodePort: 30181
       name: api
     - port: 8182
       targetPort: 8182
       name: admin
-  type: ClusterIP
+  type: NodePort

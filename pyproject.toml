@@ -34,6 +34,10 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
+    "slow: Marks tests as slow (> 1 second)",
+    "integration: Marks tests requiring K8s services",
+    "contract: Marks cross-package contract tests",
+    "e2e: Marks end-to-end pipeline tests",
 ]
 
 [tool.mypy]

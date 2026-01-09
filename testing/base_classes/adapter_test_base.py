@@ -57,9 +57,7 @@ class AdapterTestBase(IntegrationTestBase):
         super().setup_method()
         # Validate adapter configuration
         if not self.adapter_type:
-            raise ValueError(
-                f"{self.__class__.__name__} must define adapter_type class attribute"
-            )
+            raise ValueError(f"{self.__class__.__name__} must define adapter_type class attribute")
 
     def create_adapter(self, **config_overrides: Any) -> Any:
         """Create an adapter instance for testing.

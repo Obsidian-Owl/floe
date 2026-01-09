@@ -213,9 +213,7 @@ class TestCalculateCoverage:
         }
         spec_requirements = ["FR-001", "FR-002", "FR-003"]
 
-        covered, total, percentage = calculate_coverage(
-            requirement_map, spec_requirements
-        )
+        covered, total, percentage = calculate_coverage(requirement_map, spec_requirements)
 
         assert covered == 1
         assert total == 3

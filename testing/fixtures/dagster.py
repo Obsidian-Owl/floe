@@ -38,9 +38,7 @@ class DagsterConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    host: str = Field(
-        default_factory=lambda: os.environ.get("DAGSTER_HOST", "dagster-webserver")
-    )
+    host: str = Field(default_factory=lambda: os.environ.get("DAGSTER_HOST", "dagster-webserver"))
     port: int = Field(
         default_factory=lambda: int(os.environ.get("DAGSTER_PORT", "3000")),
         ge=1,
@@ -95,9 +93,7 @@ def create_dagster_instance(config: DagsterConfig) -> DagsterInstance:
         # For non-ephemeral, use default instance or configured
         return DagsterInstance.get()
     except Exception as e:
-        raise DagsterConnectionError(
-            f"Failed to create Dagster instance: {e}"
-        ) from e
+        raise DagsterConnectionError(f"Failed to create Dagster instance: {e}") from e
 
 
 @contextmanager

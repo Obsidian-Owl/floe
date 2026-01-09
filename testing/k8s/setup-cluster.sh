@@ -10,7 +10,16 @@
 # Environment variables:
 #   CLUSTER_NAME: Name of Kind cluster (default: floe-test)
 #   SKIP_SERVICES: Set to "true" to skip deploying services
+#   SKIP_MONITORING: Set to "true" to skip Prometheus/Grafana stack
 #   VERBOSE: Set to "true" for verbose output
+#
+# After setup, services are accessible via localhost:
+#   Polaris:     http://localhost:8181
+#   Dagster:     http://localhost:3000
+#   MinIO API:   http://localhost:9000
+#   MinIO UI:    http://localhost:9001
+#   Grafana:     http://localhost:3001 (admin/admin)
+#   Prometheus:  http://localhost:9090
 
 set -euo pipefail
 
@@ -89,6 +98,53 @@ create_cluster() {
     kubectl config use-context "kind-${CLUSTER_NAME}"
 }
 
+# Deploy metrics-server (required for kubectl top and Lens metrics)
+deploy_metrics_server() {
+    log_info "Deploying metrics-server..."
+    kubectl apply -f "${SCRIPT_DIR}/services/metrics-server.yaml"
+
+    log_info "Waiting for metrics-server to be ready..."
+    kubectl wait --for=condition=available deployment/metrics-server -n kube-system --timeout=120s || {
+        log_warn "metrics-server not ready within timeout, continuing..."
+    }
+}
+
+# Deploy kube-prometheus-stack via Helm
+deploy_monitoring_stack() {
+    if [[ "${SKIP_MONITORING:-false}" == "true" ]]; then
+        log_info "Skipping monitoring stack (SKIP_MONITORING=true)"
+        return
+    fi
+
+    # Check if Helm is available
+    if ! command -v helm &> /dev/null; then
+        log_warn "Helm not installed, skipping monitoring stack"
+        log_warn "Install Helm from: https://helm.sh/docs/intro/install/"
+        return
+    fi
+
+    log_info "Adding Prometheus Helm repo..."
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
+    helm repo update
+
+    log_info "Deploying kube-prometheus-stack..."
+    helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+        --namespace monitoring \
+        --create-namespace \
+        --set prometheus.service.type=NodePort \
+        --set prometheus.service.nodePort=30090 \
+        --set grafana.service.type=NodePort \
+        --set grafana.service.nodePort=30080 \
+        --set grafana.adminPassword=admin \
+        --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+        --wait \
+        --timeout 5m
+
+    log_info "Monitoring stack deployed"
+    log_info "  Grafana:    http://localhost:3001 (admin/admin)"
+    log_info "  Prometheus: http://localhost:9090"
+}
+
 # Deploy services
 deploy_services() {
     if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
@@ -154,11 +210,24 @@ print_info() {
     echo "Services:"
     kubectl get pods -n "${NAMESPACE}" -o wide 2>/dev/null || true
     echo ""
-    echo "To access services from your host:"
-    echo "  kubectl port-forward -n ${NAMESPACE} svc/postgres 5432:5432"
-    echo "  kubectl port-forward -n ${NAMESPACE} svc/minio 9000:9000"
-    echo "  kubectl port-forward -n ${NAMESPACE} svc/polaris 8181:8181"
-    echo "  kubectl port-forward -n ${NAMESPACE} svc/dagster-webserver 3000:3000"
+    echo "Monitoring (kube-system):"
+    kubectl get pods -n kube-system -l k8s-app=metrics-server 2>/dev/null || true
+    echo ""
+    if kubectl get namespace monitoring &>/dev/null; then
+        echo "Monitoring Stack (monitoring namespace):"
+        kubectl get pods -n monitoring --no-headers 2>/dev/null | head -5 || true
+        echo "  ..."
+    fi
+    echo ""
+    echo "Services accessible via localhost (NodePort):"
+    echo "  Polaris:     http://localhost:8181"
+    echo "  Dagster:     http://localhost:3000"
+    echo "  MinIO API:   http://localhost:9000"
+    echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
+    echo "  Grafana:     http://localhost:3001 (admin/admin)"
+    echo "  Prometheus:  http://localhost:9090"
+    echo ""
+    echo "Verify metrics: kubectl top nodes"
     echo ""
 }
 
@@ -166,8 +235,10 @@ print_info() {
 main() {
     check_prerequisites
     create_cluster
+    deploy_metrics_server
     deploy_services
     wait_for_services
+    deploy_monitoring_stack
     print_info
 }
 
