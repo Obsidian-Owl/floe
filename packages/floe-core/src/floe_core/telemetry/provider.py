@@ -11,6 +11,7 @@ Requirements Covered:
 - FR-003: W3C Baggage propagation (via configure_propagators)
 - FR-008: OTLP exporter configuration
 - FR-009: gRPC protocol selection
+- FR-010: HTTP protocol selection
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -26,9 +27,12 @@ from typing import TYPE_CHECKING
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter as OTLPHttpSpanExporter,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from floe_core.telemetry.propagation import configure_propagators
@@ -138,10 +142,13 @@ class TelemetryProvider:
         Configures the SDK with the provided TelemetryConfig.
         In no-op mode, this is a no-op.
 
-        For gRPC protocol (FR-009):
-        - Creates OTLPSpanExporter with configured endpoint
-        - Wraps in BatchSpanProcessor for async export
-        - Registers TracerProvider as global provider
+        Protocol selection (FR-009, FR-010):
+        - gRPC: Creates OTLPSpanExporter with configured endpoint (port 4317)
+        - HTTP: Creates OTLPHttpSpanExporter with configured endpoint (port 4318)
+
+        Both protocols:
+        - Wrap exporter in BatchSpanProcessor for async export
+        - Register TracerProvider as global provider
 
         Raises:
             RuntimeError: If provider is not in UNINITIALIZED state.
@@ -176,15 +183,13 @@ class TelemetryProvider:
             sampler=TraceIdRatioBased(sampling_ratio),
         )
 
-        # Configure OTLP exporter based on protocol (FR-008, FR-009)
+        # Configure OTLP exporter based on protocol (FR-008, FR-009, FR-010)
+        exporter: SpanExporter
         if self._config.otlp_protocol == "grpc":
             exporter = OTLPSpanExporter(endpoint=self._config.otlp_endpoint)
         else:
-            # HTTP protocol will be implemented in T041
-            raise NotImplementedError(
-                f"Protocol '{self._config.otlp_protocol}' not yet implemented. "
-                "Use 'grpc' or wait for T041."
-            )
+            # HTTP protocol (FR-010)
+            exporter = OTLPHttpSpanExporter(endpoint=self._config.otlp_endpoint)
 
         # Add BatchSpanProcessor for async export (FR-024)
         self._span_processor = BatchSpanProcessor(exporter)

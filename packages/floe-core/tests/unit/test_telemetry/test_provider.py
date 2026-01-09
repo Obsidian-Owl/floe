@@ -711,19 +711,18 @@ class TestOTLPHttpExporterSetup:
         provider = TelemetryProvider(http_telemetry_config)
         assert provider.config.otlp_protocol == "http"
 
-    @pytest.mark.requirement("FR-009")
+    @pytest.mark.requirement("FR-010")
     def test_provider_initializes_with_http_config(
         self, http_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
         """Test that TelemetryProvider initializes with HTTP configuration.
 
-        NOTE: HTTP protocol implementation is T041. Until then, this raises
-        NotImplementedError. Update this test when T041 is complete.
+        Validates FR-010: HTTP protocol selection creates OTLPHttpSpanExporter.
         """
         provider = TelemetryProvider(http_telemetry_config)
-        # HTTP protocol not yet implemented (T041)
-        with pytest.raises(NotImplementedError, match="Protocol 'http' not yet implemented"):
-            provider.initialize()
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        provider.shutdown()
 
     @pytest.mark.requirement("FR-009")
     def test_http_custom_endpoint_port_4318(
