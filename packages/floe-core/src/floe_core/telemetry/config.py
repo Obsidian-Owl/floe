@@ -154,6 +154,69 @@ class TelemetryAuth(BaseModel):
         return self
 
 
+class BatchSpanProcessorConfig(BaseModel):
+    """Configuration for BatchSpanProcessor.
+
+    BatchSpanProcessor is used for async, non-blocking span export.
+    Spans are buffered in a queue and exported in batches.
+
+    Configuration guidelines by throughput:
+    - Low (<100 spans/s): queue=512, batch=256, delay=10s
+    - Medium (100-1000 spans/s): queue=2048, batch=512, delay=5s (default)
+    - High (>1000 spans/s): queue=8192, batch=1024, delay=2s
+
+    Attributes:
+        max_queue_size: Maximum spans buffered in memory (default: 2048)
+        max_export_batch_size: Spans per export batch (default: 512)
+        schedule_delay_millis: Export interval in ms (default: 5000)
+        export_timeout_millis: Per-batch export timeout in ms (default: 30000)
+
+    Examples:
+        >>> # Default configuration (medium throughput)
+        >>> config = BatchSpanProcessorConfig()
+
+        >>> # High throughput configuration
+        >>> config = BatchSpanProcessorConfig(
+        ...     max_queue_size=8192,
+        ...     max_export_batch_size=1024,
+        ...     schedule_delay_millis=2000,
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_queue_size: int = Field(
+        default=2048,
+        gt=0,
+        description="Maximum spans buffered in memory",
+    )
+    max_export_batch_size: int = Field(
+        default=512,
+        gt=0,
+        description="Spans per export batch",
+    )
+    schedule_delay_millis: int = Field(
+        default=5000,
+        gt=0,
+        description="Export interval in milliseconds",
+    )
+    export_timeout_millis: int = Field(
+        default=30000,
+        gt=0,
+        description="Per-batch export timeout in milliseconds",
+    )
+
+    @model_validator(mode="after")
+    def validate_batch_size_le_queue_size(self) -> Self:
+        """Validate that batch size does not exceed queue size."""
+        if self.max_export_batch_size > self.max_queue_size:
+            raise ValueError(
+                f"max_export_batch_size ({self.max_export_batch_size}) "
+                f"cannot exceed max_queue_size ({self.max_queue_size})"
+            )
+        return self
+
+
 class SamplingConfig(BaseModel):
     """Environment-based sampling configuration.
 

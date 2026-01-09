@@ -1,10 +1,14 @@
 """Unit tests for telemetry configuration models.
 
-Tests TelemetryConfig, ResourceAttributes, SamplingConfig, and TelemetryAuth
-Pydantic models from floe_core.telemetry.config.
+Tests TelemetryConfig, ResourceAttributes, SamplingConfig, TelemetryAuth,
+and BatchSpanProcessorConfig Pydantic models from floe_core.telemetry.config.
 
 Contract Version: 1.0.0
 Per ADR-0006: Telemetry configuration models.
+
+Tests cover:
+- T007: TelemetryConfig validation
+- T035: BatchSpanProcessorConfig validation
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from floe_core.telemetry import (
+    BatchSpanProcessorConfig,
     ResourceAttributes,
     SamplingConfig,
     TelemetryAuth,
@@ -525,3 +530,136 @@ class TestTelemetryAuthValidation:
                 auth_type="oauth",  # type: ignore[arg-type]
                 api_key=SecretStr("key"),
             )
+
+
+# =============================================================================
+# T035: Unit tests for BatchSpanProcessorConfig validation
+# =============================================================================
+
+
+class TestBatchSpanProcessorConfigValidation:
+    """Test BatchSpanProcessorConfig Pydantic model validation.
+
+    BatchSpanProcessor is used for async, non-blocking span export.
+    Configuration includes queue sizes and timing parameters.
+
+    Requirements: FR-008, FR-009, FR-010, FR-011, FR-024, FR-026
+    """
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_default_values(self) -> None:
+        """Test BatchSpanProcessorConfig has sensible defaults."""
+        config = BatchSpanProcessorConfig()
+
+        # Default values per research.md for medium throughput
+        assert config.max_queue_size == 2048
+        assert config.max_export_batch_size == 512
+        assert config.schedule_delay_millis == 5000
+        assert config.export_timeout_millis == 30000
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_custom_values(self) -> None:
+        """Test BatchSpanProcessorConfig accepts custom values."""
+        config = BatchSpanProcessorConfig(
+            max_queue_size=4096,
+            max_export_batch_size=1024,
+            schedule_delay_millis=10000,
+            export_timeout_millis=60000,
+        )
+
+        assert config.max_queue_size == 4096
+        assert config.max_export_batch_size == 1024
+        assert config.schedule_delay_millis == 10000
+        assert config.export_timeout_millis == 60000
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_low_throughput(self) -> None:
+        """Test BatchSpanProcessorConfig for low throughput (<100/s)."""
+        config = BatchSpanProcessorConfig(
+            max_queue_size=512,
+            max_export_batch_size=256,
+            schedule_delay_millis=10000,
+        )
+
+        assert config.max_queue_size == 512
+        assert config.max_export_batch_size == 256
+        assert config.schedule_delay_millis == 10000
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_high_throughput(self) -> None:
+        """Test BatchSpanProcessorConfig for high throughput (>1000/s)."""
+        config = BatchSpanProcessorConfig(
+            max_queue_size=8192,
+            max_export_batch_size=1024,
+            schedule_delay_millis=2000,
+        )
+
+        assert config.max_queue_size == 8192
+        assert config.max_export_batch_size == 1024
+        assert config.schedule_delay_millis == 2000
+
+    @pytest.mark.requirement("FR-024")
+    def test_batch_processor_config_min_queue_size(self) -> None:
+        """Test max_queue_size must be positive."""
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(max_queue_size=0)
+
+    @pytest.mark.requirement("FR-024")
+    def test_batch_processor_config_min_batch_size(self) -> None:
+        """Test max_export_batch_size must be positive."""
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(max_export_batch_size=0)
+
+    @pytest.mark.requirement("FR-024")
+    def test_batch_processor_config_min_schedule_delay(self) -> None:
+        """Test schedule_delay_millis must be positive."""
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(schedule_delay_millis=0)
+
+    @pytest.mark.requirement("FR-024")
+    def test_batch_processor_config_min_export_timeout(self) -> None:
+        """Test export_timeout_millis must be positive."""
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(export_timeout_millis=0)
+
+    @pytest.mark.requirement("FR-024")
+    def test_batch_processor_config_batch_size_le_queue_size(self) -> None:
+        """Test max_export_batch_size cannot exceed max_queue_size."""
+        with pytest.raises(
+            ValidationError, match="max_export_batch_size.*cannot exceed.*max_queue_size"
+        ):
+            BatchSpanProcessorConfig(
+                max_queue_size=256,
+                max_export_batch_size=512,  # Batch larger than queue
+            )
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_is_frozen(self) -> None:
+        """Test BatchSpanProcessorConfig is immutable (frozen=True)."""
+        config = BatchSpanProcessorConfig()
+
+        with pytest.raises(ValidationError):
+            config.max_queue_size = 1024  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_forbids_extra_fields(self) -> None:
+        """Test BatchSpanProcessorConfig rejects unknown fields."""
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(
+                unknown_field=123,  # type: ignore[call-arg]
+            )
+
+    @pytest.mark.requirement("FR-008")
+    def test_batch_processor_config_negative_values_rejected(self) -> None:
+        """Test negative values are rejected for all fields."""
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(max_queue_size=-100)
+
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(max_export_batch_size=-50)
+
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(schedule_delay_millis=-1000)
+
+        with pytest.raises(ValidationError):
+            BatchSpanProcessorConfig(export_timeout_millis=-5000)

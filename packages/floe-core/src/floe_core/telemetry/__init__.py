@@ -39,6 +39,7 @@ from __future__ import annotations
 
 # Configuration models
 from floe_core.telemetry.config import (
+    BatchSpanProcessorConfig,
     ResourceAttributes,
     SamplingConfig,
     TelemetryAuth,
@@ -92,6 +93,7 @@ __all__: list[str] = [
     "ResourceAttributes",
     "SamplingConfig",
     "TelemetryAuth",
+    "BatchSpanProcessorConfig",
     # Provider
     "TelemetryProvider",
     "ProviderState",
