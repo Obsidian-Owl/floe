@@ -691,18 +691,97 @@ class PolarisCatalogPlugin(CatalogPlugin):
     ) -> dict[str, Any]:
         """Vend short-lived credentials for table access.
 
+        Returns temporary credentials scoped to specific table operations.
+        This implements the credential vending pattern for secure table access
+        without exposing long-lived credentials.
+
+        The Polaris catalog supports credential vending via the Iceberg REST
+        X-Iceberg-Access-Delegation header. When enabled, the catalog returns
+        temporary AWS STS credentials scoped to the table's storage location.
+
         Args:
-            table_path: Full table path.
-            operations: List of operations to allow.
+            table_path: Full table path (e.g., "bronze.customers").
+            operations: List of operations to allow (e.g., ["READ"], ["READ", "WRITE"]).
 
         Returns:
-            Dictionary containing temporary credentials.
+            Dictionary containing temporary credentials:
+                - access_key: Temporary access key
+                - secret_key: Temporary secret key
+                - token: Session token (if applicable)
+                - expiration: Credential expiration timestamp (ISO 8601)
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            RuntimeError: If catalog not connected.
+            NotFoundError: If table does not exist.
+            AuthenticationError: If lacking permission for requested operations.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> creds = plugin.vend_credentials(
+            ...     table_path="silver.dim_customers",
+            ...     operations=["READ", "WRITE"]
+            ... )
+            >>> creds["access_key"]
+            'ASIA...'
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("vend_credentials() not yet implemented")
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "vend_credentials",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            table_full_name=table_path,
+        ) as span:
+            log = logger.bind(
+                table=table_path,
+                operations=operations,
+                uri=self._config.uri,
+            )
+            log.info("vending_credentials")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # Load the table - PyIceberg will request vended credentials
+                # via the X-Iceberg-Access-Delegation header when supported
+                table = self._catalog.load_table(table_path)
+
+                # Extract credentials from table IO properties
+                # PyIceberg stores vended credentials in table.io properties
+                io_properties = table.io
+
+                # Build credentials response
+                credentials: dict[str, Any] = {
+                    "access_key": io_properties.get("s3.access-key-id", ""),
+                    "secret_key": io_properties.get("s3.secret-access-key", ""),
+                    "token": io_properties.get("s3.session-token", ""),
+                    "expiration": io_properties.get("s3.session-token-expires-at", ""),
+                }
+
+                log.info(
+                    "credentials_vended",
+                    has_token=bool(credentials.get("token")),
+                )
+
+                return credentials
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("vend_credentials_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="vend_credentials",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("vend_credentials_failed", error=str(e))
+                raise
 
     def health_check(self, timeout: float = 1.0) -> HealthStatus:
         """Check Polaris catalog connectivity and health.
