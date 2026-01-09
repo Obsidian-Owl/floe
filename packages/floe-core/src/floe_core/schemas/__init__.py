@@ -64,10 +64,15 @@ from floe_core.schemas.secrets import (
     SecretSource,
 )
 
-# Plugin models (T016, T017)
+# Plugin models (T016, T017, T042-T046)
 from floe_core.schemas.plugins import (
+    PLUGIN_REGISTRY,
     PluginSelection,
     PluginsConfig,
+    PluginWhitelistError,
+    get_available_plugins,
+    validate_domain_plugin_whitelist,
+    validate_plugin_selection,
 )
 
 # Manifest models (T018, T019)
@@ -100,9 +105,14 @@ __all__: list[str] = [
     "SecretSource",
     "SecretReference",
     "SECRET_NAME_PATTERN",
-    # Plugins (Phase 3)
+    # Plugins (Phase 3, Phase 5)
     "PluginSelection",
     "PluginsConfig",
+    "PluginWhitelistError",
+    "PLUGIN_REGISTRY",
+    "get_available_plugins",
+    "validate_plugin_selection",
+    "validate_domain_plugin_whitelist",
     # Manifest (Phase 3)
     "ManifestScope",
     "GovernanceConfig",

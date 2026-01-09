@@ -5,14 +5,81 @@ across all 11 pluggable platform components.
 
 Implements:
     - FR-006: Plugin Selection
+    - FR-007: Plugin Registry Validation
     - FR-008: Plugin-Specific Configuration
+    - FR-018: Domain Plugin Whitelist Validation
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+# Known plugin types per category (built-in registry)
+# In production, this would be populated from entry points
+PLUGIN_REGISTRY: dict[str, list[str]] = {
+    "compute": ["duckdb", "snowflake", "spark", "bigquery", "databricks"],
+    "orchestrator": ["dagster", "airflow", "prefect"],
+    "catalog": ["polaris", "glue", "hive"],
+    "storage": ["s3", "gcs", "azure-blob", "minio"],
+    "semantic_layer": ["cube", "dbt-semantic-layer"],
+    "ingestion": ["dlt", "airbyte"],
+    "secrets": ["k8s-secrets", "eso", "vault"],
+    "observability": ["jaeger", "datadog", "grafana-cloud"],
+    "identity": ["k8s-rbac", "custom"],
+    "dbt": ["local", "fusion"],
+    "quality": ["great-expectations", "soda", "dbt-expectations"],
+}
+"""Registry of known plugin types per category.
+
+This is the built-in default registry. In production environments,
+plugins are discovered via entry points (floe.{category}).
+"""
+
+
+class PluginWhitelistError(Exception):
+    """Raised when a plugin selection violates the enterprise whitelist.
+
+    In 3-tier mode, enterprise manifests can restrict which plugins
+    domains are allowed to use via approved_plugins.
+
+    Attributes:
+        category: The plugin category (e.g., "compute")
+        plugin_type: The plugin type that was rejected
+        approved_plugins: List of plugins that are approved for this category
+
+    Example:
+        >>> raise PluginWhitelistError(
+        ...     category="compute",
+        ...     plugin_type="spark",
+        ...     approved_plugins=["duckdb", "snowflake"]
+        ... )
+    """
+
+    def __init__(
+        self,
+        category: str,
+        plugin_type: str,
+        approved_plugins: list[str],
+    ) -> None:
+        """Initialize PluginWhitelistError.
+
+        Args:
+            category: The plugin category (e.g., "compute")
+            plugin_type: The plugin type that was rejected
+            approved_plugins: List of plugins that are approved
+        """
+        self.category = category
+        self.plugin_type = plugin_type
+        self.approved_plugins = approved_plugins
+        approved_str = ", ".join(approved_plugins)
+        message = (
+            f"Plugin '{plugin_type}' is not in the approved whitelist for category "
+            f"'{category}'. Approved plugins: [{approved_str}]"
+        )
+        super().__init__(message)
 
 
 class PluginSelection(BaseModel):
@@ -78,6 +145,25 @@ class PluginSelection(BaseModel):
         default=None,
         description="K8s Secret name for credentials",
     )
+
+    @field_validator("type")
+    @classmethod
+    def validate_type_not_whitespace(cls, v: str) -> str:
+        """Validate that type is not whitespace-only.
+
+        Args:
+            v: The plugin type value
+
+        Returns:
+            The validated type (stripped)
+
+        Raises:
+            ValueError: If type is whitespace-only
+        """
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Plugin type cannot be empty or whitespace-only")
+        return stripped
 
 
 class PluginsConfig(BaseModel):
@@ -186,7 +272,112 @@ class PluginsConfig(BaseModel):
     )
 
 
+def get_available_plugins(category: str) -> list[str]:
+    """Get the list of available plugins for a category.
+
+    Returns the list of known plugin types for the specified category.
+    In production, this would query the entry point registry.
+
+    Args:
+        category: Plugin category (e.g., "compute", "orchestrator")
+
+    Returns:
+        List of available plugin names for the category
+
+    Raises:
+        ValueError: If category is unknown
+
+    Example:
+        >>> plugins = get_available_plugins("compute")
+        >>> "duckdb" in plugins
+        True
+    """
+    if category not in PLUGIN_REGISTRY:
+        valid_categories = ", ".join(sorted(PLUGIN_REGISTRY.keys()))
+        raise ValueError(
+            f"Unknown plugin category '{category}'. "
+            f"Valid categories: [{valid_categories}]"
+        )
+    return list(PLUGIN_REGISTRY[category])
+
+
+def validate_plugin_selection(category: str, plugin_type: str) -> None:
+    """Validate that a plugin type is valid for the given category.
+
+    Checks the plugin type against the registry of known plugins.
+    This enables early validation with helpful error messages.
+
+    Args:
+        category: Plugin category (e.g., "compute", "orchestrator")
+        plugin_type: The plugin type to validate
+
+    Raises:
+        ValueError: If plugin type is not in the registry for this category
+
+    Example:
+        >>> validate_plugin_selection("compute", "duckdb")  # OK
+        >>> validate_plugin_selection("compute", "invalid")  # Raises ValueError
+    """
+    available = get_available_plugins(category)
+    if plugin_type not in available:
+        available_str = ", ".join(available)
+        raise ValueError(
+            f"Plugin '{plugin_type}' is not a valid {category} plugin. "
+            f"Available plugins: [{available_str}]"
+        )
+
+
+def validate_domain_plugin_whitelist(
+    category: str,
+    plugin_type: str,
+    approved_plugins: dict[str, list[str]],
+) -> None:
+    """Validate that a domain plugin selection is within enterprise whitelist.
+
+    In 3-tier mode, enterprise manifests can restrict which plugins
+    domains are allowed to use via the approved_plugins field.
+
+    Args:
+        category: Plugin category (e.g., "compute", "orchestrator")
+        plugin_type: The plugin type being selected
+        approved_plugins: Enterprise whitelist mapping category to allowed plugins
+
+    Raises:
+        PluginWhitelistError: If plugin is not in whitelist for the category
+
+    Example:
+        >>> validate_domain_plugin_whitelist(
+        ...     category="compute",
+        ...     plugin_type="duckdb",
+        ...     approved_plugins={"compute": ["duckdb", "snowflake"]}
+        ... )  # OK
+
+        >>> validate_domain_plugin_whitelist(
+        ...     category="compute",
+        ...     plugin_type="spark",
+        ...     approved_plugins={"compute": ["duckdb", "snowflake"]}
+        ... )  # Raises PluginWhitelistError
+    """
+    # If category not in whitelist, all plugins are allowed
+    if category not in approved_plugins:
+        return
+
+    # If category in whitelist, plugin must be in approved list
+    approved = approved_plugins[category]
+    if plugin_type not in approved:
+        raise PluginWhitelistError(
+            category=category,
+            plugin_type=plugin_type,
+            approved_plugins=approved,
+        )
+
+
 __all__ = [
     "PluginSelection",
     "PluginsConfig",
+    "PluginWhitelistError",
+    "PLUGIN_REGISTRY",
+    "get_available_plugins",
+    "validate_plugin_selection",
+    "validate_domain_plugin_whitelist",
 ]
