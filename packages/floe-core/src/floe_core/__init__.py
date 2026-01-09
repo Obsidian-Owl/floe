@@ -74,6 +74,9 @@ from floe_core.compute_errors import (
     ComputeTimeoutError,
 )
 
+# Compute registry
+from floe_core.compute_registry import ComputeRegistry
+
 # Health types and PluginMetadata ABC
 from floe_core.plugin_metadata import (
     HealthState,
@@ -143,6 +146,8 @@ __all__: list[str] = [
     "ComputeConnectionError",
     "ComputeError",
     "ComputeTimeoutError",
+    # Compute registry
+    "ComputeRegistry",
     # Version compatibility
     "FLOE_PLUGIN_API_VERSION",
     "FLOE_PLUGIN_API_MIN_VERSION",
