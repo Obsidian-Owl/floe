@@ -1,9 +1,9 @@
 """Unit tests for OpenTelemetry tracing utilities.
 
 Tests cover:
-- T024: @traced decorator functionality
-- T025: create_span() context manager
-- T027: Error recording on spans
+- T024: @traced decorator functionality (TestTracedDecorator, TestTracedDecoratorMethods, TestTracedDecoratorPreservesFunctionMetadata)
+- T025: create_span() context manager (TestCreateSpanContextManager)
+- T027: Error recording on spans (covered in both T024 and T025 test classes)
 
 Requirements Covered:
 - FR-004: Spans for compilation operations
@@ -397,3 +397,208 @@ class TestTracedDecoratorPreservesFunctionMetadata:
             pass
 
         assert function_with_module.__module__ == __name__
+
+
+class TestCreateSpanContextManager:
+    """Tests for create_span() context manager (T025).
+
+    The create_span() context manager should:
+    - Create a span with the given name
+    - Return the span for attribute setting
+    - Automatically end the span when exiting
+    - Create child spans when nested
+    - Record exceptions when raised
+    """
+
+    @pytest.mark.requirement("FR-004")
+    def test_create_span_creates_span_with_name(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span creates a span with the specified name."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span("test_operation"):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert spans[0].name == "test_operation"
+
+    @pytest.mark.requirement("FR-004")
+    def test_create_span_returns_span(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span yields the span for attribute setting."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span("test_operation") as span:
+            span.set_attribute("test.key", "test_value")
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+        assert attrs.get("test.key") == "test_value"
+
+    @pytest.mark.requirement("FR-004")
+    def test_create_span_ends_span_on_exit(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span automatically ends the span when exiting."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span("test_operation"):
+            # Span should not be finished yet
+            assert len(exporter.get_finished_spans()) == 0
+
+        # Span should be finished after exiting
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+
+    @pytest.mark.requirement("FR-004")
+    def test_create_span_creates_child_spans(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test nested create_span creates parent-child relationship."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span("parent_operation"):
+            with create_span("child_operation"):
+                pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 2
+
+        # Find spans by name
+        parent_span = next(s for s in spans if s.name == "parent_operation")
+        child_span = next(s for s in spans if s.name == "child_operation")
+
+        # Child span should have parent span as parent
+        assert child_span.parent is not None
+        assert child_span.parent.span_id == parent_span.context.span_id
+
+        # Both should share the same trace ID
+        assert child_span.context.trace_id == parent_span.context.trace_id
+
+    @pytest.mark.requirement("FR-022")
+    def test_create_span_records_exception(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span records exception when raised inside context."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with pytest.raises(ValueError, match="Test error"):
+            with create_span("failing_operation"):
+                raise ValueError("Test error")
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        span = spans[0]
+
+        # Span should have error status
+        assert span.status.status_code == StatusCode.ERROR
+        assert "Test error" in (span.status.description or "")
+
+        # Exception should be recorded as event
+        events = span.events
+        assert len(events) >= 1
+        exception_event = next(
+            (e for e in events if e.name == "exception"), None
+        )
+        assert exception_event is not None
+
+    @pytest.mark.requirement("FR-022")
+    def test_create_span_reraises_exception(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span re-raises the original exception."""
+        from floe_core.telemetry.tracing import create_span
+
+        with pytest.raises(RuntimeError, match="Original error"):
+            with create_span("failing_operation"):
+                raise RuntimeError("Original error")
+
+    @pytest.mark.requirement("FR-019")
+    def test_create_span_with_attributes(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span allows setting attributes via parameter."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span(
+            "test_operation",
+            attributes={"operation.type": "test", "operation.id": "123"},
+        ):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        attrs = dict(spans[0].attributes or {})
+        assert attrs.get("operation.type") == "test"
+        assert attrs.get("operation.id") == "123"
+
+    @pytest.mark.requirement("FR-004")
+    def test_create_span_with_multiple_children(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span supports multiple sequential child spans."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span("parent_operation"):
+            with create_span("child_1"):
+                pass
+            with create_span("child_2"):
+                pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 3
+
+        # Find spans by name
+        parent_span = next(s for s in spans if s.name == "parent_operation")
+        child_1 = next(s for s in spans if s.name == "child_1")
+        child_2 = next(s for s in spans if s.name == "child_2")
+
+        # Both children should have parent span as parent
+        assert child_1.parent is not None
+        assert child_1.parent.span_id == parent_span.context.span_id
+        assert child_2.parent is not None
+        assert child_2.parent.span_id == parent_span.context.span_id
+
+    @pytest.mark.requirement("FR-004")
+    def test_create_span_ok_status_on_success(
+        self,
+        tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test create_span has OK/UNSET status on successful completion."""
+        from floe_core.telemetry.tracing import create_span
+
+        _, exporter = tracer_provider_with_exporter
+
+        with create_span("successful_operation"):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        # UNSET is the default for successful operations per OTel spec
+        assert spans[0].status.status_code in (StatusCode.UNSET, StatusCode.OK)

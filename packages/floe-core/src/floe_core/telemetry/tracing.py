@@ -23,10 +23,16 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-from typing import Callable, ParamSpec, TypeVar, cast, overload
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Callable, ParamSpec, TypeVar, cast, overload
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode, Tracer
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from opentelemetry.trace import Span
 
 logger = logging.getLogger(__name__)
 
@@ -157,3 +163,43 @@ def traced(
     else:
         # Called with parentheses: @traced() or @traced(name="...")
         return decorator
+
+
+@contextmanager
+def create_span(
+    name: str,
+    attributes: dict[str, Any] | None = None,
+) -> "Generator[Span, None, None]":
+    """Create a span as a context manager.
+
+    Creates an OpenTelemetry span with the given name and optional attributes.
+    The span is automatically ended when exiting the context. Nested calls
+    create parent-child relationships automatically.
+
+    Args:
+        name: The name for the span.
+        attributes: Optional dictionary of attributes to set on the span.
+
+    Yields:
+        The created span for additional attribute setting.
+
+    Examples:
+        >>> with create_span("pipeline_execution") as span:
+        ...     span.set_attribute("pipeline.name", "customer-360")
+        ...     with create_span("load_data") as child:
+        ...         child.set_attribute("source", "s3://bucket/data")
+
+        >>> with create_span("operation", attributes={"op.type": "test"}):
+        ...     pass
+    """
+    tracer = get_tracer()
+    with tracer.start_as_current_span(name) as span:
+        if attributes:
+            for key, value in attributes.items():
+                span.set_attribute(key, value)
+        try:
+            yield span
+        except Exception as e:
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            span.record_exception(e)
+            raise

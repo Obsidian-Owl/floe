@@ -84,7 +84,7 @@ from floe_core.telemetry.propagation import (
 )
 
 # Tracing utilities
-from floe_core.telemetry.tracing import get_tracer, set_tracer, traced
+from floe_core.telemetry.tracing import create_span, get_tracer, set_tracer, traced
 
 __all__: list[str] = [
     # Configuration models
@@ -128,6 +128,7 @@ __all__: list[str] = [
     "BAGGAGE_MODE",
     # Tracing
     "traced",
+    "create_span",
     "get_tracer",
     "set_tracer",
 ]
