@@ -29,5 +29,38 @@ Example:
 
 from __future__ import annotations
 
-# Exports will be added as fixtures are implemented in Phase 2 and Phase 6
-__all__: list[str] = []
+# Phase 2 exports - Foundational utilities
+from testing.fixtures.namespaces import (
+    InvalidNamespaceError,
+    generate_unique_namespace,
+    validate_namespace,
+)
+from testing.fixtures.polling import (
+    PollingConfig,
+    PollingTimeoutError,
+    wait_for_condition,
+    wait_for_service,
+)
+from testing.fixtures.services import (
+    ServiceEndpoint,
+    ServiceUnavailableError,
+    check_infrastructure,
+    check_service_health,
+)
+
+__all__ = [
+    # Polling utilities
+    "PollingConfig",
+    "PollingTimeoutError",
+    "wait_for_condition",
+    "wait_for_service",
+    # Namespace utilities
+    "InvalidNamespaceError",
+    "generate_unique_namespace",
+    "validate_namespace",
+    # Service utilities
+    "ServiceEndpoint",
+    "ServiceUnavailableError",
+    "check_infrastructure",
+    "check_service_health",
+]
