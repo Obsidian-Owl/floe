@@ -1,4 +1,4 @@
-# REQ-086 to REQ-095: DBT Runtime Plugin
+# REQ-086 to REQ-096: DBT Runtime Plugin
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -592,6 +592,39 @@ plugins:
 - Documentation review required for PR approval
 
 **Traceability**: ADR-0043 Section "Migration Strategy"
+
+---
+
+### REQ-096: DBTPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for DBTPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for dbt runtimes (dbt-core, dbt Cloud) require compilation and execution fixtures to validate project compilation, model execution, and artifact retrieval.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/dbt.py` (extends 9C patterns)
+- [ ] `DBTTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `dbt_project_context()` for test project lifecycle
+- [ ] Runtime fixtures: `dbt_core_fixture()`, `dbt_cloud_mock_fixture()` for testing
+- [ ] Sample dbt project: `testing/fixtures/sample_dbt_project/` with models, tests
+- [ ] Mock fixtures for unit tests (no real dbt execution required)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST provide sample dbt project for compile/run tests
+- MUST NOT require dbt Cloud credentials for unit tests (use mocks)
+
+**Test Coverage**: `testing/tests/unit/test_dbt_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 5A (DBTPlugin)
+- ADR-0065 (K8s-native testing)
 
 ---
 

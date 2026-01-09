@@ -71,6 +71,10 @@ packages/floe-iceberg/
 └── tests/
     ├── unit/
     └── integration/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/storage.py          # StoragePlugin test fixtures
+testing/tests/unit/test_storage_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -81,6 +85,7 @@ packages/floe-iceberg/
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry |
 | Blocked By | Epic 4C | Uses catalog for table registration |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 3C | Data contracts reference Iceberg schemas |
 | Blocks | Epic 5A | dbt writes to Iceberg tables |
 | Blocks | Epic 6B | OpenLineage captures storage events |

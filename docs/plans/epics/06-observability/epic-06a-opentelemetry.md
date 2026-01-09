@@ -69,6 +69,11 @@ packages/floe-core/src/floe_core/
 │   ├── logging.py               # Log correlation
 │   ├── propagation.py           # Context propagation
 │   └── conventions.py           # Semantic conventions
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/telemetry.py        # TelemetryBackendPlugin test fixtures
+testing/k8s/services/jaeger.yaml     # Jaeger K8s manifest for integration tests
+testing/tests/unit/test_telemetry_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -78,6 +83,7 @@ packages/floe-core/src/floe_core/
 | Type | Epic | Reason |
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry for configuration |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 3D | Contract monitoring uses OTel metrics |
 | Blocks | Epic 4B | Dagster emits OTel traces |
 | Blocks | Epic 6B | OpenLineage correlates with OTel traces |
