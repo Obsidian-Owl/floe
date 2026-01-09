@@ -7,8 +7,18 @@ database connectivity for dbt transforms. Compute plugins are responsible for:
 - Providing K8s resource requirements for dbt job pods
 - Optionally providing SQL to attach to Iceberg catalogs
 
+The configuration models used by ComputePlugin are defined in compute_config.py
+and include Pydantic models with full validation:
+- ComputeConfig: Base configuration for compute plugins
+- ConnectionResult: Result of validate_connection() with status enum
+- ResourceSpec: K8s resource requirements
+- CatalogConfig: Iceberg catalog configuration
+
 Example:
     >>> from floe_core.plugins.compute import ComputePlugin
+    >>> from floe_core.compute_config import (
+    ...     ComputeConfig, ConnectionResult, ConnectionStatus, ResourceSpec
+    ... )
     >>> class DuckDBPlugin(ComputePlugin):
     ...     @property
     ...     def name(self) -> str:
@@ -19,124 +29,19 @@ Example:
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from floe_core.compute_config import (
+    CatalogConfig,
+    ComputeConfig,
+    ConnectionResult,
+    ResourceSpec,
+    WORKLOAD_PRESETS,
+)
 from floe_core.plugin_metadata import PluginMetadata
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
-
-
-@dataclass
-class ComputeConfig:
-    """Configuration for a compute engine connection.
-
-    This is a minimal stub dataclass. Concrete implementations will
-    use Pydantic models with full validation.
-
-    Attributes:
-        host: Database host address.
-        port: Database port number.
-        database: Database name.
-        schema_name: Schema name (called schema_name to avoid shadowing builtin).
-        credentials: Dictionary of credential key-value pairs.
-        extra: Additional configuration options.
-
-    Example:
-        >>> config = ComputeConfig(
-        ...     host="localhost",
-        ...     port=5432,
-        ...     database="analytics",
-        ...     schema_name="public"
-        ... )
-    """
-
-    host: str = ""
-    port: int = 0
-    database: str = ""
-    schema_name: str = ""
-    credentials: dict[str, Any] = field(default_factory=lambda: {})
-    extra: dict[str, Any] = field(default_factory=lambda: {})
-
-
-@dataclass
-class ConnectionResult:
-    """Result of a connection validation attempt.
-
-    Attributes:
-        success: Whether the connection was successful.
-        message: Human-readable message about the connection status.
-        latency_ms: Connection latency in milliseconds (if successful).
-        details: Additional diagnostic information.
-
-    Example:
-        >>> result = ConnectionResult(
-        ...     success=True,
-        ...     message="Connected successfully",
-        ...     latency_ms=42.5
-        ... )
-    """
-
-    success: bool
-    message: str = ""
-    latency_ms: float | None = None
-    details: dict[str, Any] = field(default_factory=lambda: {})
-
-
-@dataclass
-class ResourceSpec:
-    """Kubernetes resource requirements specification.
-
-    Follows K8s ResourceRequirements schema for CPU and memory
-    requests and limits.
-
-    Attributes:
-        cpu_request: CPU request (e.g., "100m", "1").
-        cpu_limit: CPU limit (e.g., "500m", "2").
-        memory_request: Memory request (e.g., "256Mi", "1Gi").
-        memory_limit: Memory limit (e.g., "512Mi", "2Gi").
-
-    Example:
-        >>> spec = ResourceSpec(
-        ...     cpu_request="100m",
-        ...     cpu_limit="1",
-        ...     memory_request="256Mi",
-        ...     memory_limit="1Gi"
-        ... )
-    """
-
-    cpu_request: str = "100m"
-    cpu_limit: str = "500m"
-    memory_request: str = "256Mi"
-    memory_limit: str = "512Mi"
-
-
-@dataclass
-class CatalogConfig:
-    """Configuration for an Iceberg catalog connection.
-
-    Used by get_catalog_attachment_sql() to generate SQL statements
-    for attaching compute engines to Iceberg catalogs.
-
-    Attributes:
-        catalog_name: Name of the catalog (e.g., "ice").
-        catalog_uri: REST catalog URI (e.g., "http://polaris:8181/api/catalog").
-        warehouse: Warehouse identifier.
-        credentials: Catalog credentials.
-
-    Example:
-        >>> config = CatalogConfig(
-        ...     catalog_name="ice",
-        ...     catalog_uri="http://polaris:8181/api/catalog",
-        ...     warehouse="floe_warehouse"
-        ... )
-    """
-
-    catalog_name: str = ""
-    catalog_uri: str = ""
-    warehouse: str = ""
-    credentials: dict[str, Any] = field(default_factory=lambda: {})
 
 
 class ComputePlugin(PluginMetadata):
@@ -157,7 +62,18 @@ class ComputePlugin(PluginMetadata):
     Optional override:
         - get_catalog_attachment_sql() for engines that need explicit catalog attachment
 
+    Configuration models (from compute_config.py):
+        - ComputeConfig: Base Pydantic model with plugin, timeout_seconds, threads
+        - ConnectionResult: Frozen Pydantic model with status enum, latency_ms
+        - ResourceSpec: K8s resource requirements (cpu, memory, ephemeral storage)
+        - CatalogConfig: Iceberg REST catalog configuration
+        - WORKLOAD_PRESETS: Dict of small/medium/large ResourceSpec presets
+
     Example:
+        >>> from floe_core.compute_config import (
+        ...     ComputeConfig, ConnectionResult, ConnectionStatus,
+        ...     ResourceSpec, WORKLOAD_PRESETS
+        ... )
         >>> class DuckDBPlugin(ComputePlugin):
         ...     @property
         ...     def name(self) -> str:
@@ -176,19 +92,24 @@ class ComputePlugin(PluginMetadata):
         ...         return True
         ...
         ...     def generate_dbt_profile(self, config: ComputeConfig) -> dict:
-        ...         return {"type": "duckdb", "path": "/data/floe.duckdb"}
+        ...         return {"type": "duckdb", "path": config.connection.get("path", ":memory:")}
         ...
         ...     def get_required_dbt_packages(self) -> list[str]:
         ...         return ["dbt-duckdb>=1.7.0"]
         ...
         ...     def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
-        ...         return ConnectionResult(success=True, message="Connected")
+        ...         return ConnectionResult(
+        ...             status=ConnectionStatus.HEALTHY,
+        ...             latency_ms=10.5,
+        ...             message="Connected successfully"
+        ...         )
         ...
         ...     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
-        ...         return ResourceSpec(cpu_request="500m", memory_request="1Gi")
+        ...         return WORKLOAD_PRESETS.get(workload_size, WORKLOAD_PRESETS["medium"])
 
     See Also:
         - PluginMetadata: Base class with common plugin attributes
+        - floe_core.compute_config: Configuration Pydantic models
         - docs/architecture/plugin-system/interfaces.md: Full interface specification
     """
 
@@ -220,19 +141,25 @@ class ComputePlugin(PluginMetadata):
         specific adapter (duckdb, snowflake, etc.).
 
         Args:
-            config: Compute engine configuration with connection details.
+            config: ComputeConfig Pydantic model with plugin name, timeout,
+                threads, connection dict, and credentials.
 
         Returns:
             Dictionary matching dbt profile.yml target schema.
 
         Example:
-            >>> config = ComputeConfig(database="analytics")
+            >>> from floe_core.compute_config import ComputeConfig
+            >>> config = ComputeConfig(
+            ...     plugin="duckdb",
+            ...     threads=4,
+            ...     connection={"path": "/data/floe.duckdb"}
+            ... )
             >>> profile = plugin.generate_dbt_profile(config)
             >>> profile
             {
                 'type': 'duckdb',
                 'path': '/data/floe.duckdb',
-                'extensions': ['iceberg', 'httpfs']
+                'threads': 4
             }
 
         See Also:
@@ -268,13 +195,17 @@ class ComputePlugin(PluginMetadata):
             config: Compute engine configuration with connection details.
 
         Returns:
-            ConnectionResult with success status and diagnostic information.
+            ConnectionResult with status (HEALTHY/DEGRADED/UNHEALTHY),
+            latency_ms, optional message, and warnings list.
 
         Example:
+            >>> from floe_core.compute_config import ConnectionStatus
             >>> result = plugin.validate_connection(config)
-            >>> if result.success:
+            >>> if result.status == ConnectionStatus.HEALTHY:
             ...     print(f"Connected in {result.latency_ms}ms")
-            ... else:
+            >>> elif result.status == ConnectionStatus.DEGRADED:
+            ...     print(f"Connected with warnings: {result.warnings}")
+            >>> else:
             ...     print(f"Failed: {result.message}")
         """
         ...
