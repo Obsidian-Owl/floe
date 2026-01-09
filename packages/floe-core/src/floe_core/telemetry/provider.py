@@ -12,6 +12,7 @@ Requirements Covered:
 - FR-008: OTLP exporter configuration
 - FR-009: gRPC protocol selection
 - FR-010: HTTP protocol selection
+- FR-011: Authentication header injection
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -183,13 +184,22 @@ class TelemetryProvider:
             sampler=TraceIdRatioBased(sampling_ratio),
         )
 
+        # Build authentication headers if configured (FR-011)
+        headers = self._build_auth_headers()
+
         # Configure OTLP exporter based on protocol (FR-008, FR-009, FR-010)
         exporter: SpanExporter
         if self._config.otlp_protocol == "grpc":
-            exporter = OTLPSpanExporter(endpoint=self._config.otlp_endpoint)
+            exporter = OTLPSpanExporter(
+                endpoint=self._config.otlp_endpoint,
+                headers=headers,
+            )
         else:
             # HTTP protocol (FR-010)
-            exporter = OTLPHttpSpanExporter(endpoint=self._config.otlp_endpoint)
+            exporter = OTLPHttpSpanExporter(
+                endpoint=self._config.otlp_endpoint,
+                headers=headers,
+            )
 
         # Add BatchSpanProcessor for async export (FR-024)
         self._span_processor = BatchSpanProcessor(exporter)
@@ -220,6 +230,35 @@ class TelemetryProvider:
         if not self._config.enabled:
             return "TelemetryConfig.enabled is False"
         return "unknown"
+
+    def _build_auth_headers(self) -> dict[str, str] | None:
+        """Build authentication headers for OTLP exporter.
+
+        Generates HTTP headers from TelemetryAuth configuration for
+        authenticating with SaaS backends (Datadog, Grafana Cloud, etc.).
+
+        Returns:
+            Dictionary of header name to value, or None if no auth configured.
+
+        Raises:
+            ValueError: If auth is configured but credentials are missing.
+        """
+        auth = self._config.authentication
+        if auth is None:
+            return None
+
+        headers: dict[str, str] = {}
+
+        if auth.auth_type == "api_key":
+            if auth.api_key is None:
+                raise ValueError("api_key is required for api_key auth_type")
+            headers[auth.header_name] = auth.api_key.get_secret_value()
+        elif auth.auth_type == "bearer":
+            if auth.bearer_token is None:
+                raise ValueError("bearer_token is required for bearer auth_type")
+            headers[auth.header_name] = f"Bearer {auth.bearer_token.get_secret_value()}"
+
+        return headers if headers else None
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         """Force flush all pending telemetry data.

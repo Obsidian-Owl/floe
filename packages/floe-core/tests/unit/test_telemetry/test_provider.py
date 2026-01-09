@@ -4,11 +4,13 @@ Tests cover:
 - T013: TelemetryProvider initialization and shutdown lifecycle
 - T014: No-op mode detection via OTEL_SDK_DISABLED
 - T023: Propagator integration during initialization
+- T042: Authentication header injection
 
 Requirements Covered:
 - FR-001: Initialize OpenTelemetry SDK with TelemetryConfig
 - FR-002: W3C Trace Context propagation
 - FR-003: W3C Baggage propagation
+- FR-011: Authentication header injection
 - FR-023: Telemetry provider lifecycle management
 """
 
@@ -22,6 +24,7 @@ import pytest
 from floe_core.telemetry import (
     ProviderState,
     ResourceAttributes,
+    TelemetryAuth,
     TelemetryConfig,
     TelemetryProvider,
 )
@@ -861,3 +864,190 @@ class TestOTLPHttpExporterSetup:
         # Both configs are valid and can be used together
         assert config.otlp_protocol == "http"
         assert batch_config.max_queue_size == 4096
+
+
+# T042: Unit tests for authentication header injection in TelemetryProvider
+# These tests validate that TelemetryProvider correctly builds and uses
+# authentication headers from TelemetryAuth configuration.
+
+
+class TestTelemetryProviderAuthHeaderInjection:
+    """Test TelemetryProvider authentication header injection (FR-011).
+
+    TelemetryProvider builds authentication headers from TelemetryAuth
+    and passes them to the OTLP exporter for SaaS backend authentication.
+    """
+
+    @pytest.mark.requirement("FR-011")
+    def test_build_auth_headers_with_api_key(self, clean_env: None) -> None:
+        """Test _build_auth_headers generates correct headers for api_key auth."""
+        from pydantic import SecretStr
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("my-api-key"),
+            header_name="DD-API-KEY",
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            authentication=auth,
+        )
+        provider = TelemetryProvider(config)
+
+        headers = provider._build_auth_headers()
+
+        assert headers is not None
+        assert headers == {"DD-API-KEY": "my-api-key"}
+
+    @pytest.mark.requirement("FR-011")
+    def test_build_auth_headers_with_bearer_token(self, clean_env: None) -> None:
+        """Test _build_auth_headers generates correct headers for bearer auth."""
+        from pydantic import SecretStr
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("my-bearer-token"),
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            authentication=auth,
+        )
+        provider = TelemetryProvider(config)
+
+        headers = provider._build_auth_headers()
+
+        assert headers is not None
+        assert headers == {"Authorization": "Bearer my-bearer-token"}
+
+    @pytest.mark.requirement("FR-011")
+    def test_build_auth_headers_returns_none_when_no_auth(
+        self, clean_env: None
+    ) -> None:
+        """Test _build_auth_headers returns None when no auth configured."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            # No authentication configured
+        )
+        provider = TelemetryProvider(config)
+
+        headers = provider._build_auth_headers()
+
+        assert headers is None
+
+    @pytest.mark.requirement("FR-011")
+    def test_provider_initializes_with_api_key_auth(self, clean_env: None) -> None:
+        """Test TelemetryProvider initializes successfully with api_key auth."""
+        from pydantic import SecretStr
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("datadog-api-key"),
+            header_name="DD-API-KEY",
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://localhost:4317",
+            otlp_protocol="grpc",
+            authentication=auth,
+        )
+        provider = TelemetryProvider(config)
+
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-011")
+    def test_provider_initializes_with_bearer_auth(self, clean_env: None) -> None:
+        """Test TelemetryProvider initializes successfully with bearer auth."""
+        from pydantic import SecretStr
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("grafana-bearer-token"),
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://localhost:4318",
+            otlp_protocol="http",
+            authentication=auth,
+        )
+        provider = TelemetryProvider(config)
+
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-011")
+    def test_bearer_auth_custom_header_name(self, clean_env: None) -> None:
+        """Test bearer auth with custom header name."""
+        from pydantic import SecretStr
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("custom-token"),
+            header_name="X-Custom-Auth",
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            authentication=auth,
+        )
+        provider = TelemetryProvider(config)
+
+        headers = provider._build_auth_headers()
+
+        assert headers is not None
+        assert headers == {"X-Custom-Auth": "Bearer custom-token"}
