@@ -24,19 +24,28 @@ The text the user typed after `/speckit.specify` in the triggering message **is*
 
 Given that feature description, do this:
 
-1. **Generate a concise short name** (2-4 words) for the branch:
+1. **Identify the Epic this feature belongs to**:
+
+   All features MUST be associated with an Epic from the project's Epic Overview.
+
+   **How to find the Epic ID**:
+   - Read `docs/plans/EPIC-OVERVIEW.md` to see the full list of Epics and their IDs
+   - Epic IDs follow the pattern: number + optional letter (e.g., 1, 2A, 2B, 3A, 9C)
+   - Match the feature description to an Epic name/purpose in that document
+
+   **How to determine the Epic**:
+   - If the user explicitly mentions an Epic (e.g., "for Epic 2A" or "part of the Manifest Schema epic"), use that
+   - If unclear from the feature description, use the AskUserQuestion tool to ask which Epic this belongs to
+   - Provide suggested options based on the Epic names in EPIC-OVERVIEW.md
+
+2. **Generate a concise short name** (2-4 words) for the branch:
    - Analyze the feature description and extract the most meaningful keywords
    - Create a 2-4 word short name that captures the essence of the feature
-   - Use action-noun format when possible (e.g., "add-user-auth", "fix-payment-bug")
+   - Use action-noun format when possible (e.g., "manifest-validation", "plugin-discovery")
    - Preserve technical terms and acronyms (OAuth2, API, JWT, etc.)
    - Keep it concise but descriptive enough to understand the feature at a glance
-   - Examples:
-     - "I want to add user authentication" → "user-auth"
-     - "Implement OAuth2 integration for the API" → "oauth2-api-integration"
-     - "Create a dashboard for analytics" → "analytics-dashboard"
-     - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. **Check for existing branches before creating new one**:
+3. **Check for existing specs for this Epic**:
 
    a. First, fetch all remote branches to ensure we have the latest information:
 
@@ -44,33 +53,31 @@ Given that feature description, do this:
       git fetch --all --prune
       ```
 
-   b. Find the highest feature number across all sources for the short-name:
-      - Remote branches: `git ls-remote --heads origin | grep -E 'refs/heads/[0-9]+-<short-name>$'`
-      - Local branches: `git branch | grep -E '^[* ]*[0-9]+-<short-name>$'`
-      - Specs directories: Check for directories matching `specs/[0-9]+-<short-name>`
+   b. Check if specs already exist for this Epic:
+      - Remote branches: `git ls-remote --heads origin | grep -iE 'refs/heads/<epic-id>-'` (e.g., `2a-`, `9c-`)
+      - Local branches: `git branch | grep -iE '^[* ]*<epic-id>-'`
+      - Specs directories: Check for directories matching `specs/<epic-id>-*`
 
-   c. Determine the next available number:
-      - Extract all numbers from all three sources
-      - Find the highest number N
-      - Use N+1 for the new branch number
+   c. Determine if this is a new feature or continuation:
+      - If an existing spec matches this Epic + short-name, warn the user and ask if they want to continue work on it
+      - If no existing spec, proceed with creating a new one
 
-   d. Run the script `.specify/scripts/bash/create-new-feature.sh --json "$ARGUMENTS"` with the calculated number and short-name:
-      - Pass `--number N+1` and `--short-name "your-short-name"` along with the feature description
-      - Bash example: `.specify/scripts/bash/create-new-feature.sh --json "$ARGUMENTS" --json --number 5 --short-name "user-auth" "Add user authentication"`
-      - PowerShell example: `.specify/scripts/bash/create-new-feature.sh --json "$ARGUMENTS" -Json -Number 5 -ShortName "user-auth" "Add user authentication"`
+   d. Run the script `.specify/scripts/bash/create-new-feature.sh --json "$ARGUMENTS"` with the Epic ID and short-name:
+      - Pass `--epic <epic-id>` and `--short-name "your-short-name"` along with the feature description
+      - Bash example: `.specify/scripts/bash/create-new-feature.sh --json --epic 2a --short-name "manifest-validation" "Implement manifest schema validation"`
+      - The Epic ID should be lowercase (e.g., `2a` not `2A`, `9c` not `9C`)
 
    **IMPORTANT**:
-   - Check all three sources (remote branches, local branches, specs directories) to find the highest number
-   - Only match branches/directories with the exact short-name pattern
-   - If no existing branches/directories found with this short-name, start with number 1
+   - Every feature MUST have a valid Epic ID (check `docs/plans/EPIC-OVERVIEW.md`)
+   - Use lowercase for Epic IDs in branch names (2a, 9c, not 2A, 9C)
    - You must only ever run this script once per feature
    - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
-   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths
+   - The JSON output will contain BRANCH_NAME, SPEC_FILE paths, and EPIC_ID
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
 
-3. Load `.specify/templates/spec-template.md` to understand required sections.
+4. Load `.specify/templates/spec-template.md` to understand required sections.
 
-4. Follow this execution flow:
+5. Follow this execution flow:
 
     1. Parse user description from Input
        If empty: ERROR "No feature description provided"
@@ -90,9 +97,9 @@ Given that feature description, do this:
     7. Identify Key Entities (if data involved)
     8. Return: SUCCESS (spec ready for planning)
 
-5. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
+6. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
 
-6. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
+7. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
 
    a. **Create Spec Quality Checklist**: Generate a checklist file at `FEATURE_DIR/checklists/requirements.md` using the checklist template structure with these validation items:
 
@@ -139,7 +146,7 @@ Given that feature description, do this:
 
    c. **Handle Validation Results**:
 
-      - **If all items pass**: Mark checklist complete and proceed to step 6
+      - **If all items pass**: Mark checklist complete and proceed to step 8
 
       - **If items fail (excluding [NEEDS CLARIFICATION])**:
         1. List the failing items and specific issues
@@ -184,7 +191,7 @@ Given that feature description, do this:
 
    d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
 
-7. Report completion with branch name, spec file path, checklist results, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
+8. Report completion with branch name, spec file path, checklist results, Epic ID, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
 
 **NOTE:** The script creates and checks out the new branch and initializes the spec file before writing.
 
