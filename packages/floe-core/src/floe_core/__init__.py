@@ -33,6 +33,8 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 # Error hierarchy
+# Schemas submodule (imported for explicit re-export)
+from floe_core import schemas as schemas  # noqa: PLC0414
 from floe_core.plugin_errors import (
     CircularDependencyError,
     DuplicatePluginError,
@@ -81,9 +83,6 @@ from floe_core.version_compat import (
     FLOE_PLUGIN_API_VERSION,
     is_compatible,
 )
-
-# Schemas submodule (imported for explicit re-export)
-from floe_core import schemas as schemas  # noqa: PLC0414
 
 __all__: list[str] = [
     # Package version
