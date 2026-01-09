@@ -491,45 +491,198 @@ class PolarisCatalogPlugin(CatalogPlugin):
     ) -> None:
         """Create a new Iceberg table in the Polaris catalog.
 
+        Creates an Iceberg table with the specified schema. The table
+        location defaults to the warehouse location if not specified.
+
         Args:
             identifier: Full table identifier (e.g., "bronze.customers").
-            schema: Iceberg schema definition.
-            location: Optional storage location override.
-            properties: Optional table properties.
+            schema: Iceberg schema definition as a dictionary with:
+                - type: "struct"
+                - fields: List of field definitions with id, name, type, required
+            location: Optional storage location override (e.g., "s3://bucket/path").
+            properties: Optional table properties (e.g., {"write.format.default": "parquet"}).
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            ConflictError: If table already exists.
+            NotFoundError: If namespace does not exist.
+            AuthenticationError: If lacking permission to create tables.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> schema = {"type": "struct", "fields": [...]}
+            >>> plugin.create_table("bronze.customers", schema)
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("create_table() not yet implemented")
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "create_table",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            table_full_name=identifier,
+        ) as span:
+            log = logger.bind(
+                table=identifier,
+                uri=self._config.uri,
+            )
+            log.info("creating_table")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # Build kwargs for PyIceberg create_table
+                kwargs: dict[str, Any] = {}
+                if location:
+                    kwargs["location"] = location
+                if properties:
+                    kwargs["properties"] = properties
+
+                # Create the table via PyIceberg catalog
+                self._catalog.create_table(identifier, schema, **kwargs)
+
+                log.info("table_created", location=location)
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("create_table_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="create_table",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("create_table_failed", error=str(e))
+                raise
 
     def list_tables(self, namespace: str) -> list[str]:
         """List tables in a namespace.
 
+        Returns all table identifiers within the specified namespace.
+
         Args:
-            namespace: Namespace to list tables from.
+            namespace: Namespace to list tables from (e.g., "bronze").
 
         Returns:
-            List of table identifiers.
+            List of full table identifiers (e.g., ["bronze.customers", "bronze.orders"]).
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            NotFoundError: If namespace does not exist.
+            AuthenticationError: If lacking permission to list tables.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> plugin.list_tables("bronze")
+            ['bronze.customers', 'bronze.orders', 'bronze.products']
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("list_tables() not yet implemented")
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "list_tables",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            namespace=namespace,
+        ) as span:
+            log = logger.bind(
+                namespace=namespace,
+                uri=self._config.uri,
+            )
+            log.info("listing_tables")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # PyIceberg returns list of tuples: [(namespace, table_name), ...]
+                raw_tables = self._catalog.list_tables(namespace)
+
+                # Convert tuples to dot-notation strings
+                tables = [".".join(table) for table in raw_tables]
+
+                log.info("tables_listed", count=len(tables))
+
+                return tables
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("list_tables_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="list_tables",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("list_tables_failed", error=str(e))
+                raise
 
     def drop_table(self, identifier: str, purge: bool = False) -> None:
         """Drop an Iceberg table from the Polaris catalog.
 
+        Removes the table metadata from the catalog. If purge is True,
+        also deletes the underlying data files.
+
         Args:
-            identifier: Full table identifier.
-            purge: If True, also delete underlying data files.
+            identifier: Full table identifier (e.g., "bronze.customers").
+            purge: If True, also delete underlying data files. Defaults to False.
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            NotFoundError: If table does not exist.
+            AuthenticationError: If lacking permission to drop tables.
+            CatalogUnavailableError: If catalog is unreachable.
+
+        Example:
+            >>> plugin.drop_table("staging.temp_table")
+            >>> plugin.drop_table("staging.old_data", purge=True)  # Also delete files
         """
-        # Stub - will be implemented in later tasks
-        raise NotImplementedError("drop_table() not yet implemented")
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "drop_table",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
+            warehouse=self._config.warehouse,
+            table_full_name=identifier,
+        ) as span:
+            log = logger.bind(
+                table=identifier,
+                purge=purge,
+                uri=self._config.uri,
+            )
+            log.info("dropping_table")
+
+            try:
+                if self._catalog is None:
+                    raise RuntimeError("Catalog not connected. Call connect() first.")
+
+                # Drop the table via PyIceberg catalog
+                self._catalog.drop_table(identifier, purge=purge)
+
+                log.info("table_dropped")
+
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("drop_table_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="drop_table",
+                ) from e
+
+            except Exception as e:
+                # Catch any other unexpected exceptions
+                set_error_attributes(span, e)
+                log.error("drop_table_failed", error=str(e))
+                raise
 
     def vend_credentials(
         self,
