@@ -3,8 +3,8 @@
 Tests validation of manifest loading including valid configurations,
 required fields, field validation, and forward compatibility.
 
-Task: T011, T012, T013, T014
-Requirements: FR-001, FR-002, FR-013, FR-016
+Task: T011, T012, T013, T014, T058, T059
+Requirements: FR-001, FR-002, FR-011, FR-013, FR-015, FR-016
 """
 
 from __future__ import annotations
@@ -436,3 +436,193 @@ class TestPlatformManifestExtraFieldsForbidden:
                 plugins={},
             )
         assert "extra" in str(exc_info.value).lower()
+
+
+class TestEnvironmentAgnosticConfiguration:
+    """Tests for environment-agnostic manifest configuration (T058, T059).
+
+    US6: Compiled artifacts are environment-agnostic; FLOE_ENV determines runtime behavior.
+    """
+
+    @pytest.mark.requirement("001-FR-011")
+    @pytest.mark.requirement("001-FR-015")
+    def test_manifest_contains_no_environment_field(self) -> None:
+        """Test that manifest schema has no 'environment' field.
+
+        Given a PlatformManifest model,
+        When inspecting its fields,
+        Then there is no 'environment', 'env', or 'FLOE_ENV' field.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        field_names = set(PlatformManifest.model_fields.keys())
+        environment_fields = {"environment", "env", "floe_env", "target_env"}
+
+        # No environment-specific fields should exist in the manifest schema
+        assert not field_names.intersection(environment_fields), (
+            f"Manifest should not have environment fields. Found: "
+            f"{field_names.intersection(environment_fields)}"
+        )
+
+    @pytest.mark.requirement("001-FR-011")
+    @pytest.mark.requirement("001-FR-015")
+    def test_manifest_rejects_env_overrides_field(self) -> None:
+        """Test that manifest rejects 'env_overrides' field.
+
+        Given a manifest with an 'env_overrides' field,
+        When validating the manifest,
+        Then the manifest is rejected with a clear error.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        with pytest.raises(ValidationError) as exc_info:
+            PlatformManifest(
+                api_version="floe.dev/v1",
+                kind="Manifest",
+                metadata={
+                    "name": "test",
+                    "version": "1.0.0",
+                    "owner": "test@example.com",
+                },
+                plugins={},
+                env_overrides={  # type: ignore[call-arg]
+                    "dev": {"plugins": {"compute": {"type": "duckdb"}}},
+                    "prod": {"plugins": {"compute": {"type": "snowflake"}}},
+                },
+            )
+
+        error_str = str(exc_info.value).lower()
+        assert "env_overrides" in error_str or "environment" in error_str
+
+    @pytest.mark.requirement("001-FR-011")
+    @pytest.mark.requirement("001-FR-015")
+    def test_manifest_rejects_environments_field(self) -> None:
+        """Test that manifest rejects 'environments' field.
+
+        Given a manifest with an 'environments' field,
+        When validating the manifest,
+        Then the manifest is rejected with a clear error.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        with pytest.raises(ValidationError) as exc_info:
+            PlatformManifest(
+                api_version="floe.dev/v1",
+                kind="Manifest",
+                metadata={
+                    "name": "test",
+                    "version": "1.0.0",
+                    "owner": "test@example.com",
+                },
+                plugins={},
+                environments=["dev", "staging", "prod"],  # type: ignore[call-arg]
+            )
+
+        error_str = str(exc_info.value).lower()
+        assert "environments" in error_str or "environment" in error_str
+
+    @pytest.mark.requirement("001-FR-011")
+    @pytest.mark.requirement("001-FR-015")
+    def test_same_manifest_works_across_environments(self) -> None:
+        """Test that same manifest works across dev/staging/prod.
+
+        Given a valid manifest,
+        When loading it (simulating different FLOE_ENV values),
+        Then the manifest validates identically regardless of environment.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        manifest_data: dict[str, Any] = {
+            "api_version": "floe.dev/v1",
+            "kind": "Manifest",
+            "metadata": {
+                "name": "acme-platform",
+                "version": "1.0.0",
+                "owner": "platform@acme.com",
+            },
+            "plugins": {
+                "compute": {"type": "duckdb"},
+                "orchestrator": {"type": "dagster"},
+            },
+        }
+
+        # Manifest validation is independent of any environment context
+        # FLOE_ENV is a runtime concept, not a validation concept
+        manifest = PlatformManifest.model_validate(manifest_data)
+
+        # Manifest should be identical regardless of which "environment" it's loaded in
+        assert manifest.metadata.name == "acme-platform"
+        assert manifest.plugins.compute is not None
+        assert manifest.plugins.compute.type == "duckdb"
+
+        # Re-validate the same data multiple times (simulating different envs)
+        # All validations should produce identical results
+        for _ in ["dev", "staging", "prod"]:
+            re_manifest = PlatformManifest.model_validate(manifest_data)
+            assert re_manifest.metadata.name == manifest.metadata.name
+            assert re_manifest.plugins.compute == manifest.plugins.compute
+
+    @pytest.mark.requirement("001-FR-011")
+    @pytest.mark.requirement("001-FR-015")
+    def test_manifest_no_runtime_resolution_at_validation(self) -> None:
+        """Test that manifest validation doesn't resolve any runtime values.
+
+        Given a manifest with secret references,
+        When validating the manifest,
+        Then secrets remain as placeholders (not resolved).
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        manifest = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "test",
+                "version": "1.0.0",
+                "owner": "test@example.com",
+            },
+            plugins={
+                "compute": {
+                    "type": "snowflake",
+                    "connection_secret_ref": "snowflake-credentials",
+                },
+            },
+        )
+
+        # Secret reference should remain as a placeholder, not resolved
+        assert manifest.plugins.compute is not None
+        assert manifest.plugins.compute.connection_secret_ref == "snowflake-credentials"
+        # Should NOT have any resolved value - it's a reference only
+
+    @pytest.mark.requirement("001-FR-011")
+    def test_manifest_environment_agnostic_serialization(self) -> None:
+        """Test that serialized manifest contains no environment info.
+
+        Given a valid manifest,
+        When serializing to dict/JSON,
+        Then output contains no environment-specific fields.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        manifest = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "test",
+                "version": "1.0.0",
+                "owner": "test@example.com",
+            },
+            plugins={
+                "compute": {"type": "duckdb"},
+            },
+        )
+
+        data = manifest.model_dump(exclude_none=True)
+
+        # No environment keys should exist in serialized output
+        forbidden_keys = {"environment", "env", "environments", "env_overrides", "floe_env"}
+        all_keys = set(data.keys())
+        assert not all_keys.intersection(forbidden_keys), (
+            f"Serialized manifest should not contain environment keys. "
+            f"Found: {all_keys.intersection(forbidden_keys)}"
+        )

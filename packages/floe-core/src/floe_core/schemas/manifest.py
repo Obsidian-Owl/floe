@@ -5,6 +5,8 @@ governance configuration for platform manifests.
 
 Implements:
     - FR-001: Platform Configuration Definition
+    - FR-011: Environment-Agnostic Configuration
+    - FR-015: Runtime Environment Resolution
     - FR-016: Manifest Immutability
     - FR-017: Governance Configuration
 """
@@ -23,6 +25,26 @@ from floe_core.schemas.plugins import PluginsConfig
 # Manifest scope literals
 ManifestScope = Literal["enterprise", "domain"]
 """Valid scope values for 3-tier configuration mode."""
+
+# Environment-specific field names that are forbidden in manifests
+# Manifests are environment-agnostic; FLOE_ENV determines runtime behavior
+FORBIDDEN_ENVIRONMENT_FIELDS = frozenset({
+    "env_overrides",
+    "environments",
+    "environment",
+    "env",
+    "dev",
+    "staging",
+    "prod",
+    "production",
+    "target_env",
+    "floe_env",
+})
+"""Fields forbidden in manifests to enforce environment-agnostic design.
+
+Manifests MUST NOT contain environment-specific configuration.
+Runtime behavior is determined by FLOE_ENV environment variable.
+"""
 
 
 class GovernanceConfig(BaseModel):
@@ -242,20 +264,54 @@ class PlatformManifest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def warn_on_extra_fields(self) -> PlatformManifest:
-        """Emit warning for unknown fields (forward compatibility)."""
+    def reject_environment_specific_fields(self) -> PlatformManifest:
+        """Reject environment-specific fields to enforce environment-agnostic design.
+
+        Manifests MUST NOT contain environment-specific configuration.
+        Runtime behavior is determined by FLOE_ENV environment variable.
+
+        Raises:
+            ValueError: If any forbidden environment field is present.
+        """
         if self.model_extra:
-            unknown_fields = list(self.model_extra.keys())
-            warnings.warn(
-                f"Unknown fields in manifest will be ignored: {unknown_fields}. "
-                "This may indicate a newer manifest version or typos.",
-                UserWarning,
-                stacklevel=2,
-            )
+            forbidden_found = set(self.model_extra.keys()) & FORBIDDEN_ENVIRONMENT_FIELDS
+            if forbidden_found:
+                forbidden_str = ", ".join(sorted(forbidden_found))
+                msg = (
+                    f"Environment-specific fields are not allowed in manifests: "
+                    f"[{forbidden_str}]. "
+                    "Manifests are environment-agnostic by design. "
+                    "Use FLOE_ENV environment variable at runtime to select environment. "
+                    "See quickstart.md for environment resolution patterns."
+                )
+                raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def warn_on_extra_fields(self) -> PlatformManifest:
+        """Emit warning for unknown fields (forward compatibility).
+
+        Note: This runs after reject_environment_specific_fields, so
+        environment-specific fields will have already been rejected.
+        """
+        if self.model_extra:
+            # Filter out any fields that would have been caught by reject_environment_specific_fields
+            unknown_fields = [
+                f for f in self.model_extra.keys()
+                if f not in FORBIDDEN_ENVIRONMENT_FIELDS
+            ]
+            if unknown_fields:
+                warnings.warn(
+                    f"Unknown fields in manifest will be ignored: {unknown_fields}. "
+                    "This may indicate a newer manifest version or typos.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         return self
 
 
 __all__ = [
+    "FORBIDDEN_ENVIRONMENT_FIELDS",
     "ManifestScope",
     "GovernanceConfig",
     "PlatformManifest",

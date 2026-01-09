@@ -261,16 +261,104 @@ InheritanceError: Circular reference detected
 
 ## Environment Variables
 
-Manifests are environment-agnostic. Environment context is determined at runtime:
+### Environment-Agnostic Design
+
+**Core Principle**: Manifests are environment-agnostic by design. The same manifest file works identically across dev, staging, and production environments. Environment-specific behavior is determined at **runtime** via the `FLOE_ENV` environment variable.
+
+**Why?**
+- **Single source of truth**: One manifest defines platform configuration
+- **No configuration drift**: Same configuration validated across all environments
+- **Simplified CI/CD**: No environment-specific manifest variants to manage
+- **Audit compliance**: Clear separation between configuration (manifest) and runtime context (FLOE_ENV)
+
+### FLOE_ENV Environment Variable
+
+The `FLOE_ENV` variable determines runtime behavior:
 
 ```bash
 # Development
 export FLOE_ENV=dev
 floe run my-pipeline
 
+# Staging
+export FLOE_ENV=staging
+floe run my-pipeline
+
 # Production (same manifest, different credentials)
 export FLOE_ENV=production
 floe run my-pipeline
+```
+
+### What FLOE_ENV Controls
+
+| Aspect | How FLOE_ENV Affects It |
+|--------|------------------------|
+| **Secret Resolution** | Secret names resolve to environment-specific K8s namespaces |
+| **Logging Verbosity** | Dev may enable DEBUG logging, prod uses INFO/WARN |
+| **Feature Flags** | Environment-specific feature toggles |
+| **Resource Scaling** | Different compute/memory allocation per environment |
+
+### Forbidden Fields
+
+The manifest schema **rejects** environment-specific fields to enforce environment-agnostic design:
+
+```yaml
+# ❌ INVALID - These fields are rejected
+env_overrides:
+  dev: {...}
+  prod: {...}
+
+environments: [dev, staging, prod]
+
+dev:
+  plugins: {...}
+
+# ✅ VALID - Single configuration for all environments
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+```
+
+**Rejected fields**: `env_overrides`, `environments`, `environment`, `env`, `dev`, `staging`, `prod`, `production`, `target_env`, `floe_env`
+
+### Migration from env_overrides Pattern
+
+If you're migrating from an existing system that uses environment-specific configuration:
+
+**Before** (environment-specific):
+```yaml
+# ❌ OLD PATTERN - Not supported
+environments:
+  dev:
+    plugins:
+      compute: {type: duckdb}
+  prod:
+    plugins:
+      compute: {type: snowflake}
+```
+
+**After** (environment-agnostic):
+```yaml
+# ✅ NEW PATTERN - Single configuration
+# manifest.yaml
+plugins:
+  compute:
+    type: snowflake  # Same for all environments
+    connection_secret_ref: snowflake-credentials
+```
+
+For environment-specific behavior, configure your infrastructure:
+1. **K8s Namespaces**: Different namespaces per environment (`dev`, `staging`, `prod`)
+2. **K8s Secrets**: Same secret name, different values per namespace
+3. **Environment Variables**: `FLOE_ENV` sets the context
+
+```bash
+# The secret "snowflake-credentials" exists in all namespaces
+# with different values per environment
+kubectl -n dev get secret snowflake-credentials
+kubectl -n prod get secret snowflake-credentials
 ```
 
 ## Secret Reference Patterns
