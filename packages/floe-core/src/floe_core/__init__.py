@@ -77,6 +77,16 @@ from floe_core.compute_errors import (
 # Compute registry
 from floe_core.compute_registry import ComputeRegistry
 
+# Compiler functions
+from floe_core.compiler import (
+    EnvironmentParityError,
+    check_environment_parity,
+    compile_transforms,
+    resolve_transform_compute,
+    resolve_transforms_compute,
+    validate_environment_parity,
+)
+
 # Health types and PluginMetadata ABC
 from floe_core.plugin_metadata import (
     HealthState,
@@ -148,6 +158,13 @@ __all__: list[str] = [
     "ComputeTimeoutError",
     # Compute registry
     "ComputeRegistry",
+    # Compiler functions
+    "EnvironmentParityError",
+    "check_environment_parity",
+    "compile_transforms",
+    "resolve_transform_compute",
+    "resolve_transforms_compute",
+    "validate_environment_parity",
     # Version compatibility
     "FLOE_PLUGIN_API_VERSION",
     "FLOE_PLUGIN_API_MIN_VERSION",
