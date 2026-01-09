@@ -271,14 +271,25 @@ def merge_manifests(
 
     merged_plugins = PluginsConfig(**merged_plugins_data)
 
-    # For governance, parent's value is preserved (FORBID strategy)
-    # Child cannot change governance policies (validated separately)
-    merged_governance = parent.governance
+    # For governance, FORBID strategy means child cannot WEAKEN parent's policies.
+    # If parent has governance, it's preserved (child can't override).
+    # If parent has None, child can ADD governance policies.
+    # Note: validate_security_policy_not_weakened() should be called separately
+    # before merge to enforce FR-017 (security policy immutability).
+    if parent.governance is not None:
+        merged_governance = parent.governance
+    else:
+        merged_governance = child.governance
 
-    # approved_plugins is enterprise-only, approved_products is domain-only
-    # These are scope-specific and don't transfer across scopes
-    merged_approved_plugins = child.approved_plugins if child.scope == "enterprise" else None
-    merged_approved_products = child.approved_products if child.scope == "domain" else None
+    # approved_plugins/approved_products are scope-restricted and not propagated during merge:
+    # - approved_plugins: only valid for scope='enterprise'
+    # - approved_products: only valid for scope='domain'
+    #
+    # Whitelist validation must happen BEFORE merge via validate_domain_plugin_whitelist().
+    # The merged manifest takes child's scope, so these fields are not copied.
+    # Enterprise whitelists are enforced but not stored on domain/product manifests.
+    merged_approved_plugins = None
+    merged_approved_products = None
 
     # Create merged manifest with child's metadata (OVERRIDE strategy)
     # Note: Using apiVersion (alias) because mypy expects the alias parameter name

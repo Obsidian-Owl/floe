@@ -1,7 +1,7 @@
 """Plugin configuration models for manifest schema.
 
 This module provides models for plugin selection and configuration
-across all 11 pluggable platform components.
+across all 12 pluggable platform components.
 
 Implements:
     - FR-006: Plugin Selection
@@ -89,7 +89,7 @@ class PluginSelection(BaseModel):
     """A choice of specific plugin for a platform capability.
 
     Represents the selection of a particular plugin implementation
-    for one of the 11 pluggable platform components.
+    for one of the 12 pluggable platform components.
 
     Attributes:
         type: Plugin name (e.g., "duckdb", "snowflake", "dagster")
@@ -215,7 +215,7 @@ class PluginsConfig(BaseModel):
 
     See Also:
         - data-model.md: PluginsConfig entity specification
-        - Constitution Principle II: 11 plugin categories
+        - Constitution Principle II: 12 plugin categories
     """
 
     model_config = ConfigDict(

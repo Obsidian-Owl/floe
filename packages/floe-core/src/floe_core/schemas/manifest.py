@@ -134,7 +134,7 @@ class PlatformManifest(BaseModel):
         metadata: Manifest metadata (name, version, owner)
         scope: Configuration scope (None=2-tier, enterprise/domain=3-tier)
         parent_manifest: OCI URI of parent manifest (required for domain scope)
-        plugins: Plugin selections for all 11 categories
+        plugins: Plugin selections for all 12 categories
         governance: Security and compliance settings
         approved_plugins: Enterprise whitelist of approved plugins per category
         approved_products: Domain list of approved data products
@@ -208,7 +208,7 @@ class PlatformManifest(BaseModel):
         description="OCI URI of parent manifest (required for domain scope)",
     )
     plugins: PluginsConfig = Field(
-        description="Plugin selections for all 11 categories",
+        description="Plugin selections for all 12 categories",
     )
     governance: GovernanceConfig | None = Field(
         default=None,
