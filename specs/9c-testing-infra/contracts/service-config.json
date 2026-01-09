@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://floe.dev/schemas/service-config.json",
+  "title": "ServiceConfig",
+  "description": "Configuration schemas for test service fixtures",
+  "definitions": {
+    "PostgresConfig": {
+      "type": "object",
+      "required": ["password"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "default": "postgres.floe-test.svc.cluster.local"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 5432
+        },
+        "database": {
+          "type": "string",
+          "default": "test"
+        },
+        "user": {
+          "type": "string",
+          "default": "test"
+        },
+        "password": {
+          "type": "string",
+          "description": "Database password (use SecretStr in Python)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MinIOConfig": {
+      "type": "object",
+      "required": ["secret_key"],
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://minio.floe-test.svc.cluster.local:9000"
+        },
+        "access_key": {
+          "type": "string",
+          "default": "minioadmin"
+        },
+        "secret_key": {
+          "type": "string",
+          "description": "MinIO secret key (use SecretStr in Python)"
+        },
+        "secure": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "PolarisConfig": {
+      "type": "object",
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://polaris.floe-test.svc.cluster.local:8181/api/catalog"
+        },
+        "warehouse": {
+          "type": "string",
+          "default": "test_warehouse"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DuckDBConfig": {
+      "type": "object",
+      "properties": {
+        "database": {
+          "type": "string",
+          "default": ":memory:"
+        },
+        "read_only": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "DagsterConfig": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "default": "dagster-webserver.floe-test.svc.cluster.local"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 3000
+        }
+      },
+      "additionalProperties": false
+    },
+    "ServiceRequirement": {
+      "type": "object",
+      "required": ["name", "port"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Service name (e.g., 'postgres')"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Service port"
+        },
+        "namespace": {
+          "type": "string",
+          "default": "floe-test",
+          "description": "K8s namespace"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PollingConfig": {
+      "type": "object",
+      "properties": {
+        "timeout": {
+          "type": "number",
+          "minimum": 1.0,
+          "default": 30.0,
+          "description": "Max wait time in seconds"
+        },
+        "interval": {
+          "type": "number",
+          "minimum": 0.1,
+          "default": 0.5,
+          "description": "Poll interval in seconds"
+        },
+        "description": {
+          "type": "string",
+          "default": "condition",
+          "description": "Description for error messages"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

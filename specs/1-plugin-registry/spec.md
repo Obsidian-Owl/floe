@@ -1,6 +1,7 @@
 # Feature Specification: Plugin Registry Foundation
 
-**Feature Branch**: `001-plugin-registry`
+**Epic**: 1 (Plugin Registry)
+**Feature Branch**: `1-plugin-registry`
 **Created**: 2026-01-08
 **Status**: Draft
 **Input**: Epic 1 - Plugin Registry Foundation from docs/plans/epics/01-foundation/epic-01-plugin-registry.md

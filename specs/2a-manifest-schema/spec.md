@@ -1,6 +1,7 @@
 # Feature Specification: Manifest Schema
 
-**Feature Branch**: `001-manifest-schema`
+**Epic**: 2A (Manifest Schema)
+**Feature Branch**: `2a-manifest-schema`
 **Created**: 2026-01-09
 **Status**: Draft
 **Input**: User description: "Define manifest.yaml schema with three-tier inheritance for platform configuration"

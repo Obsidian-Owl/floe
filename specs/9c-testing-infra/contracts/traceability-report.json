@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://floe.dev/schemas/traceability-report.json",
+  "title": "TraceabilityReport",
+  "description": "Requirement traceability report schema for CI enforcement",
+  "type": "object",
+  "required": ["spec_id", "total_requirements", "covered_requirements", "coverage_percentage", "coverage_map"],
+  "properties": {
+    "spec_id": {
+      "type": "string",
+      "description": "Specification identifier (e.g., '001-testing-infra')"
+    },
+    "total_requirements": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of requirements in spec"
+    },
+    "covered_requirements": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of requirements with at least one test"
+    },
+    "coverage_percentage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Coverage percentage (0-100)"
+    },
+    "uncovered": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d{3}-FR-\\d{3}[a-z]?$"
+      },
+      "description": "List of requirement IDs without tests"
+    },
+    "coverage_map": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "description": "Map of requirement_id to list of test node IDs"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Report generation timestamp"
+    }
+  },
+  "additionalProperties": false
+}

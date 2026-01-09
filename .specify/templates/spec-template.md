@@ -1,8 +1,9 @@
 # Feature Specification: [FEATURE NAME]
 
-**Feature Branch**: `[###-feature-name]`  
-**Created**: [DATE]  
-**Status**: Draft  
+**Epic**: [EPIC_ID] ([EPIC_NAME from EPIC-OVERVIEW.md])
+**Feature Branch**: `[epic-id-feature-name]`
+**Created**: [DATE]
+**Status**: Draft
 **Input**: User description: "$ARGUMENTS"
 
 ## User Scenarios & Testing *(mandatory)*
