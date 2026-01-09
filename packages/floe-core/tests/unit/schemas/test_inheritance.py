@@ -207,7 +207,11 @@ class TestParentChildMerge:
 
     @pytest.mark.requirement("001-FR-003")
     def test_inheritance_chain_tracks_sources(self) -> None:
-        """Test that InheritanceChain tracks which tier provided each field."""
+        """Test that InheritanceChain can be constructed with merge results.
+
+        This test verifies the InheritanceChain model accepts valid data
+        and properly stores field source tracking information.
+        """
         from floe_core.schemas import PlatformManifest
         from floe_core.schemas.inheritance import InheritanceChain, merge_manifests
 
@@ -242,6 +246,14 @@ class TestParentChildMerge:
 
         resolved = merge_manifests(parent, child)
 
+        # Verify merge_manifests correctly inherited compute from parent
+        assert resolved.plugins.compute is not None
+        assert resolved.plugins.compute.type == "snowflake"  # From parent
+        # Verify merge_manifests correctly added orchestrator from child
+        assert resolved.plugins.orchestrator is not None
+        assert resolved.plugins.orchestrator.type == "dagster"  # From child
+
+        # InheritanceChain can track these sources
         chain = InheritanceChain(
             enterprise=parent,
             domain=child,
@@ -253,8 +265,74 @@ class TestParentChildMerge:
             },
         )
 
+        assert chain.resolved.plugins.compute is not None
+        assert chain.resolved.plugins.compute.type == "snowflake"
         assert chain.field_sources["plugins.compute"] == "enterprise"
         assert chain.field_sources["plugins.orchestrator"] == "domain"
+
+    @pytest.mark.requirement("001-FR-003")
+    def test_merge_manifests_tracks_inheritance_correctly(self) -> None:
+        """Test that merge_manifests correctly applies inheritance behavior.
+
+        This tests the ACTUAL merge behavior, not just data structure construction.
+        """
+        from floe_core.schemas import PlatformManifest
+        from floe_core.schemas.inheritance import merge_manifests
+
+        parent = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "enterprise",
+                "version": "1.0.0",
+                "owner": "enterprise@corp.com",
+            },
+            scope="enterprise",
+            plugins={
+                "compute": {"type": "snowflake", "config": {"warehouse": "LARGE"}},
+                "catalog": {"type": "polaris"},
+                "storage": {"type": "s3"},
+            },
+        )
+
+        child = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "domain",
+                "version": "1.0.0",
+                "owner": "domain@corp.com",
+            },
+            scope="domain",
+            parent_manifest="oci://registry/enterprise:v1",
+            plugins={
+                "orchestrator": {"type": "dagster"},  # New in child
+                "compute": {"type": "duckdb"},  # Override parent
+            },
+        )
+
+        resolved = merge_manifests(parent, child)
+
+        # Child's compute OVERRIDES parent's compute (OVERRIDE strategy)
+        assert resolved.plugins.compute is not None
+        assert resolved.plugins.compute.type == "duckdb"
+        assert resolved.plugins.compute.config is None  # Child didn't include config
+
+        # Child's new orchestrator is ADDED
+        assert resolved.plugins.orchestrator is not None
+        assert resolved.plugins.orchestrator.type == "dagster"
+
+        # Parent's catalog is INHERITED (child didn't override)
+        assert resolved.plugins.catalog is not None
+        assert resolved.plugins.catalog.type == "polaris"
+
+        # Parent's storage is INHERITED
+        assert resolved.plugins.storage is not None
+        assert resolved.plugins.storage.type == "s3"
+
+        # Child's metadata takes precedence (OVERRIDE strategy)
+        assert resolved.metadata.name == "domain"
+        assert resolved.metadata.owner == "domain@corp.com"
 
 
 class TestListMerge:
@@ -498,3 +576,149 @@ class TestMergeStrategies:
         assert MergeStrategy.OVERRIDE.value == "override"
         assert MergeStrategy.EXTEND.value == "extend"
         assert MergeStrategy.FORBID.value == "forbid"
+
+    @pytest.mark.requirement("001-FR-004")
+    def test_override_strategy_replaces_completely(self) -> None:
+        """Test that OVERRIDE strategy completely replaces parent values.
+
+        Verifies that plugins (OVERRIDE strategy) are fully replaced when
+        child specifies a value, not merged.
+        """
+        from floe_core.schemas import PlatformManifest
+        from floe_core.schemas.inheritance import merge_manifests
+
+        parent = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "enterprise",
+                "version": "1.0.0",
+                "owner": "enterprise@corp.com",
+            },
+            scope="enterprise",
+            plugins={
+                "compute": {
+                    "type": "snowflake",
+                    "config": {"warehouse": "LARGE", "database": "PROD"},
+                },
+            },
+        )
+
+        child = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "domain",
+                "version": "1.0.0",
+                "owner": "domain@corp.com",
+            },
+            scope="domain",
+            parent_manifest="oci://registry/enterprise:v1",
+            plugins={
+                "compute": {
+                    "type": "duckdb",  # Different type, no config
+                },
+            },
+        )
+
+        resolved = merge_manifests(parent, child)
+
+        # OVERRIDE: Child's compute COMPLETELY replaces parent's
+        # Parent's config is NOT preserved - this is OVERRIDE, not MERGE
+        assert resolved.plugins.compute is not None
+        assert resolved.plugins.compute.type == "duckdb"
+        assert resolved.plugins.compute.config is None  # NOT parent's config
+
+    @pytest.mark.requirement("001-FR-004")
+    def test_forbid_strategy_preserves_governance(self) -> None:
+        """Test that FORBID strategy preserves parent's governance.
+
+        Verifies that governance (FORBID strategy) is preserved from parent
+        and not overwritten by child values in merge_manifests.
+
+        Note: The actual enforcement that children cannot WEAKEN policies
+        is tested in test_governance.py (security policy immutability tests).
+        This test verifies merge behavior preserves parent governance.
+        """
+        from floe_core.schemas import PlatformManifest
+        from floe_core.schemas.inheritance import merge_manifests
+
+        parent = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "enterprise",
+                "version": "1.0.0",
+                "owner": "enterprise@corp.com",
+            },
+            scope="enterprise",
+            plugins={},
+            governance={
+                "pii_encryption": "required",
+                "audit_logging": "enabled",
+                "policy_enforcement_level": "strict",
+            },
+        )
+
+        child = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "domain",
+                "version": "1.0.0",
+                "owner": "domain@corp.com",
+            },
+            scope="domain",
+            parent_manifest="oci://registry/enterprise:v1",
+            plugins={},
+            # Note: child doesn't specify governance - parent's is preserved
+        )
+
+        resolved = merge_manifests(parent, child)
+
+        # FORBID: Parent's governance is preserved
+        assert resolved.governance is not None
+        assert resolved.governance.pii_encryption == "required"
+        assert resolved.governance.audit_logging == "enabled"
+        assert resolved.governance.policy_enforcement_level == "strict"
+
+    @pytest.mark.requirement("001-FR-004")
+    def test_metadata_override_strategy(self) -> None:
+        """Test that metadata uses OVERRIDE strategy (child takes precedence)."""
+        from floe_core.schemas import PlatformManifest
+        from floe_core.schemas.inheritance import merge_manifests
+
+        parent = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "enterprise-platform",
+                "version": "1.0.0",
+                "owner": "enterprise@corp.com",
+                "description": "Enterprise platform",
+            },
+            scope="enterprise",
+            plugins={},
+        )
+
+        child = PlatformManifest(
+            api_version="floe.dev/v1",
+            kind="Manifest",
+            metadata={
+                "name": "domain-platform",
+                "version": "2.0.0",
+                "owner": "domain@corp.com",
+                "description": "Domain platform",
+            },
+            scope="domain",
+            parent_manifest="oci://registry/enterprise:v1",
+            plugins={},
+        )
+
+        resolved = merge_manifests(parent, child)
+
+        # OVERRIDE: Child's metadata completely replaces parent's
+        assert resolved.metadata.name == "domain-platform"
+        assert resolved.metadata.version == "2.0.0"
+        assert resolved.metadata.owner == "domain@corp.com"
+        assert resolved.metadata.description == "Domain platform"

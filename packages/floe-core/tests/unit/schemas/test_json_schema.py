@@ -280,17 +280,67 @@ class TestJsonSchemaIdeCompatibility:
 
     @pytest.mark.requirement("001-FR-009")
     def test_schema_field_descriptions_present(self) -> None:
-        """Test that schema includes field descriptions for IDE tooltips."""
+        """Test that schema includes field descriptions for IDE tooltips.
+
+        This test follows $ref references to ensure descriptions exist
+        in the referenced definition, not just that a $ref exists.
+        """
         from floe_core.schemas.json_schema import export_json_schema
 
         schema = export_json_schema()
         props = schema["properties"]
+        defs = schema.get("$defs", schema.get("definitions", {}))
 
         # Key fields should have descriptions (Note: api_version uses alias apiVersion)
         for field_name in ["apiVersion", "kind", "metadata", "plugins", "scope"]:
             assert field_name in props, f"Field {field_name} not found in properties"
             field_def = props[field_name]
-            # Description might be in the field or in a $ref target
-            has_description = "description" in field_def
-            has_ref = "$ref" in field_def
-            assert has_description or has_ref, f"Field {field_name} should have description or $ref"
+
+            if "description" in field_def:
+                # Direct description - pass
+                continue
+            elif "$ref" in field_def:
+                # Follow the reference and check description there
+                ref_path = field_def["$ref"]
+                ref_name = ref_path.split("/")[-1]
+                assert ref_name in defs, f"Referenced definition {ref_name} not found"
+                ref_def = defs[ref_name]
+                assert "description" in ref_def or "title" in ref_def, (
+                    f"Referenced definition {ref_name} for field {field_name} "
+                    f"should have description or title for IDE tooltips"
+                )
+            elif "anyOf" in field_def or "oneOf" in field_def:
+                # For Optional types (anyOf/oneOf), check if any branch has description
+                branches = field_def.get("anyOf", field_def.get("oneOf", []))
+                has_info = any(
+                    "description" in b or "$ref" in b or b.get("type") == "null"
+                    for b in branches
+                )
+                assert has_info, f"Field {field_name} should have description info"
+            else:
+                raise AssertionError(
+                    f"Field {field_name} should have description or $ref"
+                )
+
+    @pytest.mark.requirement("001-FR-009")
+    def test_schema_referenced_definitions_have_descriptions(self) -> None:
+        """Test that all referenced definitions have descriptions for IDE support."""
+        from floe_core.schemas.json_schema import export_json_schema
+
+        schema = export_json_schema()
+        defs = schema.get("$defs", schema.get("definitions", {}))
+
+        # Key definitions that should have descriptions
+        expected_defs = [
+            "ManifestMetadata",
+            "PluginsConfig",
+            "PluginSelection",
+            "GovernanceConfig",
+        ]
+
+        for def_name in expected_defs:
+            if def_name in defs:
+                def_schema = defs[def_name]
+                assert "description" in def_schema or "title" in def_schema, (
+                    f"Definition {def_name} should have description or title"
+                )
