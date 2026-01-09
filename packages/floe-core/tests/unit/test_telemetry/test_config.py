@@ -9,6 +9,7 @@ Per ADR-0006: Telemetry configuration models.
 Tests cover:
 - T007: TelemetryConfig validation
 - T035: BatchSpanProcessorConfig validation
+- T038: TelemetryAuth header injection
 """
 
 from __future__ import annotations
@@ -663,3 +664,185 @@ class TestBatchSpanProcessorConfigValidation:
 
         with pytest.raises(ValidationError):
             BatchSpanProcessorConfig(export_timeout_millis=-5000)
+
+
+# =============================================================================
+# T038: Unit tests for TelemetryAuth header injection
+# =============================================================================
+
+
+class TestTelemetryAuthHeaderInjection:
+    """Test TelemetryAuth header generation for OTLP exports.
+
+    TelemetryAuth generates HTTP headers for authenticating with SaaS
+    telemetry backends like Datadog, Grafana Cloud, and others.
+
+    Requirements: FR-001, FR-012, FR-013
+    """
+
+    @pytest.mark.requirement("FR-012")
+    def test_api_key_header_generation(self) -> None:
+        """Test api_key auth generates correct header name and value."""
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("dd-api-key-12345"),
+            header_name="DD-API-KEY",
+        )
+
+        # Header name should be as specified
+        assert auth.header_name == "DD-API-KEY"
+        # API key should be retrievable for header value
+        assert auth.api_key is not None
+        assert auth.api_key.get_secret_value() == "dd-api-key-12345"
+
+    @pytest.mark.requirement("FR-012")
+    def test_bearer_token_header_generation(self) -> None:
+        """Test bearer auth generates Authorization header with Bearer prefix."""
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("grafana-cloud-token-xyz"),
+        )
+
+        # Default header name for bearer is "Authorization"
+        assert auth.header_name == "Authorization"
+        # Bearer token should be retrievable for header value
+        assert auth.bearer_token is not None
+        assert auth.bearer_token.get_secret_value() == "grafana-cloud-token-xyz"
+
+    @pytest.mark.requirement("FR-012")
+    def test_bearer_token_custom_header_name(self) -> None:
+        """Test bearer auth can use custom header name."""
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("custom-token"),
+            header_name="X-Custom-Auth",
+        )
+
+        assert auth.header_name == "X-Custom-Auth"
+        assert auth.bearer_token is not None
+        assert auth.bearer_token.get_secret_value() == "custom-token"
+
+    @pytest.mark.requirement("FR-012")
+    def test_datadog_api_key_header(self) -> None:
+        """Test Datadog-style DD-API-KEY header configuration."""
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("datadog-api-key"),
+            header_name="DD-API-KEY",
+        )
+
+        assert auth.auth_type == "api_key"
+        assert auth.header_name == "DD-API-KEY"
+        assert auth.api_key is not None
+
+    @pytest.mark.requirement("FR-012")
+    def test_grafana_cloud_bearer_header(self) -> None:
+        """Test Grafana Cloud-style bearer token configuration."""
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("grafana-cloud-api-token"),
+            header_name="Authorization",
+        )
+
+        assert auth.auth_type == "bearer"
+        assert auth.header_name == "Authorization"
+        assert auth.bearer_token is not None
+
+    @pytest.mark.requirement("FR-013")
+    def test_api_key_secret_is_hidden_in_repr(self) -> None:
+        """Test api_key is hidden when TelemetryAuth is printed/logged."""
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("super-secret-key"),
+            header_name="X-API-KEY",
+        )
+
+        # SecretStr should mask the value in string representation
+        auth_str = str(auth)
+        assert "super-secret-key" not in auth_str
+        # SecretStr displays as '**********'
+        assert "**********" in auth_str
+
+    @pytest.mark.requirement("FR-013")
+    def test_bearer_token_secret_is_hidden_in_repr(self) -> None:
+        """Test bearer_token is hidden when TelemetryAuth is printed/logged."""
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("super-secret-token"),
+        )
+
+        # SecretStr should mask the value in string representation
+        auth_str = str(auth)
+        assert "super-secret-token" not in auth_str
+        assert "**********" in auth_str
+
+    @pytest.mark.requirement("FR-012")
+    def test_api_key_can_be_used_in_headers_dict(self) -> None:
+        """Test api_key can be extracted for use in HTTP headers dict."""
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("my-api-key"),
+            header_name="X-API-KEY",
+        )
+
+        # Simulate building headers dict for OTLP exporter
+        headers: dict[str, str] = {}
+        if auth.api_key is not None:
+            headers[auth.header_name] = auth.api_key.get_secret_value()
+
+        assert headers == {"X-API-KEY": "my-api-key"}
+
+    @pytest.mark.requirement("FR-012")
+    def test_bearer_token_can_be_used_in_headers_dict(self) -> None:
+        """Test bearer_token can be extracted for use in HTTP headers dict."""
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("my-bearer-token"),
+        )
+
+        # Simulate building headers dict for OTLP exporter
+        # Bearer auth typically requires "Bearer " prefix
+        headers: dict[str, str] = {}
+        if auth.bearer_token is not None:
+            headers[auth.header_name] = f"Bearer {auth.bearer_token.get_secret_value()}"
+
+        assert headers == {"Authorization": "Bearer my-bearer-token"}
+
+    @pytest.mark.requirement("FR-001")
+    def test_telemetry_config_with_api_key_auth(
+        self,
+        sample_resource_attributes: ResourceAttributes,
+    ) -> None:
+        """Test TelemetryConfig accepts TelemetryAuth with api_key."""
+        auth = TelemetryAuth(
+            auth_type="api_key",
+            api_key=SecretStr("config-api-key"),
+            header_name="DD-API-KEY",
+        )
+        config = TelemetryConfig(
+            resource_attributes=sample_resource_attributes,
+            authentication=auth,
+        )
+
+        assert config.authentication is not None
+        assert config.authentication.auth_type == "api_key"
+        assert config.authentication.header_name == "DD-API-KEY"
+
+    @pytest.mark.requirement("FR-001")
+    def test_telemetry_config_with_bearer_auth(
+        self,
+        sample_resource_attributes: ResourceAttributes,
+    ) -> None:
+        """Test TelemetryConfig accepts TelemetryAuth with bearer token."""
+        auth = TelemetryAuth(
+            auth_type="bearer",
+            bearer_token=SecretStr("config-bearer-token"),
+        )
+        config = TelemetryConfig(
+            resource_attributes=sample_resource_attributes,
+            authentication=auth,
+        )
+
+        assert config.authentication is not None
+        assert config.authentication.auth_type == "bearer"
+        assert config.authentication.bearer_token is not None
