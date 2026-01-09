@@ -4,6 +4,8 @@
 
 Testing infrastructure provides the foundation for K8s-native testing. This includes Kind cluster configuration, test fixtures, integration test base classes, and CI/CD pipeline integration for automated testing.
 
+**Wave 0 BLOCKER**: This epic is the foundation for ALL other epics. No feature PRs can be merged without this infrastructure. Test services use raw K8s manifests (not Helm) to avoid circular dependencies.
+
 ## Status
 
 - [ ] Specification created
@@ -36,6 +38,16 @@ Testing infrastructure provides the foundation for K8s-native testing. This incl
 | REQ-648 | Requirement traceability | CRITICAL |
 | REQ-649 | Performance benchmarks | LOW |
 | REQ-650 | Test documentation | MEDIUM |
+| REQ-651 | PostgreSQL test fixtures | HIGH |
+| REQ-652 | DuckDB test fixtures | HIGH |
+| REQ-653 | Polaris test fixtures | HIGH |
+| REQ-654 | MinIO/S3 test fixtures | HIGH |
+| REQ-655 | Dagster test fixtures | HIGH |
+| REQ-656 | K8s manifests for test services (raw, not Helm) | HIGH |
+| REQ-657 | Makefile test targets | CRITICAL |
+| REQ-658 | GitHub Actions test workflow | CRITICAL |
+| REQ-659 | PluginTestBase class | HIGH |
+| REQ-660 | AdapterTestBase class | HIGH |
 
 ---
 
@@ -60,23 +72,40 @@ Testing infrastructure provides the foundation for K8s-native testing. This incl
 testing/
 ├── base_classes/
 │   ├── __init__.py
-│   └── integration_test_base.py    # IntegrationTestBase
+│   ├── integration_test_base.py    # IntegrationTestBase
+│   ├── plugin_test_base.py         # PluginTestBase
+│   └── adapter_test_base.py        # AdapterTestBase
 ├── fixtures/
 │   ├── __init__.py
-│   ├── services.py                  # Service fixtures
-│   ├── namespaces.py                # Namespace management
-│   └── data.py                      # Test data helpers
+│   ├── services.py                 # Service health checks
+│   ├── polling.py                  # Polling utilities
+│   ├── namespaces.py               # Namespace management
+│   ├── data.py                     # Test data helpers
+│   ├── postgres.py                 # PostgreSQL fixtures
+│   ├── duckdb.py                   # DuckDB fixtures
+│   ├── polaris.py                  # Polaris fixtures
+│   ├── minio.py                    # MinIO fixtures
+│   └── dagster.py                  # Dagster fixtures
 ├── k8s/
-│   ├── kind-config.yaml             # Kind cluster config
-│   ├── kind-values.yaml             # Helm values for Kind
-│   └── setup-cluster.sh             # Cluster setup script
+│   ├── kind-config.yaml            # Kind cluster config
+│   ├── services/                   # Raw K8s manifests (NOT Helm)
+│   │   ├── namespace.yaml
+│   │   ├── postgres.yaml
+│   │   ├── polaris.yaml
+│   │   ├── minio.yaml
+│   │   └── dagster.yaml
+│   ├── setup-cluster.sh            # Cluster setup script
+│   └── cleanup-cluster.sh          # Cluster teardown
 ├── traceability/
 │   ├── __init__.py
-│   └── checker.py                   # Requirement traceability
+│   └── checker.py                  # Requirement traceability
 └── ci/
     ├── test-unit.sh
     ├── test-integration.sh
     └── test-e2e.sh
+
+Makefile                            # Test targets
+.github/workflows/test.yml          # CI workflow
 ```
 
 ---
@@ -85,8 +114,16 @@ testing/
 
 | Type | Epic | Reason |
 |------|------|--------|
-| Blocked By | Epic 9B | Uses Helm charts for test setup |
-| Blocks | None | Terminal Epic in deployment chain |
+| Blocked By | None | Wave 0 BLOCKER - foundation for all testing |
+| Blocks | 1 | Plugin Registry needs test infrastructure |
+| Blocks | 2A-B | Configuration needs test infrastructure |
+| Blocks | 3A-D | Governance needs test infrastructure |
+| Blocks | 4A-D | Core Plugins need test infrastructure |
+| Blocks | 5A-B | Transformation needs test infrastructure |
+| Blocks | 6A-B | Observability needs test infrastructure |
+| Blocks | 7A-C | Security needs test infrastructure |
+| Blocks | 8A-C | Artifact Distribution needs test infrastructure |
+| Blocks | 9A-B | Deployment needs test infrastructure |
 
 ---
 
@@ -98,10 +135,10 @@ testing/
 **So that** I can run integration tests locally
 
 **Acceptance Criteria**:
-- [ ] `make test-k8s` creates Kind cluster
-- [ ] Platform services deployed via Helm
+- [ ] `make kind-up` creates Kind cluster
+- [ ] Test services deployed via raw K8s manifests
 - [ ] Cluster persists between test runs
-- [ ] `make test-k8s-clean` tears down
+- [ ] `make kind-down` tears down cluster
 
 ### US2: IntegrationTestBase (P0)
 **As a** test author
@@ -154,8 +191,10 @@ testing/
 ### Key Decisions
 - All tests run in Kubernetes (Kind for local)
 - No Docker Compose (deprecated)
+- Raw K8s manifests for test services (NOT Helm - avoids 9B dependency)
 - IntegrationTestBase for service tests
 - Polling, never sleeping
+- MinIO preferred over LocalStack for S3 (faster, simpler)
 
 ### Risks
 | Risk | Likelihood | Impact | Mitigation |
@@ -179,7 +218,7 @@ testing/
 - `testing/`
 
 ### Related Existing Code
-- Helm charts from Epic 9B
+- None (greenfield - provides foundation for other epics)
 
 ### External Dependencies
 - `pytest>=7.0.0`
