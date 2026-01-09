@@ -51,6 +51,19 @@ from floe_core.schemas.secrets import (
     SecretSource,
 )
 
+# Plugin models (T016, T017)
+from floe_core.schemas.plugins import (
+    PluginSelection,
+    PluginsConfig,
+)
+
+# Manifest models (T018, T019)
+from floe_core.schemas.manifest import (
+    GovernanceConfig,
+    ManifestScope,
+    PlatformManifest,
+)
+
 __all__: list[str] = [
     # Inheritance (Phase 2)
     "MergeStrategy",
@@ -64,4 +77,11 @@ __all__: list[str] = [
     "SecretSource",
     "SecretReference",
     "SECRET_NAME_PATTERN",
+    # Plugins (Phase 3)
+    "PluginSelection",
+    "PluginsConfig",
+    # Manifest (Phase 3)
+    "ManifestScope",
+    "GovernanceConfig",
+    "PlatformManifest",
 ]
