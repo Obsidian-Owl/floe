@@ -30,5 +30,38 @@ See Also:
 
 from __future__ import annotations
 
-# Public exports will be added as models are implemented
-__all__: list[str] = []
+# Inheritance models (T006)
+from floe_core.schemas.inheritance import (
+    FIELD_MERGE_STRATEGIES,
+    InheritanceChain,
+    MergeStrategy,
+)
+
+# Metadata models (T007)
+from floe_core.schemas.metadata import (
+    NAME_PATTERN,
+    SEMVER_PATTERN,
+    ManifestMetadata,
+)
+
+# Secret models (T005, T008)
+from floe_core.schemas.secrets import (
+    SECRET_NAME_PATTERN,
+    SecretReference,
+    SecretSource,
+)
+
+__all__: list[str] = [
+    # Inheritance (Phase 2)
+    "MergeStrategy",
+    "FIELD_MERGE_STRATEGIES",
+    "InheritanceChain",
+    # Metadata (Phase 2)
+    "ManifestMetadata",
+    "NAME_PATTERN",
+    "SEMVER_PATTERN",
+    # Secrets (Phase 2)
+    "SecretSource",
+    "SecretReference",
+    "SECRET_NAME_PATTERN",
+]
