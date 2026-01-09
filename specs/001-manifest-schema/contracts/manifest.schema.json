@@ -1,0 +1,498 @@
+{
+  "$defs": {
+    "GovernanceConfig": {
+      "additionalProperties": false,
+      "description": "Security and compliance settings for platform governance.\n\nDefines security policies that are immutable in inheritance chains.\nChild manifests can only strengthen (not weaken) security policies.\n\nAttributes:\n    pii_encryption: PII encryption policy (required > optional)\n    audit_logging: Audit logging policy (enabled > disabled)\n    policy_enforcement_level: Enforcement level (strict > warn > off)\n    data_retention_days: Data retention period in days\n\nExample:\n    >>> governance = GovernanceConfig(\n    ...     pii_encryption=\"required\",\n    ...     audit_logging=\"enabled\",\n    ...     policy_enforcement_level=\"strict\",\n    ...     data_retention_days=90\n    ... )\n\nStrength Ordering (for inheritance validation):\n    - pii_encryption: required > optional\n    - audit_logging: enabled > disabled\n    - policy_enforcement_level: strict > warn > off\n    - data_retention_days: higher is stricter\n\nSee Also:\n    - data-model.md: GovernanceConfig entity specification\n    - FR-017: Governance immutability in inheritance",
+      "examples": [
+        {
+          "audit_logging": "enabled",
+          "data_retention_days": 90,
+          "pii_encryption": "required",
+          "policy_enforcement_level": "strict"
+        }
+      ],
+      "properties": {
+        "pii_encryption": {
+          "anyOf": [
+            {
+              "enum": [
+                "required",
+                "optional"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PII encryption policy (required > optional)",
+          "title": "Pii Encryption"
+        },
+        "audit_logging": {
+          "anyOf": [
+            {
+              "enum": [
+                "enabled",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Audit logging policy (enabled > disabled)",
+          "title": "Audit Logging"
+        },
+        "policy_enforcement_level": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "warn",
+                "strict"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Policy enforcement level (strict > warn > off)",
+          "title": "Policy Enforcement Level"
+        },
+        "data_retention_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data retention period in days (higher is stricter)",
+          "title": "Data Retention Days"
+        }
+      },
+      "title": "GovernanceConfig",
+      "type": "object"
+    },
+    "ManifestMetadata": {
+      "additionalProperties": false,
+      "description": "Metadata for tracking manifest versions and ownership.\n\nProvides identification, versioning, and ownership information\nfor platform manifests. All manifests require metadata.\n\nAttributes:\n    name: Manifest name (lowercase alphanumeric with hyphens, 1-63 chars)\n    version: Semantic version (MAJOR.MINOR.PATCH)\n    owner: Owner email address or team name\n    description: Optional human-readable description (max 500 chars)\n\nExample:\n    >>> metadata = ManifestMetadata(\n    ...     name=\"acme-platform\",\n    ...     version=\"1.0.0\",\n    ...     owner=\"platform-team@acme.com\",\n    ...     description=\"ACME data platform configuration\"\n    ... )\n    >>> metadata.name\n    'acme-platform'\n\nValidation Rules:\n    - V003: name matches pattern ^[a-z0-9][a-z0-9-]*[a-z0-9]$, 1-63 chars\n    - V004: version matches semver ^\\d+\\.\\d+\\.\\d+$\n    - owner: non-empty string\n    - description: max 500 characters\n\nSee Also:\n    - data-model.md: ManifestMetadata entity specification",
+      "examples": [
+        {
+          "description": "ACME data platform configuration",
+          "name": "acme-platform",
+          "owner": "platform-team@acme.com",
+          "version": "1.0.0"
+        }
+      ],
+      "properties": {
+        "name": {
+          "description": "Manifest name (lowercase alphanumeric with hyphens)",
+          "examples": [
+            "acme-platform",
+            "sales-domain"
+          ],
+          "maxLength": 63,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Semantic version (MAJOR.MINOR.PATCH)",
+          "examples": [
+            "1.0.0",
+            "2.1.3"
+          ],
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "owner": {
+          "description": "Owner email or team name",
+          "examples": [
+            "platform-team@acme.com",
+            "data-engineering"
+          ],
+          "minLength": 1,
+          "title": "Owner",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "owner"
+      ],
+      "title": "ManifestMetadata",
+      "type": "object"
+    },
+    "PluginSelection": {
+      "additionalProperties": false,
+      "description": "A choice of specific plugin for a platform capability.\n\nRepresents the selection of a particular plugin implementation\nfor one of the 11 pluggable platform components.\n\nAttributes:\n    type: Plugin name (e.g., \"duckdb\", \"snowflake\", \"dagster\")\n    config: Plugin-specific configuration options\n    connection_secret_ref: Reference to K8s Secret for credentials\n\nExample:\n    >>> selection = PluginSelection(\n    ...     type=\"duckdb\",\n    ...     config={\"threads\": 4, \"memory_limit\": \"8GB\"},\n    ...     connection_secret_ref=\"db-credentials\"\n    ... )\n    >>> selection.type\n    'duckdb'\n\nValidation Rules:\n    - type: Required, must match registered plugin name (validated at runtime)\n    - config: Optional dict for plugin-specific settings\n    - connection_secret_ref: Optional K8s Secret name for credentials\n\nSee Also:\n    - data-model.md: PluginSelection entity specification\n    - PluginsConfig: Container for all plugin selections",
+      "examples": [
+        {
+          "config": {
+            "threads": 4
+          },
+          "type": "duckdb"
+        },
+        {
+          "connection_secret_ref": "snowflake-credentials",
+          "type": "snowflake"
+        }
+      ],
+      "properties": {
+        "type": {
+          "description": "Plugin name (must match registered plugin)",
+          "examples": [
+            "duckdb",
+            "snowflake",
+            "dagster",
+            "polaris"
+          ],
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Plugin-specific configuration options",
+          "title": "Config"
+        },
+        "connection_secret_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "K8s Secret name for credentials",
+          "title": "Connection Secret Ref"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "PluginSelection",
+      "type": "object"
+    },
+    "PluginsConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for all pluggable platform components.\n\nDefines plugin selections for all 11 platform capability categories.\nEach category corresponds to an entry point group (floe.{category}).\n\nAttributes:\n    compute: Compute engine (DuckDB, Snowflake, Spark, BigQuery, Databricks)\n    orchestrator: Workflow orchestration (Dagster, Airflow 3.x, Prefect)\n    catalog: Data catalog (Polaris, AWS Glue, Hive)\n    storage: Object storage (S3, GCS, Azure Blob, MinIO)\n    semantic_layer: Semantic layer (Cube, dbt Semantic Layer)\n    ingestion: Data ingestion (dlt, Airbyte)\n    secrets: Secret management (K8s Secrets, ESO, Vault)\n    observability: Observability (Jaeger, Datadog, Grafana Cloud)\n    identity: Identity/auth (K8s RBAC, custom)\n    dbt: dbt execution (local, fusion)\n    quality: Data quality (Great Expectations, Soda, dbt Expectations)\n\nExample:\n    >>> plugins = PluginsConfig(\n    ...     compute=PluginSelection(type=\"duckdb\"),\n    ...     orchestrator=PluginSelection(type=\"dagster\"),\n    ...     catalog=PluginSelection(type=\"polaris\"),\n    ... )\n    >>> plugins.compute.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: PluginsConfig entity specification\n    - Constitution Principle II: 11 plugin categories",
+      "examples": [
+        {
+          "catalog": {
+            "type": "polaris"
+          },
+          "compute": {
+            "type": "duckdb"
+          },
+          "orchestrator": {
+            "type": "dagster"
+          }
+        }
+      ],
+      "properties": {
+        "compute": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Compute engine (duckdb, snowflake, spark, bigquery, databricks)"
+        },
+        "orchestrator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workflow orchestration (dagster, airflow, prefect)"
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data catalog (polaris, glue, hive)"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Object storage (s3, gcs, azure-blob, minio)"
+        },
+        "semantic_layer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Semantic layer (cube, dbt-semantic-layer)"
+        },
+        "ingestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data ingestion (dlt, airbyte)"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Secret management (k8s-secrets, eso, vault)"
+        },
+        "observability": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Observability (jaeger, datadog, grafana-cloud)"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Identity/auth (k8s-rbac, custom)"
+        },
+        "dbt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "dbt execution (local, fusion)"
+        },
+        "quality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data quality (great-expectations, soda, dbt-expectations)"
+        }
+      },
+      "title": "PluginsConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Root configuration entity for platform manifests.\n\nRepresents an organization's platform settings including plugin\nselections, governance policies, and inheritance configuration.\n\nSupports two configuration modes:\n- 2-tier mode (scope=None): Single platform configuration\n- 3-tier mode (scope=enterprise/domain): Enterprise \u2192 Domain hierarchy\n\nAttributes:\n    api_version: API version (must be \"floe.dev/v1\")\n    kind: Resource kind (must be \"Manifest\")\n    metadata: Manifest metadata (name, version, owner)\n    scope: Configuration scope (None=2-tier, enterprise/domain=3-tier)\n    parent_manifest: OCI URI of parent manifest (required for domain scope)\n    plugins: Plugin selections for all 11 categories\n    governance: Security and compliance settings\n    approved_plugins: Enterprise whitelist of approved plugins per category\n    approved_products: Domain list of approved data products\n\nExample:\n    >>> manifest = PlatformManifest(\n    ...     api_version=\"floe.dev/v1\",\n    ...     kind=\"Manifest\",\n    ...     metadata=ManifestMetadata(\n    ...         name=\"acme-platform\",\n    ...         version=\"1.0.0\",\n    ...         owner=\"platform-team@acme.com\"\n    ...     ),\n    ...     plugins=PluginsConfig(\n    ...         compute=PluginSelection(type=\"duckdb\"),\n    ...         orchestrator=PluginSelection(type=\"dagster\")\n    ...     )\n    ... )\n\nValidation Rules:\n    - C001: scope=enterprise \u2192 parent_manifest=None\n    - C002: scope=domain \u2192 parent_manifest required\n    - C003: scope=None \u2192 parent_manifest=None\n    - C004: approved_plugins only for scope=enterprise\n    - C005: approved_products only for scope=domain\n\nSee Also:\n    - data-model.md: PlatformManifest entity specification\n    - spec.md: Manifest schema specification",
+  "examples": [
+    {
+      "api_version": "floe.dev/v1",
+      "kind": "Manifest",
+      "metadata": {
+        "name": "acme-platform",
+        "owner": "platform-team@acme.com",
+        "version": "1.0.0"
+      },
+      "plugins": {
+        "compute": {
+          "type": "duckdb"
+        },
+        "orchestrator": {
+          "type": "dagster"
+        }
+      }
+    }
+  ],
+  "properties": {
+    "api_version": {
+      "const": "floe.dev/v1",
+      "description": "API version (must be 'floe.dev/v1')",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "Manifest",
+      "description": "Resource kind (must be 'Manifest')",
+      "title": "Kind",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/ManifestMetadata",
+      "description": "Manifest metadata (name, version, owner)"
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "enum": [
+            "enterprise",
+            "domain"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Configuration scope (None=2-tier, enterprise/domain=3-tier)",
+      "title": "Scope"
+    },
+    "parent_manifest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "OCI URI of parent manifest (required for domain scope)",
+      "title": "Parent Manifest"
+    },
+    "plugins": {
+      "$ref": "#/$defs/PluginsConfig",
+      "description": "Plugin selections for all 11 categories"
+    },
+    "governance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GovernanceConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Security and compliance settings"
+    },
+    "approved_plugins": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Enterprise whitelist of approved plugins per category",
+      "title": "Approved Plugins"
+    },
+    "approved_products": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Domain list of approved data products",
+      "title": "Approved Products"
+    }
+  },
+  "required": [
+    "api_version",
+    "kind",
+    "metadata",
+    "plugins"
+  ],
+  "title": "PlatformManifest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/manifest.schema.json"
+}

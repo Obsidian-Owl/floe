@@ -82,6 +82,16 @@ from floe_core.schemas.manifest import (
     PlatformManifest,
 )
 
+# JSON Schema export (T047, T048, T049)
+from floe_core.schemas.json_schema import (
+    JSON_SCHEMA_DRAFT,
+    MANIFEST_SCHEMA_ID,
+    JsonSchemaValidationError,
+    export_json_schema,
+    export_json_schema_to_file,
+    validate_against_schema,
+)
+
 __all__: list[str] = [
     # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
@@ -117,4 +127,11 @@ __all__: list[str] = [
     "ManifestScope",
     "GovernanceConfig",
     "PlatformManifest",
+    # JSON Schema (Phase 6)
+    "JSON_SCHEMA_DRAFT",
+    "MANIFEST_SCHEMA_ID",
+    "JsonSchemaValidationError",
+    "export_json_schema",
+    "export_json_schema_to_file",
+    "validate_against_schema",
 ]

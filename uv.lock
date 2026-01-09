@@ -188,15 +188,18 @@ version = "0.1.0"
 source = { editable = "packages/floe-core" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "structlog" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
     { name = "structlog", specifier = ">=24.0" },
 ]
