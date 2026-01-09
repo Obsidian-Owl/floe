@@ -3,7 +3,7 @@
 This package provides:
 - PluginRegistry: Singleton for discovering and managing plugins
 - PluginMetadata: Base ABC for all plugin types
-- PluginType: Enum defining the 11 plugin categories
+- PluginType: Enum defining the 12 plugin categories
 - Plugin ABCs: Type-specific interfaces (ComputePlugin, etc.)
 - Errors: Custom exceptions for plugin operations
 - Schemas: Pydantic models for manifest validation (floe_core.schemas)
@@ -62,7 +62,7 @@ from floe_core.plugin_registry import (
 # Plugin type categories
 from floe_core.plugin_types import PluginType
 
-# Plugin ABCs (11 types)
+# Plugin ABCs (12 types)
 from floe_core.plugins import (
     CatalogPlugin,
     ComputePlugin,
@@ -71,6 +71,7 @@ from floe_core.plugins import (
     IngestionPlugin,
     LineageBackendPlugin,
     OrchestratorPlugin,
+    QualityPlugin,
     SecretsPlugin,
     SemanticLayerPlugin,
     StoragePlugin,
@@ -111,7 +112,7 @@ __all__: list[str] = [
     # Plugin registry
     "PluginRegistry",
     "get_registry",
-    # Plugin ABCs (11 types)
+    # Plugin ABCs (12 types)
     "CatalogPlugin",
     "ComputePlugin",
     "DBTPlugin",
@@ -119,6 +120,7 @@ __all__: list[str] = [
     "IngestionPlugin",
     "LineageBackendPlugin",
     "OrchestratorPlugin",
+    "QualityPlugin",
     "SecretsPlugin",
     "SemanticLayerPlugin",
     "StoragePlugin",
