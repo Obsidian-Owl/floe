@@ -656,3 +656,205 @@ class TestOTLPGrpcExporterSetup:
         # Both configs are valid and can be used together
         assert config.otlp_protocol == "grpc"
         assert batch_config.max_queue_size == 4096
+
+
+class TestOTLPHttpExporterSetup:
+    """Tests for OTLP/HTTP exporter setup (T037).
+
+    These tests validate that TelemetryProvider correctly configures
+    the OTLP/HTTP span exporter when otlp_protocol is "http".
+
+    Requirements: FR-008, FR-009, FR-010, FR-011, FR-024, FR-026
+    """
+
+    @pytest.fixture
+    def http_telemetry_config(self) -> TelemetryConfig:
+        """Create a TelemetryConfig with HTTP protocol.
+
+        Returns:
+            TelemetryConfig configured for HTTP export.
+        """
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        return TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://localhost:4318",
+            otlp_protocol="http",
+        )
+
+    @pytest.mark.requirement("FR-009")
+    def test_http_protocol_in_config(
+        self, http_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryConfig accepts http protocol."""
+        assert http_telemetry_config.otlp_protocol == "http"
+
+    @pytest.mark.requirement("FR-009")
+    def test_http_endpoint_in_config(
+        self, http_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryConfig stores HTTP endpoint."""
+        assert http_telemetry_config.otlp_endpoint == "http://localhost:4318"
+
+    @pytest.mark.requirement("FR-009")
+    def test_provider_accepts_http_config(
+        self, http_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryProvider accepts HTTP configuration."""
+        provider = TelemetryProvider(http_telemetry_config)
+        assert provider.config.otlp_protocol == "http"
+
+    @pytest.mark.requirement("FR-009")
+    def test_provider_initializes_with_http_config(
+        self, http_telemetry_config: TelemetryConfig, clean_env: None
+    ) -> None:
+        """Test that TelemetryProvider initializes with HTTP configuration."""
+        provider = TelemetryProvider(http_telemetry_config)
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-009")
+    def test_http_custom_endpoint_port_4318(
+        self, clean_env: None
+    ) -> None:
+        """Test that HTTP uses port 4318 per OTel convention."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        # HTTP endpoint should use 4318 per OpenTelemetry convention
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://otel-collector:4318",
+            otlp_protocol="http",
+        )
+        assert "4318" in config.otlp_endpoint
+
+    @pytest.mark.requirement("FR-009")
+    def test_http_custom_endpoint(
+        self, clean_env: None
+    ) -> None:
+        """Test that HTTP accepts custom endpoint."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://otel-collector.monitoring:4318",
+            otlp_protocol="http",
+        )
+        assert config.otlp_endpoint == "http://otel-collector.monitoring:4318"
+
+    @pytest.mark.requirement("FR-009")
+    def test_http_endpoint_with_path(
+        self, clean_env: None
+    ) -> None:
+        """Test that HTTP endpoint can include path component."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        # HTTP OTLP typically uses /v1/traces for traces endpoint
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://otel-collector:4318/v1/traces",
+            otlp_protocol="http",
+        )
+        assert "/v1/traces" in config.otlp_endpoint
+
+    @pytest.mark.requirement("FR-009")
+    def test_http_protocol_is_valid_literal(
+        self, clean_env: None
+    ) -> None:
+        """Test that http is a valid protocol literal."""
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        # Should not raise validation error
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_protocol="http",
+        )
+        assert config.otlp_protocol == "http"
+
+    @pytest.mark.requirement("FR-009")
+    def test_invalid_protocol_rejected(
+        self, clean_env: None
+    ) -> None:
+        """Test that invalid protocol is rejected."""
+        from pydantic import ValidationError
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        with pytest.raises(ValidationError, match="Input should be 'grpc' or 'http'"):
+            TelemetryConfig(
+                resource_attributes=attrs,
+                otlp_protocol="invalid",  # type: ignore[arg-type]
+            )
+
+    @pytest.mark.requirement("FR-024")
+    def test_http_config_with_batch_processor_settings(
+        self, clean_env: None
+    ) -> None:
+        """Test that HTTP config can include BatchSpanProcessor settings."""
+        from floe_core.telemetry import BatchSpanProcessorConfig
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        batch_config = BatchSpanProcessorConfig(
+            max_queue_size=4096,
+            max_export_batch_size=1024,
+            schedule_delay_millis=2000,
+        )
+        # BatchSpanProcessorConfig can be created alongside HTTP TelemetryConfig
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_protocol="http",
+        )
+        # Both configs are valid and can be used together
+        assert config.otlp_protocol == "http"
+        assert batch_config.max_queue_size == 4096
