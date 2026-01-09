@@ -139,6 +139,7 @@ class DuckDBComputePlugin(ComputePlugin):
                 - path: Database file path (default: ":memory:")
                 - extensions: List of extensions to load
                 - settings: DuckDB settings dict (memory_limit, etc.)
+                - attach: List of AttachConfig dicts for attaching external databases
                 Uses config.threads for thread count.
 
         Returns:
@@ -148,6 +149,7 @@ class DuckDBComputePlugin(ComputePlugin):
             - threads: Number of query threads
             - extensions: Extensions to load (optional)
             - settings: DuckDB configuration (optional)
+            - attach: List of attached databases (optional)
 
         Example:
             >>> config = ComputeConfig(
@@ -158,6 +160,21 @@ class DuckDBComputePlugin(ComputePlugin):
             >>> profile = plugin.generate_dbt_profile(config)
             >>> profile
             {'type': 'duckdb', 'path': '/data/analytics.duckdb', 'threads': 8}
+
+            With attach configuration:
+            >>> config = ComputeConfig(
+            ...     plugin="duckdb",
+            ...     threads=4,
+            ...     connection={
+            ...         "path": ":memory:",
+            ...         "attach": [
+            ...             {"path": "iceberg:polaris", "alias": "iceberg_db", "type": "iceberg"}
+            ...         ]
+            ...     }
+            ... )
+            >>> profile = plugin.generate_dbt_profile(config)
+            >>> len(profile["attach"])
+            1
         """
         connection = config.connection
 
@@ -176,6 +193,29 @@ class DuckDBComputePlugin(ComputePlugin):
         settings = connection.get("settings")
         if settings:
             profile["settings"] = settings
+
+        # Add optional attach blocks if specified (for attaching external databases)
+        attach_configs = connection.get("attach")
+        if attach_configs:
+            attach_list: list[dict[str, Any]] = []
+            for attach in attach_configs:
+                attach_entry: dict[str, Any] = {"path": attach["path"]}
+
+                # Alias is optional but recommended
+                if "alias" in attach:
+                    attach_entry["alias"] = attach["alias"]
+
+                # Type is optional (defaults to DuckDB native)
+                if "type" in attach:
+                    attach_entry["type"] = attach["type"]
+
+                # Additional options can be included
+                if "options" in attach and attach["options"]:
+                    attach_entry.update(attach["options"])
+
+                attach_list.append(attach_entry)
+
+            profile["attach"] = attach_list
 
         return profile
 

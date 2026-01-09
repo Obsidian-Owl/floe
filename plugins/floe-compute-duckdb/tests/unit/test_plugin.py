@@ -108,6 +108,129 @@ class TestGenerateDBTProfile:
         assert profile["settings"]["memory_limit"] == "4GB"
 
 
+class TestGenerateDBTProfileWithAttach:
+    """Test dbt profile generation with attach blocks."""
+
+    @pytest.mark.requirement("001-FR-009")
+    def test_generate_dbt_profile_with_attach(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test profile generation includes attach blocks when configured."""
+        from floe_core import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=4,
+            connection={
+                "path": ":memory:",
+                "attach": [
+                    {
+                        "path": "iceberg:polaris",
+                        "alias": "iceberg_catalog",
+                        "type": "iceberg",
+                    }
+                ],
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert "attach" in profile
+        assert len(profile["attach"]) == 1
+        assert profile["attach"][0]["path"] == "iceberg:polaris"
+        assert profile["attach"][0]["alias"] == "iceberg_catalog"
+        assert profile["attach"][0]["type"] == "iceberg"
+
+    @pytest.mark.requirement("001-FR-009")
+    def test_generate_dbt_profile_with_multiple_attach(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test profile generation with multiple attach blocks."""
+        from floe_core import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=4,
+            connection={
+                "path": ":memory:",
+                "attach": [
+                    {"path": "other_db.duckdb", "alias": "other_db"},
+                    {"path": "third_db.duckdb", "alias": "third_db"},
+                ],
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert len(profile["attach"]) == 2
+        assert profile["attach"][0]["path"] == "other_db.duckdb"
+        assert profile["attach"][1]["alias"] == "third_db"
+
+    @pytest.mark.requirement("001-FR-009")
+    def test_generate_dbt_profile_attach_with_options(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test attach block options are rendered properly."""
+        from floe_core import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=4,
+            connection={
+                "path": ":memory:",
+                "attach": [
+                    {
+                        "path": "iceberg:catalog",
+                        "alias": "ice",
+                        "type": "iceberg",
+                        "options": {"catalog_uri": "http://polaris:8181"},
+                    }
+                ],
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert profile["attach"][0]["catalog_uri"] == "http://polaris:8181"
+
+    @pytest.mark.requirement("001-FR-009")
+    def test_generate_dbt_profile_without_attach(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+    ) -> None:
+        """Test profile generation without attach blocks."""
+        profile = duckdb_plugin.generate_dbt_profile(memory_config)
+
+        assert "attach" not in profile
+
+    @pytest.mark.requirement("001-FR-009")
+    def test_generate_dbt_profile_attach_minimal(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test attach with only required path field."""
+        from floe_core import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            connection={
+                "path": ":memory:",
+                "attach": [{"path": "my_db.duckdb"}],
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert len(profile["attach"]) == 1
+        assert profile["attach"][0]["path"] == "my_db.duckdb"
+        assert "alias" not in profile["attach"][0]
+        assert "type" not in profile["attach"][0]
+
+
 class TestRequiredDBTPackages:
     """Test required dbt packages."""
 
