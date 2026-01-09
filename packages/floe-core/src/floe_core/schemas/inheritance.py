@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
-    from floe_core.schemas.manifest import PlatformManifest
+    from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
 
 
 class CircularInheritanceError(Exception):
@@ -276,6 +276,7 @@ def merge_manifests(
     # If parent has None, child can ADD governance policies.
     # Note: validate_security_policy_not_weakened() should be called separately
     # before merge to enforce FR-017 (security policy immutability).
+    merged_governance: GovernanceConfig | None
     if parent.governance is not None:
         merged_governance = parent.governance
     else:
