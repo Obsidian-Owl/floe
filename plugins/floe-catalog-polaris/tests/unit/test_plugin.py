@@ -419,3 +419,307 @@ class TestPolarisCatalogPluginConnect:
 
             # Access private attribute to verify storage
             assert plugin._catalog == mock_catalog
+
+
+class TestPolarisCatalogPluginTracing:
+    """Unit tests for PolarisCatalogPlugin OpenTelemetry tracing.
+
+    These tests verify that connect() creates proper OTel spans with
+    correct attributes for observability.
+    """
+
+    @pytest.fixture
+    def plugin(self) -> CatalogPlugin:
+        """Create a PolarisCatalogPlugin instance for testing."""
+        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+        config = _create_test_config()
+        return PolarisCatalogPlugin(config=config)
+
+    @pytest.mark.requirement("FR-030")
+    def test_connect_creates_otel_span(self, plugin: CatalogPlugin) -> None:
+        """Test connect() creates an OpenTelemetry span for the operation."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
+            patch(
+                "floe_catalog_polaris.plugin.get_tracer", return_value=mock_tracer
+            ),
+            patch(
+                "floe_catalog_polaris.plugin.catalog_span"
+            ) as mock_catalog_span,
+        ):
+            mock_catalog_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+            mock_catalog_span.return_value.__exit__ = MagicMock(return_value=False)
+
+            plugin.connect({})
+
+            # Verify catalog_span was called with correct arguments
+            mock_catalog_span.assert_called_once()
+            call_args = mock_catalog_span.call_args
+            assert call_args[0][0] == mock_tracer  # tracer arg
+            assert call_args[0][1] == "connect"  # operation arg
+
+    @pytest.mark.requirement("FR-030")
+    def test_connect_span_has_catalog_attributes(self, plugin: CatalogPlugin) -> None:
+        """Test connect() span includes catalog.name, catalog.uri, warehouse attributes."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
+            patch(
+                "floe_catalog_polaris.plugin.get_tracer", return_value=mock_tracer
+            ),
+            patch(
+                "floe_catalog_polaris.plugin.catalog_span"
+            ) as mock_catalog_span,
+        ):
+            mock_catalog_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+            mock_catalog_span.return_value.__exit__ = MagicMock(return_value=False)
+
+            plugin.connect({})
+
+            # Verify span attributes
+            call_kwargs = mock_catalog_span.call_args[1]
+            assert call_kwargs["catalog_name"] == "polaris"
+            assert call_kwargs["catalog_uri"] == "https://polaris.example.com/api/catalog"
+            assert call_kwargs["warehouse"] == "test_warehouse"
+
+    @pytest.mark.requirement("FR-031")
+    def test_connect_sets_error_attributes_on_failure(
+        self, plugin: CatalogPlugin
+    ) -> None:
+        """Test connect() sets error attributes on span when connection fails."""
+        from unittest.mock import MagicMock, patch
+
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        test_error = ConnectionError("Connection refused")
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", side_effect=test_error
+            ),
+            patch(
+                "floe_catalog_polaris.plugin.get_tracer", return_value=mock_tracer
+            ),
+            patch(
+                "floe_catalog_polaris.plugin.catalog_span"
+            ) as mock_catalog_span,
+            patch(
+                "floe_catalog_polaris.plugin.set_error_attributes"
+            ) as mock_set_error,
+        ):
+            mock_catalog_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+            mock_catalog_span.return_value.__exit__ = MagicMock(return_value=False)
+
+            with pytest.raises(ConnectionError):
+                plugin.connect({})
+
+            # Verify set_error_attributes was called with the span and error
+            mock_set_error.assert_called_once_with(mock_span, test_error)
+
+
+class TestPolarisCatalogPluginLogging:
+    """Unit tests for PolarisCatalogPlugin structlog logging.
+
+    These tests verify that connect() emits proper structured logs
+    for observability and debugging.
+    """
+
+    @pytest.fixture
+    def plugin(self) -> CatalogPlugin:
+        """Create a PolarisCatalogPlugin instance for testing."""
+        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+        config = _create_test_config()
+        return PolarisCatalogPlugin(config=config)
+
+    @pytest.mark.requirement("FR-029")
+    def test_connect_logs_operation_start(self, plugin: CatalogPlugin) -> None:
+        """Test connect() logs when connection attempt starts."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+        mock_logger = MagicMock()
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
+            patch("floe_catalog_polaris.plugin.logger") as patched_logger,
+        ):
+            patched_logger.bind.return_value = mock_logger
+
+            plugin.connect({})
+
+            # Verify logger was bound with uri and warehouse
+            patched_logger.bind.assert_called_once()
+            bind_kwargs = patched_logger.bind.call_args[1]
+            assert "uri" in bind_kwargs
+            assert "warehouse" in bind_kwargs
+
+            # Verify info log for start
+            mock_logger.info.assert_any_call("connecting_to_polaris_catalog")
+
+    @pytest.mark.requirement("FR-029")
+    def test_connect_logs_success(self, plugin: CatalogPlugin) -> None:
+        """Test connect() logs on successful connection."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+        mock_logger = MagicMock()
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
+            patch("floe_catalog_polaris.plugin.logger") as patched_logger,
+        ):
+            patched_logger.bind.return_value = mock_logger
+
+            plugin.connect({})
+
+            # Verify success log
+            mock_logger.info.assert_any_call("polaris_catalog_connected")
+
+    @pytest.mark.requirement("FR-029")
+    def test_connect_logs_failure(self, plugin: CatalogPlugin) -> None:
+        """Test connect() logs on connection failure."""
+        from unittest.mock import MagicMock, patch
+
+        mock_logger = MagicMock()
+        test_error = ConnectionError("Connection refused")
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", side_effect=test_error
+            ),
+            patch("floe_catalog_polaris.plugin.logger") as patched_logger,
+        ):
+            patched_logger.bind.return_value = mock_logger
+
+            with pytest.raises(ConnectionError):
+                plugin.connect({})
+
+            # Verify error log with error details
+            mock_logger.error.assert_called_once()
+            call_args = mock_logger.error.call_args
+            assert call_args[0][0] == "polaris_catalog_connection_failed"
+            assert "error" in call_args[1]
+
+    @pytest.mark.requirement("FR-032")
+    def test_connect_does_not_log_credentials(self, plugin: CatalogPlugin) -> None:
+        """Test connect() does NOT log credentials or secrets."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+        all_logs: list[tuple[str, dict[str, str]]] = []
+
+        class MockBoundLogger:
+            def info(self, event: str, **kwargs: str) -> None:
+                all_logs.append((event, kwargs))
+
+            def debug(self, event: str, **kwargs: str) -> None:
+                all_logs.append((event, kwargs))
+
+            def error(self, event: str, **kwargs: str) -> None:
+                all_logs.append((event, kwargs))
+
+        mock_bound = MockBoundLogger()
+
+        with (
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
+            patch("floe_catalog_polaris.plugin.logger") as patched_logger,
+        ):
+            patched_logger.bind.return_value = mock_bound
+
+            plugin.connect({})
+
+            # Check no logs contain credentials
+            for event, kwargs in all_logs:
+                # Check event name doesn't contain secret
+                assert "secret" not in event.lower()
+                assert "password" not in event.lower()
+                assert "credential" not in event.lower()
+
+                # Check kwargs don't contain secret values
+                for key, value in kwargs.items():
+                    assert "test-secret" not in str(value)  # Our test secret
+                    assert "client_secret" not in key.lower()
+                    assert "password" not in key.lower()
+
+
+class TestPolarisCatalogPluginEntryPoint:
+    """Unit tests for PolarisCatalogPlugin entry point registration.
+
+    These tests verify that the plugin is correctly registered via
+    entry points and can be discovered by the plugin registry.
+    """
+
+    @pytest.mark.requirement("FR-006")
+    def test_plugin_entry_point_is_registered(self) -> None:
+        """Test plugin is registered under floe.catalogs entry point group."""
+        from importlib.metadata import entry_points
+
+        # Get all entry points for the floe.catalogs group
+        eps = entry_points(group="floe.catalogs")
+
+        # Find our plugin
+        polaris_eps = [ep for ep in eps if ep.name == "polaris"]
+
+        assert len(polaris_eps) == 1, "Expected one 'polaris' entry point"
+        ep = polaris_eps[0]
+        assert ep.name == "polaris"
+        assert "PolarisCatalogPlugin" in ep.value
+
+    @pytest.mark.requirement("FR-006")
+    def test_plugin_can_be_loaded_via_entry_point(self) -> None:
+        """Test plugin can be loaded dynamically via entry point."""
+        from importlib.metadata import entry_points
+
+        from floe_core import CatalogPlugin
+
+        eps = entry_points(group="floe.catalogs")
+        polaris_eps = [ep for ep in eps if ep.name == "polaris"]
+
+        assert len(polaris_eps) == 1
+        ep = polaris_eps[0]
+
+        # Load the plugin class via entry point
+        plugin_class = ep.load()
+
+        # Verify it's the correct class
+        assert plugin_class.__name__ == "PolarisCatalogPlugin"
+        assert issubclass(plugin_class, CatalogPlugin)
+
+    @pytest.mark.requirement("FR-006")
+    def test_plugin_discoverable_via_registry(self) -> None:
+        """Test plugin can be discovered via floe-core plugin registry."""
+        from floe_core.plugin_registry import PluginRegistry
+        from floe_core.plugin_types import PluginType
+
+        registry = PluginRegistry()
+        registry.discover_all()
+
+        # Use list_all() which returns discovered names without loading
+        all_plugins = registry.list_all()
+        catalog_plugin_names = all_plugins[PluginType.CATALOG]
+
+        # Verify polaris is in the discovered plugins
+        assert "polaris" in catalog_plugin_names

@@ -34,6 +34,7 @@ from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
 
 from floe_catalog_polaris.config import PolarisCatalogConfig
+from floe_catalog_polaris.tracing import catalog_span, get_tracer, set_error_attributes
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -191,54 +192,68 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> catalog = plugin.connect({})
             >>> namespaces = catalog.list_namespaces()
         """
-        log = logger.bind(
-            uri=self._config.uri,
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "connect",
+            catalog_name="polaris",
+            catalog_uri=self._config.uri,
             warehouse=self._config.warehouse,
-        )
-        log.info("connecting_to_polaris_catalog")
+        ) as span:
+            log = logger.bind(
+                uri=self._config.uri,
+                warehouse=self._config.warehouse,
+            )
+            log.info("connecting_to_polaris_catalog")
 
-        # Build OAuth2 credential string in format expected by PyIceberg
-        # PyIceberg accepts "client_id:client_secret" format
-        client_id = self._config.oauth2.client_id
-        client_secret = self._config.oauth2.client_secret.get_secret_value()
-        credential = f"{client_id}:{client_secret}"
+            try:
+                # Build OAuth2 credential string in format expected by PyIceberg
+                # PyIceberg accepts "client_id:client_secret" format
+                client_id = self._config.oauth2.client_id
+                client_secret = self._config.oauth2.client_secret.get_secret_value()
+                credential = f"{client_id}:{client_secret}"
 
-        # Build catalog configuration
-        catalog_config: dict[str, Any] = {
-            "type": "rest",
-            "uri": self._config.uri,
-            "warehouse": self._config.warehouse,
-            "credential": credential,
-            # Enable automatic token refresh
-            "token-refresh-enabled": "true",
-        }
+                # Build catalog configuration
+                catalog_config: dict[str, Any] = {
+                    "type": "rest",
+                    "uri": self._config.uri,
+                    "warehouse": self._config.warehouse,
+                    "credential": credential,
+                    # Enable automatic token refresh
+                    "token-refresh-enabled": "true",
+                }
 
-        # Add OAuth2 token URL if different from default catalog endpoint
-        # PyIceberg defaults to {uri}/v1/oauth/tokens if not specified
-        token_url = self._config.oauth2.token_url
-        if token_url:
-            catalog_config["oauth2-server-uri"] = token_url
+                # Add OAuth2 token URL if different from default catalog endpoint
+                # PyIceberg defaults to {uri}/v1/oauth/tokens if not specified
+                token_url = self._config.oauth2.token_url
+                if token_url:
+                    catalog_config["oauth2-server-uri"] = token_url
 
-        # Add scope if configured
-        scope = config.get("scope", self._config.oauth2.scope)
-        if scope:
-            catalog_config["scope"] = scope
+                # Add scope if configured
+                scope = config.get("scope", self._config.oauth2.scope)
+                if scope:
+                    catalog_config["scope"] = scope
 
-        # Merge any additional configuration from the config argument
-        for key, value in config.items():
-            if key not in ("scope",):  # Already handled above
-                catalog_config[key] = value
+                # Merge any additional configuration from the config argument
+                for key, value in config.items():
+                    if key not in ("scope",):  # Already handled above
+                        catalog_config[key] = value
 
-        log.debug("catalog_config_built", config_keys=list(catalog_config.keys()))
+                log.debug("catalog_config_built", config_keys=list(catalog_config.keys()))
 
-        # Load the PyIceberg REST catalog
-        # Using "polaris" as the catalog name for identification
-        self._catalog = load_catalog("polaris", **catalog_config)
+                # Load the PyIceberg REST catalog
+                # Using "polaris" as the catalog name for identification
+                self._catalog = load_catalog("polaris", **catalog_config)
 
-        log.info("polaris_catalog_connected")
+                log.info("polaris_catalog_connected")
 
-        # Return the catalog (which implements the Catalog protocol)
-        return self._catalog  # type: ignore[return-value]
+                # Return the catalog (which implements the Catalog protocol)
+                return self._catalog  # type: ignore[return-value]
+
+            except Exception as e:
+                set_error_attributes(span, e)
+                log.error("polaris_catalog_connection_failed", error=str(e))
+                raise
 
     def create_namespace(
         self,
