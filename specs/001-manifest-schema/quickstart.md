@@ -273,6 +273,102 @@ export FLOE_ENV=production
 floe run my-pipeline
 ```
 
+## Secret Reference Patterns
+
+Secrets (passwords, API keys, credentials) are NEVER stored in manifest files. Instead, you reference secrets by name, and they are resolved at runtime from secure backends.
+
+### Supported Secret Sources
+
+| Source | Value | Description |
+|--------|-------|-------------|
+| `kubernetes` | Default | Kubernetes Secret objects |
+| `env` | Environment | Environment variables |
+| `vault` | HashiCorp Vault | Vault secret engine |
+| `external-secrets` | ESO | External Secrets Operator |
+
+### Using connection_secret_ref in Plugins
+
+For plugins that need credentials, use `connection_secret_ref`:
+
+```yaml
+plugins:
+  compute:
+    type: snowflake
+    connection_secret_ref: snowflake-credentials  # K8s Secret name
+    config:
+      warehouse: COMPUTE_WH
+      database: RAW
+
+  catalog:
+    type: polaris
+    connection_secret_ref: polaris-api-key
+```
+
+**Naming rules** (K8s Secret naming conventions):
+- Lowercase alphanumeric characters
+- Hyphens (`-`) allowed (not at start or end)
+- No underscores, dots, or uppercase
+- Maximum 253 characters
+
+**Valid**: `db-credentials`, `api-key-v2`, `polaris-creds`
+**Invalid**: `MySecret`, `db_creds`, `secret.v1`
+
+### SecretReference Model
+
+For more control, use the full SecretReference model:
+
+```python
+from floe_core.schemas import SecretReference, SecretSource
+
+# Simple reference (defaults to Kubernetes)
+ref = SecretReference(name="db-password")
+
+# Full reference with source and key
+ref = SecretReference(
+    source=SecretSource.VAULT,
+    name="database-credentials",
+    key="password"  # For multi-value secrets
+)
+```
+
+### Runtime Resolution
+
+Secrets are validated at manifest load time but NOT resolved:
+
+```python
+# At load time: validates format, does NOT fetch secret value
+manifest = PlatformManifest.model_validate(yaml_data)
+# manifest.plugins.compute.connection_secret_ref == "snowflake-credentials"
+
+# At runtime: secret is resolved based on FLOE_ENV
+# Dev environment uses: snowflake-credentials in 'dev' namespace
+# Prod environment uses: snowflake-credentials in 'production' namespace
+```
+
+### dbt Integration
+
+SecretReference includes `to_env_var_syntax()` for dbt profiles.yml:
+
+```python
+from floe_core.schemas import SecretReference
+
+ref = SecretReference(name="db-password")
+print(ref.to_env_var_syntax())
+# Output: {{ env_var('FLOE_SECRET_DB_PASSWORD') }}
+
+ref_with_key = SecretReference(name="db-creds", key="password")
+print(ref_with_key.to_env_var_syntax())
+# Output: {{ env_var('FLOE_SECRET_DB_CREDS_PASSWORD') }}
+```
+
+### Best Practices
+
+1. **Never commit secrets**: Manifests contain references, not values
+2. **Use descriptive names**: `snowflake-warehouse-creds` not `creds1`
+3. **Follow K8s naming**: Lowercase, hyphens, no special characters
+4. **Environment isolation**: Same secret name resolves to different values per FLOE_ENV
+5. **Rotate regularly**: Update secrets in backend; manifests don't change
+
 ## Next Steps
 
 1. **Create your manifest**: Start with 2-tier, migrate to 3-tier when needed

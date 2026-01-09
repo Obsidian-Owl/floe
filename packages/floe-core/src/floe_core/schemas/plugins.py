@@ -7,6 +7,7 @@ Implements:
     - FR-006: Plugin Selection
     - FR-007: Plugin Registry Validation
     - FR-008: Plugin-Specific Configuration
+    - FR-010: Secret Reference Handling (connection_secret_ref validation)
     - FR-018: Domain Plugin Whitelist Validation
 """
 
@@ -15,6 +16,8 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from floe_core.schemas.secrets import SECRET_NAME_PATTERN
 
 
 # Known plugin types per category (built-in registry)
@@ -141,10 +144,16 @@ class PluginSelection(BaseModel):
         default=None,
         description="Plugin-specific configuration options",
     )
-    connection_secret_ref: str | None = Field(
-        default=None,
-        description="K8s Secret name for credentials",
-    )
+    connection_secret_ref: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=253,  # K8s Secret name limit
+            pattern=SECRET_NAME_PATTERN,
+            description="K8s Secret name for credentials (lowercase alphanumeric with hyphens)",
+            examples=["polaris-credentials", "snowflake-creds"],
+        ),
+    ] | None = None
 
     @field_validator("type")
     @classmethod

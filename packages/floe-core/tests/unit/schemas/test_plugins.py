@@ -429,6 +429,6 @@ class TestPluginSelectionValidation:
 
         selection2 = PluginSelection(
             type="snowflake",
-            connection_secret_ref="db.credentials.v1",
+            connection_secret_ref="db-credentials-v1",
         )
-        assert selection2.connection_secret_ref == "db.credentials.v1"
+        assert selection2.connection_secret_ref == "db-credentials-v1"
