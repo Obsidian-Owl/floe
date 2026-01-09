@@ -137,9 +137,7 @@ class TestManifestMetadataValidation:
         """Test that description exceeding 500 characters is rejected."""
         long_desc = "a" * 501
         with pytest.raises(ValidationError) as exc_info:
-            ManifestMetadata(
-                name="test", version="1.0.0", owner="test", description=long_desc
-            )
+            ManifestMetadata(name="test", version="1.0.0", owner="test", description=long_desc)
         assert "description" in str(exc_info.value)
 
     @pytest.mark.requirement("001-FR-001")

@@ -295,9 +295,7 @@ class TestManifestSchemaExports:
 
         for name in __all__:
             # Import should not raise
-            module = __import__(
-                "floe_core.schemas", fromlist=[name]
-            )
+            module = __import__("floe_core.schemas", fromlist=[name])
             assert hasattr(module, name), f"Missing export: {name}"
 
 
