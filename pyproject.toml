@@ -15,6 +15,7 @@ dependencies = [
     "ruff>=0.3",
     "pre-commit>=3.0",
     "bandit[toml]>=1.7",
+    "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
 ]
