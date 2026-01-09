@@ -1,7 +1,7 @@
 # Implementation Plan: K8s-Native Testing Infrastructure
 
-**Branch**: `001-testing-infra` | **Date**: 2026-01-09 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/001-testing-infra/spec.md`
+**Branch**: `9c-testing-infra` | **Date**: 2026-01-09 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/9c-testing-infra/spec.md`
 
 ## Summary
 
@@ -67,7 +67,7 @@ Establish foundational K8s-native testing infrastructure for the floe platform, 
 ### Documentation (this feature)
 
 ```text
-specs/001-testing-infra/
+specs/9c-testing-infra/
 ├── plan.md              # This file
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output

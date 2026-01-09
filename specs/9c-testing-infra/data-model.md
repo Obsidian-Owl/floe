@@ -1,6 +1,6 @@
 # Data Model: K8s-Native Testing Infrastructure
 
-**Feature**: 001-testing-infra
+**Feature**: 9c-testing-infra
 **Date**: 2026-01-09
 **Status**: Complete
 
