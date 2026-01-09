@@ -194,6 +194,14 @@
         "connection_secret_ref": {
           "anyOf": [
             {
+              "description": "K8s Secret name for credentials (lowercase alphanumeric with hyphens)",
+              "examples": [
+                "polaris-credentials",
+                "snowflake-creds"
+              ],
+              "maxLength": 253,
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
               "type": "string"
             },
             {
@@ -201,7 +209,6 @@
             }
           ],
           "default": null,
-          "description": "K8s Secret name for credentials",
           "title": "Connection Secret Ref"
         }
       },
@@ -213,7 +220,7 @@
     },
     "PluginsConfig": {
       "additionalProperties": false,
-      "description": "Configuration for all pluggable platform components.\n\nDefines plugin selections for all 11 platform capability categories.\nEach category corresponds to an entry point group (floe.{category}).\n\nAttributes:\n    compute: Compute engine (DuckDB, Snowflake, Spark, BigQuery, Databricks)\n    orchestrator: Workflow orchestration (Dagster, Airflow 3.x, Prefect)\n    catalog: Data catalog (Polaris, AWS Glue, Hive)\n    storage: Object storage (S3, GCS, Azure Blob, MinIO)\n    semantic_layer: Semantic layer (Cube, dbt Semantic Layer)\n    ingestion: Data ingestion (dlt, Airbyte)\n    secrets: Secret management (K8s Secrets, ESO, Vault)\n    observability: Observability (Jaeger, Datadog, Grafana Cloud)\n    identity: Identity/auth (K8s RBAC, custom)\n    dbt: dbt execution (local, fusion)\n    quality: Data quality (Great Expectations, Soda, dbt Expectations)\n\nExample:\n    >>> plugins = PluginsConfig(\n    ...     compute=PluginSelection(type=\"duckdb\"),\n    ...     orchestrator=PluginSelection(type=\"dagster\"),\n    ...     catalog=PluginSelection(type=\"polaris\"),\n    ... )\n    >>> plugins.compute.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: PluginsConfig entity specification\n    - Constitution Principle II: 11 plugin categories",
+      "description": "Configuration for all pluggable platform components.\n\nDefines plugin selections for all 12 platform capability categories.\nEach category corresponds to an entry point group (floe.{category}).\n\nPer ADR-0035, observability is split into two independent categories:\n- telemetry_backend: OTLP-based backends (Jaeger, Datadog, Grafana Cloud)\n- lineage_backend: OpenLineage-based backends (Marquez, Atlan, OpenMetadata)\n\nThis enables mixed backends (e.g., Datadog for telemetry + Atlan for lineage).\n\nAttributes:\n    compute: Compute engine (DuckDB, Snowflake, Spark, BigQuery, Databricks)\n    orchestrator: Workflow orchestration (Dagster, Airflow 3.x, Prefect)\n    catalog: Data catalog (Polaris, AWS Glue, Hive)\n    storage: Object storage (S3, GCS, Azure Blob, MinIO)\n    semantic_layer: Semantic layer (Cube, dbt Semantic Layer)\n    ingestion: Data ingestion (dlt, Airbyte)\n    secrets: Secret management (K8s Secrets, ESO, Vault)\n    telemetry_backend: Telemetry backend - OTLP (Jaeger, Datadog, Grafana Cloud)\n    lineage_backend: Lineage backend - OpenLineage (Marquez, Atlan, OpenMetadata)\n    identity: Identity/auth (K8s RBAC, custom)\n    dbt: dbt execution (local, fusion)\n    quality: Data quality (Great Expectations, Soda, dbt Expectations)\n\nExample:\n    >>> plugins = PluginsConfig(\n    ...     compute=PluginSelection(type=\"duckdb\"),\n    ...     orchestrator=PluginSelection(type=\"dagster\"),\n    ...     catalog=PluginSelection(type=\"polaris\"),\n    ... )\n    >>> plugins.compute.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: PluginsConfig entity specification\n    - Constitution Principle II: 11 plugin categories",
       "examples": [
         {
           "catalog": {
@@ -312,7 +319,7 @@
           "default": null,
           "description": "Secret management (k8s-secrets, eso, vault)"
         },
-        "observability": {
+        "telemetry_backend": {
           "anyOf": [
             {
               "$ref": "#/$defs/PluginSelection"
@@ -322,7 +329,19 @@
             }
           ],
           "default": null,
-          "description": "Observability (jaeger, datadog, grafana-cloud)"
+          "description": "Telemetry backend - OTLP (jaeger, datadog, grafana-cloud)"
+        },
+        "lineage_backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lineage backend - OpenLineage (marquez, atlan, openmetadata)"
         },
         "identity": {
           "anyOf": [
@@ -369,7 +388,7 @@
   "description": "Root configuration entity for platform manifests.\n\nRepresents an organization's platform settings including plugin\nselections, governance policies, and inheritance configuration.\n\nSupports two configuration modes:\n- 2-tier mode (scope=None): Single platform configuration\n- 3-tier mode (scope=enterprise/domain): Enterprise \u2192 Domain hierarchy\n\nAttributes:\n    api_version: API version (must be \"floe.dev/v1\")\n    kind: Resource kind (must be \"Manifest\")\n    metadata: Manifest metadata (name, version, owner)\n    scope: Configuration scope (None=2-tier, enterprise/domain=3-tier)\n    parent_manifest: OCI URI of parent manifest (required for domain scope)\n    plugins: Plugin selections for all 11 categories\n    governance: Security and compliance settings\n    approved_plugins: Enterprise whitelist of approved plugins per category\n    approved_products: Domain list of approved data products\n\nExample:\n    >>> manifest = PlatformManifest(\n    ...     api_version=\"floe.dev/v1\",\n    ...     kind=\"Manifest\",\n    ...     metadata=ManifestMetadata(\n    ...         name=\"acme-platform\",\n    ...         version=\"1.0.0\",\n    ...         owner=\"platform-team@acme.com\"\n    ...     ),\n    ...     plugins=PluginsConfig(\n    ...         compute=PluginSelection(type=\"duckdb\"),\n    ...         orchestrator=PluginSelection(type=\"dagster\")\n    ...     )\n    ... )\n\nValidation Rules:\n    - C001: scope=enterprise \u2192 parent_manifest=None\n    - C002: scope=domain \u2192 parent_manifest required\n    - C003: scope=None \u2192 parent_manifest=None\n    - C004: approved_plugins only for scope=enterprise\n    - C005: approved_products only for scope=domain\n\nSee Also:\n    - data-model.md: PlatformManifest entity specification\n    - spec.md: Manifest schema specification",
   "examples": [
     {
-      "api_version": "floe.dev/v1",
+      "apiVersion": "floe.dev/v1",
       "kind": "Manifest",
       "metadata": {
         "name": "acme-platform",
@@ -387,10 +406,10 @@
     }
   ],
   "properties": {
-    "api_version": {
+    "apiVersion": {
       "const": "floe.dev/v1",
       "description": "API version (must be 'floe.dev/v1')",
-      "title": "Api Version",
+      "title": "Apiversion",
       "type": "string"
     },
     "kind": {
@@ -486,7 +505,7 @@
     }
   },
   "required": [
-    "api_version",
+    "apiVersion",
     "kind",
     "metadata",
     "plugins"

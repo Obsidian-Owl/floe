@@ -169,3 +169,29 @@ A platform team member needs configuration that works identically across all env
 - **SC-004**: 100% of configuration errors are caught at validation time (no runtime surprises from invalid configuration)
 - **SC-005**: IDE autocomplete covers all configuration fields and provides valid option suggestions
 - **SC-006**: Configuration changes at enterprise level propagate correctly to all child configurations without manual updates
+
+## Architectural References
+
+### ADR-0035: Telemetry and Lineage Backend Plugins
+
+The manifest schema implements 12 plugin categories (not 11) per ADR-0035. The original "observability" category was split into two independent categories:
+
+- **telemetry_backend**: OTLP-based backends (Jaeger, Datadog, Grafana Cloud)
+- **lineage_backend**: OpenLineage-based backends (Marquez, Atlan, OpenMetadata)
+
+**Rationale** (from ADR-0035):
+- OTLP and OpenLineage have different transport mechanisms (OTLP Collector vs direct HTTP)
+- Organizations want mixed backends (e.g., Datadog for telemetry + Atlan for lineage)
+- Independent evolution of telemetry vs lineage standards
+
+This enables manifest configurations like:
+
+```yaml
+plugins:
+  telemetry_backend:
+    type: datadog  # OTLP telemetry to Datadog APM
+  lineage_backend:
+    type: atlan    # OpenLineage to Atlan governance platform
+```
+
+See: `docs/architecture/adr/0035-observability-plugin-interface.md`

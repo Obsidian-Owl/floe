@@ -91,7 +91,8 @@ class TestManifestSchemaContract:
 
         plugins = PluginsConfig()
 
-        # All 11 categories MUST exist as fields
+        # All 12 categories MUST exist as fields
+        # Per ADR-0035, observability is split into telemetry_backend and lineage_backend
         expected_categories = [
             "compute",
             "orchestrator",
@@ -100,7 +101,8 @@ class TestManifestSchemaContract:
             "semantic_layer",
             "ingestion",
             "secrets",
-            "observability",
+            "telemetry_backend",
+            "lineage_backend",
             "identity",
             "dbt",
             "quality",

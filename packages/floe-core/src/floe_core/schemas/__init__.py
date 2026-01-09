@@ -9,7 +9,7 @@ platform manifest files (manifest.yaml). It supports:
 Models:
     PlatformManifest: Root configuration schema
     ManifestMetadata: Name, version, owner metadata
-    PluginsConfig: Plugin selection for all 11 categories
+    PluginsConfig: Plugin selection for all 12 categories (per ADR-0035)
     PluginSelection: Individual plugin configuration
     GovernanceConfig: Security and compliance settings
     SecretReference: Placeholder for sensitive values
@@ -52,6 +52,7 @@ from floe_core.schemas.json_schema import (
 
 # Manifest models (T018, T019)
 from floe_core.schemas.manifest import (
+    FORBIDDEN_ENVIRONMENT_FIELDS,
     GovernanceConfig,
     ManifestScope,
     PlatformManifest,
@@ -127,6 +128,7 @@ __all__: list[str] = [
     "ManifestScope",
     "GovernanceConfig",
     "PlatformManifest",
+    "FORBIDDEN_ENVIRONMENT_FIELDS",
     # JSON Schema (Phase 6)
     "JSON_SCHEMA_DRAFT",
     "MANIFEST_SCHEMA_ID",

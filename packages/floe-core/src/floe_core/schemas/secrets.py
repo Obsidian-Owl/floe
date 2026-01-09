@@ -5,6 +5,27 @@ Secrets remain as placeholders until runtime resolution.
 
 Implements:
     - FR-010: Secret Reference Handling
+
+Note:
+    This module uses SecretReference (name + source pattern) for manifest-level
+    secret declarations. The actual secret values are NEVER stored in manifests.
+
+    When implementing runtime credential resolution in future components
+    (e.g., floe-cli credential injection, CompiledArtifacts credential field),
+    use Pydantic's SecretStr type to prevent accidental logging of secret values:
+
+    Example for runtime handling::
+
+        from pydantic import SecretStr
+
+        class ResolvedCredentials(BaseModel):
+            password: SecretStr  # SecretStr masks value in repr/str
+
+        resolved = ResolvedCredentials(password="actual-secret")
+        print(resolved)  # password=SecretStr('**********')
+        actual_value = resolved.password.get_secret_value()
+
+    See also: pydantic.SecretStr, pydantic.SecretBytes
 """
 
 from __future__ import annotations

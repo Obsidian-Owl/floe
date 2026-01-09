@@ -38,7 +38,7 @@
          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           PluginsConfig                                      │
-│  (Plugin selections for all pluggable components)                           │
+│  (Plugin selections for all pluggable components - 12 categories)           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  compute: PluginSelection | None                                            │
 │  orchestrator: PluginSelection | None                                       │
@@ -47,7 +47,8 @@
 │  semantic_layer: PluginSelection | None                                     │
 │  ingestion: PluginSelection | None                                          │
 │  secrets: PluginSelection | None                                            │
-│  observability: PluginSelection | None                                      │
+│  telemetry_backend: PluginSelection | None   # ADR-0035: OTLP backends      │
+│  lineage_backend: PluginSelection | None     # ADR-0035: OpenLineage        │
 │  identity: PluginSelection | None                                           │
 │  dbt: PluginSelection | None                                                │
 │  quality: PluginSelection | None                                            │
@@ -167,12 +168,13 @@ Configuration for all pluggable platform components.
 | semantic_layer | PluginSelection \| None | No | Must be registered plugin |
 | ingestion | PluginSelection \| None | No | Must be registered plugin |
 | secrets | PluginSelection \| None | No | Must be registered plugin |
-| observability | PluginSelection \| None | No | Must be registered plugin |
+| telemetry_backend | PluginSelection \| None | No | Must be registered plugin (ADR-0035) |
+| lineage_backend | PluginSelection \| None | No | Must be registered plugin (ADR-0035) |
 | identity | PluginSelection \| None | No | Must be registered plugin |
 | dbt | PluginSelection \| None | No | Must be registered plugin |
 | quality | PluginSelection \| None | No | Must be registered plugin |
 
-**Plugin Categories** (11 total per Constitution Principle II):
+**Plugin Categories** (12 total per Constitution Principle II and ADR-0035):
 1. compute (DuckDB, Snowflake, Spark, BigQuery, Databricks)
 2. orchestrator (Dagster, Airflow 3.x, Prefect)
 3. catalog (Polaris, AWS Glue, Hive)
@@ -180,10 +182,11 @@ Configuration for all pluggable platform components.
 5. semantic_layer (Cube, dbt Semantic Layer)
 6. ingestion (dlt, Airbyte)
 7. secrets (K8s Secrets, ESO, Vault)
-8. observability (Jaeger, Datadog, Grafana Cloud)
-9. identity (K8s RBAC, custom)
-10. dbt (local, fusion)
-11. quality (Great Expectations, Soda, dbt Expectations)
+8. telemetry_backend (Jaeger, Datadog, Grafana Cloud) - OTLP backends per ADR-0035
+9. lineage_backend (Marquez, Atlan, OpenMetadata) - OpenLineage backends per ADR-0035
+10. identity (K8s RBAC, custom)
+11. dbt (local, fusion)
+12. quality (Great Expectations, Soda, dbt Expectations)
 
 ---
 

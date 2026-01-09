@@ -29,7 +29,8 @@ PLUGIN_REGISTRY: dict[str, list[str]] = {
     "semantic_layer": ["cube", "dbt-semantic-layer"],
     "ingestion": ["dlt", "airbyte"],
     "secrets": ["k8s-secrets", "eso", "vault"],
-    "observability": ["jaeger", "datadog", "grafana-cloud"],
+    "telemetry_backend": ["jaeger", "datadog", "grafana-cloud"],
+    "lineage_backend": ["marquez", "atlan", "openmetadata"],
     "identity": ["k8s-rbac", "custom"],
     "dbt": ["local", "fusion"],
     "quality": ["great-expectations", "soda", "dbt-expectations"],
@@ -180,8 +181,14 @@ class PluginSelection(BaseModel):
 class PluginsConfig(BaseModel):
     """Configuration for all pluggable platform components.
 
-    Defines plugin selections for all 11 platform capability categories.
+    Defines plugin selections for all 12 platform capability categories.
     Each category corresponds to an entry point group (floe.{category}).
+
+    Per ADR-0035, observability is split into two independent categories:
+    - telemetry_backend: OTLP-based backends (Jaeger, Datadog, Grafana Cloud)
+    - lineage_backend: OpenLineage-based backends (Marquez, Atlan, OpenMetadata)
+
+    This enables mixed backends (e.g., Datadog for telemetry + Atlan for lineage).
 
     Attributes:
         compute: Compute engine (DuckDB, Snowflake, Spark, BigQuery, Databricks)
@@ -191,7 +198,8 @@ class PluginsConfig(BaseModel):
         semantic_layer: Semantic layer (Cube, dbt Semantic Layer)
         ingestion: Data ingestion (dlt, Airbyte)
         secrets: Secret management (K8s Secrets, ESO, Vault)
-        observability: Observability (Jaeger, Datadog, Grafana Cloud)
+        telemetry_backend: Telemetry backend - OTLP (Jaeger, Datadog, Grafana Cloud)
+        lineage_backend: Lineage backend - OpenLineage (Marquez, Atlan, OpenMetadata)
         identity: Identity/auth (K8s RBAC, custom)
         dbt: dbt execution (local, fusion)
         quality: Data quality (Great Expectations, Soda, dbt Expectations)
@@ -261,9 +269,13 @@ class PluginsConfig(BaseModel):
         default=None,
         description="Secret management (k8s-secrets, eso, vault)",
     )
-    observability: PluginSelection | None = Field(
+    telemetry_backend: PluginSelection | None = Field(
         default=None,
-        description="Observability (jaeger, datadog, grafana-cloud)",
+        description="Telemetry backend - OTLP (jaeger, datadog, grafana-cloud)",
+    )
+    lineage_backend: PluginSelection | None = Field(
+        default=None,
+        description="Lineage backend - OpenLineage (marquez, atlan, openmetadata)",
     )
     identity: PluginSelection | None = Field(
         default=None,

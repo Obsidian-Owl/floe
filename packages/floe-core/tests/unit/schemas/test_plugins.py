@@ -99,8 +99,11 @@ class TestValidPluginSelection:
         assert plugins.storage.type == "s3"
 
     @pytest.mark.requirement("001-FR-006")
-    def test_plugins_config_all_11_categories(self) -> None:
-        """Test that PluginsConfig supports all 11 plugin categories."""
+    def test_plugins_config_all_12_categories(self) -> None:
+        """Test that PluginsConfig supports all 12 plugin categories.
+
+        Per ADR-0035, observability is split into telemetry_backend and lineage_backend.
+        """
         from floe_core.schemas import PluginsConfig
 
         plugins = PluginsConfig(
@@ -111,7 +114,8 @@ class TestValidPluginSelection:
             semantic_layer={"type": "cube"},
             ingestion={"type": "dlt"},
             secrets={"type": "k8s-secrets"},
-            observability={"type": "jaeger"},
+            telemetry_backend={"type": "jaeger"},
+            lineage_backend={"type": "marquez"},
             identity={"type": "k8s-rbac"},
             dbt={"type": "local"},
             quality={"type": "great-expectations"},
@@ -124,7 +128,8 @@ class TestValidPluginSelection:
         assert plugins.semantic_layer is not None
         assert plugins.ingestion is not None
         assert plugins.secrets is not None
-        assert plugins.observability is not None
+        assert plugins.telemetry_backend is not None
+        assert plugins.lineage_backend is not None
         assert plugins.identity is not None
         assert plugins.dbt is not None
         assert plugins.quality is not None
