@@ -34,6 +34,7 @@ from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
 
 from floe_catalog_polaris.config import PolarisCatalogConfig
+from floe_catalog_polaris.errors import PYICEBERG_EXCEPTION_TYPES, map_pyiceberg_error
 from floe_catalog_polaris.retry import with_retry
 from floe_catalog_polaris.tracing import catalog_span, get_tracer, set_error_attributes
 
@@ -255,7 +256,18 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 # Return the catalog (which implements the Catalog protocol)
                 return self._catalog  # type: ignore[return-value]
 
+            except PYICEBERG_EXCEPTION_TYPES as e:
+                # Map PyIceberg exceptions to floe errors
+                set_error_attributes(span, e)
+                log.error("polaris_catalog_connection_failed", error=str(e))
+                raise map_pyiceberg_error(
+                    e,
+                    catalog_uri=self._config.uri,
+                    operation="connect",
+                ) from e
+
             except Exception as e:
+                # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
                 log.error("polaris_catalog_connection_failed", error=str(e))
                 raise
