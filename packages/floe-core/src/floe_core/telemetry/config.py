@@ -285,6 +285,7 @@ class TelemetryConfig(BaseModel):
         sampling: Environment-based sampling configuration
         resource_attributes: Service identification attributes
         authentication: Optional OTLP authentication
+        batch_processor: BatchSpanProcessor configuration for async export
 
     Examples:
         >>> config = TelemetryConfig(
@@ -319,6 +320,10 @@ class TelemetryConfig(BaseModel):
     authentication: TelemetryAuth | None = Field(
         default=None,
         description="Optional OTLP authentication",
+    )
+    batch_processor: BatchSpanProcessorConfig = Field(
+        default_factory=BatchSpanProcessorConfig,
+        description="BatchSpanProcessor configuration for async export",
     )
 
     def get_sampling_ratio(self, environment: str) -> float:

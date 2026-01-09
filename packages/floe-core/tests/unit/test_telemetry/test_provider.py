@@ -651,14 +651,51 @@ class TestOTLPGrpcExporterSetup:
             max_export_batch_size=1024,
             schedule_delay_millis=2000,
         )
-        # BatchSpanProcessorConfig can be created alongside TelemetryConfig
+        # TelemetryConfig includes batch_processor field
         config = TelemetryConfig(
             resource_attributes=attrs,
             otlp_protocol="grpc",
+            batch_processor=batch_config,
         )
-        # Both configs are valid and can be used together
+        # Verify batch processor config is stored in TelemetryConfig
         assert config.otlp_protocol == "grpc"
-        assert batch_config.max_queue_size == 4096
+        assert config.batch_processor.max_queue_size == 4096
+        assert config.batch_processor.max_export_batch_size == 1024
+        assert config.batch_processor.schedule_delay_millis == 2000
+
+    @pytest.mark.requirement("FR-024")
+    def test_grpc_provider_uses_batch_processor_config(
+        self, clean_env: None
+    ) -> None:
+        """Test that TelemetryProvider uses BatchSpanProcessor config on init."""
+        from floe_core.telemetry import BatchSpanProcessorConfig
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        batch_config = BatchSpanProcessorConfig(
+            max_queue_size=8192,
+            max_export_batch_size=2048,
+            schedule_delay_millis=1000,
+            export_timeout_millis=15000,
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_protocol="grpc",
+            batch_processor=batch_config,
+        )
+        provider = TelemetryProvider(config)
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        # Verify the span processor was created
+        assert provider._span_processor is not None
+        provider.shutdown()
 
 
 class TestOTLPHttpExporterSetup:
@@ -856,14 +893,52 @@ class TestOTLPHttpExporterSetup:
             max_export_batch_size=1024,
             schedule_delay_millis=2000,
         )
-        # BatchSpanProcessorConfig can be created alongside HTTP TelemetryConfig
+        # TelemetryConfig includes batch_processor field for HTTP protocol
         config = TelemetryConfig(
             resource_attributes=attrs,
             otlp_protocol="http",
+            batch_processor=batch_config,
         )
-        # Both configs are valid and can be used together
+        # Verify batch processor config is stored in TelemetryConfig
         assert config.otlp_protocol == "http"
-        assert batch_config.max_queue_size == 4096
+        assert config.batch_processor.max_queue_size == 4096
+        assert config.batch_processor.max_export_batch_size == 1024
+        assert config.batch_processor.schedule_delay_millis == 2000
+
+    @pytest.mark.requirement("FR-024")
+    def test_http_provider_uses_batch_processor_config(
+        self, clean_env: None
+    ) -> None:
+        """Test that TelemetryProvider with HTTP uses BatchSpanProcessor config."""
+        from floe_core.telemetry import BatchSpanProcessorConfig
+
+        attrs = ResourceAttributes(
+            service_name="test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        batch_config = BatchSpanProcessorConfig(
+            max_queue_size=8192,
+            max_export_batch_size=2048,
+            schedule_delay_millis=1000,
+            export_timeout_millis=15000,
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            otlp_endpoint="http://localhost:4318",
+            otlp_protocol="http",
+            batch_processor=batch_config,
+        )
+        provider = TelemetryProvider(config)
+        provider.initialize()
+        assert provider.state == ProviderState.INITIALIZED
+        # Verify the span processor was created
+        assert provider._span_processor is not None
+        provider.shutdown()
 
 
 # T042: Unit tests for authentication header injection in TelemetryProvider

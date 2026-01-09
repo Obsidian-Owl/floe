@@ -13,6 +13,7 @@ Requirements Covered:
 - FR-009: gRPC protocol selection
 - FR-010: HTTP protocol selection
 - FR-011: Authentication header injection
+- FR-024: Configurable BatchSpanProcessor
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -202,7 +203,14 @@ class TelemetryProvider:
             )
 
         # Add BatchSpanProcessor for async export (FR-024)
-        self._span_processor = BatchSpanProcessor(exporter)
+        batch_config = self._config.batch_processor
+        self._span_processor = BatchSpanProcessor(
+            span_exporter=exporter,
+            max_queue_size=batch_config.max_queue_size,
+            schedule_delay_millis=batch_config.schedule_delay_millis,
+            max_export_batch_size=batch_config.max_export_batch_size,
+            export_timeout_millis=batch_config.export_timeout_millis,
+        )
         self._tracer_provider.add_span_processor(self._span_processor)
 
         # Register as global tracer provider
