@@ -34,6 +34,7 @@ from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
 
 from floe_catalog_polaris.config import PolarisCatalogConfig
+from floe_catalog_polaris.retry import with_retry
 from floe_catalog_polaris.tracing import catalog_span, get_tracer, set_error_attributes
 
 if TYPE_CHECKING:
@@ -241,9 +242,13 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
                 log.debug("catalog_config_built", config_keys=list(catalog_config.keys()))
 
-                # Load the PyIceberg REST catalog
+                # Load the PyIceberg REST catalog with retry for transient failures
                 # Using "polaris" as the catalog name for identification
-                self._catalog = load_catalog("polaris", **catalog_config)
+                load_with_retry = with_retry(
+                    load_catalog,
+                    max_retries=self._config.max_retries,
+                )
+                self._catalog = load_with_retry("polaris", **catalog_config)
 
                 log.info("polaris_catalog_connected")
 
