@@ -25,6 +25,11 @@ classifiers = [
 dependencies = [
     "pydantic>=2.0",
     "structlog>=24.0",
+    # OpenTelemetry SDK and exporters (per ADR-0006, spec 001-opentelemetry)
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.20.0",
 ]
 
 [project.optional-dependencies]
