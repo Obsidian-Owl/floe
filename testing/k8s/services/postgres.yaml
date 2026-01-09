@@ -1,0 +1,109 @@
+# PostgreSQL for integration testing (Dagster metadata, Polaris backend)
+# NOT production-ready - for testing only
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: floe-test
+data:
+  POSTGRES_DB: floe_test
+  POSTGRES_USER: floe
+  # Init script to create multiple databases
+  init-databases.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      CREATE DATABASE dagster;
+      CREATE DATABASE polaris;
+      GRANT ALL PRIVILEGES ON DATABASE dagster TO floe;
+      GRANT ALL PRIVILEGES ON DATABASE polaris TO floe;
+    EOSQL
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: floe-test
+type: Opaque
+stringData:
+  # Test-only password - NOT for production
+  POSTGRES_PASSWORD: floe_test_password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: floe-test
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+            - secretRef:
+                name: postgres-secret
+          volumeMounts:
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - floe
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - floe
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-config
+            items:
+              - key: init-databases.sh
+                path: init-databases.sh
+        - name: postgres-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: floe-test
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

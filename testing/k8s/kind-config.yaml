@@ -1,0 +1,42 @@
+# Kind cluster configuration for floe integration testing
+# See: https://kind.sigs.k8s.io/docs/user/configuration/
+#
+# Usage:
+#   kind create cluster --config testing/k8s/kind-config.yaml
+#   make kind-up
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: floe-test
+
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.29.0
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        # Resource reservations for system stability
+        systemReserved:
+          cpu: 100m
+          memory: 100Mi
+        kubeReserved:
+          cpu: 50m
+          memory: 50Mi
+    extraMounts:
+      # Mount for test artifacts
+      - hostPath: /tmp/floe-test-artifacts
+        containerPath: /artifacts
+
+networking:
+  # Pod network CIDR
+  podSubnet: "10.244.0.0/16"
+  # Service network CIDR
+  serviceSubnet: "10.96.0.0/16"
+  # Use iptables for kube-proxy (faster startup than ipvs)
+  kubeProxyMode: iptables
+
+# Containerd configuration for faster image pulls
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+      endpoint = ["http://kind-registry:5000"]
