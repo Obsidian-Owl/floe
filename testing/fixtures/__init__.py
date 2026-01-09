@@ -48,6 +48,62 @@ from testing.fixtures.services import (
     check_service_health,
 )
 
+# Phase 6 exports - Service fixtures
+from testing.fixtures.dagster import (
+    DagsterConfig,
+    DagsterConnectionError,
+    check_webserver_health,
+    create_dagster_instance,
+    dagster_instance_context,
+    ephemeral_instance,
+)
+from testing.fixtures.data import (
+    create_model_instance,
+    generate_random_string,
+    generate_test_data,
+    generate_test_email,
+    generate_test_id,
+    generate_test_timestamp,
+    sample_customer_data,
+    sample_order_data,
+    sample_records,
+)
+from testing.fixtures.duckdb import (
+    DuckDBConfig,
+    DuckDBConnectionError,
+    create_duckdb_connection,
+    create_file_connection,
+    create_memory_connection,
+    duckdb_connection_context,
+    execute_script,
+)
+from testing.fixtures.minio import (
+    MinIOConfig,
+    MinIOConnectionError,
+    cleanup_bucket,
+    create_minio_client,
+    delete_bucket_contents,
+    ensure_bucket,
+    minio_client_context,
+)
+from testing.fixtures.polaris import (
+    PolarisConfig,
+    PolarisConnectionError,
+    create_polaris_catalog,
+    create_test_namespace,
+    drop_test_namespace,
+    namespace_exists,
+    polaris_catalog_context,
+)
+from testing.fixtures.postgres import (
+    PostgresConfig,
+    PostgresConnectionError,
+    create_connection,
+    create_test_database,
+    drop_test_database,
+    postgres_connection_context,
+)
+
 __all__ = [
     # Polling utilities
     "PollingConfig",
@@ -63,4 +119,52 @@ __all__ = [
     "ServiceUnavailableError",
     "check_infrastructure",
     "check_service_health",
+    # PostgreSQL fixtures
+    "PostgresConfig",
+    "PostgresConnectionError",
+    "create_connection",
+    "create_test_database",
+    "drop_test_database",
+    "postgres_connection_context",
+    # MinIO fixtures
+    "MinIOConfig",
+    "MinIOConnectionError",
+    "cleanup_bucket",
+    "create_minio_client",
+    "delete_bucket_contents",
+    "ensure_bucket",
+    "minio_client_context",
+    # Polaris fixtures
+    "PolarisConfig",
+    "PolarisConnectionError",
+    "create_polaris_catalog",
+    "create_test_namespace",
+    "drop_test_namespace",
+    "namespace_exists",
+    "polaris_catalog_context",
+    # DuckDB fixtures
+    "DuckDBConfig",
+    "DuckDBConnectionError",
+    "create_duckdb_connection",
+    "create_file_connection",
+    "create_memory_connection",
+    "duckdb_connection_context",
+    "execute_script",
+    # Dagster fixtures
+    "DagsterConfig",
+    "DagsterConnectionError",
+    "check_webserver_health",
+    "create_dagster_instance",
+    "dagster_instance_context",
+    "ephemeral_instance",
+    # Data generation helpers
+    "create_model_instance",
+    "generate_random_string",
+    "generate_test_data",
+    "generate_test_email",
+    "generate_test_id",
+    "generate_test_timestamp",
+    "sample_customer_data",
+    "sample_order_data",
+    "sample_records",
 ]
