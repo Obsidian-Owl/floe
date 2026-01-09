@@ -29,6 +29,7 @@ __version__ = "0.1.0"
 
 # Error hierarchy
 from floe_core.plugin_errors import (
+    # Plugin registry errors
     CircularDependencyError,
     DuplicatePluginError,
     MissingDependencyError,
@@ -37,6 +38,13 @@ from floe_core.plugin_errors import (
     PluginIncompatibleError,
     PluginNotFoundError,
     PluginStartupError,
+    # Catalog operation errors
+    AuthenticationError,
+    CatalogError,
+    CatalogUnavailableError,
+    ConflictError,
+    NotFoundError,
+    NotSupportedError,
 )
 
 # Health types and PluginMetadata ABC
@@ -82,7 +90,7 @@ __all__: list[str] = [
     "__version__",
     # Plugin type categories
     "PluginType",
-    # Error hierarchy
+    # Plugin registry errors
     "CircularDependencyError",
     "DuplicatePluginError",
     "MissingDependencyError",
@@ -91,6 +99,13 @@ __all__: list[str] = [
     "PluginIncompatibleError",
     "PluginNotFoundError",
     "PluginStartupError",
+    # Catalog operation errors
+    "AuthenticationError",
+    "CatalogError",
+    "CatalogUnavailableError",
+    "ConflictError",
+    "NotFoundError",
+    "NotSupportedError",
     # Version compatibility
     "FLOE_PLUGIN_API_VERSION",
     "FLOE_PLUGIN_API_MIN_VERSION",
