@@ -49,8 +49,9 @@ class TestPolarisCatalogPluginInstantiation:
     @pytest.mark.requirement("FR-006")
     def test_plugin_is_subclass_of_catalog_plugin(self) -> None:
         """Test PolarisCatalogPlugin inherits from CatalogPlugin ABC."""
-        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
         from floe_core import CatalogPlugin
+
+        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
         assert issubclass(PolarisCatalogPlugin, CatalogPlugin)
 
@@ -292,3 +293,129 @@ class TestPolarisCatalogPluginConfigSchema:
         schema = plugin.get_config_schema()
 
         assert schema.__name__ == "PolarisCatalogConfig"
+
+
+class TestPolarisCatalogPluginConnect:
+    """Unit tests for PolarisCatalogPlugin connect() method.
+
+    These tests use mocking to verify the connect() method builds
+    the correct configuration without requiring a real Polaris instance.
+    """
+
+    @pytest.fixture
+    def plugin(self) -> CatalogPlugin:
+        """Create a PolarisCatalogPlugin instance for testing."""
+        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+        config = _create_test_config()
+        return PolarisCatalogPlugin(config=config)
+
+    @pytest.mark.requirement("FR-006")
+    def test_connect_method_is_callable(self, plugin: CatalogPlugin) -> None:
+        """Test connect() method exists and is callable."""
+        assert hasattr(plugin, "connect")
+        assert callable(plugin.connect)
+
+    @pytest.mark.requirement("FR-009")
+    def test_connect_builds_rest_catalog_config(self, plugin: CatalogPlugin) -> None:
+        """Test connect() builds proper REST catalog configuration.
+
+        This test mocks pyiceberg.catalog.load_catalog to verify
+        the configuration passed to it is correct.
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ) as mock_load:
+            result = plugin.connect({})
+
+            # Verify load_catalog was called
+            mock_load.assert_called_once()
+
+            # Get the call arguments
+            call_args = mock_load.call_args
+            catalog_name = call_args[0][0]  # First positional arg
+            config_kwargs = call_args[1]  # Keyword args
+
+            # Verify catalog name
+            assert catalog_name == "polaris"
+
+            # Verify config keys
+            assert config_kwargs["type"] == "rest"
+            assert config_kwargs["uri"] == "https://polaris.example.com/api/catalog"
+            assert config_kwargs["warehouse"] == "test_warehouse"
+            assert "credential" in config_kwargs
+            assert "test-client:" in config_kwargs["credential"]
+            assert config_kwargs["token-refresh-enabled"] == "true"
+
+            # Verify result is the mock catalog
+            assert result == mock_catalog
+
+    @pytest.mark.requirement("FR-009")
+    def test_connect_includes_oauth2_token_url(self, plugin: CatalogPlugin) -> None:
+        """Test connect() includes OAuth2 token URL in config."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ) as mock_load:
+            plugin.connect({})
+
+            config_kwargs = mock_load.call_args[1]
+            assert config_kwargs["oauth2-server-uri"] == (
+                "https://auth.example.com/oauth/token"
+            )
+
+    @pytest.mark.requirement("FR-009")
+    def test_connect_accepts_scope_override(self, plugin: CatalogPlugin) -> None:
+        """Test connect() accepts scope parameter override."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ) as mock_load:
+            plugin.connect({"scope": "PRINCIPAL_ROLE:data_engineer"})
+
+            config_kwargs = mock_load.call_args[1]
+            assert config_kwargs["scope"] == "PRINCIPAL_ROLE:data_engineer"
+
+    @pytest.mark.requirement("FR-009")
+    def test_connect_merges_additional_config(self, plugin: CatalogPlugin) -> None:
+        """Test connect() merges additional configuration from argument."""
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ) as mock_load:
+            plugin.connect({"py-io-impl": "pyiceberg.io.fsspec.FsspecFileIO"})
+
+            config_kwargs = mock_load.call_args[1]
+            assert config_kwargs["py-io-impl"] == "pyiceberg.io.fsspec.FsspecFileIO"
+
+    @pytest.mark.requirement("FR-009")
+    def test_connect_stores_catalog_reference(self) -> None:
+        """Test connect() stores the catalog reference internally."""
+        from unittest.mock import MagicMock, patch
+
+        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+        config = _create_test_config()
+        plugin = PolarisCatalogPlugin(config=config)
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ):
+            plugin.connect({})
+
+            # Access private attribute to verify storage
+            assert plugin._catalog == mock_catalog

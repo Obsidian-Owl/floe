@@ -28,13 +28,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from floe_core import CatalogPlugin, HealthState, HealthStatus
 from floe_core.plugins.catalog import Catalog
+from pyiceberg.catalog import load_catalog
 
 from floe_catalog_polaris.config import PolarisCatalogConfig
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+    from pyiceberg.catalog import Catalog as PyIcebergCatalog
+
+logger = structlog.get_logger(__name__)
 
 
 class PolarisCatalogPlugin(CatalogPlugin):
@@ -64,6 +69,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             config: Configuration for connecting to Polaris catalog.
         """
         self._config = config
+        self._catalog: PyIcebergCatalog | None = None
 
     @property
     def config(self) -> PolarisCatalogConfig:
@@ -161,20 +167,78 @@ class PolarisCatalogPlugin(CatalogPlugin):
     # =========================================================================
 
     def connect(self, config: dict[str, Any]) -> Catalog:
-        """Connect to the Polaris catalog.
+        """Connect to the Polaris catalog using PyIceberg REST catalog.
+
+        Establishes a connection to the Polaris REST catalog using OAuth2
+        client credentials authentication. The connection uses the plugin's
+        stored configuration, optionally merged with additional config.
 
         Args:
             config: Additional connection configuration. Merged with
-                the plugin's stored configuration.
+                the plugin's stored configuration. Supported keys:
+                - scope: OAuth2 scope override (default: "PRINCIPAL_ROLE:ALL")
+                - Additional PyIceberg catalog configuration
 
         Returns:
             A PyIceberg-compatible Catalog instance.
 
         Raises:
-            NotImplementedError: This method is not yet implemented.
+            ConnectionError: If unable to connect to the catalog.
+            AuthenticationError: If OAuth2 credentials are invalid.
+
+        Example:
+            >>> plugin = PolarisCatalogPlugin(config)
+            >>> catalog = plugin.connect({})
+            >>> namespaces = catalog.list_namespaces()
         """
-        # Stub - will be implemented in T032
-        raise NotImplementedError("connect() not yet implemented")
+        log = logger.bind(
+            uri=self._config.uri,
+            warehouse=self._config.warehouse,
+        )
+        log.info("connecting_to_polaris_catalog")
+
+        # Build OAuth2 credential string in format expected by PyIceberg
+        # PyIceberg accepts "client_id:client_secret" format
+        client_id = self._config.oauth2.client_id
+        client_secret = self._config.oauth2.client_secret.get_secret_value()
+        credential = f"{client_id}:{client_secret}"
+
+        # Build catalog configuration
+        catalog_config: dict[str, Any] = {
+            "type": "rest",
+            "uri": self._config.uri,
+            "warehouse": self._config.warehouse,
+            "credential": credential,
+            # Enable automatic token refresh
+            "token-refresh-enabled": "true",
+        }
+
+        # Add OAuth2 token URL if different from default catalog endpoint
+        # PyIceberg defaults to {uri}/v1/oauth/tokens if not specified
+        token_url = self._config.oauth2.token_url
+        if token_url:
+            catalog_config["oauth2-server-uri"] = token_url
+
+        # Add scope if configured
+        scope = config.get("scope", self._config.oauth2.scope)
+        if scope:
+            catalog_config["scope"] = scope
+
+        # Merge any additional configuration from the config argument
+        for key, value in config.items():
+            if key not in ("scope",):  # Already handled above
+                catalog_config[key] = value
+
+        log.debug("catalog_config_built", config_keys=list(catalog_config.keys()))
+
+        # Load the PyIceberg REST catalog
+        # Using "polaris" as the catalog name for identification
+        self._catalog = load_catalog("polaris", **catalog_config)
+
+        log.info("polaris_catalog_connected")
+
+        # Return the catalog (which implements the Catalog protocol)
+        return self._catalog  # type: ignore[return-value]
 
     def create_namespace(
         self,
