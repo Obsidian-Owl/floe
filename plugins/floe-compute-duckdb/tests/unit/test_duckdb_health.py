@@ -1,0 +1,244 @@
+"""Unit tests for DuckDB connection health monitoring.
+
+Tests for FR-018 (validate_connection method) and FR-019 (latency measurement).
+
+Note: Unit tests mock the duckdb module. Integration tests with real DuckDB
+should go in tests/integration/.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from floe_core import (
+    ComputeConfig,
+    ConnectionResult,
+    ConnectionStatus,
+)
+from floe_compute_duckdb import DuckDBComputePlugin
+
+
+@pytest.fixture
+def plugin() -> DuckDBComputePlugin:
+    """Create a DuckDBComputePlugin instance."""
+    return DuckDBComputePlugin()
+
+
+@pytest.fixture
+def memory_config() -> ComputeConfig:
+    """Create in-memory DuckDB config."""
+    return ComputeConfig(
+        plugin="duckdb",
+        connection={"path": ":memory:"},
+    )
+
+
+@pytest.fixture
+def mock_duckdb_success() -> MagicMock:
+    """Create a mock duckdb module that succeeds."""
+    mock_duckdb = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.fetchone.return_value = (1,)
+    mock_duckdb.connect.return_value = mock_conn
+    return mock_duckdb
+
+
+class TestValidateConnectionLatency:
+    """Test validate_connection latency measurement (FR-019)."""
+
+    @pytest.mark.requirement("001-FR-019")
+    def test_validate_connection_returns_latency_ms(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection returns latency_ms in result."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(memory_config)
+
+        assert hasattr(result, "latency_ms")
+        assert isinstance(result.latency_ms, float)
+
+    @pytest.mark.requirement("001-FR-019")
+    def test_validate_connection_latency_is_non_negative(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection latency_ms is non-negative."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(memory_config)
+
+        assert result.latency_ms >= 0
+
+    @pytest.mark.requirement("001-FR-019")
+    def test_validate_connection_latency_is_reasonable(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection latency_ms is reasonable (< 5 seconds)."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(memory_config)
+
+        # Mocked connection should be very fast
+        assert result.latency_ms < 5000  # 5 seconds max
+
+    @pytest.mark.requirement("001-FR-019")
+    def test_validate_connection_latency_measured_on_success(
+        self, plugin: DuckDBComputePlugin, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test latency is measured on successful connection."""
+        config = ComputeConfig(
+            plugin="duckdb",
+            connection={"path": ":memory:"},
+        )
+
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(config)
+
+        # Latency should be measured (non-negative)
+        assert result.latency_ms >= 0
+        assert result.status == ConnectionStatus.HEALTHY
+
+
+class TestValidateConnectionStatus:
+    """Test validate_connection status reporting (FR-018)."""
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_returns_connection_result(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection returns ConnectionResult."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(memory_config)
+
+        assert isinstance(result, ConnectionResult)
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_healthy_for_success(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection returns HEALTHY on successful connection."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(memory_config)
+
+        assert result.status == ConnectionStatus.HEALTHY
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_includes_message(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection includes human-readable message."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            result = plugin.validate_connection(memory_config)
+
+        assert result.message != ""
+        assert ":memory:" in result.message or "DuckDB" in result.message
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_unhealthy_on_error(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
+        """Test validate_connection returns UNHEALTHY on error."""
+        mock_duckdb = MagicMock()
+        mock_duckdb.connect.side_effect = Exception("Connection failed")
+
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/nonexistent/path/db.duckdb"},
+            )
+            result = plugin.validate_connection(config)
+
+        assert result.status == ConnectionStatus.UNHEALTHY
+        assert "failed" in result.message.lower() or "error" in result.message.lower()
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_latency_measured_on_error(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
+        """Test validate_connection measures latency even on error."""
+        def delayed_error(*args: Any, **kwargs: Any) -> None:
+            raise Exception("Connection failed")
+
+        mock_duckdb = MagicMock()
+        mock_duckdb.connect.side_effect = delayed_error
+
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/nonexistent/path/db.duckdb"},
+            )
+            result = plugin.validate_connection(config)
+
+        # Latency should still be measured
+        assert result.latency_ms >= 0
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_unhealthy_includes_warnings(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
+        """Test validate_connection includes warnings on error."""
+        mock_duckdb = MagicMock()
+        mock_duckdb.connect.side_effect = Exception("Connection timeout")
+
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/nonexistent/path/db.duckdb"},
+            )
+            result = plugin.validate_connection(config)
+
+        assert result.status == ConnectionStatus.UNHEALTHY
+        # Should include error details in warnings
+        assert len(result.warnings) >= 1 or "timeout" in result.message.lower()
+
+
+class TestValidateConnectionNativeDriver:
+    """Test validate_connection uses native driver (FR-018)."""
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_uses_duckdb_driver(
+        self, plugin: DuckDBComputePlugin, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection uses native duckdb driver, not dbt debug."""
+        # This test verifies the implementation uses duckdb.connect directly
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": ":memory:"},
+            )
+            plugin.validate_connection(config)
+
+        # Verify native driver was called
+        mock_duckdb_success.connect.assert_called_once()
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_executes_validation_query(
+        self, plugin: DuckDBComputePlugin, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection executes a validation query."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": ":memory:"},
+            )
+            plugin.validate_connection(config)
+
+        # Verify execute was called (validation query)
+        mock_conn = mock_duckdb_success.connect.return_value
+        mock_conn.execute.assert_called()
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_closes_connection(
+        self, plugin: DuckDBComputePlugin, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection properly closes the connection."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": ":memory:"},
+            )
+            plugin.validate_connection(config)
+
+        # Verify connection was closed
+        mock_conn = mock_duckdb_success.connect.return_value
+        mock_conn.close.assert_called_once()
