@@ -4,6 +4,7 @@ This module provides OpenTelemetry-based telemetry capabilities for the floe
 data platform, including:
 
 - TelemetryConfig: Configuration for telemetry emission
+- TelemetryProvider: SDK lifecycle management (init, shutdown, context manager)
 - ResourceAttributes: Service identification for OTel resources
 - SamplingConfig: Environment-based trace sampling
 - FloeSpanAttributes: Floe semantic conventions for spans
@@ -14,7 +15,7 @@ The telemetry architecture follows a three-layer model (per ADR-0006):
 - Layer 3 (Pluggable): Backend storage/visualization (TelemetryBackendPlugin)
 
 Example:
-    >>> from floe_core.telemetry import TelemetryConfig, ResourceAttributes
+    >>> from floe_core.telemetry import TelemetryConfig, TelemetryProvider, ResourceAttributes
     >>> attrs = ResourceAttributes(
     ...     service_name="my-service",
     ...     service_version="1.0.0",
@@ -25,6 +26,9 @@ Example:
     ...     floe_mode="dev",
     ... )
     >>> config = TelemetryConfig(resource_attributes=attrs)
+    >>> with TelemetryProvider(config) as provider:
+    ...     # Telemetry is active
+    ...     pass
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -54,12 +58,18 @@ from floe_core.telemetry.conventions import (
     FloeSpanAttributes,
 )
 
+# Provider
+from floe_core.telemetry.provider import ProviderState, TelemetryProvider
+
 __all__: list[str] = [
     # Configuration models
     "TelemetryConfig",
     "ResourceAttributes",
     "SamplingConfig",
     "TelemetryAuth",
+    # Provider
+    "TelemetryProvider",
+    "ProviderState",
     # Semantic conventions
     "FloeSpanAttributes",
     # Semantic convention constants
