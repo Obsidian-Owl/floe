@@ -25,5 +25,27 @@ CLI:
 
 from __future__ import annotations
 
-# Exports will be added as checker is implemented in Phase 5
-__all__: list[str] = []
+# Phase 5 exports - Traceability checker
+from testing.traceability.checker import (
+    RequirementCollector,
+    RequirementCoverage,
+    TraceabilityReport,
+    calculate_coverage,
+    collect_requirements,
+    collect_tests_without_markers,
+    generate_report,
+    get_requirement_markers,
+    load_spec_requirements,
+)
+
+__all__ = [
+    "RequirementCollector",
+    "RequirementCoverage",
+    "TraceabilityReport",
+    "calculate_coverage",
+    "collect_requirements",
+    "collect_tests_without_markers",
+    "generate_report",
+    "get_requirement_markers",
+    "load_spec_requirements",
+]
