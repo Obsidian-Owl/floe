@@ -1,0 +1,267 @@
+"""Telemetry configuration contracts (Pydantic v2).
+
+These models define the contract for OpenTelemetry configuration
+in CompiledArtifacts. Platform Team configures via manifest.yaml;
+Data Engineers inherit configuration.
+
+Contract Version: 1.0.0
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+
+
+class ResourceAttributes(BaseModel):
+    """OpenTelemetry resource attributes for service identification.
+
+    Applied to all traces, metrics, and logs from the service.
+    Follows OpenTelemetry semantic conventions plus Floe-specific attributes.
+
+    Attributes:
+        service_name: Service identifier (e.g., 'floe-core', 'floe-dagster')
+        service_version: Service version following semver
+        deployment_environment: Target environment (dev, staging, prod)
+        floe_namespace: Polaris catalog namespace (mandatory per ADR-0006)
+        floe_product_name: Data product name
+        floe_product_version: Data product version
+        floe_mode: Execution mode matching environment
+
+    Examples:
+        >>> attrs = ResourceAttributes(
+        ...     service_name="floe-core",
+        ...     service_version="1.0.0",
+        ...     deployment_environment="prod",
+        ...     floe_namespace="analytics",
+        ...     floe_product_name="customer-360",
+        ...     floe_product_version="2.1.0",
+        ...     floe_mode="prod",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # OpenTelemetry standard attributes
+    service_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Service identifier",
+    )
+    service_version: str = Field(
+        ...,
+        pattern=r"^\d+\.\d+\.\d+.*$",
+        description="Service version (semver)",
+    )
+    deployment_environment: Literal["dev", "staging", "prod"] = Field(
+        ...,
+        description="Deployment environment",
+    )
+
+    # Floe-specific semantic conventions (per ADR-0006)
+    floe_namespace: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Polaris catalog namespace (mandatory)",
+    )
+    floe_product_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Data product name",
+    )
+    floe_product_version: str = Field(
+        ...,
+        description="Data product version",
+    )
+    floe_mode: Literal["dev", "staging", "prod"] = Field(
+        ...,
+        description="Execution mode",
+    )
+
+    def to_otel_dict(self) -> dict[str, str]:
+        """Convert to OpenTelemetry resource attributes dictionary.
+
+        Returns:
+            Dictionary with OTel semantic convention keys.
+        """
+        return {
+            "service.name": self.service_name,
+            "service.version": self.service_version,
+            "deployment.environment": self.deployment_environment,
+            "floe.namespace": self.floe_namespace,
+            "floe.product.name": self.floe_product_name,
+            "floe.product.version": self.floe_product_version,
+            "floe.mode": self.floe_mode,
+        }
+
+
+class TelemetryAuth(BaseModel):
+    """Authentication for OTLP exports.
+
+    Supports API key and bearer token authentication for
+    SaaS backends (Datadog, Grafana Cloud, etc.).
+
+    Attributes:
+        auth_type: Authentication mechanism
+        api_key: API key credential (SecretStr)
+        bearer_token: Bearer token credential (SecretStr)
+        header_name: HTTP header for credentials
+
+    Examples:
+        >>> auth = TelemetryAuth(
+        ...     auth_type="api_key",
+        ...     api_key=SecretStr("dd-api-key-xxx"),
+        ...     header_name="DD-API-KEY",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    auth_type: Literal["api_key", "bearer"] = Field(
+        ...,
+        description="Authentication mechanism",
+    )
+    api_key: SecretStr | None = Field(
+        default=None,
+        description="API key (for api_key auth_type)",
+    )
+    bearer_token: SecretStr | None = Field(
+        default=None,
+        description="Bearer token (for bearer auth_type)",
+    )
+    header_name: str = Field(
+        default="Authorization",
+        description="HTTP header name for credentials",
+    )
+
+    @model_validator(mode="after")
+    def validate_credentials(self) -> Self:
+        """Validate that required credentials are provided."""
+        if self.auth_type == "api_key" and not self.api_key:
+            raise ValueError("api_key required when auth_type is 'api_key'")
+        if self.auth_type == "bearer" and not self.bearer_token:
+            raise ValueError("bearer_token required when auth_type is 'bearer'")
+        return self
+
+
+class SamplingConfig(BaseModel):
+    """Environment-based sampling configuration.
+
+    Controls trace sampling ratio per environment to balance
+    observability coverage with data volume/cost.
+
+    Attributes:
+        dev: Sampling ratio for development (default: 100%)
+        staging: Sampling ratio for staging (default: 50%)
+        prod: Sampling ratio for production (default: 10%)
+
+    Examples:
+        >>> sampling = SamplingConfig(dev=1.0, staging=0.5, prod=0.1)
+        >>> sampling.get_ratio("prod")
+        0.1
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dev: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Development sampling ratio (0.0-1.0)",
+    )
+    staging: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Staging sampling ratio (0.0-1.0)",
+    )
+    prod: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Production sampling ratio (0.0-1.0)",
+    )
+
+    def get_ratio(self, environment: str) -> float:
+        """Get sampling ratio for environment.
+
+        Args:
+            environment: Target environment name
+
+        Returns:
+            Sampling ratio (0.0-1.0), defaults to 1.0 if unknown
+        """
+        return getattr(self, environment, 1.0)
+
+
+class TelemetryConfig(BaseModel):
+    """Configuration for OpenTelemetry telemetry emission.
+
+    Central configuration included in CompiledArtifacts.
+    Platform Team configures via manifest.yaml; Data Engineers inherit.
+
+    Three-Layer Architecture (per ADR-0006, ADR-0035):
+    - Layer 1 (Emission): OpenTelemetry SDK - ENFORCED
+    - Layer 2 (Collection): OTLP Collector - ENFORCED
+    - Layer 3 (Backend): Storage/Viz - PLUGGABLE (via TelemetryBackendPlugin)
+
+    Attributes:
+        enabled: Whether telemetry is enabled (default: True)
+        otlp_endpoint: OTLP Collector endpoint
+        otlp_protocol: Export protocol (grpc or http)
+        sampling: Environment-based sampling configuration
+        resource_attributes: Service identification attributes
+        authentication: Optional OTLP authentication
+
+    Examples:
+        >>> config = TelemetryConfig(
+        ...     enabled=True,
+        ...     otlp_endpoint="http://otel-collector:4317",
+        ...     resource_attributes=ResourceAttributes(...),
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable telemetry emission",
+    )
+    otlp_endpoint: str = Field(
+        default="http://otel-collector:4317",
+        description="OTLP Collector endpoint (Layer 2)",
+    )
+    otlp_protocol: Literal["grpc", "http"] = Field(
+        default="grpc",
+        description="OTLP export protocol",
+    )
+    sampling: SamplingConfig = Field(
+        default_factory=SamplingConfig,
+        description="Environment-based sampling",
+    )
+    resource_attributes: ResourceAttributes = Field(
+        ...,
+        description="Service identification attributes",
+    )
+    authentication: TelemetryAuth | None = Field(
+        default=None,
+        description="Optional OTLP authentication",
+    )
+
+    def get_sampling_ratio(self, environment: str) -> float:
+        """Get sampling ratio for the specified environment.
+
+        Args:
+            environment: Target environment (dev, staging, prod)
+
+        Returns:
+            Sampling ratio (0.0-1.0)
+        """
+        return self.sampling.get_ratio(environment)

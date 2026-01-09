@@ -61,6 +61,28 @@ from floe_core.telemetry.conventions import (
 # Provider
 from floe_core.telemetry.provider import ProviderState, TelemetryProvider
 
+# Propagation utilities
+from floe_core.telemetry.propagation import (
+    BAGGAGE_MODE,
+    BAGGAGE_NAMESPACE,
+    BAGGAGE_PRODUCT_NAME,
+    BAGGAGE_PRODUCT_VERSION,
+    configure_propagators,
+    create_context_from_headers,
+    extract_context,
+    get_baggage_value,
+    get_current_span,
+    get_current_span_context,
+    get_propagator,
+    get_span_id,
+    get_trace_id,
+    inject_context,
+    inject_headers,
+    is_trace_active,
+    set_baggage_value,
+    set_floe_baggage,
+)
+
 __all__: list[str] = [
     # Configuration models
     "TelemetryConfig",
@@ -81,4 +103,24 @@ __all__: list[str] = [
     "FLOE_JOB_TYPE",
     "FLOE_DBT_MODEL",
     "FLOE_DAGSTER_ASSET",
+    # Propagation
+    "configure_propagators",
+    "get_propagator",
+    "inject_context",
+    "extract_context",
+    "inject_headers",
+    "create_context_from_headers",
+    "set_baggage_value",
+    "get_baggage_value",
+    "set_floe_baggage",
+    "get_current_span",
+    "get_current_span_context",
+    "get_trace_id",
+    "get_span_id",
+    "is_trace_active",
+    # Baggage keys
+    "BAGGAGE_NAMESPACE",
+    "BAGGAGE_PRODUCT_NAME",
+    "BAGGAGE_PRODUCT_VERSION",
+    "BAGGAGE_MODE",
 ]
