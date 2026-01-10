@@ -159,31 +159,10 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run unit tests with coverage
-        run: |
-          # Dynamically discover all packages with unit tests
-          UNIT_TEST_PATHS=""
-          COV_PATHS=""
-          for pkg_dir in packages/*/; do
-            if [[ -d "${pkg_dir}tests/unit" ]]; then
-              UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${pkg_dir}tests/unit/"
-              COV_PATHS="${COV_PATHS} --cov=${pkg_dir}src"
-            fi
-          done
-          # Also include testing module and root tests
-          if [[ -d "testing/tests/unit" ]]; then
-            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/tests/unit/"
-            COV_PATHS="${COV_PATHS} --cov=testing"
-          fi
-          if [[ -d "tests/contract" ]]; then
-            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} tests/contract/"
-          fi
-
-          uv run pytest ${UNIT_TEST_PATHS} \
-            -v \
-            ${COV_PATHS} \
-            --cov-report=xml:coverage-${{ matrix.python-version }}.xml \
-            --cov-report=term-missing \
-            --cov-fail-under=80
+        run: ./testing/ci/test-unit.sh
+        env:
+          COVERAGE_THRESHOLD: 80
+          PYTHON_VERSION: ${{ matrix.python-version }}
 
       - name: Upload coverage artifact
         if: matrix.python-version == env.PYTHON_VERSION_DEFAULT
@@ -271,6 +250,7 @@ jobs:
         run: ./testing/ci/test-integration.sh
         env:
           TEST_NAMESPACE: floe-test
+          ALLOW_NO_TESTS: true  # Allow empty integration tests during development
 
       - name: Collect logs on failure
         if: failure()

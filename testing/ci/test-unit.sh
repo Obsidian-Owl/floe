@@ -7,6 +7,7 @@
 # Environment:
 #   COVERAGE_THRESHOLD  Minimum coverage percentage (default: 80)
 #   COVERAGE_REPORT     Coverage report format: xml, html, term (default: xml)
+#   PYTHON_VERSION      Python version suffix for coverage file (e.g., "3.10" -> coverage-3.10.xml)
 #
 # Note: This script dynamically discovers all packages with tests.
 #       New packages are automatically included when they have a tests/unit/ directory.
@@ -16,8 +17,16 @@ set -euo pipefail
 # Configuration
 COVERAGE_THRESHOLD="${COVERAGE_THRESHOLD:-80}"
 COVERAGE_REPORT="${COVERAGE_REPORT:-xml}"
+PYTHON_VERSION="${PYTHON_VERSION:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Coverage file name (optionally include Python version)
+if [[ -n "${PYTHON_VERSION}" ]]; then
+    COVERAGE_FILE="coverage-${PYTHON_VERSION}.xml"
+else
+    COVERAGE_FILE="coverage.xml"
+fi
 
 cd "${PROJECT_ROOT}"
 
@@ -62,7 +71,7 @@ fi
 COVERAGE_FLAGS="${COVERAGE_SOURCES}"
 case "${COVERAGE_REPORT}" in
     xml)
-        COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=xml:coverage.xml"
+        COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=xml:${COVERAGE_FILE}"
         ;;
     html)
         COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=html:coverage_html"
@@ -71,7 +80,7 @@ case "${COVERAGE_REPORT}" in
         COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=term-missing"
         ;;
     *)
-        COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=xml:coverage.xml --cov-report=term-missing"
+        COVERAGE_FLAGS="${COVERAGE_FLAGS} --cov-report=xml:${COVERAGE_FILE} --cov-report=term-missing"
         ;;
 esac
 
