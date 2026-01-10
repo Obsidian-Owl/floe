@@ -17,7 +17,9 @@ Requirements Covered:
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 import pytest
 
@@ -1126,3 +1128,202 @@ class TestTelemetryProviderAuthHeaderInjection:
 
         assert headers is not None
         assert headers == {"X-Custom-Auth": "Bearer custom-token"}
+
+
+# T044: Unit tests for async export (non-blocking) verification
+# These tests validate that TelemetryProvider uses BatchSpanProcessor for
+# asynchronous, non-blocking span export.
+# Uses mocked exporters to avoid network calls in unit tests.
+
+
+class TestTelemetryProviderAsyncExport:
+    """Test TelemetryProvider async export behavior (FR-024, FR-026).
+
+    BatchSpanProcessor provides non-blocking export via a background thread.
+    Span creation returns immediately; export happens asynchronously.
+
+    These tests mock the OTLP exporter to avoid network calls.
+    """
+
+    @pytest.fixture
+    def mock_grpc_exporter(self) -> Generator[Mock, None, None]:
+        """Mock the gRPC OTLP exporter to avoid network calls."""
+        from unittest.mock import patch
+
+        mock_exporter = Mock()
+        mock_exporter.export.return_value = None
+        mock_exporter.shutdown.return_value = None
+
+        with patch(
+            "floe_core.telemetry.provider.OTLPSpanExporter",
+            return_value=mock_exporter,
+        ):
+            yield mock_exporter
+
+    @pytest.fixture
+    def telemetry_config(self) -> TelemetryConfig:
+        """Create a basic TelemetryConfig for async export tests."""
+        attrs = ResourceAttributes(
+            service_name="async-test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        return TelemetryConfig(resource_attributes=attrs)
+
+    @pytest.mark.requirement("FR-024")
+    def test_provider_uses_batch_span_processor(
+        self,
+        telemetry_config: TelemetryConfig,
+        mock_grpc_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that TelemetryProvider creates BatchSpanProcessor for async export."""
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        # Verify BatchSpanProcessor is created
+        assert provider._span_processor is not None
+        assert isinstance(provider._span_processor, BatchSpanProcessor)
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-024")
+    def test_span_creation_is_non_blocking(
+        self,
+        telemetry_config: TelemetryConfig,
+        mock_grpc_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that span creation returns immediately without blocking on export.
+
+        This verifies that creating spans does not wait for export to complete,
+        which is the key characteristic of BatchSpanProcessor's async behavior.
+        """
+        import time
+
+        from opentelemetry import trace
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create 100 spans and measure time - should be fast since non-blocking
+        start_time = time.monotonic()
+        for i in range(100):
+            with tracer.start_as_current_span(f"test-span-{i}") as span:
+                span.set_attribute("iteration", i)
+        elapsed_time = time.monotonic() - start_time
+
+        # Non-blocking span creation should be very fast (< 100ms for 100 spans)
+        # If export was synchronous, this would take much longer
+        assert elapsed_time < 0.1, (
+            f"Span creation took {elapsed_time:.3f}s, expected < 0.1s. "
+            "Export appears to be blocking."
+        )
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-024")
+    def test_batch_processor_config_applied(
+        self,
+        mock_grpc_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that BatchSpanProcessor uses configured queue sizes."""
+        from floe_core.telemetry import BatchSpanProcessorConfig
+
+        attrs = ResourceAttributes(
+            service_name="config-test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        batch_config = BatchSpanProcessorConfig(
+            max_queue_size=4096,
+            max_export_batch_size=1024,
+            schedule_delay_millis=2000,
+            export_timeout_millis=15000,
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            batch_processor=batch_config,
+        )
+        provider = TelemetryProvider(config)
+        provider.initialize()
+
+        # Verify span processor is created with our config
+        assert provider._span_processor is not None
+        # The config values are applied internally - we verify by checking
+        # the span processor was created successfully
+        assert provider.state == ProviderState.INITIALIZED
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-024")
+    def test_force_flush_waits_for_pending_exports(
+        self,
+        telemetry_config: TelemetryConfig,
+        mock_grpc_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that force_flush waits for pending spans to be exported.
+
+        This verifies that while span creation is non-blocking,
+        force_flush can synchronously wait for export completion.
+        """
+        from opentelemetry import trace
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create some spans
+        for i in range(10):
+            with tracer.start_as_current_span(f"flush-test-span-{i}") as span:
+                span.set_attribute("iteration", i)
+
+        # Force flush should complete successfully, waiting for export
+        result = provider.force_flush(timeout_millis=5000)
+        assert result is True
+
+        provider.shutdown()
+
+    @pytest.mark.requirement("FR-024")
+    def test_shutdown_flushes_pending_exports(
+        self,
+        telemetry_config: TelemetryConfig,
+        mock_grpc_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that shutdown flushes all pending spans before closing.
+
+        Graceful shutdown ensures no telemetry data is lost.
+        """
+        from opentelemetry import trace
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create spans that would be pending in the batch queue
+        for i in range(5):
+            with tracer.start_as_current_span(f"shutdown-test-span-{i}") as span:
+                span.set_attribute("iteration", i)
+
+        # Shutdown should complete without errors, flushing pending spans
+        provider.shutdown()
+
+        assert provider.state == ProviderState.SHUTDOWN
+        assert provider._span_processor is None

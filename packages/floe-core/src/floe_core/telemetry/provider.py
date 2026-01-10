@@ -13,7 +13,8 @@ Requirements Covered:
 - FR-009: gRPC protocol selection
 - FR-010: HTTP protocol selection
 - FR-011: Authentication header injection
-- FR-024: Configurable BatchSpanProcessor
+- FR-024: Configurable BatchSpanProcessor (async, non-blocking export)
+- FR-026: All telemetry sent to OTLP Collector (enforced)
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
