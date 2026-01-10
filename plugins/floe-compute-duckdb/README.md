@@ -67,6 +67,35 @@ else:
     print(f"Failed: {result.message}")
 ```
 
+### Query Timeout Configuration
+
+The plugin supports query timeout enforcement via the `timeout_seconds` configuration:
+
+```python
+from floe_core import ComputeConfig
+
+config = ComputeConfig(
+    plugin="duckdb",
+    threads=4,
+    timeout_seconds=300,  # 5 minute timeout
+    connection={"path": ":memory:"}
+)
+
+profile = duckdb_plugin.generate_dbt_profile(config)
+# profile["timeout_seconds"] == 300
+```
+
+**How timeout enforcement works:**
+
+1. The plugin includes `timeout_seconds` in the generated dbt profile
+2. The dbt-duckdb adapter is responsible for actual timeout enforcement
+3. Platform operators can set timeouts in `manifest.yaml` to enforce governance
+4. Data engineers inherit the platform default unless explicitly overridden
+
+**Default value:** 3600 seconds (1 hour)
+
+**Valid range:** 1 to 86400 seconds (1 second to 24 hours)
+
 ### Get K8s Resource Requirements
 
 ```python
