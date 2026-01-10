@@ -7,6 +7,9 @@ Models:
     OAuth2Config: OAuth2 client credentials configuration
     PolarisCatalogConfig: Complete Polaris catalog connection settings
 
+Functions:
+    export_json_schema: Export JSON Schema for PolarisCatalogConfig
+
 Example:
     >>> from floe_catalog_polaris.config import PolarisCatalogConfig, OAuth2Config
     >>> config = PolarisCatalogConfig(
@@ -18,6 +21,17 @@ Example:
     ...         token_url="https://polaris.example.com/oauth/token"
     ...     )
     ... )
+
+JSON Schema:
+    The JSON Schema for PolarisCatalogConfig can be used for IDE autocomplete
+    and validation. Add to your YAML file:
+
+    .. code-block:: yaml
+
+        # yaml-language-server: $schema=./schemas/polaris-catalog-config.schema.json
+        uri: https://polaris.example.com/api/catalog
+        warehouse: prod_warehouse
+        ...
 """
 
 from __future__ import annotations
@@ -144,3 +158,58 @@ class PolarisCatalogConfig(BaseModel):
         default=True,
         description="Enable X-Iceberg-Access-Delegation header",
     )
+
+
+def get_json_schema() -> dict[str, object]:
+    """Get JSON Schema for PolarisCatalogConfig.
+
+    Returns the JSON Schema representation of the PolarisCatalogConfig model,
+    suitable for IDE autocomplete and configuration validation.
+
+    Returns:
+        JSON Schema dictionary for PolarisCatalogConfig.
+
+    Example:
+        >>> schema = get_json_schema()
+        >>> schema["title"]
+        'PolarisCatalogConfig'
+        >>> "uri" in schema["properties"]
+        True
+    """
+    return PolarisCatalogConfig.model_json_schema()
+
+
+def export_json_schema(output_path: str | None = None) -> str:
+    """Export JSON Schema for PolarisCatalogConfig to file.
+
+    Generates and writes the JSON Schema to the specified path. If no path
+    is provided, returns the schema as a JSON string.
+
+    Args:
+        output_path: Path to write the schema file. If None, returns JSON string.
+
+    Returns:
+        JSON Schema as a string.
+
+    Example:
+        >>> # Export to file
+        >>> export_json_schema("schemas/polaris-catalog-config.schema.json")
+        '{"title": "PolarisCatalogConfig", ...}'
+
+        >>> # Get schema as string
+        >>> schema_str = export_json_schema()
+        >>> "PolarisCatalogConfig" in schema_str
+        True
+    """
+    import json
+    from pathlib import Path
+
+    schema = get_json_schema()
+    schema_json = json.dumps(schema, indent=2, sort_keys=False)
+
+    if output_path is not None:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(schema_json + "\n")
+
+    return schema_json

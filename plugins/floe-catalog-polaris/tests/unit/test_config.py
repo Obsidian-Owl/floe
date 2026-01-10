@@ -514,3 +514,99 @@ class TestOAuth2ConfigRefreshMarginBoundaries:
             refresh_margin_seconds=300,
         )
         assert config.refresh_margin_seconds == 300
+
+
+class TestJsonSchemaExport:
+    """Tests for JSON Schema export functionality."""
+
+    def test_get_json_schema_returns_dict(self) -> None:
+        """Test get_json_schema returns a dictionary."""
+        from floe_catalog_polaris.config import get_json_schema
+
+        schema = get_json_schema()
+        assert isinstance(schema, dict)
+        assert "title" in schema
+        assert schema["title"] == "PolarisCatalogConfig"
+
+    def test_get_json_schema_includes_properties(self) -> None:
+        """Test schema includes expected properties."""
+        from floe_catalog_polaris.config import get_json_schema
+
+        schema = get_json_schema()
+        assert "properties" in schema
+        props = schema["properties"]
+        assert "uri" in props
+        assert "warehouse" in props
+        assert "oauth2" in props
+        assert "connect_timeout_seconds" in props
+        assert "read_timeout_seconds" in props
+        assert "max_retries" in props
+        assert "credential_vending_enabled" in props
+
+    def test_get_json_schema_includes_required(self) -> None:
+        """Test schema includes required fields."""
+        from floe_catalog_polaris.config import get_json_schema
+
+        schema = get_json_schema()
+        assert "required" in schema
+        required = schema["required"]
+        assert "uri" in required
+        assert "warehouse" in required
+        assert "oauth2" in required
+
+    def test_get_json_schema_includes_nested_oauth2(self) -> None:
+        """Test schema includes nested OAuth2Config definition."""
+        from floe_catalog_polaris.config import get_json_schema
+
+        schema = get_json_schema()
+        assert "$defs" in schema
+        assert "OAuth2Config" in schema["$defs"]
+        oauth2_schema = schema["$defs"]["OAuth2Config"]
+        assert "properties" in oauth2_schema
+        assert "client_id" in oauth2_schema["properties"]
+        assert "client_secret" in oauth2_schema["properties"]
+        assert "token_url" in oauth2_schema["properties"]
+
+    def test_export_json_schema_returns_string(self) -> None:
+        """Test export_json_schema returns JSON string."""
+        from floe_catalog_polaris.config import export_json_schema
+
+        schema_str = export_json_schema()
+        assert isinstance(schema_str, str)
+        assert "PolarisCatalogConfig" in schema_str
+
+    def test_export_json_schema_is_valid_json(self) -> None:
+        """Test export_json_schema returns valid JSON."""
+        import json
+
+        from floe_catalog_polaris.config import export_json_schema
+
+        schema_str = export_json_schema()
+        # Should not raise
+        schema = json.loads(schema_str)
+        assert isinstance(schema, dict)
+
+    def test_export_json_schema_to_file(self, tmp_path: str) -> None:
+        """Test export_json_schema writes to file."""
+        import json
+        from pathlib import Path
+
+        from floe_catalog_polaris.config import export_json_schema
+
+        output_file = Path(tmp_path) / "test-schema.json"
+        export_json_schema(str(output_file))
+
+        assert output_file.exists()
+        content = json.loads(output_file.read_text())
+        assert content["title"] == "PolarisCatalogConfig"
+
+    def test_export_json_schema_creates_parent_dirs(self, tmp_path: str) -> None:
+        """Test export_json_schema creates parent directories."""
+        from pathlib import Path
+
+        from floe_catalog_polaris.config import export_json_schema
+
+        output_file = Path(tmp_path) / "nested" / "dir" / "schema.json"
+        export_json_schema(str(output_file))
+
+        assert output_file.exists()

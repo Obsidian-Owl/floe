@@ -21,7 +21,12 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 # Public API exports
-from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
+from floe_catalog_polaris.config import (
+    OAuth2Config,
+    PolarisCatalogConfig,
+    export_json_schema,
+    get_json_schema,
+)
 from floe_catalog_polaris.errors import (
     PYICEBERG_EXCEPTION_TYPES,
     map_pyiceberg_error,
@@ -33,6 +38,8 @@ __all__ = [
     "PolarisCatalogPlugin",
     "PolarisCatalogConfig",
     "OAuth2Config",
+    "export_json_schema",
+    "get_json_schema",
     "map_pyiceberg_error",
     "PYICEBERG_EXCEPTION_TYPES",
 ]
