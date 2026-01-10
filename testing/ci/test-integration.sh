@@ -62,11 +62,23 @@ echo ""
 # Dynamically discover all packages with integration tests
 INTEGRATION_TEST_PATHS=""
 
+# Discover packages
 for pkg_dir in packages/*/; do
     integration_test_dir="${pkg_dir}tests/integration"
     if [[ -d "${integration_test_dir}" ]]; then
         echo "  Found: ${integration_test_dir}"
         INTEGRATION_TEST_PATHS="${INTEGRATION_TEST_PATHS} ${integration_test_dir}"
+    fi
+done
+
+# Discover plugins
+for plugin_dir in plugins/*/; do
+    if [[ -d "${plugin_dir}" ]]; then
+        integration_test_dir="${plugin_dir}tests/integration"
+        if [[ -d "${integration_test_dir}" ]]; then
+            echo "  Found: ${integration_test_dir}"
+            INTEGRATION_TEST_PATHS="${INTEGRATION_TEST_PATHS} ${integration_test_dir}"
+        fi
     fi
 done
 

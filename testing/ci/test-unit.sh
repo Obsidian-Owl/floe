@@ -39,6 +39,7 @@ echo ""
 UNIT_TEST_PATHS=""
 COVERAGE_SOURCES=""
 
+# Discover packages
 for pkg_dir in packages/*/; do
     pkg_name=$(basename "${pkg_dir}")
     unit_test_dir="${pkg_dir}tests/unit"
@@ -46,6 +47,19 @@ for pkg_dir in packages/*/; do
         echo "  Found: ${unit_test_dir}"
         UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${unit_test_dir}"
         COVERAGE_SOURCES="${COVERAGE_SOURCES} --cov=${pkg_dir}src"
+    fi
+done
+
+# Discover plugins
+for plugin_dir in plugins/*/; do
+    if [[ -d "${plugin_dir}" ]]; then
+        plugin_name=$(basename "${plugin_dir}")
+        unit_test_dir="${plugin_dir}tests/unit"
+        if [[ -d "${unit_test_dir}" ]]; then
+            echo "  Found: ${unit_test_dir}"
+            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${unit_test_dir}"
+            COVERAGE_SOURCES="${COVERAGE_SOURCES} --cov=${plugin_dir}src"
+        fi
     fi
 done
 
