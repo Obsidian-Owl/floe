@@ -305,3 +305,165 @@ class TestMetricRecorderSetGauge:
 
         gauge = mock_meter.create_gauge.return_value
         gauge.set.assert_called_once()
+
+
+class TestMetricRecorderRecordHistogram:
+    """Tests for MetricRecorder.record_histogram() method (FR-012)."""
+
+    @pytest.fixture
+    def mock_meter(self) -> Generator[Mock, None, None]:
+        """Mock OpenTelemetry Meter with histogram support."""
+        mock_histogram = Mock()
+        mock_histogram.record = Mock()
+
+        mock_meter = Mock()
+        mock_meter.create_histogram = Mock(return_value=mock_histogram)
+
+        with patch(
+            "opentelemetry.metrics.get_meter",
+            return_value=mock_meter,
+        ):
+            yield mock_meter
+
+    def test_record_histogram_creates_histogram(self, mock_meter: Mock) -> None:
+        """Test record_histogram() creates a histogram with the specified name."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram("test_histogram", value=100)
+
+        mock_meter.create_histogram.assert_called()
+        call_args = mock_meter.create_histogram.call_args
+        assert call_args[0][0] == "test_histogram"
+
+    def test_record_histogram_records_value(self, mock_meter: Mock) -> None:
+        """Test record_histogram() records the specified value."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram("test_histogram", value=250)
+
+        histogram = mock_meter.create_histogram.return_value
+        histogram.record.assert_called_once()
+        call_args = histogram.record.call_args
+        assert call_args[0][0] == 250
+
+    def test_record_histogram_with_float_value(self, mock_meter: Mock) -> None:
+        """Test record_histogram() accepts float values."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram("response_time", value=1.234)
+
+        histogram = mock_meter.create_histogram.return_value
+        histogram.record.assert_called_once()
+        call_args = histogram.record.call_args
+        assert call_args[0][0] == 1.234
+
+    def test_record_histogram_with_labels(self, mock_meter: Mock) -> None:
+        """Test record_histogram() passes labels/attributes."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram(
+            "request_duration",
+            value=500,
+            labels={"endpoint": "/api/v1/users", "method": "GET"},
+        )
+
+        histogram = mock_meter.create_histogram.return_value
+        histogram.record.assert_called_once()
+        call_args = histogram.record.call_args
+        assert "attributes" in call_args[1]
+
+    def test_record_histogram_reuses_histogram_for_same_name(
+        self, mock_meter: Mock
+    ) -> None:
+        """Test record_histogram() reuses histogram for the same metric name."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram("reused_histogram", value=10)
+        recorder.record_histogram("reused_histogram", value=20)
+        recorder.record_histogram("reused_histogram", value=30)
+
+        # Histogram should only be created once
+        assert mock_meter.create_histogram.call_count == 1
+
+    def test_record_histogram_creates_different_histograms_for_different_names(
+        self, mock_meter: Mock
+    ) -> None:
+        """Test record_histogram() creates separate histograms for different names."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram("histogram_a", value=1)
+        recorder.record_histogram("histogram_b", value=2)
+
+        assert mock_meter.create_histogram.call_count == 2
+
+    def test_record_histogram_with_description(self, mock_meter: Mock) -> None:
+        """Test record_histogram() can set histogram description."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram(
+            "documented_histogram",
+            value=100,
+            description="Distribution of processing times",
+        )
+
+        call_args = mock_meter.create_histogram.call_args
+        # create_histogram uses positional args: name, unit, description
+        assert call_args[0][2] == "Distribution of processing times"
+
+    def test_record_histogram_with_unit(self, mock_meter: Mock) -> None:
+        """Test record_histogram() can set histogram unit."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram(
+            "pipeline_duration",
+            value=5000,
+            unit="ms",  # milliseconds
+        )
+
+        call_args = mock_meter.create_histogram.call_args
+        # create_histogram uses positional args: name, unit, description
+        assert call_args[0][1] == "ms"
+
+    def test_record_histogram_for_pipeline_duration(self, mock_meter: Mock) -> None:
+        """Test record_histogram() for pipeline run duration (FR-012)."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram(
+            "floe.pipeline.duration",
+            value=12500,
+            labels={
+                "pipeline_name": "customer_360",
+                "status": "success",
+            },
+            unit="ms",
+        )
+
+        histogram = mock_meter.create_histogram.return_value
+        histogram.record.assert_called_once()
+
+    def test_record_histogram_for_model_execution_time(self, mock_meter: Mock) -> None:
+        """Test record_histogram() for dbt model execution time."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram(
+            "floe.dbt.model.execution_time",
+            value=3.45,
+            labels={
+                "model_name": "stg_customers",
+                "materialization": "table",
+            },
+            unit="s",  # seconds
+        )
+
+        histogram = mock_meter.create_histogram.return_value
+        histogram.record.assert_called_once()

@@ -23,6 +23,7 @@ from opentelemetry import metrics
 
 if TYPE_CHECKING:
     from opentelemetry.metrics import Counter as CounterType
+    from opentelemetry.metrics import Histogram as HistogramType
     from opentelemetry.metrics import Meter
     from opentelemetry.metrics._internal.instrument import Gauge as GaugeType
 
@@ -60,6 +61,7 @@ class MetricRecorder:
         self._meter: Meter = metrics.get_meter(name, version)
         self._counters: dict[str, CounterType] = {}
         self._gauges: dict[str, GaugeType] = {}
+        self._histograms: dict[str, HistogramType] = {}
 
     def increment(
         self,
@@ -190,6 +192,78 @@ class MetricRecorder:
             self._gauges[name] = self._meter.create_gauge(name, **kwargs)
 
         return self._gauges[name]
+
+    def record_histogram(
+        self,
+        name: str,
+        value: int | float,
+        *,
+        labels: dict[str, Any] | None = None,
+        description: str | None = None,
+        unit: str | None = None,
+    ) -> None:
+        """Record a value in a histogram metric.
+
+        Creates or reuses a histogram with the specified name and records the value.
+        Histograms are used to track the distribution of values, such as request
+        latencies or response sizes. Ideal for measuring durations (FR-012).
+
+        Args:
+            name: The name of the histogram metric.
+            value: The value to record (can be int or float).
+            labels: Optional dictionary of attribute key-value pairs.
+            description: Optional description for the histogram.
+            unit: Optional unit for the histogram (e.g., "ms" for milliseconds).
+
+        Examples:
+            >>> recorder.record_histogram("request_duration", value=150, unit="ms")
+            >>> recorder.record_histogram(
+            ...     "pipeline_duration",
+            ...     value=12500,
+            ...     labels={"pipeline": "customer_360"},
+            ...     unit="ms",
+            ... )
+
+        See Also:
+            - FR-012: Pipeline run duration tracking
+        """
+        histogram = self._get_or_create_histogram(
+            name,
+            description=description,
+            unit=unit,
+        )
+
+        attributes: dict[str, Any] = labels if labels is not None else {}
+        histogram.record(value, attributes=attributes)
+
+    def _get_or_create_histogram(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        unit: str | None = None,
+    ) -> HistogramType:
+        """Get or create a histogram by name.
+
+        Caches histograms to avoid recreating them on every record call.
+
+        Args:
+            name: The name of the histogram.
+            description: Optional description.
+            unit: Optional unit.
+
+        Returns:
+            The Histogram instrument.
+        """
+        if name not in self._histograms:
+            # create_histogram uses positional args: name, unit, description
+            unit_val = unit if unit is not None else ""
+            desc_val = description if description is not None else ""
+            self._histograms[name] = self._meter.create_histogram(
+                name, unit_val, desc_val
+            )
+
+        return self._histograms[name]
 
 
 __all__ = [
