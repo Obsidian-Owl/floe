@@ -62,6 +62,7 @@ echo ""
 # Dynamically discover all packages with integration tests
 INTEGRATION_TEST_PATHS=""
 
+# Discover packages
 for pkg_dir in packages/*/; do
     integration_test_dir="${pkg_dir}tests/integration"
     if [[ -d "${integration_test_dir}" ]]; then

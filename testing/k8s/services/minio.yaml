@@ -127,3 +127,95 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+---
+# Create MinIO IAM user with policy for Polaris STS credential vending
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-iam-setup
+  namespace: floe-test
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        # Wait for minio-setup to complete (buckets created)
+        - name: wait-for-buckets
+          image: minio/mc:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until mc alias set minio http://minio:9000 minioadmin minioadmin123; do
+                echo "Waiting for MinIO..."
+                sleep 2
+              done
+              # Verify buckets exist (confirms minio-setup completed)
+              until mc ls minio/floe-warehouse; do
+                echo "Waiting for bucket setup..."
+                sleep 2
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Set up MinIO client alias
+              mc alias set minio http://minio:9000 minioadmin minioadmin123
+
+              # Create policy for Polaris service account with full S3 access
+              # This policy enables STS credential vending for table operations
+              cat > /tmp/polaris-policy.json << 'EOF'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": [
+                      "s3:*"
+                    ],
+                    "Resource": [
+                      "arn:aws:s3:::floe-warehouse",
+                      "arn:aws:s3:::floe-warehouse/*",
+                      "arn:aws:s3:::floe-iceberg",
+                      "arn:aws:s3:::floe-iceberg/*",
+                      "arn:aws:s3:::floe-artifacts",
+                      "arn:aws:s3:::floe-artifacts/*"
+                    ]
+                  }
+                ]
+              }
+              EOF
+
+              # Create policy (ignore error if exists)
+              mc admin policy create minio polaris-access /tmp/polaris-policy.json || \
+                echo "Policy already exists or created"
+
+              # Create service account for Polaris (used for STS)
+              # WARNING: Test-only credentials - NOT for production
+              mc admin user add minio polaris-svc polaris-secret123 || \
+                echo "User already exists"
+
+              # Attach policy to user
+              mc admin policy attach minio polaris-access --user polaris-svc || \
+                echo "Policy already attached"
+
+              echo "MinIO IAM setup complete"
+              echo "Polaris service user: polaris-svc"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

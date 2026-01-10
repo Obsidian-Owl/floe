@@ -1,0 +1,327 @@
+# CatalogPlugin API Contract
+# This defines the abstract interface that all catalog plugins must implement.
+# It is NOT a REST API - this documents the Python ABC method signatures.
+
+openapi: 3.1.0
+info:
+  title: CatalogPlugin ABC Contract
+  description: |
+    Abstract Base Class contract for floe catalog plugins.
+    All catalog implementations (Polaris, AWS Glue, Unity Catalog, etc.)
+    must implement these methods.
+  version: 2.0.0
+  contact:
+    name: floe Platform Team
+
+# Note: This uses OpenAPI format for documentation purposes.
+# The actual implementation is a Python ABC, not a REST API.
+
+paths:
+  /connect:
+    post:
+      operationId: connect
+      summary: Connect to catalog
+      description: |
+        Establish connection to the Iceberg catalog and return a PyIceberg
+        Catalog instance. This must be called before any other operations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogConfig'
+      responses:
+        '200':
+          description: Successfully connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogInstance'
+        '401':
+          description: Authentication failed
+        '503':
+          description: Catalog unavailable
+
+  /namespaces:
+    post:
+      operationId: create_namespace
+      summary: Create namespace
+      description: |
+        Create a new namespace in the catalog. Supports hierarchical
+        namespaces using dot notation (e.g., "bronze.raw").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [namespace]
+              properties:
+                namespace:
+                  type: string
+                  pattern: '^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$'
+                  example: "bronze.raw_data"
+                properties:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  example:
+                    location: "s3://bucket/bronze/raw_data"
+                    owner: "data-platform-team"
+      responses:
+        '201':
+          description: Namespace created
+        '409':
+          description: Namespace already exists
+        '403':
+          description: Permission denied
+
+    get:
+      operationId: list_namespaces
+      summary: List namespaces
+      description: List all namespaces, optionally filtered by parent.
+      parameters:
+        - name: parent
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Parent namespace to list children of
+      responses:
+        '200':
+          description: List of namespaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["bronze", "silver", "gold"]
+
+  /namespaces/{namespace}:
+    delete:
+      operationId: delete_namespace
+      summary: Delete namespace
+      description: Delete an empty namespace. Fails if namespace contains tables.
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Namespace deleted
+        '400':
+          description: Namespace not empty
+        '404':
+          description: Namespace not found
+
+  /tables:
+    post:
+      operationId: create_table
+      summary: Create table
+      description: Create a new Iceberg table in the specified namespace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, schema]
+              properties:
+                identifier:
+                  type: string
+                  description: "Full table identifier (namespace.table)"
+                  example: "bronze.raw_events"
+                schema:
+                  type: object
+                  description: Iceberg schema definition
+                location:
+                  type: string
+                  description: Optional storage location override
+                properties:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        '201':
+          description: Table created
+        '409':
+          description: Table already exists
+
+  /tables/{namespace}:
+    get:
+      operationId: list_tables
+      summary: List tables in namespace
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of table names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["raw_events", "raw_users"]
+
+  /tables/{identifier}:
+    delete:
+      operationId: drop_table
+      summary: Drop table
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Full table identifier (namespace.table)
+        - name: purge
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Also delete underlying data files
+      responses:
+        '204':
+          description: Table dropped
+        '404':
+          description: Table not found
+
+  /credentials/vend:
+    post:
+      operationId: vend_credentials
+      summary: Vend temporary credentials
+      description: |
+        Vend short-lived, scoped credentials for table access.
+        Uses Iceberg REST X-Iceberg-Access-Delegation pattern.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [table_path, operations]
+              properties:
+                table_path:
+                  type: string
+                  description: Full table path (namespace.table)
+                  example: "silver.dim_customers"
+                operations:
+                  type: array
+                  items:
+                    type: string
+                    enum: [READ, WRITE]
+                  minItems: 1
+                  example: ["READ", "WRITE"]
+      responses:
+        '200':
+          description: Credentials vended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendedCredentials'
+        '403':
+          description: Permission denied for requested operations
+        '501':
+          description: Credential vending not supported by this catalog
+
+  /health:
+    get:
+      operationId: health_check
+      summary: Health check
+      description: Check catalog availability and response time.
+      parameters:
+        - name: timeout
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 1.0
+            minimum: 0.1
+            maximum: 10.0
+          description: Timeout in seconds
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+  schemas:
+    CatalogConfig:
+      type: object
+      description: Generic catalog configuration (implementation-specific)
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: Catalog type identifier
+          example: "polaris"
+      additionalProperties: true
+
+    CatalogInstance:
+      type: object
+      description: Reference to connected catalog (opaque to callers)
+      properties:
+        connected:
+          type: boolean
+        catalog_type:
+          type: string
+
+    VendedCredentials:
+      type: object
+      required: [access_key, secret_key, expiration, operations, table_path]
+      properties:
+        access_key:
+          type: string
+          description: Temporary access key
+        secret_key:
+          type: string
+          format: password
+          description: Temporary secret key (sensitive)
+        session_token:
+          type: string
+          format: password
+          description: Session token for AWS STS (optional)
+        expiration:
+          type: string
+          format: date-time
+          description: Credential expiration timestamp (UTC)
+        operations:
+          type: array
+          items:
+            type: string
+            enum: [READ, WRITE]
+          description: Allowed operations
+        table_path:
+          type: string
+          description: Table path credentials are scoped to
+
+    HealthStatus:
+      type: object
+      required: [healthy, response_time_ms, message]
+      properties:
+        healthy:
+          type: boolean
+          description: Whether catalog is responding normally
+        response_time_ms:
+          type: number
+          minimum: 0
+          description: Health check response time in milliseconds
+        message:
+          type: string
+          description: Human-readable status message
+        checked_at:
+          type: string
+          format: date-time
+          description: Timestamp of health check (UTC)

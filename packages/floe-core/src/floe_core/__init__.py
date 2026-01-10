@@ -97,9 +97,17 @@ from floe_core.observability import (
 
 # Plugin error hierarchy
 from floe_core.plugin_errors import (
+    # Catalog operation errors
+    AuthenticationError,
+    CatalogError,
+    CatalogUnavailableError,
+    # Plugin registry errors
     CircularDependencyError,
+    ConflictError,
     DuplicatePluginError,
     MissingDependencyError,
+    NotFoundError,
+    NotSupportedError,
     PluginConfigurationError,
     PluginError,
     PluginIncompatibleError,
@@ -178,6 +186,13 @@ __all__: list[str] = [
     "PluginIncompatibleError",
     "PluginNotFoundError",
     "PluginStartupError",
+    # Catalog operation errors
+    "AuthenticationError",
+    "CatalogError",
+    "CatalogUnavailableError",
+    "ConflictError",
+    "NotFoundError",
+    "NotSupportedError",
     # Compute configuration models
     "AttachConfig",
     "CatalogConfig",

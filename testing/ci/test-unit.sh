@@ -39,6 +39,7 @@ echo ""
 UNIT_TEST_PATHS=""
 COVERAGE_SOURCES=""
 
+# Discover packages
 for pkg_dir in packages/*/; do
     pkg_name=$(basename "${pkg_dir}")
     unit_test_dir="${pkg_dir}tests/unit"
@@ -49,15 +50,25 @@ for pkg_dir in packages/*/; do
     fi
 done
 
-# Always include testing module tests and contract tests
+# Discover plugins
+for plugin_dir in plugins/*/; do
+    if [[ -d "${plugin_dir}" ]]; then
+        plugin_name=$(basename "${plugin_dir}")
+        unit_test_dir="${plugin_dir}tests/unit"
+        if [[ -d "${unit_test_dir}" ]]; then
+            echo "  Found: ${unit_test_dir}"
+            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${unit_test_dir}"
+            COVERAGE_SOURCES="${COVERAGE_SOURCES} --cov=${plugin_dir}src"
+        fi
+    fi
+done
+
+# Always include testing module tests
+# Note: Contract tests are NOT included here - they run separately via test-contract.sh
+# because they test cross-package contracts and have different fixture requirements
 if [[ -d "testing/tests/unit" ]]; then
     echo "  Found: testing/tests/unit"
     UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/tests/unit"
-fi
-
-if [[ -d "tests/contract" ]]; then
-    echo "  Found: tests/contract"
-    UNIT_TEST_PATHS="${UNIT_TEST_PATHS} tests/contract"
 fi
 
 echo ""

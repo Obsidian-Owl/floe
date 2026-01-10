@@ -180,6 +180,13 @@ deploy_services() {
     log_info "Waiting for MinIO to be ready..."
     kubectl wait --for=condition=available deployment/minio -n "${NAMESPACE}" --timeout=120s
 
+    # Wait for MinIO IAM setup job to complete (creates Polaris service account)
+    log_info "Waiting for MinIO IAM setup..."
+    kubectl wait --for=condition=complete job/minio-iam-setup -n "${NAMESPACE}" --timeout=120s || {
+        log_warn "MinIO IAM setup job not complete, checking logs..."
+        kubectl logs job/minio-iam-setup -n "${NAMESPACE}" --tail=20 2>/dev/null || true
+    }
+
     # Apply Polaris
     log_info "Deploying Polaris..."
     kubectl apply -f "${SCRIPT_DIR}/services/polaris.yaml"
@@ -207,6 +214,22 @@ wait_for_services() {
     done
 
     log_info "All services deployed"
+}
+
+# Initialize Polaris catalog
+init_polaris() {
+    log_info "Initializing Polaris catalog..."
+
+    if [[ -x "${SCRIPT_DIR}/scripts/init-polaris.sh" ]]; then
+        # Run the init script (connects via localhost NodePort)
+        if "${SCRIPT_DIR}/scripts/init-polaris.sh"; then
+            log_info "Polaris initialization complete"
+        else
+            log_warn "Polaris initialization failed, tests may not work"
+        fi
+    else
+        log_warn "init-polaris.sh not found or not executable"
+    fi
 }
 
 # Print cluster info
@@ -248,6 +271,7 @@ main() {
     deploy_metrics_server
     deploy_services
     wait_for_services
+    init_polaris
     deploy_monitoring_stack
     print_info
 }

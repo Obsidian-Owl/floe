@@ -23,6 +23,8 @@ dependencies = [
     "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
+    # Include plugins for development
+    "floe-catalog-polaris",
     # Telemetry backend plugins (for entry point discovery in tests)
     "floe-telemetry-console",
     "floe-telemetry-jaeger",
@@ -32,6 +34,7 @@ dependencies = [
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
+floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true }
 floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
 floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
@@ -40,17 +43,19 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
-    ".",  # For testing module
+    "plugins/floe-catalog-polaris/src",
+    ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
     "slow: Marks tests as slow (> 1 second)",
     "integration: Marks tests requiring K8s services",
     "contract: Marks cross-package contract tests",
     "e2e: Marks end-to-end pipeline tests",
+    "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
     "benchmark: Marks performance benchmark tests (CodSpeed)",
 ]
 

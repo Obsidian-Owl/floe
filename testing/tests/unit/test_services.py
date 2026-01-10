@@ -36,9 +36,28 @@ class TestServiceEndpoint:
 
     @pytest.mark.requirement("9c-FR-005")
     def test_host_property(self) -> None:
-        """Test ServiceEndpoint generates correct K8s DNS name."""
+        """Test ServiceEndpoint generates effective host based on environment.
+
+        When K8s DNS is resolvable, returns K8s DNS name.
+        When not resolvable (running on host), returns localhost.
+        """
         endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
-        assert endpoint.host == "polaris.floe-test.svc.cluster.local"
+        # Mock K8s DNS resolution to return True so we get K8s DNS name
+        with patch("testing.fixtures.services._can_resolve_host", return_value=True):
+            assert endpoint.host == "polaris.floe-test.svc.cluster.local"
+
+    @pytest.mark.requirement("9c-FR-005")
+    def test_host_property_falls_back_to_localhost(self) -> None:
+        """Test ServiceEndpoint falls back to localhost when K8s DNS not resolvable."""
+        endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
+        with patch("testing.fixtures.services._can_resolve_host", return_value=False):
+            assert endpoint.host == "localhost"
+
+    @pytest.mark.requirement("9c-FR-005")
+    def test_k8s_host_property(self) -> None:
+        """Test ServiceEndpoint k8s_host always returns K8s DNS name."""
+        endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
+        assert endpoint.k8s_host == "polaris.floe-test.svc.cluster.local"
 
     @pytest.mark.requirement("9c-FR-005")
     def test_str_representation(self) -> None:
@@ -76,11 +95,14 @@ class TestCheckServiceHealth:
     @pytest.mark.requirement("9c-FR-005")
     def test_uses_custom_namespace(self) -> None:
         """Test check_service_health uses custom namespace."""
-        with patch("testing.fixtures.services._tcp_health_check") as mock_check:
+        with (
+            patch("testing.fixtures.services._can_resolve_host", return_value=True),
+            patch("testing.fixtures.services._tcp_health_check") as mock_check,
+        ):
             mock_check.return_value = True
             check_service_health("postgres", 5432, namespace="custom-ns")
 
-            # Verify called with correct host
+            # Verify called with correct host (K8s DNS with custom namespace)
             call_args = mock_check.call_args[0]
             assert "custom-ns" in call_args[0]
 
@@ -122,9 +144,13 @@ class TestCheckInfrastructure:
         """Test check_infrastructure raises when service unhealthy."""
 
         def mock_check(host: str, port: int, timeout: float) -> bool:
+            _ = port, timeout  # Unused in mock
             return "polaris" not in host
 
-        with patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check):
+        with (
+            patch("testing.fixtures.services._can_resolve_host", return_value=True),
+            patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check),
+        ):
             with pytest.raises(ServiceUnavailableError) as exc_info:
                 check_infrastructure(
                     [
@@ -140,9 +166,13 @@ class TestCheckInfrastructure:
         """Test check_infrastructure returns all statuses with raise_on_failure=False."""
 
         def mock_check(host: str, port: int, timeout: float) -> bool:
+            _ = port, timeout  # Unused in mock
             return "polaris" not in host
 
-        with patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check):
+        with (
+            patch("testing.fixtures.services._can_resolve_host", return_value=True),
+            patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check),
+        ):
             result = check_infrastructure(
                 [("polaris", 8181), ("minio", 9000)],
                 raise_on_failure=False,

@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "OAuth2Config": {
+      "additionalProperties": false,
+      "description": "OAuth2 client credentials configuration.\n\nConfigures OAuth2 authentication for Polaris catalog access.\nUses the client credentials flow (machine-to-machine).\n\nAttributes:\n    client_id: OAuth2 client identifier.\n    client_secret: OAuth2 client secret (stored securely).\n    token_url: OAuth2 token endpoint URL.\n    scope: Optional OAuth2 scope.\n    refresh_margin_seconds: Seconds before expiration to refresh token.\n\nExample:\n    >>> oauth = OAuth2Config(\n    ...     client_id=\"polaris-client\",\n    ...     client_secret=\"super-secret\",\n    ...     token_url=\"https://polaris.example.com/oauth/token\",\n    ...     scope=\"PRINCIPAL_ROLE:ALL\"\n    ... )",
+      "properties": {
+        "client_id": {
+          "description": "OAuth2 client identifier",
+          "minLength": 1,
+          "title": "Client Id",
+          "type": "string"
+        },
+        "client_secret": {
+          "description": "OAuth2 client secret (stored securely)",
+          "format": "password",
+          "title": "Client Secret",
+          "type": "string",
+          "writeOnly": true
+        },
+        "token_url": {
+          "description": "OAuth2 token endpoint URL",
+          "pattern": "^https?://",
+          "title": "Token Url",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OAuth2 scope (optional)",
+          "title": "Scope"
+        },
+        "refresh_margin_seconds": {
+          "default": 60,
+          "description": "Seconds before expiration to refresh token",
+          "maximum": 300,
+          "minimum": 10,
+          "title": "Refresh Margin Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "client_id",
+        "client_secret",
+        "token_url"
+      ],
+      "title": "OAuth2Config",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Polaris catalog plugin configuration.\n\nComplete configuration for connecting to an Apache Polaris REST catalog.\nIncludes connection settings, authentication, and operational parameters.\n\nAttributes:\n    uri: Polaris REST API endpoint URL.\n    warehouse: Polaris warehouse identifier.\n    oauth2: OAuth2 authentication configuration.\n    connect_timeout_seconds: Connection timeout in seconds.\n    read_timeout_seconds: Read operation timeout in seconds.\n    max_retries: Maximum retry attempts for transient failures.\n    credential_vending_enabled: Enable X-Iceberg-Access-Delegation header.\n\nExample:\n    >>> config = PolarisCatalogConfig(\n    ...     uri=\"https://polaris.example.com/api/catalog\",\n    ...     warehouse=\"default_warehouse\",\n    ...     oauth2=OAuth2Config(\n    ...         client_id=\"client\",\n    ...         client_secret=\"secret\",\n    ...         token_url=\"https://polaris.example.com/oauth/token\"\n    ...     ),\n    ...     connect_timeout_seconds=15,\n    ...     credential_vending_enabled=True\n    ... )",
+  "properties": {
+    "uri": {
+      "description": "Polaris REST API endpoint",
+      "examples": [
+        "https://polaris.example.com/api/catalog"
+      ],
+      "pattern": "^https?://",
+      "title": "Uri",
+      "type": "string"
+    },
+    "warehouse": {
+      "description": "Polaris warehouse identifier",
+      "examples": [
+        "default_warehouse",
+        "prod_iceberg"
+      ],
+      "minLength": 1,
+      "title": "Warehouse",
+      "type": "string"
+    },
+    "oauth2": {
+      "$ref": "#/$defs/OAuth2Config",
+      "description": "OAuth2 authentication configuration"
+    },
+    "connect_timeout_seconds": {
+      "default": 10,
+      "description": "Connection timeout in seconds",
+      "maximum": 60,
+      "minimum": 1,
+      "title": "Connect Timeout Seconds",
+      "type": "integer"
+    },
+    "read_timeout_seconds": {
+      "default": 30,
+      "description": "Read timeout in seconds",
+      "maximum": 300,
+      "minimum": 1,
+      "title": "Read Timeout Seconds",
+      "type": "integer"
+    },
+    "max_retries": {
+      "default": 5,
+      "description": "Maximum retry attempts for transient failures",
+      "maximum": 10,
+      "minimum": 0,
+      "title": "Max Retries",
+      "type": "integer"
+    },
+    "credential_vending_enabled": {
+      "default": true,
+      "description": "Enable X-Iceberg-Access-Delegation header",
+      "title": "Credential Vending Enabled",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "uri",
+    "warehouse",
+    "oauth2"
+  ],
+  "title": "PolarisCatalogConfig",
+  "type": "object"
+}
