@@ -8,6 +8,7 @@ This package provides:
 - Compute Config Models: Pydantic models for compute plugin configuration
 - Errors: Custom exceptions for plugin and compute operations
 - Schemas: Pydantic models for manifest validation (floe_core.schemas)
+- Telemetry: OpenTelemetry SDK integration (floe_core.telemetry)
 
 Example:
     >>> from floe_core import get_registry, PluginType
@@ -23,6 +24,12 @@ Example:
     >>> from floe_core.schemas import PlatformManifest
     >>> manifest = PlatformManifest.model_validate(yaml_data)
 
+    >>> from floe_core import TelemetryConfig, TelemetryProvider, ResourceAttributes
+    >>> attrs = ResourceAttributes(service_name="my-service", ...)
+    >>> config = TelemetryConfig(resource_attributes=attrs)
+    >>> with TelemetryProvider(config) as provider:
+    ...     pass  # Telemetry active
+
     >>> from floe_core import DuckDBConfig, ConnectionStatus
     >>> config = DuckDBConfig(path=":memory:", memory_limit="4GB")
     >>> status = ConnectionStatus.HEALTHY
@@ -30,6 +37,7 @@ Example:
 See Also:
     - floe_core.plugins: All plugin ABCs with supporting dataclasses
     - floe_core.schemas: Manifest schema definitions
+    - floe_core.telemetry: OpenTelemetry integration
     - floe_core.compute_config: Compute configuration models
     - floe_core.compute_errors: Compute error hierarchy
     - docs/architecture/plugin-system/: Full architecture documentation
@@ -41,6 +49,9 @@ __version__ = "0.1.0"
 
 # Schemas submodule (imported for explicit re-export)
 from floe_core import schemas as schemas  # noqa: PLC0414
+
+# Telemetry submodule (explicit re-export)
+from floe_core import telemetry as telemetry  # noqa: PLC0414
 
 # Compiler functions
 from floe_core.compiler import (
@@ -128,6 +139,15 @@ from floe_core.plugins import (
     TelemetryBackendPlugin,
 )
 
+# Telemetry public API (convenience imports)
+from floe_core.telemetry import (
+    ProviderState,
+    ResourceAttributes,
+    SamplingConfig,
+    TelemetryConfig,
+    TelemetryProvider,
+)
+
 # Version compatibility
 from floe_core.version_compat import (
     FLOE_PLUGIN_API_MIN_VERSION,
@@ -140,6 +160,13 @@ __all__: list[str] = [
     "__version__",
     # Schemas submodule
     "schemas",
+    # Telemetry submodule and exports
+    "telemetry",
+    "TelemetryConfig",
+    "TelemetryProvider",
+    "ResourceAttributes",
+    "SamplingConfig",
+    "ProviderState",
     # Plugin type categories
     "PluginType",
     # Plugin error hierarchy

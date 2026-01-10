@@ -6,9 +6,44 @@ database connections.
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_otel_global_state() -> Generator[None, None, None]:
+    """Reset OpenTelemetry global state before and after each test.
+
+    Required for integration tests that use observability instrumentation.
+    Uses SDK TracerProvider/MeterProvider to avoid ProxyTracerProvider recursion.
+
+    Yields:
+        None after resetting state.
+    """
+    from floe_core.observability import reset_for_testing
+    from opentelemetry import metrics, trace
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.trace import TracerProvider
+
+    reset_for_testing()
+
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    trace._TRACER_PROVIDER = TracerProvider()
+
+    metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+    metrics._internal._METER_PROVIDER = MeterProvider()
+
+    yield
+
+    reset_for_testing()
+
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    trace._TRACER_PROVIDER = TracerProvider()
+
+    metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+    metrics._internal._METER_PROVIDER = MeterProvider()
 
 
 @pytest.fixture

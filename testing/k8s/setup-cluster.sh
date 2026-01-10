@@ -94,7 +94,12 @@ create_cluster() {
         log_info "Cluster created successfully"
     fi
 
-    # Set kubectl context
+    # Export kubeconfig to ensure ~/.kube/config is up to date
+    # This is idempotent and ensures Lens/other tools can see the cluster
+    log_info "Exporting kubeconfig for kind-${CLUSTER_NAME}..."
+    kind export kubeconfig --name "${CLUSTER_NAME}"
+
+    # Verify context is set
     kubectl config use-context "kind-${CLUSTER_NAME}"
 }
 
@@ -182,13 +187,17 @@ deploy_services() {
     # Apply Dagster
     log_info "Deploying Dagster..."
     kubectl apply -f "${SCRIPT_DIR}/services/dagster.yaml"
+
+    # Apply Jaeger (for OpenTelemetry integration tests)
+    log_info "Deploying Jaeger..."
+    kubectl apply -f "${SCRIPT_DIR}/services/jaeger.yaml"
 }
 
 # Wait for all services to be ready
 wait_for_services() {
     log_info "Waiting for all services to be ready..."
 
-    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon")
+    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger")
 
     for service in "${services[@]}"; do
         log_info "Waiting for ${service}..."
@@ -224,6 +233,7 @@ print_info() {
     echo "  Dagster:     http://localhost:3000"
     echo "  MinIO API:   http://localhost:9000"
     echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
+    echo "  Jaeger:      http://localhost:16686"
     echo "  Grafana:     http://localhost:3001 (admin/admin)"
     echo "  Prometheus:  http://localhost:9090"
     echo ""

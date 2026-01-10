@@ -31,6 +31,21 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+# Clean up kubeconfig entries for the cluster
+cleanup_kubeconfig() {
+    local context_name="kind-${CLUSTER_NAME}"
+
+    log_info "Cleaning up kubeconfig entries for ${context_name}..."
+
+    # Remove context, cluster, and user entries from kubeconfig
+    # These commands are safe to run even if entries don't exist
+    kubectl config delete-context "${context_name}" 2>/dev/null || true
+    kubectl config delete-cluster "${context_name}" 2>/dev/null || true
+    kubectl config delete-user "${context_name}" 2>/dev/null || true
+
+    log_info "Kubeconfig cleaned up"
+}
+
 # Delete namespace only (keep cluster)
 delete_namespace() {
     log_info "Deleting namespace: ${NAMESPACE}"
@@ -56,6 +71,9 @@ delete_cluster() {
     else
         log_info "Cluster ${CLUSTER_NAME} does not exist"
     fi
+
+    # Clean up kubeconfig entries (so Lens doesn't show stale cluster)
+    cleanup_kubeconfig
 
     # Clean up artifact directory
     if [[ -d /tmp/floe-test-artifacts ]]; then
