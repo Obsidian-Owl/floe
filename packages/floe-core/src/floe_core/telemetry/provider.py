@@ -13,6 +13,9 @@ Requirements Covered:
 - FR-009: gRPC protocol selection
 - FR-010: HTTP protocol selection
 - FR-011: Authentication header injection
+- FR-012: Record pipeline run duration as histogram metric
+- FR-013: Record asset materialization counts as counter metric
+- FR-014: Record error rates by component as counter metric
 - FR-024: Configurable BatchSpanProcessor (async, non-blocking export)
 - FR-026: All telemetry sent to OTLP Collector (enforced)
 
@@ -28,11 +31,19 @@ import os
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+    OTLPMetricExporter as OTLPMetricExporterGrpc,
+)
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+    OTLPMetricExporter as OTLPMetricExporterHttp,
+)
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
     OTLPSpanExporter as OTLPHttpSpanExporter,
 )
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
@@ -108,6 +119,8 @@ class TelemetryProvider:
         self._noop_mode = self._check_noop_mode()
         self._tracer_provider: TracerProvider | None = None
         self._span_processor: BatchSpanProcessor | None = None
+        self._meter_provider: MeterProvider | None = None
+        self._metric_reader: PeriodicExportingMetricReader | None = None
 
     @property
     def config(self) -> TelemetryConfig:
@@ -217,6 +230,9 @@ class TelemetryProvider:
         # Register as global tracer provider
         trace.set_tracer_provider(self._tracer_provider)
 
+        # Configure MeterProvider for metrics (FR-012, FR-013, FR-014)
+        self._setup_meter_provider(resource, headers)
+
         logger.info(
             "TelemetryProvider initialized",
             extra={
@@ -224,6 +240,7 @@ class TelemetryProvider:
                 "protocol": self._config.otlp_protocol,
                 "service_name": self._config.resource_attributes.service_name,
                 "sampling_ratio": sampling_ratio,
+                "metrics_enabled": self._meter_provider is not None,
             },
         )
         self._state = ProviderState.INITIALIZED
@@ -269,6 +286,72 @@ class TelemetryProvider:
 
         return headers if headers else None
 
+    def _setup_meter_provider(
+        self,
+        resource: Resource,
+        headers: dict[str, str] | None,
+    ) -> None:
+        """Set up MeterProvider for metrics collection.
+
+        Configures the MeterProvider with OTLP metric exporter and
+        PeriodicExportingMetricReader for async metric export.
+
+        Args:
+            resource: OpenTelemetry Resource with service attributes.
+            headers: Authentication headers for OTLP exporter, or None.
+
+        Requirements:
+            - FR-012: Pipeline run duration as histogram metric
+            - FR-013: Asset materialization counts as counter metric
+            - FR-014: Error rates by component as counter metric
+        """
+        # Determine metric endpoint (use same endpoint, different path for HTTP)
+        metric_endpoint = self._config.otlp_endpoint
+
+        # For HTTP protocol, append /v1/metrics if not already present
+        if self._config.otlp_protocol == "http" and not metric_endpoint.endswith(
+            "/v1/metrics"
+        ):
+            # Replace /v1/traces with /v1/metrics or append
+            if metric_endpoint.endswith("/v1/traces"):
+                metric_endpoint = metric_endpoint.rsplit("/v1/traces", 1)[0]
+            metric_endpoint = metric_endpoint.rstrip("/") + "/v1/metrics"
+
+        # Create OTLP metric exporter based on protocol
+        if self._config.otlp_protocol == "grpc":
+            metric_exporter = OTLPMetricExporterGrpc(
+                endpoint=metric_endpoint,
+                headers=headers,
+            )
+        else:
+            metric_exporter = OTLPMetricExporterHttp(
+                endpoint=metric_endpoint,
+                headers=headers,
+            )
+
+        # Create PeriodicExportingMetricReader for async export
+        # Default export interval is 60 seconds, can be configured via env vars
+        self._metric_reader = PeriodicExportingMetricReader(
+            exporter=metric_exporter,
+            export_interval_millis=self._config.batch_processor.schedule_delay_millis,
+            export_timeout_millis=self._config.batch_processor.export_timeout_millis,
+        )
+
+        # Create and register MeterProvider
+        self._meter_provider = MeterProvider(
+            resource=resource,
+            metric_readers=[self._metric_reader],
+        )
+        metrics.set_meter_provider(self._meter_provider)
+
+        logger.debug(
+            "MeterProvider initialized",
+            extra={
+                "metric_endpoint": metric_endpoint,
+                "protocol": self._config.otlp_protocol,
+            },
+        )
+
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         """Force flush all pending telemetry data.
 
@@ -292,10 +375,12 @@ class TelemetryProvider:
 
         self._state = ProviderState.FLUSHING
         try:
-            # Call SDK force_flush on tracer provider
+            # Call SDK force_flush on tracer provider and meter provider
             result = True
             if self._tracer_provider is not None:
-                result = self._tracer_provider.force_flush(timeout_millis)
+                result = self._tracer_provider.force_flush(timeout_millis) and result
+            if self._meter_provider is not None:
+                result = self._meter_provider.force_flush(timeout_millis) and result
             logger.debug(
                 "TelemetryProvider force_flush completed",
                 extra={"timeout_millis": timeout_millis, "success": result},
@@ -330,6 +415,10 @@ class TelemetryProvider:
             if self._tracer_provider is not None:
                 self._tracer_provider.shutdown()
 
+            # Shutdown the meter provider (includes flushing)
+            if self._meter_provider is not None:
+                self._meter_provider.shutdown()
+
             logger.info(
                 "TelemetryProvider shutdown",
                 extra={"timeout_millis": timeout_millis},
@@ -338,6 +427,8 @@ class TelemetryProvider:
         self._state = ProviderState.SHUTDOWN
         self._tracer_provider = None
         self._span_processor = None
+        self._meter_provider = None
+        self._metric_reader = None
 
     def __enter__(self) -> TelemetryProvider:
         """Enter context manager, initializing the provider.
