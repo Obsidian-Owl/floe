@@ -18,14 +18,18 @@ See Also:
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
 from typing import Any
+
+# Type alias for structlog EventDict
+EventDict = MutableMapping[str, Any]
 
 
 def add_trace_context(
     logger: Any,  # noqa: ARG001
     method_name: str,  # noqa: ARG001
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
+    event_dict: EventDict,
+) -> EventDict:
     """Add trace context to structlog event dictionary.
 
     Structlog processor that injects trace_id and span_id from the
