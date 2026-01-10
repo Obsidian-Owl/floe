@@ -29,6 +29,24 @@ Example:
 
 from __future__ import annotations
 
+# Catalog plugin fixtures
+from testing.fixtures.catalog import (
+    CatalogConnectionError,
+    CatalogTestConfig,
+    MockCatalog,
+    MockCatalogPlugin,
+    MockTable,
+    MockTableIO,
+    create_mock_catalog_plugin,
+    create_polaris_catalog_plugin,
+    get_catalog_connection_info,
+    mock_catalog_plugin_context,
+    polaris_catalog_plugin_context,
+)
+from testing.fixtures.catalog import (
+    generate_unique_namespace as generate_unique_catalog_namespace,
+)
+
 # Phase 6 exports - Service fixtures
 from testing.fixtures.dagster import (
     DagsterConfig,
@@ -105,6 +123,19 @@ from testing.fixtures.services import (
 )
 
 __all__ = [
+    # Catalog plugin fixtures
+    "CatalogConnectionError",
+    "CatalogTestConfig",
+    "MockCatalog",
+    "MockCatalogPlugin",
+    "MockTable",
+    "MockTableIO",
+    "create_mock_catalog_plugin",
+    "create_polaris_catalog_plugin",
+    "generate_unique_catalog_namespace",
+    "get_catalog_connection_info",
+    "mock_catalog_plugin_context",
+    "polaris_catalog_plugin_context",
     # Polling utilities
     "PollingConfig",
     "PollingTimeoutError",
