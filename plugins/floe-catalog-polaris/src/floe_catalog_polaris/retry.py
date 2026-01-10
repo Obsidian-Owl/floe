@@ -101,7 +101,9 @@ def create_retry_decorator(
         return no_retry
 
     return retry(
-        stop=stop_after_attempt(max_retries + 1),  # +1 because first attempt isn't a retry
+        # stop_after_attempt counts total attempts, not retries.
+        # If max_retries=3, we want: 1 initial attempt + 3 retries = 4 total attempts.
+        stop=stop_after_attempt(max_retries + 1),
         wait=wait_exponential(
             multiplier=multiplier,
             min=min_wait_seconds,

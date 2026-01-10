@@ -372,7 +372,9 @@ class TestTableNotConnected:
         sample_schema: dict[str, Any],
     ) -> None:
         """Test that create_table fails when not connected."""
-        with pytest.raises((RuntimeError, AttributeError, NotImplementedError)):
+        from floe_core import CatalogUnavailableError
+
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.create_table("bronze.customers", sample_schema)
 
     @pytest.mark.requirement("FR-015")
@@ -381,7 +383,9 @@ class TestTableNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that list_tables fails when not connected."""
-        with pytest.raises((RuntimeError, AttributeError, NotImplementedError)):
+        from floe_core import CatalogUnavailableError
+
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.list_tables("bronze")
 
     @pytest.mark.requirement("FR-018")
@@ -390,7 +394,9 @@ class TestTableNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that drop_table fails when not connected."""
-        with pytest.raises((RuntimeError, AttributeError, NotImplementedError)):
+        from floe_core import CatalogUnavailableError
+
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.drop_table("bronze.customers")
 
 

@@ -33,7 +33,13 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from floe_core import CatalogPlugin, HealthState, HealthStatus, NotSupportedError
+from floe_core import (
+    CatalogPlugin,
+    CatalogUnavailableError,
+    HealthState,
+    HealthStatus,
+    NotSupportedError,
+)
 from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
 
@@ -165,9 +171,13 @@ class PolarisCatalogPlugin(CatalogPlugin):
         """Clean up plugin resources.
 
         Called when the platform shuts down. Closes any open connections
-        and releases resources.
+        and releases resources. Safe to call multiple times.
         """
-        # Stub implementation - will be enhanced in later tasks
+        if self._catalog is not None:
+            logger.info("shutting_down_polaris_catalog")
+            # PyIceberg REST catalog doesn't have an explicit close method,
+            # but we clear the reference to allow garbage collection
+            self._catalog = None
 
     # =========================================================================
     # CatalogPlugin abstract methods
@@ -253,6 +263,11 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
                 log.debug("catalog_config_built", config_keys=list(catalog_config.keys()))
 
+                # Clean up existing connection if reconnecting
+                if self._catalog is not None:
+                    log.debug("closing_existing_catalog_connection")
+                    self._catalog = None
+
                 # Load the PyIceberg REST catalog with retry for transient failures
                 # Using "polaris" as the catalog name for identification
                 load_with_retry = with_retry(
@@ -328,7 +343,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # Use empty dict if no properties provided
                 ns_properties = properties or {}
@@ -398,7 +416,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # PyIceberg returns list of tuples, e.g., [("bronze",), ("silver",)]
                 # or for hierarchical: [("domain", "product", "bronze")]
@@ -469,7 +490,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # Drop the namespace via PyIceberg catalog
                 self._catalog.drop_namespace(namespace)
@@ -539,7 +563,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # Build kwargs for PyIceberg create_table
                 kwargs: dict[str, Any] = {}
@@ -606,7 +633,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # PyIceberg returns list of tuples: [(namespace, table_name), ...]
                 raw_tables = self._catalog.list_tables(namespace)
@@ -671,7 +701,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # Drop the table via PyIceberg catalog
                 # Note: purge_requested is supported by RestCatalog but not
@@ -775,7 +808,10 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
             try:
                 if self._catalog is None:
-                    raise RuntimeError("Catalog not connected. Call connect() first.")
+                    raise CatalogUnavailableError(
+                        catalog_uri=self._config.uri,
+                        cause=ValueError("Catalog not connected. Call connect() first."),
+                    )
 
                 # Load the table - PyIceberg will request vended credentials
                 # via the X-Iceberg-Access-Delegation header when supported
@@ -872,11 +908,13 @@ class PolarisCatalogPlugin(CatalogPlugin):
                         self._catalog.list_namespaces()
 
                 executor = ThreadPoolExecutor(max_workers=1)
+                timed_out = False
                 try:
                     future = executor.submit(_probe)
                     try:
                         future.result(timeout=timeout)
                     except FuturesTimeoutError:
+                        timed_out = True
                         elapsed_ms = (time.perf_counter() - start_time) * 1000
                         log.warning(
                             "health_check_timeout",
@@ -897,8 +935,11 @@ class PolarisCatalogPlugin(CatalogPlugin):
                             },
                         )
                 finally:
-                    # Shutdown without waiting for thread to complete
-                    executor.shutdown(wait=False)
+                    # Shutdown executor:
+                    # - On timeout: use wait=False to return immediately (thread may continue)
+                    # - On success: use wait=True for clean shutdown
+                    # cancel_futures=True cancels pending (not running) futures
+                    executor.shutdown(wait=not timed_out, cancel_futures=True)
 
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
                 log.info(

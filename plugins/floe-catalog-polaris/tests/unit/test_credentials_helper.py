@@ -21,7 +21,7 @@ from floe_catalog_polaris.credentials import (
     S3_SECRET_ACCESS_KEY,
     S3_SESSION_TOKEN,
     S3_SESSION_TOKEN_EXPIRES_AT,
-    credentials_are_valid,
+    credentials_have_required_fields,
     extract_credentials_from_io_properties,
     get_expiration_datetime,
     get_ttl_seconds,
@@ -267,12 +267,12 @@ class TestValidateCredentialStructure:
 
 
 # ============================================================================
-# TestCredentialsAreValid - Validity check
+# TestCredentialsHaveRequiredFields - Validity check
 # ============================================================================
 
 
-class TestCredentialsAreValid:
-    """Tests for credentials_are_valid function."""
+class TestCredentialsHaveRequiredFields:
+    """Tests for credentials_have_required_fields function."""
 
     @pytest.mark.requirement("FR-020")
     def test_valid_credentials_returns_true(self) -> None:
@@ -284,7 +284,7 @@ class TestCredentialsAreValid:
         }
 
         # Act
-        result = credentials_are_valid(credentials)
+        result = credentials_have_required_fields(credentials)
 
         # Assert
         assert result is True
@@ -299,7 +299,7 @@ class TestCredentialsAreValid:
         }
 
         # Act
-        result = credentials_are_valid(credentials)
+        result = credentials_have_required_fields(credentials)
 
         # Assert
         assert result is False
@@ -314,7 +314,7 @@ class TestCredentialsAreValid:
         }
 
         # Act
-        result = credentials_are_valid(credentials)
+        result = credentials_have_required_fields(credentials)
 
         # Assert
         assert result is False
@@ -326,7 +326,7 @@ class TestCredentialsAreValid:
         credentials: dict[str, str] = {}
 
         # Act
-        result = credentials_are_valid(credentials)
+        result = credentials_have_required_fields(credentials)
 
         # Assert
         assert result is False

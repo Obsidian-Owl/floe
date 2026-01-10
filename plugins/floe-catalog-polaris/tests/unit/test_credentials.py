@@ -332,10 +332,12 @@ class TestVendCredentialsNotConnected:
         """Test vend_credentials raises error when catalog not connected.
 
         Validates that calling vend_credentials before connect() raises
-        a RuntimeError with clear message.
+        a CatalogUnavailableError with clear message.
         """
+        from floe_core import CatalogUnavailableError
+
         # Act & Assert
-        with pytest.raises(RuntimeError, match="not connected"):
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.vend_credentials(
                 table_path="bronze.customers",
                 operations=["READ"],

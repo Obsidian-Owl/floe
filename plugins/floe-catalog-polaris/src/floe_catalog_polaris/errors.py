@@ -277,7 +277,9 @@ def map_pyiceberg_error(
             cause=error,
         )
 
-    # Unknown error - wrap as CatalogUnavailableError
+    # Unknown error - wrap as generic CatalogError
+    # Using CatalogError (not CatalogUnavailableError) because unknown exceptions
+    # may indicate logic errors, not connectivity issues
     logger.error(
         "catalog_unknown_error",
         error_type=type(error).__name__,
@@ -285,9 +287,8 @@ def map_pyiceberg_error(
         catalog_uri=catalog_uri,
         operation=operation,
     )
-    return CatalogUnavailableError(
-        catalog_uri=catalog_uri or "unknown",
-        cause=error,
+    return CatalogError(
+        f"Unexpected catalog error during {operation or 'operation'}: {error}",
     )
 
 

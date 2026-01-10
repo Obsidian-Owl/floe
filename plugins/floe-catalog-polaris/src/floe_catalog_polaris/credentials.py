@@ -167,11 +167,12 @@ def extract_credentials_from_io_properties(
     return credentials
 
 
-def credentials_are_valid(credentials: dict[str, Any]) -> bool:
+def credentials_have_required_fields(credentials: dict[str, Any]) -> bool:
     """Check if credentials have required fields with non-empty values.
 
     Validates that access_key and secret_key are present and non-empty.
-    Token and expiration are optional for some storage backends.
+    This function only checks field presence, NOT expiration.
+    Use is_expired() to check credential expiration.
 
     Args:
         credentials: Credential dictionary to validate.
@@ -180,9 +181,9 @@ def credentials_are_valid(credentials: dict[str, Any]) -> bool:
         True if credentials have required fields, False otherwise.
 
     Example:
-        >>> credentials_are_valid({"access_key": "key", "secret_key": "secret"})
+        >>> credentials_have_required_fields({"access_key": "key", "secret_key": "secret"})
         True
-        >>> credentials_are_valid({"access_key": "", "secret_key": "secret"})
+        >>> credentials_have_required_fields({"access_key": "", "secret_key": "secret"})
         False
     """
     return bool(credentials.get("access_key")) and bool(credentials.get("secret_key"))

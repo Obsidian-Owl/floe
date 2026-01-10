@@ -29,7 +29,7 @@ from floe_catalog_polaris.config import (
 )
 from floe_catalog_polaris.credentials import (
     MAX_CREDENTIAL_TTL_SECONDS,
-    credentials_are_valid,
+    credentials_have_required_fields,
     extract_credentials_from_io_properties,
     get_expiration_datetime,
     get_ttl_seconds,
@@ -58,7 +58,7 @@ __all__ = [
     "extract_credentials_from_io_properties",
     "parse_expiration",
     "validate_credential_structure",
-    "credentials_are_valid",
+    "credentials_have_required_fields",
     "is_expired",
     "get_expiration_datetime",
     # TTL validation

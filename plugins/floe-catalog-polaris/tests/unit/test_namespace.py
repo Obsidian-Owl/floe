@@ -365,8 +365,10 @@ class TestNamespaceNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that create_namespace fails when not connected."""
+        from floe_core import CatalogUnavailableError
+
         # Plugin is not connected (no connect() called)
-        with pytest.raises((RuntimeError, AttributeError, NotImplementedError)):
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.create_namespace("bronze")
 
     @pytest.mark.requirement("FR-012")
@@ -375,7 +377,9 @@ class TestNamespaceNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that list_namespaces fails when not connected."""
-        with pytest.raises((RuntimeError, AttributeError, NotImplementedError)):
+        from floe_core import CatalogUnavailableError
+
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.list_namespaces()
 
     @pytest.mark.requirement("FR-013")
@@ -384,7 +388,9 @@ class TestNamespaceNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that delete_namespace fails when not connected."""
-        with pytest.raises((RuntimeError, AttributeError, NotImplementedError)):
+        from floe_core import CatalogUnavailableError
+
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.delete_namespace("bronze")
 
 

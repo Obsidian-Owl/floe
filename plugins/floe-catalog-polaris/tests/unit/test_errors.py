@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 from floe_core import (
     AuthenticationError,
+    CatalogError,
     CatalogUnavailableError,
     ConflictError,
     NotFoundError,
@@ -228,17 +229,23 @@ class TestMapPyicebergError:
         assert result.cause is error
 
     @pytest.mark.requirement("FR-033")
-    def test_unknown_exception_maps_to_catalog_unavailable(self) -> None:
-        """Test unknown exceptions map to CatalogUnavailableError."""
+    def test_unknown_exception_maps_to_catalog_error(self) -> None:
+        """Test unknown exceptions map to generic CatalogError.
+
+        Unknown exceptions are wrapped in CatalogError (not CatalogUnavailableError)
+        because they may indicate logic errors rather than connectivity issues.
+        """
         error = RuntimeError("Some unexpected error")
 
         result = map_pyiceberg_error(
             error,
             catalog_uri="http://polaris:8181",
+            operation="test_operation",
         )
 
-        assert isinstance(result, CatalogUnavailableError)
-        assert result.cause is error
+        assert isinstance(result, CatalogError)
+        assert "unexpected" in str(result).lower()
+        assert "test_operation" in str(result)
 
     @pytest.mark.requirement("FR-033")
     def test_map_with_no_context(self) -> None:
