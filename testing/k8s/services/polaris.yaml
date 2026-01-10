@@ -21,7 +21,7 @@ data:
       type: in-memory
 
     defaultRealms:
-      - default-realm
+      - POLARIS
 
     featureConfiguration:
       ENFORCE_PRINCIPAL_CREDENTIAL_ROTATION_REQUIRED_CHECKING: false
