@@ -1,25 +1,33 @@
-"""Base test classes for plugin compliance testing.
+"""Test base classes for K8s-native integration testing.
 
-This package provides abstract base test classes that plugin implementations
-must pass. Each plugin type has a corresponding base test class:
+This module provides base classes that handle common integration test setup,
+including service availability checks, namespace isolation, and resource cleanup.
 
-- BaseCatalogPluginTests: Tests for CatalogPlugin implementations
-
-Usage:
-    Plugin test classes inherit from the appropriate base class and
-    provide a fixture for their concrete plugin implementation.
+Classes:
+    IntegrationTestBase: Base class for K8s-native integration tests
+    PluginTestBase: Base class for plugin compliance testing
+    AdapterTestBase: Base class for adapter testing
 
 Example:
-    >>> from testing.base_classes import BaseCatalogPluginTests
-    >>>
-    >>> class TestPolarisPlugin(BaseCatalogPluginTests):
-    ...     @pytest.fixture
-    ...     def catalog_plugin(self):
-    ...         return PolarisCatalogPlugin(config)
+    from testing.base_classes import IntegrationTestBase
+
+    class TestPolarisCatalog(IntegrationTestBase):
+        required_services = [("polaris", 8181)]
+
+        def test_create_namespace(self) -> None:
+            namespace = self.generate_unique_namespace("test")
+            # Test implementation...
 """
 
 from __future__ import annotations
 
-from testing.base_classes.base_catalog_plugin_tests import BaseCatalogPluginTests
+# Phase 4 exports - Base classes for integration testing
+from testing.base_classes.adapter_test_base import AdapterTestBase
+from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.base_classes.plugin_test_base import PluginTestBase
 
-__all__ = ["BaseCatalogPluginTests"]
+__all__ = [
+    "AdapterTestBase",
+    "IntegrationTestBase",
+    "PluginTestBase",
+]

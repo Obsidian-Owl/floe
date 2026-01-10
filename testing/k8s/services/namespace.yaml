@@ -1,0 +1,41 @@
+# floe-test namespace for integration testing
+# All test services run in this namespace
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: floe-test
+  labels:
+    app.kubernetes.io/name: floe-test
+    app.kubernetes.io/component: testing
+    app.kubernetes.io/managed-by: floe
+---
+# ResourceQuota to prevent runaway resource consumption
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: floe-test-quota
+  namespace: floe-test
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "20"
+---
+# LimitRange for default resource limits
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: floe-test-limits
+  namespace: floe-test
+spec:
+  limits:
+    - default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      type: Container

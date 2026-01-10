@@ -72,6 +72,11 @@ packages/floe-core/src/floe_core/
 │       ├── __init__.py
 │       ├── dbt.py               # dbt lineage extractor
 │       └── dagster.py           # Dagster lineage extractor
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/lineage.py          # LineageBackendPlugin test fixtures
+testing/k8s/services/marquez.yaml    # Marquez K8s manifest for integration tests
+testing/tests/unit/test_lineage_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -83,6 +88,7 @@ packages/floe-core/src/floe_core/
 | Blocked By | Epic 1 | Uses plugin registry |
 | Blocked By | Epic 4B | Extracts lineage from Dagster |
 | Blocked By | Epic 5A | Extracts lineage from dbt |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 3D | Contract monitoring uses lineage |
 
 ---

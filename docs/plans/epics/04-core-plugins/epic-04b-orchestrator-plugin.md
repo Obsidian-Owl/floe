@@ -70,6 +70,10 @@ plugins/floe-orchestrator-dagster/
 └── tests/
     ├── unit/
     └── integration/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/orchestrator.py     # OrchestratorPlugin test fixtures
+testing/tests/unit/test_orchestrator_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -80,6 +84,7 @@ plugins/floe-orchestrator-dagster/
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry |
 | Blocked By | Epic 2B | Loads CompiledArtifacts |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 5A | dbt plugin generates Dagster assets |
 | Blocks | Epic 6A | OpenTelemetry traces from orchestrator |
 | Blocks | Epic 6B | OpenLineage events from orchestrator |

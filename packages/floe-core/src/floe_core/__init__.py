@@ -1,11 +1,12 @@
-"""floe-core: Core plugin registry and interfaces for the floe data platform.
+"""floe-core: Core plugin registry, schemas, and interfaces for the floe data platform.
 
 This package provides:
 - PluginRegistry: Singleton for discovering and managing plugins
 - PluginMetadata: Base ABC for all plugin types
-- PluginType: Enum defining the 11 plugin categories
+- PluginType: Enum defining the 12 plugin categories
 - Plugin ABCs: Type-specific interfaces (ComputePlugin, etc.)
 - Errors: Custom exceptions for plugin operations
+- Schemas: Pydantic models for manifest validation (floe_core.schemas)
 
 Example:
     >>> from floe_core import get_registry, PluginType
@@ -18,8 +19,12 @@ Example:
     ...     # Implement abstract methods
     ...     pass
 
+    >>> from floe_core.schemas import PlatformManifest
+    >>> manifest = PlatformManifest.model_validate(yaml_data)
+
 See Also:
     - floe_core.plugins: All plugin ABCs with supporting dataclasses
+    - floe_core.schemas: Manifest schema definitions
     - docs/architecture/plugin-system/: Full architecture documentation
 """
 
@@ -28,6 +33,8 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 # Error hierarchy
+# Schemas submodule (imported for explicit re-export)
+from floe_core import schemas as schemas  # noqa: PLC0414
 from floe_core.plugin_errors import (
     # Plugin registry errors
     CircularDependencyError,
@@ -63,7 +70,7 @@ from floe_core.plugin_registry import (
 # Plugin type categories
 from floe_core.plugin_types import PluginType
 
-# Plugin ABCs (11 types)
+# Plugin ABCs (12 types)
 from floe_core.plugins import (
     CatalogPlugin,
     ComputePlugin,
@@ -72,6 +79,7 @@ from floe_core.plugins import (
     IngestionPlugin,
     LineageBackendPlugin,
     OrchestratorPlugin,
+    QualityPlugin,
     SecretsPlugin,
     SemanticLayerPlugin,
     StoragePlugin,
@@ -88,6 +96,8 @@ from floe_core.version_compat import (
 __all__: list[str] = [
     # Package version
     "__version__",
+    # Schemas submodule
+    "schemas",
     # Plugin type categories
     "PluginType",
     # Plugin registry errors
@@ -117,7 +127,7 @@ __all__: list[str] = [
     # Plugin registry
     "PluginRegistry",
     "get_registry",
-    # Plugin ABCs (11 types)
+    # Plugin ABCs (12 types)
     "CatalogPlugin",
     "ComputePlugin",
     "DBTPlugin",
@@ -125,6 +135,7 @@ __all__: list[str] = [
     "IngestionPlugin",
     "LineageBackendPlugin",
     "OrchestratorPlugin",
+    "QualityPlugin",
     "SecretsPlugin",
     "SemanticLayerPlugin",
     "StoragePlugin",

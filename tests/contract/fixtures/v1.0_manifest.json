@@ -1,0 +1,40 @@
+{
+  "apiVersion": "floe.dev/v1",
+  "kind": "Manifest",
+  "metadata": {
+    "name": "golden-platform",
+    "version": "1.0.0",
+    "owner": "platform-team@example.com",
+    "description": "Golden fixture for backward compatibility testing"
+  },
+  "scope": "enterprise",
+  "plugins": {
+    "compute": {
+      "type": "duckdb",
+      "config": {
+        "threads": 4,
+        "memory_limit": "8GB"
+      }
+    },
+    "orchestrator": {
+      "type": "dagster"
+    },
+    "catalog": {
+      "type": "polaris",
+      "connection_secret_ref": "polaris-credentials"
+    },
+    "storage": {
+      "type": "s3"
+    }
+  },
+  "governance": {
+    "pii_encryption": "required",
+    "audit_logging": "enabled",
+    "policy_enforcement_level": "strict",
+    "data_retention_days": 90
+  },
+  "approved_plugins": {
+    "compute": ["duckdb", "snowflake"],
+    "orchestrator": ["dagster", "airflow"]
+  }
+}

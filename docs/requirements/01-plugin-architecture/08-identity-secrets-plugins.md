@@ -1,4 +1,4 @@
-# REQ-071 to REQ-085: Identity and Secrets Plugin Standards
+# REQ-071 to REQ-087: Identity and Secrets Plugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -293,9 +293,75 @@ IdentityPlugin and SecretsPlugin provide authentication/authorization and secret
 
 ---
 
+### REQ-086: IdentityPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for IdentityPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for identity implementations (Keycloak, Dex) require OIDC/JWT fixtures to validate authentication, token generation, and security context extraction.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/identity.py` (extends 9C patterns)
+- [ ] `IdentityTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `identity_provider_context()` for lifecycle
+- [ ] Implementation fixtures: `keycloak_fixture()`, `dex_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real IdP required)
+- [ ] K8s manifest: `testing/k8s/services/keycloak.yaml` for integration tests
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST support credential injection via environment variables
+- MUST NOT expose test credentials in logs or error messages
+
+**Test Coverage**: `testing/tests/unit/test_identity_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 7A (IdentityPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
+### REQ-087: SecretsPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for SecretsPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for secrets implementations (Vault, Infisical) require secrets backend fixtures to validate secret retrieval, creation, and K8s secret mounting.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/secrets.py` (extends 9C patterns)
+- [ ] `SecretsTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `secrets_backend_context()` for lifecycle
+- [ ] Implementation fixtures: `vault_fixture()`, `infisical_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real backend required)
+- [ ] K8s manifest: `testing/k8s/services/vault.yaml` for integration tests
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST support credential injection via environment variables
+- MUST NOT expose secret values in logs or error messages
+
+**Test Coverage**: `testing/tests/unit/test_secrets_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 7A (SecretsPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-Identity and Secrets Standards (REQ-071 to REQ-085) complete when:
+Identity and Secrets Standards (REQ-071 to REQ-087) complete when:
 
 - [ ] All 15 requirements documented with complete fields
 - [ ] IdentityPlugin and SecretsPlugin ABCs defined

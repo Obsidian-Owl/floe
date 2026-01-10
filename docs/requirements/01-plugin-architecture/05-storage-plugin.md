@@ -1,4 +1,4 @@
-# REQ-041 to REQ-050: StoragePlugin Standards
+# REQ-041 to REQ-051: StoragePlugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -199,9 +199,41 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 ---
 
+### REQ-051: StoragePlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for StoragePlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for storage adapters require object storage connectivity fixtures to validate FileIO operations, warehouse URI generation, and credential management.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/storage.py` (extends 9C patterns)
+- [ ] `StorageTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `storage_connection_context()` for lifecycle
+- [ ] Cloud-specific fixtures: `s3_fixture()`, `gcs_fixture()`, `azure_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real storage required)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST NOT duplicate MinIO fixture from Epic 9C (reference implementation)
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_storage_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 4D (StoragePlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-StoragePlugin Standards (REQ-041 to REQ-050) complete when:
+StoragePlugin Standards (REQ-041 to REQ-051) complete when:
 
 - [ ] All 10 requirements documented with complete fields
 - [ ] StoragePlugin ABC defined in floe-core

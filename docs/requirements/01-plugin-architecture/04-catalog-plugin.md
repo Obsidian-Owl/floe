@@ -1,4 +1,4 @@
-# REQ-031 to REQ-040: CatalogPlugin Standards
+# REQ-031 to REQ-041: CatalogPlugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -201,9 +201,41 @@ CatalogPlugin defines the interface for all data catalogs (Polaris, AWS Glue, Hi
 
 ---
 
+### REQ-041: CatalogPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for CatalogPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for catalog adapters (AWS Glue, Hive) require catalog connectivity fixtures to validate catalog operations, namespace management, and credential vending.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/catalog.py` (extends 9C patterns)
+- [ ] `CatalogTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `catalog_connection_context()` for lifecycle
+- [ ] Adapter-specific fixtures: `glue_fixture()`, `hive_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real catalog required)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST NOT duplicate Polaris fixture from Epic 9C (reference implementation)
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_catalog_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 4C (CatalogPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-CatalogPlugin Standards (REQ-031 to REQ-040) complete when:
+CatalogPlugin Standards (REQ-031 to REQ-041) complete when:
 
 - [ ] All 10 requirements documented with complete fields
 - [ ] CatalogPlugin ABC defined in floe-core

@@ -1,4 +1,4 @@
-# REQ-101 to REQ-110: DataQualityPlugin Standards
+# REQ-101 to REQ-111: DataQualityPlugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: HIGH
@@ -234,9 +234,44 @@ dbt_expectations = "floe_dq_dbt:DBTExpectationsPlugin"
 | `SodaPlugin` | Soda Core integration | Epic 8+ |
 | `DBTExpectationsPlugin` | Wraps dbt native tests for unified scoring | Epic 8+ |
 
+---
+
+### REQ-111: DataQualityPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for DataQualityPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for data quality implementations (Great Expectations, Soda) require quality framework fixtures to validate configuration, check execution, and scoring calculation.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/quality.py` (extends 9C patterns)
+- [ ] `QualityTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `quality_context()` for lifecycle
+- [ ] Implementation fixtures: `great_expectations_fixture()`, `soda_fixture()` for testing
+- [ ] Sample expectations: `testing/fixtures/sample_expectations/` with test data
+- [ ] Mock fixtures for unit tests (no real database required)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST provide sample expectations for validation tests
+- MUST support testing against DuckDB fixture from Epic 9C
+
+**Test Coverage**: `testing/tests/unit/test_quality_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 5B (DataQualityPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-DataQualityPlugin Standards (REQ-101 to REQ-110) complete when:
+DataQualityPlugin Standards (REQ-101 to REQ-111) complete when:
 
 - [ ] All 10 requirements documented with complete fields
 - [ ] DataQualityPlugin ABC defined in floe-core

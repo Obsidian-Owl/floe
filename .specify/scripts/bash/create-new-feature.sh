@@ -4,14 +4,14 @@ set -e
 
 JSON_MODE=false
 SHORT_NAME=""
-BRANCH_NUMBER=""
+EPIC_ID=""
 ARGS=()
 i=1
 while [ $i -le $# ]; do
     arg="${!i}"
     case "$arg" in
-        --json) 
-            JSON_MODE=true 
+        --json)
+            JSON_MODE=true
             ;;
         --short-name)
             if [ $((i + 1)) -gt $# ]; then
@@ -27,35 +27,38 @@ while [ $i -le $# ]; do
             fi
             SHORT_NAME="$next_arg"
             ;;
-        --number)
+        --epic)
             if [ $((i + 1)) -gt $# ]; then
-                echo 'Error: --number requires a value' >&2
+                echo 'Error: --epic requires a value' >&2
                 exit 1
             fi
             i=$((i + 1))
             next_arg="${!i}"
             if [[ "$next_arg" == --* ]]; then
-                echo 'Error: --number requires a value' >&2
+                echo 'Error: --epic requires a value' >&2
                 exit 1
             fi
-            BRANCH_NUMBER="$next_arg"
+            EPIC_ID="$next_arg"
             ;;
-        --help|-h) 
-            echo "Usage: $0 [--json] [--short-name <name>] [--number N] <feature_description>"
+        --help|-h)
+            echo "Usage: $0 [--json] [--short-name <name>] --epic <epic-id> <feature_description>"
             echo ""
             echo "Options:"
             echo "  --json              Output in JSON format"
             echo "  --short-name <name> Provide a custom short name (2-4 words) for the branch"
-            echo "  --number N          Specify branch number manually (overrides auto-detection)"
+            echo "  --epic <id>         Epic ID from EPIC-OVERVIEW.md (e.g., 1, 2a, 9c) - REQUIRED"
             echo "  --help, -h          Show this help message"
             echo ""
+            echo "Epic IDs follow the pattern: number + optional letter (1, 2a, 2b, 3a, 9c, etc.)"
+            echo "See docs/plans/EPIC-OVERVIEW.md for the full list of Epics."
+            echo ""
             echo "Examples:"
-            echo "  $0 'Add user authentication system' --short-name 'user-auth'"
-            echo "  $0 'Implement OAuth2 integration for API' --number 5"
+            echo "  $0 --epic 2a --short-name 'manifest-validation' 'Implement manifest schema validation'"
+            echo "  $0 --epic 9c 'Set up K8s test infrastructure'"
             exit 0
             ;;
-        *) 
-            ARGS+=("$arg") 
+        *)
+            ARGS+=("$arg")
             ;;
     esac
     i=$((i + 1))
@@ -63,7 +66,22 @@ done
 
 FEATURE_DESCRIPTION="${ARGS[*]}"
 if [ -z "$FEATURE_DESCRIPTION" ]; then
-    echo "Usage: $0 [--json] [--short-name <name>] [--number N] <feature_description>" >&2
+    echo "Usage: $0 [--json] [--short-name <name>] --epic <epic-id> <feature_description>" >&2
+    exit 1
+fi
+
+# Validate Epic ID is provided
+if [ -z "$EPIC_ID" ]; then
+    echo "Error: --epic is required. Provide an Epic ID (e.g., 1, 2a, 9c)." >&2
+    echo "See docs/plans/EPIC-OVERVIEW.md for the full list of Epics." >&2
+    exit 1
+fi
+
+# Validate Epic ID format: number + optional letter (e.g., 1, 2a, 2b, 3a, 9c)
+# Convert to lowercase for consistency
+EPIC_ID=$(echo "$EPIC_ID" | tr '[:upper:]' '[:lower:]')
+if ! echo "$EPIC_ID" | grep -qE '^[0-9]+[a-z]?$'; then
+    echo "Error: Invalid Epic ID format '$EPIC_ID'. Expected format: number + optional letter (e.g., 1, 2a, 9c)." >&2
     exit 1
 fi
 
@@ -80,73 +98,25 @@ find_repo_root() {
     return 1
 }
 
-# Function to get highest number from specs directory
-get_highest_from_specs() {
+# Function to check if a spec already exists for this Epic
+check_existing_epic_spec() {
     local specs_dir="$1"
-    local highest=0
-    
-    if [ -d "$specs_dir" ]; then
-        for dir in "$specs_dir"/*; do
-            [ -d "$dir" ] || continue
-            dirname=$(basename "$dir")
-            number=$(echo "$dirname" | grep -o '^[0-9]\+' || echo "0")
-            number=$((10#$number))
-            if [ "$number" -gt "$highest" ]; then
-                highest=$number
-            fi
-        done
-    fi
-    
-    echo "$highest"
-}
-
-# Function to get highest number from git branches
-get_highest_from_branches() {
-    local highest=0
-    
-    # Get all branches (local and remote)
-    branches=$(git branch -a 2>/dev/null || echo "")
-    
-    if [ -n "$branches" ]; then
-        while IFS= read -r branch; do
-            # Clean branch name: remove leading markers and remote prefixes
-            clean_branch=$(echo "$branch" | sed 's/^[* ]*//; s|^remotes/[^/]*/||')
-            
-            # Extract feature number if branch matches pattern ###-*
-            if echo "$clean_branch" | grep -q '^[0-9]\{3\}-'; then
-                number=$(echo "$clean_branch" | grep -o '^[0-9]\{3\}' || echo "0")
-                number=$((10#$number))
-                if [ "$number" -gt "$highest" ]; then
-                    highest=$number
-                fi
-            fi
-        done <<< "$branches"
-    fi
-    
-    echo "$highest"
-}
-
-# Function to check existing branches (local and remote) and return next available number
-check_existing_branches() {
-    local specs_dir="$1"
+    local epic_id="$2"
 
     # Fetch all remotes to get latest branch info (suppress errors if no remotes)
     git fetch --all --prune 2>/dev/null || true
 
-    # Get highest number from ALL branches (not just matching short name)
-    local highest_branch=$(get_highest_from_branches)
-
-    # Get highest number from ALL specs (not just matching short name)
-    local highest_spec=$(get_highest_from_specs "$specs_dir")
-
-    # Take the maximum of both
-    local max_num=$highest_branch
-    if [ "$highest_spec" -gt "$max_num" ]; then
-        max_num=$highest_spec
+    # Check for existing specs with this Epic ID prefix
+    if [ -d "$specs_dir" ]; then
+        for dir in "$specs_dir"/"$epic_id"-*; do
+            if [ -d "$dir" ]; then
+                echo "$(basename "$dir")"
+                return 0
+            fi
+        done
     fi
 
-    # Return next number
-    echo $((max_num + 1))
+    return 1
 }
 
 # Function to clean and format a branch name
@@ -180,19 +150,19 @@ mkdir -p "$SPECS_DIR"
 # Function to generate branch name with stop word filtering and length filtering
 generate_branch_name() {
     local description="$1"
-    
+
     # Common stop words to filter out
     local stop_words="^(i|a|an|the|to|for|of|in|on|at|by|with|from|is|are|was|were|be|been|being|have|has|had|do|does|did|will|would|should|could|can|may|might|must|shall|this|that|these|those|my|your|our|their|want|need|add|get|set)$"
-    
+
     # Convert to lowercase and split into words
     local clean_name=$(echo "$description" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/ /g')
-    
+
     # Filter words: remove stop words and words shorter than 3 chars (unless they're uppercase acronyms in original)
     local meaningful_words=()
     for word in $clean_name; do
         # Skip empty words
         [ -z "$word" ] && continue
-        
+
         # Keep words that are NOT stop words AND (length >= 3 OR are potential acronyms)
         if ! echo "$word" | grep -qiE "$stop_words"; then
             if [ ${#word} -ge 3 ]; then
@@ -203,12 +173,12 @@ generate_branch_name() {
             fi
         fi
     done
-    
+
     # If we have meaningful words, use first 3-4 of them
     if [ ${#meaningful_words[@]} -gt 0 ]; then
         local max_words=3
         if [ ${#meaningful_words[@]} -eq 4 ]; then max_words=4; fi
-        
+
         local result=""
         local count=0
         for word in "${meaningful_words[@]}"; do
@@ -225,7 +195,7 @@ generate_branch_name() {
     fi
 }
 
-# Generate branch name
+# Generate branch name suffix
 if [ -n "$SHORT_NAME" ]; then
     # Use provided short name, just clean it up
     BRANCH_SUFFIX=$(clean_branch_name "$SHORT_NAME")
@@ -234,38 +204,33 @@ else
     BRANCH_SUFFIX=$(generate_branch_name "$FEATURE_DESCRIPTION")
 fi
 
-# Determine branch number
-if [ -z "$BRANCH_NUMBER" ]; then
-    if [ "$HAS_GIT" = true ]; then
-        # Check existing branches on remotes
-        BRANCH_NUMBER=$(check_existing_branches "$SPECS_DIR")
-    else
-        # Fall back to local directory check
-        HIGHEST=$(get_highest_from_specs "$SPECS_DIR")
-        BRANCH_NUMBER=$((HIGHEST + 1))
-    fi
+# Check for existing spec with this Epic ID
+EXISTING_SPEC=$(check_existing_epic_spec "$SPECS_DIR" "$EPIC_ID")
+if [ -n "$EXISTING_SPEC" ]; then
+    >&2 echo "[specify] Warning: Existing spec found for Epic $EPIC_ID: $EXISTING_SPEC"
+    >&2 echo "[specify] Creating new feature branch, but spec directory already exists."
 fi
 
-# Force base-10 interpretation to prevent octal conversion (e.g., 010 → 8 in octal, but should be 10 in decimal)
-FEATURE_NUM=$(printf "%03d" "$((10#$BRANCH_NUMBER))")
-BRANCH_NAME="${FEATURE_NUM}-${BRANCH_SUFFIX}"
+# Create branch name using Epic ID prefix (lowercase)
+BRANCH_NAME="${EPIC_ID}-${BRANCH_SUFFIX}"
 
 # GitHub enforces a 244-byte limit on branch names
 # Validate and truncate if necessary
 MAX_BRANCH_LENGTH=244
 if [ ${#BRANCH_NAME} -gt $MAX_BRANCH_LENGTH ]; then
     # Calculate how much we need to trim from suffix
-    # Account for: feature number (3) + hyphen (1) = 4 chars
-    MAX_SUFFIX_LENGTH=$((MAX_BRANCH_LENGTH - 4))
-    
+    # Account for: Epic ID + hyphen
+    EPIC_PREFIX_LENGTH=$((${#EPIC_ID} + 1))
+    MAX_SUFFIX_LENGTH=$((MAX_BRANCH_LENGTH - EPIC_PREFIX_LENGTH))
+
     # Truncate suffix at word boundary if possible
     TRUNCATED_SUFFIX=$(echo "$BRANCH_SUFFIX" | cut -c1-$MAX_SUFFIX_LENGTH)
     # Remove trailing hyphen if truncation created one
     TRUNCATED_SUFFIX=$(echo "$TRUNCATED_SUFFIX" | sed 's/-$//')
-    
+
     ORIGINAL_BRANCH_NAME="$BRANCH_NAME"
-    BRANCH_NAME="${FEATURE_NUM}-${TRUNCATED_SUFFIX}"
-    
+    BRANCH_NAME="${EPIC_ID}-${TRUNCATED_SUFFIX}"
+
     >&2 echo "[specify] Warning: Branch name exceeded GitHub's 244-byte limit"
     >&2 echo "[specify] Original: $ORIGINAL_BRANCH_NAME (${#ORIGINAL_BRANCH_NAME} bytes)"
     >&2 echo "[specify] Truncated to: $BRANCH_NAME (${#BRANCH_NAME} bytes)"
@@ -288,10 +253,10 @@ if [ -f "$TEMPLATE" ]; then cp "$TEMPLATE" "$SPEC_FILE"; else touch "$SPEC_FILE"
 export SPECIFY_FEATURE="$BRANCH_NAME"
 
 if $JSON_MODE; then
-    printf '{"BRANCH_NAME":"%s","SPEC_FILE":"%s","FEATURE_NUM":"%s"}\n' "$BRANCH_NAME" "$SPEC_FILE" "$FEATURE_NUM"
+    printf '{"BRANCH_NAME":"%s","SPEC_FILE":"%s","EPIC_ID":"%s"}\n' "$BRANCH_NAME" "$SPEC_FILE" "$EPIC_ID"
 else
     echo "BRANCH_NAME: $BRANCH_NAME"
     echo "SPEC_FILE: $SPEC_FILE"
-    echo "FEATURE_NUM: $FEATURE_NUM"
+    echo "EPIC_ID: $EPIC_ID"
     echo "SPECIFY_FEATURE environment variable set to: $BRANCH_NAME"
 fi

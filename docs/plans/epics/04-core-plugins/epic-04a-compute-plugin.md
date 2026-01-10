@@ -81,6 +81,10 @@ plugins/floe-compute-duckdb/
 └── tests/
     ├── unit/
     └── integration/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/compute.py          # ComputePlugin test fixtures
+testing/tests/unit/test_compute_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -90,6 +94,7 @@ plugins/floe-compute-duckdb/
 | Type | Epic | Reason |
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 5A | dbt uses compute for execution |
 | Blocks | Epic 9A | K8s deployment needs compute config |
 

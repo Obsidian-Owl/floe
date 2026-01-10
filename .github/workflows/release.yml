@@ -1,0 +1,159 @@
+# Release Pipeline - runs on tags for formal releases
+# Integration tests and E2E validation run here (not on every PR)
+#
+# Triggers:
+#   - Push to tags matching v*.*.*
+#   - Manual workflow_dispatch for testing
+#
+# Best practice: Fast tests (lint, unit) on PRs, slow tests (integration, E2E) on releases
+# See: https://docs.github.com/en/actions/guides/about-continuous-integration
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      run_integration:
+        description: 'Run integration tests'
+        required: false
+        default: true
+        type: boolean
+
+# Only one release at a time
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.10"
+
+jobs:
+  # ============================================================
+  # Validate: Quick checks before expensive tests
+  # ============================================================
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Release version: ${VERSION}"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run quick validation
+        run: |
+          uv run ruff check .
+          uv run mypy --strict packages/ testing/
+
+  # ============================================================
+  # Integration Tests (K8s-native with Kind)
+  # ============================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    if: ${{ github.event_name == 'push' || inputs.run_integration == true }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3  # v1.12.0
+        with:
+          cluster_name: floe-release
+          config: testing/k8s/kind-config.yaml
+
+      - name: Deploy test services
+        run: |
+          kubectl apply -f testing/k8s/services/namespace.yaml
+          kubectl apply -f testing/k8s/services/
+
+      - name: Wait for services to be ready
+        run: |
+          kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s || true
+          kubectl get pods -n floe-test
+
+      - name: Run integration tests
+        run: ./testing/ci/test-integration.sh
+        env:
+          TEST_NAMESPACE: floe-test
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          kubectl get pods -n floe-test -o wide
+          kubectl logs -n floe-test --all-containers --tail=50 -l app || true
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: kind delete cluster --name floe-release || true
+
+  # ============================================================
+  # Create GitHub Release
+  # ============================================================
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [validate, integration-tests]
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974  # v2
+        with:
+          name: Release ${{ needs.validate.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

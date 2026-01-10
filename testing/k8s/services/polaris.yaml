@@ -1,0 +1,120 @@
+# Apache Polaris catalog for integration testing
+# NOT production-ready - for testing only
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: polaris-config
+  namespace: floe-test
+data:
+  # Polaris server configuration
+  polaris-server.yml: |
+    server:
+      applicationConnectors:
+        - type: http
+          port: 8181
+      adminConnectors:
+        - type: http
+          port: 8182
+
+    metaStoreManager:
+      type: in-memory
+
+    defaultRealms:
+      - default-realm
+
+    featureConfiguration:
+      ENFORCE_PRINCIPAL_CREDENTIAL_ROTATION_REQUIRED_CHECKING: false
+      SUPPORTED_CATALOG_STORAGE_TYPES:
+        - S3
+        - FILE
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: polaris
+  namespace: floe-test
+  labels:
+    app: polaris
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: polaris
+  template:
+    metadata:
+      labels:
+        app: polaris
+    spec:
+      containers:
+        - name: polaris
+          image: apache/polaris:1.0.0-incubating
+          ports:
+            - containerPort: 8181
+              name: api
+            - containerPort: 8182
+              name: admin
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: AWS_REGION
+              value: us-east-1
+            # Point S3 to MinIO
+            - name: CATALOG_WAREHOUSE
+              value: s3://floe-warehouse/
+            - name: CATALOG_S3_ENDPOINT
+              value: http://minio:9000
+            - name: CATALOG_S3_PATH_STYLE_ACCESS
+              value: "true"
+          volumeMounts:
+            - name: config
+              mountPath: /opt/polaris/etc
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8182
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 8182
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: polaris-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: polaris
+  namespace: floe-test
+spec:
+  selector:
+    app: polaris
+  ports:
+    - port: 8181
+      targetPort: 8181
+      nodePort: 30181
+      name: api
+    - port: 8182
+      targetPort: 8182
+      name: admin
+  type: NodePort

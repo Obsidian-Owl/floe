@@ -176,13 +176,13 @@ Before creating a PR, validate test quality:
 **Every integration test MUST link to a requirement** for full traceability:
 
 ```python
-@pytest.mark.requirement("REQ-042")  # From CONSOLIDATED-REQUIREMENTS.md
+@pytest.mark.requirement("9c-FR-001")  # Epic-scoped format
 @pytest.mark.integration
 def test_create_catalog():
     """Test catalog creation with OAuth2 authentication.
 
     Covers:
-    - REQ-042: Plugin MUST support Polaris REST catalog
+    - 9c-FR-001: Integration tests require K8s-native fixtures
     """
     catalog = create_catalog(name="test", warehouse="warehouse")
     assert catalog is not None
@@ -190,12 +190,12 @@ def test_create_catalog():
 
 ### Requirement ID Format
 
-Use Epic-scoped format: `REQ-XXX` or legacy `spec#FR-XXX`
+Use Epic-scoped format: `{epic}-FR-{number}`
 
 | Example | Source |
 |---------|--------|
-| `REQ-042` | `docs/plan/CONSOLIDATED-REQUIREMENTS.md` |
-| `003#FR-015` | Legacy spec format (being migrated) |
+| `9c-FR-001` | `specs/9c-testing-infra/checklists/requirements.md` |
+| `4a-FR-015` | `specs/4a-compute-plugin/checklists/requirements.md` |
 
 ### Traceability Reports
 
@@ -260,43 +260,47 @@ def test_something(service_client):
 **Staging/Prod**: Managed K8s clusters
 
 ```bash
-# Create Kind cluster
-kind create cluster --config testing/k8s/kind-config.yaml
-
-# Deploy test services
-helm install floe-test charts/floe-platform \
-  -f testing/k8s/values-test.yaml
+# Create Kind cluster and deploy services (all-in-one)
+make kind-up          # Runs testing/k8s/setup-cluster.sh
 
 # Run tests
-make test
+make test             # Unit tests + integration tests
 
 # Cleanup
-kind delete cluster
+make kind-down        # Runs testing/k8s/cleanup-cluster.sh
 ```
 
-### Test Services (Deployed via Helm)
+**Note**: Services are deployed via raw K8s manifests in `testing/k8s/services/`, not Helm.
+This avoids circular dependencies with Helm chart development.
 
-| Service | Purpose | K8s Resource |
-|---------|---------|--------------|
-| PostgreSQL | Catalog metadata, orchestrator DB | StatefulSet |
-| Polaris | Iceberg REST catalog | Deployment |
-| LocalStack | S3/STS/IAM emulation | Deployment |
-| Dagster | Orchestration (webserver, daemon) | Deployment |
-| Cube | Semantic layer API | Deployment |
+### Test Services (Deployed via Raw K8s Manifests)
 
-**Service Discovery**: Tests use K8s DNS (`polaris.default.svc.cluster.local`)
+| Service | Purpose | Manifest |
+|---------|---------|----------|
+| PostgreSQL | Catalog metadata, orchestrator DB | `testing/k8s/services/postgres.yaml` |
+| Polaris | Iceberg REST catalog | `testing/k8s/services/polaris.yaml` |
+| MinIO | S3-compatible object storage | `testing/k8s/services/minio.yaml` |
+| Dagster | Orchestration (webserver, daemon) | `testing/k8s/services/dagster.yaml` |
 
-### Persistent vs Ephemeral Mode
+**Service Discovery**: Tests use K8s DNS (`polaris.floe-test.svc.cluster.local`)
+
+### Development Workflow
 
 ```bash
-# Persistent cluster (fast iteration)
-make test-dev         # Reuses cluster, fast subsequent runs
+# Start cluster and services (persistent)
+make kind-up          # Creates cluster, deploys services
 
-# Ephemeral cluster (clean slate)
-make test             # Creates cluster, runs tests, destroys cluster
+# Run unit tests only (fast, no K8s required)
+make test-unit        # ~30 seconds
 
-# Manual cleanup
-make test-clean       # Destroys cluster
+# Run all tests (unit + integration)
+make test             # Requires Kind cluster
+
+# Full CI checks locally
+make check            # lint + typecheck + test
+
+# Cleanup when done
+make kind-down        # Destroys cluster and artifacts
 ```
 
 ---
@@ -305,7 +309,11 @@ make test-clean       # Destroys cluster
 
 ### BaseProfileGeneratorTests
 
-All dbt profile generator tests inherit from this base class:
+> **Coming in Epic 5A (dbt Plugin)**: This base class will be delivered as part of the
+> dbt plugin implementation. It provides automatic test inheritance for profile generators.
+> The example below shows the intended usage pattern.
+
+All dbt profile generator tests will inherit from this base class:
 
 ```python
 from testing.base_classes.adapter_test_base import BaseProfileGeneratorTests
@@ -359,9 +367,9 @@ class TestPolarisIntegration(IntegrationTestBase):
 
     required_services = [("polaris", 8181), ("localstack", 4566)]
 
-    @pytest.mark.requirement("REQ-042")
+    @pytest.mark.requirement("4c-FR-001")
     @pytest.mark.integration
-    def test_create_catalog(self):
+    def test_create_catalog(self) -> None:
         """Test catalog creation with Polaris."""
         # Auto-checks infrastructure
         self.check_infrastructure("polaris", 8181)
@@ -396,7 +404,7 @@ Available markers (defined in `pyproject.toml`):
 | `integration` | Require external services (K8s) | `@pytest.mark.integration` |
 | `contract` | Cross-package validation | `@pytest.mark.contract` |
 | `e2e` | End-to-end pipeline tests | `@pytest.mark.e2e` |
-| `requirement` | Links test to requirement | `@pytest.mark.requirement("REQ-042")` |
+| `requirement` | Links test to requirement | `@pytest.mark.requirement("9c-FR-001")` |
 
 ### Running by Marker
 
