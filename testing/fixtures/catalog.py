@@ -47,21 +47,15 @@ class CatalogTestConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    catalog_type: str = Field(
-        default_factory=lambda: os.environ.get("CATALOG_TYPE", "mock")
-    )
+    catalog_type: str = Field(default_factory=lambda: os.environ.get("CATALOG_TYPE", "mock"))
     uri: str = Field(
-        default_factory=lambda: os.environ.get(
-            "CATALOG_URI", "http://polaris:8181/api/catalog"
-        )
+        default_factory=lambda: os.environ.get("CATALOG_URI", "http://polaris:8181/api/catalog")
     )
     warehouse: str = Field(
         default_factory=lambda: os.environ.get("CATALOG_WAREHOUSE", "test_warehouse")
     )
     credential: SecretStr = Field(
-        default_factory=lambda: SecretStr(
-            os.environ.get("CATALOG_CREDENTIAL", "root:secret")
-        )
+        default_factory=lambda: SecretStr(os.environ.get("CATALOG_CREDENTIAL", "root:secret"))
     )
     namespace_prefix: str = Field(
         default_factory=lambda: os.environ.get("CATALOG_NAMESPACE_PREFIX", "test")
@@ -105,9 +99,7 @@ class MockCatalog:
         self._namespaces: dict[tuple[str, ...], dict[str, str]] = {}
         self._tables: dict[str, dict[str, Any]] = {}
 
-    def list_namespaces(
-        self, parent: tuple[str, ...] | None = None
-    ) -> list[tuple[str, ...]]:
+    def list_namespaces(self, parent: tuple[str, ...] | None = None) -> list[tuple[str, ...]]:
         """List all namespaces in the catalog.
 
         Args:
@@ -209,7 +201,9 @@ class MockCatalog:
         return self._tables[identifier]
 
     def drop_table(
-        self, identifier: str, purge_requested: bool = False  # noqa: ARG002
+        self,
+        identifier: str,
+        purge_requested: bool = False,  # noqa: ARG002
     ) -> None:
         """Drop a table from the catalog.
 
@@ -324,7 +318,8 @@ class MockCatalogPlugin:
         return []
 
     def connect(
-        self, config: dict[str, Any]  # noqa: ARG002
+        self,
+        config: dict[str, Any],  # noqa: ARG002
     ) -> MockCatalog:
         """Connect to the mock catalog.
 
@@ -470,7 +465,8 @@ class MockCatalogPlugin:
         }
 
     def health_check(
-        self, timeout: float = 1.0  # noqa: ARG002
+        self,
+        timeout: float = 1.0,  # noqa: ARG002
     ) -> dict[str, Any]:
         """Check mock catalog health.
 
@@ -575,8 +571,7 @@ def create_polaris_catalog_plugin(
         from floe_catalog_polaris.plugin import PolarisCatalogPlugin
     except ImportError as e:
         raise CatalogConnectionError(
-            "floe-catalog-polaris not installed. "
-            "Install with: pip install floe-catalog-polaris"
+            "floe-catalog-polaris not installed. Install with: pip install floe-catalog-polaris"
         ) from e
 
     if config is None:
@@ -591,7 +586,9 @@ def create_polaris_catalog_plugin(
 
         # Derive token URL from catalog URI
         # Default: {uri}/v1/oauth/tokens (PyIceberg convention)
-        token_url = f"{config.uri.rstrip('/').rsplit('/api/catalog', 1)[0]}/api/catalog/v1/oauth/tokens"
+        token_url = (
+            f"{config.uri.rstrip('/').rsplit('/api/catalog', 1)[0]}/api/catalog/v1/oauth/tokens"
+        )
 
         polaris_config = PolarisCatalogConfig(
             uri=config.uri,
@@ -604,9 +601,7 @@ def create_polaris_catalog_plugin(
         )
         return PolarisCatalogPlugin(config=polaris_config)
     except Exception as e:
-        raise CatalogConnectionError(
-            f"Failed to create Polaris catalog plugin: {e}"
-        ) from e
+        raise CatalogConnectionError(f"Failed to create Polaris catalog plugin: {e}") from e
 
 
 @contextmanager

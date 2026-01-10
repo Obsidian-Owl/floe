@@ -18,17 +18,16 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from abc import ABC
 from typing import TYPE_CHECKING
 
 import pytest
 
-# Import from floe-core (the contract provider)
-from floe_core import CatalogPlugin, HealthStatus, PluginMetadata
-
 # Import from floe-catalog-polaris (the contract consumer)
 from floe_catalog_polaris import PolarisCatalogPlugin
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
+
+# Import from floe-core (the contract provider)
+from floe_core import CatalogPlugin, HealthStatus, PluginMetadata
 
 if TYPE_CHECKING:
     pass
@@ -121,9 +120,7 @@ class TestPolarisCatalogPluginMetadata:
         assert re.match(r"^\d+\.\d+\.\d+", version)
 
     @pytest.mark.requirement("FR-004")
-    def test_floe_api_version_is_declared(
-        self, plugin: PolarisCatalogPlugin
-    ) -> None:
+    def test_floe_api_version_is_declared(self, plugin: PolarisCatalogPlugin) -> None:
         """Verify plugin declares floe API version."""
         api_version = plugin.floe_api_version
         assert isinstance(api_version, str)
@@ -191,9 +188,7 @@ class TestPolarisCatalogPluginMethods:
         assert callable(plugin.health_check)
 
     @pytest.mark.requirement("FR-001")
-    def test_health_check_returns_health_status(
-        self, plugin: PolarisCatalogPlugin
-    ) -> None:
+    def test_health_check_returns_health_status(self, plugin: PolarisCatalogPlugin) -> None:
         """Verify health_check() returns HealthStatus from floe-core.
 
         This validates the contract that plugins return the core HealthStatus type.
@@ -211,9 +206,7 @@ class TestPolarisCatalogPluginConfigSchema:
         return PolarisCatalogPlugin(config=_create_test_config())
 
     @pytest.mark.requirement("FR-004")
-    def test_get_config_schema_returns_pydantic_model(
-        self, plugin: PolarisCatalogPlugin
-    ) -> None:
+    def test_get_config_schema_returns_pydantic_model(self, plugin: PolarisCatalogPlugin) -> None:
         """Verify get_config_schema() returns a Pydantic BaseModel class."""
         from pydantic import BaseModel
 
@@ -223,9 +216,7 @@ class TestPolarisCatalogPluginConfigSchema:
         assert issubclass(schema, BaseModel)
 
     @pytest.mark.requirement("FR-004")
-    def test_config_schema_is_polaris_config(
-        self, plugin: PolarisCatalogPlugin
-    ) -> None:
+    def test_config_schema_is_polaris_config(self, plugin: PolarisCatalogPlugin) -> None:
         """Verify config schema is PolarisCatalogConfig."""
         schema = plugin.get_config_schema()
         assert schema is PolarisCatalogConfig

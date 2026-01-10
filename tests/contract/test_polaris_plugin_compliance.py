@@ -21,10 +21,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from testing.base_classes import BaseCatalogPluginTests
-
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+from testing.base_classes import BaseCatalogPluginTests
 
 if TYPE_CHECKING:
     from floe_core import CatalogPlugin

@@ -39,7 +39,7 @@ from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
@@ -415,9 +415,7 @@ class TestCredentialVending(IntegrationTestBase):
             # Assert - if expiration is set, it should be within 24 hours
             expiration = credentials.get("expiration", "")
             if expiration:
-                expiration_dt = datetime.fromisoformat(
-                    expiration.replace("Z", "+00:00")
-                )
+                expiration_dt = datetime.fromisoformat(expiration.replace("Z", "+00:00"))
                 now = datetime.now(timezone.utc)
 
                 # Expiration should be in the future
@@ -505,9 +503,7 @@ class TestCredentialVending(IntegrationTestBase):
             table1_path = f"{namespace}.{table1}"
             schema = Schema(
                 NestedField(field_id=1, name="id", field_type=LongType(), required=True),
-                NestedField(
-                    field_id=2, name="name", field_type=StringType(), required=False
-                ),
+                NestedField(field_id=2, name="name", field_type=StringType(), required=False),
             )
             plugin.create_table(table1_path, schema)
 

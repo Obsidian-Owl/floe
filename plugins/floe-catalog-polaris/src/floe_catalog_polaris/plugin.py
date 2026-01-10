@@ -244,9 +244,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 # When enabled, Polaris returns vended credentials in table load response
                 # See: https://iceberg.apache.org/docs/latest/rest-catalog/#credential-vending
                 if self._config.credential_vending_enabled:
-                    catalog_config["header.X-Iceberg-Access-Delegation"] = (
-                        "vended-credentials"
-                    )
+                    catalog_config["header.X-Iceberg-Access-Delegation"] = "vended-credentials"
 
                 # Merge any additional configuration from the config argument
                 for key, value in config.items():
@@ -676,7 +674,8 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     raise RuntimeError("Catalog not connected. Call connect() first.")
 
                 # Drop the table via PyIceberg catalog
-                # Note: purge_requested is supported by RestCatalog but not in base Catalog type stubs
+                # Note: purge_requested is supported by RestCatalog but not
+                # in base Catalog type stubs
                 self._catalog.drop_table(identifier, purge_requested=purge)  # type: ignore[call-arg]
 
                 log.info("table_dropped")

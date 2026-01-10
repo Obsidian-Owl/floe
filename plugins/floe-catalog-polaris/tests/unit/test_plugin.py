@@ -420,9 +420,7 @@ class TestPolarisCatalogPluginConnect:
             plugin.connect({})
 
             config_kwargs = mock_load.call_args[1]
-            assert config_kwargs.get("header.X-Iceberg-Access-Delegation") == (
-                "vended-credentials"
-            )
+            assert config_kwargs.get("header.X-Iceberg-Access-Delegation") == ("vended-credentials")
 
     @pytest.mark.requirement("FR-058")
     def test_connect_omits_access_delegation_header_when_disabled(self) -> None:

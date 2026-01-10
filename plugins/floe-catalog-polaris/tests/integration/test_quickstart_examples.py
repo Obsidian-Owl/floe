@@ -26,7 +26,6 @@ from pyiceberg.types import NestedField, StringType, TimestampType
 from floe_catalog_polaris import PolarisCatalogPlugin
 from floe_catalog_polaris.config import PolarisCatalogConfig
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -108,15 +107,9 @@ class TestQuickstartExamples:
 
         # Define Iceberg schema using PyIceberg types (from quickstart)
         schema = Schema(
-            NestedField(
-                field_id=1, name="event_id", field_type=StringType(), required=True
-            ),
-            NestedField(
-                field_id=2, name="event_time", field_type=TimestampType(), required=True
-            ),
-            NestedField(
-                field_id=3, name="payload", field_type=StringType(), required=False
-            ),
+            NestedField(field_id=1, name="event_id", field_type=StringType(), required=True),
+            NestedField(field_id=2, name="event_time", field_type=TimestampType(), required=True),
+            NestedField(field_id=3, name="payload", field_type=StringType(), required=False),
         )
 
         # Create table in namespace (from quickstart)
@@ -232,7 +225,6 @@ class TestQuickstartExamples:
         NotSupportedError as shown in the custom plugin example.
         """
         # Create plugin with credential vending disabled
-        from floe_catalog_polaris.config import OAuth2Config
 
         config_disabled = PolarisCatalogConfig(
             uri=polaris_config.uri,

@@ -374,7 +374,7 @@ class TestNamespaceHierarchy(IntegrationTestBase):
             # Verify child exists when querying with parent filter
             child_namespaces = plugin.list_namespaces(parent=parent)
             assert child in child_namespaces, (
-                f"Child namespace '{child}' not found when listing parent '{parent}': {child_namespaces}"
+                f"Child '{child}' not found in parent '{parent}': {child_namespaces}"
             )
         finally:
             # Cleanup in reverse order (child first, then parent)
@@ -595,9 +595,7 @@ class TestNamespaceEdgeCases(IntegrationTestBase):
         Verifies that multiple namespaces can be created independently.
         """
         plugin = self._get_connected_plugin()
-        namespaces = [
-            self._generate_unique_namespace(f"multi{i}") for i in range(3)
-        ]
+        namespaces = [self._generate_unique_namespace(f"multi{i}") for i in range(3)]
 
         try:
             # Create all

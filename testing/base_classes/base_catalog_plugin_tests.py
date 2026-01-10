@@ -101,9 +101,7 @@ class BaseCatalogPluginTests(ABC):
         assert len(catalog_plugin.version) > 0
 
     @pytest.mark.requirement("FR-004")
-    def test_has_floe_api_version_property(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_has_floe_api_version_property(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify plugin declares compatible floe API version.
 
         This is used to check plugin compatibility with the platform.
@@ -141,25 +139,19 @@ class BaseCatalogPluginTests(ABC):
         assert callable(catalog_plugin.connect)
 
     @pytest.mark.requirement("FR-002")
-    def test_has_create_namespace_method(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_has_create_namespace_method(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify plugin has create_namespace() method."""
         assert hasattr(catalog_plugin, "create_namespace")
         assert callable(catalog_plugin.create_namespace)
 
     @pytest.mark.requirement("FR-002")
-    def test_has_list_namespaces_method(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_has_list_namespaces_method(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify plugin has list_namespaces() method."""
         assert hasattr(catalog_plugin, "list_namespaces")
         assert callable(catalog_plugin.list_namespaces)
 
     @pytest.mark.requirement("FR-002")
-    def test_has_delete_namespace_method(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_has_delete_namespace_method(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify plugin has delete_namespace() method."""
         assert hasattr(catalog_plugin, "delete_namespace")
         assert callable(catalog_plugin.delete_namespace)
@@ -183,9 +175,7 @@ class BaseCatalogPluginTests(ABC):
         assert callable(catalog_plugin.drop_table)
 
     @pytest.mark.requirement("FR-001")
-    def test_has_vend_credentials_method(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_has_vend_credentials_method(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify plugin has vend_credentials() method."""
         assert hasattr(catalog_plugin, "vend_credentials")
         assert callable(catalog_plugin.vend_credentials)
@@ -229,17 +219,13 @@ class BaseCatalogPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-004")
-    def test_has_get_config_schema_method(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_has_get_config_schema_method(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify plugin has get_config_schema() method."""
         assert hasattr(catalog_plugin, "get_config_schema")
         assert callable(catalog_plugin.get_config_schema)
 
     @pytest.mark.requirement("FR-004")
-    def test_config_schema_returns_valid_type(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_config_schema_returns_valid_type(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify get_config_schema() returns None or a BaseModel class.
 
         Plugins can either have no config schema (None) or return
@@ -258,9 +244,7 @@ class BaseCatalogPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-001")
-    def test_health_check_returns_health_status(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_health_check_returns_health_status(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify health_check() returns a HealthStatus object."""
         from floe_core import HealthStatus
 
@@ -271,9 +255,7 @@ class BaseCatalogPluginTests(ABC):
         assert hasattr(health, "message")
 
     @pytest.mark.requirement("FR-001")
-    def test_health_check_accepts_timeout(
-        self, catalog_plugin: CatalogPlugin
-    ) -> None:
+    def test_health_check_accepts_timeout(self, catalog_plugin: CatalogPlugin) -> None:
         """Verify health_check() accepts timeout parameter."""
         from floe_core import HealthStatus
 

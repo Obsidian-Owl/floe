@@ -15,7 +15,7 @@ Requirements Covered:
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import SecretStr
@@ -173,8 +173,7 @@ class TestPolarisConnection(IntegrationTestBase):
         # Error should indicate authentication failure
         error_str = str(exc_info.value).lower()
         assert any(
-            term in error_str
-            for term in ["auth", "credential", "unauthorized", "401", "forbidden"]
+            term in error_str for term in ["auth", "credential", "unauthorized", "401", "forbidden"]
         ), f"Expected auth-related error, got: {exc_info.value}"
 
     @pytest.mark.requirement("FR-006")
@@ -203,8 +202,7 @@ class TestPolarisConnection(IntegrationTestBase):
         # Error should indicate connection failure
         error_str = str(exc_info.value).lower()
         assert any(
-            term in error_str
-            for term in ["connect", "network", "resolve", "unreachable", "failed"]
+            term in error_str for term in ["connect", "network", "resolve", "unreachable", "failed"]
         ), f"Expected connection error, got: {exc_info.value}"
 
     @pytest.mark.requirement("FR-006")

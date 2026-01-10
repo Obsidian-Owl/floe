@@ -65,9 +65,7 @@ class TestHealthCheckIntegration(IntegrationTestBase):
         assert status.message is not None
         # Message should indicate positive status (healthy, ok, responding, normal, etc.)
         msg_lower = status.message.lower()
-        assert any(
-            word in msg_lower for word in ["healthy", "ok", "responding", "normal"]
-        )
+        assert any(word in msg_lower for word in ["healthy", "ok", "responding", "normal"])
 
     @pytest.mark.requirement("FR-050")
     @pytest.mark.integration
@@ -142,9 +140,7 @@ class TestHealthCheckIntegration(IntegrationTestBase):
 
     @pytest.mark.requirement("FR-052")
     @pytest.mark.integration
-    def test_health_check_timeout_validation(
-        self, polaris_config: PolarisCatalogConfig
-    ) -> None:
+    def test_health_check_timeout_validation(self, polaris_config: PolarisCatalogConfig) -> None:
         """Test health check validates timeout parameter.
 
         Verifies that timeout must be between 0.1 and 10.0 seconds.

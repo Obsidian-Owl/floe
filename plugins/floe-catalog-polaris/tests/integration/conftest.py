@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Generator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import SecretStr
@@ -169,8 +169,7 @@ def polaris_config(
 
     if not check_service_health(host, port, timeout=5.0):
         pytest.fail(
-            f"Polaris not accessible at {host}:{port}\n"
-            "Start the Kind cluster with: make kind-up"
+            f"Polaris not accessible at {host}:{port}\nStart the Kind cluster with: make kind-up"
         )
 
     return PolarisCatalogConfig(

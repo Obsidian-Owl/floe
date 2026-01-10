@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from floe_core import CatalogPlugin, HealthState, HealthStatus
 from floe_core.plugins.catalog import Catalog
+
 from testing.base_classes import BaseCatalogPluginTests
 
 

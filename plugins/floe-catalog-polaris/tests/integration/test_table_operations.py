@@ -32,7 +32,14 @@ import pytest
 from floe_core import ConflictError, NotFoundError
 from pydantic import SecretStr
 from pyiceberg.schema import Schema
-from pyiceberg.types import BooleanType, DoubleType, LongType, NestedField, StringType, TimestampType
+from pyiceberg.types import (
+    BooleanType,
+    DoubleType,
+    LongType,
+    NestedField,
+    StringType,
+    TimestampType,
+)
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig

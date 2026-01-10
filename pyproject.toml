@@ -48,7 +48,7 @@ pythonpath = [
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
     "slow: Marks tests as slow (> 1 second)",

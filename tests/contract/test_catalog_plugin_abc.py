@@ -66,9 +66,7 @@ class TestCatalogPluginABCDefinition:
 
         # Must be abstract
         method = CatalogPlugin.connect
-        assert getattr(method, "__isabstractmethod__", False), (
-            "connect() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "connect() must be abstract"
 
         # Check signature
         sig = inspect.signature(CatalogPlugin.connect)
@@ -88,9 +86,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "create_namespace")
 
         method = CatalogPlugin.create_namespace
-        assert getattr(method, "__isabstractmethod__", False), (
-            "create_namespace() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "create_namespace() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.create_namespace)
         params = list(sig.parameters.keys())
@@ -109,9 +105,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "list_namespaces")
 
         method = CatalogPlugin.list_namespaces
-        assert getattr(method, "__isabstractmethod__", False), (
-            "list_namespaces() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "list_namespaces() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.list_namespaces)
         params = list(sig.parameters.keys())
@@ -129,9 +123,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "delete_namespace")
 
         method = CatalogPlugin.delete_namespace
-        assert getattr(method, "__isabstractmethod__", False), (
-            "delete_namespace() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "delete_namespace() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.delete_namespace)
         params = list(sig.parameters.keys())
@@ -149,9 +141,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "create_table")
 
         method = CatalogPlugin.create_table
-        assert getattr(method, "__isabstractmethod__", False), (
-            "create_table() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "create_table() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.create_table)
         params = list(sig.parameters.keys())
@@ -170,9 +160,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "list_tables")
 
         method = CatalogPlugin.list_tables
-        assert getattr(method, "__isabstractmethod__", False), (
-            "list_tables() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "list_tables() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.list_tables)
         params = list(sig.parameters.keys())
@@ -190,9 +178,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "drop_table")
 
         method = CatalogPlugin.drop_table
-        assert getattr(method, "__isabstractmethod__", False), (
-            "drop_table() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "drop_table() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.drop_table)
         params = list(sig.parameters.keys())
@@ -210,9 +196,7 @@ class TestCatalogPluginABCDefinition:
         assert hasattr(CatalogPlugin, "vend_credentials")
 
         method = CatalogPlugin.vend_credentials
-        assert getattr(method, "__isabstractmethod__", False), (
-            "vend_credentials() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "vend_credentials() must be abstract"
 
         sig = inspect.signature(CatalogPlugin.vend_credentials)
         params = list(sig.parameters.keys())

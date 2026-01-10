@@ -74,9 +74,7 @@ def mock_time_controller() -> Generator[MockTime, None, None]:
     """
     controller = MockTime(start=1000.0)  # Start at arbitrary point
 
-    with patch("time.time", controller.time), patch(
-        "time.perf_counter", controller.perf_counter
-    ):
+    with patch("time.time", controller.time), patch("time.perf_counter", controller.perf_counter):
         yield controller
 
 
