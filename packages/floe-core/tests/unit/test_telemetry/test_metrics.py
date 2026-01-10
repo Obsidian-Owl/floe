@@ -467,3 +467,254 @@ class TestMetricRecorderRecordHistogram:
 
         histogram = mock_meter.create_histogram.return_value
         histogram.record.assert_called_once()
+
+
+class TestMetricLabelsAttributes:
+    """Tests for metric labels/attributes functionality (FR-012, FR-013, FR-014).
+
+    Tests cover label passing behavior across all metric types and
+    semantic attribute patterns used in floe telemetry.
+    """
+
+    @pytest.fixture
+    def mock_meter(self) -> Generator[Mock, None, None]:
+        """Mock OpenTelemetry Meter with all instrument types."""
+        mock_counter = Mock()
+        mock_counter.add = Mock()
+
+        mock_gauge = Mock()
+        mock_gauge.set = Mock()
+
+        mock_histogram = Mock()
+        mock_histogram.record = Mock()
+
+        mock_meter = Mock()
+        mock_meter.create_counter = Mock(return_value=mock_counter)
+        mock_meter.create_gauge = Mock(return_value=mock_gauge)
+        mock_meter.create_histogram = Mock(return_value=mock_histogram)
+
+        with patch(
+            "opentelemetry.metrics.get_meter",
+            return_value=mock_meter,
+        ):
+            yield mock_meter
+
+    def test_counter_with_empty_labels(self, mock_meter: Mock) -> None:
+        """Test counter works with empty labels dict."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.increment("test_counter", labels={})
+
+        counter = mock_meter.create_counter.return_value
+        counter.add.assert_called_once()
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == {}
+
+    def test_counter_with_none_labels(self, mock_meter: Mock) -> None:
+        """Test counter works with None labels (default)."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.increment("test_counter")
+
+        counter = mock_meter.create_counter.return_value
+        counter.add.assert_called_once()
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == {}
+
+    def test_gauge_with_empty_labels(self, mock_meter: Mock) -> None:
+        """Test gauge works with empty labels dict."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge("test_gauge", value=42, labels={})
+
+        gauge = mock_meter.create_gauge.return_value
+        gauge.set.assert_called_once()
+        call_args = gauge.set.call_args
+        assert call_args[1]["attributes"] == {}
+
+    def test_histogram_with_empty_labels(self, mock_meter: Mock) -> None:
+        """Test histogram works with empty labels dict."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.record_histogram("test_histogram", value=100, labels={})
+
+        histogram = mock_meter.create_histogram.return_value
+        histogram.record.assert_called_once()
+        call_args = histogram.record.call_args
+        assert call_args[1]["attributes"] == {}
+
+    def test_labels_with_string_values(self, mock_meter: Mock) -> None:
+        """Test labels with string values are passed correctly."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels = {"component": "compiler", "environment": "production"}
+        recorder.increment("test_counter", labels=labels)
+
+        counter = mock_meter.create_counter.return_value
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_labels_with_numeric_values(self, mock_meter: Mock) -> None:
+        """Test labels with numeric values are passed correctly."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels: dict[str, Any] = {"port": 8080, "retry_count": 3}
+        recorder.increment("test_counter", labels=labels)
+
+        counter = mock_meter.create_counter.return_value
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_labels_with_boolean_values(self, mock_meter: Mock) -> None:
+        """Test labels with boolean values are passed correctly."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels: dict[str, Any] = {"is_incremental": True, "is_full_refresh": False}
+        recorder.increment("test_counter", labels=labels)
+
+        counter = mock_meter.create_counter.return_value
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_labels_with_mixed_value_types(self, mock_meter: Mock) -> None:
+        """Test labels with mixed value types are passed correctly."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels: dict[str, Any] = {
+            "pipeline_name": "customer_360",
+            "step_count": 5,
+            "is_production": True,
+        }
+        recorder.increment("test_counter", labels=labels)
+
+        counter = mock_meter.create_counter.return_value
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_floe_pipeline_semantic_labels(self, mock_meter: Mock) -> None:
+        """Test floe.pipeline.* semantic labels for FR-012."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels = {
+            "floe.pipeline.name": "customer_360",
+            "floe.pipeline.run_id": "run_abc123",
+            "floe.pipeline.status": "success",
+        }
+        recorder.record_histogram(
+            "floe.pipeline.duration",
+            value=12500,
+            labels=labels,
+            unit="ms",
+        )
+
+        histogram = mock_meter.create_histogram.return_value
+        call_args = histogram.record.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_floe_asset_semantic_labels(self, mock_meter: Mock) -> None:
+        """Test floe.asset.* semantic labels for FR-013."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels = {
+            "floe.asset.key": "customers",
+            "floe.asset.group": "raw_data",
+            "floe.asset.status": "materialized",
+        }
+        recorder.increment("floe.asset.materializations", labels=labels)
+
+        counter = mock_meter.create_counter.return_value
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_floe_error_semantic_labels(self, mock_meter: Mock) -> None:
+        """Test floe.error.* semantic labels for FR-014."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels = {
+            "floe.error.type": "ValidationError",
+            "floe.error.component": "compiler",
+            "floe.error.severity": "error",
+        }
+        recorder.increment("floe.errors", labels=labels)
+
+        counter = mock_meter.create_counter.return_value
+        call_args = counter.add.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_labels_preserved_across_multiple_recordings(
+        self, mock_meter: Mock
+    ) -> None:
+        """Test that labels are passed correctly on each recording."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+
+        # First recording with labels
+        recorder.increment("test_counter", labels={"batch": "1"})
+        # Second recording with different labels
+        recorder.increment("test_counter", labels={"batch": "2"})
+
+        counter = mock_meter.create_counter.return_value
+        assert counter.add.call_count == 2
+
+        # Verify first call
+        first_call = counter.add.call_args_list[0]
+        assert first_call[1]["attributes"] == {"batch": "1"}
+
+        # Verify second call
+        second_call = counter.add.call_args_list[1]
+        assert second_call[1]["attributes"] == {"batch": "2"}
+
+    def test_dbt_model_semantic_labels(self, mock_meter: Mock) -> None:
+        """Test dbt model execution semantic labels."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels = {
+            "dbt.model.name": "stg_customers",
+            "dbt.model.schema": "staging",
+            "dbt.model.materialization": "table",
+            "dbt.model.unique_id": "model.my_project.stg_customers",
+        }
+        recorder.record_histogram(
+            "dbt.model.execution_time",
+            value=3.45,
+            labels=labels,
+            unit="s",
+        )
+
+        histogram = mock_meter.create_histogram.return_value
+        call_args = histogram.record.call_args
+        assert call_args[1]["attributes"] == labels
+
+    def test_resource_usage_semantic_labels(self, mock_meter: Mock) -> None:
+        """Test resource usage semantic labels for gauges."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        labels = {
+            "resource.type": "memory",
+            "resource.unit": "bytes",
+            "host.name": "worker-1",
+        }
+        recorder.set_gauge(
+            "floe.resource.usage",
+            value=1073741824,  # 1 GB
+            labels=labels,
+            unit="By",
+        )
+
+        gauge = mock_meter.create_gauge.return_value
+        call_args = gauge.set.call_args
+        assert call_args[1]["attributes"] == labels
