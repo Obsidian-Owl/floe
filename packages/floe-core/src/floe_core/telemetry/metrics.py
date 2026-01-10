@@ -24,6 +24,7 @@ from opentelemetry import metrics
 if TYPE_CHECKING:
     from opentelemetry.metrics import Counter as CounterType
     from opentelemetry.metrics import Meter
+    from opentelemetry.metrics._internal.instrument import Gauge as GaugeType
 
 
 class MetricRecorder:
@@ -58,6 +59,7 @@ class MetricRecorder:
         """
         self._meter: Meter = metrics.get_meter(name, version)
         self._counters: dict[str, CounterType] = {}
+        self._gauges: dict[str, GaugeType] = {}
 
     def increment(
         self,
@@ -123,6 +125,71 @@ class MetricRecorder:
             self._counters[name] = self._meter.create_counter(name, **kwargs)
 
         return self._counters[name]
+
+    def set_gauge(
+        self,
+        name: str,
+        value: int | float,
+        *,
+        labels: dict[str, Any] | None = None,
+        description: str | None = None,
+        unit: str | None = None,
+    ) -> None:
+        """Set a gauge metric to a specific value.
+
+        Creates or reuses a gauge with the specified name and sets its value.
+        Gauges represent a current value that can go up or down, suitable for
+        tracking resource usage, queue sizes, or other point-in-time measurements.
+
+        Args:
+            name: The name of the gauge metric.
+            value: The value to set (can be int or float).
+            labels: Optional dictionary of attribute key-value pairs.
+            description: Optional description for the gauge.
+            unit: Optional unit for the gauge (e.g., "By" for bytes).
+
+        Examples:
+            >>> recorder.set_gauge("queue_size", value=50, labels={"queue": "default"})
+            >>> recorder.set_gauge("memory_usage", value=75.5, unit="By")
+        """
+        gauge = self._get_or_create_gauge(
+            name,
+            description=description,
+            unit=unit,
+        )
+
+        attributes: dict[str, Any] = labels if labels is not None else {}
+        gauge.set(value, attributes=attributes)
+
+    def _get_or_create_gauge(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        unit: str | None = None,
+    ) -> GaugeType:
+        """Get or create a gauge by name.
+
+        Caches gauges to avoid recreating them on every set call.
+
+        Args:
+            name: The name of the gauge.
+            description: Optional description.
+            unit: Optional unit.
+
+        Returns:
+            The Gauge instrument.
+        """
+        if name not in self._gauges:
+            kwargs: dict[str, str] = {}
+            if description is not None:
+                kwargs["description"] = description
+            if unit is not None:
+                kwargs["unit"] = unit
+
+            self._gauges[name] = self._meter.create_gauge(name, **kwargs)
+
+        return self._gauges[name]
 
 
 __all__ = [

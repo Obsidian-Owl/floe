@@ -167,3 +167,141 @@ class TestMetricRecorderIncrement:
 
         counter = mock_meter.create_counter.return_value
         counter.add.assert_called_once()
+
+
+class TestMetricRecorderSetGauge:
+    """Tests for MetricRecorder.set_gauge() method."""
+
+    @pytest.fixture
+    def mock_meter(self) -> Generator[Mock, None, None]:
+        """Mock OpenTelemetry Meter with gauge support."""
+        mock_gauge = Mock()
+        mock_gauge.set = Mock()
+
+        mock_meter = Mock()
+        mock_meter.create_gauge = Mock(return_value=mock_gauge)
+
+        with patch(
+            "opentelemetry.metrics.get_meter",
+            return_value=mock_meter,
+        ):
+            yield mock_meter
+
+    def test_set_gauge_creates_gauge(self, mock_meter: Mock) -> None:
+        """Test set_gauge() creates a gauge with the specified name."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge("test_gauge", value=42)
+
+        mock_meter.create_gauge.assert_called()
+        call_args = mock_meter.create_gauge.call_args
+        assert call_args[0][0] == "test_gauge"
+
+    def test_set_gauge_sets_value(self, mock_meter: Mock) -> None:
+        """Test set_gauge() sets the gauge to the specified value."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge("test_gauge", value=100)
+
+        gauge = mock_meter.create_gauge.return_value
+        gauge.set.assert_called_once()
+        call_args = gauge.set.call_args
+        assert call_args[0][0] == 100
+
+    def test_set_gauge_with_float_value(self, mock_meter: Mock) -> None:
+        """Test set_gauge() accepts float values."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge("memory_usage", value=75.5)
+
+        gauge = mock_meter.create_gauge.return_value
+        gauge.set.assert_called_once()
+        call_args = gauge.set.call_args
+        assert call_args[0][0] == 75.5
+
+    def test_set_gauge_with_labels(self, mock_meter: Mock) -> None:
+        """Test set_gauge() passes labels/attributes."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge(
+            "queue_size",
+            value=50,
+            labels={"queue_name": "default"},
+        )
+
+        gauge = mock_meter.create_gauge.return_value
+        gauge.set.assert_called_once()
+        call_args = gauge.set.call_args
+        assert "attributes" in call_args[1]
+
+    def test_set_gauge_reuses_gauge_for_same_name(self, mock_meter: Mock) -> None:
+        """Test set_gauge() reuses gauge for the same metric name."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge("reused_gauge", value=10)
+        recorder.set_gauge("reused_gauge", value=20)
+        recorder.set_gauge("reused_gauge", value=30)
+
+        # Gauge should only be created once
+        assert mock_meter.create_gauge.call_count == 1
+
+    def test_set_gauge_creates_different_gauges_for_different_names(
+        self, mock_meter: Mock
+    ) -> None:
+        """Test set_gauge() creates separate gauges for different names."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge("gauge_a", value=1)
+        recorder.set_gauge("gauge_b", value=2)
+
+        assert mock_meter.create_gauge.call_count == 2
+
+    def test_set_gauge_with_description(self, mock_meter: Mock) -> None:
+        """Test set_gauge() can set gauge description."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge(
+            "documented_gauge",
+            value=42,
+            description="Current value of something",
+        )
+
+        call_args = mock_meter.create_gauge.call_args
+        assert "description" in call_args[1]
+        assert call_args[1]["description"] == "Current value of something"
+
+    def test_set_gauge_with_unit(self, mock_meter: Mock) -> None:
+        """Test set_gauge() can set gauge unit."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge(
+            "memory_bytes",
+            value=1024,
+            unit="By",  # OTel convention for bytes
+        )
+
+        call_args = mock_meter.create_gauge.call_args
+        assert "unit" in call_args[1]
+        assert call_args[1]["unit"] == "By"
+
+    def test_set_gauge_for_resource_usage(self, mock_meter: Mock) -> None:
+        """Test set_gauge() for typical resource usage metrics."""
+        from floe_core.telemetry.metrics import MetricRecorder
+
+        recorder = MetricRecorder()
+        recorder.set_gauge(
+            "floe.pipeline.active_jobs",
+            value=5,
+            labels={"pipeline": "customer_360"},
+        )
+
+        gauge = mock_meter.create_gauge.return_value
+        gauge.set.assert_called_once()
