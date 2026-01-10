@@ -52,6 +52,15 @@ polaris = "floe_catalog_polaris.plugin:PolarisCatalogPlugin"
 [tool.hatch.build.targets.wheel]
 packages = ["src/floe_catalog_polaris"]
 
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+[tool.hatch.build]
+include = [
+    "src/floe_catalog_polaris/**/*.py",
+    "src/floe_catalog_polaris/py.typed",
+]
+
 [tool.mypy]
 python_version = "3.10"
 strict = true
