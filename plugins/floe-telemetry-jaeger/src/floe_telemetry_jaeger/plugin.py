@@ -14,10 +14,13 @@ See Also:
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from floe_core.plugins.telemetry import TelemetryBackendPlugin
+
+logger = logging.getLogger(__name__)
 
 
 class JaegerTelemetryPlugin(TelemetryBackendPlugin):
@@ -168,4 +171,8 @@ class JaegerTelemetryPlugin(TelemetryBackendPlugin):
             with socket.create_connection((host, port), timeout=5.0):
                 return True
         except OSError:
+            # Includes socket.gaierror (DNS), socket.timeout, connection refused
+            return False
+        except Exception as e:
+            logger.warning("Unexpected error validating Jaeger connection: %s", e)
             return False
