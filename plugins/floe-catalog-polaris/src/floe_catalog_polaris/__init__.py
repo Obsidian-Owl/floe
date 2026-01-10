@@ -27,6 +27,14 @@ from floe_catalog_polaris.config import (
     export_json_schema,
     get_json_schema,
 )
+from floe_catalog_polaris.credentials import (
+    credentials_are_valid,
+    extract_credentials_from_io_properties,
+    get_expiration_datetime,
+    is_expired,
+    parse_expiration,
+    validate_credential_structure,
+)
 from floe_catalog_polaris.errors import (
     PYICEBERG_EXCEPTION_TYPES,
     map_pyiceberg_error,
@@ -42,4 +50,11 @@ __all__ = [
     "get_json_schema",
     "map_pyiceberg_error",
     "PYICEBERG_EXCEPTION_TYPES",
+    # Credential vending helpers
+    "extract_credentials_from_io_properties",
+    "parse_expiration",
+    "validate_credential_structure",
+    "credentials_are_valid",
+    "is_expired",
+    "get_expiration_datetime",
 ]

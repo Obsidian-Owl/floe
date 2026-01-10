@@ -753,17 +753,14 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 # via the X-Iceberg-Access-Delegation header when supported
                 table = self._catalog.load_table(table_path)
 
-                # Extract credentials from table IO properties
+                # Extract credentials from table IO properties using helper
                 # PyIceberg stores vended credentials in table.io.properties dict
-                io_properties = table.io.properties
+                from floe_catalog_polaris.credentials import (
+                    extract_credentials_from_io_properties,
+                )
 
-                # Build credentials response
-                credentials: dict[str, Any] = {
-                    "access_key": io_properties.get("s3.access-key-id", ""),
-                    "secret_key": io_properties.get("s3.secret-access-key", ""),
-                    "token": io_properties.get("s3.session-token", ""),
-                    "expiration": io_properties.get("s3.session-token-expires-at", ""),
-                }
+                io_properties = table.io.properties
+                credentials = extract_credentials_from_io_properties(io_properties)
 
                 log.info(
                     "credentials_vended",
