@@ -28,12 +28,16 @@ from floe_catalog_polaris.config import (
     get_json_schema,
 )
 from floe_catalog_polaris.credentials import (
+    MAX_CREDENTIAL_TTL_SECONDS,
     credentials_are_valid,
     extract_credentials_from_io_properties,
     get_expiration_datetime,
+    get_ttl_seconds,
     is_expired,
+    is_ttl_valid,
     parse_expiration,
     validate_credential_structure,
+    validate_ttl,
 )
 from floe_catalog_polaris.errors import (
     PYICEBERG_EXCEPTION_TYPES,
@@ -57,4 +61,9 @@ __all__ = [
     "credentials_are_valid",
     "is_expired",
     "get_expiration_datetime",
+    # TTL validation
+    "MAX_CREDENTIAL_TTL_SECONDS",
+    "get_ttl_seconds",
+    "validate_ttl",
+    "is_ttl_valid",
 ]

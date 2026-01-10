@@ -32,6 +32,9 @@ S3_SESSION_TOKEN_EXPIRES_AT = "s3.session-token-expires-at"
 # Required keys in credential response
 REQUIRED_CREDENTIAL_KEYS = frozenset({"access_key", "secret_key", "expiration"})
 
+# Maximum TTL for vended credentials (24 hours in seconds)
+MAX_CREDENTIAL_TTL_SECONDS = 86400
+
 
 def parse_expiration(expiration_str: str) -> datetime | None:
     """Parse expiration timestamp string to datetime.
@@ -231,3 +234,94 @@ def get_expiration_datetime(credentials: dict[str, Any]) -> datetime | None:
     if not expiration_str:
         return None
     return parse_expiration(expiration_str)
+
+
+def get_ttl_seconds(credentials: dict[str, Any]) -> int:
+    """Get remaining time-to-live in seconds.
+
+    Args:
+        credentials: Credential dictionary with expiration field.
+
+    Returns:
+        Seconds until expiration, or 0 if expired or no expiration set.
+
+    Example:
+        >>> creds = {"expiration": "2026-01-09T12:00:00Z"}
+        >>> ttl = get_ttl_seconds(creds)  # Returns seconds until expiration
+    """
+    expiration_dt = get_expiration_datetime(credentials)
+    if expiration_dt is None:
+        return 0
+
+    delta = expiration_dt - datetime.now(timezone.utc)
+    return max(0, int(delta.total_seconds()))
+
+
+def validate_ttl(
+    credentials: dict[str, Any],
+    max_ttl_seconds: int = MAX_CREDENTIAL_TTL_SECONDS,
+) -> tuple[bool, str | None]:
+    """Validate credential TTL against maximum allowed.
+
+    Checks that:
+    1. Expiration is in the future (not expired)
+    2. TTL does not exceed the maximum (default 24 hours)
+
+    Args:
+        credentials: Credential dictionary with expiration field.
+        max_ttl_seconds: Maximum allowed TTL in seconds (default: 86400 = 24 hours).
+
+    Returns:
+        Tuple of (is_valid, error_message). error_message is None if valid.
+
+    Example:
+        >>> creds = {"expiration": "2020-01-01T00:00:00Z"}
+        >>> valid, error = validate_ttl(creds)
+        >>> valid
+        False
+        >>> error
+        'Credentials have expired'
+    """
+    expiration_dt = get_expiration_datetime(credentials)
+
+    if expiration_dt is None:
+        # No expiration set - cannot validate TTL
+        return True, None
+
+    now = datetime.now(timezone.utc)
+
+    # Check if expired
+    if expiration_dt <= now:
+        return False, "Credentials have expired"
+
+    # Check TTL does not exceed maximum
+    ttl_seconds = (expiration_dt - now).total_seconds()
+    if ttl_seconds > max_ttl_seconds:
+        hours = max_ttl_seconds / 3600
+        return False, f"TTL exceeds maximum allowed ({hours:.0f} hours)"
+
+    return True, None
+
+
+def is_ttl_valid(
+    credentials: dict[str, Any],
+    max_ttl_seconds: int = MAX_CREDENTIAL_TTL_SECONDS,
+) -> bool:
+    """Check if credential TTL is valid.
+
+    Convenience wrapper around validate_ttl that returns a boolean.
+
+    Args:
+        credentials: Credential dictionary with expiration field.
+        max_ttl_seconds: Maximum allowed TTL in seconds (default: 86400 = 24 hours).
+
+    Returns:
+        True if TTL is valid (not expired and within limit), False otherwise.
+
+    Example:
+        >>> creds = {"expiration": "2026-01-09T12:00:00Z"}
+        >>> is_ttl_valid(creds)
+        True
+    """
+    valid, _ = validate_ttl(credentials, max_ttl_seconds)
+    return valid

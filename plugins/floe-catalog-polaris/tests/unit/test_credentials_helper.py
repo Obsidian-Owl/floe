@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from floe_catalog_polaris.credentials import (
+    MAX_CREDENTIAL_TTL_SECONDS,
     S3_ACCESS_KEY_ID,
     S3_SECRET_ACCESS_KEY,
     S3_SESSION_TOKEN,
@@ -23,9 +24,12 @@ from floe_catalog_polaris.credentials import (
     credentials_are_valid,
     extract_credentials_from_io_properties,
     get_expiration_datetime,
+    get_ttl_seconds,
     is_expired,
+    is_ttl_valid,
     parse_expiration,
     validate_credential_structure,
+    validate_ttl,
 )
 
 # ============================================================================
@@ -407,3 +411,219 @@ class TestGetExpirationDatetime:
 
         # Assert
         assert result is None
+
+
+# ============================================================================
+# TestGetTTLSeconds - TTL calculation
+# ============================================================================
+
+
+class TestGetTTLSeconds:
+    """Tests for get_ttl_seconds function."""
+
+    @pytest.mark.requirement("FR-021")
+    def test_get_ttl_future_expiration(self) -> None:
+        """Test TTL calculation for credentials with future expiration."""
+        # Arrange - expiration 1 hour in future
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        credentials = {"expiration": future.isoformat()}
+
+        # Act
+        result = get_ttl_seconds(credentials)
+
+        # Assert - should be approximately 3600 seconds (1 hour)
+        assert 3590 <= result <= 3610
+
+    @pytest.mark.requirement("FR-021")
+    def test_get_ttl_past_expiration_returns_zero(self) -> None:
+        """Test TTL returns 0 for expired credentials."""
+        # Arrange - expiration 1 hour in past
+        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        credentials = {"expiration": past.isoformat()}
+
+        # Act
+        result = get_ttl_seconds(credentials)
+
+        # Assert
+        assert result == 0
+
+    @pytest.mark.requirement("FR-021")
+    def test_get_ttl_no_expiration_returns_zero(self) -> None:
+        """Test TTL returns 0 when no expiration set."""
+        # Arrange
+        credentials = {"expiration": ""}
+
+        # Act
+        result = get_ttl_seconds(credentials)
+
+        # Assert
+        assert result == 0
+
+    @pytest.mark.requirement("FR-021")
+    def test_get_ttl_missing_expiration_key_returns_zero(self) -> None:
+        """Test TTL returns 0 when expiration key is missing."""
+        # Arrange
+        credentials: dict[str, str] = {}
+
+        # Act
+        result = get_ttl_seconds(credentials)
+
+        # Assert
+        assert result == 0
+
+
+# ============================================================================
+# TestValidateTTL - TTL validation
+# ============================================================================
+
+
+class TestValidateTTL:
+    """Tests for validate_ttl function."""
+
+    @pytest.mark.requirement("FR-021")
+    def test_validate_ttl_valid_future_expiration(self) -> None:
+        """Test valid TTL returns True with no error."""
+        # Arrange - expiration 1 hour in future (within 24 hour limit)
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        credentials = {"expiration": future.isoformat()}
+
+        # Act
+        is_valid, error = validate_ttl(credentials)
+
+        # Assert
+        assert is_valid is True
+        assert error is None
+
+    @pytest.mark.requirement("FR-021")
+    def test_validate_ttl_expired_returns_error(self) -> None:
+        """Test expired credentials return validation error."""
+        # Arrange - expiration 1 hour in past
+        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        credentials = {"expiration": past.isoformat()}
+
+        # Act
+        is_valid, error = validate_ttl(credentials)
+
+        # Assert
+        assert is_valid is False
+        assert error == "Credentials have expired"
+
+    @pytest.mark.requirement("FR-021")
+    def test_validate_ttl_exceeds_maximum(self) -> None:
+        """Test TTL exceeding 24 hours returns error."""
+        # Arrange - expiration 48 hours in future (exceeds 24 hour limit)
+        far_future = datetime.now(timezone.utc) + timedelta(hours=48)
+        credentials = {"expiration": far_future.isoformat()}
+
+        # Act
+        is_valid, error = validate_ttl(credentials)
+
+        # Assert
+        assert is_valid is False
+        assert error is not None
+        assert "TTL exceeds maximum" in error
+        assert "24 hours" in error
+
+    @pytest.mark.requirement("FR-021")
+    def test_validate_ttl_custom_max_ttl(self) -> None:
+        """Test TTL validation with custom max TTL."""
+        # Arrange - expiration 2 hours in future, max TTL 1 hour
+        future = datetime.now(timezone.utc) + timedelta(hours=2)
+        credentials = {"expiration": future.isoformat()}
+        max_ttl = 3600  # 1 hour
+
+        # Act
+        is_valid, error = validate_ttl(credentials, max_ttl_seconds=max_ttl)
+
+        # Assert
+        assert is_valid is False
+        assert error is not None
+        assert "TTL exceeds maximum" in error
+
+    @pytest.mark.requirement("FR-021")
+    def test_validate_ttl_no_expiration_is_valid(self) -> None:
+        """Test credentials without expiration are considered valid."""
+        # Arrange - no expiration set
+        credentials = {"expiration": ""}
+
+        # Act
+        is_valid, error = validate_ttl(credentials)
+
+        # Assert
+        assert is_valid is True
+        assert error is None
+
+    @pytest.mark.requirement("FR-021")
+    def test_validate_ttl_at_maximum_boundary(self) -> None:
+        """Test TTL exactly at maximum is valid."""
+        # Arrange - expiration exactly at 24 hour limit
+        future = datetime.now(timezone.utc) + timedelta(seconds=MAX_CREDENTIAL_TTL_SECONDS - 10)
+        credentials = {"expiration": future.isoformat()}
+
+        # Act
+        is_valid, error = validate_ttl(credentials)
+
+        # Assert
+        assert is_valid is True
+        assert error is None
+
+
+# ============================================================================
+# TestIsTTLValid - Convenience wrapper
+# ============================================================================
+
+
+class TestIsTTLValid:
+    """Tests for is_ttl_valid convenience function."""
+
+    @pytest.mark.requirement("FR-021")
+    def test_is_ttl_valid_true_for_valid_credentials(self) -> None:
+        """Test returns True for valid credentials."""
+        # Arrange - expiration 1 hour in future
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        credentials = {"expiration": future.isoformat()}
+
+        # Act
+        result = is_ttl_valid(credentials)
+
+        # Assert
+        assert result is True
+
+    @pytest.mark.requirement("FR-021")
+    def test_is_ttl_valid_false_for_expired(self) -> None:
+        """Test returns False for expired credentials."""
+        # Arrange - expiration in past
+        past = datetime.now(timezone.utc) - timedelta(hours=1)
+        credentials = {"expiration": past.isoformat()}
+
+        # Act
+        result = is_ttl_valid(credentials)
+
+        # Assert
+        assert result is False
+
+    @pytest.mark.requirement("FR-021")
+    def test_is_ttl_valid_false_for_exceeds_max(self) -> None:
+        """Test returns False when TTL exceeds maximum."""
+        # Arrange - expiration 48 hours in future
+        far_future = datetime.now(timezone.utc) + timedelta(hours=48)
+        credentials = {"expiration": far_future.isoformat()}
+
+        # Act
+        result = is_ttl_valid(credentials)
+
+        # Assert
+        assert result is False
+
+    @pytest.mark.requirement("FR-021")
+    def test_is_ttl_valid_with_custom_max(self) -> None:
+        """Test with custom max TTL parameter."""
+        # Arrange - expiration 2 hours in future, max 1 hour
+        future = datetime.now(timezone.utc) + timedelta(hours=2)
+        credentials = {"expiration": future.isoformat()}
+
+        # Act
+        result = is_ttl_valid(credentials, max_ttl_seconds=3600)
+
+        # Assert
+        assert result is False
