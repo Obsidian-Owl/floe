@@ -126,6 +126,15 @@ from floe_core.version_compat import (
     is_compatible,
 )
 
+# Observability (OTel)
+from floe_core.observability import (
+    get_meter,
+    get_tracer,
+    record_validation_duration,
+    record_validation_error,
+    start_validation_span,
+)
+
 __all__: list[str] = [
     # Package version
     "__version__",
@@ -189,4 +198,10 @@ __all__: list[str] = [
     "SemanticLayerPlugin",
     "StoragePlugin",
     "TelemetryBackendPlugin",
+    # Observability (OTel)
+    "get_meter",
+    "get_tracer",
+    "record_validation_duration",
+    "record_validation_error",
+    "start_validation_span",
 ]

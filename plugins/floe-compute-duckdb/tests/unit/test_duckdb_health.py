@@ -1,6 +1,7 @@
 """Unit tests for DuckDB connection health monitoring.
 
-Tests for FR-018 (validate_connection method) and FR-019 (latency measurement).
+Tests for FR-018 (validate_connection method), FR-019 (latency measurement),
+and FR-024 (OTel metrics emission).
 
 Note: Unit tests mock the duckdb module. Integration tests with real DuckDB
 should go in tests/integration/.
@@ -242,3 +243,105 @@ class TestValidateConnectionNativeDriver:
         # Verify connection was closed
         mock_conn = mock_duckdb_success.connect.return_value
         mock_conn.close.assert_called_once()
+
+
+class TestValidateConnectionOTelMetrics:
+    """Test validate_connection OTel metrics emission (FR-024)."""
+
+    @pytest.mark.requirement("001-FR-024")
+    def test_validate_connection_records_duration_on_success(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection records duration metric on success."""
+        with (
+            patch.dict("sys.modules", {"duckdb": mock_duckdb_success}),
+            patch("floe_compute_duckdb.plugin.record_validation_duration") as mock_record,
+        ):
+            plugin.validate_connection(memory_config)
+
+        mock_record.assert_called_once()
+        call_args = mock_record.call_args
+        assert call_args[0][0] == "duckdb"  # plugin_name
+        assert call_args[0][2] == "healthy"  # status
+
+    @pytest.mark.requirement("001-FR-024")
+    def test_validate_connection_records_duration_on_error(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
+        """Test validate_connection records duration metric on error."""
+        mock_duckdb = MagicMock()
+        mock_duckdb.connect.side_effect = Exception("Connection failed")
+
+        with (
+            patch.dict("sys.modules", {"duckdb": mock_duckdb}),
+            patch("floe_compute_duckdb.plugin.record_validation_duration") as mock_record,
+            patch("floe_compute_duckdb.plugin.record_validation_error"),
+        ):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/nonexistent/path/db.duckdb"},
+            )
+            plugin.validate_connection(config)
+
+        mock_record.assert_called_once()
+        call_args = mock_record.call_args
+        assert call_args[0][0] == "duckdb"  # plugin_name
+        assert call_args[0][2] == "unhealthy"  # status
+
+    @pytest.mark.requirement("001-FR-024")
+    def test_validate_connection_records_error_on_failure(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
+        """Test validate_connection records error counter on failure."""
+        mock_duckdb = MagicMock()
+        mock_duckdb.connect.side_effect = Exception("Connection failed")
+
+        with (
+            patch.dict("sys.modules", {"duckdb": mock_duckdb}),
+            patch("floe_compute_duckdb.plugin.record_validation_duration"),
+            patch("floe_compute_duckdb.plugin.record_validation_error") as mock_error,
+        ):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/nonexistent/path/db.duckdb"},
+            )
+            plugin.validate_connection(config)
+
+        mock_error.assert_called_once()
+        call_args = mock_error.call_args
+        assert call_args[0][0] == "duckdb"  # plugin_name
+        assert call_args[0][1] == "Exception"  # error_type
+
+    @pytest.mark.requirement("001-FR-024")
+    def test_validate_connection_no_error_counter_on_success(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection does not record error counter on success."""
+        with (
+            patch.dict("sys.modules", {"duckdb": mock_duckdb_success}),
+            patch("floe_compute_duckdb.plugin.record_validation_duration"),
+            patch("floe_compute_duckdb.plugin.record_validation_error") as mock_error,
+        ):
+            plugin.validate_connection(memory_config)
+
+        mock_error.assert_not_called()
+
+    @pytest.mark.requirement("001-FR-024")
+    def test_validate_connection_starts_span(
+        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test validate_connection creates OTel span."""
+        mock_span = MagicMock()
+        mock_span.__enter__ = MagicMock(return_value=mock_span)
+        mock_span.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch.dict("sys.modules", {"duckdb": mock_duckdb_success}),
+            patch("floe_compute_duckdb.plugin.start_validation_span", return_value=mock_span) as mock_start,
+            patch("floe_compute_duckdb.plugin.record_validation_duration"),
+        ):
+            plugin.validate_connection(memory_config)
+
+        mock_start.assert_called_once_with("duckdb")
+        mock_span.set_attribute.assert_any_call("db.path", ":memory:")
+        mock_span.set_attribute.assert_any_call("validation.status", "healthy")

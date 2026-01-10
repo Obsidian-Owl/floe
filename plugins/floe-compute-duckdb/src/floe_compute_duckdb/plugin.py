@@ -27,6 +27,9 @@ from floe_core import (
     ConnectionResult,
     ConnectionStatus,
     ResourceSpec,
+    record_validation_duration,
+    record_validation_error,
+    start_validation_span,
 )
 
 if TYPE_CHECKING:
@@ -238,6 +241,10 @@ class DuckDBComputePlugin(ComputePlugin):
         connection and executing a simple query. For in-memory databases,
         this verifies DuckDB is available and working.
 
+        Emits OpenTelemetry metrics (FR-024):
+        - floe.compute.validation_duration histogram
+        - floe.compute.validation_errors counter (on failure)
+
         Args:
             config: Compute configuration with DuckDB settings.
 
@@ -256,34 +263,49 @@ class DuckDBComputePlugin(ComputePlugin):
         path = config.connection.get("path", ":memory:")
         start_time = time.perf_counter()
 
-        try:
-            conn = duckdb.connect(path, read_only=False)
-            try:
-                # Simple validation query
-                result = conn.execute("SELECT 1").fetchone()
-                latency_ms = (time.perf_counter() - start_time) * 1000
+        with start_validation_span(self.name) as span:
+            span.set_attribute("db.path", path)
 
-                if result and result[0] == 1:
-                    return ConnectionResult(
-                        status=ConnectionStatus.HEALTHY,
+            try:
+                conn = duckdb.connect(path, read_only=False)
+                try:
+                    # Simple validation query
+                    query_result = conn.execute("SELECT 1").fetchone()
+                    latency_ms = (time.perf_counter() - start_time) * 1000
+
+                    if query_result and query_result[0] == 1:
+                        result = ConnectionResult(
+                            status=ConnectionStatus.HEALTHY,
+                            latency_ms=latency_ms,
+                            message=f"Connected to DuckDB successfully (path: {path})",
+                        )
+                        span.set_attribute("validation.status", "healthy")
+                        record_validation_duration(self.name, latency_ms, "healthy")
+                        return result
+
+                    result = ConnectionResult(
+                        status=ConnectionStatus.UNHEALTHY,
                         latency_ms=latency_ms,
-                        message=f"Connected to DuckDB successfully (path: {path})",
+                        message="DuckDB validation query returned unexpected result",
                     )
+                    span.set_attribute("validation.status", "unhealthy")
+                    record_validation_duration(self.name, latency_ms, "unhealthy")
+                    record_validation_error(self.name, "unexpected_result")
+                    return result
+                finally:
+                    conn.close()
+            except Exception as e:
+                latency_ms = (time.perf_counter() - start_time) * 1000
+                span.set_attribute("validation.status", "unhealthy")
+                span.set_attribute("error.message", str(e))
+                record_validation_duration(self.name, latency_ms, "unhealthy")
+                record_validation_error(self.name, type(e).__name__)
                 return ConnectionResult(
                     status=ConnectionStatus.UNHEALTHY,
                     latency_ms=latency_ms,
-                    message="DuckDB validation query returned unexpected result",
+                    message=f"Failed to connect to DuckDB: {e}",
+                    warnings=[f"Error details: {e!s}"],
                 )
-            finally:
-                conn.close()
-        except Exception as e:
-            latency_ms = (time.perf_counter() - start_time) * 1000
-            return ConnectionResult(
-                status=ConnectionStatus.UNHEALTHY,
-                latency_ms=latency_ms,
-                message=f"Failed to connect to DuckDB: {e}",
-                warnings=[f"Error details: {e!s}"],
-            )
 
     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
         """Return K8s resource requirements for DuckDB dbt job pods.
