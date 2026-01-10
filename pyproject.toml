@@ -37,6 +37,7 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    ".",  # For testing module
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

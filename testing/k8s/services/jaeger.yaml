@@ -77,6 +77,7 @@ spec:
     # OTLP gRPC - for TelemetryProvider
     - port: 4317
       targetPort: 4317
+      nodePort: 30417
       name: otlp-grpc
     # OTLP HTTP - alternative to gRPC
     - port: 4318

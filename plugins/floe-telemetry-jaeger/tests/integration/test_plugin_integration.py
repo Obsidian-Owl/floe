@@ -30,10 +30,32 @@ class TestJaegerPluginIntegration(IntegrationTestBase):
 
     These tests require a running Jaeger collector accessible via gRPC.
     The collector must be deployed in the K8s cluster and accessible
-    at jaeger-collector:4317 (or via OTEL_EXPORTER_OTLP_ENDPOINT).
+    via localhost:4317 (NodePort mapping) or OTEL_EXPORTER_OTLP_ENDPOINT.
     """
 
-    required_services = [("jaeger-collector", 4317)]
+    # Don't use cluster DNS - we connect via NodePort from host
+    required_services: list[tuple[str, int]] = []
+
+    def setup_method(self) -> None:
+        """Set up test fixtures, checking localhost connectivity."""
+        import socket
+
+        super().setup_method()
+
+        # Check Jaeger is accessible via NodePort (localhost:4317)
+        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+        if "://" in endpoint:
+            endpoint = endpoint.split("://", 1)[1]
+        host, port_str = endpoint.rsplit(":", 1) if ":" in endpoint else (endpoint, "4317")
+
+        try:
+            with socket.create_connection((host, int(port_str)), timeout=5.0):
+                pass  # Connection succeeded
+        except OSError as e:
+            pytest.fail(
+                f"Jaeger not accessible at {host}:{port_str}: {e}\n"
+                f"Ensure Kind cluster has Jaeger deployed: make kind-up"
+            )
 
     @pytest.fixture
     def plugin(self) -> JaegerTelemetryPlugin:
@@ -50,15 +72,15 @@ class TestJaegerPluginIntegration(IntegrationTestBase):
     def jaeger_endpoint(self) -> str:
         """Get Jaeger collector endpoint for tests.
 
-        Uses environment variable if set, otherwise constructs from
-        K8s service discovery.
+        Uses environment variable if set, otherwise uses localhost
+        which is mapped via NodePort in Kind cluster.
 
         Returns:
             Endpoint string in host:port format.
         """
         return os.environ.get(
             "OTEL_EXPORTER_OTLP_ENDPOINT",
-            f"{self.get_service_host('jaeger-collector')}:4317",
+            "localhost:4317",
         )
 
     @pytest.mark.requirement("FR-029")
