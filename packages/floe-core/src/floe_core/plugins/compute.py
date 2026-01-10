@@ -36,7 +36,6 @@ from floe_core.compute_config import (
     ComputeConfig,
     ConnectionResult,
     ResourceSpec,
-    WORKLOAD_PRESETS,
 )
 from floe_core.plugin_metadata import PluginMetadata
 

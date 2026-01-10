@@ -42,20 +42,19 @@ __version__ = "0.1.0"
 # Schemas submodule (imported for explicit re-export)
 from floe_core import schemas as schemas  # noqa: PLC0414
 
-# Plugin error hierarchy
-from floe_core.plugin_errors import (
-    CircularDependencyError,
-    DuplicatePluginError,
-    MissingDependencyError,
-    PluginConfigurationError,
-    PluginError,
-    PluginIncompatibleError,
-    PluginNotFoundError,
-    PluginStartupError,
+# Compiler functions
+from floe_core.compiler import (
+    EnvironmentParityError,
+    check_environment_parity,
+    compile_transforms,
+    resolve_transform_compute,
+    resolve_transforms_compute,
+    validate_environment_parity,
 )
 
 # Compute configuration models
 from floe_core.compute_config import (
+    WORKLOAD_PRESETS,
     AttachConfig,
     CatalogConfig,
     ComputeConfig,
@@ -63,7 +62,6 @@ from floe_core.compute_config import (
     ConnectionStatus,
     DuckDBConfig,
     ResourceSpec,
-    WORKLOAD_PRESETS,
 )
 
 # Compute error hierarchy
@@ -77,14 +75,25 @@ from floe_core.compute_errors import (
 # Compute registry
 from floe_core.compute_registry import ComputeRegistry
 
-# Compiler functions
-from floe_core.compiler import (
-    EnvironmentParityError,
-    check_environment_parity,
-    compile_transforms,
-    resolve_transform_compute,
-    resolve_transforms_compute,
-    validate_environment_parity,
+# Observability (OTel)
+from floe_core.observability import (
+    get_meter,
+    get_tracer,
+    record_validation_duration,
+    record_validation_error,
+    start_validation_span,
+)
+
+# Plugin error hierarchy
+from floe_core.plugin_errors import (
+    CircularDependencyError,
+    DuplicatePluginError,
+    MissingDependencyError,
+    PluginConfigurationError,
+    PluginError,
+    PluginIncompatibleError,
+    PluginNotFoundError,
+    PluginStartupError,
 )
 
 # Health types and PluginMetadata ABC
@@ -124,15 +133,6 @@ from floe_core.version_compat import (
     FLOE_PLUGIN_API_MIN_VERSION,
     FLOE_PLUGIN_API_VERSION,
     is_compatible,
-)
-
-# Observability (OTel)
-from floe_core.observability import (
-    get_meter,
-    get_tracer,
-    record_validation_duration,
-    record_validation_error,
-    start_validation_span,
 )
 
 __all__: list[str] = [
