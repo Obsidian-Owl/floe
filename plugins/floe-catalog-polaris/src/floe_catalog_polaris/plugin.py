@@ -26,6 +26,9 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -786,20 +789,124 @@ class PolarisCatalogPlugin(CatalogPlugin):
     def health_check(self, timeout: float = 1.0) -> HealthStatus:
         """Check Polaris catalog connectivity and health.
 
-        Performs a lightweight operation to verify the catalog is reachable
-        and responding within the timeout period.
+        Performs a lightweight operation (list_namespaces) to verify the catalog
+        is reachable and responding within the timeout period.
 
         Args:
             timeout: Maximum time in seconds to wait for response.
+                Defaults to 1.0 second. Must be between 0.1 and 10.0 seconds.
 
         Returns:
-            HealthStatus indicating whether catalog is healthy.
+            HealthStatus indicating whether catalog is healthy, including
+            response_time_ms and checked_at timestamp in details.
+
+        Example:
+            >>> status = plugin.health_check(timeout=2.0)
+            >>> if status.state == HealthState.HEALTHY:
+            ...     print(f"Catalog OK ({status.details['response_time_ms']:.1f}ms)")
         """
-        # Stub - returns unhealthy until actual implementation
-        # Will be implemented in later tasks with real connectivity check
-        _ = timeout  # Intentionally unused for stub
-        return HealthStatus(
-            state=HealthState.UNHEALTHY,
-            message="Polaris catalog not connected",
-            details={"reason": "Plugin not yet connected to catalog"},
-        )
+        log = logger.bind(operation="health_check", timeout=timeout)
+        checked_at = datetime.now(timezone.utc)
+        start_time = time.perf_counter()
+
+        # Check if plugin is connected
+        if self._catalog is None:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            log.warning("health_check_not_connected")
+            return HealthStatus(
+                state=HealthState.UNHEALTHY,
+                message="Polaris catalog not connected",
+                details={
+                    "reason": "Plugin not yet connected to catalog",
+                    "response_time_ms": elapsed_ms,
+                    "checked_at": checked_at,
+                    "timeout": timeout,
+                },
+            )
+
+        tracer = get_tracer()
+        with catalog_span(
+            tracer,
+            "health_check",
+            catalog_name="polaris",
+            warehouse=self._config.warehouse,
+        ) as span:
+            try:
+                # Use list_namespaces as lightweight health probe with timeout
+                def _probe() -> None:
+                    if self._catalog is not None:
+                        self._catalog.list_namespaces()
+
+                executor = ThreadPoolExecutor(max_workers=1)
+                try:
+                    future = executor.submit(_probe)
+                    try:
+                        future.result(timeout=timeout)
+                    except FuturesTimeoutError:
+                        elapsed_ms = (time.perf_counter() - start_time) * 1000
+                        log.warning(
+                            "health_check_timeout",
+                            response_time_ms=elapsed_ms,
+                            timeout=timeout,
+                        )
+                        if span is not None:
+                            span.set_attribute("health.status", "unhealthy")
+                            span.set_attribute("health.response_time_ms", elapsed_ms)
+                        return HealthStatus(
+                            state=HealthState.UNHEALTHY,
+                            message=f"Health check timed out after {timeout}s",
+                            details={
+                                "reason": "timeout",
+                                "response_time_ms": elapsed_ms,
+                                "checked_at": checked_at,
+                                "timeout": timeout,
+                            },
+                        )
+                finally:
+                    # Shutdown without waiting for thread to complete
+                    executor.shutdown(wait=False)
+
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                log.info(
+                    "health_check_success",
+                    response_time_ms=elapsed_ms,
+                    healthy=True,
+                )
+                if span is not None:
+                    span.set_attribute("health.status", "healthy")
+                    span.set_attribute("health.response_time_ms", elapsed_ms)
+
+                return HealthStatus(
+                    state=HealthState.HEALTHY,
+                    message="Polaris catalog responding normally",
+                    details={
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": timeout,
+                    },
+                )
+
+            except Exception as e:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                error_message = str(e) if str(e) else type(e).__name__
+                log.warning(
+                    "health_check_failed",
+                    response_time_ms=elapsed_ms,
+                    error=error_message,
+                )
+                if span is not None:
+                    span.set_attribute("health.status", "unhealthy")
+                    span.set_attribute("health.response_time_ms", elapsed_ms)
+                    set_error_attributes(span, e)
+
+                return HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message=f"Health check failed: {error_message}",
+                    details={
+                        "reason": "probe_failed",
+                        "error": error_message,
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": timeout,
+                    },
+                )

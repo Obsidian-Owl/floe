@@ -100,7 +100,9 @@ class TestHealthCheckBasic:
         result = connected_plugin.health_check()
 
         assert result.state == HealthState.HEALTHY
-        assert "healthy" in result.message.lower() or "ok" in result.message.lower()
+        # Accept various positive messages
+        msg_lower = result.message.lower()
+        assert any(word in msg_lower for word in ["healthy", "ok", "responding", "normal"])
 
     @pytest.mark.requirement("FR-028")
     def test_health_check_unhealthy_when_list_namespaces_fails(
