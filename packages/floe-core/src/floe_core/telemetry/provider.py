@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import os
 from enum import Enum, auto
+from importlib.metadata import entry_points
 from typing import TYPE_CHECKING
 
 from opentelemetry import metrics, trace
@@ -49,6 +50,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
+from floe_core.plugins.telemetry import TelemetryBackendPlugin
 from floe_core.telemetry.logging import configure_logging
 from floe_core.telemetry.propagation import configure_propagators
 
@@ -58,6 +60,40 @@ if TYPE_CHECKING:
     from floe_core.telemetry.config import TelemetryConfig
 
 logger = logging.getLogger(__name__)
+
+
+def load_telemetry_backend(backend_name: str) -> TelemetryBackendPlugin:
+    """Load a telemetry backend plugin by name.
+
+    Discovers and loads the plugin via Python entry points
+    (floe.telemetry_backends group).
+
+    Args:
+        backend_name: Plugin name (e.g., 'console', 'jaeger')
+
+    Returns:
+        Instantiated TelemetryBackendPlugin
+
+    Raises:
+        ValueError: If no plugin found with the given name
+
+    Example:
+        >>> plugin = load_telemetry_backend("console")
+        >>> plugin.name
+        'console'
+    """
+    eps = entry_points(group="floe.telemetry_backends")
+
+    for ep in eps:
+        if ep.name == backend_name:
+            plugin_class = ep.load()
+            return plugin_class()
+
+    available = [ep.name for ep in eps]
+    raise ValueError(
+        f"Telemetry backend '{backend_name}' not found. "
+        f"Available backends: {available}"
+    )
 
 
 class ProviderState(Enum):
@@ -114,6 +150,9 @@ class TelemetryProvider:
 
         Args:
             config: TelemetryConfig containing SDK configuration.
+
+        Raises:
+            ValueError: If backend plugin cannot be loaded.
         """
         self._config = config
         self._state = ProviderState.UNINITIALIZED
@@ -122,6 +161,11 @@ class TelemetryProvider:
         self._span_processor: BatchSpanProcessor | None = None
         self._meter_provider: MeterProvider | None = None
         self._metric_reader: PeriodicExportingMetricReader | None = None
+
+        # Load backend plugin (FR-025, FR-028)
+        self._backend_plugin: TelemetryBackendPlugin | None = None
+        if not self.is_noop:
+            self._backend_plugin = load_telemetry_backend(config.backend)
 
     @property
     def config(self) -> TelemetryConfig:
@@ -141,6 +185,15 @@ class TelemetryProvider:
             True if telemetry is disabled or in no-op mode.
         """
         return self._noop_mode or not self._config.enabled
+
+    @property
+    def backend_plugin(self) -> TelemetryBackendPlugin | None:
+        """Get the loaded backend plugin.
+
+        Returns:
+            The loaded TelemetryBackendPlugin, or None if in no-op mode.
+        """
+        return self._backend_plugin
 
     def _check_noop_mode(self) -> bool:
         """Check if OTEL_SDK_DISABLED environment variable is set.
@@ -241,6 +294,11 @@ class TelemetryProvider:
             json_output=logging_config.json_output,
         )
 
+        # Log backend plugin info
+        backend_name = (
+            self._backend_plugin.name if self._backend_plugin else "none"
+        )
+
         logger.info(
             "TelemetryProvider initialized",
             extra={
@@ -250,6 +308,7 @@ class TelemetryProvider:
                 "sampling_ratio": sampling_ratio,
                 "metrics_enabled": self._meter_provider is not None,
                 "log_level": logging_config.log_level,
+                "backend": backend_name,
             },
         )
         self._state = ProviderState.INITIALIZED

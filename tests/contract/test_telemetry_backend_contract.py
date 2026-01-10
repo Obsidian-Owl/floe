@@ -297,3 +297,153 @@ class TestTelemetryBackendPluginPartialImplementation:
 
         with pytest.raises(TypeError, match="abstract"):
             IncompletePlugin()  # type: ignore[abstract]
+
+
+class TestTelemetryBackendPluginDiscovery:
+    """Contract tests for plugin discovery via entry points.
+
+    Validates that telemetry backend plugins can be discovered and loaded
+    via Python entry points (importlib.metadata).
+    """
+
+    @pytest.mark.requirement("FR-025")
+    def test_can_discover_plugins_via_entry_points(self) -> None:
+        """Verify plugins are discoverable via entry points."""
+        from importlib.metadata import entry_points
+
+        # Get all telemetry backend plugins
+        eps = entry_points(group="floe.telemetry_backends")
+
+        # Should have at least console and jaeger plugins
+        plugin_names = [ep.name for ep in eps]
+        assert "console" in plugin_names
+        assert "jaeger" in plugin_names
+
+    @pytest.mark.requirement("FR-025")
+    def test_console_plugin_loadable_via_entry_point(self) -> None:
+        """Verify console plugin can be loaded via entry point."""
+        from importlib.metadata import entry_points
+
+        eps = entry_points(group="floe.telemetry_backends")
+        console_ep = next(ep for ep in eps if ep.name == "console")
+
+        # Load the plugin class
+        plugin_class = console_ep.load()
+        assert plugin_class is not None
+        assert issubclass(plugin_class, TelemetryBackendPlugin)
+
+        # Instantiate and verify
+        plugin = plugin_class()
+        assert plugin.name == "console"
+
+    @pytest.mark.requirement("FR-025")
+    def test_jaeger_plugin_loadable_via_entry_point(self) -> None:
+        """Verify Jaeger plugin can be loaded via entry point."""
+        from importlib.metadata import entry_points
+
+        eps = entry_points(group="floe.telemetry_backends")
+        jaeger_ep = next(ep for ep in eps if ep.name == "jaeger")
+
+        # Load the plugin class
+        plugin_class = jaeger_ep.load()
+        assert plugin_class is not None
+        assert issubclass(plugin_class, TelemetryBackendPlugin)
+
+        # Instantiate and verify
+        plugin = plugin_class()
+        assert plugin.name == "jaeger"
+
+
+class TestConcretePluginCompliance:
+    """Contract tests for concrete plugin implementations.
+
+    Validates that real plugin implementations (console, jaeger) satisfy
+    the TelemetryBackendPlugin contract.
+    """
+
+    @pytest.mark.requirement("FR-027")
+    def test_console_plugin_implements_abc(self) -> None:
+        """Verify console plugin properly implements the ABC."""
+        from floe_telemetry_console import ConsoleTelemetryPlugin
+
+        plugin = ConsoleTelemetryPlugin()
+
+        # Verify all abstract properties
+        assert isinstance(plugin.name, str)
+        assert isinstance(plugin.version, str)
+        assert isinstance(plugin.floe_api_version, str)
+
+        # Verify all abstract methods
+        config = plugin.get_otlp_exporter_config()
+        assert isinstance(config, dict)
+
+        values = plugin.get_helm_values()
+        assert isinstance(values, dict)
+
+        valid = plugin.validate_connection()
+        assert isinstance(valid, bool)
+
+    @pytest.mark.requirement("FR-027")
+    def test_console_plugin_returns_console_exporter_type(self) -> None:
+        """Verify console plugin indicates console exporter type."""
+        from floe_telemetry_console import ConsoleTelemetryPlugin
+
+        plugin = ConsoleTelemetryPlugin()
+        config = plugin.get_otlp_exporter_config()
+
+        assert config.get("exporter_type") == "console"
+
+    @pytest.mark.requirement("FR-027")
+    def test_console_plugin_returns_empty_helm_values(self) -> None:
+        """Verify console plugin returns empty Helm values (no deployment)."""
+        from floe_telemetry_console import ConsoleTelemetryPlugin
+
+        plugin = ConsoleTelemetryPlugin()
+        values = plugin.get_helm_values()
+
+        assert values == {}
+
+    @pytest.mark.requirement("FR-029")
+    def test_jaeger_plugin_implements_abc(self) -> None:
+        """Verify Jaeger plugin properly implements the ABC."""
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        # Verify all abstract properties
+        assert isinstance(plugin.name, str)
+        assert isinstance(plugin.version, str)
+        assert isinstance(plugin.floe_api_version, str)
+
+        # Verify all abstract methods
+        config = plugin.get_otlp_exporter_config()
+        assert isinstance(config, dict)
+
+        values = plugin.get_helm_values()
+        assert isinstance(values, dict)
+
+        valid = plugin.validate_connection()
+        assert isinstance(valid, bool)
+
+    @pytest.mark.requirement("FR-029")
+    def test_jaeger_plugin_returns_otlp_exporter_type(self) -> None:
+        """Verify Jaeger plugin indicates OTLP exporter type."""
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+        config = plugin.get_otlp_exporter_config()
+
+        assert config.get("exporter_type") == "otlp"
+        assert "endpoint" in config
+
+    @pytest.mark.requirement("FR-029")
+    def test_jaeger_plugin_returns_helm_values(self) -> None:
+        """Verify Jaeger plugin returns Helm values for deployment."""
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+        values = plugin.get_helm_values()
+
+        assert isinstance(values, dict)
+        assert len(values) > 0  # Jaeger needs deployment config
+        assert "collector" in values or "query" in values

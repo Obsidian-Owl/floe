@@ -386,6 +386,10 @@ class TelemetryConfig(BaseModel):
         default_factory=LoggingConfig,
         description="Structured logging configuration with trace context",
     )
+    backend: str = Field(
+        default="console",
+        description="Telemetry backend plugin name (e.g., 'console', 'jaeger')",
+    )
 
     def get_sampling_ratio(self, environment: str) -> float:
         """Get sampling ratio for the specified environment.

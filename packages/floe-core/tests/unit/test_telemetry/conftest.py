@@ -5,12 +5,46 @@ Provides fixtures specific to telemetry module unit tests.
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     from floe_core.telemetry import ResourceAttributes, SamplingConfig
+
+
+@pytest.fixture(autouse=True)
+def reset_otel_global_state() -> Generator[None, None, None]:
+    """Reset OpenTelemetry global state before and after each test.
+
+    This fixture ensures test isolation by resetting the global
+    TracerProvider and MeterProvider between tests. Without this,
+    tests that call `trace.set_tracer_provider()` will cause
+    subsequent tests to fail with "Overriding not allowed" errors.
+
+    Yields:
+        None after resetting state.
+    """
+    from opentelemetry import metrics, trace
+    from opentelemetry.trace import ProxyTracerProvider
+    from opentelemetry.metrics._internal import _ProxyMeterProvider
+
+    # Reset before test
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    trace._TRACER_PROVIDER = ProxyTracerProvider()
+
+    metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+    metrics._internal._METER_PROVIDER = _ProxyMeterProvider()
+
+    yield
+
+    # Reset after test
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    trace._TRACER_PROVIDER = ProxyTracerProvider()
+
+    metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+    metrics._internal._METER_PROVIDER = _ProxyMeterProvider()
 
 
 @pytest.fixture
