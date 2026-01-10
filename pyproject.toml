@@ -17,6 +17,8 @@ dependencies = [
     "bandit[toml]>=1.7",
     "pip-audit>=2.0",  # Security audit for dependencies
     "types-psycopg2>=2.9",  # Type stubs for psycopg2
+    "types-requests>=2.31",  # Type stubs for requests
+    "requests>=2.31",  # HTTP client for telemetry fixture tests
     "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
