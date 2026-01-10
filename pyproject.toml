@@ -20,10 +20,13 @@ dependencies = [
     "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
+    # Include floe-compute-duckdb for development
+    "floe-compute-duckdb",
 ]
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
+floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

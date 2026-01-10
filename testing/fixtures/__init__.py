@@ -57,6 +57,10 @@ from testing.fixtures.duckdb import (
     create_memory_connection,
     duckdb_connection_context,
     execute_script,
+    file_database_context,
+)
+from testing.fixtures.duckdb import (
+    get_connection_info as get_duckdb_connection_info,
 )
 from testing.fixtures.minio import (
     MinIOConfig,
@@ -150,6 +154,8 @@ __all__ = [
     "create_memory_connection",
     "duckdb_connection_context",
     "execute_script",
+    "file_database_context",
+    "get_duckdb_connection_info",
     # Dagster fixtures
     "DagsterConfig",
     "DagsterConnectionError",

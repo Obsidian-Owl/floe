@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "floe-core"
+name = "floe-compute-duckdb"
 version = "0.1.0"
-description = "Core plugin registry and interfaces for the floe data platform"
+description = "DuckDB compute plugin for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -23,11 +23,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "floe-core>=0.1.0",
+    "duckdb>=0.9.0",
     "pydantic>=2.0",
-    "pyyaml>=6.0",
-    "structlog>=24.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
 ]
 
 [project.optional-dependencies]
@@ -36,8 +34,13 @@ dev = [
     "pytest-cov>=4.0",
     "mypy>=1.8",
     "ruff>=0.3",
-    "jsonschema>=4.0",  # For JSON Schema validation in tests
 ]
+dbt = [
+    "dbt-duckdb>=1.7.0",
+]
+
+[project.entry-points."floe.computes"]
+duckdb = "floe_compute_duckdb:DuckDBComputePlugin"
 
 [project.urls]
 Homepage = "https://github.com/Obsidian-Owl/floe"
@@ -45,7 +48,7 @@ Documentation = "https://github.com/Obsidian-Owl/floe/tree/main/docs"
 Repository = "https://github.com/Obsidian-Owl/floe"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/floe_core"]
+packages = ["src/floe_compute_duckdb"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -77,4 +80,5 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
+    "integration: Mark test as integration test requiring real services",
 ]

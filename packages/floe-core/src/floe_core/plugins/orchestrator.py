@@ -44,6 +44,9 @@ class TransformConfig:
         tags: List of model tags.
         depends_on: List of upstream model names.
         meta: Additional model metadata.
+        compute: Optional compute target override. When None, inherits from
+            platform default. When specified, must be in the approved compute
+            list. Validated at compile time via ComputeRegistry.validate_selection().
 
     Example:
         >>> transform = TransformConfig(
@@ -53,6 +56,16 @@ class TransformConfig:
         ...     materialization="view",
         ...     depends_on=["raw_customers"]
         ... )
+        >>> # With explicit compute override
+        >>> heavy_transform = TransformConfig(
+        ...     name="heavy_aggregation",
+        ...     compute="spark"  # Override platform default
+        ... )
+
+    See Also:
+        - FR-012: Per-transform compute selection in floe.yaml
+        - FR-014: Environment parity enforcement
+        - ComputeRegistry.validate_selection(): Compile-time validation
     """
 
     name: str
@@ -62,6 +75,7 @@ class TransformConfig:
     tags: list[str] = field(default_factory=lambda: [])
     depends_on: list[str] = field(default_factory=lambda: [])
     meta: dict[str, Any] = field(default_factory=lambda: {})
+    compute: str | None = None
 
 
 @dataclass
