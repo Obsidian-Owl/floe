@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 _VALID_EXTENSION_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 if TYPE_CHECKING:
-    import duckdb  # type: ignore[import-not-found]
+    import duckdb
 
 
 class DuckDBConfig(BaseModel):

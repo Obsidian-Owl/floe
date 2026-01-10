@@ -39,6 +39,15 @@ from floe_core.compute_config import (
 )
 from floe_core.plugin_metadata import PluginMetadata
 
+# Explicit re-exports for mypy --strict
+__all__ = [
+    "CatalogConfig",
+    "ComputeConfig",
+    "ComputePlugin",
+    "ConnectionResult",
+    "ResourceSpec",
+]
+
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
