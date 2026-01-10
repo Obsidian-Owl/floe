@@ -17,13 +17,45 @@ set -euo pipefail
 GIT_DIR="$(git rev-parse --git-common-dir 2>/dev/null || git rev-parse --git-dir)"
 HOOKS_DIR="$GIT_DIR/hooks"
 
+# Create hooks directory if it doesn't exist
+mkdir -p "$HOOKS_DIR"
+
+# Backup existing hooks if they exist and weren't created by this script
+BACKUP_DIR="$HOOKS_DIR/backup.$(date +%Y%m%d-%H%M%S)"
+HOOKS_TO_INSTALL="pre-commit pre-push prepare-commit-msg post-checkout post-merge"
+NEEDS_BACKUP=false
+
+for hook in $HOOKS_TO_INSTALL; do
+    if [ -f "$HOOKS_DIR/$hook" ]; then
+        # Check if it's our hook (contains our marker)
+        if ! grep -q "Installed by: scripts/setup-hooks.sh" "$HOOKS_DIR/$hook" 2>/dev/null; then
+            NEEDS_BACKUP=true
+            break
+        fi
+    fi
+done
+
+if [ "$NEEDS_BACKUP" = true ]; then
+    mkdir -p "$BACKUP_DIR"
+    for hook in $HOOKS_TO_INSTALL; do
+        if [ -f "$HOOKS_DIR/$hook" ]; then
+            if ! grep -q "Installed by: scripts/setup-hooks.sh" "$HOOKS_DIR/$hook" 2>/dev/null; then
+                cp "$HOOKS_DIR/$hook" "$BACKUP_DIR/$hook"
+                echo "Backed up existing $hook to $BACKUP_DIR/"
+            fi
+        fi
+    done
+fi
+
 echo "Installing chained hooks to: $HOOKS_DIR"
 
 # Pre-commit hook (runs on every commit)
 cat > "$HOOKS_DIR/pre-commit" << 'HOOK'
 #!/usr/bin/env sh
+# AUTO-GENERATED - Do not edit manually
 # Chained hook: bd (beads) + pre-commit framework
 # Installed by: scripts/setup-hooks.sh
+# Re-run 'make setup-hooks' to regenerate
 
 # 1. Run bd hooks (beads JSONL sync)
 if command -v bd >/dev/null 2>&1; then
@@ -36,16 +68,19 @@ if command -v uv >/dev/null 2>&1; then
 elif command -v pre-commit >/dev/null 2>&1; then
     exec pre-commit run --hook-stage pre-commit
 else
-    echo "Warning: pre-commit not found, skipping code quality checks" >&2
-    echo "  Install: uv add pre-commit --dev" >&2
+    echo "ERROR: pre-commit not found - code quality checks cannot run" >&2
+    echo "  Install: uv add pre-commit --dev && make setup-hooks" >&2
+    exit 1
 fi
 HOOK
 
 # Pre-push hook (runs before push - slower checks)
 cat > "$HOOKS_DIR/pre-push" << 'HOOK'
 #!/usr/bin/env sh
+# AUTO-GENERATED - Do not edit manually
 # Chained hook: bd (beads) + pre-commit framework
 # Installed by: scripts/setup-hooks.sh
+# Re-run 'make setup-hooks' to regenerate
 
 # 1. Run bd hooks (beads sync)
 if command -v bd >/dev/null 2>&1; then
@@ -58,15 +93,19 @@ if command -v uv >/dev/null 2>&1; then
 elif command -v pre-commit >/dev/null 2>&1; then
     exec pre-commit run --hook-stage pre-push --all-files
 else
-    echo "Warning: pre-commit not found, skipping pre-push checks" >&2
+    echo "ERROR: pre-commit not found - pre-push checks cannot run" >&2
+    echo "  Install: uv add pre-commit --dev && make setup-hooks" >&2
+    exit 1
 fi
 HOOK
 
 # Prepare-commit-msg hook (bd only - for issue references)
 cat > "$HOOKS_DIR/prepare-commit-msg" << 'HOOK'
 #!/usr/bin/env sh
+# AUTO-GENERATED - Do not edit manually
 # bd (beads) hook for commit message preparation
 # Installed by: scripts/setup-hooks.sh
+# Re-run 'make setup-hooks' to regenerate
 
 if command -v bd >/dev/null 2>&1; then
     exec bd hooks run prepare-commit-msg "$@"
@@ -76,8 +115,10 @@ HOOK
 # Post-checkout hook (bd only - for branch tracking)
 cat > "$HOOKS_DIR/post-checkout" << 'HOOK'
 #!/usr/bin/env sh
+# AUTO-GENERATED - Do not edit manually
 # bd (beads) hook for checkout tracking
 # Installed by: scripts/setup-hooks.sh
+# Re-run 'make setup-hooks' to regenerate
 
 if command -v bd >/dev/null 2>&1; then
     exec bd hooks run post-checkout "$@"
@@ -87,8 +128,10 @@ HOOK
 # Post-merge hook (bd only - for merge tracking)
 cat > "$HOOKS_DIR/post-merge" << 'HOOK'
 #!/usr/bin/env sh
+# AUTO-GENERATED - Do not edit manually
 # bd (beads) hook for merge tracking
 # Installed by: scripts/setup-hooks.sh
+# Re-run 'make setup-hooks' to regenerate
 
 if command -v bd >/dev/null 2>&1; then
     exec bd hooks run post-merge "$@"
@@ -110,5 +153,5 @@ echo "  - prepare-commit-msg: bd (issue references)"
 echo "  - post-checkout:      bd (branch tracking)"
 echo "  - post-merge:         bd (merge tracking)"
 echo ""
-echo "Note: Run this script again after 'bd hooks install' or 'pre-commit install'"
+echo "Note: Run 'make setup-hooks' again after 'bd hooks install' or 'pre-commit install'"
 echo "      to restore chained hooks."
