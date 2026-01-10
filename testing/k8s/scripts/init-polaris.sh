@@ -109,6 +109,66 @@ create_catalog() {
     fi
 }
 
+# Create catalog role with table operation privileges
+setup_catalog_role() {
+    local token=$1
+    local catalog_name=$2
+    local role_name="test_data_admin"
+
+    log_info "Creating catalog role: ${role_name}..."
+
+    # Create catalog role
+    local status
+    status=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "${POLARIS_URL}/api/management/v1/catalogs/${catalog_name}/catalog-roles" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" \
+        -d "{\"catalogRole\": {\"name\": \"${role_name}\"}}")
+
+    if [[ "$status" == "201" || "$status" == "409" ]]; then
+        log_info "Catalog role ${role_name} created (or exists)"
+    else
+        log_error "Failed to create catalog role. HTTP status: $status"
+        return
+    fi
+
+    # Grant privileges for table operations
+    local privileges=(
+        "CATALOG_MANAGE_CONTENT"
+        "TABLE_CREATE"
+        "TABLE_DROP"
+        "TABLE_READ_DATA"
+        "TABLE_WRITE_DATA"
+        "TABLE_LIST"
+        "NAMESPACE_CREATE"
+        "NAMESPACE_DROP"
+        "NAMESPACE_LIST"
+    )
+
+    for priv in "${privileges[@]}"; do
+        curl -s -o /dev/null -X PUT \
+            "${POLARIS_URL}/api/management/v1/catalogs/${catalog_name}/catalog-roles/${role_name}/grants" \
+            -H "Authorization: Bearer ${token}" \
+            -H "Content-Type: application/json" \
+            -d "{\"grant\": {\"type\": \"catalog\", \"privilege\": \"${priv}\"}}"
+    done
+
+    log_info "Privileges granted to ${role_name}"
+
+    # Assign catalog role to service_admin principal role
+    status=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+        "${POLARIS_URL}/api/management/v1/principal-roles/service_admin/catalog-roles/${catalog_name}" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" \
+        -d "{\"catalogRole\": {\"name\": \"${role_name}\"}}")
+
+    if [[ "$status" == "201" || "$status" == "200" || "$status" == "204" ]]; then
+        log_info "Catalog role ${role_name} assigned to service_admin"
+    else
+        log_error "Failed to assign catalog role. HTTP status: $status"
+    fi
+}
+
 # Main
 main() {
     log_info "Initializing Polaris catalog..."
@@ -138,6 +198,9 @@ main() {
     else
         create_catalog "$token" "$CATALOG_NAME"
     fi
+
+    # Setup catalog role with table privileges
+    setup_catalog_role "$token" "$CATALOG_NAME"
 
     log_info "Polaris initialization complete"
 }

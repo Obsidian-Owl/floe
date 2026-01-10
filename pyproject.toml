@@ -44,6 +44,7 @@ markers = [
     "integration: Marks tests requiring K8s services",
     "contract: Marks cross-package contract tests",
     "e2e: Marks end-to-end pipeline tests",
+    "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
 ]
 
 [tool.mypy]
