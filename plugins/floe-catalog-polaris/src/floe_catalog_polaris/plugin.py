@@ -745,6 +745,13 @@ class PolarisCatalogPlugin(CatalogPlugin):
             catalog_uri=self._config.uri,
             warehouse=self._config.warehouse,
             table_full_name=table_path,
+            extra_attributes={
+                # OTel semantic conventions
+                "db.system": "iceberg",
+                # floe-specific attributes
+                "floe.catalog.system": "polaris",
+                "floe.catalog.operations": operations,
+            },
         ) as span:
             log = logger.bind(
                 table=table_path,

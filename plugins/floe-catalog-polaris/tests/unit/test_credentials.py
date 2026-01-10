@@ -388,7 +388,7 @@ class TestVendCredentialsOTelTracing:
         """Test vend_credentials span includes required attributes.
 
         Validates FR-031: OTel spans MUST include catalog_name, catalog_uri,
-        warehouse, and table_full_name.
+        warehouse, table_full_name, and OTel semantic attributes.
         """
         # Arrange
         mock_catalog.load_table.return_value.io.return_value = mock_vended_credentials
@@ -410,6 +410,12 @@ class TestVendCredentialsOTelTracing:
             assert "catalog_uri" in call_kwargs
             assert "warehouse" in call_kwargs
             assert "table_full_name" in call_kwargs
+
+            # Check OTel semantic attributes in extra_attributes
+            extra_attrs = call_kwargs.get("extra_attributes", {})
+            assert extra_attrs.get("db.system") == "iceberg"
+            assert extra_attrs.get("floe.catalog.system") == "polaris"
+            assert extra_attrs.get("floe.catalog.operations") == ["READ"]
 
     @pytest.mark.requirement("FR-032")
     def test_vend_credentials_span_does_not_include_credentials(
