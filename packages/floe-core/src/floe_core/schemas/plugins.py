@@ -29,7 +29,7 @@ PLUGIN_REGISTRY: dict[str, list[str]] = {
     "semantic_layer": ["cube", "dbt-semantic-layer"],
     "ingestion": ["dlt", "airbyte"],
     "secrets": ["k8s-secrets", "eso", "vault"],
-    "telemetry_backend": ["jaeger", "datadog", "grafana-cloud"],
+    "telemetry_backend": ["console", "jaeger", "datadog", "grafana-cloud"],
     "lineage_backend": ["marquez", "atlan", "openmetadata"],
     "identity": ["k8s-rbac", "custom"],
     "dbt": ["local", "fusion"],

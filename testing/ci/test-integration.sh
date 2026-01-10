@@ -71,14 +71,12 @@ for pkg_dir in packages/*/; do
     fi
 done
 
-# Discover plugins
+# Also check for plugin integration tests
 for plugin_dir in plugins/*/; do
-    if [[ -d "${plugin_dir}" ]]; then
-        integration_test_dir="${plugin_dir}tests/integration"
-        if [[ -d "${integration_test_dir}" ]]; then
-            echo "  Found: ${integration_test_dir}"
-            INTEGRATION_TEST_PATHS="${INTEGRATION_TEST_PATHS} ${integration_test_dir}"
-        fi
+    integration_test_dir="${plugin_dir}tests/integration"
+    if [[ -d "${integration_test_dir}" ]]; then
+        echo "  Found: ${integration_test_dir}"
+        INTEGRATION_TEST_PATHS="${INTEGRATION_TEST_PATHS} ${integration_test_dir}"
     fi
 done
 

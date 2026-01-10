@@ -76,6 +76,14 @@ nodes:
       - containerPort: 30090
         hostPort: 9090
         protocol: TCP
+      # Jaeger OTLP gRPC (NodePort 30417 -> localhost 4317)
+      - containerPort: 30417
+        hostPort: 4317
+        protocol: TCP
+      # Jaeger Query UI (NodePort 30686 -> localhost 16686)
+      - containerPort: 30686
+        hostPort: 16686
+        protocol: TCP
 
 networking:
   # Pod network CIDR

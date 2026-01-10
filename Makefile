@@ -29,6 +29,9 @@ help: ## Show this help message
 	@echo "  make typecheck       Run type checking (mypy)"
 	@echo "  make check           Run all CI checks (lint + typecheck + test)"
 	@echo ""
+	@echo "Setup:"
+	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit)"
+	@echo ""
 	@echo "Use 'make <target>' to run a command."
 
 # ============================================================
@@ -90,6 +93,10 @@ check: lint typecheck test ## Run all CI checks (lint + typecheck + test)
 # ============================================================
 # Development Helpers
 # ============================================================
+
+.PHONY: setup-hooks
+setup-hooks: ## Install chained git hooks (bd + pre-commit)
+	@./scripts/setup-hooks.sh
 
 .PHONY: fmt
 fmt: ## Format code with ruff

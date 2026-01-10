@@ -1,12 +1,15 @@
-"""Manifest schema definitions for the floe data platform.
+"""Schema definitions for the floe data platform.
 
-This module provides Pydantic models for validating and working with
-platform manifest files (manifest.yaml). It supports:
+This module provides Pydantic models for validating and working with:
 
-- 2-tier mode: Single platform configuration (scope=None)
-- 3-tier mode: Enterprise/Domain hierarchy with inheritance (scope=enterprise/domain)
+- Platform manifest files (manifest.yaml) - input configuration
+- CompiledArtifacts - output from floe compile
 
-Models:
+Manifest Configuration:
+    - 2-tier mode: Single platform configuration (scope=None)
+    - 3-tier mode: Enterprise/Domain hierarchy with inheritance (scope=enterprise/domain)
+
+Manifest Models:
     PlatformManifest: Root configuration schema
     ManifestMetadata: Name, version, owner metadata
     PluginsConfig: Plugin selection for all 12 categories (per ADR-0035)
@@ -14,6 +17,13 @@ Models:
     GovernanceConfig: Security and compliance settings
     SecretReference: Placeholder for sensitive values
     InheritanceChain: Resolved configuration lineage (3-tier)
+
+CompiledArtifacts Models:
+    CompiledArtifacts: Output of floe compile with resolved configuration
+    CompilationMetadata: Compilation information and source hash
+    ProductIdentity: Product identity from catalog registration
+    ManifestRef: Reference to manifest in inheritance chain
+    ObservabilityConfig: Observability settings with TelemetryConfig
 
 Example:
     >>> from floe_core.schemas import PlatformManifest
@@ -25,10 +35,20 @@ Example:
 
 See Also:
     - specs/001-manifest-schema/spec.md: Feature specification
-    - specs/001-manifest-schema/quickstart.md: Usage guide
+    - docs/contracts/compiled-artifacts.md: CompiledArtifacts contract
 """
 
 from __future__ import annotations
+
+# CompiledArtifacts models (T076)
+from floe_core.schemas.compiled_artifacts import (
+    CompilationMetadata,
+    CompiledArtifacts,
+    DeploymentMode,
+    ManifestRef,
+    ObservabilityConfig,
+    ProductIdentity,
+)
 
 # Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
@@ -136,4 +156,11 @@ __all__: list[str] = [
     "export_json_schema",
     "export_json_schema_to_file",
     "validate_against_schema",
+    # CompiledArtifacts (T076)
+    "CompiledArtifacts",
+    "CompilationMetadata",
+    "DeploymentMode",
+    "ManifestRef",
+    "ObservabilityConfig",
+    "ProductIdentity",
 ]

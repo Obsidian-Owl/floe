@@ -36,11 +36,23 @@ class TelemetryBackendPlugin(PluginMetadata):
     - Layer 2 (Enforced): OTLP Collector aggregation
     - Layer 3 (Pluggable): Backend storage/visualization (this plugin)
 
-    Concrete plugins must implement:
-        - All abstract properties from PluginMetadata (name, version, floe_api_version)
-        - get_otlp_exporter_config() method
-        - get_helm_values() method
-        - validate_connection() method
+    Inherited from PluginMetadata (abstract properties):
+        - name: Plugin identifier (e.g., 'jaeger', 'console', 'datadog')
+        - version: Plugin version following semver (e.g., '1.0.0')
+        - floe_api_version: Compatible floe-core API version (e.g., '1.0')
+
+    Inherited from PluginMetadata (optional, with defaults):
+        - description: Human-readable plugin description (default: "")
+        - dependencies: List of plugin dependencies (default: [])
+        - health_check(): Returns HealthStatus (default: HEALTHY)
+        - startup(): Called on plugin initialization (default: no-op)
+        - shutdown(): Called on plugin teardown (default: no-op)
+        - get_config_schema(): Returns config JSON schema (default: None)
+
+    Telemetry-specific abstract methods (MUST implement):
+        - get_otlp_exporter_config(): Returns OTLP Collector exporter config
+        - get_helm_values(): Returns Helm values for backend deployment
+        - validate_connection(): Validates backend connectivity
 
     Example:
         >>> class JaegerPlugin(TelemetryBackendPlugin):
@@ -55,6 +67,10 @@ class TelemetryBackendPlugin(PluginMetadata):
         ...     @property
         ...     def floe_api_version(self) -> str:
         ...         return "1.0"
+        ...
+        ...     @property
+        ...     def description(self) -> str:
+        ...         return "Jaeger distributed tracing backend"
         ...
         ...     def get_otlp_exporter_config(self) -> dict:
         ...         return {

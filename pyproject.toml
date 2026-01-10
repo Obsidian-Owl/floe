@@ -11,22 +11,33 @@ requires-python = ">=3.10"
 dependencies = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-codspeed>=3.0",  # Performance benchmarking with CodSpeed
     "mypy>=1.8",
     "ruff>=0.3",
     "pre-commit>=3.0",
     "bandit[toml]>=1.7",
     "pip-audit>=2.0",  # Security audit for dependencies
     "types-psycopg2>=2.9",  # Type stubs for psycopg2
+    "types-requests>=2.31",  # Type stubs for requests
+    "requests>=2.31",  # HTTP client for telemetry fixture tests
     "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
     # Include plugins for development
     "floe-catalog-polaris",
+    # Telemetry backend plugins (for entry point discovery in tests)
+    "floe-telemetry-console",
+    "floe-telemetry-jaeger",
+    # Include floe-compute-duckdb for development
+    "floe-compute-duckdb",
 ]
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
 floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true }
+floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
+floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
+floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -45,6 +56,7 @@ markers = [
     "contract: Marks cross-package contract tests",
     "e2e: Marks end-to-end pipeline tests",
     "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
+    "benchmark: Marks performance benchmark tests (CodSpeed)",
 ]
 
 [tool.mypy]

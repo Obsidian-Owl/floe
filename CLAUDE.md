@@ -541,6 +541,12 @@ Linear app                      # Team progress view
 - N/A (in-memory registry, plugins are entry points in installed packages) (001-plugin-registry)
 - Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api, httpx (for OAuth2) (001-catalog-plugin)
 - N/A (catalog manages metadata; storage is handled by StoragePlugin) (001-catalog-plugin)
+- Python 3.10+ (required for floe-core compatibility) + opentelemetry-api>=1.20.0, opentelemetry-sdk>=1.20.0, opentelemetry-exporter-otlp>=1.20.0, structlog (001-opentelemetry)
+- N/A (telemetry flows to OTLP Collector, not stored locally) (001-opentelemetry)
+- Python 3.10+ (required for improved importlib.metadata.entry_points API) + Pydantic v2 (BaseModel, Field, ConfigDict, field_validator), PyYAML, structlog (001-manifest-schema)
+- N/A (schema definitions only; OCI registry loading deferred to Epic 2B) (001-manifest-schema)
+- Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging), duckdb>=0.9.0 (reference implementation) (001-compute-plugin)
+- N/A (plugin system is stateless; dbt profiles.yml is file-based output) (001-compute-plugin)
 
 ## Recent Changes
 - 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)

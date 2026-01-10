@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 _VALID_EXTENSION_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 if TYPE_CHECKING:
-    import duckdb  # type: ignore[import-not-found]
+    import duckdb
 
 
 class DuckDBConfig(BaseModel):
@@ -201,6 +201,49 @@ def get_connection_info(config: DuckDBConfig) -> dict[str, Any]:
     }
 
 
+@contextmanager
+def file_database_context(
+    path: str | Path,
+    *,
+    extensions: tuple[str, ...] = (),
+    cleanup: bool = True,
+) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+    """Context manager for file-based DuckDB with automatic cleanup.
+
+    Creates a file-based DuckDB database, yields the connection,
+    and optionally cleans up the database file on exit.
+
+    Args:
+        path: Path to database file.
+        extensions: Optional extensions to load.
+        cleanup: Whether to delete the database file on exit (default: True).
+
+    Yields:
+        DuckDB connection instance.
+
+    Example:
+        with file_database_context("/tmp/test.duckdb") as conn:
+            conn.execute("CREATE TABLE test (id INTEGER)")
+        # File is automatically deleted after context exits
+    """
+    db_path = Path(path)
+    config = DuckDBConfig(
+        database=str(db_path),
+        extensions=extensions,
+    )
+    conn = create_duckdb_connection(config)
+    try:
+        yield conn
+    finally:
+        conn.close()
+        if cleanup and db_path.exists():
+            db_path.unlink()
+            # Also clean up WAL file if it exists
+            wal_path = db_path.with_suffix(".duckdb.wal")
+            if wal_path.exists():
+                wal_path.unlink()
+
+
 __all__ = [
     "DuckDBConfig",
     "DuckDBConnectionError",
@@ -209,5 +252,6 @@ __all__ = [
     "create_memory_connection",
     "duckdb_connection_context",
     "execute_script",
+    "file_database_context",
     "get_connection_info",
 ]
