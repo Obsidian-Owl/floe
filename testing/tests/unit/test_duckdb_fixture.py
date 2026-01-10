@@ -18,6 +18,7 @@ from testing.fixtures.duckdb import (
     create_memory_connection,
     duckdb_connection_context,
     execute_script,
+    file_database_context,
     get_connection_info,
 )
 
@@ -247,3 +248,78 @@ class TestGetConnectionInfo:
         info = get_connection_info(config)
         assert info["database"] == ":memory:"
         assert info["is_memory"] is True
+
+
+class TestFileDatabaseContext:
+    """Tests for file_database_context context manager."""
+
+    @pytest.mark.requirement("9c-FR-011")
+    def test_creates_file_database(self, tmp_path: Path) -> None:
+        """Test context manager creates file-based database."""
+        pytest.importorskip("duckdb")
+        db_path = tmp_path / "test_context.duckdb"
+
+        with file_database_context(db_path, cleanup=False) as conn:
+            conn.execute("CREATE TABLE test (id INTEGER)")
+            conn.execute("INSERT INTO test VALUES (1)")
+            result = conn.execute("SELECT * FROM test").fetchone()
+            assert result is not None
+            assert result[0] == 1
+
+        # With cleanup=False, file should still exist
+        assert db_path.exists()
+
+    @pytest.mark.requirement("9c-FR-011")
+    def test_cleans_up_on_exit(self, tmp_path: Path) -> None:
+        """Test context manager deletes file on exit by default."""
+        pytest.importorskip("duckdb")
+        db_path = tmp_path / "test_cleanup.duckdb"
+
+        with file_database_context(db_path) as conn:
+            conn.execute("CREATE TABLE test (id INTEGER)")
+            # File exists during context
+            assert db_path.exists()
+
+        # File should be deleted after context
+        assert not db_path.exists()
+
+    @pytest.mark.requirement("9c-FR-011")
+    def test_cleanup_false_preserves_file(self, tmp_path: Path) -> None:
+        """Test cleanup=False preserves database file."""
+        pytest.importorskip("duckdb")
+        db_path = tmp_path / "test_preserve.duckdb"
+
+        with file_database_context(db_path, cleanup=False) as conn:
+            conn.execute("CREATE TABLE preserve (value TEXT)")
+
+        # File should still exist
+        assert db_path.exists()
+
+    @pytest.mark.requirement("9c-FR-011")
+    def test_with_extensions(self, tmp_path: Path) -> None:
+        """Test file database with extensions."""
+        pytest.importorskip("duckdb")
+        db_path = tmp_path / "test_ext.duckdb"
+
+        # Test with json extension (built-in, always available)
+        with file_database_context(db_path, extensions=("json",)) as conn:
+            # Extension should be loaded
+            query = "SELECT * FROM duckdb_extensions() WHERE extension_name = 'json'"
+            result = conn.execute(query).fetchone()
+            assert result is not None
+
+    @pytest.mark.requirement("9c-FR-011")
+    def test_closes_connection_on_exception(self, tmp_path: Path) -> None:
+        """Test connection is closed even when exception occurs."""
+        pytest.importorskip("duckdb")
+        db_path = tmp_path / "test_exception.duckdb"
+
+        try:
+            with file_database_context(db_path) as conn:
+                conn.execute("CREATE TABLE test (id INTEGER)")
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+
+        # File should be cleaned up
+        assert not db_path.exists()
