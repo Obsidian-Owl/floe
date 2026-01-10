@@ -800,11 +800,20 @@ class PolarisCatalogPlugin(CatalogPlugin):
             HealthStatus indicating whether catalog is healthy, including
             response_time_ms and checked_at timestamp in details.
 
+        Raises:
+            ValueError: If timeout is not between 0.1 and 10.0 seconds.
+
         Example:
             >>> status = plugin.health_check(timeout=2.0)
             >>> if status.state == HealthState.HEALTHY:
             ...     print(f"Catalog OK ({status.details['response_time_ms']:.1f}ms)")
         """
+        # Validate timeout parameter
+        if not (0.1 <= timeout <= 10.0):
+            raise ValueError(
+                f"timeout must be between 0.1 and 10.0 seconds, got {timeout}"
+            )
+
         log = logger.bind(operation="health_check", timeout=timeout)
         checked_at = datetime.now(timezone.utc)
         start_time = time.perf_counter()

@@ -251,6 +251,58 @@ class TestHealthCheckTimeout:
         elif "timeout_seconds" in result.details:
             assert result.details["timeout_seconds"] == pytest.approx(2.5)
 
+    def test_health_check_rejects_timeout_below_minimum(
+        self,
+        polaris_plugin: PolarisCatalogPlugin,
+    ) -> None:
+        """Test that health_check rejects timeout below 0.1 seconds."""
+        with pytest.raises(ValueError, match=r"timeout.*0\.1.*10"):
+            polaris_plugin.health_check(timeout=0.05)
+
+    def test_health_check_rejects_timeout_above_maximum(
+        self,
+        polaris_plugin: PolarisCatalogPlugin,
+    ) -> None:
+        """Test that health_check rejects timeout above 10.0 seconds."""
+        with pytest.raises(ValueError, match=r"timeout.*0\.1.*10"):
+            polaris_plugin.health_check(timeout=15.0)
+
+    def test_health_check_accepts_minimum_timeout(
+        self,
+        connected_plugin: PolarisCatalogPlugin,
+        mock_catalog: MagicMock,
+    ) -> None:
+        """Test that health_check accepts timeout of exactly 0.1 seconds."""
+        # Should not raise - 0.1 is the minimum allowed
+        result = connected_plugin.health_check(timeout=0.1)
+        assert isinstance(result, HealthStatus)
+
+    def test_health_check_accepts_maximum_timeout(
+        self,
+        connected_plugin: PolarisCatalogPlugin,
+        mock_catalog: MagicMock,
+    ) -> None:
+        """Test that health_check accepts timeout of exactly 10.0 seconds."""
+        # Should not raise - 10.0 is the maximum allowed
+        result = connected_plugin.health_check(timeout=10.0)
+        assert isinstance(result, HealthStatus)
+
+    def test_health_check_rejects_zero_timeout(
+        self,
+        polaris_plugin: PolarisCatalogPlugin,
+    ) -> None:
+        """Test that health_check rejects zero timeout."""
+        with pytest.raises(ValueError, match=r"timeout.*0\.1.*10"):
+            polaris_plugin.health_check(timeout=0.0)
+
+    def test_health_check_rejects_negative_timeout(
+        self,
+        polaris_plugin: PolarisCatalogPlugin,
+    ) -> None:
+        """Test that health_check rejects negative timeout."""
+        with pytest.raises(ValueError, match=r"timeout.*0\.1.*10"):
+            polaris_plugin.health_check(timeout=-1.0)
+
 
 class TestHealthCheckTimestamp:
     """Tests for timestamp in health_check()."""
