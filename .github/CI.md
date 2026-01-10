@@ -134,13 +134,15 @@ gh workflow run nightly.yml
 
 ## Local Development
 
-### Install Pre-commit Hooks
+### Install Git Hooks
 
 ```bash
-# Install hooks (run once)
-uv run pre-commit install
-uv run pre-commit install --hook-type pre-push
+# Install chained hooks (bd + pre-commit) - run once after cloning
+make setup-hooks
 ```
+
+> **Note**: This installs hooks that run both bd (beads) for issue tracking AND
+> pre-commit for code quality. Run again after `bd hooks install` or `pre-commit install`.
 
 ### What Runs Locally
 
