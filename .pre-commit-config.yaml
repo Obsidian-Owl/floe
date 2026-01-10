@@ -4,7 +4,7 @@
 # See .github/CI.md for CI strategy documentation
 
 default_language_version:
-  python: python3.10
+  python: python3
 
 repos:
   # ==========================================================
