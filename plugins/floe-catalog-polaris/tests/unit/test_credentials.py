@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core import AuthenticationError, NotFoundError
+from floe_core import AuthenticationError, NotFoundError, NotSupportedError
 from pyiceberg.exceptions import ForbiddenError, NoSuchTableError
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
@@ -630,3 +630,102 @@ class TestVendCredentialsLogging:
                     if isinstance(value, str):
                         assert "TEST_ACCESS_KEY" not in value
                         assert "TEST_SECRET_KEY" not in value
+
+
+# ============================================================================
+# TestVendCredentialsNotSupported - FR-022: NotSupportedError tests
+# ============================================================================
+
+
+class TestVendCredentialsNotSupported:
+    """Tests for NotSupportedError when credential vending is disabled."""
+
+    @pytest.fixture
+    def config_vending_disabled(self) -> PolarisCatalogConfig:
+        """Create a Polaris config with credential vending disabled."""
+        return PolarisCatalogConfig(
+            uri="https://polaris.example.com/api/catalog",
+            warehouse="test_warehouse",
+            oauth2=OAuth2Config(
+                client_id="test-client",
+                client_secret="test-secret",
+                token_url="https://auth.example.com/oauth/token",
+            ),
+            credential_vending_enabled=False,
+        )
+
+    @pytest.fixture
+    def plugin_vending_disabled(
+        self, config_vending_disabled: PolarisCatalogConfig
+    ) -> PolarisCatalogPlugin:
+        """Create a plugin with credential vending disabled."""
+        plugin = PolarisCatalogPlugin(config=config_vending_disabled)
+        # Mock catalog to simulate connected state
+        plugin._catalog = MagicMock()
+        return plugin
+
+    @pytest.mark.requirement("FR-022")
+    def test_vend_credentials_raises_not_supported_when_disabled(
+        self,
+        plugin_vending_disabled: PolarisCatalogPlugin,
+    ) -> None:
+        """Test vend_credentials raises NotSupportedError when vending disabled.
+
+        Validates FR-022: Catalogs without credential vending MUST raise
+        NotSupportedError with actionable guidance.
+        """
+        # Act & Assert
+        with pytest.raises(NotSupportedError) as exc_info:
+            plugin_vending_disabled.vend_credentials(
+                table_path="bronze.customers",
+                operations=["READ"],
+            )
+
+        # Verify error details
+        assert exc_info.value.operation == "vend_credentials"
+        assert exc_info.value.catalog_name == "polaris"
+
+    @pytest.mark.requirement("FR-022")
+    def test_vend_credentials_error_includes_actionable_guidance(
+        self,
+        plugin_vending_disabled: PolarisCatalogPlugin,
+    ) -> None:
+        """Test NotSupportedError includes actionable guidance for users.
+
+        Validates the error message provides clear instructions on how to
+        proceed when credential vending is not available.
+        """
+        # Act & Assert
+        with pytest.raises(NotSupportedError) as exc_info:
+            plugin_vending_disabled.vend_credentials(
+                table_path="bronze.customers",
+                operations=["READ"],
+            )
+
+        # Verify actionable guidance is present
+        error_message = str(exc_info.value)
+        assert "Credential vending not supported" in error_message
+        assert "Configure storage credentials" in error_message
+
+    @pytest.mark.requirement("FR-022")
+    def test_vend_credentials_disabled_logs_warning(
+        self,
+        plugin_vending_disabled: PolarisCatalogPlugin,
+    ) -> None:
+        """Test vend_credentials logs warning when vending is disabled.
+
+        Validates structured logging captures the attempt to use disabled feature.
+        """
+        with patch("floe_catalog_polaris.plugin.logger") as mock_logger:
+            mock_bound = MagicMock()
+            mock_logger.bind.return_value = mock_bound
+
+            # Act & Assert
+            with pytest.raises(NotSupportedError):
+                plugin_vending_disabled.vend_credentials(
+                    table_path="bronze.customers",
+                    operations=["READ"],
+                )
+
+            # Verify warning was logged
+            mock_bound.warning.assert_called_with("credential_vending_disabled")

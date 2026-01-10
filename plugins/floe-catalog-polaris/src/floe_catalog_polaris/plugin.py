@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from floe_core import CatalogPlugin, HealthState, HealthStatus
+from floe_core import CatalogPlugin, HealthState, HealthStatus, NotSupportedError
 from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
 
@@ -724,6 +724,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 - expiration: Credential expiration timestamp (ISO 8601)
 
         Raises:
+            NotSupportedError: If credential_vending_enabled is False in config.
             RuntimeError: If catalog not connected.
             NotFoundError: If table does not exist.
             AuthenticationError: If lacking permission for requested operations.
@@ -758,6 +759,19 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 operations=operations,
                 uri=self._config.uri,
             )
+
+            # Check if credential vending is enabled
+            if not self._config.credential_vending_enabled:
+                log.warning("credential_vending_disabled")
+                raise NotSupportedError(
+                    operation="vend_credentials",
+                    catalog_name="polaris",
+                    reason=(
+                        "Credential vending not supported. "
+                        "Configure storage credentials directly in compute plugin."
+                    ),
+                )
+
             log.info("vending_credentials")
 
             try:
