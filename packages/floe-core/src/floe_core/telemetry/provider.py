@@ -30,7 +30,7 @@ import logging
 import os
 from enum import Enum, auto
 from importlib.metadata import entry_points
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
@@ -44,7 +44,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
     OTLPSpanExporter as OTLPHttpSpanExporter,
 )
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import MetricExporter, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
@@ -87,7 +87,7 @@ def load_telemetry_backend(backend_name: str) -> TelemetryBackendPlugin:
     for ep in eps:
         if ep.name == backend_name:
             plugin_class = ep.load()
-            return plugin_class()
+            return cast(TelemetryBackendPlugin, plugin_class())
 
     available = [ep.name for ep in eps]
     raise ValueError(
@@ -386,6 +386,7 @@ class TelemetryProvider:
             metric_endpoint = metric_endpoint.rstrip("/") + "/v1/metrics"
 
         # Create OTLP metric exporter based on protocol
+        metric_exporter: MetricExporter
         if self._config.otlp_protocol == "grpc":
             metric_exporter = OTLPMetricExporterGrpc(
                 endpoint=metric_endpoint,

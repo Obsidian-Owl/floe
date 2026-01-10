@@ -7,6 +7,7 @@ This package provides:
 - Plugin ABCs: Type-specific interfaces (ComputePlugin, etc.)
 - Errors: Custom exceptions for plugin operations
 - Schemas: Pydantic models for manifest validation (floe_core.schemas)
+- Telemetry: OpenTelemetry SDK integration (floe_core.telemetry)
 
 Example:
     >>> from floe_core import get_registry, PluginType
@@ -22,9 +23,16 @@ Example:
     >>> from floe_core.schemas import PlatformManifest
     >>> manifest = PlatformManifest.model_validate(yaml_data)
 
+    >>> from floe_core import TelemetryConfig, TelemetryProvider, ResourceAttributes
+    >>> attrs = ResourceAttributes(service_name="my-service", ...)
+    >>> config = TelemetryConfig(resource_attributes=attrs)
+    >>> with TelemetryProvider(config) as provider:
+    ...     pass  # Telemetry active
+
 See Also:
     - floe_core.plugins: All plugin ABCs with supporting dataclasses
     - floe_core.schemas: Manifest schema definitions
+    - floe_core.telemetry: OpenTelemetry integration
     - docs/architecture/plugin-system/: Full architecture documentation
 """
 
@@ -85,11 +93,30 @@ from floe_core.version_compat import (
     is_compatible,
 )
 
+# Telemetry submodule (explicit re-export)
+from floe_core import telemetry as telemetry  # noqa: PLC0414
+
+# Telemetry public API (convenience imports)
+from floe_core.telemetry import (
+    TelemetryConfig,
+    TelemetryProvider,
+    ResourceAttributes,
+    SamplingConfig,
+    ProviderState,
+)
+
 __all__: list[str] = [
     # Package version
     "__version__",
     # Schemas submodule
     "schemas",
+    # Telemetry submodule and exports
+    "telemetry",
+    "TelemetryConfig",
+    "TelemetryProvider",
+    "ResourceAttributes",
+    "SamplingConfig",
+    "ProviderState",
     # Plugin type categories
     "PluginType",
     # Error hierarchy

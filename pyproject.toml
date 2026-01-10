@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-codspeed>=3.0",  # Performance benchmarking with CodSpeed
     "mypy>=1.8",
     "ruff>=0.3",
     "pre-commit>=3.0",
@@ -41,6 +42,7 @@ markers = [
     "integration: Marks tests requiring K8s services",
     "contract: Marks cross-package contract tests",
     "e2e: Marks end-to-end pipeline tests",
+    "benchmark: Marks performance benchmark tests (CodSpeed)",
 ]
 
 [tool.mypy]
