@@ -12,6 +12,7 @@ See Also:
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -217,11 +218,38 @@ class BatchSpanProcessorConfig(BaseModel):
         return self
 
 
+def _get_default_log_level() -> str:
+    """Get default log level from environment or use INFO.
+
+    Checks FLOE_LOG_LEVEL environment variable first, then falls back to INFO.
+
+    Returns:
+        Log level string (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    """
+    return os.environ.get("FLOE_LOG_LEVEL", "INFO").upper()
+
+
+def _get_default_json_output() -> bool:
+    """Get default JSON output setting from environment.
+
+    Checks FLOE_LOG_JSON environment variable. Defaults to True.
+
+    Returns:
+        True for JSON output, False for console output.
+    """
+    env_value = os.environ.get("FLOE_LOG_JSON", "true").lower()
+    return env_value not in ("false", "0", "no")
+
+
 class LoggingConfig(BaseModel):
     """Logging configuration for structured log output.
 
     Controls structlog configuration with trace context injection.
     Log level can be set per environment or globally.
+
+    Environment Variables:
+        FLOE_LOG_LEVEL: Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        FLOE_LOG_JSON: Set to "false" to use console output instead of JSON
 
     Attributes:
         log_level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -229,18 +257,20 @@ class LoggingConfig(BaseModel):
 
     Examples:
         >>> logging_config = LoggingConfig(log_level="DEBUG", json_output=True)
+        >>> # Or use environment variables:
+        >>> # FLOE_LOG_LEVEL=DEBUG FLOE_LOG_JSON=false python app.py
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     log_level: str = Field(
-        default="INFO",
+        default_factory=_get_default_log_level,
         pattern=r"^(?i)(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
-        description="Minimum log level (case-insensitive)",
+        description="Minimum log level (case-insensitive). Override with FLOE_LOG_LEVEL env var.",
     )
     json_output: bool = Field(
-        default=True,
-        description="Output format - JSON (True) or console (False)",
+        default_factory=_get_default_json_output,
+        description="Output format - JSON (True) or console (False). Override with FLOE_LOG_JSON env var.",
     )
 
 
