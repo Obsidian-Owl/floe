@@ -80,4 +80,5 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
+    "integration: Mark test as integration test requiring real services",
 ]
