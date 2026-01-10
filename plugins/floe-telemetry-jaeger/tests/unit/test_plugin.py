@@ -244,3 +244,131 @@ class TestJaegerTelemetryPluginLifecycle:
         result = plugin.health_check()
         assert result.state == HealthState.HEALTHY
         plugin.shutdown()
+
+
+class TestJaegerValidateConnection:
+    """Test JaegerTelemetryPlugin.validate_connection() method."""
+
+    @pytest.mark.requirement("FR-029")
+    def test_validate_connection_returns_false_when_unreachable(self) -> None:
+        """Test validate_connection returns False when endpoint is unreachable."""
+        import os
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        # Set an unreachable endpoint
+        original = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "nonexistent-host:4317"
+        try:
+            result = plugin.validate_connection()
+            assert result is False
+        finally:
+            if original is None:
+                os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+            else:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = original
+
+    @pytest.mark.requirement("FR-029")
+    def test_validate_connection_returns_true_when_reachable(self) -> None:
+        """Test validate_connection returns True when endpoint is reachable."""
+        from unittest.mock import MagicMock, patch
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        # Mock socket.create_connection to simulate successful connection
+        with patch("socket.create_connection") as mock_conn:
+            mock_conn.return_value.__enter__ = MagicMock(return_value=None)
+            mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+            result = plugin.validate_connection()
+            assert result is True
+
+    @pytest.mark.requirement("FR-029")
+    def test_validate_connection_parses_http_prefix(self) -> None:
+        """Test validate_connection correctly parses http:// prefixed endpoints."""
+        import os
+        from unittest.mock import MagicMock, patch
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        original = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://jaeger-collector:4317"
+        try:
+            with patch("socket.create_connection") as mock_conn:
+                mock_conn.return_value.__enter__ = MagicMock(return_value=None)
+                mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+                plugin.validate_connection()
+                # Verify the host was parsed correctly (without http://)
+                mock_conn.assert_called_once_with(("jaeger-collector", 4317), timeout=5.0)
+        finally:
+            if original is None:
+                os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+            else:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = original
+
+    @pytest.mark.requirement("FR-029")
+    def test_validate_connection_parses_https_prefix(self) -> None:
+        """Test validate_connection correctly parses https:// prefixed endpoints."""
+        import os
+        from unittest.mock import MagicMock, patch
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        original = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://secure-jaeger:4317"
+        try:
+            with patch("socket.create_connection") as mock_conn:
+                mock_conn.return_value.__enter__ = MagicMock(return_value=None)
+                mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+                plugin.validate_connection()
+                mock_conn.assert_called_once_with(("secure-jaeger", 4317), timeout=5.0)
+        finally:
+            if original is None:
+                os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+            else:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = original
+
+    @pytest.mark.requirement("FR-029")
+    def test_validate_connection_uses_default_port_when_not_specified(self) -> None:
+        """Test validate_connection uses port 4317 when not specified."""
+        import os
+        from unittest.mock import MagicMock, patch
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        original = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "jaeger-collector"
+        try:
+            with patch("socket.create_connection") as mock_conn:
+                mock_conn.return_value.__enter__ = MagicMock(return_value=None)
+                mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+                plugin.validate_connection()
+                mock_conn.assert_called_once_with(("jaeger-collector", 4317), timeout=5.0)
+        finally:
+            if original is None:
+                os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+            else:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = original
+
+    @pytest.mark.requirement("FR-029")
+    def test_validate_connection_returns_false_for_invalid_port(self) -> None:
+        """Test validate_connection returns False for invalid port format."""
+        import os
+        from floe_telemetry_jaeger import JaegerTelemetryPlugin
+
+        plugin = JaegerTelemetryPlugin()
+
+        original = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "jaeger-collector:invalid"
+        try:
+            result = plugin.validate_connection()
+            assert result is False
+        finally:
+            if original is None:
+                os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+            else:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = original

@@ -32,21 +32,28 @@ def tracer_provider_with_exporter() -> (
 ):
     """Create a TracerProvider with InMemorySpanExporter for testing.
 
+    Properly saves and restores the global tracer provider to ensure
+    test isolation.
+
     Yields:
         Tuple of (TracerProvider, InMemorySpanExporter) for test assertions.
     """
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider(sampler=ALWAYS_ON)
-
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider(sampler=ALWAYS_ON)
     provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    # Save original provider before setting ours
+    original_provider = trace.get_tracer_provider()
 
     # Set as global tracer provider for tests
     trace.set_tracer_provider(provider)
 
     yield provider, exporter
 
+    # Restore original provider after test
+    trace.set_tracer_provider(original_provider)
     exporter.clear()
 
 

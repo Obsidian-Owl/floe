@@ -1,0 +1,61 @@
+{
+  "version": "0.1.0",
+  "metadata": {
+    "compiled_at": "2025-01-10T12:00:00Z",
+    "floe_version": "0.1.0",
+    "source_hash": "sha256:golden123abc",
+    "product_name": "golden-product",
+    "product_version": "1.0.0"
+  },
+  "identity": {
+    "product_id": "analytics.golden_product",
+    "domain": "analytics",
+    "repository": "github.com/acme/golden-product",
+    "namespace_registered": true,
+    "registration_timestamp": "2025-01-10T12:00:00Z"
+  },
+  "mode": "centralized",
+  "inheritance_chain": [
+    {
+      "name": "enterprise-manifest",
+      "version": "1.0.0",
+      "scope": "enterprise",
+      "ref": "oci://registry.example.com/manifests/enterprise:1.0.0"
+    }
+  ],
+  "observability": {
+    "telemetry": {
+      "enabled": true,
+      "otlp_endpoint": "http://otel-collector:4317",
+      "otlp_protocol": "grpc",
+      "sampling": {
+        "dev": 1.0,
+        "staging": 0.5,
+        "prod": 0.1
+      },
+      "resource_attributes": {
+        "service_name": "golden-product",
+        "service_version": "1.0.0",
+        "deployment_environment": "prod",
+        "floe_namespace": "analytics",
+        "floe_product_name": "golden-product",
+        "floe_product_version": "1.0.0",
+        "floe_mode": "prod"
+      },
+      "authentication": null,
+      "batch_processor": {
+        "max_queue_size": 2048,
+        "max_export_batch_size": 512,
+        "schedule_delay_millis": 5000,
+        "export_timeout_millis": 30000
+      },
+      "logging": {
+        "log_level": "INFO",
+        "json_output": true
+      },
+      "backend": "jaeger"
+    },
+    "lineage": true,
+    "lineage_namespace": "golden-product"
+  }
+}

@@ -4,6 +4,7 @@ These tests validate that:
 - CompiledArtifacts correctly includes TelemetryConfig in ObservabilityConfig
 - TelemetryConfig is properly integrated into the schema
 - JSON Schema export includes telemetry configuration
+- Golden fixtures remain backward compatible
 
 Contract tests focus on schema stability and cross-package integration.
 
@@ -14,7 +15,9 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from floe_core.schemas import (
@@ -30,6 +33,9 @@ from floe_core.telemetry.config import (
     SamplingConfig,
     TelemetryConfig,
 )
+
+# Path to golden fixtures directory
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 class TestCompiledArtifactsTelemetryContract:
@@ -283,4 +289,125 @@ class TestCompiledArtifactsJsonSchema:
         assert (
             restored.observability.telemetry.resource_attributes.service_name
             == original.observability.telemetry.resource_attributes.service_name
+        )
+
+
+class TestGoldenCompiledArtifactsCompatibility:
+    """Tests for backward compatibility with golden CompiledArtifacts fixtures.
+
+    Golden fixtures represent artifacts created at a specific schema version.
+    These tests ensure that schema evolution does not break existing artifacts.
+    If a test fails, the schema change is potentially breaking.
+    """
+
+    @pytest.mark.requirement("T076")
+    def test_v0_1_golden_compiled_artifacts_parses(self) -> None:
+        """Contract: v0.1 golden CompiledArtifacts continues to parse correctly.
+
+        This is a regression test ensuring backward compatibility.
+        If this test fails, the schema change is potentially breaking.
+        """
+        fixture_path = FIXTURES_DIR / "v0.1_compiled_artifacts.json"
+        assert fixture_path.exists(), f"Golden fixture not found: {fixture_path}"
+
+        with fixture_path.open() as f:
+            data = json.load(f)
+
+        # Should parse without errors
+        artifacts = CompiledArtifacts.model_validate(data)
+
+        # Verify key fields are preserved
+        assert artifacts.version == "0.1.0"
+        assert artifacts.mode == "centralized"
+        assert artifacts.identity.product_id == "analytics.golden_product"
+        assert artifacts.identity.domain == "analytics"
+
+    @pytest.mark.requirement("T076")
+    def test_v0_1_golden_telemetry_config_preserved(self) -> None:
+        """Contract: v0.1 golden TelemetryConfig is preserved.
+
+        Verifies all telemetry-specific fields are correctly loaded.
+        """
+        fixture_path = FIXTURES_DIR / "v0.1_compiled_artifacts.json"
+        with fixture_path.open() as f:
+            data = json.load(f)
+
+        artifacts = CompiledArtifacts.model_validate(data)
+
+        # TelemetryConfig must be preserved
+        telemetry = artifacts.observability.telemetry
+        assert telemetry.enabled is True
+        assert telemetry.otlp_endpoint == "http://otel-collector:4317"
+        assert telemetry.otlp_protocol == "grpc"
+        assert telemetry.backend == "jaeger"
+
+        # Resource attributes preserved
+        attrs = telemetry.resource_attributes
+        assert attrs.service_name == "golden-product"
+        assert attrs.service_version == "1.0.0"
+        assert attrs.deployment_environment == "prod"
+        assert attrs.floe_namespace == "analytics"
+
+    @pytest.mark.requirement("T076")
+    def test_v0_1_golden_nested_configs_preserved(self) -> None:
+        """Contract: v0.1 golden nested configurations are preserved.
+
+        Verifies sampling, batch processor, and logging configs.
+        """
+        fixture_path = FIXTURES_DIR / "v0.1_compiled_artifacts.json"
+        with fixture_path.open() as f:
+            data = json.load(f)
+
+        artifacts = CompiledArtifacts.model_validate(data)
+
+        # Sampling config preserved
+        sampling = artifacts.observability.telemetry.sampling
+        assert sampling.dev == pytest.approx(1.0)
+        assert sampling.staging == pytest.approx(0.5)
+        assert sampling.prod == pytest.approx(0.1)
+
+        # BatchProcessor config preserved
+        batch = artifacts.observability.telemetry.batch_processor
+        assert batch.max_queue_size == 2048
+        assert batch.max_export_batch_size == 512
+        assert batch.schedule_delay_millis == 5000
+        assert batch.export_timeout_millis == 30000
+
+        # Logging config preserved
+        logging_cfg = artifacts.observability.telemetry.logging
+        assert logging_cfg.log_level.upper() == "INFO"
+        assert logging_cfg.json_output is True
+
+        # Inheritance chain preserved
+        assert len(artifacts.inheritance_chain) == 1
+        assert artifacts.inheritance_chain[0].name == "enterprise-manifest"
+        assert artifacts.inheritance_chain[0].scope == "enterprise"
+
+    @pytest.mark.requirement("T076")
+    def test_v0_1_golden_compiled_artifacts_roundtrip(self) -> None:
+        """Contract: v0.1 golden CompiledArtifacts survives roundtrip serialization.
+
+        Tests that deserialize -> serialize -> deserialize produces equivalent data.
+        """
+        fixture_path = FIXTURES_DIR / "v0.1_compiled_artifacts.json"
+        with fixture_path.open() as f:
+            original_data = json.load(f)
+
+        # Deserialize
+        artifacts = CompiledArtifacts.model_validate(original_data)
+
+        # Serialize back to dict
+        exported = artifacts.model_dump(mode="json")
+
+        # Key fields should match original
+        assert exported["version"] == original_data["version"]
+        assert exported["mode"] == original_data["mode"]
+        assert exported["identity"]["product_id"] == original_data["identity"]["product_id"]
+        assert (
+            exported["observability"]["telemetry"]["backend"]
+            == original_data["observability"]["telemetry"]["backend"]
+        )
+        assert (
+            exported["observability"]["telemetry"]["resource_attributes"]["service_name"]
+            == original_data["observability"]["telemetry"]["resource_attributes"]["service_name"]
         )

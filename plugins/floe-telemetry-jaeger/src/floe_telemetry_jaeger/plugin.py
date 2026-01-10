@@ -132,18 +132,40 @@ class JaegerTelemetryPlugin(TelemetryBackendPlugin):
     def validate_connection(self) -> bool:
         """Validate connection to Jaeger backend.
 
-        Attempts to verify that the Jaeger collector is reachable.
-        For now, returns True as connection validation requires
-        actual network connectivity which may not be available
-        during configuration time.
+        Attempts TCP connection to the configured OTLP endpoint to verify
+        that the Jaeger collector is reachable.
 
         Returns:
-            True if validation passes (currently always true).
+            True if the Jaeger collector is reachable, False otherwise.
 
         Note:
-            Full connectivity testing will be implemented when
-            the OTLP exporter is configured with actual endpoints.
+            Uses TCP connectivity check rather than full OTLP handshake
+            to avoid blocking on connection timeouts during configuration.
         """
-        # TODO: Implement actual connectivity check when endpoint is configured
-        # For now, assume connection will be validated at runtime
-        return True
+        import socket
+
+        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", self.DEFAULT_ENDPOINT)
+
+        # Parse host:port (handle http:// or https:// prefix)
+        if "://" in endpoint:
+            endpoint = endpoint.split("://", 1)[1]
+
+        # Split host and port
+        if ":" in endpoint:
+            host, port_str = endpoint.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                # Invalid port format
+                return False
+        else:
+            # No port specified, use default gRPC port
+            host = endpoint
+            port = 4317
+
+        # Attempt TCP connection with timeout
+        try:
+            with socket.create_connection((host, port), timeout=5.0):
+                return True
+        except OSError:
+            return False

@@ -47,6 +47,24 @@ def reset_otel_global_state() -> Generator[None, None, None]:
     metrics._internal._METER_PROVIDER = _ProxyMeterProvider()
 
 
+@pytest.fixture(autouse=True)
+def reset_structlog_after_test() -> Generator[None, None, None]:
+    """Reset structlog configuration after each test.
+
+    This ensures tests that call configure_logging() don't pollute
+    global structlog state for subsequent tests.
+
+    Yields:
+        None after test completes.
+    """
+    import structlog
+
+    yield
+
+    # Reset structlog to defaults after test
+    structlog.reset_defaults()
+
+
 @pytest.fixture
 def valid_resource_attributes() -> dict[str, str]:
     """Return valid ResourceAttributes constructor kwargs.
