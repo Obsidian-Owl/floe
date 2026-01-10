@@ -240,6 +240,14 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if scope:
                     catalog_config["scope"] = scope
 
+                # Add X-Iceberg-Access-Delegation header for credential vending
+                # When enabled, Polaris returns vended credentials in table load response
+                # See: https://iceberg.apache.org/docs/latest/rest-catalog/#credential-vending
+                if self._config.credential_vending_enabled:
+                    catalog_config["header.X-Iceberg-Access-Delegation"] = (
+                        "vended-credentials"
+                    )
+
                 # Merge any additional configuration from the config argument
                 for key, value in config.items():
                     if key not in ("scope",):  # Already handled above

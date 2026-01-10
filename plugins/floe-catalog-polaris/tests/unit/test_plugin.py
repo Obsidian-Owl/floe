@@ -400,6 +400,64 @@ class TestPolarisCatalogPluginConnect:
             # Access private attribute to verify storage
             assert plugin._catalog == mock_catalog
 
+    @pytest.mark.requirement("FR-058")
+    def test_connect_includes_access_delegation_header_when_enabled(
+        self, plugin: CatalogPlugin
+    ) -> None:
+        """Test connect() includes X-Iceberg-Access-Delegation header when enabled.
+
+        When credential_vending_enabled=True, the header should be set to
+        'vended-credentials' to request that Polaris returns temporary
+        credentials in table load responses.
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ) as mock_load:
+            plugin.connect({})
+
+            config_kwargs = mock_load.call_args[1]
+            assert config_kwargs.get("header.X-Iceberg-Access-Delegation") == (
+                "vended-credentials"
+            )
+
+    @pytest.mark.requirement("FR-058")
+    def test_connect_omits_access_delegation_header_when_disabled(self) -> None:
+        """Test connect() omits X-Iceberg-Access-Delegation header when disabled.
+
+        When credential_vending_enabled=False, the header should not be
+        included in the catalog configuration.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from floe_catalog_polaris.config import PolarisCatalogConfig
+        from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+        # Create config with credential vending disabled
+        config = PolarisCatalogConfig(
+            uri="https://polaris.example.com/api/catalog",
+            warehouse="test_warehouse",
+            oauth2={
+                "client_id": "test-client",
+                "client_secret": "test-secret",
+                "token_url": "https://auth.example.com/oauth/token",
+            },
+            credential_vending_enabled=False,
+        )
+        plugin = PolarisCatalogPlugin(config=config)
+        mock_catalog = MagicMock()
+
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ) as mock_load:
+            plugin.connect({})
+
+            config_kwargs = mock_load.call_args[1]
+            assert "header.X-Iceberg-Access-Delegation" not in config_kwargs
+
 
 class TestPolarisCatalogPluginTracing:
     """Unit tests for PolarisCatalogPlugin OpenTelemetry tracing.
