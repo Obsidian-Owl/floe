@@ -5,7 +5,7 @@ Tests for FR-024 (OTel metrics emission).
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -210,8 +210,8 @@ class TestResetForTesting:
         )
 
         # Initialize singletons
-        tracer1 = get_tracer()
-        meter1 = get_meter()
+        get_tracer()
+        get_meter()
 
         # Reset
         reset_for_testing()

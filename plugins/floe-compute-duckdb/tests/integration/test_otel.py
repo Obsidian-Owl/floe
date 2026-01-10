@@ -13,16 +13,14 @@ for production parity.
 from __future__ import annotations
 
 import pytest
+from floe_core import ComputeConfig, ConnectionStatus
+from floe_core.observability import reset_for_testing
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-from floe_core import ComputeConfig, ConnectionStatus
-from floe_core.observability import reset_for_testing
-
 
 # Module-scoped OTel setup - providers can only be set once
 _metric_reader: InMemoryMetricReader | None = None

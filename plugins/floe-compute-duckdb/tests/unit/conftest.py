@@ -35,9 +35,8 @@ def memory_config() -> Any:
 @pytest.fixture
 def catalog_config() -> Any:
     """Create an Iceberg CatalogConfig for testing."""
-    from pydantic import SecretStr
-
     from floe_core import CatalogConfig
+    from pydantic import SecretStr
 
     return CatalogConfig(
         catalog_type="rest",

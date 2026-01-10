@@ -11,7 +11,12 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from floe_core.compute_config import CatalogConfig, ComputeConfig, ConnectionResult, ResourceSpec
+    from floe_core.compute_config import (
+        CatalogConfig,
+        ComputeConfig,
+        ConnectionResult,
+        ResourceSpec,
+    )
     from floe_core.plugin_metadata import PluginMetadata
 
 

@@ -474,3 +474,130 @@ class TestCatalogAttachment:
         assert sql is not None
         attach_stmt = [s for s in sql if "ATTACH" in s][0]
         assert catalog_config.catalog_uri in attach_stmt
+
+
+class TestCatalogAttachmentSecurity:
+    """Test SQL injection prevention in catalog attachment.
+
+    These tests verify that the get_catalog_attachment_sql method
+    properly validates and escapes inputs to prevent SQL injection.
+    """
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_invalid_catalog_name_raises_error(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test that invalid catalog names raise ValueError.
+
+        Catalog names are used as SQL identifiers (in AS clause),
+        so they must be validated to prevent SQL injection.
+        """
+        from floe_core import CatalogConfig
+
+        # SQL injection attempt via catalog_name
+        config = CatalogConfig(
+            catalog_type="rest",
+            catalog_name="malicious'; DROP TABLE users; --",
+            catalog_uri="http://polaris:8181/api/catalog",
+        )
+
+        with pytest.raises(ValueError, match="Invalid catalog_name"):
+            duckdb_plugin.get_catalog_attachment_sql(config)
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_catalog_name_with_special_chars_raises_error(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test that catalog names with special characters raise ValueError."""
+        from floe_core import CatalogConfig
+
+        invalid_names = [
+            "catalog-with-dash",
+            "catalog.with.dots",
+            "catalog with spaces",
+            "catalog'quote",
+            "123startwithnumber",
+        ]
+
+        for name in invalid_names:
+            config = CatalogConfig(
+                catalog_type="rest",
+                catalog_name=name,
+                catalog_uri="http://polaris:8181/api/catalog",
+            )
+
+            with pytest.raises(ValueError, match="Invalid catalog_name"):
+                duckdb_plugin.get_catalog_attachment_sql(config)
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_valid_catalog_names_accepted(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test that valid catalog names are accepted."""
+        from floe_core import CatalogConfig
+
+        valid_names = [
+            "floe",
+            "my_catalog",
+            "_private",
+            "catalog123",
+            "UPPERCASE",
+            "MixedCase_123",
+        ]
+
+        for name in valid_names:
+            config = CatalogConfig(
+                catalog_type="rest",
+                catalog_name=name,
+                catalog_uri="http://polaris:8181/api/catalog",
+            )
+
+            # Should not raise
+            sql = duckdb_plugin.get_catalog_attachment_sql(config)
+            assert sql is not None
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_uri_with_quotes_escaped(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test that single quotes in URI are properly escaped."""
+        from floe_core import CatalogConfig
+
+        config = CatalogConfig(
+            catalog_type="rest",
+            catalog_name="test_catalog",
+            catalog_uri="http://example.com/path?param='value'",
+        )
+
+        sql = duckdb_plugin.get_catalog_attachment_sql(config)
+        assert sql is not None
+
+        attach_stmt = [s for s in sql if "ATTACH" in s][0]
+        # Single quotes should be doubled for SQL escaping
+        assert "''value''" in attach_stmt
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_warehouse_with_quotes_escaped(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test that single quotes in warehouse path are properly escaped."""
+        from floe_core import CatalogConfig
+
+        config = CatalogConfig(
+            catalog_type="rest",
+            catalog_name="test_catalog",
+            catalog_uri="http://polaris:8181/api/catalog",
+            warehouse="s3://bucket/path'with'quotes",
+        )
+
+        sql = duckdb_plugin.get_catalog_attachment_sql(config)
+        assert sql is not None
+
+        attach_stmt = [s for s in sql if "ATTACH" in s][0]
+        # Single quotes should be doubled for SQL escaping
+        assert "path''with''quotes" in attach_stmt

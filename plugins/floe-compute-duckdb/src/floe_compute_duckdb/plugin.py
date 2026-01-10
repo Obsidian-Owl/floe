@@ -17,6 +17,7 @@ Example:
 
 from __future__ import annotations
 
+import re
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,44 @@ from floe_core import (
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+
+# Regex pattern for valid SQL identifiers (alphanumeric + underscores only)
+# Used to prevent SQL injection in ATTACH statements
+_SAFE_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_sql_identifier(value: str, field_name: str) -> None:
+    """Validate that a value is a safe SQL identifier.
+
+    Args:
+        value: The value to validate.
+        field_name: Name of the field for error messages.
+
+    Raises:
+        ValueError: If the value contains unsafe characters.
+    """
+    if not _SAFE_IDENTIFIER_PATTERN.match(value):
+        msg = (
+            f"Invalid {field_name}: '{value}'. "
+            "Must contain only alphanumeric characters and underscores, "
+            "and must start with a letter or underscore."
+        )
+        raise ValueError(msg)
+
+
+def _escape_sql_string(value: str) -> str:
+    """Escape single quotes in SQL string literals.
+
+    Escapes single quotes by doubling them, which is the standard
+    SQL escaping mechanism for string literals.
+
+    Args:
+        value: The string value to escape.
+
+    Returns:
+        The escaped string safe for use in SQL literals.
+    """
+    return value.replace("'", "''")
 
 
 class DuckDBComputePlugin(ComputePlugin):
@@ -368,35 +407,47 @@ class DuckDBComputePlugin(ComputePlugin):
             >>> sql = plugin.get_catalog_attachment_sql(config)
             >>> sql[0]
             'INSTALL iceberg;'
+
+        Raises:
+            ValueError: If catalog_name contains invalid characters.
         """
+        # Validate catalog_name as it's used as an SQL identifier (AS clause)
+        # This prevents SQL injection via malicious catalog names
+        _validate_sql_identifier(catalog_config.catalog_name, "catalog_name")
+
         statements: list[str] = [
             "INSTALL iceberg;",
             "LOAD iceberg;",
         ]
 
+        # Escape string values to prevent SQL injection
+        catalog_name_escaped = _escape_sql_string(catalog_config.catalog_name)
+
         # Build ATTACH statement with options
         attach_parts = [
-            f"ATTACH '{catalog_config.catalog_name}' AS {catalog_config.catalog_name}",
+            f"ATTACH '{catalog_name_escaped}' AS {catalog_config.catalog_name}",
             "(TYPE ICEBERG",
         ]
 
         if catalog_config.catalog_uri:
-            attach_parts.append(f", ENDPOINT '{catalog_config.catalog_uri}'")
+            uri_escaped = _escape_sql_string(catalog_config.catalog_uri)
+            attach_parts.append(f", ENDPOINT '{uri_escaped}'")
 
         if catalog_config.warehouse:
-            attach_parts.append(f", WAREHOUSE '{catalog_config.warehouse}'")
+            warehouse_escaped = _escape_sql_string(catalog_config.warehouse)
+            attach_parts.append(f", WAREHOUSE '{warehouse_escaped}'")
 
-        # Add credentials if provided (extract secret values)
+        # Add credentials if provided (extract secret values and escape)
         creds = catalog_config.credentials
         client_id = creds.get("client_id")
         client_secret = creds.get("client_secret")
 
         if client_id:
-            # SecretStr: use get_secret_value() to extract
-            value = client_id.get_secret_value()
+            # SecretStr: use get_secret_value() to extract, then escape
+            value = _escape_sql_string(client_id.get_secret_value())
             attach_parts.append(f", CLIENT_ID '{value}'")
         if client_secret:
-            value = client_secret.get_secret_value()
+            value = _escape_sql_string(client_secret.get_secret_value())
             attach_parts.append(f", CLIENT_SECRET '{value}'")
 
         attach_parts.append(")")

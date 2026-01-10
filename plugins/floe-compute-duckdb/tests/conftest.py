@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    pass
 
 
 @pytest.fixture
@@ -65,9 +65,8 @@ def catalog_config() -> Any:
         ...     sql = duckdb_plugin.get_catalog_attachment_sql(catalog_config)
         ...     assert sql is not None
     """
-    from pydantic import SecretStr
-
     from floe_core import CatalogConfig
+    from pydantic import SecretStr
 
     return CatalogConfig(
         catalog_type="rest",

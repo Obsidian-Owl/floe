@@ -16,7 +16,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from floe_core import ComputeConfig, ConnectionStatus
 
 from floe_compute_duckdb import DuckDBComputePlugin
@@ -140,7 +139,8 @@ class TestValidateConnection:
 
         assert result.status == ConnectionStatus.UNHEALTHY
         # Error details should be in message or warnings (not OR'd with empty list)
-        has_error_in_message = "failed" in result.message.lower() or "error" in result.message.lower()
+        msg_lower = result.message.lower()
+        has_error_in_message = "failed" in msg_lower or "error" in msg_lower
         has_error_in_warnings = len(result.warnings) > 0
         assert has_error_in_message or has_error_in_warnings, (
             f"Expected error details in message or warnings. "

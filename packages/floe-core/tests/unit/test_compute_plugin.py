@@ -19,13 +19,13 @@ from typing import Any, get_type_hints
 import pytest
 
 from floe_core import (
+    WORKLOAD_PRESETS,
     CatalogConfig,
     ComputeConfig,
     ComputePlugin,
     ConnectionResult,
     ConnectionStatus,
     ResourceSpec,
-    WORKLOAD_PRESETS,
 )
 
 
@@ -288,7 +288,7 @@ class TestComputePluginMethodSignatures:
         assert "workload_size" in params, "Method must accept 'workload_size'"
 
         hints = get_type_hints(method)
-        assert hints.get("workload_size") == str
+        assert hints.get("workload_size") is str
 
     @pytest.mark.requirement("001-FR-004")
     def test_get_resource_requirements_returns_resource_spec(self) -> None:
@@ -309,13 +309,13 @@ class TestComputePluginMethodSignatures:
     @pytest.mark.requirement("001-FR-001")
     def test_is_self_hosted_is_property(self) -> None:
         """Test is_self_hosted is a property returning bool."""
-        prop = getattr(ComputePlugin, "is_self_hosted")
+        prop = ComputePlugin.is_self_hosted
         assert isinstance(prop, property), "is_self_hosted must be a property"
 
         getter = prop.fget
         assert getter is not None
         hints = get_type_hints(getter)
-        assert hints.get("return") == bool
+        assert hints.get("return") is bool
 
 
 class TestComputePluginOptionalMethods:

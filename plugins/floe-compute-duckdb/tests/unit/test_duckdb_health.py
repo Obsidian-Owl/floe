@@ -13,12 +13,12 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from floe_core import (
     ComputeConfig,
     ConnectionResult,
     ConnectionStatus,
 )
+
 from floe_compute_duckdb import DuckDBComputePlugin
 
 
@@ -52,7 +52,10 @@ class TestValidateConnectionLatency:
 
     @pytest.mark.requirement("001-FR-019")
     def test_validate_connection_returns_latency_ms(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection returns latency_ms in result."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
@@ -63,7 +66,10 @@ class TestValidateConnectionLatency:
 
     @pytest.mark.requirement("001-FR-019")
     def test_validate_connection_latency_is_non_negative(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection latency_ms is non-negative."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
@@ -73,7 +79,10 @@ class TestValidateConnectionLatency:
 
     @pytest.mark.requirement("001-FR-019")
     def test_validate_connection_latency_is_reasonable(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection latency_ms is reasonable (< 5 seconds)."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
@@ -105,7 +114,10 @@ class TestValidateConnectionStatus:
 
     @pytest.mark.requirement("001-FR-018")
     def test_validate_connection_returns_connection_result(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection returns ConnectionResult."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
@@ -115,7 +127,10 @@ class TestValidateConnectionStatus:
 
     @pytest.mark.requirement("001-FR-018")
     def test_validate_connection_healthy_for_success(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection returns HEALTHY on successful connection."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
@@ -125,7 +140,10 @@ class TestValidateConnectionStatus:
 
     @pytest.mark.requirement("001-FR-018")
     def test_validate_connection_includes_message(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection includes human-readable message."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
@@ -272,7 +290,10 @@ class TestValidateConnectionOTelMetrics:
 
     @pytest.mark.requirement("001-FR-024")
     def test_validate_connection_records_duration_on_success(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection records duration metric on success."""
         with (
@@ -336,7 +357,10 @@ class TestValidateConnectionOTelMetrics:
 
     @pytest.mark.requirement("001-FR-024")
     def test_validate_connection_no_error_counter_on_success(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection does not record error counter on success."""
         with (
@@ -350,7 +374,10 @@ class TestValidateConnectionOTelMetrics:
 
     @pytest.mark.requirement("001-FR-024")
     def test_validate_connection_starts_span(
-        self, plugin: DuckDBComputePlugin, memory_config: ComputeConfig, mock_duckdb_success: MagicMock
+        self,
+        plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+        mock_duckdb_success: MagicMock,
     ) -> None:
         """Test validate_connection creates OTel span."""
         mock_span = MagicMock()
@@ -359,7 +386,10 @@ class TestValidateConnectionOTelMetrics:
 
         with (
             patch.dict("sys.modules", {"duckdb": mock_duckdb_success}),
-            patch("floe_compute_duckdb.plugin.start_validation_span", return_value=mock_span) as mock_start,
+            patch(
+                "floe_compute_duckdb.plugin.start_validation_span",
+                return_value=mock_span,
+            ) as mock_start,
             patch("floe_compute_duckdb.plugin.record_validation_duration"),
         ):
             plugin.validate_connection(memory_config)

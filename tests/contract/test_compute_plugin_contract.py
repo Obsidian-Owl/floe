@@ -161,7 +161,7 @@ class TestComputePluginABCContract:
 
         # Check type hints
         hints = get_type_hints(method)
-        assert hints.get("workload_size") == str, (
+        assert hints.get("workload_size") is str, (
             f"workload_size type changed from str to {hints.get('workload_size')}"
         )
         assert hints.get("return") == ResourceSpec, (
@@ -182,14 +182,14 @@ class TestComputePluginABCContract:
 
         # Verify it's a property
         assert hasattr(ComputePlugin, "is_self_hosted")
-        prop = getattr(ComputePlugin, "is_self_hosted")
+        prop = ComputePlugin.is_self_hosted
         assert isinstance(prop, property), "is_self_hosted must be a property"
 
         # Check type hint on the getter
         getter = prop.fget
         assert getter is not None, "Property must have a getter"
         hints = get_type_hints(getter)
-        assert hints.get("return") == bool, (
+        assert hints.get("return") is bool, (
             f"return type changed from bool to {hints.get('return')}"
         )
 
@@ -376,7 +376,7 @@ class TestComputeConfigurationModelsContract:
 
         Plugins reference these preset names for resource allocation.
         """
-        from floe_core import ResourceSpec, WORKLOAD_PRESETS
+        from floe_core import WORKLOAD_PRESETS, ResourceSpec
 
         # These preset names are part of the contract
         assert "small" in WORKLOAD_PRESETS

@@ -10,6 +10,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from floe_core.compute_config import (
+    WORKLOAD_PRESETS,
     AttachConfig,
     CatalogConfig,
     ComputeConfig,
@@ -17,7 +18,6 @@ from floe_core.compute_config import (
     ConnectionStatus,
     DuckDBConfig,
     ResourceSpec,
-    WORKLOAD_PRESETS,
 )
 
 
