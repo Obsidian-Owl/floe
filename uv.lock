@@ -458,12 +458,54 @@ requires-dist = [
 ]
 
 [[package]]
+name = "floe-telemetry-console"
+version = "0.1.0"
+source = { editable = "plugins/floe-telemetry-console" }
+dependencies = [
+    { name = "floe-core" },
+    { name = "opentelemetry-sdk" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+]
+
+[[package]]
+name = "floe-telemetry-jaeger"
+version = "0.1.0"
+source = { editable = "plugins/floe-telemetry-jaeger" }
+dependencies = [
+    { name = "floe-core" },
+    { name = "opentelemetry-exporter-otlp" },
+    { name = "opentelemetry-sdk" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "opentelemetry-exporter-otlp", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+]
+
+[[package]]
 name = "floe-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "bandit", extra = ["toml"] },
     { name = "floe-core" },
+    { name = "floe-telemetry-console" },
+    { name = "floe-telemetry-jaeger" },
     { name = "jsonschema" },
     { name = "mypy" },
     { name = "pip-audit" },
@@ -481,6 +523,8 @@ dependencies = [
 requires-dist = [
     { name = "bandit", extras = ["toml"], specifier = ">=1.7" },
     { name = "floe-core", editable = "packages/floe-core" },
+    { name = "floe-telemetry-console", editable = "plugins/floe-telemetry-console" },
+    { name = "floe-telemetry-jaeger", editable = "plugins/floe-telemetry-jaeger" },
     { name = "jsonschema", specifier = ">=4.0" },
     { name = "mypy", specifier = ">=1.8" },
     { name = "pip-audit", specifier = ">=2.0" },
@@ -875,6 +919,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/b9/3161be15bb8e3ad01be8be5a968a9237c3027c5be504362ff800fca3e442/opentelemetry_api-1.39.1.tar.gz", hash = "sha256:fbde8c80e1b937a2c61f20347e91c0c18a1940cecf012d62e65a7caf08967c9c", size = 65767 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cf/df/d3f1ddf4bb4cb50ed9b1139cc7b1c54c34a1e7ce8fd1b9a37c0d1551a6bd/opentelemetry_api-1.39.1-py3-none-any.whl", hash = "sha256:2edd8463432a7f8443edce90972169b195e7d6a05500cd29e6d13898187c9950", size = 66356 },
+]
+
+[[package]]
+name = "opentelemetry-exporter-otlp"
+version = "1.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/9c/3ab1db90f32da200dba332658f2bbe602369e3d19f6aba394031a42635be/opentelemetry_exporter_otlp-1.39.1.tar.gz", hash = "sha256:7cf7470e9fd0060c8a38a23e4f695ac686c06a48ad97f8d4867bc9b420180b9c", size = 6147 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/6c/bdc82a066e6fb1dcf9e8cc8d4e026358fe0f8690700cc6369a6bf9bd17a7/opentelemetry_exporter_otlp-1.39.1-py3-none-any.whl", hash = "sha256:68ae69775291f04f000eb4b698ff16ff685fdebe5cb52871bc4e87938a7b00fe", size = 7019 },
 ]
 
 [[package]]

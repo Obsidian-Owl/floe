@@ -23,10 +23,15 @@ dependencies = [
     "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
+    # Telemetry backend plugins (for entry point discovery in tests)
+    "floe-telemetry-console",
+    "floe-telemetry-jaeger",
 ]
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
+floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
+floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

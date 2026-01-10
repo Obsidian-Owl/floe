@@ -4,7 +4,11 @@ These models define the contract for OpenTelemetry configuration
 in CompiledArtifacts. Platform Team configures via manifest.yaml;
 Data Engineers inherit configuration.
 
-Contract Version: 1.0.0
+Contract Version: 1.1.0
+
+Changelog:
+    - 1.1.0: Added BatchSpanProcessorConfig, LoggingConfig, and backend field (MINOR)
+    - 1.0.0: Initial contract with core telemetry configuration
 """
 
 from __future__ import annotations
@@ -151,6 +155,102 @@ class TelemetryAuth(BaseModel):
         return self
 
 
+class BatchSpanProcessorConfig(BaseModel):
+    """Configuration for BatchSpanProcessor.
+
+    BatchSpanProcessor is used for async, non-blocking span export.
+    Spans are buffered in a queue and exported in batches.
+
+    Configuration guidelines by throughput:
+    - Low (<100 spans/s): queue=512, batch=256, delay=10s
+    - Medium (100-1000 spans/s): queue=2048, batch=512, delay=5s (default)
+    - High (>1000 spans/s): queue=8192, batch=1024, delay=2s
+
+    Attributes:
+        max_queue_size: Maximum spans buffered in memory (default: 2048)
+        max_export_batch_size: Spans per export batch (default: 512)
+        schedule_delay_millis: Export interval in ms (default: 5000)
+        export_timeout_millis: Per-batch export timeout in ms (default: 30000)
+
+    Examples:
+        >>> # Default configuration (medium throughput)
+        >>> config = BatchSpanProcessorConfig()
+
+        >>> # High throughput configuration
+        >>> config = BatchSpanProcessorConfig(
+        ...     max_queue_size=8192,
+        ...     max_export_batch_size=1024,
+        ...     schedule_delay_millis=2000,
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_queue_size: int = Field(
+        default=2048,
+        gt=0,
+        description="Maximum spans buffered in memory",
+    )
+    max_export_batch_size: int = Field(
+        default=512,
+        gt=0,
+        description="Spans per export batch",
+    )
+    schedule_delay_millis: int = Field(
+        default=5000,
+        gt=0,
+        description="Export interval in milliseconds",
+    )
+    export_timeout_millis: int = Field(
+        default=30000,
+        gt=0,
+        description="Per-batch export timeout in milliseconds",
+    )
+
+    @model_validator(mode="after")
+    def validate_batch_size_le_queue_size(self) -> Self:
+        """Validate that batch size does not exceed queue size."""
+        if self.max_export_batch_size > self.max_queue_size:
+            raise ValueError(
+                f"max_export_batch_size ({self.max_export_batch_size}) "
+                f"cannot exceed max_queue_size ({self.max_queue_size})"
+            )
+        return self
+
+
+class LoggingConfig(BaseModel):
+    """Logging configuration for structured log output.
+
+    Controls structlog configuration with trace context injection.
+    Log level can be set per environment or globally.
+
+    Environment Variables:
+        FLOE_LOG_LEVEL: Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        FLOE_LOG_JSON: Set to "false" to use console output instead of JSON
+
+    Attributes:
+        log_level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        json_output: Output format - JSON (True) or console (False)
+
+    Examples:
+        >>> logging_config = LoggingConfig(log_level="DEBUG", json_output=True)
+        >>> # Or use environment variables:
+        >>> # FLOE_LOG_LEVEL=DEBUG FLOE_LOG_JSON=false python app.py
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    log_level: str = Field(
+        default="INFO",
+        pattern=r"^(?i)(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
+        description="Minimum log level (case-insensitive). Override with FLOE_LOG_LEVEL env var.",
+    )
+    json_output: bool = Field(
+        default=True,
+        description="Output format - JSON (True) or console (False). Override with FLOE_LOG_JSON env var.",
+    )
+
+
 class SamplingConfig(BaseModel):
     """Environment-based sampling configuration.
 
@@ -219,6 +319,9 @@ class TelemetryConfig(BaseModel):
         sampling: Environment-based sampling configuration
         resource_attributes: Service identification attributes
         authentication: Optional OTLP authentication
+        batch_processor: BatchSpanProcessor configuration for async export
+        logging: Structured logging configuration with trace context
+        backend: Telemetry backend plugin name (e.g., 'console', 'jaeger')
 
     Examples:
         >>> config = TelemetryConfig(
@@ -253,6 +356,18 @@ class TelemetryConfig(BaseModel):
     authentication: TelemetryAuth | None = Field(
         default=None,
         description="Optional OTLP authentication",
+    )
+    batch_processor: BatchSpanProcessorConfig = Field(
+        default_factory=BatchSpanProcessorConfig,
+        description="BatchSpanProcessor configuration for async export",
+    )
+    logging: LoggingConfig = Field(
+        default_factory=LoggingConfig,
+        description="Structured logging configuration with trace context",
+    )
+    backend: str = Field(
+        default="console",
+        description="Telemetry backend plugin name (e.g., 'console', 'jaeger')",
     )
 
     def get_sampling_ratio(self, environment: str) -> float:
