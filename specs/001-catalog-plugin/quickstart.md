@@ -22,27 +22,29 @@ This quickstart demonstrates how to use the CatalogPlugin ABC and PolarisCatalog
 ## Quick Example: Connect to Polaris
 
 ```python
-from floe_core.plugins import get_plugin
+from pydantic import SecretStr
 
-# Get the Polaris catalog plugin
-catalog = get_plugin("catalog", "polaris")
+from floe_catalog_polaris import PolarisCatalogPlugin
+from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 
-# Configure connection
-config = {
-    "uri": "https://polaris.example.com/api/catalog",
-    "warehouse": "default_warehouse",
-    "oauth2": {
-        "client_id": "${POLARIS_CLIENT_ID}",
-        "client_secret": "${POLARIS_CLIENT_SECRET}",
-        "token_url": "https://polaris.example.com/oauth/token",
-    },
-}
+# Create plugin configuration
+config = PolarisCatalogConfig(
+    uri="https://polaris.example.com/api/catalog",
+    warehouse="default_warehouse",
+    oauth2=OAuth2Config(
+        client_id="your-client-id",
+        client_secret=SecretStr("your-client-secret"),
+        token_url="https://polaris.example.com/oauth/token",
+        scope="PRINCIPAL_ROLE:ALL",
+    ),
+)
 
-# Connect to catalog
-iceberg_catalog = catalog.connect(config)
+# Create and connect plugin
+plugin = PolarisCatalogPlugin(config=config)
+iceberg_catalog = plugin.connect({})
 
 # List namespaces
-namespaces = catalog.list_namespaces()
+namespaces = plugin.list_namespaces()
 print(f"Available namespaces: {namespaces}")
 ```
 
@@ -54,7 +56,7 @@ print(f"Available namespaces: {namespaces}")
 
 ```python
 # Create a namespace with properties
-catalog.create_namespace(
+plugin.create_namespace(
     namespace="bronze.raw_events",
     properties={
         "location": "s3://data-lake/bronze/raw_events",
@@ -67,17 +69,17 @@ catalog.create_namespace(
 
 ```python
 # List all namespaces
-all_namespaces = catalog.list_namespaces()
+all_namespaces = plugin.list_namespaces()
 
 # List child namespaces under "bronze"
-bronze_children = catalog.list_namespaces(parent="bronze")
+bronze_children = plugin.list_namespaces(parent="bronze")
 ```
 
 ### Delete a Namespace
 
 ```python
 # Delete an empty namespace
-catalog.delete_namespace("bronze.raw_events")
+plugin.delete_namespace("bronze.raw_events")
 ```
 
 ---
@@ -87,18 +89,18 @@ catalog.delete_namespace("bronze.raw_events")
 ### Create a Table
 
 ```python
-# Define Iceberg schema
-schema = {
-    "type": "struct",
-    "fields": [
-        {"id": 1, "name": "event_id", "type": "string", "required": True},
-        {"id": 2, "name": "event_time", "type": "timestamp", "required": True},
-        {"id": 3, "name": "payload", "type": "string", "required": False},
-    ],
-}
+from pyiceberg.schema import Schema
+from pyiceberg.types import LongType, NestedField, StringType, TimestampType
+
+# Define Iceberg schema using PyIceberg types
+schema = Schema(
+    NestedField(field_id=1, name="event_id", field_type=StringType(), required=True),
+    NestedField(field_id=2, name="event_time", field_type=TimestampType(), required=True),
+    NestedField(field_id=3, name="payload", field_type=StringType(), required=False),
+)
 
 # Create table in namespace
-catalog.create_table(
+plugin.create_table(
     identifier="bronze.raw_events",
     schema=schema,
     location="s3://data-lake/bronze/raw_events",
@@ -110,7 +112,7 @@ catalog.create_table(
 
 ```python
 # List tables in a namespace
-tables = catalog.list_tables("bronze")
+tables = plugin.list_tables("bronze")
 print(f"Tables in bronze: {tables}")
 ```
 
@@ -118,10 +120,10 @@ print(f"Tables in bronze: {tables}")
 
 ```python
 # Drop table (metadata only)
-catalog.drop_table("bronze.raw_events")
+plugin.drop_table("bronze.raw_events")
 
 # Drop table and purge data files
-catalog.drop_table("bronze.raw_events", purge=True)
+plugin.drop_table("bronze.raw_events", purge=True)
 ```
 
 ---
@@ -132,7 +134,7 @@ Get short-lived, scoped credentials for direct table access:
 
 ```python
 # Vend read credentials
-read_creds = catalog.vend_credentials(
+read_creds = plugin.vend_credentials(
     table_path="silver.dim_customers",
     operations=["READ"],
 )
@@ -141,7 +143,7 @@ print(f"Access key: {read_creds['access_key']}")
 print(f"Expires at: {read_creds['expiration']}")
 
 # Vend read/write credentials
-write_creds = catalog.vend_credentials(
+write_creds = plugin.vend_credentials(
     table_path="silver.dim_customers",
     operations=["READ", "WRITE"],
 )
@@ -157,18 +159,18 @@ write_creds = catalog.vend_credentials(
 Monitor catalog availability:
 
 ```python
-from floe_catalog_polaris import PolarisCatalogPlugin
+from floe_core import HealthState
 
-# Check catalog health
-status = catalog.health_check(timeout=1.0)
+# Check catalog health (requires connected plugin)
+status = plugin.health_check(timeout=1.0)
 
-if status.healthy:
-    print(f"Catalog OK - response time: {status.response_time_ms}ms")
+if status.state == HealthState.HEALTHY:
+    print(f"Catalog OK - response time: {status.details['response_time_ms']:.1f}ms")
 else:
     print(f"Catalog unhealthy: {status.message}")
 
 # Integrate with monitoring
-# status.checked_at provides timestamp for metrics
+# status.details['checked_at'] provides timestamp for metrics
 ```
 
 ---
@@ -214,26 +216,63 @@ export POLARIS_WAREHOUSE="default_warehouse"
 To create a custom catalog adapter:
 
 ```python
-from abc import abstractmethod
 from typing import Any
 
-from floe_core.plugins.catalog import CatalogPlugin, Catalog
+from floe_core import CatalogPlugin, HealthStatus, NotSupportedError
+from floe_core.plugins.catalog import Catalog
+from pydantic import BaseModel
+
+
+class MyCatalogConfig(BaseModel):
+    """Configuration for custom catalog."""
+
+    host: str
+    port: int = 9000
 
 
 class MyCatalogPlugin(CatalogPlugin):
     """Custom catalog plugin implementation."""
 
-    name = "my-catalog"
-    version = "1.0.0"
-    floe_api_version = "2.0.0"
+    def __init__(self, config: MyCatalogConfig) -> None:
+        self._config = config
+        self._catalog: Catalog | None = None
 
-    @abstractmethod
+    @property
+    def name(self) -> str:
+        return "my-catalog"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "0.1"
+
+    @property
+    def description(self) -> str:
+        return "Custom catalog adapter"
+
+    @property
+    def dependencies(self) -> list[str]:
+        return []
+
+    def get_config_schema(self) -> type[BaseModel]:
+        return MyCatalogConfig
+
+    def startup(self) -> None:
+        """Initialize plugin resources."""
+        pass
+
+    def shutdown(self) -> None:
+        """Clean up plugin resources."""
+        pass
+
     def connect(self, config: dict[str, Any]) -> Catalog:
         """Connect to your catalog."""
         # Return PyIceberg-compatible Catalog instance
         ...
 
-    @abstractmethod
     def create_namespace(
         self,
         namespace: str,
@@ -242,17 +281,14 @@ class MyCatalogPlugin(CatalogPlugin):
         """Create namespace in your catalog."""
         ...
 
-    @abstractmethod
     def list_namespaces(self, parent: str | None = None) -> list[str]:
         """List namespaces."""
         ...
 
-    @abstractmethod
     def delete_namespace(self, namespace: str) -> None:
         """Delete empty namespace."""
         ...
 
-    @abstractmethod
     def create_table(
         self,
         identifier: str,
@@ -263,23 +299,28 @@ class MyCatalogPlugin(CatalogPlugin):
         """Create Iceberg table."""
         ...
 
-    @abstractmethod
     def list_tables(self, namespace: str) -> list[str]:
         """List tables in namespace."""
         ...
 
-    @abstractmethod
     def drop_table(self, identifier: str, purge: bool = False) -> None:
         """Drop table."""
         ...
 
-    @abstractmethod
     def vend_credentials(
         self,
         table_path: str,
         operations: list[str],
     ) -> dict[str, Any]:
         """Vend credentials (raise NotSupportedError if not supported)."""
+        raise NotSupportedError(
+            operation="vend_credentials",
+            catalog_name="my-catalog",
+            reason="This catalog does not support credential vending",
+        )
+
+    def health_check(self, timeout: float = 1.0) -> HealthStatus:
+        """Check catalog health."""
         ...
 ```
 
@@ -296,7 +337,7 @@ my-catalog = "my_catalog_plugin:MyCatalogPlugin"
 ## Error Handling
 
 ```python
-from floe_core.plugin_errors import (
+from floe_core import (
     CatalogError,
     CatalogUnavailableError,
     AuthenticationError,
@@ -306,7 +347,7 @@ from floe_core.plugin_errors import (
 )
 
 try:
-    catalog.create_namespace("existing_namespace")
+    plugin.create_namespace("existing_namespace")
 except ConflictError:
     print("Namespace already exists")
 except AuthenticationError:
@@ -334,8 +375,8 @@ provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 trace.set_tracer_provider(provider)
 
 # Catalog operations now emit spans
-catalog.create_namespace("bronze")  # Emits: catalog.create_namespace span
-catalog.list_tables("bronze")  # Emits: catalog.list_tables span
+plugin.create_namespace("bronze")  # Emits: catalog.create_namespace span
+plugin.list_tables("bronze")  # Emits: catalog.list_tables span
 
 # Spans include:
 # - db.system: "iceberg"
