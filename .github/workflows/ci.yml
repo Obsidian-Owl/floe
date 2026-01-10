@@ -270,7 +270,6 @@ jobs:
       - name: Run integration tests
         run: ./testing/ci/test-integration.sh
         env:
-          KUBECONFIG: ${{ github.workspace }}/.kube/config
           TEST_NAMESPACE: floe-test
 
       - name: Collect logs on failure
