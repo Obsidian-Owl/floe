@@ -75,7 +75,6 @@ def connected_plugin(
 class TestHealthCheckBasic:
     """Tests for basic health_check() functionality."""
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_returns_health_status(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -88,7 +87,6 @@ class TestHealthCheckBasic:
         assert hasattr(result, "state")
         assert hasattr(result, "message")
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_healthy_when_list_namespaces_succeeds(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -104,7 +102,6 @@ class TestHealthCheckBasic:
         msg_lower = result.message.lower()
         assert any(word in msg_lower for word in ["healthy", "ok", "responding", "normal"])
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_unhealthy_when_list_namespaces_fails(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -118,7 +115,6 @@ class TestHealthCheckBasic:
         assert result.state == HealthState.UNHEALTHY
         assert result.message != ""
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_unhealthy_includes_error_details(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -138,7 +134,6 @@ class TestHealthCheckBasic:
 class TestHealthCheckResponseTime:
     """Tests for response time measurement in health_check()."""
 
-    @pytest.mark.requirement("SC-007")
     def test_health_check_captures_response_time_ms(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -160,7 +155,6 @@ class TestHealthCheckResponseTime:
         # And less than 1 second (reasonable upper bound)
         assert result.details["response_time_ms"] < 1000.0
 
-    @pytest.mark.requirement("SC-007")
     def test_health_check_response_time_is_float(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -173,7 +167,6 @@ class TestHealthCheckResponseTime:
         # Use pytest.approx or isinstance check to handle float comparison
         assert isinstance(result.details["response_time_ms"], (int, float))
 
-    @pytest.mark.requirement("SC-007")
     def test_health_check_response_time_captured_on_failure(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -197,7 +190,6 @@ class TestHealthCheckResponseTime:
 class TestHealthCheckTimeout:
     """Tests for timeout parameter in health_check()."""
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_accepts_timeout_parameter(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -209,7 +201,6 @@ class TestHealthCheckTimeout:
 
         assert isinstance(result, HealthStatus)
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_default_timeout_is_one_second(
         self,
         polaris_plugin: PolarisCatalogPlugin,
@@ -223,7 +214,6 @@ class TestHealthCheckTimeout:
         assert timeout_param is not None
         assert timeout_param.default == 1.0
 
-    @pytest.mark.requirement("SC-007")
     def test_health_check_respects_timeout(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -246,7 +236,6 @@ class TestHealthCheckTimeout:
         # Should have returned before the 2 second operation completed
         assert elapsed < 1.5, f"Timeout not respected: took {elapsed:.2f}s"
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_timeout_includes_in_details(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -266,7 +255,6 @@ class TestHealthCheckTimeout:
 class TestHealthCheckTimestamp:
     """Tests for timestamp in health_check()."""
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_includes_checked_at_timestamp(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -286,7 +274,6 @@ class TestHealthCheckTimestamp:
 
         assert before <= checked_at <= after
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_timestamp_is_utc(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -313,7 +300,6 @@ class TestHealthCheckTimestamp:
 class TestHealthCheckNotConnected:
     """Tests for health_check when plugin is not connected."""
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_not_connected_returns_unhealthy(
         self,
         polaris_plugin: PolarisCatalogPlugin,
@@ -325,7 +311,6 @@ class TestHealthCheckNotConnected:
         assert result.state == HealthState.UNHEALTHY
         assert "not connected" in result.message.lower() or "connect" in result.message.lower()
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_not_connected_does_not_raise(
         self,
         polaris_plugin: PolarisCatalogPlugin,
@@ -341,7 +326,6 @@ class TestHealthCheckNotConnected:
 class TestHealthCheckOTelTracing:
     """Tests for OpenTelemetry tracing in health_check()."""
 
-    @pytest.mark.requirement("FR-030")
     def test_health_check_emits_otel_span(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -358,7 +342,6 @@ class TestHealthCheckOTelTracing:
             call_args = mock_span.call_args
             assert "health_check" in str(call_args)
 
-    @pytest.mark.requirement("FR-031")
     def test_health_check_span_includes_duration(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -375,7 +358,6 @@ class TestHealthCheckOTelTracing:
             # The span context manager should be used
             assert mock_span.called
 
-    @pytest.mark.requirement("FR-031")
     def test_health_check_span_includes_status(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -397,7 +379,6 @@ class TestHealthCheckOTelTracing:
 class TestHealthCheckLogging:
     """Tests for logging in health_check()."""
 
-    @pytest.mark.requirement("FR-029")
     def test_health_check_logs_operation(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -410,7 +391,6 @@ class TestHealthCheckLogging:
             # Should log the health check operation
             assert mock_logger.bind.called or mock_logger.info.called or mock_logger.debug.called
 
-    @pytest.mark.requirement("FR-029")
     def test_health_check_logs_failure(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -433,7 +413,6 @@ class TestHealthCheckLogging:
 class TestHealthCheckEdgeCases:
     """Tests for edge cases in health_check()."""
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_handles_empty_namespace_list(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -447,7 +426,6 @@ class TestHealthCheckEdgeCases:
         # Empty catalog is still healthy (catalog is reachable)
         assert result.state == HealthState.HEALTHY
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_handles_network_error(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -463,7 +441,6 @@ class TestHealthCheckEdgeCases:
         assert result.state == HealthState.UNHEALTHY
         assert "unreachable" in result.message.lower() or len(result.message) > 0
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_handles_auth_error(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -479,7 +456,6 @@ class TestHealthCheckEdgeCases:
         # Auth failures should be reported as UNHEALTHY or DEGRADED
         assert result.state in (HealthState.UNHEALTHY, HealthState.DEGRADED)
 
-    @pytest.mark.requirement("FR-028")
     def test_health_check_returns_quickly_when_healthy(
         self,
         connected_plugin: PolarisCatalogPlugin,
