@@ -25,8 +25,8 @@ cd floe
 # Install dependencies
 uv sync
 
-# Install git hooks
-make hooks
+# Install git hooks (runs both bd and pre-commit)
+make setup-hooks
 
 # Run quality checks
 make check

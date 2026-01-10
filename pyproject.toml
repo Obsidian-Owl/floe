@@ -26,10 +26,13 @@ dependencies = [
     # Telemetry backend plugins (for entry point discovery in tests)
     "floe-telemetry-console",
     "floe-telemetry-jaeger",
+    # Include floe-compute-duckdb for development
+    "floe-compute-duckdb",
 ]
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
+floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
 floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
 

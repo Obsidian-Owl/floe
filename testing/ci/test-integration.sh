@@ -70,7 +70,7 @@ for pkg_dir in packages/*/; do
     fi
 done
 
-# Also check plugin packages
+# Also check for plugin integration tests
 for plugin_dir in plugins/*/; do
     integration_test_dir="${plugin_dir}tests/integration"
     if [[ -d "${integration_test_dir}" ]]; then
