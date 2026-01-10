@@ -94,7 +94,12 @@ create_cluster() {
         log_info "Cluster created successfully"
     fi
 
-    # Set kubectl context
+    # Export kubeconfig to ensure ~/.kube/config is up to date
+    # This is idempotent and ensures Lens/other tools can see the cluster
+    log_info "Exporting kubeconfig for kind-${CLUSTER_NAME}..."
+    kind export kubeconfig --name "${CLUSTER_NAME}"
+
+    # Verify context is set
     kubectl config use-context "kind-${CLUSTER_NAME}"
 }
 
