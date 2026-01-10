@@ -33,6 +33,7 @@ testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
     "plugins/floe-catalog-polaris/src",
+    ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

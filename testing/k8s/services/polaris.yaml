@@ -74,6 +74,11 @@ spec:
               value: http://minio:9000
             - name: CATALOG_S3_PATH_STYLE_ACCESS
               value: "true"
+            # Bootstrap credentials for testing
+            # Format: realm,client_id,client_secret
+            # WARNING: These are test-only credentials, never use in production
+            - name: POLARIS_BOOTSTRAP_CREDENTIALS
+              value: "POLARIS,test-admin,test-secret"
           volumeMounts:
             - name: config
               mountPath: /opt/polaris/etc

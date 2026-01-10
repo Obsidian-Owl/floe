@@ -31,6 +31,7 @@ from testing.fixtures.services import (
     ServiceUnavailableError,
     check_infrastructure,
     check_service_health,
+    get_effective_host,
 )
 
 
@@ -185,26 +186,28 @@ class IntegrationTestBase:
         service_name: str,
         namespace: str | None = None,
     ) -> str:
-        """Get K8s DNS hostname for a service.
+        """Get effective hostname for a service.
 
-        Constructs the fully-qualified K8s DNS name for a service. This is
-        useful for connecting to services in tests without hardcoding hostnames.
+        Returns the effective hostname for connecting to a service. When running
+        on the host (outside K8s), returns localhost. When running inside K8s,
+        returns the K8s DNS name.
 
         Args:
             service_name: Name of the K8s service (e.g., "polaris", "postgres").
             namespace: K8s namespace. Defaults to self.namespace.
 
         Returns:
-            K8s DNS hostname like 'polaris.floe-test.svc.cluster.local'.
+            Effective hostname (e.g., "localhost" or K8s DNS name).
 
         Example:
             def test_with_polaris(self) -> None:
                 host = self.get_service_host("polaris")
-                # Returns: "polaris.floe-test.svc.cluster.local"
+                # Returns: "localhost" when running on host with Kind
+                # Returns: "polaris.floe-test.svc.cluster.local" when in K8s
                 catalog_uri = f"http://{host}:8181/api/catalog"
         """
         effective_namespace = namespace or self.namespace
-        return f"{service_name}.{effective_namespace}.svc.cluster.local"
+        return get_effective_host(service_name, effective_namespace)
 
     def _cleanup_namespace(self, namespace: str) -> None:
         """Clean up a K8s namespace created during testing.

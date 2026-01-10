@@ -120,6 +120,7 @@ from testing.fixtures.services import (
     ServiceUnavailableError,
     check_infrastructure,
     check_service_health,
+    get_effective_host,
 )
 
 __all__ = [
@@ -150,6 +151,7 @@ __all__ = [
     "ServiceUnavailableError",
     "check_infrastructure",
     "check_service_health",
+    "get_effective_host",
     # PostgreSQL fixtures
     "PostgresConfig",
     "PostgresConnectionError",

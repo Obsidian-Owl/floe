@@ -200,6 +200,22 @@ wait_for_services() {
     log_info "All services deployed"
 }
 
+# Initialize Polaris catalog
+init_polaris() {
+    log_info "Initializing Polaris catalog..."
+
+    if [[ -x "${SCRIPT_DIR}/scripts/init-polaris.sh" ]]; then
+        # Run the init script (connects via localhost NodePort)
+        if "${SCRIPT_DIR}/scripts/init-polaris.sh"; then
+            log_info "Polaris initialization complete"
+        else
+            log_warn "Polaris initialization failed, tests may not work"
+        fi
+    else
+        log_warn "init-polaris.sh not found or not executable"
+    fi
+}
+
 # Print cluster info
 print_info() {
     log_info "Cluster is ready!"
@@ -238,6 +254,7 @@ main() {
     deploy_metrics_server
     deploy_services
     wait_for_services
+    init_polaris
     deploy_monitoring_stack
     print_info
 }
