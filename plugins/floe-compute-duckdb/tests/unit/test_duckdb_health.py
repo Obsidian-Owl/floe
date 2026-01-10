@@ -153,9 +153,7 @@ class TestValidateConnectionStatus:
         assert ":memory:" in result.message or "DuckDB" in result.message
 
     @pytest.mark.requirement("001-FR-018")
-    def test_validate_connection_unhealthy_on_error(
-        self, plugin: DuckDBComputePlugin
-    ) -> None:
+    def test_validate_connection_unhealthy_on_error(self, plugin: DuckDBComputePlugin) -> None:
         """Test validate_connection returns UNHEALTHY on error."""
         mock_duckdb = MagicMock()
         mock_duckdb.connect.side_effect = Exception("Connection failed")
@@ -175,6 +173,7 @@ class TestValidateConnectionStatus:
         self, plugin: DuckDBComputePlugin
     ) -> None:
         """Test validate_connection measures latency even on error."""
+
         def delayed_error(*args: Any, **kwargs: Any) -> None:
             raise Exception("Connection failed")
 

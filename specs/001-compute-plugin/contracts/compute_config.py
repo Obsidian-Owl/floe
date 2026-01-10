@@ -5,6 +5,7 @@ These models are the data contracts between manifest.yaml and ComputePlugin.
 
 Location: packages/floe-core/src/floe_core/compute_config.py
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -86,12 +87,8 @@ class ResourceSpec(BaseModel):
     cpu_limit: str = Field(default="1000m", description="CPU limit (K8s format)")
     memory_request: str = Field(default="256Mi", description="Memory request (K8s format)")
     memory_limit: str = Field(default="1Gi", description="Memory limit (K8s format)")
-    ephemeral_storage_request: str = Field(
-        default="100Mi", description="Ephemeral storage request"
-    )
-    ephemeral_storage_limit: str = Field(
-        default="1Gi", description="Ephemeral storage limit"
-    )
+    ephemeral_storage_request: str = Field(default="100Mi", description="Ephemeral storage request")
+    ephemeral_storage_limit: str = Field(default="1Gi", description="Ephemeral storage limit")
 
 
 # Workload size presets
@@ -183,9 +180,7 @@ class AttachConfig(BaseModel):
     path: str = Field(..., description="Attach path (e.g., 'iceberg:catalog_name')")
     alias: str = Field(..., description="Database alias in DuckDB")
     type: str = Field(default="iceberg", description="Attachment type")
-    options: dict[str, str] = Field(
-        default_factory=dict, description="Additional options"
-    )
+    options: dict[str, str] = Field(default_factory=dict, description="Additional options")
 
 
 class DuckDBConfig(ComputeConfig):
@@ -212,9 +207,7 @@ class DuckDBConfig(ComputeConfig):
     plugin: Literal["duckdb"] = "duckdb"
     path: str = Field(default=":memory:", description="Database path")
     memory_limit: str = Field(default="4GB", description="Maximum memory for DuckDB")
-    extensions: list[str] = Field(
-        default_factory=list, description="Extensions to load"
-    )
+    extensions: list[str] = Field(default_factory=list, description="Extensions to load")
     attach: list[AttachConfig] = Field(
         default_factory=list, description="Iceberg catalogs to attach"
     )

@@ -213,8 +213,7 @@ class ComputeRegistry:
                 approved=self._approved,
             )
             raise ComputeConfigurationError(
-                f"Compute '{name}' is not in the approved list. "
-                f"Allowed computes: {self._approved}",
+                f"Compute '{name}' is not in the approved list. Allowed computes: {self._approved}",
                 plugin_name=name,
             )
 

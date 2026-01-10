@@ -121,9 +121,7 @@ class ResourceSpec(BaseModel):
     cpu_limit: str = Field(default="1000m", description="CPU limit (K8s format)")
     memory_request: str = Field(default="256Mi", description="Memory request (K8s format)")
     memory_limit: str = Field(default="1Gi", description="Memory limit (K8s format)")
-    ephemeral_storage_request: str = Field(
-        default="100Mi", description="Ephemeral storage request"
-    )
+    ephemeral_storage_request: str = Field(default="100Mi", description="Ephemeral storage request")
     ephemeral_storage_limit: str = Field(default="1Gi", description="Ephemeral storage limit")
 
 

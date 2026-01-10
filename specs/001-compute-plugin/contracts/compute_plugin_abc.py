@@ -5,6 +5,7 @@ All compute plugin implementations MUST implement these abstract methods.
 
 Location: packages/floe-core/src/floe_core/compute_plugin.py
 """
+
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -145,9 +146,7 @@ class ComputePlugin(PluginMetadata):
         ...
 
     @abstractmethod
-    def get_catalog_attachment_sql(
-        self, catalog_config: CatalogConfig
-    ) -> list[str] | None:
+    def get_catalog_attachment_sql(self, catalog_config: CatalogConfig) -> list[str] | None:
         """Return SQL statements to attach compute engine to Iceberg catalog.
 
         For compute engines that support direct Iceberg catalog attachment

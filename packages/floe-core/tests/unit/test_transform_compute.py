@@ -199,9 +199,7 @@ class TestDefaultComputeInheritance:
             TransformConfig(name="model_d", compute="snowflake"),  # Explicit
         ]
 
-        resolved = [
-            compute_registry.validate_selection(t.compute) for t in transforms
-        ]
+        resolved = [compute_registry.validate_selection(t.compute) for t in transforms]
 
         assert resolved == ["duckdb", "spark", "duckdb", "snowflake"]
 
