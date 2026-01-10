@@ -18,9 +18,12 @@ See Also:
 
 from __future__ import annotations
 
+import logging
+import sys
 from collections.abc import MutableMapping
 from typing import Any
 
+import structlog
 from opentelemetry import trace
 from opentelemetry.trace import INVALID_SPAN_ID, INVALID_TRACE_ID
 
@@ -77,6 +80,7 @@ def configure_logging(
 
     Args:
         log_level: The minimum log level to emit (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+            Case-insensitive.
         json_output: If True, output logs as JSON. If False, use console format.
 
     Examples:
@@ -84,9 +88,37 @@ def configure_logging(
         >>> log = structlog.get_logger()
         >>> log.info("configured")  # JSON output with trace context
     """
-    # TODO: T062 - Implement configure_logging
-    # This stub exists to enable TDD - tests should fail until T062 implementation
-    raise NotImplementedError("configure_logging not yet implemented (T062)")
+    # Normalize log level to uppercase for Python logging module
+    normalized_level = log_level.upper()
+
+    # Configure Python stdlib logging
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=getattr(logging, normalized_level, logging.INFO),
+    )
+
+    # Build processor chain
+    processors: list[structlog.typing.Processor] = [
+        structlog.stdlib.add_log_level,
+        add_trace_context,
+        structlog.processors.TimeStamper(fmt="iso"),
+    ]
+
+    # Choose renderer based on json_output
+    if json_output:
+        processors.append(structlog.processors.JSONRenderer())
+    else:
+        processors.append(structlog.dev.ConsoleRenderer())
+
+    # Configure structlog with trace context injection
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
 
 
 __all__ = [
