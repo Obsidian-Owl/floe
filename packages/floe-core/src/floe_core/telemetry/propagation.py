@@ -216,9 +216,7 @@ def set_floe_baggage(
     if product_name is not None:
         result_ctx = baggage.set_baggage(BAGGAGE_PRODUCT_NAME, product_name, result_ctx)
     if product_version is not None:
-        result_ctx = baggage.set_baggage(
-            BAGGAGE_PRODUCT_VERSION, product_version, result_ctx
-        )
+        result_ctx = baggage.set_baggage(BAGGAGE_PRODUCT_VERSION, product_version, result_ctx)
     if mode is not None:
         result_ctx = baggage.set_baggage(BAGGAGE_MODE, mode, result_ctx)
 

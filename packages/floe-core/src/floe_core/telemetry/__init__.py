@@ -59,9 +59,6 @@ from floe_core.telemetry.conventions import (
     FloeSpanAttributes,
 )
 
-# Provider
-from floe_core.telemetry.provider import ProviderState, TelemetryProvider
-
 # Propagation utilities
 from floe_core.telemetry.propagation import (
     BAGGAGE_MODE,
@@ -83,6 +80,9 @@ from floe_core.telemetry.propagation import (
     set_baggage_value,
     set_floe_baggage,
 )
+
+# Provider
+from floe_core.telemetry.provider import ProviderState, TelemetryProvider
 
 # Tracing utilities
 from floe_core.telemetry.tracing import create_span, get_tracer, set_tracer, traced

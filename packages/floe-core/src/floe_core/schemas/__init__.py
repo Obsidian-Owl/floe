@@ -40,6 +40,16 @@ See Also:
 
 from __future__ import annotations
 
+# CompiledArtifacts models (T076)
+from floe_core.schemas.compiled_artifacts import (
+    CompilationMetadata,
+    CompiledArtifacts,
+    DeploymentMode,
+    ManifestRef,
+    ObservabilityConfig,
+    ProductIdentity,
+)
+
 # Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
     FIELD_MERGE_STRATEGIES,
@@ -101,16 +111,6 @@ from floe_core.schemas.validation import (
     InheritanceError,
     SecurityPolicyViolationError,
     validate_security_policy_not_weakened,
-)
-
-# CompiledArtifacts models (T076)
-from floe_core.schemas.compiled_artifacts import (
-    CompiledArtifacts,
-    CompilationMetadata,
-    DeploymentMode,
-    ManifestRef,
-    ObservabilityConfig,
-    ProductIdentity,
 )
 
 __all__: list[str] = [

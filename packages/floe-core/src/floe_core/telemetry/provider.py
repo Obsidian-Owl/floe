@@ -91,8 +91,7 @@ def load_telemetry_backend(backend_name: str) -> TelemetryBackendPlugin:
 
     available = [ep.name for ep in eps]
     raise ValueError(
-        f"Telemetry backend '{backend_name}' not found. "
-        f"Available backends: {available}"
+        f"Telemetry backend '{backend_name}' not found. Available backends: {available}"
     )
 
 
@@ -295,9 +294,7 @@ class TelemetryProvider:
         )
 
         # Log backend plugin info
-        backend_name = (
-            self._backend_plugin.name if self._backend_plugin else "none"
-        )
+        backend_name = self._backend_plugin.name if self._backend_plugin else "none"
 
         logger.info(
             "TelemetryProvider initialized",
@@ -377,9 +374,7 @@ class TelemetryProvider:
         metric_endpoint = self._config.otlp_endpoint
 
         # For HTTP protocol, append /v1/metrics if not already present
-        if self._config.otlp_protocol == "http" and not metric_endpoint.endswith(
-            "/v1/metrics"
-        ):
+        if self._config.otlp_protocol == "http" and not metric_endpoint.endswith("/v1/metrics"):
             # Replace /v1/traces with /v1/metrics or append
             if metric_endpoint.endswith("/v1/traces"):
                 metric_endpoint = metric_endpoint.rsplit("/v1/traces", 1)[0]

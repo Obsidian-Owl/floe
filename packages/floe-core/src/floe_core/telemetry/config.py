@@ -270,7 +270,9 @@ class LoggingConfig(BaseModel):
     )
     json_output: bool = Field(
         default_factory=_get_default_json_output,
-        description="Output format - JSON (True) or console (False). Override with FLOE_LOG_JSON env var.",
+        description=(
+            "Output format - JSON (True) or console (False). Override with FLOE_LOG_JSON env var."
+        ),
     )
 
 

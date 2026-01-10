@@ -118,9 +118,7 @@ class TestOTLPGrpcExporterConfiguration:
             otlp_protocol="grpc",
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPSpanExporter"
-        ) as mock_grpc_exporter:
+        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_grpc_exporter:
             mock_grpc_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -146,9 +144,7 @@ class TestOTLPGrpcExporterConfiguration:
             otlp_protocol="grpc",
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPSpanExporter"
-        ) as mock_grpc_exporter:
+        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_grpc_exporter:
             mock_grpc_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -202,9 +198,7 @@ class TestOTLPHttpExporterConfiguration:
             otlp_protocol="http",
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPHttpSpanExporter"
-        ) as mock_http_exporter:
+        with patch("floe_core.telemetry.provider.OTLPHttpSpanExporter") as mock_http_exporter:
             mock_http_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -230,9 +224,7 @@ class TestOTLPHttpExporterConfiguration:
             otlp_protocol="http",
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPHttpSpanExporter"
-        ) as mock_http_exporter:
+        with patch("floe_core.telemetry.provider.OTLPHttpSpanExporter") as mock_http_exporter:
             mock_http_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -274,9 +266,7 @@ class TestOTLPAuthenticationConfiguration:
             authentication=auth,
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPSpanExporter"
-        ) as mock_exporter:
+        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_exporter:
             mock_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -309,9 +299,7 @@ class TestOTLPAuthenticationConfiguration:
             authentication=auth,
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPSpanExporter"
-        ) as mock_exporter:
+        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_exporter:
             mock_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -336,9 +324,7 @@ class TestOTLPAuthenticationConfiguration:
             authentication=None,
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPSpanExporter"
-        ) as mock_exporter:
+        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_exporter:
             mock_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -367,9 +353,7 @@ class TestOTLPAuthenticationConfiguration:
             authentication=auth,
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPHttpSpanExporter"
-        ) as mock_exporter:
+        with patch("floe_core.telemetry.provider.OTLPHttpSpanExporter") as mock_exporter:
             mock_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -401,9 +385,7 @@ class TestBatchSpanProcessorConfiguration:
             resource_attributes=create_resource_attributes(),
         )
 
-        with patch(
-            "floe_core.telemetry.provider.BatchSpanProcessor"
-        ) as mock_processor:
+        with patch("floe_core.telemetry.provider.BatchSpanProcessor") as mock_processor:
             with patch("floe_core.telemetry.provider.OTLPSpanExporter"):
                 mock_processor.return_value = MagicMock()
                 provider = TelemetryProvider(config)
@@ -437,9 +419,7 @@ class TestBatchSpanProcessorConfiguration:
             batch_processor=batch_config,
         )
 
-        with patch(
-            "floe_core.telemetry.provider.BatchSpanProcessor"
-        ) as mock_processor:
+        with patch("floe_core.telemetry.provider.BatchSpanProcessor") as mock_processor:
             with patch("floe_core.telemetry.provider.OTLPSpanExporter"):
                 mock_processor.return_value = MagicMock()
                 provider = TelemetryProvider(config)
@@ -470,9 +450,7 @@ class TestBatchSpanProcessorConfiguration:
             "floe_core.telemetry.provider.OTLPSpanExporter",
             return_value=mock_exporter,
         ):
-            with patch(
-                "floe_core.telemetry.provider.BatchSpanProcessor"
-            ) as mock_processor:
+            with patch("floe_core.telemetry.provider.BatchSpanProcessor") as mock_processor:
                 mock_processor.return_value = MagicMock()
                 provider = TelemetryProvider(config)
                 provider.initialize()
@@ -627,9 +605,7 @@ class TestResourceAttributesOnExport:
 
         with patch("floe_core.telemetry.provider.OTLPSpanExporter"):
             with patch("floe_core.telemetry.provider.BatchSpanProcessor"):
-                with patch(
-                    "floe_core.telemetry.provider.Resource.create"
-                ) as mock_resource:
+                with patch("floe_core.telemetry.provider.Resource.create") as mock_resource:
                     mock_resource.return_value = MagicMock()
                     provider = TelemetryProvider(config)
                     provider.initialize()
@@ -667,9 +643,7 @@ class TestNoOpModeExport:
             enabled=False,
         )
 
-        with patch(
-            "floe_core.telemetry.provider.OTLPSpanExporter"
-        ) as mock_exporter:
+        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_exporter:
             provider = TelemetryProvider(config)
             provider.initialize()
 
@@ -699,9 +673,7 @@ class TestNoOpModeExport:
         os.environ["OTEL_SDK_DISABLED"] = "true"
 
         try:
-            with patch(
-                "floe_core.telemetry.provider.OTLPSpanExporter"
-            ) as mock_exporter:
+            with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_exporter:
                 provider = TelemetryProvider(config)
                 provider.initialize()
 
@@ -752,9 +724,7 @@ class TestRealSpanExportWithInMemory:
     @pytest.mark.requirement("FR-026")
     def test_spans_exported_to_memory_exporter(
         self,
-        otel_provider_with_memory_exporter: tuple[
-            TracerProvider, InMemorySpanExporter
-        ],
+        otel_provider_with_memory_exporter: tuple[TracerProvider, InMemorySpanExporter],
     ) -> None:
         """Test spans are exported to InMemorySpanExporter.
 
@@ -777,9 +747,7 @@ class TestRealSpanExportWithInMemory:
     @pytest.mark.requirement("FR-024")
     def test_multiple_spans_exported_in_order(
         self,
-        otel_provider_with_memory_exporter: tuple[
-            TracerProvider, InMemorySpanExporter
-        ],
+        otel_provider_with_memory_exporter: tuple[TracerProvider, InMemorySpanExporter],
     ) -> None:
         """Test multiple spans are exported in creation order."""
         provider, exporter = otel_provider_with_memory_exporter
@@ -803,9 +771,7 @@ class TestRealSpanExportWithInMemory:
     @pytest.mark.requirement("FR-026")
     def test_nested_spans_exported_with_hierarchy(
         self,
-        otel_provider_with_memory_exporter: tuple[
-            TracerProvider, InMemorySpanExporter
-        ],
+        otel_provider_with_memory_exporter: tuple[TracerProvider, InMemorySpanExporter],
     ) -> None:
         """Test nested spans maintain parent-child relationship."""
         provider, exporter = otel_provider_with_memory_exporter

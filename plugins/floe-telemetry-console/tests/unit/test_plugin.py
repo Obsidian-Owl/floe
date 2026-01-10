@@ -237,6 +237,7 @@ class TestConsoleTelemetryPluginLifecycle:
     def test_health_check_returns_health_status(self) -> None:
         """Test that health_check returns a HealthStatus."""
         from floe_core.plugin_metadata import HealthStatus
+
         from floe_telemetry_console import ConsoleTelemetryPlugin
 
         plugin = ConsoleTelemetryPlugin()
@@ -247,6 +248,7 @@ class TestConsoleTelemetryPluginLifecycle:
     def test_health_check_healthy_after_startup(self) -> None:
         """Test that health_check returns HEALTHY state after startup."""
         from floe_core.plugin_metadata import HealthState
+
         from floe_telemetry_console import ConsoleTelemetryPlugin
 
         plugin = ConsoleTelemetryPlugin()

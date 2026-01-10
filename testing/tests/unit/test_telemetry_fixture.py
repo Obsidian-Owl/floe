@@ -241,9 +241,7 @@ class TestJaegerClient:
         mock_requests = MagicMock()
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": [{"traceID": "abc123", "spans": []}]
-        }
+        mock_response.json.return_value = {"data": [{"traceID": "abc123", "spans": []}]}
         mock_requests.get.return_value = mock_response
 
         with patch.dict("sys.modules", {"requests": mock_requests}):

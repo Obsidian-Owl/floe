@@ -27,8 +27,8 @@ def reset_otel_global_state() -> Generator[None, None, None]:
         None after resetting state.
     """
     from opentelemetry import metrics, trace
-    from opentelemetry.trace import ProxyTracerProvider
     from opentelemetry.metrics._internal import _ProxyMeterProvider
+    from opentelemetry.trace import ProxyTracerProvider
 
     # Reset before test
     trace._TRACER_PROVIDER_SET_ONCE._done = False

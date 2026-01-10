@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from floe_core.telemetry.tracing import create_span, traced
 
 

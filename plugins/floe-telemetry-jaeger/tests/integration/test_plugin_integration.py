@@ -18,7 +18,6 @@ import os
 from typing import TYPE_CHECKING, Any
 
 import pytest
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:

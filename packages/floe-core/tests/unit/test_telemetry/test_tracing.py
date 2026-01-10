@@ -1,7 +1,8 @@
 """Unit tests for OpenTelemetry tracing utilities.
 
 Tests cover:
-- T024: @traced decorator functionality (TestTracedDecorator, TestTracedDecoratorMethods, TestTracedDecoratorPreservesFunctionMetadata)
+- T024: @traced decorator functionality (TestTracedDecorator, TestTracedDecoratorMethods,
+        TestTracedDecoratorPreservesFunctionMetadata)
 - T025: create_span() context manager (TestCreateSpanContextManager)
 - T027: Error recording on spans (covered in both T024 and T025 test classes)
 - T033: Floe semantic attribute injection (TestFloeAttributeInjection)
@@ -34,9 +35,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def tracer_provider_with_exporter() -> (
-    Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]
-):
+def tracer_provider_with_exporter() -> Generator[
+    tuple[TracerProvider, InMemorySpanExporter], None, None
+]:
     """Create a TracerProvider with InMemorySpanExporter for testing.
 
     Injects the tracer into the tracing module for testing purposes.
@@ -186,9 +187,7 @@ class TestTracedDecorator:
         # Exception should be recorded as event
         events = span.events
         assert len(events) >= 1
-        exception_event = next(
-            (e for e in events if e.name == "exception"), None
-        )
+        exception_event = next((e for e in events if e.name == "exception"), None)
         assert exception_event is not None
 
     @pytest.mark.requirement("FR-022")
@@ -520,9 +519,7 @@ class TestCreateSpanContextManager:
         # Exception should be recorded as event
         events = span.events
         assert len(events) >= 1
-        exception_event = next(
-            (e for e in events if e.name == "exception"), None
-        )
+        exception_event = next((e for e in events if e.name == "exception"), None)
         assert exception_event is not None
 
     @pytest.mark.requirement("FR-022")

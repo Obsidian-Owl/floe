@@ -50,6 +50,9 @@ __version__ = "0.1.0"
 # Schemas submodule (imported for explicit re-export)
 from floe_core import schemas as schemas  # noqa: PLC0414
 
+# Telemetry submodule (explicit re-export)
+from floe_core import telemetry as telemetry  # noqa: PLC0414
+
 # Compiler functions
 from floe_core.compiler import (
     EnvironmentParityError,
@@ -136,23 +139,20 @@ from floe_core.plugins import (
     TelemetryBackendPlugin,
 )
 
+# Telemetry public API (convenience imports)
+from floe_core.telemetry import (
+    ProviderState,
+    ResourceAttributes,
+    SamplingConfig,
+    TelemetryConfig,
+    TelemetryProvider,
+)
+
 # Version compatibility
 from floe_core.version_compat import (
     FLOE_PLUGIN_API_MIN_VERSION,
     FLOE_PLUGIN_API_VERSION,
     is_compatible,
-)
-
-# Telemetry submodule (explicit re-export)
-from floe_core import telemetry as telemetry  # noqa: PLC0414
-
-# Telemetry public API (convenience imports)
-from floe_core.telemetry import (
-    TelemetryConfig,
-    TelemetryProvider,
-    ResourceAttributes,
-    SamplingConfig,
-    ProviderState,
 )
 
 __all__: list[str] = [

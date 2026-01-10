@@ -267,9 +267,7 @@ class TestTelemetryProviderNoopModeEnvVar:
     Validates the provider correctly detects and handles no-op mode.
     """
 
-    def test_otel_sdk_disabled_true_enables_noop(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_true_enables_noop(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED=true enables no-op mode."""
         os.environ["OTEL_SDK_DISABLED"] = "true"
         try:
@@ -278,9 +276,7 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    def test_otel_sdk_disabled_one_enables_noop(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_one_enables_noop(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED=1 enables no-op mode."""
         os.environ["OTEL_SDK_DISABLED"] = "1"
         try:
@@ -289,9 +285,7 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    def test_otel_sdk_disabled_yes_enables_noop(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_yes_enables_noop(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED=yes enables no-op mode."""
         os.environ["OTEL_SDK_DISABLED"] = "yes"
         try:
@@ -300,9 +294,7 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    def test_otel_sdk_disabled_case_insensitive(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_case_insensitive(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED is case-insensitive."""
         os.environ["OTEL_SDK_DISABLED"] = "TRUE"
         try:
@@ -394,9 +386,7 @@ class TestTelemetryProviderNoopModeBehavior:
             assert p.is_noop is True
         assert provider.state == ProviderState.SHUTDOWN
 
-    def test_noop_mode_env_var_takes_precedence(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_noop_mode_env_var_takes_precedence(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED takes precedence over config.enabled."""
         os.environ["OTEL_SDK_DISABLED"] = "true"
         try:
@@ -544,9 +534,7 @@ class TestOTLPGrpcExporterSetup:
         assert provider.state == ProviderState.INITIALIZED
         provider.shutdown()
 
-    def test_grpc_default_port_4317(
-        self, clean_env: None
-    ) -> None:
+    def test_grpc_default_port_4317(self, clean_env: None) -> None:
         """Test that gRPC uses default port 4317 per OTel convention."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -565,9 +553,7 @@ class TestOTLPGrpcExporterSetup:
         # Default endpoint has 4317
         assert "4317" in config.otlp_endpoint
 
-    def test_grpc_custom_endpoint(
-        self, clean_env: None
-    ) -> None:
+    def test_grpc_custom_endpoint(self, clean_env: None) -> None:
         """Test that gRPC accepts custom endpoint."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -592,9 +578,7 @@ class TestOTLPGrpcExporterSetup:
         # TelemetryConfig default should be grpc
         assert telemetry_config.otlp_protocol == "grpc"
 
-    def test_grpc_config_with_batch_processor_settings(
-        self, clean_env: None
-    ) -> None:
+    def test_grpc_config_with_batch_processor_settings(self, clean_env: None) -> None:
         """Test that gRPC config can include BatchSpanProcessor settings."""
         from floe_core.telemetry import BatchSpanProcessorConfig
 
@@ -624,9 +608,7 @@ class TestOTLPGrpcExporterSetup:
         assert config.batch_processor.max_export_batch_size == 1024
         assert config.batch_processor.schedule_delay_millis == 2000
 
-    def test_grpc_provider_uses_batch_processor_config(
-        self, clean_env: None
-    ) -> None:
+    def test_grpc_provider_uses_batch_processor_config(self, clean_env: None) -> None:
         """Test that TelemetryProvider uses BatchSpanProcessor config on init."""
         from floe_core.telemetry import BatchSpanProcessorConfig
 
@@ -720,9 +702,7 @@ class TestOTLPHttpExporterSetup:
         assert provider.state == ProviderState.INITIALIZED
         provider.shutdown()
 
-    def test_http_custom_endpoint_port_4318(
-        self, clean_env: None
-    ) -> None:
+    def test_http_custom_endpoint_port_4318(self, clean_env: None) -> None:
         """Test that HTTP uses port 4318 per OTel convention."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -741,9 +721,7 @@ class TestOTLPHttpExporterSetup:
         )
         assert "4318" in config.otlp_endpoint
 
-    def test_http_custom_endpoint(
-        self, clean_env: None
-    ) -> None:
+    def test_http_custom_endpoint(self, clean_env: None) -> None:
         """Test that HTTP accepts custom endpoint."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -761,9 +739,7 @@ class TestOTLPHttpExporterSetup:
         )
         assert config.otlp_endpoint == "http://otel-collector.monitoring:4318"
 
-    def test_http_endpoint_with_path(
-        self, clean_env: None
-    ) -> None:
+    def test_http_endpoint_with_path(self, clean_env: None) -> None:
         """Test that HTTP endpoint can include path component."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -782,9 +758,7 @@ class TestOTLPHttpExporterSetup:
         )
         assert "/v1/traces" in config.otlp_endpoint
 
-    def test_http_protocol_is_valid_literal(
-        self, clean_env: None
-    ) -> None:
+    def test_http_protocol_is_valid_literal(self, clean_env: None) -> None:
         """Test that http is a valid protocol literal."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -802,9 +776,7 @@ class TestOTLPHttpExporterSetup:
         )
         assert config.otlp_protocol == "http"
 
-    def test_invalid_protocol_rejected(
-        self, clean_env: None
-    ) -> None:
+    def test_invalid_protocol_rejected(self, clean_env: None) -> None:
         """Test that invalid protocol is rejected."""
         from pydantic import ValidationError
 
@@ -823,9 +795,7 @@ class TestOTLPHttpExporterSetup:
                 otlp_protocol="invalid",  # type: ignore[arg-type]
             )
 
-    def test_http_config_with_batch_processor_settings(
-        self, clean_env: None
-    ) -> None:
+    def test_http_config_with_batch_processor_settings(self, clean_env: None) -> None:
         """Test that HTTP config can include BatchSpanProcessor settings."""
         from floe_core.telemetry import BatchSpanProcessorConfig
 
@@ -855,9 +825,7 @@ class TestOTLPHttpExporterSetup:
         assert config.batch_processor.max_export_batch_size == 1024
         assert config.batch_processor.schedule_delay_millis == 2000
 
-    def test_http_provider_uses_batch_processor_config(
-        self, clean_env: None
-    ) -> None:
+    def test_http_provider_uses_batch_processor_config(self, clean_env: None) -> None:
         """Test that TelemetryProvider with HTTP uses BatchSpanProcessor config."""
         from floe_core.telemetry import BatchSpanProcessorConfig
 
@@ -959,9 +927,7 @@ class TestTelemetryProviderAuthHeaderInjection:
         assert headers is not None
         assert headers == {"Authorization": "Bearer my-bearer-token"}
 
-    def test_build_auth_headers_returns_none_when_no_auth(
-        self, clean_env: None
-    ) -> None:
+    def test_build_auth_headers_returns_none_when_no_auth(self, clean_env: None) -> None:
         """Test _build_auth_headers returns None when no auth configured."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -1442,7 +1408,7 @@ class TestTelemetryProviderGracefulDegradation:
         from opentelemetry import trace
 
         with pytest.raises(ValueError, match="Application error"):
-            with TelemetryProvider(telemetry_config) as provider:
+            with TelemetryProvider(telemetry_config):
                 tracer = trace.get_tracer(__name__)
 
                 with tracer.start_as_current_span("app-error-span"):
@@ -1459,8 +1425,9 @@ class TestTelemetryProviderGracefulDegradation:
         BatchSpanProcessor drops spans when queue is full rather than
         growing unbounded.
         """
-        from floe_core.telemetry import BatchSpanProcessorConfig
         from opentelemetry import trace
+
+        from floe_core.telemetry import BatchSpanProcessorConfig
 
         # Use small queue to test queue-full behavior
         attrs = ResourceAttributes(

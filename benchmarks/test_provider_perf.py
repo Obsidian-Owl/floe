@@ -11,7 +11,6 @@ These benchmarks track provider startup cost for application boot time.
 from __future__ import annotations
 
 import pytest
-
 from floe_core.telemetry import ResourceAttributes, TelemetryConfig, TelemetryProvider
 
 

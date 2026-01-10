@@ -12,7 +12,6 @@ significant latency in hot paths.
 from __future__ import annotations
 
 import pytest
-
 from floe_core.telemetry.metrics import MetricRecorder
 
 

@@ -31,12 +31,11 @@ def reset_otel_global_state() -> Generator[None, None, None]:
     Yields:
         None after resetting state.
     """
+    from floe_core.telemetry.tracing import set_tracer
     from opentelemetry import metrics, trace
     from opentelemetry.metrics._internal import _ProxyMeterProvider
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.trace import ProxyTracerProvider
-
-    from floe_core.telemetry.tracing import set_tracer
 
     # Reset OTel global state
     trace._TRACER_PROVIDER_SET_ONCE._done = False

@@ -104,9 +104,7 @@ class TestW3CPropagatorSetup:
         assert hasattr(composite, "extract")
 
     @pytest.mark.requirement("FR-002")
-    def test_propagator_can_be_set_globally(
-        self, reset_propagators: None
-    ) -> None:
+    def test_propagator_can_be_set_globally(self, reset_propagators: None) -> None:
         """Test propagators can be set as global textmap."""
         from opentelemetry.propagate import set_global_textmap
 
@@ -200,9 +198,7 @@ class TestTraceContextInjectionExtraction:
     """
 
     @pytest.mark.requirement("FR-002")
-    def test_trace_context_can_be_injected(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_trace_context_can_be_injected(self, tracer_provider: TracerProvider) -> None:
         """Test trace context can be injected into a carrier."""
         propagator = TraceContextTextMapPropagator()
 
@@ -241,9 +237,7 @@ class TestTraceContextInjectionExtraction:
     def test_trace_context_can_be_extracted(self) -> None:
         """Test trace context can be extracted from carrier."""
         propagator = TraceContextTextMapPropagator()
-        carrier = {
-            "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-        }
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 
         ctx = propagator.extract(carrier)
         span_ctx = trace.get_current_span(ctx).get_span_context()
@@ -307,9 +301,7 @@ class TestTraceContextHelpers:
     """
 
     @pytest.mark.requirement("FR-002")
-    def test_get_current_span_context(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_get_current_span_context(self, tracer_provider: TracerProvider) -> None:
         """Test getting current span context from active span."""
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("test-span") as span:
@@ -327,9 +319,7 @@ class TestTraceContextHelpers:
         assert span_ctx.trace_id == 0 or not span_ctx.is_valid
 
     @pytest.mark.requirement("FR-002")
-    def test_child_span_inherits_trace_id(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_child_span_inherits_trace_id(self, tracer_provider: TracerProvider) -> None:
         """Test child span inherits parent's trace_id."""
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("parent") as parent:
@@ -339,9 +329,7 @@ class TestTraceContextHelpers:
                 assert child_trace_id == parent_trace_id
 
     @pytest.mark.requirement("FR-002")
-    def test_child_span_has_different_span_id(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_child_span_has_different_span_id(self, tracer_provider: TracerProvider) -> None:
         """Test child span has different span_id from parent."""
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("parent") as parent:

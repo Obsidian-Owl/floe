@@ -227,6 +227,7 @@ class TestJaegerTelemetryPluginLifecycle:
     def test_health_check_returns_health_status(self) -> None:
         """Test that health_check returns a HealthStatus."""
         from floe_core.plugin_metadata import HealthStatus
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -237,6 +238,7 @@ class TestJaegerTelemetryPluginLifecycle:
     def test_health_check_healthy_after_startup(self) -> None:
         """Test that health_check returns HEALTHY state after startup."""
         from floe_core.plugin_metadata import HealthState
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -253,6 +255,7 @@ class TestJaegerValidateConnection:
     def test_validate_connection_returns_false_when_unreachable(self) -> None:
         """Test validate_connection returns False when endpoint is unreachable."""
         import os
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -273,6 +276,7 @@ class TestJaegerValidateConnection:
     def test_validate_connection_returns_true_when_reachable(self) -> None:
         """Test validate_connection returns True when endpoint is reachable."""
         from unittest.mock import MagicMock, patch
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -289,6 +293,7 @@ class TestJaegerValidateConnection:
         """Test validate_connection correctly parses http:// prefixed endpoints."""
         import os
         from unittest.mock import MagicMock, patch
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -313,6 +318,7 @@ class TestJaegerValidateConnection:
         """Test validate_connection correctly parses https:// prefixed endpoints."""
         import os
         from unittest.mock import MagicMock, patch
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -336,6 +342,7 @@ class TestJaegerValidateConnection:
         """Test validate_connection uses port 4317 when not specified."""
         import os
         from unittest.mock import MagicMock, patch
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()
@@ -358,6 +365,7 @@ class TestJaegerValidateConnection:
     def test_validate_connection_returns_false_for_invalid_port(self) -> None:
         """Test validate_connection returns False for invalid port format."""
         import os
+
         from floe_telemetry_jaeger import JaegerTelemetryPlugin
 
         plugin = JaegerTelemetryPlugin()

@@ -26,8 +26,9 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Callable, ParamSpec, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast, overload
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode, Tracer
@@ -83,7 +84,7 @@ def traced(
     *,
     name: str | None = None,
     attributes: dict[str, str] | None = None,
-    floe_attributes: "FloeSpanAttributes | None" = None,
+    floe_attributes: FloeSpanAttributes | None = None,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
@@ -92,7 +93,7 @@ def traced(
     *,
     name: str | None = None,
     attributes: dict[str, str] | None = None,
-    floe_attributes: "FloeSpanAttributes | None" = None,
+    floe_attributes: FloeSpanAttributes | None = None,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to trace function execution with OpenTelemetry span.
 
@@ -140,7 +141,7 @@ def traced(
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
         span_name = name if name is not None else fn.__name__
 
-        def _set_span_attributes(span: "Span") -> None:
+        def _set_span_attributes(span: Span) -> None:
             """Set all attributes on the span."""
             # Set Floe semantic attributes first (if provided)
             if floe_attributes is not None:
@@ -152,6 +153,7 @@ def traced(
                     span.set_attribute(key, value)
 
         if asyncio.iscoroutinefunction(fn):
+
             @functools.wraps(fn)
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 tracer = get_tracer()
@@ -167,6 +169,7 @@ def traced(
 
             return async_wrapper  # type: ignore[return-value]
         else:
+
             @functools.wraps(fn)
             def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 tracer = get_tracer()
@@ -194,8 +197,8 @@ def traced(
 def create_span(
     name: str,
     attributes: dict[str, Any] | None = None,
-    floe_attributes: "FloeSpanAttributes | None" = None,
-) -> "Generator[Span, None, None]":
+    floe_attributes: FloeSpanAttributes | None = None,
+) -> Generator[Span, None, None]:
     """Create a span as a context manager.
 
     Creates an OpenTelemetry span with the given name and optional attributes.
