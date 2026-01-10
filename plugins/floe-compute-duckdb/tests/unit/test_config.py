@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 class TestDuckDBConfigValidation:
     """Tests for DuckDBConfig Pydantic model validation."""
 
-    @pytest.mark.requirement("FR-005")
     def test_valid_config_minimal(self) -> None:
         """Test minimal valid DuckDBConfig with defaults."""
         config = DuckDBConfig()
@@ -35,7 +34,6 @@ class TestDuckDBConfigValidation:
         assert config.threads == 4
         assert config.timeout_seconds == 3600
 
-    @pytest.mark.requirement("FR-005")
     def test_valid_config_with_all_fields(self) -> None:
         """Test DuckDBConfig with all fields specified."""
         attach = AttachConfig(
@@ -63,19 +61,16 @@ class TestDuckDBConfigValidation:
         assert config.threads == 8
         assert config.timeout_seconds == 7200
 
-    @pytest.mark.requirement("FR-006")
     def test_valid_memory_limit_gigabytes(self) -> None:
         """Test valid memory_limit with GB suffix."""
         config = DuckDBConfig(memory_limit="16GB")
         assert config.memory_limit == "16GB"
 
-    @pytest.mark.requirement("FR-006")
     def test_valid_memory_limit_megabytes(self) -> None:
         """Test valid memory_limit with MB suffix."""
         config = DuckDBConfig(memory_limit="512MB")
         assert config.memory_limit == "512MB"
 
-    @pytest.mark.requirement("FR-006")
     def test_invalid_memory_limit_no_unit(self) -> None:
         """Test memory_limit without unit suffix is rejected."""
         with pytest.raises(ValidationError) as exc_info:
@@ -85,7 +80,6 @@ class TestDuckDBConfigValidation:
         assert len(errors) == 1
         assert "memory_limit must end with GB or MB" in errors[0]["msg"]
 
-    @pytest.mark.requirement("FR-006")
     def test_invalid_memory_limit_wrong_unit(self) -> None:
         """Test memory_limit with invalid unit suffix is rejected."""
         with pytest.raises(ValidationError) as exc_info:
@@ -95,7 +89,6 @@ class TestDuckDBConfigValidation:
         assert len(errors) == 1
         assert "memory_limit must end with GB or MB" in errors[0]["msg"]
 
-    @pytest.mark.requirement("FR-006")
     def test_invalid_memory_limit_lowercase_unit(self) -> None:
         """Test memory_limit with lowercase unit is rejected (case-sensitive)."""
         with pytest.raises(ValidationError) as exc_info:
@@ -105,68 +98,57 @@ class TestDuckDBConfigValidation:
         assert len(errors) == 1
         assert "memory_limit must end with GB or MB" in errors[0]["msg"]
 
-    @pytest.mark.requirement("FR-005")
     def test_valid_in_memory_path(self) -> None:
         """Test in-memory path configuration."""
         config = DuckDBConfig(path=":memory:")
         assert config.path == ":memory:"
 
-    @pytest.mark.requirement("FR-005")
     def test_valid_file_path(self) -> None:
         """Test file-based path configuration."""
         config = DuckDBConfig(path="/tmp/test.duckdb")
         assert config.path == "/tmp/test.duckdb"
 
-    @pytest.mark.requirement("FR-005")
     def test_plugin_literal_enforcement(self) -> None:
         """Test that plugin field is fixed to 'duckdb'."""
         # Cannot set plugin to a different value
         with pytest.raises(ValidationError):
             DuckDBConfig(plugin="snowflake")  # type: ignore[arg-type]
 
-    @pytest.mark.requirement("FR-005")
     def test_threads_validation_minimum(self) -> None:
         """Test threads field minimum value (1)."""
         config = DuckDBConfig(threads=1)
         assert config.threads == 1
 
-    @pytest.mark.requirement("FR-005")
     def test_threads_validation_maximum(self) -> None:
         """Test threads field maximum value (64)."""
         config = DuckDBConfig(threads=64)
         assert config.threads == 64
 
-    @pytest.mark.requirement("FR-005")
     def test_threads_validation_below_minimum(self) -> None:
         """Test threads field below minimum is rejected."""
         with pytest.raises(ValidationError):
             DuckDBConfig(threads=0)
 
-    @pytest.mark.requirement("FR-005")
     def test_threads_validation_above_maximum(self) -> None:
         """Test threads field above maximum is rejected."""
         with pytest.raises(ValidationError):
             DuckDBConfig(threads=65)
 
-    @pytest.mark.requirement("FR-005")
     def test_timeout_validation_minimum(self) -> None:
         """Test timeout_seconds field minimum value (1)."""
         config = DuckDBConfig(timeout_seconds=1)
         assert config.timeout_seconds == 1
 
-    @pytest.mark.requirement("FR-005")
     def test_timeout_validation_maximum(self) -> None:
         """Test timeout_seconds field maximum value (86400 = 24 hours)."""
         config = DuckDBConfig(timeout_seconds=86400)
         assert config.timeout_seconds == 86400
 
-    @pytest.mark.requirement("FR-005")
     def test_timeout_validation_below_minimum(self) -> None:
         """Test timeout_seconds below minimum is rejected."""
         with pytest.raises(ValidationError):
             DuckDBConfig(timeout_seconds=0)
 
-    @pytest.mark.requirement("FR-005")
     def test_timeout_validation_above_maximum(self) -> None:
         """Test timeout_seconds above maximum is rejected."""
         with pytest.raises(ValidationError):
@@ -176,7 +158,6 @@ class TestDuckDBConfigValidation:
 class TestAttachConfigValidation:
     """Tests for AttachConfig Pydantic model validation."""
 
-    @pytest.mark.requirement("FR-005")
     def test_valid_attach_config(self) -> None:
         """Test valid AttachConfig."""
         attach = AttachConfig(
@@ -191,7 +172,6 @@ class TestAttachConfigValidation:
         assert attach.type == "iceberg"
         assert attach.options == {"warehouse": "floe_warehouse"}
 
-    @pytest.mark.requirement("FR-005")
     def test_attach_config_required_fields(self) -> None:
         """Test AttachConfig requires path and alias."""
         with pytest.raises(ValidationError):
@@ -200,13 +180,11 @@ class TestAttachConfigValidation:
         with pytest.raises(ValidationError):
             AttachConfig(alias="test")  # type: ignore[call-arg]
 
-    @pytest.mark.requirement("FR-005")
     def test_attach_config_default_type(self) -> None:
         """Test AttachConfig default type is 'iceberg'."""
         attach = AttachConfig(path="iceberg:catalog", alias="ice")
         assert attach.type == "iceberg"
 
-    @pytest.mark.requirement("FR-005")
     def test_attach_config_frozen(self) -> None:
         """Test AttachConfig is frozen (immutable)."""
         attach = AttachConfig(path="iceberg:catalog", alias="ice")

@@ -2,6 +2,9 @@
 
 These tests verify the DuckDB compute plugin implementation without
 requiring external services.
+
+Note: @pytest.mark.requirement markers are only used for integration tests.
+Unit tests validate implementation correctness; integration tests validate requirements.
 """
 
 from __future__ import annotations
@@ -11,19 +14,18 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from floe_compute_duckdb import DuckDBComputePlugin
     from floe_core import CatalogConfig, ComputeConfig
+
+    from floe_compute_duckdb import DuckDBComputePlugin
 
 
 class TestDuckDBComputePluginMetadata:
     """Test plugin metadata properties."""
 
-    @pytest.mark.requirement("001-FR-001")
     def test_plugin_name(self, duckdb_plugin: DuckDBComputePlugin) -> None:
         """Test plugin name is 'duckdb'."""
         assert duckdb_plugin.name == "duckdb"
 
-    @pytest.mark.requirement("001-FR-001")
     def test_plugin_version(self, duckdb_plugin: DuckDBComputePlugin) -> None:
         """Test plugin version follows semver format."""
         version = duckdb_plugin.version
@@ -31,18 +33,15 @@ class TestDuckDBComputePluginMetadata:
         assert len(parts) == 3
         assert all(part.isdigit() for part in parts)
 
-    @pytest.mark.requirement("001-FR-001")
     def test_floe_api_version(self, duckdb_plugin: DuckDBComputePlugin) -> None:
         """Test floe API version is specified."""
         api_version = duckdb_plugin.floe_api_version
         assert api_version == "1.0"
 
-    @pytest.mark.requirement("001-FR-002")
     def test_is_self_hosted(self, duckdb_plugin: DuckDBComputePlugin) -> None:
         """Test DuckDB is self-hosted (runs in platform K8s)."""
         assert duckdb_plugin.is_self_hosted is True
 
-    @pytest.mark.requirement("001-FR-001")
     def test_plugin_description(self, duckdb_plugin: DuckDBComputePlugin) -> None:
         """Test plugin has a description."""
         assert len(duckdb_plugin.description) > 0
@@ -50,27 +49,48 @@ class TestDuckDBComputePluginMetadata:
 
 
 class TestGenerateDBTProfile:
-    """Test dbt profile generation."""
+    """Test dbt profile generation.
 
-    @pytest.mark.requirement("001-FR-003")
+    Tests implementation of generate_dbt_profile() method which should:
+    - Return correct dbt profile structure for dbt-duckdb adapter
+    - Support Iceberg extension configuration (FR-007)
+    - Generate valid profiles (FR-008)
+    """
+
     def test_generate_dbt_profile_minimal(
         self,
         duckdb_plugin: DuckDBComputePlugin,
         memory_config: ComputeConfig,
     ) -> None:
-        """Test profile generation with minimal configuration."""
+        """Test profile generation with minimal configuration.
+
+        Verifies correct dbt profile structure with required keys.
+        """
         profile = duckdb_plugin.generate_dbt_profile(memory_config)
 
         assert profile["type"] == "duckdb"
         assert profile["path"] == ":memory:"
         assert profile["threads"] == 4
 
-    @pytest.mark.requirement("001-FR-003")
-    def test_generate_dbt_profile_with_extensions(
+    def test_generate_dbt_profile_structure(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+    ) -> None:
+        """Test dbt profile has all required keys for dbt-duckdb adapter."""
+        profile = duckdb_plugin.generate_dbt_profile(memory_config)
+
+        # Required keys for dbt-duckdb adapter
+        assert "type" in profile
+        assert "path" in profile
+        assert "threads" in profile
+        assert profile["type"] == "duckdb"
+
+    def test_generate_dbt_profile_with_iceberg_extension(
         self,
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
-        """Test profile generation includes extensions when specified."""
+        """Test profile generation includes iceberg extension for Iceberg support."""
         from floe_core import ComputeConfig
 
         config = ComputeConfig(
@@ -85,9 +105,30 @@ class TestGenerateDBTProfile:
         profile = duckdb_plugin.generate_dbt_profile(config)
 
         assert profile["extensions"] == ["iceberg", "httpfs"]
+        assert "iceberg" in profile["extensions"]
         assert profile["threads"] == 8
 
-    @pytest.mark.requirement("001-FR-003")
+    def test_generate_dbt_profile_with_extensions(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test profile generation includes extensions when specified."""
+        from floe_core import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=8,
+            connection={
+                "path": "/data/analytics.duckdb",
+                "extensions": ["parquet", "json"],
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert profile["extensions"] == ["parquet", "json"]
+        assert profile["threads"] == 8
+
     def test_generate_dbt_profile_with_settings(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -107,11 +148,44 @@ class TestGenerateDBTProfile:
 
         assert profile["settings"]["memory_limit"] == "4GB"
 
+    def test_generate_dbt_profile_with_file_path(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test profile generation with file-based database path."""
+        from floe_core import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=4,
+            connection={
+                "path": "/data/analytics.duckdb",
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert profile["path"] == "/data/analytics.duckdb"
+        assert profile["threads"] == 4
+
+    def test_generate_dbt_profile_no_extensions_when_empty(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+        memory_config: ComputeConfig,
+    ) -> None:
+        """Test profile omits extensions key when no extensions specified."""
+        profile = duckdb_plugin.generate_dbt_profile(memory_config)
+
+        # Extensions should not be in profile when empty
+        assert "extensions" not in profile
+
 
 class TestGenerateDBTProfileWithAttach:
-    """Test dbt profile generation with attach blocks."""
+    """Test dbt profile generation with attach blocks.
 
-    @pytest.mark.requirement("001-FR-009")
+    Tests attach block support for Iceberg catalog attachment.
+    """
+
     def test_generate_dbt_profile_with_attach(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -142,7 +216,6 @@ class TestGenerateDBTProfileWithAttach:
         assert profile["attach"][0]["alias"] == "iceberg_catalog"
         assert profile["attach"][0]["type"] == "iceberg"
 
-    @pytest.mark.requirement("001-FR-009")
     def test_generate_dbt_profile_with_multiple_attach(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -168,7 +241,6 @@ class TestGenerateDBTProfileWithAttach:
         assert profile["attach"][0]["path"] == "other_db.duckdb"
         assert profile["attach"][1]["alias"] == "third_db"
 
-    @pytest.mark.requirement("001-FR-009")
     def test_generate_dbt_profile_attach_with_options(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -196,7 +268,6 @@ class TestGenerateDBTProfileWithAttach:
 
         assert profile["attach"][0]["catalog_uri"] == "http://polaris:8181"
 
-    @pytest.mark.requirement("001-FR-009")
     def test_generate_dbt_profile_without_attach(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -207,7 +278,6 @@ class TestGenerateDBTProfileWithAttach:
 
         assert "attach" not in profile
 
-    @pytest.mark.requirement("001-FR-009")
     def test_generate_dbt_profile_attach_minimal(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -234,7 +304,6 @@ class TestGenerateDBTProfileWithAttach:
 class TestRequiredDBTPackages:
     """Test required dbt packages."""
 
-    @pytest.mark.requirement("001-FR-004")
     def test_get_required_dbt_packages(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -249,7 +318,6 @@ class TestRequiredDBTPackages:
         dbt_duckdb_found = any("dbt-duckdb" in pkg for pkg in packages)
         assert dbt_duckdb_found
 
-    @pytest.mark.requirement("001-FR-004")
     def test_packages_have_version_constraints(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -265,7 +333,6 @@ class TestRequiredDBTPackages:
 class TestResourceRequirements:
     """Test K8s resource requirements."""
 
-    @pytest.mark.requirement("001-FR-005")
     @pytest.mark.parametrize("size", ["small", "medium", "large"])
     def test_get_resource_requirements_valid_sizes(
         self,
@@ -280,7 +347,6 @@ class TestResourceRequirements:
         assert spec.memory_request is not None
         assert spec.memory_limit is not None
 
-    @pytest.mark.requirement("001-FR-005")
     def test_get_resource_requirements_invalid_size(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -289,7 +355,6 @@ class TestResourceRequirements:
         with pytest.raises(ValueError, match="Unknown workload size"):
             duckdb_plugin.get_resource_requirements("invalid")
 
-    @pytest.mark.requirement("001-FR-005")
     def test_resource_requirements_scaling(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -318,7 +383,6 @@ class TestResourceRequirements:
 class TestCatalogAttachment:
     """Test Iceberg catalog attachment SQL generation."""
 
-    @pytest.mark.requirement("001-FR-006")
     def test_get_catalog_attachment_sql(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -331,7 +395,6 @@ class TestCatalogAttachment:
         assert isinstance(sql, list)
         assert len(sql) > 0
 
-    @pytest.mark.requirement("001-FR-006")
     def test_catalog_attachment_installs_extension(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -343,7 +406,6 @@ class TestCatalogAttachment:
         assert sql is not None
         assert any("INSTALL iceberg" in stmt for stmt in sql)
 
-    @pytest.mark.requirement("001-FR-006")
     def test_catalog_attachment_loads_extension(
         self,
         duckdb_plugin: DuckDBComputePlugin,
@@ -355,7 +417,6 @@ class TestCatalogAttachment:
         assert sql is not None
         assert any("LOAD iceberg" in stmt for stmt in sql)
 
-    @pytest.mark.requirement("001-FR-006")
     def test_catalog_attachment_includes_endpoint(
         self,
         duckdb_plugin: DuckDBComputePlugin,
