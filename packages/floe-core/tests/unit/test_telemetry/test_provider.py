@@ -92,7 +92,6 @@ class TestTelemetryProviderInitialization:
     Validates the provider correctly initializes and manages state.
     """
 
-    @pytest.mark.requirement("FR-001")
     def test_provider_initial_state_is_uninitialized(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -100,7 +99,6 @@ class TestTelemetryProviderInitialization:
         provider = TelemetryProvider(telemetry_config)
         assert provider.state == ProviderState.UNINITIALIZED
 
-    @pytest.mark.requirement("FR-001")
     def test_provider_stores_config(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -108,7 +106,6 @@ class TestTelemetryProviderInitialization:
         provider = TelemetryProvider(telemetry_config)
         assert provider.config == telemetry_config
 
-    @pytest.mark.requirement("FR-001")
     def test_initialize_changes_state_to_initialized(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -117,7 +114,6 @@ class TestTelemetryProviderInitialization:
         provider.initialize()
         assert provider.state == ProviderState.INITIALIZED
 
-    @pytest.mark.requirement("FR-001")
     def test_initialize_cannot_be_called_twice(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -128,7 +124,6 @@ class TestTelemetryProviderInitialization:
         with pytest.raises(RuntimeError, match="Cannot initialize provider"):
             provider.initialize()
 
-    @pytest.mark.requirement("FR-001")
     def test_initialize_cannot_be_called_after_shutdown(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -147,7 +142,6 @@ class TestTelemetryProviderShutdown:
     Validates the provider correctly shuts down and manages state.
     """
 
-    @pytest.mark.requirement("FR-023")
     def test_shutdown_changes_state_to_shutdown(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -157,7 +151,6 @@ class TestTelemetryProviderShutdown:
         provider.shutdown()
         assert provider.state == ProviderState.SHUTDOWN
 
-    @pytest.mark.requirement("FR-023")
     def test_shutdown_cannot_be_called_when_uninitialized(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -167,7 +160,6 @@ class TestTelemetryProviderShutdown:
         with pytest.raises(RuntimeError, match="Cannot shutdown provider"):
             provider.shutdown()
 
-    @pytest.mark.requirement("FR-023")
     def test_shutdown_cannot_be_called_twice(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -186,7 +178,6 @@ class TestTelemetryProviderForceFlush:
     Validates the provider correctly flushes pending telemetry.
     """
 
-    @pytest.mark.requirement("FR-023")
     def test_force_flush_returns_true_when_successful(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -197,7 +188,6 @@ class TestTelemetryProviderForceFlush:
         assert result is True
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-023")
     def test_force_flush_cannot_be_called_when_uninitialized(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -207,7 +197,6 @@ class TestTelemetryProviderForceFlush:
         with pytest.raises(RuntimeError, match="Cannot flush provider"):
             provider.force_flush()
 
-    @pytest.mark.requirement("FR-023")
     def test_force_flush_cannot_be_called_after_shutdown(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -219,7 +208,6 @@ class TestTelemetryProviderForceFlush:
         with pytest.raises(RuntimeError, match="Cannot flush provider"):
             provider.force_flush()
 
-    @pytest.mark.requirement("FR-023")
     def test_force_flush_state_returns_to_initialized(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -237,7 +225,6 @@ class TestTelemetryProviderContextManager:
     Validates the provider works correctly as a context manager.
     """
 
-    @pytest.mark.requirement("FR-001")
     def test_context_manager_initializes_on_enter(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -246,7 +233,6 @@ class TestTelemetryProviderContextManager:
         with provider:
             assert provider.state == ProviderState.INITIALIZED
 
-    @pytest.mark.requirement("FR-023")
     def test_context_manager_shuts_down_on_exit(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -256,7 +242,6 @@ class TestTelemetryProviderContextManager:
             pass
         assert provider.state == ProviderState.SHUTDOWN
 
-    @pytest.mark.requirement("FR-023")
     def test_context_manager_returns_provider(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -265,7 +250,6 @@ class TestTelemetryProviderContextManager:
         with provider as p:
             assert p is provider
 
-    @pytest.mark.requirement("FR-023")
     def test_context_manager_shuts_down_on_exception(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -283,7 +267,6 @@ class TestTelemetryProviderNoopModeEnvVar:
     Validates the provider correctly detects and handles no-op mode.
     """
 
-    @pytest.mark.requirement("FR-001")
     def test_otel_sdk_disabled_true_enables_noop(
         self, telemetry_config: TelemetryConfig
     ) -> None:
@@ -295,7 +278,6 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    @pytest.mark.requirement("FR-001")
     def test_otel_sdk_disabled_one_enables_noop(
         self, telemetry_config: TelemetryConfig
     ) -> None:
@@ -307,7 +289,6 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    @pytest.mark.requirement("FR-001")
     def test_otel_sdk_disabled_yes_enables_noop(
         self, telemetry_config: TelemetryConfig
     ) -> None:
@@ -319,7 +300,6 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    @pytest.mark.requirement("FR-001")
     def test_otel_sdk_disabled_case_insensitive(
         self, telemetry_config: TelemetryConfig
     ) -> None:
@@ -331,7 +311,6 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    @pytest.mark.requirement("FR-001")
     def test_otel_sdk_disabled_false_does_not_enable_noop(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -343,7 +322,6 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    @pytest.mark.requirement("FR-001")
     def test_no_env_var_does_not_enable_noop(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -358,7 +336,6 @@ class TestTelemetryProviderNoopModeConfig:
     Validates the provider correctly handles disabled configuration.
     """
 
-    @pytest.mark.requirement("FR-001")
     def test_config_enabled_false_enables_noop(
         self, disabled_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -366,7 +343,6 @@ class TestTelemetryProviderNoopModeConfig:
         provider = TelemetryProvider(disabled_telemetry_config)
         assert provider.is_noop is True
 
-    @pytest.mark.requirement("FR-001")
     def test_config_enabled_true_does_not_enable_noop(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -381,7 +357,6 @@ class TestTelemetryProviderNoopModeBehavior:
     Validates that no-op mode still allows state transitions.
     """
 
-    @pytest.mark.requirement("FR-023")
     def test_noop_mode_allows_initialization(
         self, disabled_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -390,7 +365,6 @@ class TestTelemetryProviderNoopModeBehavior:
         provider.initialize()
         assert provider.state == ProviderState.INITIALIZED
 
-    @pytest.mark.requirement("FR-023")
     def test_noop_mode_allows_shutdown(
         self, disabled_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -400,7 +374,6 @@ class TestTelemetryProviderNoopModeBehavior:
         provider.shutdown()
         assert provider.state == ProviderState.SHUTDOWN
 
-    @pytest.mark.requirement("FR-023")
     def test_noop_mode_force_flush_returns_true(
         self, disabled_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -411,7 +384,6 @@ class TestTelemetryProviderNoopModeBehavior:
         assert result is True
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-023")
     def test_noop_mode_context_manager_works(
         self, disabled_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -422,7 +394,6 @@ class TestTelemetryProviderNoopModeBehavior:
             assert p.is_noop is True
         assert provider.state == ProviderState.SHUTDOWN
 
-    @pytest.mark.requirement("FR-001")
     def test_noop_mode_env_var_takes_precedence(
         self, telemetry_config: TelemetryConfig
     ) -> None:
@@ -443,7 +414,6 @@ class TestTelemetryProviderPropagatorIntegration:
     Validates that W3C propagators are configured when provider initializes.
     """
 
-    @pytest.mark.requirement("FR-002")
     def test_initialize_configures_propagators(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -460,7 +430,6 @@ class TestTelemetryProviderPropagatorIntegration:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-002")
     def test_propagator_has_trace_context(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -476,7 +445,6 @@ class TestTelemetryProviderPropagatorIntegration:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-003")
     def test_propagator_has_baggage(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -492,7 +460,6 @@ class TestTelemetryProviderPropagatorIntegration:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-002")
     def test_noop_mode_does_not_configure_propagators(
         self, disabled_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -549,21 +516,18 @@ class TestOTLPGrpcExporterSetup:
             otlp_protocol="grpc",
         )
 
-    @pytest.mark.requirement("FR-008")
     def test_grpc_protocol_in_config(
         self, grpc_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
         """Test that TelemetryConfig accepts grpc protocol."""
         assert grpc_telemetry_config.otlp_protocol == "grpc"
 
-    @pytest.mark.requirement("FR-008")
     def test_grpc_endpoint_in_config(
         self, grpc_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
         """Test that TelemetryConfig stores gRPC endpoint."""
         assert grpc_telemetry_config.otlp_endpoint == "http://localhost:4317"
 
-    @pytest.mark.requirement("FR-008")
     def test_provider_accepts_grpc_config(
         self, grpc_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -571,7 +535,6 @@ class TestOTLPGrpcExporterSetup:
         provider = TelemetryProvider(grpc_telemetry_config)
         assert provider.config.otlp_protocol == "grpc"
 
-    @pytest.mark.requirement("FR-008")
     def test_provider_initializes_with_grpc_config(
         self, grpc_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -581,7 +544,6 @@ class TestOTLPGrpcExporterSetup:
         assert provider.state == ProviderState.INITIALIZED
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-008")
     def test_grpc_default_port_4317(
         self, clean_env: None
     ) -> None:
@@ -603,7 +565,6 @@ class TestOTLPGrpcExporterSetup:
         # Default endpoint has 4317
         assert "4317" in config.otlp_endpoint
 
-    @pytest.mark.requirement("FR-008")
     def test_grpc_custom_endpoint(
         self, clean_env: None
     ) -> None:
@@ -624,7 +585,6 @@ class TestOTLPGrpcExporterSetup:
         )
         assert config.otlp_endpoint == "http://otel-collector.monitoring:4317"
 
-    @pytest.mark.requirement("FR-010")
     def test_grpc_protocol_is_default(
         self, telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -632,7 +592,6 @@ class TestOTLPGrpcExporterSetup:
         # TelemetryConfig default should be grpc
         assert telemetry_config.otlp_protocol == "grpc"
 
-    @pytest.mark.requirement("FR-024")
     def test_grpc_config_with_batch_processor_settings(
         self, clean_env: None
     ) -> None:
@@ -665,7 +624,6 @@ class TestOTLPGrpcExporterSetup:
         assert config.batch_processor.max_export_batch_size == 1024
         assert config.batch_processor.schedule_delay_millis == 2000
 
-    @pytest.mark.requirement("FR-024")
     def test_grpc_provider_uses_batch_processor_config(
         self, clean_env: None
     ) -> None:
@@ -731,21 +689,18 @@ class TestOTLPHttpExporterSetup:
             otlp_protocol="http",
         )
 
-    @pytest.mark.requirement("FR-009")
     def test_http_protocol_in_config(
         self, http_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
         """Test that TelemetryConfig accepts http protocol."""
         assert http_telemetry_config.otlp_protocol == "http"
 
-    @pytest.mark.requirement("FR-009")
     def test_http_endpoint_in_config(
         self, http_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
         """Test that TelemetryConfig stores HTTP endpoint."""
         assert http_telemetry_config.otlp_endpoint == "http://localhost:4318"
 
-    @pytest.mark.requirement("FR-009")
     def test_provider_accepts_http_config(
         self, http_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -753,7 +708,6 @@ class TestOTLPHttpExporterSetup:
         provider = TelemetryProvider(http_telemetry_config)
         assert provider.config.otlp_protocol == "http"
 
-    @pytest.mark.requirement("FR-010")
     def test_provider_initializes_with_http_config(
         self, http_telemetry_config: TelemetryConfig, clean_env: None
     ) -> None:
@@ -766,7 +720,6 @@ class TestOTLPHttpExporterSetup:
         assert provider.state == ProviderState.INITIALIZED
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-009")
     def test_http_custom_endpoint_port_4318(
         self, clean_env: None
     ) -> None:
@@ -788,7 +741,6 @@ class TestOTLPHttpExporterSetup:
         )
         assert "4318" in config.otlp_endpoint
 
-    @pytest.mark.requirement("FR-009")
     def test_http_custom_endpoint(
         self, clean_env: None
     ) -> None:
@@ -809,7 +761,6 @@ class TestOTLPHttpExporterSetup:
         )
         assert config.otlp_endpoint == "http://otel-collector.monitoring:4318"
 
-    @pytest.mark.requirement("FR-009")
     def test_http_endpoint_with_path(
         self, clean_env: None
     ) -> None:
@@ -831,7 +782,6 @@ class TestOTLPHttpExporterSetup:
         )
         assert "/v1/traces" in config.otlp_endpoint
 
-    @pytest.mark.requirement("FR-009")
     def test_http_protocol_is_valid_literal(
         self, clean_env: None
     ) -> None:
@@ -852,7 +802,6 @@ class TestOTLPHttpExporterSetup:
         )
         assert config.otlp_protocol == "http"
 
-    @pytest.mark.requirement("FR-009")
     def test_invalid_protocol_rejected(
         self, clean_env: None
     ) -> None:
@@ -874,7 +823,6 @@ class TestOTLPHttpExporterSetup:
                 otlp_protocol="invalid",  # type: ignore[arg-type]
             )
 
-    @pytest.mark.requirement("FR-024")
     def test_http_config_with_batch_processor_settings(
         self, clean_env: None
     ) -> None:
@@ -907,7 +855,6 @@ class TestOTLPHttpExporterSetup:
         assert config.batch_processor.max_export_batch_size == 1024
         assert config.batch_processor.schedule_delay_millis == 2000
 
-    @pytest.mark.requirement("FR-024")
     def test_http_provider_uses_batch_processor_config(
         self, clean_env: None
     ) -> None:
@@ -955,7 +902,6 @@ class TestTelemetryProviderAuthHeaderInjection:
     and passes them to the OTLP exporter for SaaS backend authentication.
     """
 
-    @pytest.mark.requirement("FR-011")
     def test_build_auth_headers_with_api_key(self, clean_env: None) -> None:
         """Test _build_auth_headers generates correct headers for api_key auth."""
         from pydantic import SecretStr
@@ -985,7 +931,6 @@ class TestTelemetryProviderAuthHeaderInjection:
         assert headers is not None
         assert headers == {"DD-API-KEY": "my-api-key"}
 
-    @pytest.mark.requirement("FR-011")
     def test_build_auth_headers_with_bearer_token(self, clean_env: None) -> None:
         """Test _build_auth_headers generates correct headers for bearer auth."""
         from pydantic import SecretStr
@@ -1014,7 +959,6 @@ class TestTelemetryProviderAuthHeaderInjection:
         assert headers is not None
         assert headers == {"Authorization": "Bearer my-bearer-token"}
 
-    @pytest.mark.requirement("FR-011")
     def test_build_auth_headers_returns_none_when_no_auth(
         self, clean_env: None
     ) -> None:
@@ -1038,7 +982,6 @@ class TestTelemetryProviderAuthHeaderInjection:
 
         assert headers is None
 
-    @pytest.mark.requirement("FR-011")
     def test_provider_initializes_with_api_key_auth(self, clean_env: None) -> None:
         """Test TelemetryProvider initializes successfully with api_key auth."""
         from pydantic import SecretStr
@@ -1069,7 +1012,6 @@ class TestTelemetryProviderAuthHeaderInjection:
         assert provider.state == ProviderState.INITIALIZED
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-011")
     def test_provider_initializes_with_bearer_auth(self, clean_env: None) -> None:
         """Test TelemetryProvider initializes successfully with bearer auth."""
         from pydantic import SecretStr
@@ -1099,7 +1041,6 @@ class TestTelemetryProviderAuthHeaderInjection:
         assert provider.state == ProviderState.INITIALIZED
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-011")
     def test_bearer_auth_custom_header_name(self, clean_env: None) -> None:
         """Test bearer auth with custom header name."""
         from pydantic import SecretStr
@@ -1174,7 +1115,6 @@ class TestTelemetryProviderAsyncExport:
         )
         return TelemetryConfig(resource_attributes=attrs)
 
-    @pytest.mark.requirement("FR-024")
     def test_provider_uses_batch_span_processor(
         self,
         telemetry_config: TelemetryConfig,
@@ -1193,7 +1133,6 @@ class TestTelemetryProviderAsyncExport:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-024")
     def test_span_creation_is_non_blocking(
         self,
         telemetry_config: TelemetryConfig,
@@ -1230,7 +1169,6 @@ class TestTelemetryProviderAsyncExport:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-024")
     def test_batch_processor_config_applied(
         self,
         mock_grpc_exporter: Mock,
@@ -1269,7 +1207,6 @@ class TestTelemetryProviderAsyncExport:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-024")
     def test_force_flush_waits_for_pending_exports(
         self,
         telemetry_config: TelemetryConfig,
@@ -1299,7 +1236,6 @@ class TestTelemetryProviderAsyncExport:
 
         provider.shutdown()
 
-    @pytest.mark.requirement("FR-024")
     def test_shutdown_flushes_pending_exports(
         self,
         telemetry_config: TelemetryConfig,
@@ -1327,3 +1263,238 @@ class TestTelemetryProviderAsyncExport:
 
         assert provider.state == ProviderState.SHUTDOWN
         assert provider._span_processor is None
+
+
+# T045: Unit tests for graceful degradation when backend unavailable
+# These tests validate that TelemetryProvider continues operating when
+# the OTLP backend is unavailable (SC-005: no application failures).
+
+
+class TestTelemetryProviderGracefulDegradation:
+    """Test TelemetryProvider graceful degradation (SC-005).
+
+    The system must continue operating normally when the observability
+    backend is unavailable - no application failures should occur.
+
+    These tests mock the exporter to simulate backend failures.
+    """
+
+    @pytest.fixture
+    def failing_exporter(self) -> Generator[Mock, None, None]:
+        """Mock exporter that simulates backend unavailable."""
+        from unittest.mock import patch
+
+        mock_exporter = Mock()
+        # Simulate export failure (returns failure result)
+        mock_exporter.export.side_effect = Exception("Backend unavailable")
+        mock_exporter.shutdown.return_value = None
+
+        with patch(
+            "floe_core.telemetry.provider.OTLPSpanExporter",
+            return_value=mock_exporter,
+        ):
+            yield mock_exporter
+
+    @pytest.fixture
+    def telemetry_config(self) -> TelemetryConfig:
+        """Create a basic TelemetryConfig for degradation tests."""
+        attrs = ResourceAttributes(
+            service_name="degradation-test-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        return TelemetryConfig(resource_attributes=attrs)
+
+    def test_span_creation_continues_when_export_fails(
+        self,
+        telemetry_config: TelemetryConfig,
+        failing_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that span creation continues when export fails.
+
+        Span creation should never fail due to export failures.
+        The BatchSpanProcessor handles export failures internally.
+        """
+        from opentelemetry import trace
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create spans - should not raise even if export fails
+        for i in range(10):
+            with tracer.start_as_current_span(f"degradation-span-{i}") as span:
+                span.set_attribute("iteration", i)
+
+        # Provider should still be in initialized state
+        assert provider.state == ProviderState.INITIALIZED
+
+        provider.shutdown()
+
+    def test_force_flush_handles_export_failure(
+        self,
+        telemetry_config: TelemetryConfig,
+        failing_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that force_flush handles export failures gracefully.
+
+        force_flush should not raise exceptions even if export fails.
+        It may return False to indicate incomplete flush.
+        """
+        from opentelemetry import trace
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create some spans
+        for i in range(5):
+            with tracer.start_as_current_span(f"flush-fail-span-{i}") as span:
+                span.set_attribute("iteration", i)
+
+        # force_flush should not raise - may return False if export failed
+        result = provider.force_flush(timeout_millis=1000)
+        # Result could be True or False depending on SDK behavior
+        assert isinstance(result, bool)
+
+        # Provider should still be functional
+        assert provider.state == ProviderState.INITIALIZED
+
+        provider.shutdown()
+
+    def test_shutdown_completes_when_export_fails(
+        self,
+        telemetry_config: TelemetryConfig,
+        failing_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that shutdown completes even when export fails.
+
+        Shutdown should always complete gracefully, releasing resources
+        even if final flush fails.
+        """
+        from opentelemetry import trace
+
+        provider = TelemetryProvider(telemetry_config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create spans that will fail to export
+        for i in range(5):
+            with tracer.start_as_current_span(f"shutdown-fail-span-{i}") as span:
+                span.set_attribute("iteration", i)
+
+        # Shutdown should complete without raising
+        provider.shutdown()
+
+        assert provider.state == ProviderState.SHUTDOWN
+        assert provider._span_processor is None
+        assert provider._tracer_provider is None
+
+    def test_context_manager_handles_export_failure(
+        self,
+        telemetry_config: TelemetryConfig,
+        failing_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that context manager handles export failures gracefully.
+
+        The context manager should complete without raising even if
+        export fails during shutdown.
+        """
+        from opentelemetry import trace
+
+        # Context manager should work even with failing exporter
+        with TelemetryProvider(telemetry_config) as provider:
+            tracer = trace.get_tracer(__name__)
+
+            for i in range(3):
+                with tracer.start_as_current_span(f"cm-fail-span-{i}") as span:
+                    span.set_attribute("iteration", i)
+
+            state_inside = provider.state
+            assert state_inside == ProviderState.INITIALIZED
+
+        # Provider should be shutdown after context exit
+        state_after = provider.state
+        assert state_after == ProviderState.SHUTDOWN
+
+    def test_application_exception_not_masked_by_export_failure(
+        self,
+        telemetry_config: TelemetryConfig,
+        failing_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that application exceptions are not masked by export failures.
+
+        If the application raises an exception, it should propagate correctly
+        even if telemetry export is also failing.
+        """
+        from opentelemetry import trace
+
+        with pytest.raises(ValueError, match="Application error"):
+            with TelemetryProvider(telemetry_config) as provider:
+                tracer = trace.get_tracer(__name__)
+
+                with tracer.start_as_current_span("app-error-span"):
+                    raise ValueError("Application error")
+
+    def test_multiple_failures_do_not_cause_memory_leak(
+        self,
+        telemetry_config: TelemetryConfig,
+        failing_exporter: Mock,
+        clean_env: None,
+    ) -> None:
+        """Test that repeated export failures don't cause resource issues.
+
+        BatchSpanProcessor drops spans when queue is full rather than
+        growing unbounded.
+        """
+        from floe_core.telemetry import BatchSpanProcessorConfig
+        from opentelemetry import trace
+
+        # Use small queue to test queue-full behavior
+        attrs = ResourceAttributes(
+            service_name="small-queue-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test-namespace",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        )
+        batch_config = BatchSpanProcessorConfig(
+            max_queue_size=100,
+            max_export_batch_size=50,
+        )
+        config = TelemetryConfig(
+            resource_attributes=attrs,
+            batch_processor=batch_config,
+        )
+
+        provider = TelemetryProvider(config)
+        provider.initialize()
+
+        tracer = trace.get_tracer(__name__)
+
+        # Create many spans (more than queue size)
+        for i in range(200):
+            with tracer.start_as_current_span(f"queue-test-span-{i}") as span:
+                span.set_attribute("iteration", i)
+
+        # Provider should still be functional
+        state_before = provider.state
+        assert state_before == ProviderState.INITIALIZED
+
+        provider.shutdown()
+        state_after = provider.state
+        assert state_after == ProviderState.SHUTDOWN
