@@ -217,6 +217,33 @@ class BatchSpanProcessorConfig(BaseModel):
         return self
 
 
+class LoggingConfig(BaseModel):
+    """Logging configuration for structured log output.
+
+    Controls structlog configuration with trace context injection.
+    Log level can be set per environment or globally.
+
+    Attributes:
+        log_level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        json_output: Output format - JSON (True) or console (False)
+
+    Examples:
+        >>> logging_config = LoggingConfig(log_level="DEBUG", json_output=True)
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    log_level: str = Field(
+        default="INFO",
+        pattern=r"^(?i)(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
+        description="Minimum log level (case-insensitive)",
+    )
+    json_output: bool = Field(
+        default=True,
+        description="Output format - JSON (True) or console (False)",
+    )
+
+
 class SamplingConfig(BaseModel):
     """Environment-based sampling configuration.
 
@@ -324,6 +351,10 @@ class TelemetryConfig(BaseModel):
     batch_processor: BatchSpanProcessorConfig = Field(
         default_factory=BatchSpanProcessorConfig,
         description="BatchSpanProcessor configuration for async export",
+    )
+    logging: LoggingConfig = Field(
+        default_factory=LoggingConfig,
+        description="Structured logging configuration with trace context",
     )
 
     def get_sampling_ratio(self, environment: str) -> float:

@@ -49,6 +49,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
+from floe_core.telemetry.logging import configure_logging
 from floe_core.telemetry.propagation import configure_propagators
 
 if TYPE_CHECKING:
@@ -233,6 +234,13 @@ class TelemetryProvider:
         # Configure MeterProvider for metrics (FR-012, FR-013, FR-014)
         self._setup_meter_provider(resource, headers)
 
+        # Configure structured logging with trace context injection (FR-015, FR-016, FR-017, FR-018)
+        logging_config = self._config.logging
+        configure_logging(
+            log_level=logging_config.log_level,
+            json_output=logging_config.json_output,
+        )
+
         logger.info(
             "TelemetryProvider initialized",
             extra={
@@ -241,6 +249,7 @@ class TelemetryProvider:
                 "service_name": self._config.resource_attributes.service_name,
                 "sampling_ratio": sampling_ratio,
                 "metrics_enabled": self._meter_provider is not None,
+                "log_level": logging_config.log_level,
             },
         )
         self._state = ProviderState.INITIALIZED
