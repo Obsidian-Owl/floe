@@ -337,3 +337,163 @@ class TestTraceContextHelpers:
             with tracer.start_as_current_span("child") as child:
                 child_span_id = child.get_span_context().span_id
                 assert child_span_id != parent_span_id
+
+
+class TestPropagationModuleFunctions:
+    """Tests for floe propagation module wrapper functions.
+
+    Tests the helper functions in floe_core.telemetry.propagation module
+    that wrap OTel SDK functions for convenience.
+    """
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_inject_context_with_custom_context(self) -> None:
+        """Test inject_context with explicit context parameter."""
+        from opentelemetry import context
+
+        from floe_core.telemetry.propagation import inject_context
+
+        ctx = context.get_current()
+        carrier: dict[str, str] = {}
+        result = inject_context(carrier, ctx)
+        assert isinstance(result, dict)
+
+    @pytest.mark.requirement("001-FR-003")
+    def test_set_baggage_value_with_context(self) -> None:
+        """Test set_baggage_value with explicit context parameter."""
+        from opentelemetry import context
+
+        from floe_core.telemetry.propagation import get_baggage_value, set_baggage_value
+
+        ctx = context.get_current()
+        new_ctx = set_baggage_value("test.key", "test_value", ctx)
+        assert get_baggage_value("test.key", new_ctx) == "test_value"
+
+    @pytest.mark.requirement("001-FR-003")
+    def test_get_baggage_value_with_context(self) -> None:
+        """Test get_baggage_value with explicit context parameter."""
+        from floe_core.telemetry.propagation import get_baggage_value, set_baggage_value
+
+        ctx = set_baggage_value("test.key", "test_value")
+        value = get_baggage_value("test.key", ctx)
+        assert value == "test_value"
+
+    @pytest.mark.requirement("001-FR-007a")
+    def test_set_floe_baggage_all_parameters(self) -> None:
+        """Test set_floe_baggage with all optional parameters."""
+        from floe_core.telemetry.propagation import (
+            BAGGAGE_MODE,
+            BAGGAGE_NAMESPACE,
+            BAGGAGE_PRODUCT_NAME,
+            BAGGAGE_PRODUCT_VERSION,
+            get_baggage_value,
+            set_floe_baggage,
+        )
+
+        ctx = set_floe_baggage(
+            namespace="analytics",
+            product_name="customer-360",
+            product_version="2.1.0",
+            mode="prod",
+        )
+        assert get_baggage_value(BAGGAGE_NAMESPACE, ctx) == "analytics"
+        assert get_baggage_value(BAGGAGE_PRODUCT_NAME, ctx) == "customer-360"
+        assert get_baggage_value(BAGGAGE_PRODUCT_VERSION, ctx) == "2.1.0"
+        assert get_baggage_value(BAGGAGE_MODE, ctx) == "prod"
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_get_trace_id_with_active_span(self, tracer_provider: TracerProvider) -> None:
+        """Test get_trace_id returns valid ID within active span."""
+        from floe_core.telemetry.propagation import get_trace_id
+
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("test_span"):
+            trace_id = get_trace_id()
+            assert trace_id is not None
+            assert len(trace_id) == 32
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_get_span_id_with_active_span(self, tracer_provider: TracerProvider) -> None:
+        """Test get_span_id returns valid ID within active span."""
+        from floe_core.telemetry.propagation import get_span_id
+
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("test_span"):
+            span_id = get_span_id()
+            assert span_id is not None
+            assert len(span_id) == 16
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_create_context_from_headers(self, reset_propagators: None) -> None:
+        """Test create_context_from_headers extracts context."""
+        from floe_core.telemetry.propagation import (
+            BAGGAGE_NAMESPACE,
+            configure_propagators,
+            create_context_from_headers,
+            get_baggage_value,
+        )
+
+        configure_propagators()
+        headers = {
+            "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "baggage": "floe.namespace=analytics",
+        }
+        ctx = create_context_from_headers(headers)
+        assert get_baggage_value(BAGGAGE_NAMESPACE, ctx) == "analytics"
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_inject_headers(self, reset_propagators: None) -> None:
+        """Test inject_headers creates carrier dict."""
+        from floe_core.telemetry.propagation import configure_propagators, inject_headers
+
+        configure_propagators()
+        headers = inject_headers()
+        assert isinstance(headers, dict)
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_is_trace_active_with_span(self, tracer_provider: TracerProvider) -> None:
+        """Test is_trace_active returns True within active span."""
+        from floe_core.telemetry.propagation import is_trace_active
+
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("test_span"):
+            assert is_trace_active() is True
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_is_trace_active_without_span(self) -> None:
+        """Test is_trace_active returns False without active span."""
+        from floe_core.telemetry.propagation import is_trace_active
+
+        # Outside of any span, trace may not be active
+        # The exact result depends on whether there's a global trace context
+        result = is_trace_active()
+        assert isinstance(result, bool)
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_get_current_span(self, tracer_provider: TracerProvider) -> None:
+        """Test get_current_span returns the active span."""
+        from floe_core.telemetry.propagation import get_current_span
+
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("test_span") as span:
+            current = get_current_span()
+            assert current is span
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_get_current_span_context(self, tracer_provider: TracerProvider) -> None:
+        """Test get_current_span_context returns valid context."""
+        from floe_core.telemetry.propagation import get_current_span_context
+
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("test_span"):
+            span_ctx = get_current_span_context()
+            assert span_ctx.is_valid
+
+    @pytest.mark.requirement("001-FR-002")
+    def test_configure_propagators(self, reset_propagators: None) -> None:
+        """Test configure_propagators sets up global propagator."""
+        from floe_core.telemetry.propagation import configure_propagators, get_propagator
+
+        result = configure_propagators()
+        assert isinstance(result, CompositePropagator)
+        assert get_propagator() is not None

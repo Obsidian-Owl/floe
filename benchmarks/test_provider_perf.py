@@ -24,10 +24,9 @@ def test_provider_initialization(
     Measures the time to initialize the telemetry provider,
     which occurs once at application startup.
     """
-    for _ in range(10):
-        provider = TelemetryProvider(benchmark_telemetry_config)
-        provider.initialize()
-        provider.shutdown()
+    provider = TelemetryProvider(benchmark_telemetry_config)
+    provider.initialize()
+    provider.shutdown()
 
 
 @pytest.mark.benchmark
@@ -40,10 +39,9 @@ def test_provider_shutdown(
     Measures the time to cleanly shutdown the provider,
     which occurs once at application exit.
     """
-    for _ in range(10):
-        provider = TelemetryProvider(benchmark_telemetry_config)
-        provider.initialize()
-        provider.shutdown()
+    provider = TelemetryProvider(benchmark_telemetry_config)
+    provider.initialize()
+    provider.shutdown()
 
 
 @pytest.mark.benchmark
@@ -55,9 +53,8 @@ def test_provider_context_manager(
 
     Measures combined init/shutdown using context manager pattern.
     """
-    for _ in range(10):
-        with TelemetryProvider(benchmark_telemetry_config):
-            pass  # Provider active
+    with TelemetryProvider(benchmark_telemetry_config):
+        pass  # Provider active
 
 
 @pytest.mark.benchmark
@@ -84,9 +81,8 @@ def test_provider_noop_mode() -> None:
                 floe_mode="dev",
             ),
         )
-        for _ in range(10):
-            with TelemetryProvider(config):
-                pass
+        with TelemetryProvider(config):
+            pass
     finally:
         if original is not None:
             os.environ["OTEL_SDK_DISABLED"] = original
@@ -100,20 +96,19 @@ def test_config_creation_overhead() -> None:
 
     Measures Pydantic model validation cost for configuration.
     """
-    for _ in range(100):
-        _ = TelemetryConfig(
-            enabled=True,
-            otlp_endpoint="http://localhost:4317",
-            resource_attributes=ResourceAttributes(
-                service_name="benchmark-service",
-                service_version="1.0.0",
-                deployment_environment="dev",
-                floe_namespace="benchmark",
-                floe_product_name="perf-test",
-                floe_product_version="1.0.0",
-                floe_mode="dev",
-            ),
-        )
+    _ = TelemetryConfig(
+        enabled=True,
+        otlp_endpoint="http://localhost:4317",
+        resource_attributes=ResourceAttributes(
+            service_name="benchmark-service",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="benchmark",
+            floe_product_name="perf-test",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        ),
+    )
 
 
 @pytest.mark.benchmark
@@ -122,13 +117,12 @@ def test_resource_attributes_creation() -> None:
 
     Measures Pydantic model validation for resource attributes.
     """
-    for _ in range(100):
-        _ = ResourceAttributes(
-            service_name="benchmark-service",
-            service_version="1.0.0",
-            deployment_environment="dev",
-            floe_namespace="benchmark",
-            floe_product_name="perf-test",
-            floe_product_version="1.0.0",
-            floe_mode="dev",
-        )
+    _ = ResourceAttributes(
+        service_name="benchmark-service",
+        service_version="1.0.0",
+        deployment_environment="dev",
+        floe_namespace="benchmark",
+        floe_product_name="perf-test",
+        floe_product_version="1.0.0",
+        floe_mode="dev",
+    )

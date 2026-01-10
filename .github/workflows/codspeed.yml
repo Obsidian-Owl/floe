@@ -38,7 +38,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@0d7de549485db8284c0b87a0d2c0dd871097e641  # v4
         with:
           mode: simulation
           run: uv run pytest benchmarks/ --codspeed

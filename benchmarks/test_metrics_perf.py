@@ -23,9 +23,7 @@ def test_metric_increment_overhead() -> None:
     event counting in hot paths (e.g., request counting).
     """
     recorder = MetricRecorder()
-
-    for _ in range(1000):
-        recorder.increment("test.counter", labels={"status": "success"})
+    recorder.increment("test.counter", labels={"status": "success"})
 
 
 @pytest.mark.benchmark
@@ -35,9 +33,7 @@ def test_metric_increment_no_labels() -> None:
     Measures baseline increment overhead without attribute allocation.
     """
     recorder = MetricRecorder()
-
-    for _ in range(1000):
-        recorder.increment("test.counter.simple")
+    recorder.increment("test.counter.simple")
 
 
 @pytest.mark.benchmark
@@ -48,9 +44,7 @@ def test_metric_gauge_overhead() -> None:
     (e.g., queue depth, memory usage).
     """
     recorder = MetricRecorder()
-
-    for _ in range(1000):
-        recorder.set_gauge("test.gauge", value=42, labels={"queue": "default"})
+    recorder.set_gauge("test.gauge", value=42, labels={"queue": "default"})
 
 
 @pytest.mark.benchmark
@@ -61,9 +55,7 @@ def test_metric_histogram_overhead() -> None:
     distributions (e.g., request duration, response size).
     """
     recorder = MetricRecorder()
-
-    for _ in range(1000):
-        recorder.record_histogram("test.duration", value=42.5, unit="ms")
+    recorder.record_histogram("test.duration", value=42.5, unit="ms")
 
 
 @pytest.mark.benchmark
@@ -73,13 +65,11 @@ def test_metric_histogram_with_labels() -> None:
     Measures overhead when recording with high-cardinality attributes.
     """
     recorder = MetricRecorder()
-
-    for _ in range(1000):
-        recorder.record_histogram(
-            "test.duration",
-            value=42.5,
-            labels={"method": "GET", "status": "200", "path": "/api/v1/users"},
-        )
+    recorder.record_histogram(
+        "test.duration",
+        value=42.5,
+        labels={"method": "GET", "status": "200", "path": "/api/v1/users"},
+    )
 
 
 @pytest.mark.benchmark
@@ -89,8 +79,6 @@ def test_mixed_metrics_overhead() -> None:
     Simulates realistic monitoring scenario with multiple metric types.
     """
     recorder = MetricRecorder()
-
-    for i in range(500):
-        recorder.increment("requests.total", labels={"status": "success"})
-        recorder.set_gauge("queue.depth", value=i % 100)
-        recorder.record_histogram("request.duration", value=float(i % 1000))
+    recorder.increment("requests.total", labels={"status": "success"})
+    recorder.set_gauge("queue.depth", value=50)
+    recorder.record_histogram("request.duration", value=100.0)

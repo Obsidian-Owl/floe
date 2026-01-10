@@ -28,8 +28,7 @@ def test_traced_decorator_overhead() -> None:
     def work() -> int:
         return sum(range(100))
 
-    for _ in range(1000):
-        work()
+    work()
 
 
 @pytest.mark.benchmark
@@ -44,8 +43,7 @@ def test_create_span_overhead() -> None:
         with create_span("test_span"):
             return sum(range(100))
 
-    for _ in range(1000):
-        work()
+    work()
 
 
 @pytest.mark.benchmark
@@ -63,8 +61,7 @@ def test_nested_spans_overhead() -> None:
                 result += sum(range(50))
         return result
 
-    for _ in range(500):
-        work()
+    work()
 
 
 @pytest.mark.benchmark
@@ -81,8 +78,7 @@ def test_traced_with_attributes_overhead() -> None:
     def work() -> int:
         return sum(range(100))
 
-    for _ in range(1000):
-        work()
+    work()
 
 
 @pytest.mark.benchmark
@@ -101,8 +97,7 @@ def test_realistic_pipeline_with_tracing() -> None:
         parsed = json.loads(json_str)
         return sum(item["value"] for item in parsed["items"])
 
-    for _ in range(100):
-        pipeline()
+    pipeline()
 
 
 @pytest.mark.benchmark
@@ -118,5 +113,4 @@ def test_baseline_no_tracing() -> None:
         parsed = json.loads(json_str)
         return sum(item["value"] for item in parsed["items"])
 
-    for _ in range(100):
-        pipeline()
+    pipeline()

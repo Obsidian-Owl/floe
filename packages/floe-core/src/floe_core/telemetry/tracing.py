@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast, overload
@@ -48,6 +49,7 @@ R = TypeVar("R")
 
 # Module-level tracer instance (can be overridden for testing)
 _tracer: Tracer | None = None
+_tracer_lock = threading.Lock()
 
 
 def get_tracer() -> Tracer:
@@ -55,13 +57,16 @@ def get_tracer() -> Tracer:
 
     Returns the module-level tracer, creating it if necessary.
     This indirection allows tests to inject a test tracer.
+    Thread-safe via double-checked locking pattern.
 
     Returns:
         Tracer instance for creating spans.
     """
     global _tracer
     if _tracer is None:
-        _tracer = trace.get_tracer("floe_core.telemetry")
+        with _tracer_lock:
+            if _tracer is None:  # Double-check after acquiring lock
+                _tracer = trace.get_tracer("floe_core.telemetry")
     return _tracer
 
 

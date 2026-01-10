@@ -362,7 +362,9 @@ class TelemetryConfig(BaseModel):
     )
     otlp_endpoint: str = Field(
         default="http://otel-collector:4317",
-        description="OTLP Collector endpoint (Layer 2)",
+        description="OTLP Collector endpoint (Layer 2). HTTP is used for K8s-internal "
+        "cluster traffic where TLS termination happens at ingress. "
+        "Configure HTTPS for external/public endpoints.",
     )
     otlp_protocol: Literal["grpc", "http"] = Field(
         default="grpc",
