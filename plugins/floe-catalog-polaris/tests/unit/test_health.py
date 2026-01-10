@@ -126,9 +126,7 @@ class TestHealthCheckBasic:
         result = connected_plugin.health_check()
 
         # Error details should be in message or details
-        assert "Connection refused" in result.message or "Connection refused" in str(
-            result.details
-        )
+        assert "Connection refused" in result.message or "Connection refused" in str(result.details)
 
 
 class TestHealthCheckResponseTime:
@@ -342,11 +340,7 @@ class TestHealthCheckTimestamp:
             assert checked_at.tzinfo == timezone.utc or str(checked_at.tzinfo) == "UTC"
         elif isinstance(checked_at, str):
             # ISO format with Z suffix or +00:00 indicates UTC
-            assert (
-                checked_at.endswith("Z")
-                or "+00:00" in checked_at
-                or checked_at.endswith("UTC")
-            )
+            assert checked_at.endswith("Z") or "+00:00" in checked_at or checked_at.endswith("UTC")
 
 
 class TestHealthCheckNotConnected:
@@ -455,11 +449,7 @@ class TestHealthCheckLogging:
             connected_plugin.health_check()
 
             # Should log the error/warning
-            assert (
-                mock_logger.warning.called
-                or mock_logger.error.called
-                or mock_logger.bind.called
-            )
+            assert mock_logger.warning.called or mock_logger.error.called or mock_logger.bind.called
 
 
 class TestHealthCheckEdgeCases:

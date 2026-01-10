@@ -473,9 +473,8 @@ class TestTableErrorMapping:
         sample_schema: dict[str, Any],
     ) -> None:
         """Test that create_table maps PyIceberg errors correctly."""
-        from pyiceberg.exceptions import ServiceUnavailableError
-
         from floe_core import CatalogUnavailableError
+        from pyiceberg.exceptions import ServiceUnavailableError
 
         mock_catalog.create_table.side_effect = ServiceUnavailableError("Catalog down")
 
@@ -489,9 +488,8 @@ class TestTableErrorMapping:
         mock_catalog: MagicMock,
     ) -> None:
         """Test that list_tables maps PyIceberg errors correctly."""
-        from pyiceberg.exceptions import ServiceUnavailableError
-
         from floe_core import CatalogUnavailableError
+        from pyiceberg.exceptions import ServiceUnavailableError
 
         mock_catalog.list_tables.side_effect = ServiceUnavailableError("Catalog down")
 
@@ -505,9 +503,8 @@ class TestTableErrorMapping:
         mock_catalog: MagicMock,
     ) -> None:
         """Test that drop_table maps PyIceberg errors correctly."""
-        from pyiceberg.exceptions import ServiceUnavailableError
-
         from floe_core import CatalogUnavailableError
+        from pyiceberg.exceptions import ServiceUnavailableError
 
         mock_catalog.drop_table.side_effect = ServiceUnavailableError("Catalog down")
 

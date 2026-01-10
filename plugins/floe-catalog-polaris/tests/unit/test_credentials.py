@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core import AuthenticationError, NotFoundError, NotSupportedError
+from floe_core import AuthenticationError, NotFoundError
 from pyiceberg.exceptions import ForbiddenError, NoSuchTableError
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
@@ -308,9 +308,7 @@ class TestVendCredentialsExpiration:
         # Assert - expiration should be in the future but within 24h
         expiration_str = result["expiration"]
         if isinstance(expiration_str, str):
-            expiration_dt = datetime.fromisoformat(
-                expiration_str.replace("Z", "+00:00")
-            )
+            expiration_dt = datetime.fromisoformat(expiration_str.replace("Z", "+00:00"))
             # Should be in the future
             assert expiration_dt > now
             # Should be within 24 hours from now
@@ -366,9 +364,7 @@ class TestVendCredentialsOTelTracing:
         # Arrange
         mock_catalog.load_table.return_value.io.return_value = mock_vended_credentials
 
-        with patch(
-            "floe_catalog_polaris.plugin.catalog_span"
-        ) as mock_span_context:
+        with patch("floe_catalog_polaris.plugin.catalog_span") as mock_span_context:
             mock_span = MagicMock()
             mock_span_context.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_span_context.return_value.__exit__ = MagicMock(return_value=False)
@@ -397,9 +393,7 @@ class TestVendCredentialsOTelTracing:
         # Arrange
         mock_catalog.load_table.return_value.io.return_value = mock_vended_credentials
 
-        with patch(
-            "floe_catalog_polaris.plugin.catalog_span"
-        ) as mock_span_context:
+        with patch("floe_catalog_polaris.plugin.catalog_span") as mock_span_context:
             mock_span = MagicMock()
             mock_span_context.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_span_context.return_value.__exit__ = MagicMock(return_value=False)
@@ -432,9 +426,7 @@ class TestVendCredentialsOTelTracing:
         # Arrange
         mock_catalog.load_table.return_value.io.return_value = mock_vended_credentials
 
-        with patch(
-            "floe_catalog_polaris.plugin.catalog_span"
-        ) as mock_span_context:
+        with patch("floe_catalog_polaris.plugin.catalog_span") as mock_span_context:
             mock_span = MagicMock()
             mock_span_context.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_span_context.return_value.__exit__ = MagicMock(return_value=False)
@@ -472,16 +464,12 @@ class TestVendCredentialsOTelTracing:
         # Arrange - configure mock to raise error
         mock_catalog.load_table.side_effect = NoSuchTableError("bronze.customers")
 
-        with patch(
-            "floe_catalog_polaris.plugin.catalog_span"
-        ) as mock_span_context:
+        with patch("floe_catalog_polaris.plugin.catalog_span") as mock_span_context:
             mock_span = MagicMock()
             mock_span_context.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_span_context.return_value.__exit__ = MagicMock(return_value=False)
 
-            with patch(
-                "floe_catalog_polaris.plugin.set_error_attributes"
-            ) as mock_set_error:
+            with patch("floe_catalog_polaris.plugin.set_error_attributes") as mock_set_error:
                 # Act & Assert
                 with pytest.raises(NotFoundError):
                     connected_plugin.vend_credentials(
@@ -632,7 +620,7 @@ class TestVendCredentialsLogging:
             # Assert - check bind kwargs don't include secrets
             for call in mock_logger.bind.call_args_list:
                 kwargs = call[1]
-                for key, value in kwargs.items():
+                for _key, value in kwargs.items():
                     if isinstance(value, str):
                         assert "TEST_ACCESS_KEY" not in value
                         assert "TEST_SECRET_KEY" not in value

@@ -27,7 +27,8 @@ Requirements Covered:
 from __future__ import annotations
 
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -810,9 +811,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
         """
         # Validate timeout parameter
         if not (0.1 <= timeout <= 10.0):
-            raise ValueError(
-                f"timeout must be between 0.1 and 10.0 seconds, got {timeout}"
-            )
+            raise ValueError(f"timeout must be between 0.1 and 10.0 seconds, got {timeout}")
 
         log = logger.bind(operation="health_check", timeout=timeout)
         checked_at = datetime.now(timezone.utc)

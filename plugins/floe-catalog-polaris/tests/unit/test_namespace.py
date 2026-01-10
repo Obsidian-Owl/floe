@@ -12,7 +12,6 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -220,7 +219,7 @@ class TestListNamespaces:
             ("silver", "orders"),
         ]
 
-        result = connected_plugin.list_namespaces(parent="silver")
+        connected_plugin.list_namespaces(parent="silver")
 
         mock_catalog.list_namespaces.assert_called_once()
         # Verify parent was passed to the catalog
@@ -457,7 +456,6 @@ class TestNamespaceOTelTracing:
             connected_plugin.create_namespace("bronze")
 
             # Should include namespace in span attributes
-            call_kwargs = mock_span.call_args.kwargs if mock_span.call_args else {}
             # Namespace should be passed either as kwarg or positional
             call_str = str(mock_span.call_args)
             assert "bronze" in call_str or "namespace" in call_str
