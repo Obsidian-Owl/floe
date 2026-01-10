@@ -1,6 +1,8 @@
 """Integration tests for DuckDBComputePlugin.
 
-Tests for FR-005 (DuckDBComputePlugin implements ComputePlugin ABC) with real DuckDB.
+Tests for:
+- FR-005: DuckDBComputePlugin implements ComputePlugin ABC
+- FR-006: Support both in-memory and file-based DuckDB modes
 
 These tests verify that the DuckDB compute plugin works correctly with real
 database connections. Uses in-memory DuckDB for fast, isolated testing.
@@ -9,6 +11,9 @@ Note: These tests require DuckDB to be available and run in K8s for production p
 """
 
 from __future__ import annotations
+
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -194,3 +199,121 @@ class TestRealDatabaseOperations:
 
         # The message should indicate successful connection
         assert "successfully" in result.message.lower()
+
+
+class TestDatabaseModes:
+    """Integration tests for in-memory and file-based DuckDB modes (FR-006).
+
+    These tests verify that DuckDB works correctly in both ephemeral in-memory
+    mode and persistent file-based mode.
+    """
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("FR-006")
+    def test_in_memory_mode(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test DuckDB works in in-memory mode with :memory: path.
+
+        Verifies that the :memory: path creates an ephemeral, in-process
+        database that works for quick, isolated operations.
+        """
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=4,
+            connection={"path": ":memory:"},
+        )
+
+        result = duckdb_plugin.validate_connection(config)
+
+        assert result.status == ConnectionStatus.HEALTHY
+        assert ":memory:" in result.message
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("FR-006")
+    def test_file_based_mode(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test DuckDB works in file-based mode with persistent database.
+
+        Verifies that file-based paths create persistent databases that
+        can be accessed across connections.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "test_database.duckdb"
+
+            config = ComputeConfig(
+                plugin="duckdb",
+                threads=4,
+                connection={"path": str(db_path)},
+            )
+
+            result = duckdb_plugin.validate_connection(config)
+
+            assert result.status == ConnectionStatus.HEALTHY
+            assert "test_database.duckdb" in result.message
+
+            # Verify the database file was created
+            assert db_path.exists()
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("FR-006")
+    def test_file_based_mode_creates_database(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test file-based mode creates the database file on first connection.
+
+        Verifies that DuckDB creates the database file when connecting to
+        a path that doesn't exist yet.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "new_database.duckdb"
+
+            # Ensure file doesn't exist before test
+            assert not db_path.exists()
+
+            config = ComputeConfig(
+                plugin="duckdb",
+                threads=4,
+                connection={"path": str(db_path)},
+            )
+
+            result = duckdb_plugin.validate_connection(config)
+
+            assert result.status == ConnectionStatus.HEALTHY
+            # After validation, the database file should exist
+            assert db_path.exists()
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("FR-006")
+    def test_file_based_mode_reconnection(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test file-based mode allows reconnection to existing database.
+
+        Verifies that DuckDB can connect to an existing database file
+        multiple times (persistence across connections).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "persistent.duckdb"
+
+            config = ComputeConfig(
+                plugin="duckdb",
+                threads=4,
+                connection={"path": str(db_path)},
+            )
+
+            # First connection - creates the database
+            result1 = duckdb_plugin.validate_connection(config)
+            assert result1.status == ConnectionStatus.HEALTHY
+
+            # Second connection - reconnects to existing database
+            result2 = duckdb_plugin.validate_connection(config)
+            assert result2.status == ConnectionStatus.HEALTHY
+
+            # Both connections should succeed
+            assert result1.status == result2.status
