@@ -205,65 +205,13 @@ jobs:
             --tb=short
 
   # ============================================================
-  # Stage 2c: Integration Tests (K8s-native with Kind)
+  # Note: Integration Tests moved to release.yml and nightly.yml
+  # Integration tests require K8s cluster (~10 min) - too slow for PR CI
+  # See .github/CI.md for workflow documentation
   # ============================================================
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [unit-tests, security]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Install dependencies
-        run: uv sync --all-extras --dev
-
-      - name: Create Kind cluster
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3  # v1.12.0
-        with:
-          cluster_name: floe-test
-          config: testing/k8s/kind-config.yaml
-
-      - name: Deploy test services
-        run: |
-          kubectl apply -f testing/k8s/services/namespace.yaml
-          kubectl apply -f testing/k8s/services/
-
-      - name: Wait for services to be ready
-        run: |
-          kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s || true
-          kubectl get pods -n floe-test
-
-      - name: Run integration tests
-        run: ./testing/ci/test-integration.sh
-        env:
-          TEST_NAMESPACE: floe-test
-          ALLOW_NO_TESTS: true  # Allow empty integration tests during development
-
-      - name: Collect logs on failure
-        if: failure()
-        run: |
-          kubectl get pods -n floe-test -o wide
-          kubectl logs -n floe-test --all-containers --tail=50 -l app || true
-
-      - name: Cleanup Kind cluster
-        if: always()
-        run: kind delete cluster --name floe-test || true
 
   # ============================================================
-  # Stage 2d: Traceability Check
+  # Stage 2c: Traceability Check
   # ============================================================
   traceability:
     name: Requirement Traceability
@@ -328,7 +276,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, security, unit-tests, contract-tests, integration-tests, traceability, sonarcloud]
+    needs: [lint-typecheck, security, unit-tests, contract-tests, traceability, sonarcloud]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -337,7 +285,6 @@ jobs:
           SECURITY_RESULT: ${{ needs.security.result }}
           UNIT_RESULT: ${{ needs.unit-tests.result }}
           CONTRACT_RESULT: ${{ needs.contract-tests.result }}
-          INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
           TRACEABILITY_RESULT: ${{ needs.traceability.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
         run: |
@@ -355,10 +302,6 @@ jobs:
           fi
           if [[ "$CONTRACT_RESULT" != "success" ]]; then
             echo "contract-tests failed" >&2
-            exit 1
-          fi
-          if [[ "$INTEGRATION_RESULT" != "success" ]]; then
-            echo "integration-tests failed" >&2
             exit 1
           fi
           if [[ "$TRACEABILITY_RESULT" != "success" ]]; then

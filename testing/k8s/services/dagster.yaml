@@ -106,6 +106,25 @@ spec:
         component: webserver
     spec:
       serviceAccountName: dagster
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for PostgreSQL dagster database..."
+              until pg_isready -h postgres -p 5432 -U floe -d dagster; do
+                echo "PostgreSQL not ready, waiting..."
+                sleep 2
+              done
+              echo "PostgreSQL dagster database is ready!"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
       containers:
         - name: webserver
           image: dagster/dagster-k8s:1.6.0
@@ -173,6 +192,25 @@ spec:
         component: daemon
     spec:
       serviceAccountName: dagster
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for PostgreSQL dagster database..."
+              until pg_isready -h postgres -p 5432 -U floe -d dagster; do
+                echo "PostgreSQL not ready, waiting..."
+                sleep 2
+              done
+              echo "PostgreSQL dagster database is ready!"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
       containers:
         - name: daemon
           image: dagster/dagster-k8s:1.6.0

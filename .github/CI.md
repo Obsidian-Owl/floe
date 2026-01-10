@@ -1,284 +1,214 @@
-# CI/CD Strategy
+# CI/CD Pipelines
 
-This document outlines floe's continuous integration and deployment strategy, including local development hooks, GitHub Actions pipelines, and future expansion plans.
-
----
-
-## Philosophy
-
-**Catch 99% locally. CI is the safety net, not the first line of defense.**
-
-Our CI strategy follows a progressive approach:
-1. **Pre-commit hooks** catch formatting, linting, and obvious issues instantly
-2. **Pre-push hooks** run type checking and fast unit tests before code leaves your machine
-3. **CI pipeline** validates across Python versions and runs comprehensive checks
-4. **Future stages** will add integration testing in Kubernetes
+floe uses three GitHub Actions workflows optimized for speed and reliability.
 
 ---
 
-## Current Pipeline (Stage 1: Foundation)
+## Quick Reference
+
+| Trigger | Workflow | Duration | What Runs |
+|---------|----------|----------|-----------|
+| **PR / Push to main** | `ci.yml` | ~3 min | Lint, type check, unit tests, contract tests, security, SonarCloud |
+| **Tag v\*.\*.\*** | `release.yml` | ~15 min | Validate, integration tests (K8s), GitHub Release |
+| **2am UTC daily** | `nightly.yml` | ~10 min | Integration tests (K8s), dependency audit |
+
+**Why this split?**
+- PRs get fast feedback (~3 min) for quick iteration
+- Integration tests (requiring K8s cluster) run on releases and nightly
+- Dependency vulnerabilities are caught within 24 hours
+
+---
+
+## PR Pipeline (`ci.yml`)
+
+Fast checks that run on every PR and push to main.
 
 ```mermaid
 flowchart TB
-    subgraph LOCAL ["Local Development"]
-        PC["Pre-commit Hooks"]
-        PP["Pre-push Hooks"]
+    subgraph LINT ["Stage 1: Fast Gate"]
+        L["Lint & Type Check"]
     end
 
-    subgraph CI ["GitHub Actions CI"]
-        LT["Lint & Type Check"]
-        UT["Unit Tests"]
-        CT["Contract Tests"]
-        SC["SonarCloud Analysis"]
-        SUCCESS["CI Success Gate"]
+    subgraph PARALLEL ["Stage 2: Parallel Checks"]
+        U["Unit Tests<br/>(3.10, 3.11, 3.12)"]
+        C["Contract Tests"]
+        S["Security Scan"]
+        T["Traceability"]
     end
 
-    PC -->|"ruff, bandit, yaml"| PP
-    PP -->|"mypy, pytest unit"| LT
+    subgraph ANALYSIS ["Stage 3: Analysis"]
+        SC["SonarCloud"]
+    end
 
-    LT -->|"must pass"| UT
-    LT -->|"must pass"| CT
-    UT -->|"coverage artifact"| SC
-    UT --> SUCCESS
-    CT --> SUCCESS
+    subgraph GATE ["Gate"]
+        SUCCESS["CI Success"]
+    end
+
+    L --> U
+    L --> C
+    L --> S
+    L --> T
+    U --> SC
+    U --> SUCCESS
+    C --> SUCCESS
+    S --> SUCCESS
+    T --> SUCCESS
     SC --> SUCCESS
-
-    classDef local fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef ci fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef gate fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
-
-    class PC,PP local
-    class LT,UT,CT,SC ci
-    class SUCCESS gate
 ```
 
-### Local Hooks (Pre-commit)
+### Jobs
 
-Fast checks that run on every commit:
-
-| Hook | Purpose | Speed |
-|------|---------|-------|
-| **ruff** | Linting + auto-fix | ~1s |
-| **ruff-format** | Code formatting | ~1s |
-| **bandit** | Security scanning | ~2s |
-| **yaml/whitespace** | File hygiene | <1s |
-
-### Local Hooks (Pre-push)
-
-Thorough checks before code leaves your machine:
-
-| Hook | Purpose | Speed |
-|------|---------|-------|
-| **mypy --strict** | Type checking | ~10s |
-| **pytest unit** | Unit tests | ~30s |
-
-### CI Pipeline Jobs
-
-| Job | Python | Depends On | Purpose |
-|-----|--------|------------|---------|
-| **lint-typecheck** | 3.10 | - | Fast gate: ruff + mypy |
-| **unit-tests** | 3.10, 3.11, 3.12 | lint-typecheck | Matrix testing with coverage |
-| **contract-tests** | 3.10 | lint-typecheck | Cross-package contract validation |
-| **sonarcloud** | - | unit-tests | Quality analysis + coverage |
-| **ci-success** | - | all | Branch protection gate |
+| Job | Purpose | Speed |
+|-----|---------|-------|
+| **lint-typecheck** | ruff + mypy --strict | ~30s |
+| **security** | bandit + pip-audit | ~30s |
+| **unit-tests** | pytest across Python versions | ~60s |
+| **contract-tests** | Cross-package schema validation | ~20s |
+| **traceability** | Requirement marker coverage | ~10s |
+| **sonarcloud** | Code quality + coverage | ~60s |
 
 ---
 
-## Setup Instructions
+## Release Pipeline (`release.yml`)
+
+Runs on version tags (e.g., `v0.1.0`) and validates before publishing.
+
+```mermaid
+flowchart TB
+    subgraph VALIDATE ["Validate"]
+        V["Quick Validation<br/>(lint, types)"]
+    end
+
+    subgraph K8S ["Integration Tests"]
+        KIND["Create Kind Cluster"]
+        DEPLOY["Deploy Services"]
+        WAIT["Wait for Ready"]
+        TEST["Run Tests"]
+        CLEANUP["Cleanup"]
+    end
+
+    subgraph RELEASE ["Release"]
+        GH["Create GitHub Release"]
+    end
+
+    V --> KIND
+    KIND --> DEPLOY --> WAIT --> TEST --> CLEANUP
+    TEST --> GH
+```
+
+### Triggering a Release
+
+```bash
+# Tag with semantic version
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow will:
+1. Validate code (lint, type check)
+2. Run integration tests in K8s (Kind cluster)
+3. Create GitHub Release with auto-generated notes
+
+---
+
+## Nightly Pipeline (`nightly.yml`)
+
+Scheduled at 2am UTC to catch regressions and vulnerabilities.
+
+### Jobs
+
+| Job | Purpose |
+|-----|---------|
+| **integration-tests** | Full integration test suite in K8s |
+| **dependency-audit** | pip-audit for CVEs, stale dependency check |
+| **notify-failure** | Creates GitHub issue on failure |
+
+### Manual Trigger
+
+```bash
+# Run nightly pipeline manually
+gh workflow run nightly.yml
+```
+
+---
+
+## Local Development
 
 ### Install Pre-commit Hooks
 
 ```bash
-# Install pre-commit and pre-push hooks
+# Install hooks (run once)
 uv run pre-commit install
 uv run pre-commit install --hook-type pre-push
-
-# Run all hooks manually (useful for CI debugging)
-uv run pre-commit run --all-files
 ```
 
-### Local Development Workflow
+### What Runs Locally
+
+| Hook | When | Checks |
+|------|------|--------|
+| **Pre-commit** | `git commit` | ruff, formatting, bandit, yaml |
+| **Pre-push** | `git push` | mypy --strict, unit tests |
+
+### Reproduce CI Locally
 
 ```bash
-# 1. Make changes to code
-vim packages/floe-core/src/floe_core/plugin_registry.py
+# Full CI check
+make check
 
-# 2. Stage changes (pre-commit runs automatically)
-git add .
-
-# 3. Commit (ruff, bandit, yaml checks run)
-git commit -m "feat: add plugin validation"
-
-# 4. Push (mypy + pytest run before push)
-git push origin feature-branch
+# Or manually:
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy --strict packages/ testing/
+uv run pytest packages/*/tests/unit/ -v
+uv run pytest tests/contract/ -v
 ```
-
-### Skip Hooks (Emergency Only)
-
-```bash
-# Skip pre-commit (not recommended)
-git commit --no-verify -m "emergency fix"
-
-# Skip pre-push (not recommended)
-git push --no-verify origin feature-branch
-```
-
----
-
-## Future Stages
-
-Our CI strategy will evolve through three stages:
-
-```mermaid
-flowchart LR
-    subgraph S1 ["Stage 1: Foundation"]
-        direction TB
-        S1A["Lint & Type Check"]
-        S1B["Unit Tests (matrix)"]
-        S1C["Contract Tests"]
-        S1D["SonarCloud"]
-    end
-
-    subgraph S2 ["Stage 2: Integration"]
-        direction TB
-        S2A["Kind Cluster Setup"]
-        S2B["Service Deployment"]
-        S2C["Integration Tests"]
-        S2D["E2E Tests"]
-    end
-
-    subgraph S3 ["Stage 3: Release"]
-        direction TB
-        S3A["Semantic Versioning"]
-        S3B["Package Publishing"]
-        S3C["Helm Chart Release"]
-        S3D["Documentation Deploy"]
-    end
-
-    S1 -->|"When integration tests exist"| S2
-    S2 -->|"When ready for release"| S3
-
-    classDef current fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
-    classDef future fill:#fff3e0,stroke:#e65100,stroke-width:2px
-
-    class S1,S1A,S1B,S1C,S1D current
-    class S2,S2A,S2B,S2C,S2D,S3,S3A,S3B,S3C,S3D future
-```
-
-### Stage 2: Integration Testing (Planned)
-
-When integration tests are added, CI will include:
-
-- **Kind cluster provisioning** in GitHub Actions
-- **Helm deployment** of test infrastructure (Polaris, LocalStack, PostgreSQL)
-- **Integration test execution** against real services
-- **E2E workflow validation** for complete pipelines
-
-```mermaid
-flowchart TB
-    subgraph STAGE2 ["Stage 2: Integration Pipeline"]
-        KIND["Create Kind Cluster"]
-        HELM["Deploy Services via Helm"]
-        WAIT["Wait for Services Ready"]
-        INT["Run Integration Tests"]
-        E2E["Run E2E Tests"]
-        CLEAN["Cleanup Cluster"]
-    end
-
-    KIND --> HELM --> WAIT --> INT --> E2E --> CLEAN
-
-    classDef k8s fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    class KIND,HELM,WAIT,INT,E2E,CLEAN k8s
-```
-
-### Stage 3: Release Automation (Planned)
-
-When ready for releases, CI will include:
-
-- **Semantic versioning** based on conventional commits
-- **PyPI publishing** for Python packages
-- **Helm chart releases** to OCI registry
-- **Documentation deployment** to GitHub Pages
-
----
-
-## Branch Protection Rules
-
-The following checks are required before merging to `main`:
-
-| Check | Required | Description |
-|-------|----------|-------------|
-| **ci-success** | Yes | All CI jobs must pass |
-| **SonarCloud Quality Gate** | Yes | No new bugs, vulnerabilities, or code smells |
-| **Review approval** | Recommended | At least 1 approving review |
-
-### Configuring Branch Protection
-
-1. Go to **Settings > Branches > Branch protection rules**
-2. Add rule for `main` branch
-3. Enable:
-   - Require status checks to pass before merging
-   - Select `ci-success` as required check
-   - Require branches to be up to date before merging
 
 ---
 
 ## Troubleshooting
 
-### Pre-commit Hook Failures
+### PR CI Failures
 
-```bash
-# See what failed
-uv run pre-commit run --all-files --verbose
+| Symptom | Fix |
+|---------|-----|
+| **ruff check failed** | `uv run ruff check --fix .` |
+| **ruff format failed** | `uv run ruff format .` |
+| **mypy failed** | Fix type errors shown in output |
+| **Unit tests failed** | Run locally: `make test-unit` |
+| **Contract tests failed** | Check `tests/contract/` for schema changes |
 
-# Fix ruff issues automatically
-uv run ruff check --fix .
-uv run ruff format .
+### Integration Test Failures
 
-# Fix mypy issues (manual)
-uv run mypy --strict packages/
-```
+Integration tests run in K8s (Kind cluster). Common issues:
 
-### CI Pipeline Failures
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Pod not ready | Service slow to start | Init containers wait for dependencies |
+| Connection refused | Database not initialized | PostgreSQL init script needs time |
+| Test timeout | Service crash loop | Check pod logs with `kubectl logs` |
 
-```bash
-# Reproduce CI locally
-uv sync --all-extras --dev
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy --strict packages/
-uv run pytest packages/floe-core/tests/unit/ -v --cov=packages/floe-core/src
-uv run pytest tests/contract/ -v
-```
+### Nightly Failure
 
-### SonarCloud Issues
-
-SonarCloud analysis may fail if:
-- Coverage drops below threshold
-- New security vulnerabilities introduced
-- Code smells exceed quality gate
-
-Check the SonarCloud dashboard for details: [SonarCloud Project](https://sonarcloud.io/project/overview?id=Obsidian-Owl_floe)
+If nightly fails, a GitHub issue is created automatically with the `nightly-failure` label. Check the linked workflow run for details.
 
 ---
 
-## Quality Gates
+## Branch Protection
 
-### Coverage Requirements
+Required checks before merging to `main`:
 
-| Test Type | Minimum Coverage |
-|-----------|-----------------|
-| Unit Tests | 80% |
-| Integration Tests | 70% (future) |
+| Check | Required | Description |
+|-------|----------|-------------|
+| **ci-success** | Yes | All PR CI jobs must pass |
+| **SonarCloud** | Yes | Quality gate must pass |
 
-### SonarCloud Quality Gate
+### Quality Gates
 
 | Metric | Requirement |
 |--------|-------------|
+| Unit Test Coverage | > 80% |
 | Security Rating | A (no vulnerabilities) |
 | Reliability Rating | A (no bugs) |
-| Maintainability Rating | A (manageable debt) |
-| Coverage | > 80% on new code |
 | Duplications | < 3% on new code |
 
 ---
@@ -287,8 +217,9 @@ Check the SonarCloud dashboard for details: [SonarCloud Project](https://sonarcl
 
 | File | Purpose |
 |------|---------|
-| `.github/workflows/ci.yml` | GitHub Actions CI pipeline |
-| `.pre-commit-config.yaml` | Pre-commit and pre-push hooks |
-| `pyproject.toml` | Tool configuration (ruff, mypy, pytest) |
-| `sonar-project.properties` | SonarCloud configuration |
-| `uv.lock` | Locked dependencies for reproducibility |
+| `.github/workflows/ci.yml` | PR/push pipeline |
+| `.github/workflows/release.yml` | Release pipeline (on tags) |
+| `.github/workflows/nightly.yml` | Scheduled tests + audit |
+| `.pre-commit-config.yaml` | Local hooks |
+| `testing/k8s/` | Kind cluster + service manifests |
+| `testing/ci/` | CI test runner scripts |
