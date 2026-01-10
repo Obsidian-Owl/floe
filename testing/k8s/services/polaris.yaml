@@ -25,6 +25,7 @@ data:
 
     featureConfiguration:
       ENFORCE_PRINCIPAL_CREDENTIAL_ROTATION_REQUIRED_CHECKING: false
+      DROP_WITH_PURGE_ENABLED: true
       SUPPORTED_CATALOG_STORAGE_TYPES:
         - S3
         - FILE
@@ -48,23 +49,19 @@ spec:
     spec:
       containers:
         - name: polaris
-          image: apache/polaris:1.0.0-incubating
+          image: apache/polaris:1.1.0-incubating
           ports:
             - containerPort: 8181
               name: api
             - containerPort: 8182
               name: admin
           env:
+            # Use dedicated Polaris service account for STS operations
+            # WARNING: Test-only credentials - NOT for production
             - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_USER
+              value: "polaris-svc"
             - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_PASSWORD
+              value: "polaris-secret123"
             - name: AWS_REGION
               value: us-east-1
             # Point S3 to MinIO

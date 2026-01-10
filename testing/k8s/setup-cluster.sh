@@ -175,6 +175,13 @@ deploy_services() {
     log_info "Waiting for MinIO to be ready..."
     kubectl wait --for=condition=available deployment/minio -n "${NAMESPACE}" --timeout=120s
 
+    # Wait for MinIO IAM setup job to complete (creates Polaris service account)
+    log_info "Waiting for MinIO IAM setup..."
+    kubectl wait --for=condition=complete job/minio-iam-setup -n "${NAMESPACE}" --timeout=120s || {
+        log_warn "MinIO IAM setup job not complete, checking logs..."
+        kubectl logs job/minio-iam-setup -n "${NAMESPACE}" --tail=20 2>/dev/null || true
+    }
+
     # Apply Polaris
     log_info "Deploying Polaris..."
     kubectl apply -f "${SCRIPT_DIR}/services/polaris.yaml"

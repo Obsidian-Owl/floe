@@ -29,7 +29,7 @@ S3_ENDPOINT="http://${MINIO_HOST}:${MINIO_PORT}"
 CATALOG_NAME="${POLARIS_WAREHOUSE:-test_warehouse}"
 
 log_info() {
-    echo "[INFO] $1"
+    echo "[INFO] $1" >&2
 }
 
 log_error() {
@@ -80,6 +80,11 @@ create_catalog() {
 
     log_info "Creating catalog: ${catalog_name}..."
 
+    # MinIO-compatible storageConfigInfo for Polaris 1.1.0+
+    # Note: roleArn is NOT needed for MinIO (unlike AWS S3)
+    # - endpoint: client-facing URL (Kind NodePort access from host)
+    # - endpointInternal: server-side URL (K8s internal DNS for Polaris)
+    # - pathStyleAccess: required for MinIO
     local status
     status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${POLARIS_URL}/api/management/v1/catalogs" \
         -H "Authorization: Bearer ${token}" \
@@ -89,12 +94,15 @@ create_catalog() {
                 \"name\": \"${catalog_name}\",
                 \"type\": \"INTERNAL\",
                 \"properties\": {
-                    \"default-base-location\": \"s3://floe-warehouse/${catalog_name}\"
+                    \"default-base-location\": \"s3://floe-warehouse/${catalog_name}\",
+                    \"polaris.config.drop-with-purge.enabled\": \"true\"
                 },
                 \"storageConfigInfo\": {
                     \"storageType\": \"S3\",
                     \"allowedLocations\": [\"s3://floe-warehouse/\"],
-                    \"roleArn\": \"arn:aws:iam::000000000000:role/test-role\"
+                    \"endpoint\": \"http://localhost:9000\",
+                    \"endpointInternal\": \"http://minio:9000\",
+                    \"pathStyleAccess\": true
                 }
             }
         }")
