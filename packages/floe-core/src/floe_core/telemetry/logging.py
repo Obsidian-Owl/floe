@@ -21,6 +21,9 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.trace import INVALID_SPAN_ID, INVALID_TRACE_ID
+
 # Type alias for structlog EventDict
 EventDict = MutableMapping[str, Any]
 
@@ -50,9 +53,17 @@ def add_trace_context(
         >>> with create_span("my_operation"):
         ...     log.info("processing")  # Includes trace_id and span_id
     """
-    # TODO: T061 - Implement trace context injection
-    # This stub exists to enable TDD - tests should fail until T061 implementation
-    raise NotImplementedError("add_trace_context not yet implemented (T061)")
+    # Get the current span from context
+    span = trace.get_current_span()
+    ctx = span.get_span_context()
+
+    # Only add trace context if we have a valid span
+    if ctx.trace_id != INVALID_TRACE_ID and ctx.span_id != INVALID_SPAN_ID:
+        # Format as 32-char hex for trace_id, 16-char hex for span_id
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
+
+    return event_dict
 
 
 def configure_logging(

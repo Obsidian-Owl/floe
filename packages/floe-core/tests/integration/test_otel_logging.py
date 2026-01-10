@@ -82,6 +82,20 @@ def configured_structlog(
     """
     from floe_core.telemetry.logging import add_trace_context
 
+    # Create a PrintLogger wrapper that writes to our StringIO
+    class StringIOLogger:
+        """Logger that writes to StringIO."""
+
+        def __init__(self, stream: io.StringIO) -> None:
+            self._stream = stream
+
+        def msg(self, message: str) -> None:
+            """Write message to stream."""
+            self._stream.write(message + "\n")
+
+        # structlog calls these methods based on log level
+        debug = info = warning = error = critical = msg
+
     # Configure structlog with trace context processor
     structlog.configure(
         processors=[
@@ -92,7 +106,7 @@ def configured_structlog(
         ],
         wrapper_class=structlog.BoundLogger,
         context_class=dict,
-        logger_factory=lambda: log_output,
+        logger_factory=lambda: StringIOLogger(log_output),
         cache_logger_on_first_use=False,
     )
 

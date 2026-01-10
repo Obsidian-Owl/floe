@@ -186,9 +186,8 @@ class TestTraceIdInjection:
             event_dict: dict[str, Any] = {"event": "test"}
             result = add_trace_context(None, "info", event_dict)
 
-            # Get the span's trace_id from the exporter
-            spans = exporter.get_finished_spans()
-
+        # Get the span's trace_id from the exporter (span is now finished)
+        spans = exporter.get_finished_spans()
         assert len(spans) == 1
         span = spans[0]
         assert span.context is not None
@@ -265,9 +264,8 @@ class TestSpanIdInjection:
             event_dict: dict[str, Any] = {"event": "test"}
             result = add_trace_context(None, "info", event_dict)
 
-            # Get the span's span_id from the exporter
-            spans = exporter.get_finished_spans()
-
+        # Get the span's span_id from the exporter (span is now finished)
+        spans = exporter.get_finished_spans()
         assert len(spans) == 1
         span = spans[0]
         assert span.context is not None
