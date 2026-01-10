@@ -1,4 +1,4 @@
-# REQ-051 to REQ-060: Telemetry and Lineage Backend Plugin Standards
+# REQ-051 to REQ-062: Telemetry and Lineage Backend Plugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -465,9 +465,73 @@ entry_points={
 
 ---
 
+### REQ-061: TelemetryBackendPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for TelemetryBackendPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for telemetry backends (Jaeger, Datadog, Grafana Cloud) require OTLP collector fixtures to validate exporter configuration, trace emission, and connection validation.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/telemetry.py` (extends 9C patterns)
+- [ ] `TelemetryTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `telemetry_backend_context()` for lifecycle
+- [ ] Backend-specific fixtures: `jaeger_fixture()`, `otel_collector_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real backend required)
+- [ ] K8s manifest: `testing/k8s/services/jaeger.yaml` for integration tests
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_telemetry_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 6A (TelemetryBackendPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
+### REQ-062: LineageBackendPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for LineageBackendPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for lineage backends (Marquez, Atlan, DataHub) require OpenLineage transport fixtures to validate event emission, namespace strategy, and connection validation.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/lineage.py` (extends 9C patterns)
+- [ ] `LineageTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `lineage_backend_context()` for lifecycle
+- [ ] Backend-specific fixtures: `marquez_fixture()`, `datahub_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real backend required)
+- [ ] K8s manifest: `testing/k8s/services/marquez.yaml` for integration tests
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_lineage_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 6B (LineageBackendPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-Telemetry and Lineage Backend Plugin Standards (REQ-051 to REQ-060) complete when:
+Telemetry and Lineage Backend Plugin Standards (REQ-051 to REQ-062) complete when:
 
 - [ ] All 10 requirements documented with complete fields
 - [ ] TelemetryBackendPlugin ABC defined in floe-core

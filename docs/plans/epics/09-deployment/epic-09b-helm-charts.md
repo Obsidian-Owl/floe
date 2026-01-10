@@ -91,7 +91,7 @@ charts/
 | Blocked By | Epic 7B | RBAC templates |
 | Blocked By | Epic 7C | Security templates |
 | Blocked By | Epic 9A | Wraps deployment logic |
-| Blocks | Epic 9C | Testing uses charts |
+| Blocked By | Epic 9C | Test infrastructure (Wave 0) |
 
 ---
 

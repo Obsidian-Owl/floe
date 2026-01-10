@@ -1,0 +1,256 @@
+# Dagster orchestrator for integration testing
+# NOT production-ready - for testing only
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dagster-config
+  namespace: floe-test
+data:
+  # Empty workspace - code locations added during integration tests
+  workspace.yaml: |
+    load_from: []
+  # Dagster configuration - uses PostgreSQL storage
+  dagster.yaml: |
+    telemetry:
+      enabled: false
+    storage:
+      postgres:
+        postgres_db:
+          username:
+            env: DAGSTER_PG_USER
+          password:
+            env: DAGSTER_PG_PASSWORD
+          hostname:
+            env: DAGSTER_PG_HOST
+          db_name:
+            env: DAGSTER_PG_DB
+          port:
+            env: DAGSTER_PG_PORT
+    run_coordinator:
+      module: dagster.core.run_coordinator
+      class: QueuedRunCoordinator
+    run_launcher:
+      module: dagster_k8s
+      class: K8sRunLauncher
+      config:
+        service_account_name: dagster
+        job_namespace: floe-test
+        load_incluster_config: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dagster-secret
+  namespace: floe-test
+type: Opaque
+stringData:
+  # Test-only credentials - NOT for production
+  DAGSTER_PG_HOST: postgres
+  DAGSTER_PG_PORT: "5432"
+  DAGSTER_PG_DB: dagster
+  DAGSTER_PG_USER: floe
+  DAGSTER_PG_PASSWORD: floe_test_password
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dagster
+  namespace: floe-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dagster-role
+  namespace: floe-test
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dagster-role-binding
+  namespace: floe-test
+subjects:
+  - kind: ServiceAccount
+    name: dagster
+    namespace: floe-test
+roleRef:
+  kind: Role
+  name: dagster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster-webserver
+  namespace: floe-test
+  labels:
+    app: dagster
+    component: webserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dagster
+      component: webserver
+  template:
+    metadata:
+      labels:
+        app: dagster
+        component: webserver
+    spec:
+      serviceAccountName: dagster
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for PostgreSQL dagster database..."
+              until pg_isready -h postgres -p 5432 -U floe -d dagster; do
+                echo "PostgreSQL not ready, waiting..."
+                sleep 2
+              done
+              echo "PostgreSQL dagster database is ready!"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      containers:
+        - name: webserver
+          image: dagster/dagster-k8s:1.6.0
+          command:
+            - dagster-webserver
+            - -h
+            - "0.0.0.0"
+            - -p
+            - "3000"
+            - -w
+            - /opt/dagster/dagster_home/workspace.yaml
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DAGSTER_HOME
+              value: /opt/dagster/dagster_home
+          envFrom:
+            - secretRef:
+                name: dagster-secret
+          volumeMounts:
+            - name: config
+              mountPath: /opt/dagster/dagster_home
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /server_info
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /server_info
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: dagster-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster-daemon
+  namespace: floe-test
+  labels:
+    app: dagster
+    component: daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dagster
+      component: daemon
+  template:
+    metadata:
+      labels:
+        app: dagster
+        component: daemon
+    spec:
+      serviceAccountName: dagster
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for PostgreSQL dagster database..."
+              until pg_isready -h postgres -p 5432 -U floe -d dagster; do
+                echo "PostgreSQL not ready, waiting..."
+                sleep 2
+              done
+              echo "PostgreSQL dagster database is ready!"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      containers:
+        - name: daemon
+          image: dagster/dagster-k8s:1.6.0
+          command:
+            - dagster-daemon
+            - run
+            - -w
+            - /opt/dagster/dagster_home/workspace.yaml
+          env:
+            - name: DAGSTER_HOME
+              value: /opt/dagster/dagster_home
+          envFrom:
+            - secretRef:
+                name: dagster-secret
+          volumeMounts:
+            - name: config
+              mountPath: /opt/dagster/dagster_home
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: dagster-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dagster-webserver
+  namespace: floe-test
+spec:
+  selector:
+    app: dagster
+    component: webserver
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30300
+  type: NodePort

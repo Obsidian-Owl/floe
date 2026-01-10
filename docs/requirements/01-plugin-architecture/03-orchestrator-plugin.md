@@ -1,4 +1,4 @@
-# REQ-021 to REQ-030: OrchestratorPlugin Standards
+# REQ-021 to REQ-031: OrchestratorPlugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: CRITICAL
@@ -198,9 +198,41 @@ OrchestratorPlugin defines the interface for all orchestration engines (Dagster,
 
 ---
 
+### REQ-031: OrchestratorPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for OrchestratorPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for orchestrator adapters (Airflow) require orchestration service fixtures to validate definition creation, job execution, and observability integration.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/orchestrator.py` (extends 9C patterns)
+- [ ] `OrchestratorTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `orchestrator_connection_context()` for lifecycle
+- [ ] Adapter-specific fixtures: `airflow_fixture()` for Airflow testing
+- [ ] Mock fixtures for unit tests (no real orchestrator required)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST NOT duplicate Dagster fixture from Epic 9C (reference implementation)
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_orchestrator_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 4B (OrchestratorPlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-OrchestratorPlugin Standards (REQ-021 to REQ-030) complete when:
+OrchestratorPlugin Standards (REQ-021 to REQ-031) complete when:
 
 - [ ] All 10 requirements documented with complete fields
 - [ ] OrchestratorPlugin ABC defined in floe-core

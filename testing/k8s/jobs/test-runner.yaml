@@ -1,0 +1,223 @@
+# Test runner K8s Job for floe integration tests
+# Usage:
+#   kubectl apply -f testing/k8s/jobs/test-runner.yaml
+#   kubectl logs -f job/floe-test-runner -n floe-test
+#
+# Environment variables:
+#   TEST_ARGS: Additional pytest arguments
+#   TEST_PATH: Specific test path to run
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: floe-test-runner
+  namespace: floe-test
+  labels:
+    app: floe-test-runner
+spec:
+  # Don't retry failed tests automatically
+  backoffLimit: 0
+  # Clean up completed jobs after 1 hour
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: floe-test-runner
+    spec:
+      restartPolicy: Never
+      serviceAccountName: dagster  # Reuse Dagster SA for K8s access
+      containers:
+        - name: test-runner
+          image: floe-test-runner:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--tb=short"
+            - "-v"
+            - "--color=yes"
+            - "$(TEST_PATH)"
+          env:
+            - name: TEST_PATH
+              value: "tests/"
+            - name: TEST_ARGS
+              value: ""
+            # Database connection for tests
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: floe
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            # MinIO connection for tests
+            - name: MINIO_ENDPOINT
+              value: "http://minio:9000"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: AWS_REGION
+              value: us-east-1
+            # Polaris connection for tests
+            - name: POLARIS_URI
+              value: "http://polaris:8181/api/catalog"
+            # Test configuration
+            - name: PYTHONPATH
+              value: "/app:/app/testing"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          volumeMounts:
+            - name: artifacts
+              mountPath: /artifacts
+      volumes:
+        - name: artifacts
+          emptyDir: {}
+---
+# ConfigMap for customizing test runs
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-runner-config
+  namespace: floe-test
+data:
+  # Pytest configuration overrides
+  pytest.ini: |
+    [pytest]
+    testpaths = tests
+    python_files = test_*.py
+    python_functions = test_*
+    addopts = -v --tb=short --color=yes
+    markers =
+        requirement(id): Mark test with requirement ID for traceability
+        integration: Integration tests requiring K8s services
+        e2e: End-to-end tests
+---
+# Job for running only unit tests (faster)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: floe-test-unit
+  namespace: floe-test
+  labels:
+    app: floe-test-runner
+    test-type: unit
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: floe-test-runner
+        test-type: unit
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: test-runner
+          image: floe-test-runner:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--tb=short"
+            - "-v"
+            - "--color=yes"
+            - "-m"
+            - "not integration and not e2e"
+            - "tests/"
+          env:
+            - name: PYTHONPATH
+              value: "/app:/app/testing"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+---
+# Job for running integration tests
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: floe-test-integration
+  namespace: floe-test
+  labels:
+    app: floe-test-runner
+    test-type: integration
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: floe-test-runner
+        test-type: integration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: dagster
+      containers:
+        - name: test-runner
+          image: floe-test-runner:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--tb=short"
+            - "-v"
+            - "--color=yes"
+            - "-m"
+            - "integration"
+            - "tests/"
+          env:
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: floe
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: MINIO_ENDPOINT
+              value: "http://minio:9000"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: AWS_REGION
+              value: us-east-1
+            - name: POLARIS_URI
+              value: "http://polaris:8181/api/catalog"
+            - name: PYTHONPATH
+              value: "/app:/app/testing"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi

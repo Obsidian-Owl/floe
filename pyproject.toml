@@ -15,6 +15,9 @@ dependencies = [
     "ruff>=0.3",
     "pre-commit>=3.0",
     "bandit[toml]>=1.7",
+    "pip-audit>=2.0",  # Security audit for dependencies
+    "types-psycopg2>=2.9",  # Type stubs for psycopg2
+    "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
 ]
@@ -32,6 +35,10 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
+    "slow: Marks tests as slow (> 1 second)",
+    "integration: Marks tests requiring K8s services",
+    "contract: Marks cross-package contract tests",
+    "e2e: Marks end-to-end pipeline tests",
 ]
 
 [tool.mypy]

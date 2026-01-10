@@ -1,6 +1,6 @@
 """Plugin type definitions for floe-core.
 
-This module defines the PluginType enum, which enumerates all 11 plugin categories
+This module defines the PluginType enum, which enumerates all 12 plugin categories
 in the floe platform. Each plugin type corresponds to a specific entry point group
 used for plugin discovery.
 
@@ -16,7 +16,7 @@ from enum import Enum
 
 
 class PluginType(Enum):
-    """Enumeration of the 11 plugin categories in the floe platform.
+    """Enumeration of the 12 plugin categories in the floe platform.
 
     Each enum member has a `value` that is the entry point group name used
     for plugin discovery via `importlib.metadata.entry_points()`.
@@ -33,6 +33,7 @@ class PluginType(Enum):
         INGESTION: Data loading from sources (dlt, Airbyte)
         SECRETS: Credential management (Vault, AWS Secrets Manager)
         IDENTITY: Authentication provider (OAuth, OIDC)
+        QUALITY: Data quality validation (Great Expectations, Soda, dbt-expectations)
 
     Example:
         >>> PluginType.COMPUTE.entry_point_group
@@ -52,6 +53,7 @@ class PluginType(Enum):
     INGESTION = "floe.ingestion"
     SECRETS = "floe.secrets"
     IDENTITY = "floe.identity"
+    QUALITY = "floe.quality"
 
     @property
     def entry_point_group(self) -> str:
@@ -67,7 +69,7 @@ class PluginType(Enum):
         """Return all entry point group names.
 
         Returns:
-            List of all 11 entry point group strings.
+            List of all 12 entry point group strings.
 
         Example:
             >>> PluginType.all_entry_point_groups()

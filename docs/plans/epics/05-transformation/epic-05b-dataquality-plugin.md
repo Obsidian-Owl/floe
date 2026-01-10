@@ -66,6 +66,11 @@ plugins/floe-quality-dbt/
 └── tests/
     ├── unit/
     └── integration/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/quality.py          # DataQualityPlugin test fixtures
+testing/fixtures/sample_expectations/  # Sample quality expectations for testing
+testing/tests/unit/test_quality_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -76,6 +81,7 @@ plugins/floe-quality-dbt/
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry |
 | Blocked By | Epic 5A | Wraps dbt test execution |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 3D | Contract monitoring uses quality metrics |
 | Blocks | Epic 6A | Quality metrics exported to OTel |
 

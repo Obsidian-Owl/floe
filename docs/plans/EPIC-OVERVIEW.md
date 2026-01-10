@@ -25,10 +25,16 @@ All Epics fall within the optimal or acceptable range.
 ## Dependency Graph
 
 ```
+                              WAVE 0
+                    ┌─────────────────────────┐
+                    │ Epic 9C: Testing Infra  │
+                    │ (FOUNDATION - BLOCKING) │
+                    └────────────┬────────────┘
+                                 │
                               WAVE 1
                     ┌─────────────────────────┐
                     │   Epic 1: Plugin Registry│
-                    │   (FOUNDATION - Blocking)│
+                    │   (Depends on 9C)        │
                     └────────────┬────────────┘
                                  │
         ┌────────────────────────┼────────────────────────┐
@@ -142,16 +148,12 @@ All Epics fall within the optimal or acceptable range.
                                  │     Epic 9B           │
                                  │ Helm Charts           │
                                  │ ◄──(6A,7B,7C,9A)      │
-                                 └───────────┬───────────┘
-                                             │
-                                             ▼
-                                 ┌───────────────────────┐
-                                 │     Epic 9C           │
-                                 │ Testing Infrastructure│
                                  └───────────────────────┘
 ```
 
 **Key**: Arrows show "blocked by" direction. Labels like `◄──(4D)` show additional dependencies.
+
+**Note**: Epic 9C (Testing Infrastructure) is Wave 0 - shown at the top of the graph as it blocks ALL other epics.
 
 ---
 
@@ -159,10 +161,15 @@ All Epics fall within the optimal or acceptable range.
 
 > **Note**: Waves are based on actual "Blocked By" dependencies from individual Epic files.
 
-### Wave 1 (No Dependencies)
+### Wave 0 (Foundation - BLOCKING)
 | Epic | Name | Req Count | Notes |
 |------|------|-----------|-------|
-| 1 | Plugin Registry | 10 | Foundation - blocks everything |
+| 9C | Testing Infrastructure | 25 | BLOCKING - must complete before all other epics |
+
+### Wave 1 (Depends on Epic 9C)
+| Epic | Name | Req Count | Notes |
+|------|------|-----------|-------|
+| 1 | Plugin Registry | 10 | Foundation - blocks everything except 9C |
 
 ### Wave 2 (Depends on Epic 1 only)
 | Epic | Name | Req Count | Parallel With |
@@ -217,7 +224,7 @@ All Epics fall within the optimal or acceptable range.
 ### Wave 9 (Final)
 | Epic | Name | Req Count | Depends On |
 |------|------|-----------|------------|
-| 9C | Testing Infrastructure | 15 | 9B |
+| (empty - Epic 9C moved to Wave 0) | | | |
 
 ---
 
@@ -226,11 +233,14 @@ All Epics fall within the optimal or acceptable range.
 The critical path determines the minimum time to complete all Epics:
 
 ```
-Deployment Chain (longest path - 9 waves):
+Foundation (Wave 0):
+Epic 9C (Testing Infrastructure) - MUST COMPLETE FIRST
+
+Deployment Chain (longest path - 9 waves after Wave 0):
 Epic 1 → 2A → 2B → 4B → 5A → 6B ─┐
    │                               │
    └→ 4A ─────────────────────────┤
-   │                               ├─→ 9A → 9B → 9C
+   │                               ├─→ 9A → 9B
    └→ 4C → 4D ────────────────────┤
    │                               │
    └→ 7A → 7B → 7C ───────────────┤
@@ -243,7 +253,7 @@ Epic 1 → 2A → 2B → 3A → 3B/3C → 5A → 5B/6B → 3D
                          └→ 8C (requires 3B, 8A, 8B)
 ```
 
-**Critical Path (Deployment)**: 1 → 2A → 2B → 4B → 5A → 6B → 9A → 9B → 9C (9 waves)
+**Critical Path (Deployment)**: 9C → 1 → 2A → 2B → 4B → 5A → 6B → 9A → 9B (10 waves, but 9C fast-tracks)
 
 **Key Bottlenecks**:
 - **Epic 9A (K8s Deployment)**: Blocked by 4A-D, 7B, 7C, 8A, 8B (most dependencies)
@@ -278,7 +288,7 @@ Each Epic has exclusive ownership of specific files to prevent merge conflicts:
 | 7A-C | `floe-core/src/floe_core/security/` | Security modules |
 | 8A-C | `floe-core/src/floe_core/oci/` | OCI modules |
 | 9A-B | `charts/` | Helm charts |
-| 9C | `testing/` | Test infrastructure |
+| 9C | `testing/`, `Makefile`, `.github/workflows/test.yml` | Test infrastructure (Wave 0) |
 
 ---
 

@@ -4,7 +4,7 @@ This module provides abstract base classes (ABCs) for all pluggable component
 types in the floe platform. Each ABC defines the interface that concrete
 plugin implementations must satisfy.
 
-Plugin Categories:
+Plugin Categories (12 types):
     Compute: Database execution engines (DuckDB, Snowflake, BigQuery)
     Orchestrator: Workflow schedulers (Dagster, Airflow)
     Catalog: Iceberg catalog providers (Polaris, AWS Glue, Hive)
@@ -16,6 +16,7 @@ Plugin Categories:
     Ingestion: Data loading tools (dlt, Airbyte)
     Secrets: Credential managers (Vault, AWS Secrets Manager)
     Identity: Authentication providers (OAuth2, OIDC)
+    Quality: Data quality validators (Great Expectations, Soda, dbt-expectations)
 
 Example:
     >>> from floe_core.plugins import ComputePlugin, CatalogPlugin
@@ -76,6 +77,13 @@ from floe_core.plugins.orchestrator import (
 )
 from floe_core.plugins.orchestrator import ResourceSpec as OrchestratorResourceSpec
 
+# Quality plugin
+from floe_core.plugins.quality import (
+    QualityCheckResult,
+    QualityPlugin,
+    QualitySuiteResult,
+)
+
 # Secrets plugin
 from floe_core.plugins.secrets import SecretsPlugin
 
@@ -121,6 +129,10 @@ __all__ = [
     "OrchestratorResourceSpec",
     "TransformConfig",
     "ValidationResult",
+    # Quality
+    "QualityCheckResult",
+    "QualityPlugin",
+    "QualitySuiteResult",
     # Secrets
     "SecretsPlugin",
     # Semantic
