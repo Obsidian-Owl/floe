@@ -668,7 +668,8 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     raise RuntimeError("Catalog not connected. Call connect() first.")
 
                 # Drop the table via PyIceberg catalog
-                self._catalog.drop_table(identifier, purge=purge)
+                # Note: purge_requested is supported by RestCatalog but not in base Catalog type stubs
+                self._catalog.drop_table(identifier, purge_requested=purge)  # type: ignore[call-arg]
 
                 log.info("table_dropped")
 
@@ -753,8 +754,8 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 table = self._catalog.load_table(table_path)
 
                 # Extract credentials from table IO properties
-                # PyIceberg stores vended credentials in table.io properties
-                io_properties = table.io
+                # PyIceberg stores vended credentials in table.io.properties dict
+                io_properties = table.io.properties
 
                 # Build credentials response
                 credentials: dict[str, Any] = {
