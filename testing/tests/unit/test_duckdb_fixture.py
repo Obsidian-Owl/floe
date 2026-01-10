@@ -127,15 +127,18 @@ class TestDuckDBConnectionContext:
     @pytest.mark.requirement("9c-FR-011")
     def test_context_manager_closes_connection(self) -> None:
         """Test context manager closes connection on exit."""
-        pytest.importorskip("duckdb")
+        duckdb = pytest.importorskip("duckdb")
         # Get a reference to the connection
         with duckdb_connection_context() as conn:
             conn.execute("CREATE TABLE test_close (id INTEGER)")
             # Connection should be open here
             conn.execute("SELECT 1")
         # After context, connection should be closed
-        # Attempting to use it should fail
-        with pytest.raises(Exception):  # noqa: B017
+        # Attempting to use it should fail with DuckDB ConnectionException
+        with pytest.raises(
+            duckdb.ConnectionException,
+            match="Connection.*closed|already closed",
+        ):
             conn.execute("SELECT 1")
 
     @pytest.mark.requirement("9c-FR-011")
@@ -183,8 +186,8 @@ class TestCreateFileConnection:
 
     @pytest.mark.requirement("9c-FR-011")
     def test_read_only_file_connection(self, tmp_path: Path) -> None:
-        """Test creating read-only file connection."""
-        pytest.importorskip("duckdb")
+        """Test creating read-only file connection prevents writes."""
+        duckdb = pytest.importorskip("duckdb")
         db_path = tmp_path / "readonly.duckdb"
         # First create the database
         conn = create_file_connection(db_path)
@@ -197,8 +200,11 @@ class TestCreateFileConnection:
         try:
             result = conn.execute("SELECT * FROM test").fetchone()
             assert result is not None
-            # Write should fail
-            with pytest.raises(Exception):  # noqa: B017
+            # Write should fail with permission/read-only error
+            with pytest.raises(
+                (duckdb.InvalidInputException, duckdb.PermissionException),
+                match="read.only|Cannot.*write|not allowed",
+            ):
                 conn.execute("INSERT INTO test VALUES (2)")
         finally:
             conn.close()

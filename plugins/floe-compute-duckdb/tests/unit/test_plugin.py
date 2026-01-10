@@ -201,14 +201,15 @@ class TestGenerateDBTProfile:
 
         assert profile["timeout_seconds"] == 300
 
-    def test_generate_dbt_profile_without_timeout(
+    def test_generate_dbt_profile_uses_default_timeout(
         self,
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
-        """Test profile omits timeout_seconds when not specified.
+        """Test profile includes default timeout_seconds value (3600).
 
-        Default timeout should not be included in profile - allows
-        dbt adapter defaults to apply.
+        When timeout_seconds is not explicitly set in ComputeConfig,
+        the default value (3600 seconds = 1 hour) is used in the
+        generated dbt profile.
         """
         from floe_core import ComputeConfig
 
@@ -220,9 +221,7 @@ class TestGenerateDBTProfile:
 
         profile = duckdb_plugin.generate_dbt_profile(config)
 
-        # timeout_seconds should not be in profile when using default
-        # Actually, default is 3600, so it WILL be included
-        # Let's verify the behavior
+        # Default timeout (3600) should be included in profile
         assert "timeout_seconds" in profile
         assert profile["timeout_seconds"] == 3600  # Default value
 

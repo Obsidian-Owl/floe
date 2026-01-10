@@ -139,7 +139,13 @@ class TestValidateConnection:
         result = duckdb_plugin.validate_connection(config)
 
         assert result.status == ConnectionStatus.UNHEALTHY
-        assert "Failed to connect" in result.message or result.warnings
+        # Error details should be in message or warnings (not OR'd with empty list)
+        has_error_in_message = "failed" in result.message.lower() or "error" in result.message.lower()
+        has_error_in_warnings = len(result.warnings) > 0
+        assert has_error_in_message or has_error_in_warnings, (
+            f"Expected error details in message or warnings. "
+            f"Got message='{result.message}', warnings={result.warnings}"
+        )
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-005")
@@ -151,25 +157,26 @@ class TestValidateConnection:
         """Test validate_connection populates all ConnectionResult fields.
 
         Verifies that the returned ConnectionResult has all required fields
-        properly populated with meaningful values.
+        properly populated with meaningful values for a healthy connection.
         """
         result = duckdb_plugin.validate_connection(memory_config)
 
-        # All fields should be present
-        assert result.status is not None
-        assert result.latency_ms is not None
-        assert result.message is not None
+        # Verify actual values, not just existence (Pydantic enforces non-None)
+        assert result.status == ConnectionStatus.HEALTHY
 
-        # Status should be a valid ConnectionStatus enum value
-        assert isinstance(result.status, ConnectionStatus)
-
-        # Latency should be a positive float
+        # Latency should be measured and reasonable for in-memory
         assert isinstance(result.latency_ms, float)
-        assert result.latency_ms >= 0
+        assert result.latency_ms > 0  # Actually measured, not zero
+        assert result.latency_ms < 5000  # Reasonable for in-memory (< 5s)
 
-        # Message should be a non-empty string
+        # Message should contain connection info
         assert isinstance(result.message, str)
         assert len(result.message) > 0
+        assert ":memory:" in result.message  # Should reference the database path
+
+        # Warnings should be empty for healthy connection
+        assert isinstance(result.warnings, list)
+        assert len(result.warnings) == 0
 
 
 class TestRealDatabaseOperations:

@@ -393,9 +393,11 @@ class TestCompletePluginImplementation:
 
     @pytest.mark.requirement("001-FR-001")
     def test_complete_plugin_instantiates(self, complete_plugin: ComputePlugin) -> None:
-        """Test complete plugin can be instantiated."""
-        assert complete_plugin is not None
+        """Test complete plugin can be instantiated with correct metadata."""
+        # Verify plugin has correct name and version (not just existence)
         assert complete_plugin.name == "test-complete"
+        assert complete_plugin.version == "1.0.0"
+        assert complete_plugin.floe_api_version == "0.1"
 
     @pytest.mark.requirement("001-FR-001")
     def test_complete_plugin_is_self_hosted(

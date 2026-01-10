@@ -306,29 +306,35 @@ class TestEnvironmentParityEnforcement:
         - Show which environments use which compute
         - Be clear about what needs to change
         """
-        # Simulate detected mismatch
-        transform_name = "stg_customers"
-        env_computes = {
-            "dev": "duckdb",
-            "staging": "spark",
-            "prod": "spark",
-        }
+        from floe_core.compiler import EnvironmentParityError
 
-        # Build error message
-        mismatch_details = ", ".join(
-            f"{env}={compute}" for env, compute in sorted(env_computes.items())
-        )
-        error_message = (
-            f"Environment parity violation for transform '{transform_name}': "
-            f"compute differs across environments ({mismatch_details}). "
-            f"Each transform must use the same compute in all environments."
+        # Create actual error instance to test message formatting
+        error = EnvironmentParityError(
+            transform_name="stg_customers",
+            env_computes={
+                "dev": "duckdb",
+                "staging": "spark",
+                "prod": "spark",
+            },
         )
 
+        # Get the error message from the actual exception
+        error_message = str(error)
+
+        # Verify error message contains expected content
         assert "stg_customers" in error_message
         assert "dev=duckdb" in error_message
         assert "staging=spark" in error_message
         assert "prod=spark" in error_message
         assert "Environment parity violation" in error_message
+
+        # Verify error attributes are accessible
+        assert error.transform_name == "stg_customers"
+        assert error.env_computes == {
+            "dev": "duckdb",
+            "staging": "spark",
+            "prod": "spark",
+        }
 
 
 class TestComputeFieldValidation:

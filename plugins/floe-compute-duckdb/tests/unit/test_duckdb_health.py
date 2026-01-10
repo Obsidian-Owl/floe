@@ -174,10 +174,10 @@ class TestValidateConnectionStatus:
         assert result.latency_ms >= 0
 
     @pytest.mark.requirement("001-FR-018")
-    def test_validate_connection_unhealthy_includes_warnings(
+    def test_validate_connection_unhealthy_includes_error_in_message(
         self, plugin: DuckDBComputePlugin
     ) -> None:
-        """Test validate_connection includes warnings on error."""
+        """Test validate_connection includes error details in message."""
         mock_duckdb = MagicMock()
         mock_duckdb.connect.side_effect = Exception("Connection timeout")
 
@@ -189,8 +189,30 @@ class TestValidateConnectionStatus:
             result = plugin.validate_connection(config)
 
         assert result.status == ConnectionStatus.UNHEALTHY
-        # Should include error details in warnings
-        assert len(result.warnings) >= 1 or "timeout" in result.message.lower()
+        # Error details should be in the message
+        assert "timeout" in result.message.lower() or "failed" in result.message.lower()
+
+    @pytest.mark.requirement("001-FR-018")
+    def test_validate_connection_unhealthy_populates_warnings(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
+        """Test validate_connection adds warnings with error details."""
+        mock_duckdb = MagicMock()
+        mock_duckdb.connect.side_effect = Exception("Connection timeout")
+
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/nonexistent/path/db.duckdb"},
+            )
+            result = plugin.validate_connection(config)
+
+        assert result.status == ConnectionStatus.UNHEALTHY
+        # Should include error details in warnings list
+        assert len(result.warnings) >= 1
+        # At least one warning should contain relevant error info
+        all_warnings = " ".join(result.warnings).lower()
+        assert "timeout" in all_warnings or "error" in all_warnings or "failed" in all_warnings
 
 
 class TestValidateConnectionNativeDriver:
