@@ -150,6 +150,7 @@ class DuckDBComputePlugin(ComputePlugin):
             - type: Always "duckdb"
             - path: Database path
             - threads: Number of query threads
+            - timeout_seconds: Query timeout in seconds (optional, FR-021)
             - extensions: Extensions to load (optional)
             - settings: DuckDB configuration (optional)
             - attach: List of attached databases (optional)
@@ -186,6 +187,11 @@ class DuckDBComputePlugin(ComputePlugin):
             "path": connection.get("path", ":memory:"),
             "threads": config.threads,
         }
+
+        # Add timeout if specified (FR-021: query timeout enforcement)
+        # dbt-duckdb adapter handles actual timeout enforcement
+        if config.timeout_seconds:
+            profile["timeout_seconds"] = config.timeout_seconds
 
         # Add optional extensions if specified
         extensions = connection.get("extensions")
