@@ -510,3 +510,31 @@ This group of requirements defines Kind (Kubernetes IN Docker) cluster setup, te
 - pytest plugins (pytest-benchmark, pytest-duration)
 - Kubernetes metrics API
 - GitHub Actions workflow reporting
+
+---
+
+## Plugin-Specific Test Fixtures
+
+> **Architectural Note**: Plugin-specific test fixtures are **NOT** part of Epic 9C. They are delivered with their respective plugin epics, using the testing framework provided by Epic 9C.
+
+Epic 9C provides the **framework** for testing:
+- `IntegrationTestBase`, `PluginTestBase`, `AdapterTestBase` base classes
+- Polling utilities (`wait_for_condition`, `wait_for_service`)
+- Namespace isolation helpers
+- Kind cluster configuration
+- Core service fixtures (PostgreSQL, MinIO, Polaris, DuckDB, Dagster)
+
+Each plugin epic is responsible for adding its own test fixtures:
+
+| Plugin Type | Fixture File | Owning Epic |
+|-------------|--------------|-------------|
+| Telemetry (Jaeger, OTEL) | `testing/fixtures/telemetry.py` | Epic 6A |
+| Lineage (Marquez, DataHub) | `testing/fixtures/lineage.py` | Epic 6B |
+| DBT | `testing/fixtures/dbt.py` | Epic 5A |
+| Semantic Layer (Cube) | `testing/fixtures/cube.py` | Semantic Epic |
+| Ingestion (dlt, Airbyte) | `testing/fixtures/ingestion.py` | Ingestion Epic |
+| Secrets (Vault, K8s) | `testing/fixtures/secrets.py` | Epic 7A |
+| Identity (Keycloak, Dex) | `testing/fixtures/identity.py` | Epic 7A |
+| Quality (GX, Soda) | `testing/fixtures/quality.py` | Epic 5B |
+
+This follows the **file ownership principle**: each epic owns everything related to its plugin, including test fixtures

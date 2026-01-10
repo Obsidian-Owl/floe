@@ -81,6 +81,14 @@ plugins/floe-secrets-k8s/
 │   ├── plugin.py                # K8sSecretsPlugin
 │   └── config.py
 └── tests/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/identity.py         # IdentityPlugin test fixtures
+testing/fixtures/secrets.py          # SecretsPlugin test fixtures
+testing/k8s/services/keycloak.yaml   # Keycloak K8s manifest for integration tests
+testing/k8s/services/vault.yaml      # Vault K8s manifest for integration tests
+testing/tests/unit/test_identity_fixtures.py   # Identity fixture tests
+testing/tests/unit/test_secrets_fixtures.py    # Secrets fixture tests
 ```
 
 ---
@@ -91,6 +99,7 @@ plugins/floe-secrets-k8s/
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry |
 | Blocked By | Epic 2A | SecretReference in manifest |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 4C | Catalog uses identity for access control |
 | Blocks | Epic 7B | RBAC uses identity |
 | Blocks | Epic 9A | K8s deployment configures secrets |

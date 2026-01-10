@@ -293,9 +293,41 @@ environments:
 
 ---
 
+### REQ-025: ComputePlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for ComputePlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for compute adapters (Snowflake, BigQuery, Spark) require database connectivity fixtures to validate profile generation, query execution, and resource management.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/compute.py` (extends 9C patterns)
+- [ ] `ComputeTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `compute_connection_context()` for lifecycle
+- [ ] Adapter-specific fixtures: `snowflake_fixture()`, `bigquery_fixture()`, `spark_fixture()`
+- [ ] Mock fixtures for unit tests (no real database required)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST NOT duplicate DuckDB fixture from Epic 9C (reference implementation)
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_compute_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- Epic 4A (ComputePlugin)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-ComputePlugin Standards (REQ-011 to REQ-024) complete when:
+ComputePlugin Standards (REQ-011 to REQ-025) complete when:
 
 - [ ] All 14 requirements documented with complete fields
 - [ ] ComputePlugin ABC defined in floe-core

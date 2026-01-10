@@ -70,6 +70,11 @@ packages/floe-dbt/
 └── tests/
     ├── unit/
     └── integration/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/dbt.py              # DBTPlugin test fixtures
+testing/fixtures/sample_dbt_project/ # Sample dbt project for testing
+testing/tests/unit/test_dbt_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -82,6 +87,7 @@ packages/floe-dbt/
 | Blocked By | Epic 2B | Uses CompiledArtifacts for profile generation |
 | Blocked By | Epic 4A | Uses compute plugin for connections |
 | Blocked By | Epic 4B | Generates Dagster assets |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 5B | Data quality integrates with dbt tests |
 | Blocks | Epic 6B | OpenLineage captures dbt lineage |
 

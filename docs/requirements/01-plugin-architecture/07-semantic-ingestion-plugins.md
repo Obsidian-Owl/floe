@@ -1,4 +1,4 @@
-# REQ-061 to REQ-070: Semantic Layer and Ingestion Plugin Standards
+# REQ-061 to REQ-072: Semantic Layer and Ingestion Plugin Standards
 
 **Domain**: Plugin Architecture
 **Priority**: HIGH
@@ -195,9 +195,73 @@ SemanticLayerPlugin and IngestionPlugin enable consumption-layer configuration a
 
 ---
 
+### REQ-071: SemanticLayerPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for SemanticLayerPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for semantic layer implementations (Cube) require service fixtures to validate configuration generation, API connectivity, and metrics/dimensions resolution.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/semantic.py` (extends 9C patterns)
+- [ ] `SemanticTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `semantic_layer_context()` for lifecycle
+- [ ] Implementation fixtures: `cube_fixture()` for Cube testing
+- [ ] Mock fixtures for unit tests (no real service required)
+- [ ] K8s manifest: `testing/k8s/services/cube.yaml` for integration tests
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_semantic_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- SemanticLayerPlugin (this document)
+- ADR-0065 (K8s-native testing)
+
+---
+
+### REQ-072: IngestionPlugin Test Fixtures **[New]**
+
+**Requirement**: System MUST provide test fixtures for IngestionPlugin implementations that extend the Epic 9C testing framework.
+
+**Rationale**: Integration tests for ingestion implementations (dlt, Airbyte) require service fixtures to validate connector configuration, data loading, and source/destination connectivity.
+
+**Acceptance Criteria**:
+- [ ] Fixture module: `testing/fixtures/ingestion.py` (extends 9C patterns)
+- [ ] `IngestionTestConfig(BaseModel)` with `frozen=True`
+- [ ] Context manager: `ingestion_context()` for lifecycle
+- [ ] Implementation fixtures: `dlt_fixture()`, `airbyte_fixture()` for testing
+- [ ] Mock fixtures for unit tests (no real service required)
+- [ ] K8s manifest: `testing/k8s/services/airbyte.yaml` for integration tests (if needed)
+- [ ] Extends: `IntegrationTestBase` from Epic 9C
+- [ ] Type hints: mypy --strict passes
+- [ ] Test coverage: >80% of fixture code
+
+**Constraints**:
+- MUST extend Epic 9C testing framework (`testing.base_classes`)
+- MUST follow fixture pattern from `testing/fixtures/__init__.py`
+- MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
+- MUST support credential injection via environment variables
+
+**Test Coverage**: `testing/tests/unit/test_ingestion_fixtures.py`
+
+**Traceability**:
+- Epic 9C (Testing Framework dependency)
+- IngestionPlugin (this document)
+- ADR-0065 (K8s-native testing)
+
+---
+
 ## Domain Acceptance Criteria
 
-Semantic Layer and Ingestion Standards (REQ-061 to REQ-070) complete when:
+Semantic Layer and Ingestion Standards (REQ-061 to REQ-072) complete when:
 
 - [ ] All 10 requirements documented with complete fields
 - [ ] SemanticLayerPlugin and IngestionPlugin ABCs defined

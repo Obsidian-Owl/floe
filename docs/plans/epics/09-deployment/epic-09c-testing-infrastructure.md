@@ -6,6 +6,22 @@ Testing infrastructure provides the foundation for K8s-native testing. This incl
 
 **Wave 0 BLOCKER**: This epic is the foundation for ALL other epics. No feature PRs can be merged without this infrastructure. Test services use raw K8s manifests (not Helm) to avoid circular dependencies.
 
+### Existing CI Infrastructure (Stage 1 - Complete)
+
+The project already has Stage 1 CI in `.github/workflows/ci.yml`:
+
+| Job             | Status   | Description                              |
+|-----------------|----------|------------------------------------------|
+| lint-typecheck  | Complete | Ruff + mypy --strict                     |
+| unit-tests      | Complete | Python 3.10-3.12 matrix, 80% coverage    |
+| contract-tests  | Complete | Cross-package validation                 |
+| sonarcloud      | Complete | Quality gate + coverage                  |
+| ci-success      | Complete | Branch protection gate                   |
+
+See `.github/CI.md` for full CI strategy documentation.
+
+**This epic adds Stage 2**: Security scanning (Bandit, pip-audit) and integration tests with Kind cluster.
+
 ## Status
 
 - [ ] Specification created
@@ -45,9 +61,11 @@ Testing infrastructure provides the foundation for K8s-native testing. This incl
 | REQ-655 | Dagster test fixtures | HIGH |
 | REQ-656 | K8s manifests for test services (raw, not Helm) | HIGH |
 | REQ-657 | Makefile test targets | CRITICAL |
-| REQ-658 | GitHub Actions test workflow | CRITICAL |
+| REQ-658 | Extend CI workflow with security + integration tests | CRITICAL |
 | REQ-659 | PluginTestBase class | HIGH |
 | REQ-660 | AdapterTestBase class | HIGH |
+
+> **Note**: Plugin-specific test fixtures (telemetry, lineage, semantic layer, ingestion, secrets, identity, quality) are delivered with their respective plugin epics (5A, 5B, 6A, 6B, 7A, etc.), not in this epic. Epic 9C provides the testing **framework** that those fixtures build upon.
 
 ---
 
@@ -86,6 +104,8 @@ testing/
 │   ├── polaris.py                  # Polaris fixtures
 │   ├── minio.py                    # MinIO fixtures
 │   └── dagster.py                  # Dagster fixtures
+│   # Note: Plugin-specific fixtures (telemetry, lineage, etc.) are
+│   # added by their respective plugin epics using this framework
 ├── k8s/
 │   ├── kind-config.yaml            # Kind cluster config
 │   ├── services/                   # Raw K8s manifests (NOT Helm)
@@ -105,7 +125,7 @@ testing/
     └── test-e2e.sh
 
 Makefile                            # Test targets
-.github/workflows/test.yml          # CI workflow
+.github/workflows/ci.yml            # CI workflow (UPDATE existing Stage 1)
 ```
 
 ---
@@ -162,16 +182,21 @@ Makefile                            # Test targets
 - [ ] Coverage gap identification
 - [ ] CI gate for 100% coverage
 
-### US4: CI/CD Integration (P1)
+### US4: CI/CD Integration - Stage 2 (P1)
 **As a** platform developer
-**I want** tests running in CI automatically
+**I want** integration tests running in CI automatically
 **So that** regressions are caught early
 
-**Acceptance Criteria**:
-- [ ] Unit tests in CI (fast)
-- [ ] Integration tests in CI (K8s)
+**Existing (Stage 1 - Complete)**:
+- [x] Unit tests in CI (fast) - `.github/workflows/ci.yml`
+- [x] Contract tests in CI
+- [x] SonarCloud quality gate
+
+**Acceptance Criteria (Stage 2 - This Epic)**:
+- [ ] Security job added (Bandit, pip-audit)
+- [ ] Integration tests in CI (Kind cluster)
 - [ ] E2E tests in CI (full stack)
-- [ ] Test result reporting
+- [ ] ci-success gate updated to include new jobs
 
 ### US5: Polling Utilities (P1)
 **As a** test author
@@ -218,7 +243,9 @@ Makefile                            # Test targets
 - `testing/`
 
 ### Related Existing Code
-- None (greenfield - provides foundation for other epics)
+- `.github/workflows/ci.yml` - Stage 1 CI (lint, unit tests, contract tests, SonarCloud)
+- `.github/CI.md` - CI strategy documentation
+- `.pre-commit-config.yaml` - Pre-commit and pre-push hooks
 
 ### External Dependencies
 - `pytest>=7.0.0`

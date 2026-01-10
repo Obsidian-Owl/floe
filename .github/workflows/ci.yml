@@ -53,7 +53,80 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run mypy type checking
-        run: uv run mypy --strict packages/
+        run: uv run mypy --strict packages/ testing/
+
+      - name: Check for hardcoded sleeps
+        run: |
+          echo "Checking for hardcoded time.sleep() in test code..."
+          # Exclude:
+          # - polling.py (the implementation that needs time.sleep)
+          # - test_polling_example.py (documentation showing anti-patterns)
+          # - Comments showing anti-patterns (# BAD, # Slow, etc.)
+          # - Lines that are clearly mock/simulation code for testing timeouts
+          VIOLATIONS=$(grep -rI "time\.sleep(" tests/ testing/ packages/*/tests/ 2>/dev/null \
+            | grep -v "polling\.py" \
+            | grep -v "test_polling_example\.py" \
+            | grep -v "# .*time\.sleep" \
+            | grep -v "DO NOT use time\.sleep" \
+            | grep -v "instead of.*time\.sleep" \
+            | grep -v "time\.sleep.*#.*BAD" \
+            | grep -v "time\.sleep.*#.*Slow" \
+            | grep -v "time\.sleep.*#.*Sleep" \
+            | grep -v "time\.sleep.*#.*timeout" \
+            | grep -v "time\.sleep.*#.*simulate" \
+            | grep -Ev "^\s*#" \
+            || true)
+
+          if [[ -n "$VIOLATIONS" ]]; then
+            echo "ERROR: Found hardcoded time.sleep() in test code:" >&2
+            echo "$VIOLATIONS" >&2
+            echo "" >&2
+            echo "Use polling utilities instead: from testing.fixtures.polling import wait_for_condition" >&2
+            exit 1
+          fi
+          echo "No problematic hardcoded sleeps found"
+
+  # ============================================================
+  # Stage 1b: Security Scanning (Bandit + pip-audit)
+  # ============================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run Bandit security scan
+        run: |
+          uv run bandit -r packages/ -ll -f json -o bandit-report.json || true
+          uv run bandit -r packages/ -ll
+
+      - name: Run pip-audit
+        run: uv run pip-audit
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 7
 
   # ============================================================
   # Stage 2: Unit Tests (matrix across Python versions)
@@ -86,13 +159,10 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run unit tests with coverage
-        run: |
-          uv run pytest packages/floe-core/tests/unit/ \
-            -v \
-            --cov=packages/floe-core/src \
-            --cov-report=xml:coverage-${{ matrix.python-version }}.xml \
-            --cov-report=term-missing \
-            --cov-fail-under=80
+        run: ./testing/ci/test-unit.sh
+        env:
+          COVERAGE_THRESHOLD: 80
+          PYTHON_VERSION: ${{ matrix.python-version }}
 
       - name: Upload coverage artifact
         if: matrix.python-version == env.PYTHON_VERSION_DEFAULT
@@ -135,6 +205,42 @@ jobs:
             --tb=short
 
   # ============================================================
+  # Note: Integration Tests moved to release.yml and nightly.yml
+  # Integration tests require K8s cluster (~10 min) - too slow for PR CI
+  # See .github/CI.md for workflow documentation
+  # ============================================================
+
+  # ============================================================
+  # Stage 2c: Traceability Check
+  # ============================================================
+  traceability:
+    name: Requirement Traceability
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run traceability check
+        run: |
+          uv run python -m testing.traceability --all --threshold 80
+
+  # ============================================================
   # Stage 3: SonarCloud Analysis
   # ============================================================
   sonarcloud:
@@ -170,18 +276,24 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, unit-tests, contract-tests, sonarcloud]
+    needs: [lint-typecheck, security, unit-tests, contract-tests, traceability, sonarcloud]
     if: always()
     steps:
       - name: Check all jobs passed
         env:
           LINT_RESULT: ${{ needs.lint-typecheck.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
           UNIT_RESULT: ${{ needs.unit-tests.result }}
           CONTRACT_RESULT: ${{ needs.contract-tests.result }}
+          TRACEABILITY_RESULT: ${{ needs.traceability.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
         run: |
           if [[ "$LINT_RESULT" != "success" ]]; then
             echo "lint-typecheck failed" >&2
+            exit 1
+          fi
+          if [[ "$SECURITY_RESULT" != "success" ]]; then
+            echo "security scan failed" >&2
             exit 1
           fi
           if [[ "$UNIT_RESULT" != "success" ]]; then
@@ -190,6 +302,10 @@ jobs:
           fi
           if [[ "$CONTRACT_RESULT" != "success" ]]; then
             echo "contract-tests failed" >&2
+            exit 1
+          fi
+          if [[ "$TRACEABILITY_RESULT" != "success" ]]; then
+            echo "traceability check failed" >&2
             exit 1
           fi
           # SonarCloud is optional for forks

@@ -69,6 +69,10 @@ plugins/floe-catalog-polaris/
 └── tests/
     ├── unit/
     └── integration/
+
+# Test Fixtures (extends Epic 9C framework)
+testing/fixtures/catalog.py          # CatalogPlugin test fixtures
+testing/tests/unit/test_catalog_fixtures.py  # Fixture tests
 ```
 
 ---
@@ -78,6 +82,7 @@ plugins/floe-catalog-polaris/
 | Type | Epic | Reason |
 |------|------|--------|
 | Blocked By | Epic 1 | Uses plugin registry |
+| Blocked By | Epic 9C | Uses testing framework for fixtures |
 | Blocks | Epic 4D | Storage plugin uses catalog |
 | Blocks | Epic 5A | dbt needs catalog for table resolution |
 | Blocks | Epic 7A | Access control via catalog |

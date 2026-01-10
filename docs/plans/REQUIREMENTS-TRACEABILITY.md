@@ -37,7 +37,7 @@ This document maps all requirements to their implementing Epics.
 | REQ-009 | Plugin configuration validation | HIGH |
 | REQ-010 | Plugin lifecycle hooks | MEDIUM |
 
-### Epic 4A: Compute Plugin (REQ-011-020)
+### Epic 4A: Compute Plugin (REQ-011-025)
 
 | Requirement | Description | Priority |
 |-------------|-------------|----------|
@@ -51,8 +51,9 @@ This document maps all requirements to their implementing Epics.
 | REQ-018 | Connection health monitoring | HIGH |
 | REQ-019 | Query timeout handling | HIGH |
 | REQ-020 | Resource limit enforcement | MEDIUM |
+| REQ-025 | ComputePlugin Test Fixtures | HIGH |
 
-### Epic 4B: Orchestrator Plugin (REQ-021-030)
+### Epic 4B: Orchestrator Plugin (REQ-021-031)
 
 | Requirement | Description | Priority |
 |-------------|-------------|----------|
@@ -66,8 +67,9 @@ This document maps all requirements to their implementing Epics.
 | REQ-028 | Backfill support | MEDIUM |
 | REQ-029 | Partition handling | HIGH |
 | REQ-030 | Cross-asset dependencies | HIGH |
+| REQ-031 | OrchestratorPlugin Test Fixtures | HIGH |
 
-### Epic 4C: Catalog Plugin (REQ-031-040)
+### Epic 4C: Catalog Plugin (REQ-031-041)
 
 | Requirement | Description | Priority |
 |-------------|-------------|----------|
@@ -81,8 +83,9 @@ This document maps all requirements to their implementing Epics.
 | REQ-038 | Access control integration | HIGH |
 | REQ-039 | Schema versioning | HIGH |
 | REQ-040 | Catalog health monitoring | MEDIUM |
+| REQ-041 | CatalogPlugin Test Fixtures | HIGH |
 
-### Epic 4D: Storage Plugin (REQ-041-050)
+### Epic 4D: Storage Plugin (REQ-041-051)
 
 | Requirement | Description | Priority |
 |-------------|-------------|----------|
@@ -92,12 +95,13 @@ This document maps all requirements to their implementing Epics.
 | REQ-044 | Schema evolution | HIGH |
 | REQ-045 | Snapshot management | HIGH |
 | REQ-046 | Time travel queries | MEDIUM |
-| REQ-047 | Partition management | HIGH |
+| REQ-047 | Time travel queries | MEDIUM |
 | REQ-048 | Compaction support | MEDIUM |
 | REQ-049 | ACID transaction support | CRITICAL |
 | REQ-050 | Storage metrics | MEDIUM |
+| REQ-051 | StoragePlugin Test Fixtures | HIGH |
 
-### Epic 5A: dbt Plugin (REQ-051-065)
+### Epic 5A: dbt Plugin (REQ-051-096)
 
 | Requirement | Description | Priority |
 |-------------|-------------|----------|
@@ -116,8 +120,9 @@ This document maps all requirements to their implementing Epics.
 | REQ-063 | Package management | MEDIUM |
 | REQ-064 | Run results tracking | HIGH |
 | REQ-065 | Compilation caching | MEDIUM |
+| REQ-096 | DBTPlugin Test Fixtures | HIGH |
 
-### Epic 5B: Data Quality Plugin (REQ-066-075)
+### Epic 5B: Data Quality Plugin (REQ-066-111)
 
 | Requirement | Description | Priority |
 |-------------|-------------|----------|
@@ -131,6 +136,29 @@ This document maps all requirements to their implementing Epics.
 | REQ-073 | Custom rule definition | MEDIUM |
 | REQ-074 | Historical quality tracking | MEDIUM |
 | REQ-075 | Quality gates enforcement | HIGH |
+| REQ-111 | DataQualityPlugin Test Fixtures | HIGH |
+
+### Epic 6A: OpenTelemetry (REQ-051-062)
+
+*(See 06-observability-plugin.md for full requirements)*
+| REQ-061 | TelemetryBackendPlugin Test Fixtures | HIGH |
+
+### Epic 6B: OpenLineage (REQ-051-062)
+
+*(See 06-observability-plugin.md for full requirements)*
+| REQ-062 | LineageBackendPlugin Test Fixtures | HIGH |
+
+### Epic 7A: Identity & Secrets (REQ-071-087)
+
+*(See 08-identity-secrets-plugins.md for full requirements)*
+| REQ-086 | IdentityPlugin Test Fixtures | HIGH |
+| REQ-087 | SecretsPlugin Test Fixtures | HIGH |
+
+### Semantic & Ingestion Plugins (REQ-071-072)
+
+*(See 07-semantic-ingestion-plugins.md for full requirements)*
+| REQ-071 | SemanticLayerPlugin Test Fixtures | HIGH |
+| REQ-072 | IngestionPlugin Test Fixtures | HIGH |
 
 *(Additional requirements REQ-076-110 follow similar patterns for remaining plugin types)*
 
@@ -225,32 +253,32 @@ This document maps all requirements to their implementing Epics.
 
 ### By Epic
 
-| Epic | Assigned | Verified | Status |
-|------|----------|----------|--------|
-| 1 | 10 | 10 | 100% |
-| 2A | 16 | 16 | 100% |
-| 2B | 13 | 13 | 100% |
-| 3A | 15 | 15 | 100% |
-| 3B | 21 | 21 | 100% |
-| 3C | 20 | 20 | 100% |
-| 3D | 15 | 15 | 100% |
-| 4A | 10 | 10 | 100% |
-| 4B | 10 | 10 | 100% |
-| 4C | 10 | 10 | 100% |
-| 4D | 10 | 10 | 100% |
-| 5A | 15 | 15 | 100% |
-| 5B | 10 | 10 | 100% |
-| 6A | 20 | 20 | 100% |
-| 6B | 21 | 21 | 100% |
-| 7A | 25 | 25 | 100% |
-| 7B | 16 | 16 | 100% |
-| 7C | 27 | 27 | 100% |
-| 8A | 16 | 16 | 100% |
-| 8B | 10 | 10 | 100% |
-| 8C | 14 | 14 | 100% |
-| 9A | 21 | 21 | 100% |
-| 9B | 15 | 15 | 100% |
-| 9C | 15 | 15 | 100% |
+| Epic | Assigned | Verified | Status | Test Fixtures |
+|------|----------|----------|--------|---------------|
+| 1 | 10 | 10 | 100% | N/A |
+| 2A | 16 | 16 | 100% | N/A |
+| 2B | 13 | 13 | 100% | N/A |
+| 3A | 15 | 15 | 100% | N/A |
+| 3B | 21 | 21 | 100% | N/A |
+| 3C | 20 | 20 | 100% | N/A |
+| 3D | 15 | 15 | 100% | N/A |
+| 4A | 11 | 11 | 100% | REQ-025 |
+| 4B | 11 | 11 | 100% | REQ-031 |
+| 4C | 11 | 11 | 100% | REQ-041 |
+| 4D | 11 | 11 | 100% | REQ-051 |
+| 5A | 16 | 16 | 100% | REQ-096 |
+| 5B | 11 | 11 | 100% | REQ-111 |
+| 6A | 21 | 21 | 100% | REQ-061 |
+| 6B | 22 | 22 | 100% | REQ-062 |
+| 7A | 27 | 27 | 100% | REQ-086, REQ-087 |
+| 7B | 16 | 16 | 100% | N/A |
+| 7C | 27 | 27 | 100% | N/A |
+| 8A | 16 | 16 | 100% | N/A |
+| 8B | 10 | 10 | 100% | N/A |
+| 8C | 14 | 14 | 100% | N/A |
+| 9A | 21 | 21 | 100% | N/A |
+| 9B | 15 | 15 | 100% | N/A |
+| 9C | 15 | 15 | 100% | Framework |
 
 ### Gap Analysis
 
@@ -259,3 +287,22 @@ This document maps all requirements to their implementing Epics.
 **Duplicate Assignments**: None
 
 **Coverage**: 100%
+
+### Test Fixture Ownership Note
+
+**Architectural principle**: Epic 9C provides the **testing framework** (base classes, utilities, core fixtures). Plugin epics own their **test fixtures**.
+
+| Component | Owner |
+|-----------|-------|
+| `IntegrationTestBase`, `PluginTestBase`, `AdapterTestBase` | Epic 9C |
+| `wait_for_condition`, `wait_for_service` | Epic 9C |
+| Core fixtures (PostgreSQL, MinIO, Polaris, DuckDB, Dagster) | Epic 9C |
+| `testing/fixtures/compute.py` | Epic 4A |
+| `testing/fixtures/orchestrator.py` | Epic 4B |
+| `testing/fixtures/catalog.py` | Epic 4C |
+| `testing/fixtures/storage.py` | Epic 4D |
+| `testing/fixtures/dbt.py` | Epic 5A |
+| `testing/fixtures/quality.py` | Epic 5B |
+| `testing/fixtures/telemetry.py` | Epic 6A |
+| `testing/fixtures/lineage.py` | Epic 6B |
+| `testing/fixtures/identity.py`, `testing/fixtures/secrets.py` | Epic 7A |
