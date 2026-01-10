@@ -19,8 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv for fast package management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install kubectl
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+# Install kubectl (enforce HTTPS, TLS 1.2+)
+# hadolint ignore=DL3059
+RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/release/stable.txt) \
+    && curl --proto '=https' --tlsv1.2 -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/
 
@@ -35,6 +37,15 @@ COPY tests/ ./tests/
 
 # Create virtual environment and install dependencies
 RUN uv sync --frozen
+
+# Create non-root user for security
+# hadolint ignore=DL3059
+RUN groupadd --gid 1000 floe \
+    && useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home floe \
+    && chown -R floe:floe /app
+
+# Switch to non-root user
+USER floe
 
 # Set environment variables
 ENV PYTHONPATH=/app:/app/testing
