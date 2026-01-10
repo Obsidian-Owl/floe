@@ -7,6 +7,7 @@ Classes:
     IntegrationTestBase: Base class for K8s-native integration tests
     PluginTestBase: Base class for plugin compliance testing
     AdapterTestBase: Base class for adapter testing
+    BaseCatalogPluginTests: Base class for CatalogPlugin ABC compliance testing
 
 Example:
     from testing.base_classes import IntegrationTestBase
@@ -17,17 +18,27 @@ Example:
         def test_create_namespace(self) -> None:
             namespace = self.generate_unique_namespace("test")
             # Test implementation...
+
+Example (Plugin Compliance):
+    from testing.base_classes import BaseCatalogPluginTests
+
+    class TestMyPlugin(BaseCatalogPluginTests):
+        @pytest.fixture
+        def catalog_plugin(self):
+            return MyPlugin(config={...})
 """
 
 from __future__ import annotations
 
 # Phase 4 exports - Base classes for integration testing
 from testing.base_classes.adapter_test_base import AdapterTestBase
+from testing.base_classes.base_catalog_plugin_tests import BaseCatalogPluginTests
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.base_classes.plugin_test_base import PluginTestBase
 
 __all__ = [
     "AdapterTestBase",
+    "BaseCatalogPluginTests",
     "IntegrationTestBase",
     "PluginTestBase",
 ]

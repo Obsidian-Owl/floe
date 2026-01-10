@@ -42,14 +42,18 @@ class TestQuickstartExamples:
 
         Validates:
             - Plugin creation with PolarisCatalogConfig
-            - connect() returns a catalog
+            - connect() returns a valid catalog object
             - list_namespaces() works after connect
         """
         # Example from quickstart: Create and connect plugin
         plugin = PolarisCatalogPlugin(config=polaris_config)
         iceberg_catalog = plugin.connect({})
 
-        # List namespaces
+        # Verify connect returned a valid catalog object
+        assert iceberg_catalog is not None
+        assert hasattr(iceberg_catalog, "list_namespaces")
+
+        # List namespaces - verify connection is functional
         namespaces = plugin.list_namespaces()
         assert isinstance(namespaces, list)
 
@@ -172,41 +176,49 @@ class TestQuickstartExamples:
 
         Validates that the error imports and exception types work correctly.
         """
-        # Try to create a namespace that already exists
-        try:
+        # Try to create a namespace that already exists - should raise ConflictError
+        with pytest.raises(ConflictError) as exc_info:
             polaris_plugin.create_namespace(test_namespace)
-            pytest.fail("Expected ConflictError for existing namespace")
-        except ConflictError:
-            pass  # Expected: Namespace already exists
+        # Verify error message mentions the namespace or conflict
+        assert "already exists" in str(exc_info.value).lower() or test_namespace in str(
+            exc_info.value
+        )
 
-        # Try to delete a non-existent namespace
-        try:
+        # Try to delete a non-existent namespace - should raise NotFoundError
+        with pytest.raises(NotFoundError) as exc_info:
             polaris_plugin.delete_namespace("nonexistent_namespace_xyz123")
-        except NotFoundError:
-            pass  # Expected: Namespace not found
-        except CatalogError:
-            pass  # Also acceptable depending on catalog behavior
+        # Verify error message mentions not found or the namespace
+        error_msg = str(exc_info.value).lower()
+        assert "not found" in error_msg or "does not exist" in error_msg
 
     @pytest.mark.requirement("T077")
     def test_error_hierarchy_imports(self) -> None:
         """Test that all error imports from quickstart work.
 
-        Validates the import statement from the Error Handling section.
+        Validates the import statement from the Error Handling section
+        and verifies the inheritance hierarchy is correct.
         """
-        # These imports should work (from quickstart)
-        assert CatalogError is not None
-        assert CatalogUnavailableError is not None
-        assert AuthenticationError is not None
-        assert NotSupportedError is not None
-        assert ConflictError is not None
-        assert NotFoundError is not None
-
-        # Verify inheritance
+        # Verify inheritance hierarchy (CatalogError is the base)
         assert issubclass(CatalogUnavailableError, CatalogError)
         assert issubclass(AuthenticationError, CatalogError)
         assert issubclass(NotSupportedError, CatalogError)
         assert issubclass(ConflictError, CatalogError)
         assert issubclass(NotFoundError, CatalogError)
+
+        # Verify each error can be instantiated with a message
+        error_classes = [
+            CatalogError,
+            CatalogUnavailableError,
+            AuthenticationError,
+            NotSupportedError,
+            ConflictError,
+            NotFoundError,
+        ]
+        for error_class in error_classes:
+            error = error_class("test message")
+            assert str(error) == "test message"
+            assert isinstance(error, Exception)
+            assert isinstance(error, CatalogError)
 
     @pytest.mark.requirement("T077")
     def test_credential_vending_example_disabled(

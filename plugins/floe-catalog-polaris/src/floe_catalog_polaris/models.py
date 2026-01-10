@@ -162,28 +162,46 @@ class VendedCredentials(BaseModel):
     """Temporary credentials for table access.
 
     Returned by CatalogPlugin.vend_credentials() for secure,
-    short-lived access to specific tables and operations.
+    short-lived access to specific tables and operations. Credentials
+    are scoped to specific tables and operations for security.
 
     Attributes:
         access_key: Temporary access key (e.g., AWS access key ID).
-        secret_key: Temporary secret key (stored securely).
+        secret_key: Temporary secret key (stored securely via SecretStr).
         session_token: Session token for AWS STS (if applicable).
         expiration: Credential expiration timestamp (UTC).
         operations: Allowed operations (e.g., ["READ", "WRITE"]).
         table_path: Table path these credentials are scoped to.
 
-    Example:
+    Examples:
+        Create credentials with 1-hour expiration:
+
         >>> from datetime import datetime, timezone, timedelta
+        >>> expiry = datetime.now(timezone.utc) + timedelta(hours=1)
         >>> creds = VendedCredentials(
-        ...     access_key="ASIA...",
-        ...     secret_key="secret",
-        ...     session_token="token",
-        ...     expiration=datetime.now(timezone.utc) + timedelta(hours=1),
+        ...     access_key="ASIAXXXXXXXXXXX",
+        ...     secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCY",
+        ...     session_token="FwoGZXIvYXdzEBY...",
+        ...     expiration=expiry,
         ...     operations=["READ", "WRITE"],
         ...     table_path="bronze.raw_customers"
         ... )
-        >>> creds.is_expired
+
+        Check credential validity:
+
+        >>> creds.is_expired  # False if expiration is in future
         False
+        >>> creds.ttl_seconds > 0  # Seconds remaining until expiration
+        True
+
+        Access credentials for S3 (secret revealed only when needed):
+
+        >>> s3_config = {
+        ...     "aws_access_key_id": creds.access_key,
+        ...     "aws_secret_access_key": creds.secret_key.get_secret_value(),
+        ...     "aws_session_token": creds.session_token.get_secret_value()
+        ...     if creds.session_token else None,
+        ... }
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

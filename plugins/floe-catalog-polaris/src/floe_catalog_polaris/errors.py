@@ -17,8 +17,6 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import structlog
 from floe_core import (
     AuthenticationError,
@@ -46,9 +44,6 @@ from pyiceberg.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger(__name__)
 

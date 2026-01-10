@@ -16,6 +16,7 @@ They will FAIL until health_check() is fully implemented in T067.
 from __future__ import annotations
 
 import time
+from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -28,6 +29,55 @@ from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
 if TYPE_CHECKING:
     pass
+
+
+class MockTime:
+    """Deterministic time controller for testing.
+
+    Provides controlled time progression for testing response time
+    measurement without actual delays.
+
+    Example:
+        >>> mock_time = MockTime(start=0.0)
+        >>> mock_time.time()  # Returns 0.0
+        >>> mock_time.advance(0.05)  # Advance 50ms
+        >>> mock_time.time()  # Returns 0.05
+    """
+
+    def __init__(self, start: float = 0.0) -> None:
+        """Initialize with starting time."""
+        self._current = start
+
+    def time(self) -> float:
+        """Return current mocked time."""
+        return self._current
+
+    def perf_counter(self) -> float:
+        """Return current mocked perf_counter (same as time for testing)."""
+        return self._current
+
+    def advance(self, seconds: float) -> None:
+        """Advance time by specified seconds."""
+        self._current += seconds
+
+    def sleep(self, seconds: float) -> None:
+        """Simulate sleep by advancing time (no actual delay)."""
+        self.advance(seconds)
+
+
+@pytest.fixture
+def mock_time_controller() -> Generator[MockTime, None, None]:
+    """Provide a deterministic time controller for tests.
+
+    This fixture patches time.time and time.perf_counter to use
+    controlled values, enabling deterministic response time testing.
+    """
+    controller = MockTime(start=1000.0)  # Start at arbitrary point
+
+    with patch("time.time", controller.time), patch(
+        "time.perf_counter", controller.perf_counter
+    ):
+        yield controller
 
 
 @pytest.fixture
@@ -132,15 +182,22 @@ class TestHealthCheckBasic:
 class TestHealthCheckResponseTime:
     """Tests for response time measurement in health_check()."""
 
+    @pytest.mark.requirement("FR-028")
     def test_health_check_captures_response_time_ms(
         self,
         connected_plugin: PolarisCatalogPlugin,
         mock_catalog: MagicMock,
+        mock_time_controller: MockTime,
     ) -> None:
-        """Test that health_check captures response time in milliseconds."""
+        """Test that health_check captures response time in milliseconds.
+
+        Uses deterministic time mocking to verify response time measurement
+        without actual delays (faster, more reliable tests).
+        """
 
         def slow_list_namespaces(*args: object, **kwargs: object) -> list[tuple[str]]:
-            time.sleep(0.05)  # 50ms delay
+            # Simulate 50ms delay by advancing mock time
+            mock_time_controller.advance(0.05)
             return [("bronze",)]
 
         mock_catalog.list_namespaces.side_effect = slow_list_namespaces
@@ -148,11 +205,10 @@ class TestHealthCheckResponseTime:
         result = connected_plugin.health_check()
 
         assert "response_time_ms" in result.details
-        # Response time should be >= 50ms (our simulated delay)
-        assert result.details["response_time_ms"] >= 50.0
-        # And less than 1 second (reasonable upper bound)
-        assert result.details["response_time_ms"] < 1000.0
+        # Response time should be ~50ms (our simulated delay)
+        assert result.details["response_time_ms"] == pytest.approx(50.0, rel=0.1)
 
+    @pytest.mark.requirement("FR-028")
     def test_health_check_response_time_is_float(
         self,
         connected_plugin: PolarisCatalogPlugin,
@@ -165,15 +221,21 @@ class TestHealthCheckResponseTime:
         # Use pytest.approx or isinstance check to handle float comparison
         assert isinstance(result.details["response_time_ms"], (int, float))
 
+    @pytest.mark.requirement("FR-028")
     def test_health_check_response_time_captured_on_failure(
         self,
         connected_plugin: PolarisCatalogPlugin,
         mock_catalog: MagicMock,
+        mock_time_controller: MockTime,
     ) -> None:
-        """Test that response_time_ms is captured even when check fails."""
+        """Test that response_time_ms is captured even when check fails.
+
+        Uses deterministic time mocking for reliable failure timing tests.
+        """
 
         def slow_failing_list(*args: object, **kwargs: object) -> None:
-            time.sleep(0.03)  # 30ms delay
+            # Simulate 30ms delay before failure
+            mock_time_controller.advance(0.03)
             raise Exception("Connection timeout")
 
         mock_catalog.list_namespaces.side_effect = slow_failing_list
@@ -182,7 +244,7 @@ class TestHealthCheckResponseTime:
 
         assert result.state == HealthState.UNHEALTHY
         assert "response_time_ms" in result.details
-        assert result.details["response_time_ms"] >= 30.0
+        assert result.details["response_time_ms"] == pytest.approx(30.0, rel=0.1)
 
 
 class TestHealthCheckTimeout:
@@ -212,18 +274,26 @@ class TestHealthCheckTimeout:
         assert timeout_param is not None
         assert timeout_param.default == 1.0
 
+    @pytest.mark.requirement("SC-007")
     def test_health_check_respects_timeout(
         self,
         connected_plugin: PolarisCatalogPlugin,
         mock_catalog: MagicMock,
     ) -> None:
-        """Test that health_check times out when operation exceeds timeout."""
+        """Test that health_check times out when operation exceeds timeout.
 
-        def very_slow_operation(*args: object, **kwargs: object) -> list[tuple[str]]:
-            time.sleep(2.0)  # 2 second delay
+        Note: This test uses a real (short) delay to verify actual timeout
+        behavior. The delay is kept minimal (200ms) to maintain test speed.
+        """
+        import threading
+
+        def blocking_operation(*args: object, **kwargs: object) -> list[tuple[str]]:
+            # Use threading.Event for interruptible blocking
+            event = threading.Event()
+            event.wait(timeout=2.0)  # Block for up to 2 seconds
             return [("bronze",)]
 
-        mock_catalog.list_namespaces.side_effect = very_slow_operation
+        mock_catalog.list_namespaces.side_effect = blocking_operation
 
         start = time.time()
         result = connected_plugin.health_check(timeout=0.1)  # 100ms timeout
@@ -232,7 +302,7 @@ class TestHealthCheckTimeout:
         # Should return UNHEALTHY due to timeout
         assert result.state == HealthState.UNHEALTHY
         # Should have returned before the 2 second operation completed
-        assert elapsed < 1.5, f"Timeout not respected: took {elapsed:.2f}s"
+        assert elapsed < 1.0, f"Timeout not respected: took {elapsed:.2f}s"
 
     def test_health_check_timeout_includes_in_details(
         self,
