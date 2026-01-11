@@ -32,6 +32,13 @@ dependencies = [
     "floe-compute-duckdb",
 ]
 
+[tool.uv]
+# Supply chain protection: 3-day cooldown for new package versions
+# Applied when running `uv lock` - prevents locking in very new packages
+# CI installs from lock file directly (no re-resolution)
+# See: https://mkennedy.codes/posts/devops-python-supply-chain-security/
+exclude-newer = "P3D"
+
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
 floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true }

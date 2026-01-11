@@ -30,10 +30,6 @@ concurrency:
 env:
   PYTHON_VERSION_DEFAULT: "3.10"
   UV_CACHE_DIR: /tmp/.uv-cache
-  # Supply chain protection: 7-day cooldown for new package versions
-  # Prevents installing packages published within last 7 days
-  # See: https://mkennedy.codes/posts/devops-python-supply-chain-security/
-  UV_EXCLUDE_NEWER: "7 days"
 
 jobs:
   # ============================================================
