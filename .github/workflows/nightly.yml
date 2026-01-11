@@ -117,10 +117,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Run pip-audit
+      - name: Run vulnerability audit
         run: |
           echo "Checking for known vulnerabilities..."
-          uv run pip-audit --strict
+          # uv-secure natively parses uv.lock files and ignores local packages
+          # --no-check-uv-tool: CI manages its own uv version
+          uv run uv-secure --no-check-uv-tool .
 
       - name: Check for stale dependencies
         run: |

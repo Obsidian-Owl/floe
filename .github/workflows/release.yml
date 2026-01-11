@@ -29,6 +29,7 @@ concurrency:
 
 env:
   PYTHON_VERSION_DEFAULT: "3.10"
+  UV_CACHE_DIR: /tmp/.uv-cache
 
 jobs:
   # ============================================================

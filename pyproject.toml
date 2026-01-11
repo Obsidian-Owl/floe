@@ -16,7 +16,7 @@ dependencies = [
     "ruff>=0.3",
     "pre-commit>=3.0",
     "bandit[toml]>=1.7",
-    "pip-audit>=2.0",  # Security audit for dependencies
+    "uv-secure>=0.5.0",  # Security audit native to uv.lock files
     "types-psycopg2>=2.9",  # Type stubs for psycopg2
     "types-requests>=2.31",  # Type stubs for requests
     "requests>=2.31",  # HTTP client for telemetry fixture tests
@@ -31,6 +31,13 @@ dependencies = [
     # Include floe-compute-duckdb for development
     "floe-compute-duckdb",
 ]
+
+[tool.uv]
+# Supply chain protection: 3-day cooldown for new package versions
+# Applied when running `uv lock` - prevents locking in very new packages
+# CI installs from lock file directly (no re-resolution)
+# See: https://mkennedy.codes/posts/devops-python-supply-chain-security/
+exclude-newer = "P3D"
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }

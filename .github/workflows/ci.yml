@@ -117,8 +117,11 @@ jobs:
           uv run bandit -r packages/ -ll -f json -o bandit-report.json || true
           uv run bandit -r packages/ -ll
 
-      - name: Run pip-audit
-        run: uv run pip-audit
+      - name: Run vulnerability audit
+        run: |
+          # uv-secure natively parses uv.lock files and ignores local packages
+          # --no-check-uv-tool: CI manages its own uv version
+          uv run uv-secure --no-check-uv-tool .
 
       - name: Upload Bandit report
         if: always()
