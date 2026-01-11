@@ -20,6 +20,10 @@ concurrency:
 env:
   PYTHON_VERSION_DEFAULT: "3.10"
   UV_CACHE_DIR: /tmp/.uv-cache
+  # Supply chain protection: 7-day cooldown for new package versions
+  # Prevents installing packages published within last 7 days
+  # See: https://mkennedy.codes/posts/devops-python-supply-chain-security/
+  UV_EXCLUDE_NEWER: "7 days"
 
 jobs:
   # ============================================================
@@ -117,8 +121,11 @@ jobs:
           uv run bandit -r packages/ -ll -f json -o bandit-report.json || true
           uv run bandit -r packages/ -ll
 
-      - name: Run pip-audit
-        run: uv run pip-audit
+      - name: Run vulnerability audit
+        run: |
+          # uv-secure natively parses uv.lock files and ignores local packages
+          # --no-check-uv-tool: CI manages its own uv version
+          uv run uv-secure --no-check-uv-tool .
 
       - name: Upload Bandit report
         if: always()
