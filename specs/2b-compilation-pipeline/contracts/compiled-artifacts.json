@@ -1,0 +1,413 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/compiled-artifacts/v0.2.0",
+  "title": "CompiledArtifacts",
+  "description": "Compiled output from floe compile - the sole contract between floe-core and downstream packages",
+  "type": "object",
+  "required": [
+    "version",
+    "metadata",
+    "identity",
+    "mode",
+    "observability",
+    "plugins",
+    "transforms",
+    "dbt_profiles"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "default": "0.2.0",
+      "description": "Schema version (semver)"
+    },
+    "metadata": {
+      "$ref": "#/$defs/CompilationMetadata"
+    },
+    "identity": {
+      "$ref": "#/$defs/ProductIdentity"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["simple", "centralized", "mesh"],
+      "default": "simple",
+      "description": "Deployment mode"
+    },
+    "inheritance_chain": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ManifestRef"
+      },
+      "default": [],
+      "description": "Manifest inheritance lineage"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig"
+    },
+    "plugins": {
+      "$ref": "#/$defs/ResolvedPlugins"
+    },
+    "transforms": {
+      "$ref": "#/$defs/ResolvedTransforms"
+    },
+    "dbt_profiles": {
+      "type": "object",
+      "description": "Generated dbt profiles.yml content as dictionary",
+      "additionalProperties": true
+    },
+    "governance": {
+      "$ref": "#/$defs/ResolvedGovernance"
+    }
+  },
+  "$defs": {
+    "CompilationMetadata": {
+      "type": "object",
+      "required": [
+        "compiled_at",
+        "floe_version",
+        "source_hash",
+        "product_name",
+        "product_version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "compiled_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of compilation"
+        },
+        "floe_version": {
+          "type": "string",
+          "description": "Version of floe used for compilation"
+        },
+        "source_hash": {
+          "type": "string",
+          "description": "SHA256 hash of input files"
+        },
+        "product_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Name of the data product"
+        },
+        "product_version": {
+          "type": "string",
+          "description": "Version of the data product"
+        },
+        "git_commit": {
+          "type": "string",
+          "description": "Git commit SHA (optional)"
+        },
+        "generated_by": {
+          "type": "string",
+          "description": "Identity of compilation agent"
+        }
+      }
+    },
+    "ProductIdentity": {
+      "type": "object",
+      "required": ["product_id", "domain", "repository"],
+      "additionalProperties": false,
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fully qualified product ID (e.g., 'sales.customer_360')"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Domain name"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Source repository URL"
+        },
+        "namespace_registered": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether registered in catalog"
+        },
+        "registration_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When first registered"
+        }
+      }
+    },
+    "ManifestRef": {
+      "type": "object",
+      "required": ["name", "version", "scope", "ref"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Manifest name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Manifest version"
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["enterprise", "domain"],
+          "description": "Manifest scope"
+        },
+        "ref": {
+          "type": "string",
+          "description": "OCI reference"
+        }
+      }
+    },
+    "ObservabilityConfig": {
+      "type": "object",
+      "required": ["telemetry", "lineage_namespace"],
+      "additionalProperties": false,
+      "properties": {
+        "telemetry": {
+          "type": "object",
+          "description": "OpenTelemetry configuration",
+          "additionalProperties": true
+        },
+        "lineage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether OpenLineage is enabled"
+        },
+        "lineage_namespace": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Namespace for lineage events"
+        }
+      }
+    },
+    "ResolvedPlugins": {
+      "type": "object",
+      "required": ["compute", "orchestrator"],
+      "additionalProperties": false,
+      "properties": {
+        "compute": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "orchestrator": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "catalog": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "storage": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "ingestion": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "semantic": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "quality": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "lineage": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "secrets": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "identity": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "telemetry": {
+          "$ref": "#/$defs/PluginRef"
+        },
+        "dbt": {
+          "$ref": "#/$defs/PluginRef"
+        }
+      }
+    },
+    "PluginRef": {
+      "type": "object",
+      "required": ["type", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Plugin type name (e.g., 'duckdb')"
+        },
+        "version": {
+          "type": "string",
+          "description": "Plugin version"
+        },
+        "config": {
+          "type": "object",
+          "description": "Plugin-specific configuration",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ResolvedTransforms": {
+      "type": "object",
+      "required": ["models", "default_compute"],
+      "additionalProperties": false,
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResolvedModel"
+          },
+          "description": "List of resolved models"
+        },
+        "default_compute": {
+          "type": "string",
+          "description": "Default compute target"
+        }
+      }
+    },
+    "ResolvedModel": {
+      "type": "object",
+      "required": ["name", "compute"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Model name"
+        },
+        "compute": {
+          "type": "string",
+          "description": "Resolved compute target (never null)"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "dbt tags"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Dependencies"
+        }
+      }
+    },
+    "ResolvedGovernance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pii_encryption": {
+          "type": "string",
+          "enum": ["required", "optional"],
+          "description": "PII encryption policy"
+        },
+        "audit_logging": {
+          "type": "string",
+          "enum": ["enabled", "disabled"],
+          "description": "Audit logging policy"
+        },
+        "policy_enforcement_level": {
+          "type": "string",
+          "enum": ["off", "warn", "strict"],
+          "description": "Enforcement level"
+        },
+        "data_retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Retention period in days"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": "0.2.0",
+      "metadata": {
+        "compiled_at": "2026-01-14T10:30:00Z",
+        "floe_version": "0.1.0",
+        "source_hash": "sha256:abc123def456",
+        "product_name": "customer-360",
+        "product_version": "1.0.0",
+        "git_commit": "abc123def456789"
+      },
+      "identity": {
+        "product_id": "analytics.customer_360",
+        "domain": "analytics",
+        "repository": "github.com/acme/customer-360",
+        "namespace_registered": true
+      },
+      "mode": "centralized",
+      "inheritance_chain": [
+        {
+          "name": "acme-enterprise",
+          "version": "2.0.0",
+          "scope": "enterprise",
+          "ref": "oci://registry.acme.com/floe/enterprise:v2"
+        }
+      ],
+      "observability": {
+        "telemetry": {
+          "enabled": true,
+          "resource_attributes": {
+            "service_name": "customer-360",
+            "service_version": "1.0.0"
+          }
+        },
+        "lineage": true,
+        "lineage_namespace": "customer-360"
+      },
+      "plugins": {
+        "compute": {
+          "type": "duckdb",
+          "version": "0.1.0",
+          "config": {
+            "path": ":memory:",
+            "threads": 4
+          }
+        },
+        "orchestrator": {
+          "type": "dagster",
+          "version": "0.1.0"
+        }
+      },
+      "transforms": {
+        "models": [
+          {
+            "name": "stg_customers",
+            "compute": "duckdb",
+            "tags": ["staging"]
+          },
+          {
+            "name": "mart_customer_360",
+            "compute": "duckdb",
+            "tags": ["marts"],
+            "depends_on": ["stg_customers"]
+          }
+        ],
+        "default_compute": "duckdb"
+      },
+      "dbt_profiles": {
+        "customer_360": {
+          "target": "{{ env_var('FLOE_ENV', 'dev') }}",
+          "outputs": {
+            "dev": {
+              "type": "duckdb",
+              "path": ":memory:",
+              "threads": 4
+            },
+            "prod": {
+              "type": "duckdb",
+              "path": "{{ env_var('DUCKDB_PATH') }}",
+              "threads": 8
+            }
+          }
+        }
+      },
+      "governance": {
+        "pii_encryption": "required",
+        "audit_logging": "enabled",
+        "policy_enforcement_level": "strict"
+      }
+    }
+  ]
+}
