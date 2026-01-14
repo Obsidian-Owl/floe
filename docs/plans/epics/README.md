@@ -1,6 +1,6 @@
 # Epic Index
 
-This directory contains detailed documentation for each of the 21 Epics.
+This directory contains detailed documentation for each of the 22 Epics.
 
 ---
 
@@ -54,6 +54,8 @@ This directory contains detailed documentation for each of the 21 Epics.
 | [9A](09-deployment/epic-09a-k8s-deployment.md) | K8s Deployment | 21 | Planned | [floe-09a-k8s-deployment](https://linear.app/obsidianowl/project/floe-09a-k8s-deployment-ac56ffa47013) |
 | [9B](09-deployment/epic-09b-helm-charts.md) | Helm Charts | 15 | Planned | [floe-09b-helm-charts](https://linear.app/obsidianowl/project/floe-09b-helm-charts-14ba871f8309) |
 | [9C](09-deployment/epic-09c-testing-infrastructure.md) | Testing Infrastructure | 15 | Planned | [floe-09c-testing-infra](https://linear.app/obsidianowl/project/floe-09c-testing-infra-bc1023480bf2) |
+| **Developer Experience** |
+| [10A](10-devx/epic-10a-agent-memory.md) | Agent Memory (Cognee) | 12 | Planned | TBD |
 
 ---
 
@@ -109,6 +111,10 @@ K8s deployment and testing infrastructure.
 - [Epic 9A: K8s Deployment](09-deployment/epic-09a-k8s-deployment.md)
 - [Epic 9B: Helm Charts](09-deployment/epic-09b-helm-charts.md)
 - [Epic 9C: Testing Infrastructure](09-deployment/epic-09c-testing-infrastructure.md)
+
+### Developer Experience (Epic 10A)
+AI agent memory and developer tooling enhancements.
+- [Epic 10A: Agent Memory (Cognee)](10-devx/epic-10a-agent-memory.md)
 
 ---
 

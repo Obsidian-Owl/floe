@@ -1,14 +1,14 @@
 # Epic Overview
 
-**Total Requirements**: 375+
-**Total Epics**: 21
-**Requirement Domains**: 7
+**Total Requirements**: 387+
+**Total Epics**: 22
+**Requirement Domains**: 8
 
 ---
 
 ## Executive Summary
 
-The floe platform delivery is organized into 21 Epics across 9 categories. Each Epic is sized for optimal SpecKit task generation (15-25 requirements, yielding 30-60 tasks).
+The floe platform delivery is organized into 22 Epics across 10 categories. Each Epic is sized for optimal SpecKit task generation (15-25 requirements, yielding 30-60 tasks).
 
 ### Epic Sizing Rationale
 
@@ -178,6 +178,7 @@ All Epics fall within the optimal or acceptable range.
 | 4A | Compute Plugin | 10 | 2A, 4C, 6A |
 | 4C | Catalog Plugin | 10 | 2A, 4A, 6A |
 | 6A | OpenTelemetry | 20 | 2A, 4A, 4C |
+| 10A | Agent Memory (Cognee) | 12 | 2A, 4A, 4C, 6A (non-blocking enhancement) |
 
 ### Wave 3 (Depends on Wave 2)
 | Epic | Name | Req Count | Depends On |
@@ -289,6 +290,7 @@ Each Epic has exclusive ownership of specific files to prevent merge conflicts:
 | 8A-C | `floe-core/src/floe_core/oci/` | OCI modules |
 | 9A-B | `charts/` | Helm charts |
 | 9C | `testing/`, `Makefile`, `.github/workflows/test.yml` | Test infrastructure (Wave 0) |
+| 10A | `packages/floe-devx/`, `scripts/cognee-sync`, `.cognee/` | Cognee integration, Git hooks |
 
 ---
 
