@@ -8,6 +8,7 @@ Usage:
     agent-memory health
     agent-memory sync [--dataset NAME]
     agent-memory search QUERY [--type TYPE] [--top-k N]
+    agent-memory codify [--pattern GLOB] [--progress] [--dry-run]
     agent-memory coverage
     agent-memory drift
     agent-memory repair [--dry-run]
@@ -18,6 +19,7 @@ Example:
     >>> agent-memory init
     >>> agent-memory health
     >>> agent-memory search "how do plugins work"
+    >>> agent-memory codify --progress
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from agent_memory.cognee_client import (
     CogneeConnectionError,
 )
 from agent_memory.config import AgentMemoryConfig, ContentSource, get_config
+from agent_memory.docstring_extractor import DocstringEntry, extract_docstrings
 from agent_memory.markdown_parser import ParsedContent, parse_markdown_file
 
 logger = structlog.get_logger(__name__)
@@ -143,6 +146,37 @@ def _compute_file_checksum(path: Path) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _collect_python_files(
+    patterns: list[str], exclude_patterns: list[str] | None = None
+) -> list[Path]:
+    """Collect Python files matching glob patterns.
+
+    Args:
+        patterns: List of glob patterns (e.g., ["packages/*/src/**/*.py"]).
+        exclude_patterns: Optional patterns to exclude.
+
+    Returns:
+        Sorted list of matching Python file paths.
+    """
+    files: list[Path] = []
+    exclude = exclude_patterns or []
+
+    for pattern in patterns:
+        for match in Path(".").glob(pattern):
+            if match.is_file() and match.suffix == ".py":
+                # Check exclusions
+                excluded = False
+                for exc_pattern in exclude:
+                    if match.match(exc_pattern):
+                        excluded = True
+                        break
+                if not excluded:
+                    files.append(match)
+
+    # Deduplicate and sort
+    return sorted(set(files))
+
+
 @app.command()
 def init(
     force: Annotated[
@@ -239,7 +273,10 @@ def init(
             completed_files = set(checkpoint_data.get("completed_files", []))
             typer.echo(f"  Resuming from checkpoint ({len(completed_files)} files already indexed)")
         except (json.JSONDecodeError, KeyError):
-            typer.secho("  Warning: Could not read checkpoint, starting fresh", fg=typer.colors.YELLOW)
+            typer.secho(
+                "  Warning: Could not read checkpoint, starting fresh",
+                fg=typer.colors.YELLOW,
+            )
 
     async def _index_content() -> None:
         checksums: dict[str, str] = {}
@@ -682,6 +719,236 @@ def test() -> None:
     typer.echo("Running test queries...")
     typer.secho("  Not yet implemented - requires test infrastructure", fg=typer.colors.YELLOW)
     # Will be implemented in Phase 5
+
+
+@app.command()
+def codify(
+    patterns: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--pattern",
+            "-p",
+            help="Glob patterns for Python files (default: packages/*/src/**/*.py)",
+        ),
+    ] = None,
+    exclude: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--exclude",
+            "-e",
+            help="Patterns to exclude (default: **/test_*, **/__pycache__/*)",
+        ),
+    ] = None,
+    progress: Annotated[
+        bool,
+        typer.Option("--progress", help="Show progress bar during indexing"),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be indexed without indexing"),
+    ] = False,
+) -> None:
+    """Extract and index Python docstrings to the codebase dataset.
+
+    Parses Python source files to extract docstrings from modules, classes,
+    functions, and methods. Indexed content includes:
+    - Module-level docstrings
+    - Class docstrings with base classes and method names
+    - Function/method docstrings with signatures
+    - Google-style sections (Args, Returns, Raises, Examples)
+
+    Example:
+        agent-memory codify
+        agent-memory codify --pattern "src/**/*.py" --progress
+        agent-memory codify --dry-run
+    """
+    config = _load_config()
+    if config is None:
+        raise typer.Exit(code=1)
+
+    # Default patterns
+    source_patterns = patterns or [
+        "packages/*/src/**/*.py",
+        "plugins/*/src/**/*.py",
+        "devtools/*/src/**/*.py",
+    ]
+    exclude_patterns = exclude or [
+        "**/test_*",
+        "**/__pycache__/*",
+        "**/conftest.py",
+    ]
+
+    # Collect Python files
+    typer.echo("Collecting Python files...")
+    files = _collect_python_files(source_patterns, exclude_patterns)
+
+    if not files:
+        typer.secho("No Python files found matching patterns", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=0)
+
+    typer.echo(f"Found {len(files)} Python file(s)")
+
+    if dry_run:
+        typer.echo()
+        typer.secho("Dry run - files that would be indexed:", fg=typer.colors.CYAN)
+        for f in files:
+            typer.echo(f"  {f}")
+        raise typer.Exit(code=0)
+
+    client = CogneeClient(config)
+    dataset_name = config.codebase_dataset
+
+    async def _codify_content() -> None:
+        cognee_dir = Path(".cognee")
+        state_file = cognee_dir / "state.json"
+        checksums_file = cognee_dir / "checksums.json"
+
+        # Load existing state
+        try:
+            existing_state = json.loads(state_file.read_text()) if state_file.exists() else {}
+            existing_checksums = (
+                json.loads(checksums_file.read_text()) if checksums_file.exists() else {}
+            )
+        except json.JSONDecodeError:
+            existing_state = {}
+            existing_checksums = {}
+
+        indexed_files: list[str] = []
+        total_entries = 0
+        checksums: dict[str, str] = dict(existing_checksums)
+
+        try:
+            if progress:
+                with typer.progressbar(
+                    files,
+                    label="Extracting docstrings",
+                    show_eta=True,
+                    show_pos=True,
+                ) as progress_bar:
+                    for file_path in progress_bar:
+                        entries = _process_python_file(file_path)
+                        if entries:
+                            for entry in entries:
+                                content = _format_docstring_entry(entry)
+                                await client.add_content(
+                                    content=content,
+                                    dataset_name=dataset_name,
+                                    metadata={
+                                        "source_path": str(entry.source_path),
+                                        "entry_type": entry.entry_type,
+                                        "name": entry.name,
+                                        "line_number": entry.line_number,
+                                    },
+                                )
+                            total_entries += len(entries)
+                            indexed_files.append(str(file_path))
+                            checksums[str(file_path)] = _compute_file_checksum(file_path)
+            else:
+                for i, file_path in enumerate(files, 1):
+                    typer.echo(f"  [{i}/{len(files)}] {file_path}")
+                    entries = _process_python_file(file_path)
+                    if entries:
+                        for entry in entries:
+                            content = _format_docstring_entry(entry)
+                            await client.add_content(
+                                content=content,
+                                dataset_name=dataset_name,
+                                metadata={
+                                    "source_path": str(entry.source_path),
+                                    "entry_type": entry.entry_type,
+                                    "name": entry.name,
+                                    "line_number": entry.line_number,
+                                },
+                            )
+                        total_entries += len(entries)
+                        indexed_files.append(str(file_path))
+                        checksums[str(file_path)] = _compute_file_checksum(file_path)
+                        typer.echo(f"      {len(entries)} docstring(s) extracted")
+
+            # Run cognify to build knowledge graph
+            if indexed_files:
+                typer.echo()
+                typer.echo("Running cognify to build knowledge graph...")
+                await client.cognify(dataset_name=dataset_name)
+                typer.secho("  Cognify completed", fg=typer.colors.GREEN)
+
+            # Update state
+            if dataset_name not in existing_state.get("indexed_files", {}):
+                existing_state.setdefault("indexed_files", {})[dataset_name] = []
+            existing_state["indexed_files"][dataset_name].extend(indexed_files)
+            existing_state["indexed_files"][dataset_name] = list(
+                set(existing_state["indexed_files"][dataset_name])
+            )
+
+            # Save state files
+            if cognee_dir.exists():
+                state_file.write_text(json.dumps(existing_state, indent=2))
+                checksums_file.write_text(json.dumps(checksums, indent=2))
+
+            typer.echo()
+            typer.secho(
+                f"Codify complete: {len(indexed_files)} file(s), {total_entries} docstring(s)",
+                fg=typer.colors.GREEN,
+            )
+
+        except CogneeClientError as e:
+            _exit_with_error(f"Codify failed: {e}")
+
+    _run_async(_codify_content())
+
+
+def _process_python_file(file_path: Path) -> list[DocstringEntry]:
+    """Extract docstrings from a Python file.
+
+    Args:
+        file_path: Path to the Python file.
+
+    Returns:
+        List of extracted docstring entries, empty if parsing fails.
+    """
+    try:
+        return extract_docstrings(file_path)
+    except FileNotFoundError:
+        return []
+    except Exception:
+        # Log but don't fail for individual file errors
+        logger.warning("Failed to parse file", file_path=str(file_path))
+        return []
+
+
+def _format_docstring_entry(entry: DocstringEntry) -> str:
+    """Format a docstring entry for indexing.
+
+    Args:
+        entry: The docstring entry to format.
+
+    Returns:
+        Formatted content string for Cognee indexing.
+    """
+    parts = [
+        f"# {entry.entry_type.title()}: {entry.name}",
+        f"Source: {entry.source_path}:{entry.line_number}",
+    ]
+
+    if entry.entry_type == "class" and entry.bases:
+        parts.append(f"Bases: {', '.join(entry.bases)}")
+
+    if entry.signature:
+        parts.append(f"Signature: {entry.name}{entry.signature}")
+
+    if entry.entry_type == "class" and entry.methods:
+        parts.append(f"Methods: {', '.join(entry.methods)}")
+
+    parts.append("")
+    parts.append(entry.docstring)
+
+    if entry.sections:
+        parts.append("")
+        for section_name, section_content in entry.sections.items():
+            parts.append(f"## {section_name}")
+            parts.append(section_content)
+
+    return "\n".join(parts)
 
 
 @app.callback()
