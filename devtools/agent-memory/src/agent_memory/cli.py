@@ -417,6 +417,14 @@ def search(
             help="Search type: GRAPH_COMPLETION, SUMMARIES, INSIGHTS, CHUNKS",
         ),
     ] = "GRAPH_COMPLETION",
+    dataset: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset",
+            "-d",
+            help="Filter results by dataset (architecture, governance, etc.)",
+        ),
+    ] = None,
     top_k: Annotated[
         int,
         typer.Option("--top-k", "-k", help="Maximum number of results"),
@@ -425,6 +433,7 @@ def search(
     """Search the knowledge graph.
 
     Queries indexed content using Cognee's graph-based search.
+    Optionally filter results by dataset name.
     """
     config = _load_config()
     if config is None:
@@ -436,25 +445,47 @@ def search(
         try:
             result = await client.search(query, search_type=search_type, top_k=top_k)
 
+            # Filter results by dataset if specified
+            filtered_results = result.results
+            if dataset:
+                filtered_results = [
+                    item for item in result.results
+                    if item.dataset == dataset or (
+                        item.source_path and dataset in item.source_path
+                    )
+                ]
+
             typer.echo(f"Query: {result.query}")
             typer.echo(f"Search type: {result.search_type}")
-            typer.echo(f"Results: {result.total_count} (in {result.execution_time_ms}ms)")
+            if dataset:
+                typer.echo(f"Dataset filter: {dataset}")
+            typer.echo(
+                f"Results: {len(filtered_results)}"
+                f"{f' (filtered from {result.total_count})' if dataset else ''}"
+                f" (in {result.execution_time_ms}ms)"
+            )
             typer.echo()
 
-            if not result.results:
+            if not filtered_results:
                 typer.secho("No results found", fg=typer.colors.YELLOW)
                 return
 
-            for i, item in enumerate(result.results, 1):
+            for i, item in enumerate(filtered_results, 1):
                 typer.secho(f"[{i}]", fg=typer.colors.CYAN, nl=False)
                 if item.source_path:
                     typer.echo(f" {item.source_path}")
                 else:
                     typer.echo()
 
-                typer.echo(f"    {item.content[:200]}...")
+                # Truncate long content
+                content_preview = item.content[:200]
+                if len(item.content) > 200:
+                    content_preview += "..."
+                typer.echo(f"    {content_preview}")
                 if item.relevance_score > 0:
                     typer.echo(f"    Score: {item.relevance_score:.3f}")
+                if item.dataset:
+                    typer.echo(f"    Dataset: {item.dataset}")
                 typer.echo()
 
         except CogneeClientError as e:

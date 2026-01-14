@@ -163,6 +163,10 @@ class SearchResultItem(BaseModel):
         default=None,
         description="Source file path if available",
     )
+    dataset: str | None = Field(
+        default=None,
+        description="Dataset name the result came from",
+    )
     relevance_score: float = Field(
         default=0.0,
         ge=0.0,
