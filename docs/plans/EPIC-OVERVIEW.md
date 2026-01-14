@@ -290,7 +290,7 @@ Each Epic has exclusive ownership of specific files to prevent merge conflicts:
 | 8A-C | `floe-core/src/floe_core/oci/` | OCI modules |
 | 9A-B | `charts/` | Helm charts |
 | 9C | `testing/`, `Makefile`, `.github/workflows/test.yml` | Test infrastructure (Wave 0) |
-| 10A | `packages/floe-devx/`, `scripts/cognee-sync`, `.cognee/` | Cognee integration, Git hooks |
+| 10A | `devtools/agent-memory/`, `scripts/cognee-sync`, `.cognee/` | AI agent memory (internal) |
 
 ---
 

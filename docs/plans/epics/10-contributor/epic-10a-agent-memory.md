@@ -1,8 +1,13 @@
 # Epic 10A: Agent Memory (Cognee Integration)
 
+> **Audience**: AI coding agents (Claude Code, Cursor, etc.) and human maintainers
+> **contributing to the floe codebase**.
+>
+> **Not For**: End users of floe, data engineers building pipelines, or platform engineers configuring floe.
+
 ## Summary
 
-Cognee Cloud integration provides persistent, graph-augmented memory for Claude Code agents. This Epic establishes shared team knowledge graph for cross-session context preservation, decision traceability, and capability indexing, enhancing the developer experience and AI agent effectiveness across all developers and CI.
+Cognee Cloud integration provides persistent, graph-augmented memory for **AI coding agents contributing to the floe codebase**. This Epic establishes shared knowledge graph for floe maintainers and AI assistants, enabling cross-session context preservation, decision traceability, and capability indexing.
 
 ## Status
 
@@ -39,8 +44,8 @@ Cognee Cloud integration provides persistent, graph-augmented memory for Claude 
 ## Architecture References
 
 ### ADRs
-- TBD: ADR-0046 - Agent Memory Architecture
-- ADR-0042 - Linear + Beads Traceability (related)
+- [ADR-0046](../../../architecture/adr/0046-agent-memory-architecture.md) - Agent Memory Architecture
+- [ADR-0042](../../../architecture/adr/0042-linear-beads-traceability.md) - Linear + Beads Traceability (related)
 
 ### Interface Docs
 - Cognee GitHub: https://github.com/topoteretes/cognee
@@ -56,16 +61,19 @@ Cognee Cloud integration provides persistent, graph-augmented memory for Claude 
 ## File Ownership (Exclusive)
 
 ```text
-packages/floe-devx/                    # New package
-├── src/floe_devx/
-│   ├── cognee_sync.py                 # Sync orchestration
-│   ├── docstring_extractor.py         # Python docstring → graph
-│   ├── markdown_parser.py             # Markdown → graph
-│   └── mcp_server.py                  # MCP integration (thin wrapper)
-├── tests/
-│   ├── unit/
-│   └── integration/
-└── pyproject.toml
+devtools/                              # INTERNAL ONLY - never distributed
+└── agent-memory/                      # Cognee integration for AI coding agents
+    ├── pyproject.toml                 # "Private :: Do Not Upload" classifier
+    ├── README.md                      # Explicit audience statement
+    ├── src/agent_memory/
+    │   ├── __init__.py
+    │   ├── cognee_sync.py             # Sync orchestration
+    │   ├── docstring_extractor.py     # Python docstring → graph
+    │   ├── markdown_parser.py         # Markdown → graph
+    │   └── mcp_server.py              # MCP integration (thin wrapper)
+    └── tests/
+        ├── unit/
+        └── integration/
 
 scripts/
 ├── setup-hooks.sh                     # Extended with Cognee hooks
@@ -79,7 +87,7 @@ scripts/
 └── cognee-sync.yml                    # CI sync workflow (optional)
 ```
 
-**Note**: No Helm chart needed - using Cognee Cloud (SaaS).
+**Note**: No Helm chart needed - using Cognee Cloud (SaaS). Package is dev-only via `[project.optional-dependencies].dev`.
 
 ---
 
@@ -99,7 +107,7 @@ scripts/
 ## User Stories (for SpecKit)
 
 ### US1: Cognee Cloud Setup (P0)
-**As a** platform developer
+**As a** floe contributor (human or AI agent)
 **I want** Cognee Cloud configured for the team
 **So that** all agents share persistent memory
 
@@ -111,7 +119,7 @@ scripts/
 - [ ] Connection validation in CI pipeline
 
 ### US2: Architecture Documentation Indexing (P0)
-**As a** platform developer
+**As a** floe contributor (human or AI agent)
 **I want** architecture docs automatically indexed
 **So that** Claude Code can query architectural decisions
 
@@ -122,7 +130,7 @@ scripts/
 - [ ] Search returns relevant context for queries
 
 ### US3: Docstring Extraction (P1)
-**As a** platform developer
+**As a** floe contributor (human or AI agent)
 **I want** Python docstrings extracted to knowledge graph
 **So that** API surface is searchable and connected
 
@@ -133,7 +141,7 @@ scripts/
 - [ ] 100% class docstring, 95%+ function docstring coverage
 
 ### US4: Git Hook Integration (P1)
-**As a** developer
+**As a** floe contributor
 **I want** knowledge graph updated automatically
 **So that** memory stays current without manual sync
 
@@ -155,7 +163,7 @@ scripts/
 - [ ] Decision history queryable
 
 ### US6: Session Recovery Protocol (P2)
-**As a** developer returning after compaction
+**As a** floe contributor (or AI agent) returning after compaction
 **I want** automatic context injection
 **So that** I don't need to manually reconstruct state
 
@@ -185,11 +193,11 @@ scripts/
 | Secret management | LOW | MEDIUM | Use GitHub secrets, environment variables |
 
 ### Test Strategy
-- **Unit**: `packages/floe-devx/tests/unit/`
+- **Unit**: `devtools/agent-memory/tests/unit/`
   - Mock Cognee client for extraction tests
   - Test markdown/docstring parsing
   - Test hook scripts in isolation
-- **Integration**: `packages/floe-devx/tests/integration/`
+- **Integration**: `devtools/agent-memory/tests/integration/`
   - Real Cognee Cloud API (test workspace)
   - Full cognify → search cycle
   - Validate search quality with known docs
@@ -206,8 +214,9 @@ scripts/
 - `.specify/memory/constitution.md` - Core principles
 - `.claude/rules/` - Enforcement rules
 - `.claude/skills/` - 13 skills to index
-- `packages/*/src/` - Docstrings to extract
+- `packages/*/src/`, `plugins/*/src/` - Docstrings to extract
 - `scripts/setup-hooks.sh` - Hook infrastructure
+- `devtools/agent-memory/` - This Epic's implementation
 
 ### Related Existing Code
 - `scripts/setup-hooks.sh` - Chained hook pattern (extend)
