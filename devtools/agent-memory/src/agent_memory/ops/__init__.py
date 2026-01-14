@@ -22,6 +22,7 @@ from agent_memory.ops.drift import (
     DriftReport,
     compute_content_hash,
     detect_deleted_files,
+    detect_drift,
     detect_modified_files,
     detect_renamed_files,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "DriftReport",
     "compute_content_hash",
     "detect_deleted_files",
+    "detect_drift",
     "detect_modified_files",
     "detect_renamed_files",
     # Health

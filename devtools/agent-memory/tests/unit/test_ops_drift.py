@@ -381,3 +381,165 @@ class TestDriftReportSerialization:
 
         assert parsed["has_drift"] is False
         assert parsed["unchanged_files"] == ["file.py"]
+
+
+class TestDetectDrift:
+    """Tests for detect_drift function."""
+
+    @pytest.mark.requirement("FR-020")
+    def test_detect_drift_with_checksums(self, tmp_path: Path) -> None:
+        """Test detect_drift uses stored checksums to detect drift."""
+        import json
+        from unittest.mock import MagicMock
+
+        from agent_memory.ops.drift import compute_content_hash, detect_drift
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "unchanged.py").write_text("# Unchanged")
+        (src_dir / "modified.py").write_text("# Modified - new content")
+
+        # Create .cognee directory with checksums
+        cognee_dir = tmp_path / ".cognee"
+        cognee_dir.mkdir()
+
+        # Store original checksums
+        unchanged_path = str((src_dir / "unchanged.py").resolve())
+        modified_path = str((src_dir / "modified.py").resolve())
+        deleted_path = str((src_dir / "deleted.py").resolve())
+
+        stored_checksums = {
+            unchanged_path: compute_content_hash("# Unchanged"),
+            modified_path: compute_content_hash("# Modified - old content"),  # Different!
+            deleted_path: compute_content_hash("# Deleted file"),  # No longer exists
+        }
+        (cognee_dir / "checksums.json").write_text(json.dumps(stored_checksums))
+
+        # Create mock config
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        report = detect_drift(mock_config, base_path=tmp_path)
+
+        assert len(report.modified_files) == 1
+        assert modified_path in report.modified_files
+
+        assert len(report.deleted_files) == 1
+        assert deleted_path in report.deleted_files
+
+        assert len(report.unchanged_files) == 1
+        assert unchanged_path in report.unchanged_files
+
+    @pytest.mark.requirement("FR-020")
+    def test_detect_drift_no_checksums_file(self, tmp_path: Path) -> None:
+        """Test detect_drift handles missing checksums.json gracefully."""
+        from unittest.mock import MagicMock
+
+        from agent_memory.ops.drift import detect_drift
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "file.py").write_text("# Content")
+
+        # No .cognee directory
+
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        report = detect_drift(mock_config, base_path=tmp_path)
+
+        # With no stored checksums, nothing is deleted/modified/unchanged
+        assert report.deleted_files == []
+        assert report.modified_files == []
+        assert report.unchanged_files == []
+        assert report.has_drift is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_detect_drift_with_provided_checksums(self, tmp_path: Path) -> None:
+        """Test detect_drift with provided checksums (bypasses file loading)."""
+        from unittest.mock import MagicMock
+
+        from agent_memory.ops.drift import compute_content_hash, detect_drift
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "file.py").write_text("# Current content")
+
+        file_path = str((src_dir / "file.py").resolve())
+
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        # Provide checksums directly
+        stored_checksums = {
+            file_path: compute_content_hash("# Old content"),  # Different from current
+        }
+
+        report = detect_drift(
+            mock_config,
+            base_path=tmp_path,
+            stored_checksums=stored_checksums,
+        )
+
+        assert len(report.modified_files) == 1
+        assert file_path in report.modified_files
+
+    @pytest.mark.requirement("FR-020")
+    def test_detect_drift_detects_renames(self, tmp_path: Path) -> None:
+        """Test detect_drift correctly identifies renamed files."""
+        from unittest.mock import MagicMock
+
+        from agent_memory.ops.drift import compute_content_hash, detect_drift
+
+        # Create test file with specific content
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        content = "# Unique content that was renamed"
+        (src_dir / "new_name.py").write_text(content)
+
+        new_path = str((src_dir / "new_name.py").resolve())
+        old_path = str((src_dir / "old_name.py").resolve())
+
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        # Old checksums have the same content at different path
+        stored_checksums = {
+            old_path: compute_content_hash(content),
+        }
+
+        report = detect_drift(
+            mock_config,
+            base_path=tmp_path,
+            stored_checksums=stored_checksums,
+        )
+
+        assert len(report.renamed_files) == 1
+        assert report.renamed_files[0] == [old_path, new_path]

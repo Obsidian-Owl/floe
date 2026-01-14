@@ -12,12 +12,13 @@ Implementation: T038 (FLO-623)
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, computed_field
 
 if TYPE_CHECKING:
-    pass
+    from agent_memory.config import AgentMemoryConfig
 
 
 class DriftReport(BaseModel):
@@ -157,3 +158,108 @@ def detect_modified_files(
             modified.append(path)
 
     return sorted(modified)
+
+
+def detect_drift(
+    config: AgentMemoryConfig,
+    base_path: Path | None = None,
+    *,
+    stored_checksums: dict[str, str] | None = None,
+) -> DriftReport:
+    """Detect drift between indexed files and current filesystem state.
+
+    Loads checksums from `.cognee/checksums.json` (or uses provided checksums),
+    compares to current filesystem state, and categorizes drift.
+
+    Args:
+        config: Agent memory configuration with content_sources.
+        base_path: Base path for file resolution. Defaults to cwd.
+        stored_checksums: Optional pre-loaded checksums. If not provided,
+            will load from `.cognee/checksums.json`.
+
+    Returns:
+        DriftReport with categorized drift entries:
+        - deleted_files: Indexed but no longer on filesystem
+        - renamed_files: Same content, different path
+        - modified_files: Same path, different content
+        - unchanged_files: No changes
+
+    Example:
+        >>> config = get_config()
+        >>> report = detect_drift(config)
+        >>> if report.has_drift:
+        ...     print(f"Drift detected: {report.total_drifted} files")
+    """
+    import json
+
+    from agent_memory.ops.coverage import get_all_configured_files
+
+    if base_path is None:
+        base_path = Path.cwd()
+
+    # Load stored checksums from file if not provided
+    checksums: dict[str, str]
+    if stored_checksums is not None:
+        checksums = stored_checksums
+    else:
+        checksums_path = base_path / ".cognee" / "checksums.json"
+        if checksums_path.exists():
+            with checksums_path.open() as f:
+                checksums = json.load(f)
+        else:
+            checksums = {}
+
+    # Get current filesystem files
+    filesystem_files = get_all_configured_files(config, base_path)
+
+    # Build filesystem content map (path -> content)
+    filesystem_content: dict[str, str] = {}
+    for file_path in filesystem_files:
+        path_obj = Path(file_path)
+        if path_obj.exists():
+            content = path_obj.read_text(encoding="utf-8", errors="replace")
+            filesystem_content[file_path] = content
+
+    # Detect deleted files (in checksums but not on filesystem)
+    deleted = detect_deleted_files(filesystem_files, list(checksums.keys()))
+
+    # Detect modified files (in both, but different hash)
+    modified: list[str] = []
+    for file_path, stored_hash in checksums.items():
+        if file_path in filesystem_content:
+            current_hash = compute_content_hash(filesystem_content[file_path])
+            if current_hash != stored_hash:
+                modified.append(file_path)
+
+    # Detect renamed files (same hash, different path)
+    # Build hash -> path maps
+    stored_hash_to_path: dict[str, str] = {}
+    for path, file_hash in checksums.items():
+        stored_hash_to_path[file_hash] = path
+
+    current_hash_to_path: dict[str, str] = {}
+    for path, content in filesystem_content.items():
+        current_hash_to_path[compute_content_hash(content)] = path
+
+    renamed: list[list[str]] = []
+    for stored_hash, stored_path in stored_hash_to_path.items():
+        if stored_hash in current_hash_to_path:
+            current_path = current_hash_to_path[stored_hash]
+            if current_path != stored_path:
+                # Same content, different path = renamed
+                renamed.append([stored_path, current_path])
+
+    # Unchanged files (in both with same hash)
+    unchanged: list[str] = []
+    for file_path, stored_hash in checksums.items():
+        if file_path in filesystem_content:
+            current_hash = compute_content_hash(filesystem_content[file_path])
+            if current_hash == stored_hash:
+                unchanged.append(file_path)
+
+    return DriftReport(
+        deleted_files=sorted(deleted),
+        renamed_files=sorted(renamed, key=lambda x: x[0]),
+        modified_files=sorted(modified),
+        unchanged_files=sorted(unchanged),
+    )
