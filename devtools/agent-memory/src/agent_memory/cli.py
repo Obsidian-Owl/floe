@@ -1221,6 +1221,104 @@ def _format_docstring_entry(entry: DocstringEntry) -> str:
     return "\n".join(parts)
 
 
+@app.command(name="mcp-config")
+def mcp_config(
+    install: Annotated[
+        bool,
+        typer.Option(
+            "--install",
+            "-i",
+            help="Update .claude/mcp.json with the configuration",
+        ),
+    ] = False,
+    host: Annotated[
+        str,
+        typer.Option("--host", "-h", help="MCP server hostname"),
+    ] = "localhost",
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="MCP server port"),
+    ] = 8000,
+) -> None:
+    """Generate MCP server configuration for Claude Code.
+
+    Displays the MCP configuration JSON needed to connect Claude Code
+    to the Cognee knowledge graph server.
+
+    Examples:
+        # Display configuration
+        agent-memory mcp-config
+
+        # Install to .claude/mcp.json
+        agent-memory mcp-config --install
+
+        # Custom port
+        agent-memory mcp-config --port 9000
+    """
+    from agent_memory.mcp_config import generate_mcp_config
+
+    config = generate_mcp_config(host=host, port=port)
+
+    if install:
+        # Find the .claude directory (look in repo root)
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            repo_root = Path(result.stdout.strip())
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Fall back to current directory
+            repo_root = Path.cwd()
+
+        claude_dir = repo_root / ".claude"
+        mcp_json_path = claude_dir / "mcp.json"
+
+        # Ensure .claude directory exists
+        claude_dir.mkdir(exist_ok=True)
+
+        # Load existing config if present
+        existing_config: dict[str, Any] = {}
+        if mcp_json_path.exists():
+            try:
+                existing_config = json.loads(mcp_json_path.read_text())
+                typer.echo(f"Updating existing {mcp_json_path}")
+            except json.JSONDecodeError:
+                typer.secho(
+                    f"Warning: Could not parse existing {mcp_json_path}, will overwrite",
+                    fg=typer.colors.YELLOW,
+                )
+
+        # Merge configurations
+        if "mcpServers" not in existing_config:
+            existing_config["mcpServers"] = {}
+
+        existing_config["mcpServers"].update(config["mcpServers"])
+
+        # Write updated config
+        mcp_json_path.write_text(json.dumps(existing_config, indent=2) + "\n")
+        typer.secho(
+            f"MCP configuration installed to {mcp_json_path}",
+            fg=typer.colors.GREEN,
+        )
+        typer.echo()
+        typer.echo("Next steps:")
+        typer.echo("  1. Start the MCP server: make cognee-mcp-start")
+        typer.echo("  2. Restart Claude Code to load the new configuration")
+    else:
+        # Just display the configuration
+        typer.echo("MCP Configuration for Claude Code:")
+        typer.echo()
+        typer.echo(json.dumps(config, indent=2))
+        typer.echo()
+        typer.echo("To install this configuration, run:")
+        typer.secho("  agent-memory mcp-config --install", fg=typer.colors.CYAN)
+
+
 @app.callback()
 def main(
     verbose: Annotated[
