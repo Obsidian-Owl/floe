@@ -31,13 +31,16 @@ This command creates Linear issues from tasks.md with Project organization, requ
    - Test Linear MCP connection: `mcp__plugin_linear_linear__list_teams`
    - Get team ID via `mcp__plugin_linear_linear__get_team({query: "floe"})`
 
-2. **Determine Project**
+2. **Determine Project & Label**
    - Extract feature info from directory path (e.g., `specs/001-plugin-registry/`)
    - Build project slug: `floe-{NN}-{feature-slug}` (e.g., `floe-01-plugin-registry`)
+   - Build epic label: `epic:{NN}` (e.g., `epic:01`, `epic:10a`)
    - Query Linear projects via `mcp__plugin_linear_linear__list_projects`
    - Find matching project by name or slug
    - ERROR if project not found - must be created in Linear first
-   - Optionally create epic label (e.g., `epic-1`) for filtering if it doesn't exist
+   - Query labels via `mcp__plugin_linear_linear__list_issue_labels({team: teamId})`
+   - If epic label doesn't exist, create via `mcp__plugin_linear_linear__create_issue_label({name: "epic:NN", teamId})`
+   - Store label name for use in issue creation
 
 3. **Load or Initialize Mapping**
    - Check for existing `$FEATURE_DIR/.linear-mapping.json`
@@ -67,6 +70,7 @@ This command creates Linear issues from tasks.md with Project organization, requ
      - Create via `mcp__plugin_linear_linear__create_issue`:
        - `team`: team ID
        - `project`: project ID
+       - `labels`: [epic label name] (e.g., `["epic:10a"]`)
        - `title`, `description`, `priority`, `state`
        - `links`: GitHub doc URLs
      - Store mapping: task ID → Linear ID, identifier, URL
@@ -106,9 +110,10 @@ This command creates Linear issues from tasks.md with Project organization, requ
 | `mcp__plugin_linear_linear__list_projects({team: teamId})` | Find project |
 | `mcp__plugin_linear_linear__list_issue_statuses({team: teamId})` | Get status names |
 | `mcp__plugin_linear_linear__list_issues({project: projectId})` | Get existing issues |
-| `mcp__plugin_linear_linear__create_issue({...})` | Create new issue |
+| `mcp__plugin_linear_linear__list_issue_labels({team: teamId})` | Check existing labels |
+| `mcp__plugin_linear_linear__create_issue_label({name, teamId})` | Create epic label |
+| `mcp__plugin_linear_linear__create_issue({..., labels: [...]})` | Create issue with labels |
 | `mcp__plugin_linear_linear__update_issue({id, blockedBy})` | Set dependencies |
-| `mcp__plugin_linear_linear__create_issue_label({...})` | Create epic label |
 
 **Mapping file format** (`$FEATURE_DIR/.linear-mapping.json`):
 ```json
@@ -117,6 +122,7 @@ This command creates Linear issues from tasks.md with Project organization, requ
     "feature": "001-plugin-registry",
     "project": "floe-01-plugin-registry",
     "project_id": "uuid",
+    "epic_label": "epic:01",
     "created_at": "ISO timestamp",
     "last_sync": "ISO timestamp"
   },
@@ -136,13 +142,17 @@ This command creates Linear issues from tasks.md with Project organization, requ
 
 1. **Project must exist first** - Create the Linear Project via Linear UI before running this command. Project naming: `floe-{NN}-{feature-slug}`.
 
-2. **Never hardcode status names** - Query `list_issue_statuses` and match by `type` field.
+2. **Labels are mandatory** - Every issue MUST have an epic label (e.g., `epic:10a`). This enables filtering with `bd ready --label "epic:10a"` when multiple epics are active.
 
-3. **Dependencies after creation** - `blockedBy` requires Linear IDs, so all issues must exist first.
+3. **Never hardcode status names** - Query `list_issue_statuses` and match by `type` field.
 
-4. **GitHub links for traceability** - Each issue gets links to spec.md, plan.md, tasks.md in the repo.
+4. **Dependencies after creation** - `blockedBy` requires Linear IDs, so all issues must exist first.
 
-5. **Bidirectional sync** - Linear "Done" status propagates back to tasks.md checkboxes.
+5. **GitHub links for traceability** - Each issue gets links to spec.md, plan.md, tasks.md in the repo.
+
+6. **Bidirectional sync** - Linear "Done" status propagates back to tasks.md checkboxes.
+
+7. **Filtering by epic** - Use labels for epic filtering: `bd ready --label "epic:10a"` shows only tasks from that epic.
 
 ## Task Format
 
