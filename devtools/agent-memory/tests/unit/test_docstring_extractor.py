@@ -174,7 +174,7 @@ class TestExtractClassDocstring:
         class_entry = class_entries[0]
         assert class_entry.name == "MyClass"
         assert "A sample class for testing" in class_entry.docstring
-        assert class_entry.line_number == 4  # class MyClass: is on line 4
+        assert class_entry.line_number == 3  # class MyClass: is on line 3 (after module docstring)
         assert class_entry.source_path == python_file_with_class
 
     @pytest.mark.requirement("FR-007")
@@ -231,7 +231,7 @@ class TestExtractMethodDocstring:
         func_entry = func_entries[0]
         assert func_entry.name == "calculate_total"
         assert "Calculate the total" in func_entry.docstring
-        assert func_entry.line_number == 4
+        assert func_entry.line_number == 3  # function starts on line 3 (after module docstring)
 
     @pytest.mark.requirement("FR-006")
     def test_extract_method_docstring(
