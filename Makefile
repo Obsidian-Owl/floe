@@ -36,6 +36,11 @@ help: ## Show this help message
 	@echo "  make cognee-codify   Extract and index Python docstrings (PATTERN=\"...\")"
 	@echo "  make cognee-sync     Sync changed files (FILES=\"...\", DRY_RUN=1, ALL=1)"
 	@echo ""
+	@echo "MCP Server (Claude Code Integration):"
+	@echo "  make cognee-mcp-start  Start Cognee MCP server (DETACH=1, PORT=...)"
+	@echo "  make cognee-mcp-stop   Stop running MCP server"
+	@echo "  make cognee-mcp-config Generate MCP configuration (INSTALL=1)"
+	@echo ""
 	@echo "Setup:"
 	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit + Cognee)"
 	@echo ""
@@ -177,3 +182,24 @@ cognee-sync: cognee-check-env ## Sync changed files to knowledge graph (FILES=".
 		$(if $(FILES),--files $(FILES),) \
 		$(if $(filter 1,$(DRY_RUN)),--dry-run,) \
 		$(if $(filter 1,$(ALL)),--all,)
+
+# ============================================================
+# MCP Server (Claude Code Integration)
+# ============================================================
+
+.PHONY: cognee-mcp-start
+cognee-mcp-start: cognee-check-env ## Start Cognee MCP server (DETACH=1, PORT=...)
+	@echo "Starting Cognee MCP server..."
+	@./scripts/cognee-mcp-start \
+		$(if $(filter 1,$(DETACH)),--detach,) \
+		$(if $(PORT),--port $(PORT),)
+
+.PHONY: cognee-mcp-stop
+cognee-mcp-stop: ## Stop running Cognee MCP server
+	@echo "Stopping Cognee MCP server..."
+	@./scripts/cognee-mcp-start --stop
+
+.PHONY: cognee-mcp-config
+cognee-mcp-config: ## Generate MCP configuration (INSTALL=1 to update .claude/mcp.json)
+	@cd devtools/agent-memory && uv run agent-memory mcp-config \
+		$(if $(filter 1,$(INSTALL)),--install,)
