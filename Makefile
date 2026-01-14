@@ -29,6 +29,10 @@ help: ## Show this help message
 	@echo "  make typecheck       Run type checking (mypy)"
 	@echo "  make check           Run all CI checks (lint + typecheck + test)"
 	@echo ""
+	@echo "Agent Memory (Cognee):"
+	@echo "  make cognee-health   Check Cognee Cloud connectivity"
+	@echo "  make cognee-init     Initialize knowledge graph"
+	@echo ""
 	@echo "Setup:"
 	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit)"
 	@echo ""
@@ -119,3 +123,30 @@ clean: ## Clean generated files
 traceability: ## Check requirement traceability coverage
 	@echo "Checking requirement traceability..."
 	@uv run python -m testing.traceability --all --threshold 80
+
+# ============================================================
+# Agent Memory (Cognee Integration)
+# ============================================================
+
+.PHONY: cognee-check-env
+cognee-check-env: ## Verify required Cognee environment variables are set
+	@if [ -z "$$COGNEE_API_KEY" ]; then \
+		echo "ERROR: COGNEE_API_KEY environment variable is not set" >&2; \
+		echo "Get your API key from https://www.cognee.ai/" >&2; \
+		exit 1; \
+	fi
+	@if [ -z "$$OPENAI_API_KEY" ]; then \
+		echo "ERROR: OPENAI_API_KEY environment variable is not set" >&2; \
+		echo "Get your API key from https://platform.openai.com/" >&2; \
+		exit 1; \
+	fi
+
+.PHONY: cognee-health
+cognee-health: cognee-check-env ## Run Cognee Cloud health check
+	@echo "Checking Cognee Cloud connectivity..."
+	@cd devtools/agent-memory && uv run agent-memory health
+
+.PHONY: cognee-init
+cognee-init: cognee-check-env ## Initialize Cognee knowledge graph
+	@echo "Initializing Cognee knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory init
