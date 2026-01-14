@@ -143,7 +143,12 @@ class CogneeClient:
 
                     return response
 
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
+            except (
+                httpx.TimeoutException,
+                httpx.ConnectError,
+                httpx.ReadError,
+                httpx.RemoteProtocolError,
+            ) as e:
                 last_error = e
                 self._log.warning(
                     "request_connection_error",

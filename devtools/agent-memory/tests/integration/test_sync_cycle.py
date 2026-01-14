@@ -9,6 +9,7 @@ Run with: pytest tests/integration/test_sync_cycle.py -v
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 import pytest
@@ -56,10 +57,70 @@ SAMPLE_CONSTITUTION_CONTENT = """# Project Constitution
 """
 
 
+@pytest.fixture(scope="session")
+async def cleanup_orphaned_datasets() -> AsyncGenerator[None, None]:
+    """Clean up orphaned test datasets from previous failed runs.
+
+    This runs once at the start of the test session to remove any
+    datasets with names starting with 'test_sync_' that were left
+    behind by previous test failures.
+
+    Creates its own client to avoid fixture scope mismatch.
+    """
+    import structlog
+
+    from agent_memory.cognee_client import CogneeClient
+    from agent_memory.config import get_config
+
+    logger = structlog.get_logger(__name__)
+
+    # Cleanup at session start
+    try:
+        config = get_config()
+        client = CogneeClient(config)
+        datasets = await client.list_datasets()
+        orphaned = [d for d in datasets if d.startswith("test_sync_")]
+        if orphaned:
+            logger.info("found_orphaned_datasets", count=len(orphaned))
+        for dataset in orphaned:
+            try:
+                await client.delete_dataset(dataset)
+                logger.info("deleted_orphaned_dataset", dataset=dataset)
+            except Exception as e:
+                logger.warning("orphan_cleanup_failed", dataset=dataset, error=str(e))
+    except Exception as e:
+        logger.warning("orphan_cleanup_check_failed", error=str(e))
+
+    yield
+
+
 @pytest.fixture
-def unique_dataset_name() -> str:
-    """Generate unique dataset name for test isolation."""
-    return f"test_sync_{uuid.uuid4().hex[:8]}"
+async def unique_dataset_name(
+    cognee_client: CogneeClient,
+    cleanup_orphaned_datasets: None,  # noqa: ARG001 - ensures cleanup runs first
+) -> AsyncGenerator[str, None]:
+    """Generate unique dataset name with guaranteed cleanup.
+
+    This fixture ensures the test dataset is deleted after the test completes,
+    even if the test fails mid-way. This prevents orphaned datasets in Cognee Cloud.
+
+    Also depends on cleanup_orphaned_datasets to ensure old test datasets are
+    removed before running new tests.
+    """
+    import structlog
+
+    logger = structlog.get_logger(__name__)
+    dataset_name = f"test_sync_{uuid.uuid4().hex[:8]}"
+
+    yield dataset_name
+
+    # Cleanup runs even if test fails
+    try:
+        await cognee_client.delete_dataset(dataset_name)
+        logger.info("test_dataset_cleaned_up", dataset=dataset_name)
+    except Exception as e:
+        # Log but don't fail - cleanup is best effort
+        logger.warning("cleanup_failed", dataset=dataset_name, error=str(e))
 
 
 @pytest.mark.requirement("FR-004", "FR-005")
@@ -93,9 +154,7 @@ async def test_cognify_architecture_docs(
     )
 
     assert result.total_count > 0, "Expected search results after cognify"
-
-    # Cleanup - delete test dataset
-    await cognee_client.delete_dataset(unique_dataset_name)
+    # Cleanup handled by unique_dataset_name fixture
 
 
 @pytest.mark.requirement("FR-004")
@@ -133,9 +192,7 @@ async def test_search_returns_relevant_results(
     # Verify search returned results (GRAPH_COMPLETION returns knowledge graph entities,
     # not raw text, so we just validate results were returned)
     assert len(result.results) > 0, "Expected at least one result item"
-
-    # Cleanup
-    await cognee_client.delete_dataset(unique_dataset_name)
+    # Cleanup handled by unique_dataset_name fixture
 
 
 @pytest.mark.requirement("FR-005")
@@ -169,9 +226,7 @@ async def test_cognify_constitution_principles(
     )
 
     assert result.total_count > 0, "Expected results for constitution query"
-
-    # Cleanup
-    await cognee_client.delete_dataset(unique_dataset_name)
+    # Cleanup handled by unique_dataset_name fixture
 
 
 @pytest.mark.requirement("FR-004", "FR-005")
@@ -219,9 +274,7 @@ async def test_multiple_documents_searchable(
 
     assert adr_result.total_count > 0, "Expected ADR search results"
     assert constitution_result.total_count > 0, "Expected constitution search results"
-
-    # Cleanup
-    await cognee_client.delete_dataset(unique_dataset_name)
+    # Cleanup handled by unique_dataset_name fixture
 
 
 @pytest.mark.requirement("FR-004")
@@ -255,6 +308,4 @@ async def test_search_with_no_results(
     # (or low-relevance results depending on Cognee's behavior)
     assert result is not None
     assert result.query == "quantum computing neural networks blockchain"
-
-    # Cleanup
-    await cognee_client.delete_dataset(unique_dataset_name)
+    # Cleanup handled by unique_dataset_name fixture
