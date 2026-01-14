@@ -547,6 +547,8 @@ Linear app                      # Team progress view
 - N/A (schema definitions only; OCI registry loading deferred to Epic 2B) (001-manifest-schema)
 - Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging), duckdb>=0.9.0 (reference implementation) (001-compute-plugin)
 - N/A (plugin system is stateless; dbt profiles.yml is file-based output) (001-compute-plugin)
+- Python 3.10+ (Cognee requirement, matches floe standard) (10a-agent-memory)
+- Cognee Cloud (SaaS) - managed vector + graph storage, no self-hosted backends (10a-agent-memory)
 
 ## Recent Changes
 - 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)
