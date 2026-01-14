@@ -33,6 +33,7 @@ help: ## Show this help message
 	@echo "  make cognee-health   Check Cognee Cloud connectivity"
 	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
 	@echo "  make cognee-search   Search knowledge graph (QUERY=\"...\" required)"
+	@echo "  make cognee-codify   Extract and index Python docstrings (PATTERN=\"...\")"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit)"
@@ -161,3 +162,9 @@ ifndef QUERY
 endif
 	@echo "Searching knowledge graph..."
 	@cd devtools/agent-memory && uv run agent-memory search "$(QUERY)"
+
+.PHONY: cognee-codify
+cognee-codify: cognee-check-env ## Extract and index Python docstrings (PATTERN="..." for specific files)
+	@echo "Extracting and indexing Python docstrings..."
+	@cd devtools/agent-memory && uv run agent-memory codify \
+		$(if $(PATTERN),--pattern "$(PATTERN)",)
