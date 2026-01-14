@@ -31,7 +31,8 @@ help: ## Show this help message
 	@echo ""
 	@echo "Agent Memory (Cognee):"
 	@echo "  make cognee-health   Check Cognee Cloud connectivity"
-	@echo "  make cognee-init     Initialize knowledge graph"
+	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
+	@echo "  make cognee-search   Search knowledge graph (QUERY=\"...\" required)"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit)"
@@ -147,6 +148,16 @@ cognee-health: cognee-check-env ## Run Cognee Cloud health check
 	@cd devtools/agent-memory && uv run agent-memory health
 
 .PHONY: cognee-init
-cognee-init: cognee-check-env ## Initialize Cognee knowledge graph
+cognee-init: cognee-check-env ## Initialize Cognee knowledge graph (PROGRESS=1 for progress bar, RESUME=1 to resume)
 	@echo "Initializing Cognee knowledge graph..."
-	@cd devtools/agent-memory && uv run agent-memory init
+	@cd devtools/agent-memory && uv run agent-memory init \
+		$(if $(filter 1,$(PROGRESS)),--progress,) \
+		$(if $(filter 1,$(RESUME)),--resume,)
+
+.PHONY: cognee-search
+cognee-search: cognee-check-env ## Search knowledge graph (QUERY="..." required)
+ifndef QUERY
+	$(error QUERY is required. Usage: make cognee-search QUERY="your search query")
+endif
+	@echo "Searching knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory search "$(QUERY)"

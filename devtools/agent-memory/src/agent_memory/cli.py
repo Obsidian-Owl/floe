@@ -38,7 +38,7 @@ from agent_memory.cognee_client import (
     CogneeConnectionError,
 )
 from agent_memory.config import AgentMemoryConfig, ContentSource, get_config
-from agent_memory.markdown_parser import parse_markdown_file
+from agent_memory.markdown_parser import ParsedContent, parse_markdown_file
 
 logger = structlog.get_logger(__name__)
 
@@ -153,11 +153,22 @@ def init(
         bool,
         typer.Option("--skip-index", help="Skip initial content indexing"),
     ] = False,
+    progress: Annotated[
+        bool,
+        typer.Option("--progress", "-p", help="Show progress bar during indexing"),
+    ] = False,
+    resume: Annotated[
+        bool,
+        typer.Option("--resume", "-r", help="Resume from last checkpoint"),
+    ] = False,
 ) -> None:
     """Initialize Cognee Cloud configuration and index content.
 
     Creates .cognee/ directory, validates credentials, and optionally
     indexes configured content sources.
+
+    Use --progress to show a progress bar during indexing.
+    Use --resume to continue from the last checkpoint if interrupted.
     """
     cognee_dir = Path(".cognee")
 
@@ -219,10 +230,22 @@ def init(
     typer.echo()
     typer.secho("Indexing content sources...", fg=typer.colors.CYAN)
 
+    # Load checkpoint if resuming
+    checkpoint_file = cognee_dir / "checkpoint.json"
+    completed_files: set[str] = set()
+    if resume and checkpoint_file.exists():
+        try:
+            checkpoint_data = json.loads(checkpoint_file.read_text())
+            completed_files = set(checkpoint_data.get("completed_files", []))
+            typer.echo(f"  Resuming from checkpoint ({len(completed_files)} files already indexed)")
+        except (json.JSONDecodeError, KeyError):
+            typer.secho("  Warning: Could not read checkpoint, starting fresh", fg=typer.colors.YELLOW)
+
     async def _index_content() -> None:
         checksums: dict[str, str] = {}
         indexed_files: dict[str, list[str]] = {}
         datasets_to_cognify: set[str] = set()
+        all_processed_files: list[str] = list(completed_files)
 
         try:
             for source in config.content_sources:
@@ -231,37 +254,78 @@ def init(
                     typer.echo(f"  No files found for: {source.path}")
                     continue
 
+                # Filter out already completed files if resuming
+                if resume:
+                    files = [f for f in files if str(f) not in completed_files]
+                    if not files:
+                        typer.echo(f"  All files already indexed for: {source.path}")
+                        continue
+
                 typer.echo(f"  Processing {len(files)} file(s) for dataset '{source.dataset}'")
                 indexed_files[source.dataset] = []
 
-                for i, file_path in enumerate(files, 1):
-                    typer.echo(f"    [{i}/{len(files)}] {file_path}")
+                if progress:
+                    # Use progress bar
+                    with typer.progressbar(
+                        files,
+                        label=f"    {source.dataset}",
+                        show_eta=True,
+                        show_pos=True,
+                    ) as progress_bar:
+                        for file_path in progress_bar:
+                            parsed: ParsedContent = parse_markdown_file(file_path)
+                            content_with_context = (
+                                f"# {parsed.title or file_path.name}\n"
+                                f"Source: {file_path}\n\n"
+                                f"{parsed.content}"
+                            )
+                            await client.add_content(
+                                content=content_with_context,
+                                dataset_name=source.dataset,
+                                metadata={
+                                    "source_path": str(file_path),
+                                    "title": parsed.title,
+                                    **parsed.metadata,
+                                },
+                            )
+                            checksums[str(file_path)] = _compute_file_checksum(file_path)
+                            indexed_files[source.dataset].append(str(file_path))
+                            all_processed_files.append(str(file_path))
+                            datasets_to_cognify.add(source.dataset)
 
-                    # Parse markdown file
-                    parsed = parse_markdown_file(file_path)
+                            # Save checkpoint after each file
+                            checkpoint_file.write_text(json.dumps({
+                                "completed_files": all_processed_files,
+                            }))
+                else:
+                    # Standard output without progress bar
+                    for i, file_path in enumerate(files, 1):
+                        typer.echo(f"    [{i}/{len(files)}] {file_path}")
 
-                    # Prepare content with metadata header
-                    content_with_context = (
-                        f"# {parsed.title or file_path.name}\n"
-                        f"Source: {file_path}\n\n"
-                        f"{parsed.content}"
-                    )
+                        parsed: ParsedContent = parse_markdown_file(file_path)
+                        content_with_context = (
+                            f"# {parsed.title or file_path.name}\n"
+                            f"Source: {file_path}\n\n"
+                            f"{parsed.content}"
+                        )
+                        await client.add_content(
+                            content=content_with_context,
+                            dataset_name=source.dataset,
+                            metadata={
+                                "source_path": str(file_path),
+                                "title": parsed.title,
+                                **parsed.metadata,
+                            },
+                        )
+                        checksums[str(file_path)] = _compute_file_checksum(file_path)
+                        indexed_files[source.dataset].append(str(file_path))
+                        all_processed_files.append(str(file_path))
+                        datasets_to_cognify.add(source.dataset)
 
-                    # Add to Cognee
-                    await client.add_content(
-                        content=content_with_context,
-                        dataset_name=source.dataset,
-                        metadata={
-                            "source_path": str(file_path),
-                            "title": parsed.title,
-                            **parsed.metadata,
-                        },
-                    )
-
-                    # Track for state
-                    checksums[str(file_path)] = _compute_file_checksum(file_path)
-                    indexed_files[source.dataset].append(str(file_path))
-                    datasets_to_cognify.add(source.dataset)
+                        # Save checkpoint after each file
+                        checkpoint_file.write_text(json.dumps({
+                            "completed_files": all_processed_files,
+                        }))
 
             # Run cognify for each dataset
             if datasets_to_cognify:
@@ -280,7 +344,11 @@ def init(
             state_file.write_text(json.dumps(state, indent=2))
             checksums_file.write_text(json.dumps(checksums, indent=2))
 
-            total_files = sum(len(f) for f in indexed_files.values())
+            # Remove checkpoint on successful completion
+            if checkpoint_file.exists():
+                checkpoint_file.unlink()
+
+            total_files = sum(len(f) for f in indexed_files.values()) + len(completed_files)
             typer.echo()
             typer.secho(
                 f"Initialization complete: {total_files} file(s) indexed",
