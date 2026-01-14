@@ -34,9 +34,10 @@ help: ## Show this help message
 	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
 	@echo "  make cognee-search   Search knowledge graph (QUERY=\"...\" required)"
 	@echo "  make cognee-codify   Extract and index Python docstrings (PATTERN=\"...\")"
+	@echo "  make cognee-sync     Sync changed files (FILES=\"...\", DRY_RUN=1, ALL=1)"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit)"
+	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit + Cognee)"
 	@echo ""
 	@echo "Use 'make <target>' to run a command."
 
@@ -168,3 +169,11 @@ cognee-codify: cognee-check-env ## Extract and index Python docstrings (PATTERN=
 	@echo "Extracting and indexing Python docstrings..."
 	@cd devtools/agent-memory && uv run agent-memory codify \
 		$(if $(PATTERN),--pattern "$(PATTERN)",)
+
+.PHONY: cognee-sync
+cognee-sync: cognee-check-env ## Sync changed files to knowledge graph (FILES="...", DRY_RUN=1, ALL=1)
+	@echo "Syncing files to knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory sync \
+		$(if $(FILES),--files $(FILES),) \
+		$(if $(filter 1,$(DRY_RUN)),--dry-run,) \
+		$(if $(filter 1,$(ALL)),--all,)
