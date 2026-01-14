@@ -23,6 +23,8 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -35,7 +37,8 @@ from agent_memory.cognee_client import (
     CogneeClientError,
     CogneeConnectionError,
 )
-from agent_memory.config import AgentMemoryConfig, get_config
+from agent_memory.config import AgentMemoryConfig, ContentSource, get_config
+from agent_memory.markdown_parser import parse_markdown_file
 
 logger = structlog.get_logger(__name__)
 
@@ -88,16 +91,73 @@ def _exit_with_error(message: str, code: int = 1) -> None:
     raise typer.Exit(code=code)
 
 
+def _collect_files_from_source(source: ContentSource) -> list[Path]:
+    """Collect files matching a content source configuration.
+
+    Args:
+        source: Content source configuration.
+
+    Returns:
+        List of matching file paths.
+    """
+    files: list[Path] = []
+
+    if source.source_type == "file":
+        if source.path.exists() and source.path.suffix in source.file_extensions:
+            files.append(source.path)
+    elif source.source_type == "directory":
+        if source.path.exists():
+            for ext in source.file_extensions:
+                files.extend(source.path.rglob(f"*{ext}"))
+    elif source.source_type == "glob":
+        for match in Path(".").glob(str(source.path)):
+            if match.is_file() and match.suffix in source.file_extensions:
+                files.append(match)
+
+    # Filter out excluded patterns
+    if source.exclude_patterns:
+        filtered: list[Path] = []
+        for f in files:
+            excluded = False
+            for pattern in source.exclude_patterns:
+                if f.match(pattern):
+                    excluded = True
+                    break
+            if not excluded:
+                filtered.append(f)
+        files = filtered
+
+    return sorted(files)
+
+
+def _compute_file_checksum(path: Path) -> str:
+    """Compute SHA256 checksum of a file.
+
+    Args:
+        path: File path.
+
+    Returns:
+        Hex-encoded SHA256 hash.
+    """
+    content = path.read_bytes()
+    return hashlib.sha256(content).hexdigest()
+
+
 @app.command()
 def init(
     force: Annotated[
         bool,
         typer.Option("--force", "-f", help="Overwrite existing configuration"),
     ] = False,
+    skip_index: Annotated[
+        bool,
+        typer.Option("--skip-index", help="Skip initial content indexing"),
+    ] = False,
 ) -> None:
-    """Initialize Cognee Cloud configuration.
+    """Initialize Cognee Cloud configuration and index content.
 
-    Creates .cognee/ directory with config.yaml and validates credentials.
+    Creates .cognee/ directory, validates credentials, and optionally
+    indexes configured content sources.
     """
     cognee_dir = Path(".cognee")
 
@@ -139,10 +199,98 @@ def init(
     _run_async(_validate())
 
     # Create empty state files
-    (cognee_dir / "state.json").write_text("{}")
-    (cognee_dir / "checksums.json").write_text("{}")
+    state_file = cognee_dir / "state.json"
+    checksums_file = cognee_dir / "checksums.json"
+    state_file.write_text("{}")
+    checksums_file.write_text("{}")
 
     typer.secho("Configuration validated successfully", fg=typer.colors.GREEN)
+
+    # Skip indexing if requested or no sources configured
+    if skip_index:
+        typer.echo("Skipping initial indexing (--skip-index)")
+        return
+
+    if not config.content_sources:
+        typer.echo("No content sources configured. Add sources to .cognee/config.yaml")
+        return
+
+    # Index content sources
+    typer.echo()
+    typer.secho("Indexing content sources...", fg=typer.colors.CYAN)
+
+    async def _index_content() -> None:
+        checksums: dict[str, str] = {}
+        indexed_files: dict[str, list[str]] = {}
+        datasets_to_cognify: set[str] = set()
+
+        try:
+            for source in config.content_sources:
+                files = _collect_files_from_source(source)
+                if not files:
+                    typer.echo(f"  No files found for: {source.path}")
+                    continue
+
+                typer.echo(f"  Processing {len(files)} file(s) for dataset '{source.dataset}'")
+                indexed_files[source.dataset] = []
+
+                for i, file_path in enumerate(files, 1):
+                    typer.echo(f"    [{i}/{len(files)}] {file_path}")
+
+                    # Parse markdown file
+                    parsed = parse_markdown_file(file_path)
+
+                    # Prepare content with metadata header
+                    content_with_context = (
+                        f"# {parsed.title or file_path.name}\n"
+                        f"Source: {file_path}\n\n"
+                        f"{parsed.content}"
+                    )
+
+                    # Add to Cognee
+                    await client.add_content(
+                        content=content_with_context,
+                        dataset_name=source.dataset,
+                        metadata={
+                            "source_path": str(file_path),
+                            "title": parsed.title,
+                            **parsed.metadata,
+                        },
+                    )
+
+                    # Track for state
+                    checksums[str(file_path)] = _compute_file_checksum(file_path)
+                    indexed_files[source.dataset].append(str(file_path))
+                    datasets_to_cognify.add(source.dataset)
+
+            # Run cognify for each dataset
+            if datasets_to_cognify:
+                typer.echo()
+                typer.echo("Running cognify to build knowledge graph...")
+                for dataset in datasets_to_cognify:
+                    typer.echo(f"  Cognifying dataset: {dataset}")
+                    await client.cognify(dataset_name=dataset)
+                typer.secho("  Cognify completed", fg=typer.colors.GREEN)
+
+            # Save state
+            state = {
+                "indexed_files": indexed_files,
+                "last_sync": None,  # Will be set by sync command
+            }
+            state_file.write_text(json.dumps(state, indent=2))
+            checksums_file.write_text(json.dumps(checksums, indent=2))
+
+            total_files = sum(len(f) for f in indexed_files.values())
+            typer.echo()
+            typer.secho(
+                f"Initialization complete: {total_files} file(s) indexed",
+                fg=typer.colors.GREEN,
+            )
+
+        except CogneeClientError as e:
+            _exit_with_error(f"Indexing failed: {e}")
+
+    _run_async(_index_content())
 
 
 @app.command()
