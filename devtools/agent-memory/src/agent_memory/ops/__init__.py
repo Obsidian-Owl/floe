@@ -9,3 +9,29 @@ This package contains modules for operational tasks:
 """
 
 from __future__ import annotations
+
+from agent_memory.ops.coverage import (
+    CoverageReport,
+    compare_filesystem_vs_indexed,
+    identify_missing_files,
+)
+from agent_memory.ops.drift import (
+    DriftReport,
+    compute_content_hash,
+    detect_deleted_files,
+    detect_modified_files,
+    detect_renamed_files,
+)
+
+__all__ = [
+    # Coverage
+    "CoverageReport",
+    "compare_filesystem_vs_indexed",
+    "identify_missing_files",
+    # Drift
+    "DriftReport",
+    "compute_content_hash",
+    "detect_deleted_files",
+    "detect_modified_files",
+    "detect_renamed_files",
+]
