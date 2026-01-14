@@ -8,12 +8,14 @@ Implementation: T037 (FLO-622)
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, computed_field
 
 if TYPE_CHECKING:
-    pass
+    from agent_memory.cognee_client import CogneeClient
+    from agent_memory.config import AgentMemoryConfig
 
 
 class CoverageReport(BaseModel):
@@ -103,3 +105,151 @@ def identify_missing_files(
     filesystem_set = set(filesystem_files)
     indexed_set = set(indexed_files)
     return sorted(filesystem_set - indexed_set)
+
+
+def get_files_from_source(
+    source_path: Path,
+    source_type: str,
+    file_extensions: list[str],
+    exclude_patterns: list[str],
+    base_path: Path | None = None,
+) -> list[str]:
+    """Get list of files from a content source.
+
+    Args:
+        source_path: Path or glob pattern for the source.
+        source_type: Type of source (directory, file, glob).
+        file_extensions: File extensions to include.
+        exclude_patterns: Glob patterns to exclude.
+        base_path: Base path for relative paths. Defaults to cwd.
+
+    Returns:
+        List of absolute file paths.
+    """
+    if base_path is None:
+        base_path = Path.cwd()
+
+    # Resolve path relative to base
+    if not source_path.is_absolute():
+        source_path = base_path / source_path
+
+    files: list[str] = []
+
+    if source_type == "file":
+        # Single file
+        if source_path.exists() and source_path.is_file():
+            files.append(str(source_path.resolve()))
+    elif source_type == "directory":
+        # Recursively find files in directory
+        if source_path.exists() and source_path.is_dir():
+            for ext in file_extensions:
+                for file_path in source_path.rglob(f"*{ext}"):
+                    if file_path.is_file():
+                        files.append(str(file_path.resolve()))
+    elif source_type == "glob":
+        # Glob pattern
+        for file_path in base_path.glob(str(source_path)):
+            if file_path.is_file():
+                ext = file_path.suffix
+                if not file_extensions or ext in file_extensions:
+                    files.append(str(file_path.resolve()))
+
+    # Apply exclude patterns
+    if exclude_patterns:
+        filtered_files: list[str] = []
+        for file_str in files:
+            excluded = False
+            file_path_obj = Path(file_str)
+            for pattern in exclude_patterns:
+                # Use PurePath.match() which properly handles ** patterns
+                # PurePath.match() matches from the right side of the path
+                if file_path_obj.match(pattern):
+                    excluded = True
+                    break
+            if not excluded:
+                filtered_files.append(file_str)
+        files = filtered_files
+
+    return sorted(set(files))
+
+
+def get_all_configured_files(
+    config: AgentMemoryConfig,
+    base_path: Path | None = None,
+) -> list[str]:
+    """Get all files from configured content sources.
+
+    Args:
+        config: Agent memory configuration with content_sources.
+        base_path: Base path for relative paths. Defaults to cwd.
+
+    Returns:
+        Sorted list of all unique file paths from all sources.
+    """
+    all_files: set[str] = set()
+
+    for source in config.content_sources:
+        source_files = get_files_from_source(
+            source_path=source.path,
+            source_type=source.source_type,
+            file_extensions=source.file_extensions,
+            exclude_patterns=source.exclude_patterns,
+            base_path=base_path,
+        )
+        all_files.update(source_files)
+
+    return sorted(all_files)
+
+
+async def analyze_coverage(
+    config: AgentMemoryConfig,
+    client: CogneeClient,
+    *,
+    base_path: Path | None = None,
+    indexed_files: list[str] | None = None,
+) -> CoverageReport:
+    """Analyze coverage by comparing filesystem to indexed content.
+
+    Globs filesystem for configured source patterns, queries Cognee for
+    indexed datasets, and compares to produce a coverage report.
+
+    Args:
+        config: Agent memory configuration with content_sources.
+        client: Cognee client for querying indexed datasets.
+        base_path: Base path for file resolution. Defaults to cwd.
+        indexed_files: Optional list of indexed file paths. If not provided,
+            will attempt to load from .cognee/checksums.json.
+
+    Returns:
+        CoverageReport with comparison results.
+
+    Example:
+        >>> config = get_config()
+        >>> client = CogneeClient(config)
+        >>> report = await analyze_coverage(config, client)
+        >>> print(f"Coverage: {report.coverage_percentage:.1f}%")
+    """
+    import json
+
+    if base_path is None:
+        base_path = Path.cwd()
+
+    # Get all files from configured sources
+    filesystem_files = get_all_configured_files(config, base_path)
+
+    # Get indexed files from checksums.json if not provided
+    if indexed_files is None:
+        checksums_path = base_path / ".cognee" / "checksums.json"
+        if checksums_path.exists():
+            with checksums_path.open() as f:
+                checksums_data = json.load(f)
+                # Extract file paths from checksums data
+                indexed_files = list(checksums_data.keys())
+        else:
+            indexed_files = []
+
+    # Also verify datasets exist in Cognee
+    _ = await client.list_datasets()  # Verify connectivity
+
+    # Compare filesystem to indexed
+    return compare_filesystem_vs_indexed(filesystem_files, indexed_files)

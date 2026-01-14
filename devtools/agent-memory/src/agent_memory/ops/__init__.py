@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from agent_memory.ops.coverage import (
     CoverageReport,
+    analyze_coverage,
     compare_filesystem_vs_indexed,
+    get_all_configured_files,
+    get_files_from_source,
     identify_missing_files,
 )
 from agent_memory.ops.drift import (
@@ -34,7 +37,10 @@ from agent_memory.ops.health import (
 __all__ = [
     # Coverage
     "CoverageReport",
+    "analyze_coverage",
     "compare_filesystem_vs_indexed",
+    "get_all_configured_files",
+    "get_files_from_source",
     "identify_missing_files",
     # Drift
     "DriftReport",

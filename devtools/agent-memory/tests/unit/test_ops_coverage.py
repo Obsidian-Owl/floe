@@ -326,3 +326,272 @@ class TestCoverageReportSerialization:
 
         assert parsed["total_files"] == 5
         assert parsed["coverage_percentage"] == pytest.approx(100.0)
+
+
+class TestGetFilesFromSource:
+    """Tests for get_files_from_source function."""
+
+    @pytest.mark.requirement("FR-019")
+    def test_get_files_from_file_source(self, tmp_path: Path) -> None:
+        """Test get_files_from_source with file source type."""
+        from agent_memory.ops.coverage import get_files_from_source
+
+        # Create a test file
+        test_file = tmp_path / "test.py"
+        test_file.write_text("# Test")
+
+        files = get_files_from_source(
+            source_path=test_file,
+            source_type="file",
+            file_extensions=[".py"],
+            exclude_patterns=[],
+            base_path=tmp_path,
+        )
+
+        assert len(files) == 1
+        assert str(test_file.resolve()) in files
+
+    @pytest.mark.requirement("FR-019")
+    def test_get_files_from_directory_source(self, tmp_path: Path) -> None:
+        """Test get_files_from_source with directory source type."""
+        from agent_memory.ops.coverage import get_files_from_source
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("# Main")
+        (src_dir / "utils.py").write_text("# Utils")
+        (src_dir / "readme.md").write_text("# README")
+
+        files = get_files_from_source(
+            source_path=src_dir,
+            source_type="directory",
+            file_extensions=[".py"],
+            exclude_patterns=[],
+            base_path=tmp_path,
+        )
+
+        assert len(files) == 2
+        assert str((src_dir / "main.py").resolve()) in files
+        assert str((src_dir / "utils.py").resolve()) in files
+        # .md file not included
+        assert str((src_dir / "readme.md").resolve()) not in files
+
+    @pytest.mark.requirement("FR-019")
+    def test_get_files_from_source_with_exclude(self, tmp_path: Path) -> None:
+        """Test get_files_from_source respects exclude patterns."""
+        from agent_memory.ops.coverage import get_files_from_source
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("# Main")
+        (src_dir / "test_main.py").write_text("# Test")
+
+        files = get_files_from_source(
+            source_path=src_dir,
+            source_type="directory",
+            file_extensions=[".py"],
+            exclude_patterns=["**/test_*.py"],
+            base_path=tmp_path,
+        )
+
+        assert len(files) == 1
+        assert str((src_dir / "main.py").resolve()) in files
+
+    @pytest.mark.requirement("FR-019")
+    def test_get_files_from_nonexistent_path(self, tmp_path: Path) -> None:
+        """Test get_files_from_source returns empty for nonexistent path."""
+        from agent_memory.ops.coverage import get_files_from_source
+
+        files = get_files_from_source(
+            source_path=tmp_path / "nonexistent",
+            source_type="directory",
+            file_extensions=[".py"],
+            exclude_patterns=[],
+            base_path=tmp_path,
+        )
+
+        assert files == []
+
+
+class TestGetAllConfiguredFiles:
+    """Tests for get_all_configured_files function."""
+
+    @pytest.mark.requirement("FR-019")
+    def test_get_all_configured_files_empty_sources(self, tmp_path: Path) -> None:
+        """Test get_all_configured_files with no sources."""
+        from unittest.mock import MagicMock
+
+        from agent_memory.ops.coverage import get_all_configured_files
+
+        mock_config = MagicMock()
+        mock_config.content_sources = []
+
+        files = get_all_configured_files(mock_config, base_path=tmp_path)
+
+        assert files == []
+
+    @pytest.mark.requirement("FR-019")
+    def test_get_all_configured_files_multiple_sources(self, tmp_path: Path) -> None:
+        """Test get_all_configured_files with multiple sources."""
+        from unittest.mock import MagicMock
+
+        from agent_memory.ops.coverage import get_all_configured_files
+
+        # Create test files
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "readme.md").write_text("# README")
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("# Main")
+
+        # Create mock sources
+        mock_source1 = MagicMock()
+        mock_source1.path = docs_dir
+        mock_source1.source_type = "directory"
+        mock_source1.file_extensions = [".md"]
+        mock_source1.exclude_patterns = []
+
+        mock_source2 = MagicMock()
+        mock_source2.path = src_dir
+        mock_source2.source_type = "directory"
+        mock_source2.file_extensions = [".py"]
+        mock_source2.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source1, mock_source2]
+
+        files = get_all_configured_files(mock_config, base_path=tmp_path)
+
+        assert len(files) == 2
+        assert str((docs_dir / "readme.md").resolve()) in files
+        assert str((src_dir / "main.py").resolve()) in files
+
+
+class TestAnalyzeCoverage:
+    """Tests for analyze_coverage async function."""
+
+    @pytest.mark.requirement("FR-019")
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_with_checksums(self, tmp_path: Path) -> None:
+        """Test analyze_coverage uses checksums.json when present."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock
+
+        from agent_memory.ops.coverage import analyze_coverage
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("# Main")
+        (src_dir / "utils.py").write_text("# Utils")
+
+        # Create .cognee directory with checksums
+        cognee_dir = tmp_path / ".cognee"
+        cognee_dir.mkdir()
+        checksums = {str((src_dir / "main.py").resolve()): "abc123"}
+        (cognee_dir / "checksums.json").write_text(json.dumps(checksums))
+
+        # Create mock config
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        # Create mock client
+        mock_client = AsyncMock()
+        mock_client.list_datasets = AsyncMock(return_value=["codebase"])
+
+        report = await analyze_coverage(mock_config, mock_client, base_path=tmp_path)
+
+        # main.py is indexed, utils.py is not
+        assert report.total_files == 2
+        assert report.indexed_files == 1
+        assert len(report.missing_files) == 1
+
+    @pytest.mark.requirement("FR-019")
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_no_checksums(self, tmp_path: Path) -> None:
+        """Test analyze_coverage handles missing checksums.json."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from agent_memory.ops.coverage import analyze_coverage
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("# Main")
+
+        # No .cognee directory
+
+        # Create mock config
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        # Create mock client
+        mock_client = AsyncMock()
+        mock_client.list_datasets = AsyncMock(return_value=[])
+
+        report = await analyze_coverage(mock_config, mock_client, base_path=tmp_path)
+
+        # All files are missing since no checksums
+        assert report.total_files == 1
+        assert report.indexed_files == 0
+        assert len(report.missing_files) == 1
+
+    @pytest.mark.requirement("FR-019")
+    @pytest.mark.asyncio
+    async def test_analyze_coverage_with_provided_indexed_files(
+        self, tmp_path: Path
+    ) -> None:
+        """Test analyze_coverage accepts indexed_files parameter."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from agent_memory.ops.coverage import analyze_coverage
+
+        # Create test files
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        main_file = src_dir / "main.py"
+        main_file.write_text("# Main")
+        utils_file = src_dir / "utils.py"
+        utils_file.write_text("# Utils")
+
+        # Create mock config
+        mock_source = MagicMock()
+        mock_source.path = src_dir
+        mock_source.source_type = "directory"
+        mock_source.file_extensions = [".py"]
+        mock_source.exclude_patterns = []
+
+        mock_config = MagicMock()
+        mock_config.content_sources = [mock_source]
+
+        # Create mock client
+        mock_client = AsyncMock()
+        mock_client.list_datasets = AsyncMock(return_value=["codebase"])
+
+        # Provide indexed files directly
+        indexed = [str(main_file.resolve()), str(utils_file.resolve())]
+        report = await analyze_coverage(
+            mock_config, mock_client, base_path=tmp_path, indexed_files=indexed
+        )
+
+        # Both files are indexed
+        assert report.total_files == 2
+        assert report.indexed_files == 2
+        assert report.missing_files == []
+        assert report.is_complete is True
