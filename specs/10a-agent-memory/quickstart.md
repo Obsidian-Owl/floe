@@ -228,46 +228,104 @@ make setup-hooks
 
 ## 7. Claude Code MCP Integration
 
-### Configure MCP Server
+MCP (Model Context Protocol) allows Claude Code to directly query the Cognee knowledge graph during conversations.
+
+### Step 1: Start MCP Server
 
 ```bash
-# Add Cognee MCP to Claude Code
-claude mcp add --transport http cognee http://localhost:8000/mcp -s project
-```
-
-### Start MCP Server
-
-```bash
-# Start Cognee MCP server (Docker)
-docker run -e TRANSPORT_MODE=http \
-  -e LLM_API_KEY=$OPENAI_API_KEY \
-  -e API_URL=https://api.cognee.ai \
-  -e API_TOKEN=$COGNEE_API_KEY \
-  -p 8000:8000 --rm -it cognee/cognee-mcp:main
-
-# Or via make target
+# Start Cognee MCP server (interactive mode)
 make cognee-mcp-start
+
+# Or in background (detached mode)
+make cognee-mcp-start DETACH=1
+
+# Custom port
+make cognee-mcp-start PORT=9000
+
+# Stop running server
+make cognee-mcp-stop
 ```
 
-### Using in Claude Code
+**Note**: The server requires `COGNEE_API_KEY` and `OPENAI_API_KEY` environment variables.
+
+### Step 2: Configure Claude Code
+
+```bash
+# Generate and install MCP configuration
+make cognee-mcp-config INSTALL=1
+
+# This creates/updates .claude/mcp.json with:
+# {
+#   "mcpServers": {
+#     "cognee": {
+#       "transport": "http",
+#       "url": "http://localhost:8000/mcp"
+#     }
+#   }
+# }
+```
+
+**Or manually configure**:
+
+```bash
+# View configuration (without installing)
+make cognee-mcp-config
+
+# Then add to .claude/mcp.json manually
+```
+
+### Step 3: Verify Integration
+
+1. Restart Claude Code (or reload the conversation)
+2. The MCP server should appear in Claude Code's available tools
+3. Test with a query:
 
 ```
 User: "What is the plugin system architecture?"
 
-Claude: (searches Cognee via MCP)
-Based on the architecture documentation, the plugin system...
-[References ADR-0001, ADR-0003]
+Claude: (searches Cognee via MCP automatically)
+Based on the architecture documentation in ADR-0001...
 ```
 
 ### Available MCP Tools
 
-| Tool | Usage |
-|------|-------|
-| `search` | Query knowledge graph |
-| `cognify` | Index new content |
-| `codify` | Index code with docstrings |
-| `list_data` | List indexed datasets |
-| `delete` | Remove specific content |
+| Tool | Description | Example Usage |
+|------|-------------|---------------|
+| `search` | Query knowledge graph | "Search for plugin architecture" |
+| `cognify` | Index new content | Automatically indexes conversations |
+| `codify` | Index code with docstrings | Index Python files |
+| `list_data` | List indexed datasets | "What datasets are available?" |
+| `delete` | Remove specific content | Remove outdated entries |
+
+### Manual Docker Command
+
+If you prefer to run Docker directly:
+
+```bash
+docker run --rm -it \
+  -e TRANSPORT_MODE=http \
+  -e LLM_API_KEY="$OPENAI_API_KEY" \
+  -e API_URL=https://api.cognee.ai \
+  -e API_TOKEN="$COGNEE_API_KEY" \
+  -p 8000:8000 \
+  cognee/cognee-mcp:main
+```
+
+### Troubleshooting MCP
+
+**Server won't start**:
+```bash
+# Check environment variables
+make cognee-check-env
+
+# Check if port is in use
+lsof -i :8000
+```
+
+**Claude Code doesn't see MCP server**:
+1. Verify server is running: `docker ps | grep cognee`
+2. Test server directly: `curl http://localhost:8000/mcp`
+3. Reload Claude Code configuration
 
 ---
 
