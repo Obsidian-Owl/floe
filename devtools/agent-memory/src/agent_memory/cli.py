@@ -339,7 +339,7 @@ def init(
                     for i, file_path in enumerate(files, 1):
                         typer.echo(f"    [{i}/{len(files)}] {file_path}")
 
-                        parsed: ParsedContent = parse_markdown_file(file_path)
+                        parsed = parse_markdown_file(file_path)
                         content_with_context = (
                             f"# {parsed.title or file_path.name}\n"
                             f"Source: {file_path}\n\n"
@@ -456,59 +456,329 @@ def health() -> None:
 
 @app.command()
 def sync(
+    files: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--files",
+            "-f",
+            help="Specific files to sync (can be repeated)",
+        ),
+    ] = None,
+    all_files: Annotated[
+        bool,
+        typer.Option("--all", "-a", help="Sync all configured sources, not just changed"),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be synced without syncing"),
+    ] = False,
     dataset: Annotated[
         str | None,
         typer.Option("--dataset", "-d", help="Specific dataset to sync"),
     ] = None,
     cognify: Annotated[
         bool,
-        typer.Option("--cognify", help="Run cognify after adding content"),
+        typer.Option("--cognify/--no-cognify", help="Run cognify after adding content"),
     ] = True,
+    since: Annotated[
+        str,
+        typer.Option("--since", "-s", help="Git reference to compare against for changes"),
+    ] = "HEAD~1",
 ) -> None:
-    """Sync content sources to Cognee Cloud.
+    """Sync changed files to Cognee Cloud.
 
-    Indexes configured content sources and optionally processes with cognify.
+    Detects changed files via git diff and indexes them to the knowledge graph.
+    Markdown files are parsed and added, Python files have docstrings extracted.
+
+    Example:
+        agent-memory sync                    # Sync files changed since HEAD~1
+        agent-memory sync --all              # Sync all configured sources
+        agent-memory sync --files src/foo.py # Sync specific files
+        agent-memory sync --dry-run          # Show what would sync
+        agent-memory sync --since main       # Sync changes since main branch
     """
     config = _load_config()
     if config is None:
         raise typer.Exit(code=1)
 
-    if not config.content_sources:
-        typer.secho(
-            "No content sources configured. Add sources to .cognee/config.yaml",
-            fg=typer.colors.YELLOW,
-        )
-        raise typer.Exit(code=0)
-
     client = CogneeClient(config)
 
     async def _sync() -> None:
         try:
-            sources = config.content_sources
+            files_to_sync: list[Path] = []
+
+            if files:
+                # Explicit files specified
+                files_to_sync = [Path(f) for f in files]
+                typer.echo(f"Syncing {len(files_to_sync)} specified file(s)...")
+            elif all_files:
+                # Sync all configured sources
+                typer.echo("Syncing all configured sources...")
+                files_to_sync = _get_all_source_files(config)
+            else:
+                # Detect changes via git diff
+                from agent_memory.git_diff import GitError, get_changed_files
+
+                try:
+                    include_patterns = ["*.py", "*.md"]
+                    exclude_patterns = ["**/test_*.py", "**/__pycache__/*", "**/.*"]
+
+                    files_to_sync = get_changed_files(
+                        since=since,
+                        include_patterns=include_patterns,
+                        exclude_patterns=exclude_patterns,
+                    )
+                    if not files_to_sync:
+                        typer.secho(
+                            f"No changed files found since {since}",
+                            fg=typer.colors.YELLOW,
+                        )
+                        raise typer.Exit(code=0)
+
+                    typer.echo(
+                        f"Found {len(files_to_sync)} changed file(s) since {since}..."
+                    )
+                except GitError as e:
+                    typer.secho(f"Git error: {e}", fg=typer.colors.RED, err=True)
+                    typer.echo("Falling back to syncing all configured sources...")
+                    files_to_sync = _get_all_source_files(config)
+
+            # Filter to dataset if specified
             if dataset:
-                sources = [s for s in sources if s.dataset == dataset]
-                if not sources:
-                    _exit_with_error(f"No sources found for dataset: {dataset}")
-                    return
+                files_to_sync = _filter_by_dataset(files_to_sync, config, dataset)
+                if not files_to_sync:
+                    typer.secho(
+                        f"No files match dataset: {dataset}",
+                        fg=typer.colors.YELLOW,
+                    )
+                    raise typer.Exit(code=0)
 
-            typer.echo(f"Syncing {len(sources)} content source(s)...")
+            # Categorize files
+            md_files = [f for f in files_to_sync if f.suffix == ".md"]
+            py_files = [f for f in files_to_sync if f.suffix == ".py"]
 
-            for source in sources:
-                typer.echo(f"  Processing: {source.path} -> {source.dataset}")
-                # Actual sync will be implemented in ops modules
-                # For now, placeholder logging
+            if dry_run:
+                typer.secho("\n[DRY RUN] Would sync:", fg=typer.colors.CYAN)
+                if md_files:
+                    typer.echo(f"  Markdown files ({len(md_files)}):")
+                    for f in md_files[:10]:
+                        typer.echo(f"    - {f}")
+                    if len(md_files) > 10:
+                        typer.echo(f"    ... and {len(md_files) - 10} more")
+                if py_files:
+                    typer.echo(f"  Python files ({len(py_files)}):")
+                    for f in py_files[:10]:
+                        typer.echo(f"    - {f}")
+                    if len(py_files) > 10:
+                        typer.echo(f"    ... and {len(py_files) - 10} more")
+                raise typer.Exit(code=0)
 
-            if cognify:
-                typer.echo("Running cognify...")
+            # Sync markdown files
+            if md_files:
+                typer.echo(f"\nSyncing {len(md_files)} markdown file(s)...")
+                await _sync_markdown_files(client, config, md_files)
+
+            # Sync Python files (extract docstrings)
+            if py_files:
+                typer.echo(f"\nSyncing {len(py_files)} Python file(s)...")
+                await _sync_python_files(client, config, py_files)
+
+            # Run cognify if requested
+            if cognify and (md_files or py_files):
+                typer.echo("\nRunning cognify...")
                 await client.cognify(dataset_name=dataset)
                 typer.secho("Cognify completed", fg=typer.colors.GREEN)
 
-            typer.secho("Sync completed successfully", fg=typer.colors.GREEN)
+            typer.secho(
+                f"\nSync completed: {len(md_files)} markdown, {len(py_files)} Python files",
+                fg=typer.colors.GREEN,
+            )
 
         except CogneeClientError as e:
             _exit_with_error(str(e))
 
     _run_async(_sync())
+
+
+def _get_all_source_files(config: AgentMemoryConfig) -> list[Path]:
+    """Get all files from configured content sources.
+
+    Args:
+        config: Agent memory configuration.
+
+    Returns:
+        List of file paths from all configured sources.
+    """
+    from pathlib import Path
+
+    files: list[Path] = []
+
+    for source in config.content_sources:
+        if source.source_type == "file":
+            if source.path.exists():
+                files.append(source.path)
+        elif source.source_type == "directory":
+            if source.path.exists():
+                for ext in source.file_extensions:
+                    files.extend(source.path.rglob(f"*{ext}"))
+        elif source.source_type == "glob":
+            # Glob pattern
+            import glob as glob_module
+
+            matched = glob_module.glob(str(source.path), recursive=True)
+            files.extend(Path(p) for p in matched)
+
+    # Apply exclude patterns
+    return files
+
+
+def _filter_by_dataset(
+    files: list[Path], config: AgentMemoryConfig, dataset: str
+) -> list[Path]:
+    """Filter files to those matching a specific dataset.
+
+    Args:
+        files: List of files to filter.
+        config: Configuration with content sources.
+        dataset: Dataset name to match.
+
+    Returns:
+        Filtered list of files.
+    """
+    # Build set of paths belonging to the dataset
+    dataset_paths: set[Path] = set()
+    for source in config.content_sources:
+        if source.dataset == dataset:
+            if source.source_type == "file":
+                dataset_paths.add(source.path)
+            elif source.source_type == "directory":
+                # Add all files under the directory
+                for ext in source.file_extensions:
+                    dataset_paths.update(source.path.rglob(f"*{ext}"))
+
+    # Filter files to those in the dataset
+    return [f for f in files if f in dataset_paths or _is_under_path(f, dataset_paths)]
+
+
+def _is_under_path(file: Path, paths: set[Path]) -> bool:
+    """Check if file is under any of the given paths."""
+    for p in paths:
+        if p.is_dir():
+            try:
+                file.relative_to(p)
+                return True
+            except ValueError:
+                continue
+    return False
+
+
+async def _sync_markdown_files(
+    client: CogneeClient, config: AgentMemoryConfig, files: list[Path]
+) -> None:
+    """Sync markdown files to Cognee.
+
+    Args:
+        client: Cognee client.
+        config: Configuration.
+        files: Markdown files to sync.
+    """
+    for file_path in files:
+        try:
+            typer.echo(f"  Processing: {file_path}")
+
+            # Parse markdown
+            parsed = parse_markdown_file(file_path)
+
+            # Determine dataset from config or use default
+            dataset_name = _get_dataset_for_file(file_path, config)
+
+            # Add to Cognee
+            await client.add_content(
+                content=parsed.content,
+                dataset_name=dataset_name,
+                metadata={
+                    "source_path": str(file_path),
+                    "title": parsed.title or file_path.stem,
+                },
+            )
+        except Exception as e:
+            typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
+
+
+async def _sync_python_files(
+    client: CogneeClient, config: AgentMemoryConfig, files: list[Path]
+) -> None:
+    """Sync Python files by extracting docstrings.
+
+    Args:
+        client: Cognee client.
+        config: Configuration.
+        files: Python files to sync.
+    """
+    for file_path in files:
+        try:
+            typer.echo(f"  Processing: {file_path}")
+
+            # Extract docstrings
+            entries = extract_docstrings(file_path)
+
+            if not entries:
+                typer.echo(f"    No docstrings found in {file_path}")
+                continue
+
+            # Determine dataset
+            dataset_name = config.codebase_dataset
+
+            # Format and add to Cognee
+            for entry in entries:
+                formatted_content = _format_docstring_entry(entry)
+                await client.add_content(
+                    content=formatted_content,
+                    dataset_name=dataset_name,
+                    metadata={
+                        "source_path": str(file_path),
+                        "entry_type": entry.entry_type,
+                        "name": entry.name,
+                        "line_number": entry.line_number,
+                    },
+                )
+
+            typer.echo(f"    Added {len(entries)} docstring(s)")
+
+        except Exception as e:
+            typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
+
+
+def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
+    """Determine the appropriate dataset for a file.
+
+    Args:
+        file_path: Path to the file.
+        config: Configuration with content sources.
+
+    Returns:
+        Dataset name for the file.
+    """
+    # Check if file matches any content source
+    for source in config.content_sources:
+        if source.source_type == "file" and source.path == file_path:
+            return source.dataset
+        if source.source_type == "directory":
+            try:
+                file_path.relative_to(source.path)
+                return source.dataset
+            except ValueError:
+                continue
+
+    # Default dataset based on file type
+    if file_path.suffix == ".py":
+        return config.codebase_dataset
+    if "architecture" in str(file_path).lower() or "docs" in str(file_path).lower():
+        return config.architecture_dataset
+    if "claude" in str(file_path).lower() or "rules" in str(file_path).lower():
+        return config.governance_dataset
+
+    return config.architecture_dataset  # Default
 
 
 @app.command()

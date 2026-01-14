@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
 from agent_memory.docstring_extractor import DocstringEntry, extract_docstrings
 
 if TYPE_CHECKING:
