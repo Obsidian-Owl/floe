@@ -1,10 +1,13 @@
 """Cognee Cloud client wrapper with async operations and retry logic.
 
-Provides a thin wrapper around the Cognee SDK with:
+Provides a thin wrapper around the Cognee Cloud REST API with:
 - Structured logging via structlog
 - Retry logic for transient failures
 - Health check via httpx
 - Type-safe configuration
+
+Uses Cognee Cloud REST API for add/cognify/search operations to ensure
+LLM processing happens server-side (avoids SDK bugs with local LLM calls).
 
 Example:
     >>> from agent_memory.config import get_config
@@ -17,6 +20,7 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -32,7 +36,8 @@ logger = structlog.get_logger(__name__)
 # Retry configuration
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_DELAY_SECONDS = 1.0
-RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+DEFAULT_TIMEOUT_SECONDS = 300.0  # 5 minutes for cognify operations
+RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
 
 
 class CogneeClientError(Exception):
@@ -48,13 +53,16 @@ class CogneeConnectionError(CogneeClientError):
 
 
 class CogneeClient:
-    """Async client wrapper for Cognee Cloud SDK.
+    """Async client wrapper for Cognee Cloud REST API.
 
-    Provides a simplified interface to the Cognee SDK with:
+    Provides a simplified interface to the Cognee Cloud API with:
     - Automatic configuration from AgentMemoryConfig
     - Structured logging for all operations
     - Retry logic for transient failures
     - Health check endpoint
+
+    Uses REST API instead of local SDK to ensure LLM processing
+    happens server-side in Cognee Cloud.
 
     Args:
         config: Agent memory configuration with API credentials.
@@ -77,26 +85,75 @@ class CogneeClient:
         self._log = logger.bind(
             cognee_url=config.cognee_api_url,
         )
-        self._initialized = False
 
-    async def _ensure_initialized(self) -> None:
-        """Ensure Cognee SDK is initialized with credentials."""
-        if self._initialized:
-            return
+    def _get_headers(self) -> dict[str, str]:
+        """Get HTTP headers with authentication.
 
-        import cognee  # type: ignore[import-untyped]  # type: ignore[import-untyped]
+        Cognee Cloud uses X-Api-Key header for authentication.
+        """
+        return {
+            "X-Api-Key": self._config.cognee_api_key.get_secret_value(),
+            "Content-Type": "application/json",
+        }
 
-        # Configure Cognee with our settings (v0.5.x API)
-        cognee.config.set_llm_config(
-            {
-                "llm_provider": self._config.llm_provider,
-                "llm_model": f"{self._config.llm_provider}/{self._config.llm_model}",
-                "llm_api_key": self._config.get_llm_api_key(),
-            }
-        )
+    async def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        json_data: dict[str, Any] | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> httpx.Response:
+        """Make an authenticated HTTP request to Cognee Cloud.
 
-        self._initialized = True
-        self._log.info("cognee_client_initialized")
+        Args:
+            method: HTTP method (GET, POST, DELETE).
+            endpoint: API endpoint path (e.g., "/api/add").
+            json_data: Optional JSON body data.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            HTTP response.
+
+        Raises:
+            CogneeClientError: If request fails after retries.
+        """
+        url = f"{self._config.cognee_api_url}{endpoint}"
+        last_error: Exception | None = None
+
+        for attempt in range(DEFAULT_MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(follow_redirects=True) as client:
+                    response = await client.request(
+                        method,
+                        url,
+                        headers=self._get_headers(),
+                        json=json_data,
+                        timeout=timeout,
+                    )
+
+                    if response.status_code in RETRYABLE_STATUS_CODES:
+                        self._log.warning(
+                            "request_retryable_error",
+                            status_code=response.status_code,
+                            attempt=attempt + 1,
+                        )
+                        await asyncio.sleep(DEFAULT_RETRY_DELAY_SECONDS * (attempt + 1))
+                        continue
+
+                    return response
+
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
+                last_error = e
+                self._log.warning(
+                    "request_connection_error",
+                    error=str(e),
+                    attempt=attempt + 1,
+                )
+                await asyncio.sleep(DEFAULT_RETRY_DELAY_SECONDS * (attempt + 1))
+
+        msg = f"Request failed after {DEFAULT_MAX_RETRIES} attempts"
+        raise CogneeClientError(msg) from last_error
 
     async def health_check(self) -> HealthStatus:
         """Check connectivity to Cognee Cloud and LLM provider.
@@ -120,9 +177,9 @@ class CogneeClient:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self._config.cognee_api_url}/health",
+                    f"{self._config.cognee_api_url}/api/health",
                     headers={
-                        "Authorization": f"Bearer {self._config.cognee_api_key.get_secret_value()}"
+                        "X-Api-Key": self._config.cognee_api_key.get_secret_value()
                     },
                     timeout=10.0,
                 )
@@ -225,35 +282,51 @@ class CogneeClient:
         *,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Add content to a Cognee dataset.
+        """Add content to a Cognee dataset via REST API.
 
         Args:
             content: Text content or list of content to add.
             dataset_name: Target dataset name.
-            metadata: Optional metadata to attach.
+            metadata: Optional metadata to attach (currently unused by API).
 
         Raises:
             CogneeClientError: If adding content fails.
         """
-        await self._ensure_initialized()
-        import cognee
+        content_list = [content] if isinstance(content, str) else content
 
         self._log.info(
             "add_content_started",
             dataset=dataset_name,
-            content_count=len(content) if isinstance(content, list) else 1,
+            content_count=len(content_list),
         )
 
         try:
-            # Cognee expects content as text or list
-            await cognee.add(content, dataset_name=dataset_name)
+            # Use REST API to add content
+            # Cognee Cloud API expects data as list of text strings
+            response = await self._make_request(
+                "POST",
+                "/api/add",
+                json_data={
+                    "data": content_list,
+                    "datasetName": dataset_name,
+                },
+            )
+
+            if response.status_code not in (200, 201, 202):
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"Add content failed with status {response.status_code}: {error_detail}"
+                )
+
             self._log.info("add_content_completed", dataset=dataset_name)
+        except CogneeClientError:
+            raise
         except Exception as e:
             self._log.error("add_content_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Failed to add content: {e}") from e
 
     async def cognify(self, dataset_name: str | None = None) -> None:
-        """Process content into knowledge graph using LLM.
+        """Process content into knowledge graph using LLM via REST API.
 
         Args:
             dataset_name: Optional dataset to cognify. If None, cognifies all.
@@ -261,23 +334,39 @@ class CogneeClient:
         Raises:
             CogneeClientError: If cognify operation fails.
         """
-        await self._ensure_initialized()
-        import cognee
-
         self._log.info("cognify_started", dataset=dataset_name or "all")
 
         try:
+            # Use REST API - LLM processing happens server-side
+            json_data: dict[str, Any] = {}
             if dataset_name:
-                await cognee.cognify(dataset_name=dataset_name)
-            else:
-                await cognee.cognify()
+                json_data["datasets"] = [dataset_name]
+
+            response = await self._make_request(
+                "POST",
+                "/api/cognify",
+                json_data=json_data,
+                timeout=DEFAULT_TIMEOUT_SECONDS,  # Cognify can take a while
+            )
+
+            if response.status_code not in (200, 201, 202):
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"Cognify failed with status {response.status_code}: {error_detail}"
+                )
+
             self._log.info("cognify_completed", dataset=dataset_name or "all")
+        except CogneeClientError:
+            raise
         except Exception as e:
             self._log.error("cognify_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Cognify failed: {e}") from e
 
     async def codify(self, repo_path: str, dataset_name: str | None = None) -> None:
         """Analyze code repository and build knowledge graph.
+
+        Note: Codify is not yet supported via REST API.
+        This method is a placeholder for future implementation.
 
         Args:
             repo_path: Path to the repository to analyze.
@@ -286,17 +375,14 @@ class CogneeClient:
         Raises:
             CogneeClientError: If codify operation fails.
         """
-        await self._ensure_initialized()
-        import cognee
-
         self._log.info("codify_started", repo_path=repo_path, dataset=dataset_name)
 
-        try:
-            await cognee.codify(repo_path)
-            self._log.info("codify_completed", repo_path=repo_path)
-        except Exception as e:
-            self._log.error("codify_failed", repo_path=repo_path, error=str(e))
-            raise CogneeClientError(f"Codify failed: {e}") from e
+        # Codify requires uploading code to the server
+        # For now, raise NotImplementedError
+        raise NotImplementedError(
+            "Codify via REST API is not yet implemented. "
+            "Use the local SDK or upload files via the add endpoint."
+        )
 
     async def search(
         self,
@@ -305,7 +391,7 @@ class CogneeClient:
         search_type: str = "GRAPH_COMPLETION",
         top_k: int | None = None,
     ) -> SearchResult:
-        """Search the knowledge graph.
+        """Search the knowledge graph via REST API.
 
         Args:
             query: Search query string.
@@ -318,9 +404,6 @@ class CogneeClient:
         Raises:
             CogneeClientError: If search fails.
         """
-        await self._ensure_initialized()
-        import cognee
-
         from agent_memory.models import SearchResult, SearchResultItem
 
         effective_top_k = top_k or self._config.search_top_k
@@ -334,30 +417,54 @@ class CogneeClient:
         )
 
         try:
-            # Call Cognee search
-            results = await cognee.search(query, search_type=search_type)
+            # Use REST API for search
+            response = await self._make_request(
+                "POST",
+                "/api/search",
+                json_data={
+                    "query": query,
+                    "search_type": search_type,
+                    "top_k": effective_top_k,
+                },
+            )
+
             execution_time = int((time.monotonic() - start_time) * 1000)
 
-            # Convert results to our model
+            if response.status_code not in (200, 201):
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"Search failed with status {response.status_code}: {error_detail}"
+                )
+
+            # Parse response
+            results_data = response.json()
             items: list[SearchResultItem] = []
-            if results:
-                for item in results[:effective_top_k]:
-                    if isinstance(item, dict):
-                        items.append(
-                            SearchResultItem(
-                                content=str(item.get("content", "")),
-                                source_path=item.get("source"),
-                                relevance_score=float(item.get("score", 0.0)),
-                                metadata=item.get("metadata", {}),
-                            )
+
+            # Handle different response formats from Cognee Cloud
+            if isinstance(results_data, list):
+                raw_results = results_data
+            elif isinstance(results_data, dict):
+                raw_results = results_data.get("results", results_data.get("data", []))
+            else:
+                raw_results = []
+
+            for item in raw_results[:effective_top_k]:
+                if isinstance(item, dict):
+                    items.append(
+                        SearchResultItem(
+                            content=str(item.get("content", item.get("text", ""))),
+                            source_path=item.get("source", item.get("source_path")),
+                            relevance_score=float(item.get("score", 0.0)),
+                            metadata=item.get("metadata", {}),
                         )
-                    else:
-                        items.append(
-                            SearchResultItem(
-                                content=str(item),
-                                relevance_score=0.0,
-                            )
+                    )
+                else:
+                    items.append(
+                        SearchResultItem(
+                            content=str(item),
+                            relevance_score=0.0,
                         )
+                    )
 
             search_result = SearchResult(
                 query=query,
@@ -376,33 +483,80 @@ class CogneeClient:
 
             return search_result
 
+        except CogneeClientError:
+            raise
         except Exception as e:
             self._log.error("search_failed", query=query, error=str(e))
             raise CogneeClientError(f"Search failed: {e}") from e
 
     async def delete_dataset(self, dataset_name: str) -> None:
-        """Delete a dataset from Cognee.
+        """Delete a dataset from Cognee via REST API.
 
         Args:
             dataset_name: Name of dataset to delete.
 
         Raises:
-            CogneeClientError: If deletion fails.
+            CogneeClientError: If deletion fails or dataset not found.
         """
-        await self._ensure_initialized()
-        import cognee
-
         self._log.info("delete_dataset_started", dataset=dataset_name)
 
         try:
-            await cognee.delete(dataset_name=dataset_name)
+            # First, list datasets to get the UUID for the given name
+            list_response = await self._make_request("GET", "/api/datasets")
+
+            if list_response.status_code != 200:
+                error_detail = list_response.text
+                raise CogneeClientError(
+                    f"Failed to list datasets: {list_response.status_code}: {error_detail}"
+                )
+
+            # Find the dataset UUID by name
+            datasets_data = list_response.json()
+            dataset_id: str | None = None
+
+            # Handle different response formats
+            datasets_list: list[dict[str, Any]] = []
+            if isinstance(datasets_data, list):
+                datasets_list = datasets_data
+            elif isinstance(datasets_data, dict):
+                datasets_list = datasets_data.get("datasets", datasets_data.get("data", []))
+
+            for ds in datasets_list:
+                if isinstance(ds, dict):
+                    ds_name = ds.get("name", "")
+                    if ds_name == dataset_name:
+                        dataset_id = ds.get("id", ds.get("dataset_id"))
+                        break
+
+            if not dataset_id:
+                self._log.warning(
+                    "delete_dataset_not_found",
+                    dataset=dataset_name,
+                )
+                # Dataset doesn't exist, consider this a success
+                return
+
+            # Now delete by UUID
+            response = await self._make_request(
+                "DELETE",
+                f"/api/datasets/{dataset_id}",
+            )
+
+            if response.status_code not in (200, 204):
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"Delete failed with status {response.status_code}: {error_detail}"
+                )
+
             self._log.info("delete_dataset_completed", dataset=dataset_name)
+        except CogneeClientError:
+            raise
         except Exception as e:
             self._log.error("delete_dataset_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Delete failed: {e}") from e
 
     async def list_datasets(self) -> list[str]:
-        """List all datasets in Cognee.
+        """List all datasets in Cognee via REST API.
 
         Returns:
             List of dataset names.
@@ -410,23 +564,46 @@ class CogneeClient:
         Raises:
             CogneeClientError: If listing fails.
         """
-        await self._ensure_initialized()
-        import cognee
-
         self._log.info("list_datasets_started")
 
         try:
-            # Get datasets from Cognee
-            datasets = await cognee.get_datasets()
-            dataset_names = [d.name if hasattr(d, "name") else str(d) for d in datasets]
+            response = await self._make_request(
+                "GET",
+                "/api/datasets",
+            )
+
+            if response.status_code != 200:
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"List datasets failed with status {response.status_code}: {error_detail}"
+                )
+
+            # Parse response
+            data = response.json()
+            if isinstance(data, list):
+                dataset_names = [
+                    d.get("name", str(d)) if isinstance(d, dict) else str(d)
+                    for d in data
+                ]
+            elif isinstance(data, dict):
+                datasets = data.get("datasets", data.get("data", []))
+                dataset_names = [
+                    d.get("name", str(d)) if isinstance(d, dict) else str(d)
+                    for d in datasets
+                ]
+            else:
+                dataset_names = []
+
             self._log.info("list_datasets_completed", count=len(dataset_names))
             return dataset_names
+        except CogneeClientError:
+            raise
         except Exception as e:
             self._log.error("list_datasets_failed", error=str(e))
             raise CogneeClientError(f"List datasets failed: {e}") from e
 
     async def get_status(self, dataset_name: str | None = None) -> dict[str, Any]:
-        """Get pipeline status for a dataset.
+        """Get pipeline status for a dataset via REST API.
 
         Args:
             dataset_name: Optional dataset name. If None, gets overall status.
@@ -437,15 +614,26 @@ class CogneeClient:
         Raises:
             CogneeClientError: If status check fails.
         """
-        await self._ensure_initialized()
-        import cognee
-
         self._log.info("get_status_started", dataset=dataset_name)
 
         try:
-            status = await cognee.get_status(dataset_name=dataset_name)
+            endpoint = "/api/status"
+            if dataset_name:
+                endpoint = f"/api/datasets/{dataset_name}/status"
+
+            response = await self._make_request("GET", endpoint)
+
+            if response.status_code != 200:
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"Get status failed with status {response.status_code}: {error_detail}"
+                )
+
+            status = response.json()
             self._log.info("get_status_completed", dataset=dataset_name)
             return status if isinstance(status, dict) else {"status": str(status)}
+        except CogneeClientError:
+            raise
         except Exception as e:
             self._log.error("get_status_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Get status failed: {e}") from e
