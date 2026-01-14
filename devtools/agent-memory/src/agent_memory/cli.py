@@ -169,7 +169,8 @@ def health() -> None:
                 if comp.response_time_ms is not None:
                     typer.echo(f"    Response time: {comp.response_time_ms}ms")
 
-            if status.overall_status == "unhealthy":
+            # Exit code 0 for healthy, 1 for degraded/unhealthy
+            if status.overall_status in ("degraded", "unhealthy"):
                 raise typer.Exit(code=1)
 
         except CogneeClientError as e:
