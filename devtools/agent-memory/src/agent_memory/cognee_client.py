@@ -80,11 +80,82 @@ class CogneeClient:
 
         Args:
             config: Configuration with Cognee API credentials.
+
+        Note:
+            Call validate_connection() after initialization to verify
+            connectivity to Cognee Cloud.
         """
         self._config = config
         self._log = logger.bind(
             cognee_url=config.cognee_api_url,
         )
+
+    async def validate_connection(self) -> float:
+        """Validate connection to Cognee Cloud.
+
+        Performs a health check to verify connectivity and authentication.
+        Should be called after initialization to ensure the client can
+        communicate with Cognee Cloud.
+
+        Returns:
+            Connection latency in milliseconds.
+
+        Raises:
+            CogneeConnectionError: If Cognee Cloud is unreachable.
+            CogneeAuthenticationError: If API key is invalid.
+
+        Example:
+            >>> client = CogneeClient(config)
+            >>> latency_ms = await client.validate_connection()
+            >>> print(f"Connected in {latency_ms}ms")
+        """
+        start_time = time.monotonic()
+
+        try:
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(
+                    f"{self._config.cognee_api_url}/api/health",
+                    headers={
+                        "X-Api-Key": self._config.cognee_api_key.get_secret_value()
+                    },
+                    timeout=10.0,
+                )
+                latency_ms = int((time.monotonic() - start_time) * 1000)
+
+                if response.status_code == 401:
+                    self._log.error(
+                        "connection_validation_auth_failed",
+                        status_code=response.status_code,
+                    )
+                    raise CogneeAuthenticationError(
+                        "Authentication failed - check COGNEE_API_KEY"
+                    )
+
+                if response.status_code != 200:
+                    self._log.error(
+                        "connection_validation_failed",
+                        status_code=response.status_code,
+                    )
+                    raise CogneeConnectionError(
+                        f"Cognee Cloud returned status {response.status_code}"
+                    )
+
+                self._log.info(
+                    "connection_validated",
+                    latency_ms=latency_ms,
+                )
+                return float(latency_ms)
+
+        except httpx.TimeoutException as e:
+            self._log.error("connection_validation_timeout", error=str(e))
+            raise CogneeConnectionError(
+                f"Connection to {self._config.cognee_api_url} timed out"
+            ) from e
+        except httpx.ConnectError as e:
+            self._log.error("connection_validation_unreachable", error=str(e))
+            raise CogneeConnectionError(
+                f"Cannot reach {self._config.cognee_api_url}: {e}"
+            ) from e
 
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers with authentication.
@@ -446,10 +517,11 @@ class CogneeClient:
             items: list[SearchResultItem] = []
 
             # Handle different response formats from Cognee Cloud
+            raw_results: list[Any]
             if isinstance(results_data, list):
                 raw_results = results_data
             elif isinstance(results_data, dict):
-                raw_results = results_data.get("results", results_data.get("data", []))
+                raw_results = results_data.get("results") or results_data.get("data") or []
             else:
                 raw_results = []
 
@@ -520,11 +592,15 @@ class CogneeClient:
             dataset_id: str | None = None
 
             # Handle different response formats
-            datasets_list: list[dict[str, Any]] = []
+            datasets_list: list[dict[str, Any]]
             if isinstance(datasets_data, list):
                 datasets_list = datasets_data
             elif isinstance(datasets_data, dict):
-                datasets_list = datasets_data.get("datasets", datasets_data.get("data", []))
+                datasets_list = (
+                    datasets_data.get("datasets") or datasets_data.get("data") or []
+                )
+            else:
+                datasets_list = []
 
             for ds in datasets_list:
                 if isinstance(ds, dict):
@@ -585,19 +661,18 @@ class CogneeClient:
 
             # Parse response
             data = response.json()
+            datasets_list: list[Any]
             if isinstance(data, list):
-                dataset_names = [
-                    d.get("name", str(d)) if isinstance(d, dict) else str(d)
-                    for d in data
-                ]
+                datasets_list = data
             elif isinstance(data, dict):
-                datasets = data.get("datasets", data.get("data", []))
-                dataset_names = [
-                    d.get("name", str(d)) if isinstance(d, dict) else str(d)
-                    for d in datasets
-                ]
+                datasets_list = data.get("datasets") or data.get("data") or []
             else:
-                dataset_names = []
+                datasets_list = []
+
+            dataset_names = [
+                d.get("name", str(d)) if isinstance(d, dict) else str(d)
+                for d in datasets_list
+            ]
 
             self._log.info("list_datasets_completed", count=len(dataset_names))
             return dataset_names

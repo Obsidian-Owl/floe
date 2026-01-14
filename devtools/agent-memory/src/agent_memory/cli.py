@@ -29,7 +29,12 @@ from typing import Annotated, Any
 import structlog
 import typer
 
-from agent_memory.cognee_client import CogneeClient, CogneeClientError
+from agent_memory.cognee_client import (
+    CogneeAuthenticationError,
+    CogneeClient,
+    CogneeClientError,
+    CogneeConnectionError,
+)
 from agent_memory.config import AgentMemoryConfig, get_config
 
 logger = structlog.get_logger(__name__)
@@ -115,6 +120,23 @@ def init(
     typer.secho("Initialized .cognee/ directory", fg=typer.colors.GREEN)
     typer.echo(f"  Cognee API URL: {config.cognee_api_url}")
     typer.echo(f"  LLM Provider: {config.llm_provider}")
+
+    # Validate connection to Cognee Cloud
+    client = CogneeClient(config)
+
+    async def _validate() -> None:
+        try:
+            latency_ms = await client.validate_connection()
+            typer.secho(
+                f"  Connection validated ({latency_ms:.0f}ms)",
+                fg=typer.colors.GREEN,
+            )
+        except CogneeAuthenticationError as e:
+            _exit_with_error(f"Authentication failed: {e}")
+        except CogneeConnectionError as e:
+            _exit_with_error(f"Connection failed: {e}")
+
+    _run_async(_validate())
 
     # Create empty state files
     (cognee_dir / "state.json").write_text("{}")
