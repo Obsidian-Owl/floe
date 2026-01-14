@@ -22,6 +22,14 @@ from agent_memory.ops.drift import (
     detect_modified_files,
     detect_renamed_files,
 )
+from agent_memory.ops.health import (
+    ComponentHealth,
+    HealthCheckResult,
+    check_cognee_cloud,
+    check_llm_provider,
+    check_local_state,
+    health_check,
+)
 
 __all__ = [
     # Coverage
@@ -34,4 +42,11 @@ __all__ = [
     "detect_deleted_files",
     "detect_modified_files",
     "detect_renamed_files",
+    # Health
+    "ComponentHealth",
+    "HealthCheckResult",
+    "check_cognee_cloud",
+    "check_llm_provider",
+    "check_local_state",
+    "health_check",
 ]
