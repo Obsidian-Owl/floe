@@ -10,6 +10,15 @@ This package contains modules for operational tasks:
 
 from __future__ import annotations
 
+from agent_memory.ops.batch import (
+    BatchCheckpoint,
+    BatchProgress,
+    BatchResult,
+    batch_load,
+    clear_checkpoint,
+    load_checkpoint,
+    save_checkpoint,
+)
 from agent_memory.ops.coverage import (
     CoverageReport,
     analyze_coverage,
@@ -36,6 +45,14 @@ from agent_memory.ops.health import (
 )
 
 __all__ = [
+    # Batch
+    "BatchCheckpoint",
+    "BatchProgress",
+    "BatchResult",
+    "batch_load",
+    "clear_checkpoint",
+    "load_checkpoint",
+    "save_checkpoint",
     # Coverage
     "CoverageReport",
     "analyze_coverage",
