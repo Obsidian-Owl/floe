@@ -86,12 +86,12 @@ class CogneeClient:
 
         import cognee  # type: ignore[import-untyped]  # type: ignore[import-untyped]
 
-        # Configure Cognee with our settings
+        # Configure Cognee with our settings (v0.5.x API)
         cognee.config.set_llm_config(
             {
-                "provider": self._config.llm_provider,
-                "model": self._config.llm_model,
-                "api_key": self._config.get_llm_api_key(),
+                "llm_provider": self._config.llm_provider,
+                "llm_model": f"{self._config.llm_provider}/{self._config.llm_model}",
+                "llm_api_key": self._config.get_llm_api_key(),
             }
         )
 
