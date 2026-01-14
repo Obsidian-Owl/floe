@@ -38,6 +38,12 @@ Cognee Cloud integration provides persistent, graph-augmented memory for **AI co
 | 10A-FR-010 | Constitution/rules cross-reference | LOW |
 | 10A-FR-011 | Linear/Beads sync bridging | LOW |
 | 10A-FR-012 | Cognee Cloud configuration and secrets management | LOW |
+| **Operations** |
+| 10A-FR-013 | Batch initial load with progress tracking and resume | CRITICAL |
+| 10A-FR-014 | Coverage analysis (indexed vs filesystem comparison) | HIGH |
+| 10A-FR-015 | Drift detection (stale/orphaned entries) | HIGH |
+| 10A-FR-016 | Quality validation test suite (known queries → expected results) | MEDIUM |
+| 10A-FR-017 | Selective repair (re-index drifted content without full rebuild) | MEDIUM |
 
 ---
 
@@ -49,6 +55,9 @@ Cognee Cloud integration provides persistent, graph-augmented memory for **AI co
 
 ### Interface Docs
 - Cognee GitHub: https://github.com/topoteretes/cognee
+- Cognee Documentation: https://docs.cognee.ai
+- Cognee MCP Tools: https://docs.cognee.ai/cognee-mcp/mcp-tools
+- Cognee HTTP API: https://docs.cognee.ai/http_api
 - MCP Protocol: https://modelcontextprotocol.io/
 
 ### Contracts
@@ -67,13 +76,25 @@ devtools/                              # INTERNAL ONLY - never distributed
     ├── README.md                      # Explicit audience statement
     ├── src/agent_memory/
     │   ├── __init__.py
+    │   ├── cli.py                     # CLI for Makefile targets
     │   ├── cognee_sync.py             # Sync orchestration
     │   ├── docstring_extractor.py     # Python docstring → graph
     │   ├── markdown_parser.py         # Markdown → graph
-    │   └── mcp_server.py              # MCP integration (thin wrapper)
+    │   ├── mcp_server.py              # MCP integration (thin wrapper)
+    │   ├── ops/                       # Operational tooling
+    │   │   ├── __init__.py
+    │   │   ├── health.py              # Health check wrapper
+    │   │   ├── coverage.py            # Indexed vs filesystem analysis
+    │   │   ├── drift.py               # Stale entry detection
+    │   │   ├── batch.py               # Batch load with checkpoints
+    │   │   └── quality.py             # Search quality validation
+    │   └── checkpoints/               # Resume state for batch operations
+    │       └── .gitignore
     └── tests/
         ├── unit/
-        └── integration/
+        ├── integration/
+        └── quality/                   # Known query → expected result tests
+            └── test_search_quality.py
 
 scripts/
 ├── setup-hooks.sh                     # Extended with Cognee hooks
@@ -81,6 +102,7 @@ scripts/
 
 .cognee/
 ├── config.yaml                        # Cognee Cloud configuration
+├── checksums.json                     # Content hashes for drift detection
 └── .gitignore                         # Exclude credentials
 
 .github/workflows/
@@ -173,6 +195,21 @@ scripts/
 - [ ] Related closed tasks suggested
 - [ ] Decision history for current work available
 
+### US7: Operational Management (P1)
+**As a** floe maintainer
+**I want** operational tools to manage the knowledge graph
+**So that** I can diagnose issues, recover from failures, and ensure data quality
+
+**Acceptance Criteria**:
+- [ ] `make cognee-health` checks connection and component status
+- [ ] `make cognee-init` performs batch initial load with progress and resume
+- [ ] `make cognee-coverage` reports indexed vs filesystem diff
+- [ ] `make cognee-drift` detects stale/orphaned entries
+- [ ] `make cognee-repair` selectively re-indexes drifted content
+- [ ] `make cognee-reset` performs full wipe and rebuild (with confirmation)
+- [ ] `make cognee-test` runs quality validation suite
+- [ ] All operations are idempotent and safe to retry
+
 ---
 
 ## Technical Notes
@@ -182,6 +219,76 @@ scripts/
 - **Cognee Cloud** (SaaS) - shared team knowledge, no infrastructure
 - Async post-commit hooks (non-blocking)
 - MCP integration (native Claude Code support)
+
+### Cognee Built-in Capabilities (Use Directly)
+
+Cognee provides these operations out of the box - we wrap, not rebuild:
+
+| Capability | Cognee API | Notes |
+|------------|-----------|-------|
+| Health check | `GET /health/detailed` | Component-level status |
+| Full reset | `prune_system(graph, vector, metadata, cache)` | Granular control |
+| Delete data | `delete` MCP tool, `DELETE /api/v1/datasets/{id}` | Soft/hard modes |
+| List datasets | `list_data` MCP tool | Enumerate all content |
+| Pipeline status | `cognify_status`, `codify_status` | Track long-running jobs |
+| Settings | `GET/POST /api/v1/settings` | Configuration management |
+| Visualization | `GET /api/v1/datasets/{id}/graph` | HTML graph view |
+
+**MCP Tools** (11 available): `cognify`, `codify`, `search`, `prune`, `delete`, `list_data`, `cognify_status`, `codify_status`, `save_interaction`, `get_developer_rules`, `cognee_add_developer_rules`
+
+### What We Build (On Top of Cognee)
+
+| Capability | Why Cognee Can't | Our Implementation |
+|------------|------------------|-------------------|
+| Coverage analysis | No filesystem awareness | Compare `list_data` to glob results |
+| Drift detection | No rename/delete tracking | Hash-based content tracking |
+| Batch initial load | Per-dataset only | Iterator with progress + checkpoints |
+| Quality validation | No test suite concept | Known queries → expected results |
+| Selective repair | Prune is all-or-nothing | Delete stale + add missing only |
+
+### Operational Procedures
+
+#### Makefile Targets
+
+```makefile
+# Cognee-native (thin wrappers)
+make cognee-health      # GET /health/detailed + connection test
+make cognee-status      # cognify_status + codify_status
+make cognee-reset       # prune_system(all=True) ⚠️ DESTRUCTIVE
+
+# Our additions (build on Cognee)
+make cognee-init        # Batch load: progress, checkpoints, resume
+make cognee-coverage    # Report: indexed vs should-be-indexed
+make cognee-drift       # Detect stale entries (deleted/renamed files)
+make cognee-repair      # Delete stale + re-index missing (no full rebuild)
+make cognee-test        # Quality validation: known queries → expected results
+```
+
+#### Recovery Runbook
+
+**Scenario: Search returns garbage / corruption suspected**
+```bash
+make cognee-health       # Check component status
+make cognee-test         # Run quality validation
+make cognee-drift        # Check for stale entries
+make cognee-repair       # Try selective repair first
+# If still broken:
+make cognee-reset        # Nuclear option: full wipe + rebuild
+make cognee-test         # Verify recovery
+```
+
+**Scenario: Batch process failed mid-way**
+```bash
+make cognee-coverage     # See what's indexed vs missing
+make cognee-init         # Resume from checkpoint (idempotent)
+make cognee-coverage     # Verify completion
+```
+
+**Scenario: Files renamed/deleted but still in graph**
+```bash
+make cognee-drift        # Detect orphaned entries
+make cognee-repair       # Remove stale + add new paths
+```
 
 ### Risks
 | Risk | Likelihood | Impact | Mitigation |
