@@ -15,6 +15,7 @@ Usage:
     agent-memory reset [--confirm]
     agent-memory test [--verbose] [--threshold N]
     agent-memory session-save [--issues IDS] [--decisions DESCS]
+    agent-memory session-recover --work-area TOPIC
 
 Example:
     >>> agent-memory init
@@ -1416,6 +1417,85 @@ def session_save(
             typer.echo(f"  Work areas: {len(work_area_list)}")
         if summary:
             typer.echo(f"  Summary: {summary[:50]}{'...' if len(summary) > 50 else ''}")
+
+    except CogneeClientError as e:
+        _exit_with_error(str(e))
+
+
+@app.command(name="session-recover")
+def session_recover(
+    work_area: Annotated[
+        str,
+        typer.Option(
+            "--work-area",
+            "-w",
+            help="Topic/area to recover session context for",
+        ),
+    ],
+) -> None:
+    """Recover session context from the knowledge graph.
+
+    Queries the knowledge graph for prior session context related to
+    the specified work area. Displays prior work, closed tasks, and
+    decision history to help resume work.
+
+    Example:
+        agent-memory session-recover --work-area "plugin-system"
+        agent-memory session-recover --work-area "authentication"
+    """
+    from agent_memory.session import retrieve_session_context
+
+    config = _load_config()
+    if config is None:
+        raise typer.Exit(code=1)
+
+    async def _retrieve_context() -> None:
+        client = CogneeClient(config)
+        context = await retrieve_session_context(client, work_area)
+
+        if context is None:
+            typer.secho(
+                f"No prior session context found for '{work_area}'",
+                fg=typer.colors.YELLOW,
+            )
+            return
+
+        # Display session header
+        typer.secho("Session Context Recovered", fg=typer.colors.GREEN, bold=True)
+        typer.echo(f"  Session ID: {context.session_id}")
+        typer.echo(f"  Captured at: {context.captured_at.isoformat()}")
+        typer.echo()
+
+        # Display work areas
+        if context.active_work_areas:
+            typer.secho("Work Areas:", bold=True)
+            for area in context.active_work_areas:
+                typer.echo(f"  - {area}")
+            typer.echo()
+
+        # Display related closed tasks
+        if context.related_closed_tasks:
+            typer.secho("Related Closed Tasks:", bold=True)
+            for task in context.related_closed_tasks:
+                typer.echo(f"  - {task}")
+            typer.echo()
+
+        # Display decisions
+        if context.recent_decisions:
+            typer.secho("Decision History:", bold=True)
+            for decision in context.recent_decisions:
+                typer.echo(f"  - {decision.decision}")
+                if decision.rationale:
+                    typer.echo(f"    Rationale: {decision.rationale}")
+            typer.echo()
+
+        # Display summary
+        if context.conversation_summary:
+            typer.secho("Session Summary:", bold=True)
+            typer.echo(f"  {context.conversation_summary}")
+
+    try:
+        _run_async(_retrieve_context())
 
     except CogneeClientError as e:
         _exit_with_error(str(e))
