@@ -717,3 +717,67 @@ class CogneeClient:
         except Exception as e:
             self._log.error("get_status_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Get status failed: {e}") from e
+
+    async def prune_system(
+        self,
+        *,
+        graph: bool = True,
+        vector: bool = True,
+        metadata: bool = True,
+    ) -> None:
+        """Prune system data (graph, vector, metadata) via REST API.
+
+        This performs a full reset of the knowledge graph system.
+
+        Args:
+            graph: Delete graph data.
+            vector: Delete vector embeddings.
+            metadata: Delete metadata/cache.
+
+        Raises:
+            CogneeClientError: If prune operation fails.
+        """
+        self._log.info(
+            "prune_system_started",
+            graph=graph,
+            vector=vector,
+            metadata=metadata,
+        )
+
+        try:
+            # Try the prune endpoint first
+            response = await self._make_request(
+                "DELETE",
+                "/api/prune",
+                json_data={
+                    "graph": graph,
+                    "vector": vector,
+                    "metadata": metadata,
+                },
+            )
+
+            if response.status_code in (200, 204):
+                self._log.info("prune_system_completed")
+                return
+
+            # If prune endpoint doesn't exist (404), fall back to deleting all datasets
+            if response.status_code == 404:
+                self._log.info(
+                    "prune_endpoint_not_found",
+                    message="Falling back to dataset deletion",
+                )
+                datasets = await self.list_datasets()
+                for ds in datasets:
+                    await self.delete_dataset(ds)
+                self._log.info("prune_system_completed", fallback="dataset_deletion")
+                return
+
+            error_detail = response.text
+            raise CogneeClientError(
+                f"Prune system failed with status {response.status_code}: {error_detail}"
+            )
+        except CogneeClientError:
+            raise
+        except Exception as e:
+            self._log.error("prune_system_failed", error=str(e))
+            raise CogneeClientError(f"Prune system failed: {e}") from e

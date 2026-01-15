@@ -1144,49 +1144,83 @@ def repair(
 def reset(
     confirm: Annotated[
         bool,
-        typer.Option("--confirm", help="Confirm reset without prompting"),
+        typer.Option("--confirm", help="Confirm reset without prompting (required for safety)"),
     ] = False,
 ) -> None:
-    """Reset knowledge graph by deleting all datasets.
+    """Reset knowledge graph by pruning all data and clearing local state.
 
     WARNING: This is destructive and cannot be undone.
+
+    This command:
+    - Prunes the Cognee Cloud system (graph, vector, metadata)
+    - Deletes .cognee/state.json and .cognee/checksums.json
+    - Requires --confirm flag for safety
+
+    Examples:
+        agent-memory reset --confirm   # Full reset
     """
     config = _load_config()
     if config is None:
         raise typer.Exit(code=1)
 
     if not confirm:
-        confirmed = typer.confirm(
-            "This will delete ALL indexed content. Are you sure?",
-            default=False,
+        typer.secho(
+            "ERROR: Reset requires --confirm flag for safety.",
+            fg=typer.colors.RED,
+            err=True,
         )
-        if not confirmed:
-            typer.echo("Reset cancelled")
-            raise typer.Exit(code=0)
+        typer.echo()
+        typer.echo("This will delete ALL indexed content including:")
+        typer.echo("  - Knowledge graph data")
+        typer.echo("  - Vector embeddings")
+        typer.echo("  - Metadata and cache")
+        typer.echo("  - Local state files (.cognee/state.json, .cognee/checksums.json)")
+        typer.echo()
+        typer.echo("To proceed, run:")
+        typer.secho("  agent-memory reset --confirm", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
 
     client = CogneeClient(config)
 
     async def _reset() -> None:
         try:
-            datasets = await client.list_datasets()
-            if not datasets:
-                typer.echo("No datasets to delete")
-                return
+            typer.echo("Pruning Cognee Cloud system...")
+            typer.echo("  Clearing graph data...")
+            typer.echo("  Clearing vector embeddings...")
+            typer.echo("  Clearing metadata...")
 
-            typer.echo(f"Deleting {len(datasets)} dataset(s)...")
-            for ds in datasets:
-                typer.echo(f"  Deleting: {ds}")
-                await client.delete_dataset(ds)
+            # Prune the Cognee system
+            await client.prune_system(
+                graph=True,
+                vector=True,
+                metadata=True,
+            )
 
-            # Clear local state
+            typer.secho("  Cognee Cloud pruned", fg=typer.colors.GREEN)
+
+            # Clear local state files
+            typer.echo()
+            typer.echo("Clearing local state files...")
+
             state_file = Path(".cognee/state.json")
             checksums_file = Path(".cognee/checksums.json")
-            if state_file.exists():
-                state_file.write_text("{}")
-            if checksums_file.exists():
-                checksums_file.write_text("{}")
 
-            typer.secho("Reset completed", fg=typer.colors.GREEN)
+            if state_file.exists():
+                state_file.unlink()
+                typer.echo(f"  Deleted: {state_file}")
+
+            if checksums_file.exists():
+                checksums_file.unlink()
+                typer.echo(f"  Deleted: {checksums_file}")
+
+            # Also clear checkpoint if present
+            checkpoint_file = Path(".cognee/checkpoint.json")
+            if checkpoint_file.exists():
+                checkpoint_file.unlink()
+                typer.echo(f"  Deleted: {checkpoint_file}")
+
+            typer.echo()
+            typer.secho("Reset completed successfully", fg=typer.colors.GREEN)
 
         except CogneeClientError as e:
             _exit_with_error(str(e))
