@@ -1,11 +1,16 @@
 # Agent Memory Configuration
 # Content sources for Cognee knowledge graph
+#
+# All knowledge sources use a single "floe" dataset for maximum
+# knowledge graph connectivity. Cross-domain queries like
+# "How do plugin patterns relate to testing standards?" work
+# because all content is in one unified graph.
 
 content_sources:
   # Architecture documentation
   - source_type: directory
     path: ../../docs/architecture
-    dataset: architecture
+    dataset: floe
     file_extensions:
       - .md
     exclude_patterns:
@@ -15,13 +20,13 @@ content_sources:
   # Project governance (constitution, rules)
   - source_type: directory
     path: ../../.specify/memory
-    dataset: governance
+    dataset: floe
     file_extensions:
       - .md
 
   # Claude rules
   - source_type: directory
     path: ../../.claude/rules
-    dataset: governance
+    dataset: floe
     file_extensions:
       - .md

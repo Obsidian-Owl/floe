@@ -734,7 +734,7 @@ async def _sync_python_files(
                 continue
 
             # Determine dataset
-            dataset_name = config.codebase_dataset
+            dataset_name = config.default_dataset
 
             # Format and add to Cognee
             for entry in entries:
@@ -759,6 +759,10 @@ async def _sync_python_files(
 def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
     """Determine the appropriate dataset for a file.
 
+    All knowledge content goes to a single unified dataset for maximum
+    knowledge graph connectivity. Content sources can override this
+    if explicitly configured.
+
     Args:
         file_path: Path to the file.
         config: Configuration with content sources.
@@ -766,7 +770,7 @@ def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
     Returns:
         Dataset name for the file.
     """
-    # Check if file matches any content source
+    # Check if file matches any content source (allows explicit overrides)
     for source in config.content_sources:
         if source.source_type == "file" and source.path == file_path:
             return source.dataset
@@ -777,15 +781,8 @@ def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
             except ValueError:
                 continue
 
-    # Default dataset based on file type
-    if file_path.suffix == ".py":
-        return config.codebase_dataset
-    if "architecture" in str(file_path).lower() or "docs" in str(file_path).lower():
-        return config.architecture_dataset
-    if "claude" in str(file_path).lower() or "rules" in str(file_path).lower():
-        return config.governance_dataset
-
-    return config.architecture_dataset  # Default
+    # Default: single unified dataset for all knowledge
+    return config.default_dataset
 
 
 @app.command()
@@ -825,33 +822,26 @@ def search(
 
     async def _search() -> None:
         try:
-            result = await client.search(query, search_type=search_type, top_k=top_k)
-
-            # Filter results by dataset if specified
-            filtered_results = result.results
-            if dataset:
-                filtered_results = [
-                    item
-                    for item in result.results
-                    if item.dataset == dataset or (item.source_path and dataset in item.source_path)
-                ]
+            # Pass dataset to API for server-side scoping (not client-side filtering)
+            result = await client.search(
+                query,
+                dataset_name=dataset,
+                search_type=search_type,
+                top_k=top_k,
+            )
 
             typer.echo(f"Query: {result.query}")
             typer.echo(f"Search type: {result.search_type}")
             if dataset:
-                typer.echo(f"Dataset filter: {dataset}")
-            typer.echo(
-                f"Results: {len(filtered_results)}"
-                f"{f' (filtered from {result.total_count})' if dataset else ''}"
-                f" (in {result.execution_time_ms}ms)"
-            )
+                typer.echo(f"Dataset: {dataset}")
+            typer.echo(f"Results: {result.total_count} (in {result.execution_time_ms}ms)")
             typer.echo()
 
-            if not filtered_results:
+            if not result.results:
                 typer.secho("No results found", fg=typer.colors.YELLOW)
                 return
 
-            for i, item in enumerate(filtered_results, 1):
+            for i, item in enumerate(result.results, 1):
                 typer.secho(f"[{i}]", fg=typer.colors.CYAN, nl=False)
                 if item.source_path:
                     typer.echo(f" {item.source_path}")
@@ -1112,7 +1102,7 @@ def repair(
                     try:
                         typer.echo(f"  {file_path}")
                         content = path_obj.read_text(encoding="utf-8", errors="replace")
-                        await client.add_content(content, config.codebase_dataset)
+                        await client.add_content(content, config.default_dataset)
                         checksums[file_path] = compute_content_hash(content)
                         repaired_count += 1
                     except Exception as e:
@@ -1577,7 +1567,7 @@ def codify(
         raise typer.Exit(code=0)
 
     client = CogneeClient(config)
-    dataset_name = config.codebase_dataset
+    dataset_name = config.default_dataset
 
     async def _codify_content() -> None:
         cognee_dir = Path(".cognee")

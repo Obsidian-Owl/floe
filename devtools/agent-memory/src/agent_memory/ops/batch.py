@@ -250,7 +250,7 @@ async def batch_load(
                 path_obj = Path(file_path)
                 content = path_obj.read_text(encoding="utf-8", errors="replace")
                 # Use default dataset - caller can customize via ContentSource
-                await client.add_content(content, config.codebase_dataset)
+                await client.add_content(content, config.default_dataset)
                 successful.append(file_path)
             except Exception:
                 failed.append(file_path)

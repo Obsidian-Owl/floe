@@ -95,22 +95,14 @@ class AgentMemoryConfig(BaseSettings):
         description="LLM model for cognify operations",
     )
 
-    # Dataset naming
-    architecture_dataset: str = Field(
-        default="architecture",
-        description="Dataset name for architecture docs",
+    # Dataset naming - unified for maximum knowledge graph connectivity
+    default_dataset: str = Field(
+        default="floe",
+        description="Default dataset for all knowledge (docs, rules, code)",
     )
-    governance_dataset: str = Field(
-        default="governance",
-        description="Dataset name for constitution/rules",
-    )
-    codebase_dataset: str = Field(
-        default="codebase",
-        description="Dataset name for docstrings",
-    )
-    skills_dataset: str = Field(
-        default="skills",
-        description="Dataset name for Claude skills",
+    sessions_dataset: str = Field(
+        default="sessions",
+        description="Dataset for session context (kept separate)",
     )
 
     # Content sources (loaded from YAML only)

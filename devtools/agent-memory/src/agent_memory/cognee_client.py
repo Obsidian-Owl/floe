@@ -456,6 +456,7 @@ class CogneeClient:
         self,
         query: str,
         *,
+        dataset_name: str | None = None,
         search_type: str = "GRAPH_COMPLETION",
         top_k: int | None = None,
     ) -> SearchResult:
@@ -463,6 +464,7 @@ class CogneeClient:
 
         Args:
             query: Search query string.
+            dataset_name: Optional dataset to scope search. If None, searches all datasets.
             search_type: Type of search (GRAPH_COMPLETION, SUMMARIES, INSIGHTS, CHUNKS).
             top_k: Maximum number of results. Uses config default if not specified.
 
@@ -480,20 +482,26 @@ class CogneeClient:
         self._log.info(
             "search_started",
             query=query,
+            dataset=dataset_name or "all",
             search_type=search_type,
             top_k=effective_top_k,
         )
 
         try:
+            # Build request payload
+            json_data: dict[str, Any] = {
+                "query": query,
+                "search_type": search_type,
+                "top_k": effective_top_k,
+            }
+            if dataset_name:
+                json_data["datasets"] = [dataset_name]
+
             # Use REST API for search
             response = await self._make_request(
                 "POST",
                 "/api/search",
-                json_data={
-                    "query": query,
-                    "search_type": search_type,
-                    "top_k": effective_top_k,
-                },
+                json_data=json_data,
             )
 
             execution_time = int((time.monotonic() - start_time) * 1000)

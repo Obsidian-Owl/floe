@@ -153,6 +153,7 @@ async def retrieve_session_context(
     client: CogneeClient,
     work_area: str,
     *,
+    dataset: str = "sessions",
     search_type: str = "GRAPH_COMPLETION",
 ) -> SessionContext | None:
     """Retrieve session context related to a work area.
@@ -163,6 +164,7 @@ async def retrieve_session_context(
     Args:
         client: Cognee client for API operations.
         work_area: Topic/area to recover context for.
+        dataset: Dataset to search in (default: "sessions").
         search_type: Type of search to use (default: GRAPH_COMPLETION).
 
     Returns:
@@ -174,9 +176,11 @@ async def retrieve_session_context(
         >>> if context:
         ...     print(f"Found prior work: {context.related_closed_tasks}")
     """
-    # Search for relevant session context
+    # Search for relevant session context (scoped to sessions dataset)
     query = f"session context for {work_area}"
-    search_result = await client.search(query, search_type=search_type)
+    search_result = await client.search(
+        query, dataset_name=dataset, search_type=search_type
+    )
 
     if not search_result.results:
         return None
