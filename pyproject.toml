@@ -30,8 +30,6 @@ dependencies = [
     "floe-telemetry-jaeger",
     # Include floe-compute-duckdb for development
     "floe-compute-duckdb",
-    # Include devtools for development
-    "agent-memory",
 ]
 
 [tool.uv]
@@ -47,14 +45,12 @@ floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true 
 floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
 floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
-agent-memory = { path = "devtools/agent-memory", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
     "plugins/floe-catalog-polaris/src",
-    "devtools/agent-memory/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]
