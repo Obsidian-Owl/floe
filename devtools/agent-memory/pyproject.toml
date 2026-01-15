@@ -34,6 +34,8 @@ dependencies = [
     "typer>=0.9.0",
     "pyyaml>=6.0",
     "typing-extensions>=4.0",
+    # Note: fastapi-users 14.0.2 has GHSA-5j53-63w8-8625 (Moderate, OAuth/CSRF)
+    # Ignored via .uv-secure.toml - not exploitable (internal tool, no OAuth/SSO)
 ]
 
 [project.optional-dependencies]
