@@ -63,6 +63,19 @@ for plugin_dir in plugins/*/; do
     fi
 done
 
+# Discover devtools (internal tooling like agent-memory)
+for devtool_dir in devtools/*/; do
+    if [[ -d "${devtool_dir}" ]]; then
+        devtool_name=$(basename "${devtool_dir}")
+        unit_test_dir="${devtool_dir}tests/unit"
+        if [[ -d "${unit_test_dir}" ]]; then
+            echo "  Found: ${unit_test_dir}"
+            UNIT_TEST_PATHS="${UNIT_TEST_PATHS} ${unit_test_dir}"
+            COVERAGE_SOURCES="${COVERAGE_SOURCES} --cov=${devtool_dir}src"
+        fi
+    fi
+done
+
 # Always include testing module tests
 # Note: Contract tests are NOT included here - they run separately via test-contract.sh
 # because they test cross-package contracts and have different fixture requirements
