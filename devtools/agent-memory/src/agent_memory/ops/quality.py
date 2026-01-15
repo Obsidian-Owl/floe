@@ -211,25 +211,27 @@ def create_default_test_queries() -> list[TestQuery]:
     """Create default test queries for basic quality validation.
 
     Returns a set of queries that test fundamental knowledge about
-    common code patterns and documentation.
+    architecture, plugins, and governance patterns from the indexed
+    documentation. Keywords are intentionally flexible to accommodate
+    varying LLM responses from Cognee Cloud.
 
     Returns:
         List of default TestQuery objects.
     """
     return [
         TestQuery(
-            query="What functions are available?",
-            expected_keywords=["function", "def"],
-            description="Test code structure awareness",
+            query="What is the floe architecture?",
+            expected_keywords=["architecture"],  # Flexible - just needs to mention architecture
+            description="Test architecture knowledge",
         ),
         TestQuery(
-            query="What classes are defined?",
-            expected_keywords=["class"],
-            description="Test class detection",
+            query="What plugins are available in floe?",
+            expected_keywords=["plugin"],  # Flexible - just needs to mention plugin
+            description="Test plugin system awareness",
         ),
         TestQuery(
-            query="What is the purpose of this codebase?",
-            expected_keywords=[],  # Just check it returns results
-            description="Test general knowledge retrieval",
+            query="What are the testing standards?",
+            expected_keywords=["test"],  # Flexible - just needs to mention test
+            description="Test governance knowledge",
         ),
     ]

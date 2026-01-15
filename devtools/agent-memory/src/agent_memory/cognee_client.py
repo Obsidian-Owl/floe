@@ -527,12 +527,24 @@ class CogneeClient:
 
             for item in raw_results[:effective_top_k]:
                 if isinstance(item, dict):
+                    # Handle Cognee Cloud response format with search_result
+                    search_results = item.get("search_result", [])
+                    if search_results and isinstance(search_results, list):
+                        # Join multiple search results into content
+                        content = "\n".join(str(r) for r in search_results)
+                    else:
+                        content = str(item.get("content", item.get("text", "")))
+
                     items.append(
                         SearchResultItem(
-                            content=str(item.get("content", item.get("text", ""))),
+                            content=content,
                             source_path=item.get("source", item.get("source_path")),
                             relevance_score=float(item.get("score", 0.0)),
-                            metadata=item.get("metadata", {}),
+                            metadata={
+                                "dataset_name": item.get("dataset_name"),
+                                "dataset_id": item.get("dataset_id"),
+                                **item.get("metadata", {}),
+                            },
                         )
                     )
                 else:
