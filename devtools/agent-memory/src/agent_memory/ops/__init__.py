@@ -1,10 +1,10 @@
 """Operational management modules for agent-memory.
 
 This package contains modules for operational tasks:
+- batch: Batch operations
 - coverage: Coverage analysis (compare filesystem vs indexed)
 - drift: Drift detection (detect stale/outdated entries)
 - health: Health checking
-- batch: Batch operations
 - quality: Quality validation
 """
 
@@ -43,6 +43,14 @@ from agent_memory.ops.health import (
     check_local_state,
     health_check,
 )
+from agent_memory.ops.quality import (
+    QualityReport,
+    TestQuery,
+    TestResult,
+    check_keywords_in_results,
+    create_default_test_queries,
+    validate_quality,
+)
 
 __all__ = [
     # Batch
@@ -74,4 +82,11 @@ __all__ = [
     "check_llm_provider",
     "check_local_state",
     "health_check",
+    # Quality
+    "QualityReport",
+    "TestQuery",
+    "TestResult",
+    "check_keywords_in_results",
+    "create_default_test_queries",
+    "validate_quality",
 ]
