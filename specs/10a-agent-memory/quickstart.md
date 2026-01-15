@@ -382,6 +382,79 @@ make cognee-reset CONFIRM=1
 make cognee-init
 ```
 
+### Coverage Shows 0% Despite Files Being Indexed
+
+This happens when running commands from the wrong directory. The `.cognee/checksums.json` file stores **relative paths** from your CLI working directory.
+
+```bash
+# ❌ WRONG: Running from subdirectory
+cd devtools/agent-memory
+uv run agent-memory coverage  # Shows 0%!
+
+# ✅ CORRECT: Run from project root (where .cognee/ is)
+cd /path/to/floe
+uv run agent-memory coverage  # Shows 100%
+
+# Or use make targets (always run from root)
+make cognee-coverage
+```
+
+**Why this happens**: `checksums.json` stores paths like `../../docs/architecture/...`. These are relative to where you ran `init`. Coverage compares these against absolute filesystem paths, so the working directory must match.
+
+### Search Returns Results But Content is Empty
+
+Cognee Cloud API returns search results in a nested format. If you see results with empty content:
+
+```bash
+# Check raw API response format
+uv run agent-memory search "test query" --verbose
+
+# Expected format from Cognee Cloud:
+# {
+#   "search_result": ["paragraph 1", "paragraph 2"],
+#   "score": 0.85
+# }
+```
+
+The `search_result` field is an array of strings, not a single `content` field. The CLI handles this automatically, but if writing custom integrations, parse `search_result` array.
+
+### Quality Tests Fail Due to LLM Variability
+
+Quality tests (`make cognee-test`) use keyword matching against LLM-generated responses. LLM responses vary, so:
+
+```bash
+# If tests fail with "missing keywords":
+# 1. Check what content was actually indexed
+make cognee-search QUERY="architecture" --verbose
+
+# 2. Run tests with verbose output to see actual responses
+make cognee-test VERBOSE=1
+
+# 3. The default tests use flexible keywords:
+#    - "architecture" (not "layer" or "plugin")
+#    - "plugin" (not specific plugin names)
+#    - "test" (not "pytest" or "coverage")
+```
+
+**Best practice**: When creating custom test queries, use broad keywords that should appear in any reasonable LLM response about the topic.
+
+### Git Blocks Commits Due to "Secrets" in checksums.json
+
+The `.cognee/checksums.json` file contains SHA256 file hashes that may trigger secret detection:
+
+```bash
+# Example content that triggers false positive:
+# "docs/architecture/security.md": "a3f2b1c9e8d7..."
+
+# Solution: These files are gitignored
+cat devtools/agent-memory/.gitignore
+# .cognee/checksums.json
+# .cognee/state.json
+# .cognee/checkpoint.json
+```
+
+If you see Aikido or other secret scanners flag these files, verify the `.gitignore` is in place. The hashes are file content checksums, not actual secrets.
+
 ---
 
 ## 9. Common Workflows
@@ -419,7 +492,18 @@ make cognee-repair
 # The bd prime command includes Cognee context injection
 
 bd prime  # Beads prime command with Cognee integration
+
+# Or use the session-recover hook directly
+./scripts/session-recover
 ```
+
+**What session recovery does**:
+1. Syncs Linear issues (`bd linear sync --pull`)
+2. Shows ready work (`bd ready`)
+3. Queries Cognee for relevant context based on active issues
+4. Provides a summary of where you left off
+
+**Tip**: If Cognee is unavailable, session recovery still works - it just skips the context injection step.
 
 ---
 
