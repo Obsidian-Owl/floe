@@ -11,6 +11,17 @@
   },
   "model": "claude-opus-4-5-20251101",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/session-recover --quiet 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
