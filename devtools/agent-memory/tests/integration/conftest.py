@@ -56,8 +56,9 @@ def invalid_cognee_config(monkeypatch: pytest.MonkeyPatch) -> AgentMemoryConfig:
     Uses a clearly invalid key to test authentication failure handling.
     Uses monkeypatch for proper cleanup after test completes.
     """
-    from agent_memory.config import AgentMemoryConfig
     from pydantic import SecretStr
+
+    from agent_memory.config import AgentMemoryConfig
 
     # Get original OpenAI key to preserve it (needed for some API calls)
     original_openai_key = os.environ.get("OPENAI_API_KEY", "sk-test-invalid")

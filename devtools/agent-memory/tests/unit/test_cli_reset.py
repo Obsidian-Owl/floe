@@ -11,7 +11,6 @@ Implementation: T044 (FLO-629)
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -88,7 +87,7 @@ class TestResetCommand:
 
             mock_path_class.side_effect = mock_path
 
-            result = runner.invoke(app, ["reset", "--confirm"])
+            _result = runner.invoke(app, ["reset", "--confirm"])
 
             # Should call prune_system
             mock_client.prune_system.assert_called_once_with(
@@ -98,7 +97,9 @@ class TestResetCommand:
             )
 
     @pytest.mark.requirement("FR-022")
-    def test_reset_deletes_state_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reset_deletes_state_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test reset deletes local state files."""
         from agent_memory.cli import app
 
@@ -133,7 +134,9 @@ class TestResetCommand:
             assert not checkpoint_file.exists()
 
     @pytest.mark.requirement("FR-022")
-    def test_reset_handles_missing_state_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reset_handles_missing_state_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test reset handles case where state files don't exist."""
         from agent_memory.cli import app
 
@@ -159,7 +162,9 @@ class TestResetCommand:
             assert "Reset completed successfully" in result.output
 
     @pytest.mark.requirement("FR-022")
-    def test_reset_shows_success_message(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reset_shows_success_message(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test reset shows success message on completion."""
         from agent_memory.cli import app
 
@@ -185,7 +190,9 @@ class TestResetCommand:
             assert "Reset completed successfully" in result.output
 
     @pytest.mark.requirement("FR-022")
-    def test_reset_handles_prune_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reset_handles_prune_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test reset handles prune system errors gracefully."""
         from agent_memory.cli import app
         from agent_memory.cognee_client import CogneeClientError

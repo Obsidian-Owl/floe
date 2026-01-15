@@ -277,7 +277,7 @@ class TestHealthCheck:
     @pytest.mark.asyncio
     async def test_health_check_all_healthy(self, tmp_path: Path) -> None:
         """Test health_check returns healthy when all components healthy."""
-        from agent_memory.ops.health import ComponentHealth, health_check
+        from agent_memory.ops.health import health_check
 
         mock_config = MagicMock()
         mock_config.cognee_api_url = "https://api.cognee.ai"

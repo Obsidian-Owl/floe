@@ -12,7 +12,7 @@ Implementation: T045 (FLO-630)
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -377,7 +377,7 @@ class TestDefaultTestQueries:
             )
             mock_validate.return_value = mock_report
 
-            result = runner.invoke(app, ["test"])
+            _result = runner.invoke(app, ["test"])
 
             # Validate that default queries were fetched
             mock_queries.assert_called_once()

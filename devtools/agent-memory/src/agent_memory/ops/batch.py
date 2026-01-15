@@ -9,9 +9,10 @@ Implementation: T039 (FLO-624)
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, computed_field
 

@@ -544,7 +544,6 @@ class TestBatchResultSerialization:
     @pytest.mark.requirement("FR-018")
     def test_batch_result_json_serializable(self) -> None:
         """Test BatchResult can be serialized to JSON."""
-        import json
 
         from agent_memory.ops.batch import BatchResult
 
