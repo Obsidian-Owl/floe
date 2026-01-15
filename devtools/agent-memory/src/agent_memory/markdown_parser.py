@@ -43,16 +43,20 @@ class ParsedContent:
 
 
 # Regex patterns for parsing
+# Note: Patterns avoid ReDoS by using anchors and avoiding nested quantifiers
 FRONTMATTER_PATTERN = re.compile(
-    r"^---\s*\n(.*?)\n---\s*\n?",
+    r"^---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)",
     re.DOTALL,
 )
-"""Matches YAML frontmatter between --- delimiters."""
+"""Matches YAML frontmatter between --- delimiters.
 
-H1_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+Uses [ \\t]* instead of \\s* to avoid ReDoS from backtracking with mixed whitespace.
+"""
+
+H1_PATTERN = re.compile(r"^#[ \t]+([^\n]+)$", re.MULTILINE)
 """Matches first-level headings (# Title)."""
 
-HEADER_PATTERN = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+HEADER_PATTERN = re.compile(r"^(#{1,6})[ \t]+([^\n]+)$", re.MULTILINE)
 """Matches all heading levels (# through ######)."""
 
 
