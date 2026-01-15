@@ -870,18 +870,94 @@ def search(
 
 
 @app.command()
-def coverage() -> None:
+def coverage(
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Show detailed list of missing files"),
+    ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Output format: table, json"),
+    ] = "table",
+) -> None:
     """Show coverage report comparing indexed vs filesystem.
 
-    Reports files indexed, missing, and orphaned.
+    Reports total files, indexed files, coverage percentage, and optionally
+    lists missing and extra (stale) files.
+
+    Examples:
+        agent-memory coverage              # Show summary
+        agent-memory coverage --verbose    # Show missing files
+        agent-memory coverage --format json  # JSON output
     """
     config = _load_config()
     if config is None:
         raise typer.Exit(code=1)
 
-    typer.echo("Coverage report:")
-    typer.secho("  Not yet implemented - requires ops/coverage.py", fg=typer.colors.YELLOW)
-    # Will be implemented in Phase 4
+    client = CogneeClient(config)
+
+    async def _coverage() -> None:
+        from agent_memory.ops.coverage import analyze_coverage
+
+        try:
+            report = await analyze_coverage(config, client)
+
+            if output_format == "json":
+                typer.echo(report.model_dump_json(indent=2))
+                return
+
+            # Table format output
+            typer.secho("Coverage Report", fg=typer.colors.CYAN, bold=True)
+            typer.echo()
+
+            # Determine status color
+            if report.coverage_percentage >= 100.0:
+                status_color = typer.colors.GREEN
+                status = "COMPLETE"
+            elif report.coverage_percentage >= 80.0:
+                status_color = typer.colors.YELLOW
+                status = "PARTIAL"
+            else:
+                status_color = typer.colors.RED
+                status = "LOW"
+
+            typer.echo(f"  Total files:    {report.total_files}")
+            typer.echo(f"  Indexed files:  {report.indexed_files}")
+            typer.secho(
+                f"  Coverage:       {report.coverage_percentage:.1f}% ({status})",
+                fg=status_color,
+            )
+
+            if report.missing_files:
+                typer.echo(f"  Missing files:  {len(report.missing_files)}")
+            if report.extra_files:
+                typer.echo(f"  Stale files:    {len(report.extra_files)}")
+
+            # Show details if verbose
+            if verbose:
+                if report.missing_files:
+                    typer.echo()
+                    typer.secho("Missing files (not indexed):", fg=typer.colors.YELLOW)
+                    for f in report.missing_files:
+                        typer.echo(f"  - {f}")
+
+                if report.extra_files:
+                    typer.echo()
+                    typer.secho(
+                        "Stale files (indexed but not on filesystem):",
+                        fg=typer.colors.YELLOW,
+                    )
+                    for f in report.extra_files:
+                        typer.echo(f"  - {f}")
+
+            # Exit with appropriate code
+            if not report.is_complete:
+                raise typer.Exit(code=1)
+
+        except CogneeClientError as e:
+            _exit_with_error(str(e))
+
+    _run_async(_coverage())
 
 
 @app.command()
