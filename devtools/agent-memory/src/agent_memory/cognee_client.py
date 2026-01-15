@@ -115,9 +115,7 @@ class CogneeClient:
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(
                     f"{self._config.cognee_api_url}/api/health",
-                    headers={
-                        "X-Api-Key": self._config.cognee_api_key.get_secret_value()
-                    },
+                    headers={"X-Api-Key": self._config.cognee_api_key.get_secret_value()},
                     timeout=10.0,
                 )
                 latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -127,9 +125,7 @@ class CogneeClient:
                         "connection_validation_auth_failed",
                         status_code=response.status_code,
                     )
-                    raise CogneeAuthenticationError(
-                        "Authentication failed - check COGNEE_API_KEY"
-                    )
+                    raise CogneeAuthenticationError("Authentication failed - check COGNEE_API_KEY")
 
                 if response.status_code != 200:
                     self._log.error(
@@ -153,9 +149,7 @@ class CogneeClient:
             ) from e
         except httpx.ConnectError as e:
             self._log.error("connection_validation_unreachable", error=str(e))
-            raise CogneeConnectionError(
-                f"Cannot reach {self._config.cognee_api_url}: {e}"
-            ) from e
+            raise CogneeConnectionError(f"Cannot reach {self._config.cognee_api_url}: {e}") from e
 
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers with authentication.
@@ -254,9 +248,7 @@ class CogneeClient:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self._config.cognee_api_url}/api/health",
-                    headers={
-                        "X-Api-Key": self._config.cognee_api_key.get_secret_value()
-                    },
+                    headers={"X-Api-Key": self._config.cognee_api_key.get_secret_value()},
                     timeout=10.0,
                 )
                 response_time = int((time.monotonic() - start_time) * 1000)
@@ -608,9 +600,7 @@ class CogneeClient:
             if isinstance(datasets_data, list):
                 datasets_list = datasets_data
             elif isinstance(datasets_data, dict):
-                datasets_list = (
-                    datasets_data.get("datasets") or datasets_data.get("data") or []
-                )
+                datasets_list = datasets_data.get("datasets") or datasets_data.get("data") or []
             else:
                 datasets_list = []
 
@@ -682,8 +672,7 @@ class CogneeClient:
                 datasets_list = []
 
             dataset_names = [
-                d.get("name", str(d)) if isinstance(d, dict) else str(d)
-                for d in datasets_list
+                d.get("name", str(d)) if isinstance(d, dict) else str(d) for d in datasets_list
             ]
 
             self._log.info("list_datasets_completed", count=len(dataset_names))

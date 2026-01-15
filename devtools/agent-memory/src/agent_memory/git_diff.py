@@ -286,9 +286,7 @@ def _matches_double_star_pattern(path_str: str, pattern: str) -> bool:
         # Match prefix at start and suffix anywhere after
         if path_str.startswith(prefix):
             remaining = path_str[len(prefix) :]
-            return fnmatch.fnmatch(remaining, f"*{suffix}") or remaining.endswith(
-                suffix
-            )
+            return fnmatch.fnmatch(remaining, f"*{suffix}") or remaining.endswith(suffix)
 
     # Fallback to simple fnmatch
     return fnmatch.fnmatch(path_str, pattern)

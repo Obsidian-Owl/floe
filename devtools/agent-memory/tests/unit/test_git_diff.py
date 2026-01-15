@@ -231,9 +231,7 @@ class TestGetChangedFiles:
                 result = MagicMock()
                 result.stdout = str(tmp_path) + "\n"
                 return result
-            raise subprocess.CalledProcessError(
-                1, cmd, stderr="fatal: some other error"
-            )
+            raise subprocess.CalledProcessError(1, cmd, stderr="fatal: some other error")
 
         with patch("subprocess.run", side_effect=mock_run):
             with pytest.raises(GitError, match="Git diff failed"):

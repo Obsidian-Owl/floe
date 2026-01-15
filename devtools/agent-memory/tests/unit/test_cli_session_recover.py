@@ -56,9 +56,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "plugin-system"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "plugin-system"])
 
             assert result.exit_code == 0
             mock_retrieve.assert_called_once()
@@ -87,9 +85,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "api"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "api"])
 
             assert result.exit_code == 0
             assert "src/api.py" in result.output
@@ -117,9 +113,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "plugin"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "plugin"])
 
             assert result.exit_code == 0
             assert "FLO-123" in result.output
@@ -151,9 +145,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "models"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "models"])
 
             assert result.exit_code == 0
             assert "Use Pydantic v2" in result.output
@@ -182,9 +174,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "session"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "session"])
 
             assert result.exit_code == 0
             assert "Implemented session recovery feature" in result.output
@@ -204,9 +194,7 @@ class TestSessionRecoverCommand:
             mock_client_class.return_value = mock_client
             mock_retrieve.return_value = None
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "unknown-area"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "unknown-area"])
 
             assert result.exit_code == 0
             assert "No prior session" in result.output or "not found" in result.output.lower()
@@ -219,9 +207,7 @@ class TestSessionRecoverCommand:
         with patch("agent_memory.cli._load_config") as mock_config:
             mock_config.return_value = None
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "test"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "test"])
 
             assert result.exit_code == 1
 
@@ -241,9 +227,7 @@ class TestSessionRecoverCommand:
             mock_client_class.return_value = mock_client
             mock_retrieve.side_effect = CogneeClientError("API error")
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "test"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "test"])
 
             assert result.exit_code == 1
             assert "API error" in result.output
@@ -272,9 +256,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "module"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "module"])
 
             assert result.exit_code == 0
             assert "12345678-1234-5678-1234-567812345678" in result.output
@@ -301,9 +283,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "module"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "module"])
 
             assert result.exit_code == 0
             assert "2026-01-15" in result.output
@@ -333,9 +313,7 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(
-                app, ["session-recover", "--work-area", "api"]
-            )
+            result = runner.invoke(app, ["session-recover", "--work-area", "api"])
 
             assert result.exit_code == 0
             # All sections should appear

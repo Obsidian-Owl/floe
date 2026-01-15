@@ -208,9 +208,7 @@ class TestResetCommand:
         ):
             mock_config.return_value = MagicMock()
             mock_client = MagicMock()
-            mock_client.prune_system = AsyncMock(
-                side_effect=CogneeClientError("Connection failed")
-            )
+            mock_client.prune_system = AsyncMock(side_effect=CogneeClientError("Connection failed"))
             mock_client_class.return_value = mock_client
 
             result = runner.invoke(app, ["reset", "--confirm"])

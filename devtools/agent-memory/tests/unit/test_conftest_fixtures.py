@@ -35,9 +35,7 @@ class TestMockCogneeClientFixture:
     """Tests for mock_cognee_client fixture."""
 
     @pytest.mark.requirement("FR-016")
-    def test_mock_client_has_async_methods(
-        self, mock_cognee_client: MagicMock
-    ) -> None:
+    def test_mock_client_has_async_methods(self, mock_cognee_client: MagicMock) -> None:
         """Test mock_cognee_client has all async methods configured."""
         # Verify async methods exist
         assert hasattr(mock_cognee_client, "validate_connection")
@@ -48,18 +46,14 @@ class TestMockCogneeClientFixture:
 
     @pytest.mark.requirement("FR-016")
     @pytest.mark.asyncio
-    async def test_mock_client_validate_connection(
-        self, mock_cognee_client: MagicMock
-    ) -> None:
+    async def test_mock_client_validate_connection(self, mock_cognee_client: MagicMock) -> None:
         """Test mock_cognee_client.validate_connection returns latency."""
         result = await mock_cognee_client.validate_connection()
         assert result == 100.0
 
     @pytest.mark.requirement("FR-016")
     @pytest.mark.asyncio
-    async def test_mock_client_search_returns_empty(
-        self, mock_cognee_client: MagicMock
-    ) -> None:
+    async def test_mock_client_search_returns_empty(self, mock_cognee_client: MagicMock) -> None:
         """Test mock_cognee_client.search returns empty results by default."""
         result = await mock_cognee_client.search("test query")
         assert result.results == []
@@ -83,9 +77,7 @@ class TestSampleSessionContextFixture:
     def test_sample_context_has_work_areas(self, sample_session_context) -> None:
         """Test sample_session_context has work areas."""
         assert len(sample_session_context.active_work_areas) == 2
-        assert any(
-            "session.py" in area for area in sample_session_context.active_work_areas
-        )
+        assert any("session.py" in area for area in sample_session_context.active_work_areas)
 
     @pytest.mark.requirement("FR-016")
     def test_sample_context_has_tasks(self, sample_session_context) -> None:
@@ -132,9 +124,7 @@ class TestMockSearchResultFixtures:
         assert "FLO-123" in content
 
     @pytest.mark.requirement("FR-016")
-    def test_search_result_empty_has_no_results(
-        self, mock_search_result_empty: MagicMock
-    ) -> None:
+    def test_search_result_empty_has_no_results(self, mock_search_result_empty: MagicMock) -> None:
         """Test mock_search_result_empty has no results."""
         assert mock_search_result_empty.results == []
 

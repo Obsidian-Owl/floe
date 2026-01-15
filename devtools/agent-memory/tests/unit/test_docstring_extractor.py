@@ -162,9 +162,7 @@ class TestExtractClassDocstring:
     """Tests for class docstring extraction."""
 
     @pytest.mark.requirement("FR-007")
-    def test_extract_class_docstring(
-        self, python_file_with_class: Path
-    ) -> None:
+    def test_extract_class_docstring(self, python_file_with_class: Path) -> None:
         """Test extraction of class docstring with name and line number."""
         entries = extract_docstrings(python_file_with_class)
 
@@ -179,9 +177,7 @@ class TestExtractClassDocstring:
         assert class_entry.source_path == python_file_with_class
 
     @pytest.mark.requirement("FR-007")
-    def test_extract_class_with_bases(
-        self, tmp_path: Path
-    ) -> None:
+    def test_extract_class_with_bases(self, tmp_path: Path) -> None:
         """Test extraction of class docstring includes base classes."""
         content = '''"""Module."""
 
@@ -202,9 +198,7 @@ class ChildClass(ParentClass, MixinClass):
         assert "MixinClass" in class_entry.bases
 
     @pytest.mark.requirement("FR-007")
-    def test_extract_class_methods(
-        self, python_file_with_class: Path
-    ) -> None:
+    def test_extract_class_methods(self, python_file_with_class: Path) -> None:
         """Test extraction captures method names for classes."""
         entries = extract_docstrings(python_file_with_class)
 
@@ -219,9 +213,7 @@ class TestExtractMethodDocstring:
     """Tests for method/function docstring extraction."""
 
     @pytest.mark.requirement("FR-006")
-    def test_extract_function_docstring(
-        self, python_file_with_function: Path
-    ) -> None:
+    def test_extract_function_docstring(self, python_file_with_function: Path) -> None:
         """Test extraction of standalone function docstring."""
         entries = extract_docstrings(python_file_with_function)
 
@@ -235,9 +227,7 @@ class TestExtractMethodDocstring:
         assert func_entry.line_number == 3  # function starts on line 3 (after module docstring)
 
     @pytest.mark.requirement("FR-006")
-    def test_extract_method_docstring(
-        self, python_file_with_class: Path
-    ) -> None:
+    def test_extract_method_docstring(self, python_file_with_class: Path) -> None:
         """Test extraction of class method docstring."""
         entries = extract_docstrings(python_file_with_class)
 
@@ -250,9 +240,7 @@ class TestExtractMethodDocstring:
         assert "Initialize the class" in method_entry.docstring
 
     @pytest.mark.requirement("FR-006")
-    def test_extract_function_signature(
-        self, python_file_with_function: Path
-    ) -> None:
+    def test_extract_function_signature(self, python_file_with_function: Path) -> None:
         """Test that function signature is captured."""
         entries = extract_docstrings(python_file_with_function)
 
@@ -269,9 +257,7 @@ class TestExtractGoogleStyleDocstring:
     """Tests for Google-style docstring section parsing."""
 
     @pytest.mark.requirement("FR-006")
-    def test_parse_args_section(
-        self, python_file_with_function: Path
-    ) -> None:
+    def test_parse_args_section(self, python_file_with_function: Path) -> None:
         """Test parsing of Args section in Google-style docstring."""
         entries = extract_docstrings(python_file_with_function)
 
@@ -285,9 +271,7 @@ class TestExtractGoogleStyleDocstring:
         assert "multiplier" in args_section
 
     @pytest.mark.requirement("FR-006")
-    def test_parse_returns_section(
-        self, python_file_with_function: Path
-    ) -> None:
+    def test_parse_returns_section(self, python_file_with_function: Path) -> None:
         """Test parsing of Returns section in Google-style docstring."""
         entries = extract_docstrings(python_file_with_function)
 
@@ -300,9 +284,7 @@ class TestExtractGoogleStyleDocstring:
         assert "float" in returns_section.lower()
 
     @pytest.mark.requirement("FR-006")
-    def test_parse_raises_section(
-        self, python_file_with_function: Path
-    ) -> None:
+    def test_parse_raises_section(self, python_file_with_function: Path) -> None:
         """Test parsing of Raises section in Google-style docstring."""
         entries = extract_docstrings(python_file_with_function)
 
@@ -316,9 +298,7 @@ class TestExtractGoogleStyleDocstring:
         assert "TypeError" in raises_section
 
     @pytest.mark.requirement("FR-006")
-    def test_parse_examples_section(
-        self, python_file_with_function: Path
-    ) -> None:
+    def test_parse_examples_section(self, python_file_with_function: Path) -> None:
         """Test parsing of Examples section in Google-style docstring."""
         entries = extract_docstrings(python_file_with_function)
 
@@ -332,9 +312,7 @@ class TestExtractGoogleStyleDocstring:
         assert "6.0" in examples_section
 
     @pytest.mark.requirement("FR-006")
-    def test_parse_attributes_section(
-        self, python_file_with_class: Path
-    ) -> None:
+    def test_parse_attributes_section(self, python_file_with_class: Path) -> None:
         """Test parsing of Attributes section in class docstring."""
         entries = extract_docstrings(python_file_with_class)
 
@@ -352,9 +330,7 @@ class TestHandleMalformedDocstring:
     """Tests for handling malformed or missing docstrings."""
 
     @pytest.mark.requirement("FR-006")
-    def test_function_without_docstring(
-        self, python_file_with_malformed_docstring: Path
-    ) -> None:
+    def test_function_without_docstring(self, python_file_with_malformed_docstring: Path) -> None:
         """Test handling of functions without docstrings."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 
@@ -362,14 +338,11 @@ class TestHandleMalformedDocstring:
         func_names = [e.name for e in entries if e.entry_type == "function"]
         # no_docstring and empty_docstring should either be absent or have empty docstring
         assert "no_docstring" not in func_names or any(
-            e.name == "no_docstring" and (e.docstring == "" or e.docstring is None)
-            for e in entries
+            e.name == "no_docstring" and (e.docstring == "" or e.docstring is None) for e in entries
         )
 
     @pytest.mark.requirement("FR-006")
-    def test_empty_docstring(
-        self, python_file_with_malformed_docstring: Path
-    ) -> None:
+    def test_empty_docstring(self, python_file_with_malformed_docstring: Path) -> None:
         """Test handling of empty docstrings."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 
@@ -380,9 +353,7 @@ class TestHandleMalformedDocstring:
             assert empty_entries[0].docstring == "" or empty_entries[0].docstring is None
 
     @pytest.mark.requirement("FR-006")
-    def test_incomplete_sections_graceful(
-        self, python_file_with_malformed_docstring: Path
-    ) -> None:
+    def test_incomplete_sections_graceful(self, python_file_with_malformed_docstring: Path) -> None:
         """Test graceful handling of incomplete Google-style sections."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 
@@ -396,9 +367,7 @@ class TestHandleMalformedDocstring:
         assert entry.sections is None or isinstance(entry.sections, dict)
 
     @pytest.mark.requirement("FR-006")
-    def test_class_without_docstring(
-        self, python_file_with_malformed_docstring: Path
-    ) -> None:
+    def test_class_without_docstring(self, python_file_with_malformed_docstring: Path) -> None:
         """Test handling of classes without docstrings."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 
@@ -408,9 +377,7 @@ class TestHandleMalformedDocstring:
             assert no_doc_class[0].docstring == "" or no_doc_class[0].docstring is None
 
     @pytest.mark.requirement("FR-006")
-    def test_syntax_error_graceful(
-        self, python_file_with_syntax_error: Path
-    ) -> None:
+    def test_syntax_error_graceful(self, python_file_with_syntax_error: Path) -> None:
         """Test graceful handling of Python files with syntax errors."""
         # Should not raise exception, but return empty list or partial results
         entries = extract_docstrings(python_file_with_syntax_error)

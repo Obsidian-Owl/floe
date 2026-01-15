@@ -48,27 +48,29 @@ class DocstringEntry:
 
 
 # Google-style section headers
-GOOGLE_STYLE_SECTIONS = frozenset({
-    "Args",
-    "Arguments",
-    "Attributes",
-    "Example",
-    "Examples",
-    "Keyword Args",
-    "Keyword Arguments",
-    "Note",
-    "Notes",
-    "Other Parameters",
-    "Parameters",
-    "Raises",
-    "References",
-    "Returns",
-    "See Also",
-    "Todo",
-    "Warning",
-    "Warnings",
-    "Yields",
-})
+GOOGLE_STYLE_SECTIONS = frozenset(
+    {
+        "Args",
+        "Arguments",
+        "Attributes",
+        "Example",
+        "Examples",
+        "Keyword Args",
+        "Keyword Arguments",
+        "Note",
+        "Notes",
+        "Other Parameters",
+        "Parameters",
+        "Raises",
+        "References",
+        "Returns",
+        "See Also",
+        "Todo",
+        "Warning",
+        "Warnings",
+        "Yields",
+    }
+)
 
 # Pattern to match section headers
 SECTION_HEADER_PATTERN = re.compile(

@@ -334,9 +334,13 @@ def init(
                             datasets_to_cognify.add(source.dataset)
 
                             # Save checkpoint after each file
-                            checkpoint_file.write_text(json.dumps({
-                                "completed_files": all_processed_files,
-                            }))
+                            checkpoint_file.write_text(
+                                json.dumps(
+                                    {
+                                        "completed_files": all_processed_files,
+                                    }
+                                )
+                            )
                 else:
                     # Standard output without progress bar
                     for i, file_path in enumerate(files, 1):
@@ -363,9 +367,13 @@ def init(
                         datasets_to_cognify.add(source.dataset)
 
                         # Save checkpoint after each file
-                        checkpoint_file.write_text(json.dumps({
-                            "completed_files": all_processed_files,
-                        }))
+                        checkpoint_file.write_text(
+                            json.dumps(
+                                {
+                                    "completed_files": all_processed_files,
+                                }
+                            )
+                        )
 
             # Run cognify for each dataset
             if datasets_to_cognify:
@@ -538,9 +546,7 @@ def sync(
                         )
                         raise typer.Exit(code=0)
 
-                    typer.echo(
-                        f"Found {len(files_to_sync)} changed file(s) since {since}..."
-                    )
+                    typer.echo(f"Found {len(files_to_sync)} changed file(s) since {since}...")
                 except GitError as e:
                     typer.secho(f"Git error: {e}", fg=typer.colors.RED, err=True)
                     typer.echo("Falling back to syncing all configured sources...")
@@ -635,9 +641,7 @@ def _get_all_source_files(config: AgentMemoryConfig) -> list[Path]:
     return files
 
 
-def _filter_by_dataset(
-    files: list[Path], config: AgentMemoryConfig, dataset: str
-) -> list[Path]:
+def _filter_by_dataset(files: list[Path], config: AgentMemoryConfig, dataset: str) -> list[Path]:
     """Filter files to those matching a specific dataset.
 
     Args:
@@ -827,10 +831,9 @@ def search(
             filtered_results = result.results
             if dataset:
                 filtered_results = [
-                    item for item in result.results
-                    if item.dataset == dataset or (
-                        item.source_path and dataset in item.source_path
-                    )
+                    item
+                    for item in result.results
+                    if item.dataset == dataset or (item.source_path and dataset in item.source_path)
                 ]
 
             typer.echo(f"Query: {result.query}")
@@ -1288,9 +1291,7 @@ def test(
                 if result.found_keywords:
                     typer.echo(f"         Found: {', '.join(result.found_keywords)}")
                 if result.missing_keywords:
-                    typer.echo(
-                        f"         Missing: {', '.join(result.missing_keywords)}"
-                    )
+                    typer.echo(f"         Missing: {', '.join(result.missing_keywords)}")
                 if result.error:
                     typer.echo(f"         Error: {result.error}")
 

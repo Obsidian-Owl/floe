@@ -37,9 +37,7 @@ class TestSessionSaveCommand:
             mock_client_class.return_value = mock_client
             mock_save.return_value = None
 
-            result = runner.invoke(
-                app, ["session-save", "--issues", "FLO-123,FLO-456"]
-            )
+            result = runner.invoke(app, ["session-save", "--issues", "FLO-123,FLO-456"])
 
             assert result.exit_code == 0
             mock_save.assert_called_once()
@@ -148,10 +146,14 @@ class TestSessionSaveCommand:
                 app,
                 [
                     "session-save",
-                    "--issues", "FLO-123",
-                    "--decisions", "Use REST API",
-                    "--work-areas", "src/api.py",
-                    "--summary", "Added API endpoints",
+                    "--issues",
+                    "FLO-123",
+                    "--decisions",
+                    "Use REST API",
+                    "--work-areas",
+                    "src/api.py",
+                    "--summary",
+                    "Added API endpoints",
                 ],
             )
 
@@ -180,9 +182,7 @@ class TestSessionSaveCommand:
             mock_client_class.return_value = mock_client
             mock_save.return_value = None
 
-            result = runner.invoke(
-                app, ["session-save", "--issues", "FLO-123"]
-            )
+            result = runner.invoke(app, ["session-save", "--issues", "FLO-123"])
 
             assert result.exit_code == 0
             assert "Session context saved" in result.output
@@ -202,9 +202,7 @@ class TestSessionSaveCommand:
             mock_client_class.return_value = mock_client
             mock_save.return_value = None
 
-            result = runner.invoke(
-                app, ["session-save", "--issues", "FLO-123"]
-            )
+            result = runner.invoke(app, ["session-save", "--issues", "FLO-123"])
 
             assert result.exit_code == 0
             # Session ID should appear in output (UUID format)

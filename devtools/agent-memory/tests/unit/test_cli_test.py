@@ -302,9 +302,7 @@ class TestTestCommand:
                 total_tests=5,
                 passed_tests=4,
                 failed_tests=1,
-                results=[
-                    TestResult(query=f"q{i}", passed=(i != 3)) for i in range(5)
-                ],
+                results=[TestResult(query=f"q{i}", passed=(i != 3)) for i in range(5)],
             )
             mock_validate.return_value = mock_report
 
@@ -371,9 +369,7 @@ class TestDefaultTestQueries:
                 total_tests=len(default_queries),
                 passed_tests=len(default_queries),
                 failed_tests=0,
-                results=[
-                    TestResult(query=q.query, passed=True) for q in default_queries
-                ],
+                results=[TestResult(query=q.query, passed=True) for q in default_queries],
             )
             mock_validate.return_value = mock_report
 
