@@ -41,6 +41,13 @@ help: ## Show this help message
 	@echo "  make cognee-mcp-stop   Stop running MCP server"
 	@echo "  make cognee-mcp-config Generate MCP configuration (INSTALL=1)"
 	@echo ""
+	@echo "Agent Memory Operations:"
+	@echo "  make cognee-coverage   Analyze coverage (filesystem vs indexed)"
+	@echo "  make cognee-drift      Detect drift (stale/outdated content)"
+	@echo "  make cognee-repair     Repair drifted entries (DRY_RUN=1)"
+	@echo "  make cognee-reset      Full reset (CONFIRM=1 required)"
+	@echo "  make cognee-test       Run quality validation (VERBOSE=1, THRESHOLD=N)"
+	@echo ""
 	@echo "Setup:"
 	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit + Cognee)"
 	@echo ""
@@ -203,3 +210,38 @@ cognee-mcp-stop: ## Stop running Cognee MCP server
 cognee-mcp-config: ## Generate MCP configuration (INSTALL=1 to update .claude/mcp.json)
 	@cd devtools/agent-memory && uv run agent-memory mcp-config \
 		$(if $(filter 1,$(INSTALL)),--install,)
+
+# ============================================================
+# Agent Memory Operations (Coverage, Drift, Reset, Test)
+# ============================================================
+
+.PHONY: cognee-coverage
+cognee-coverage: cognee-check-env ## Analyze coverage (filesystem vs indexed content)
+	@echo "Analyzing knowledge graph coverage..."
+	@cd devtools/agent-memory && uv run agent-memory coverage
+
+.PHONY: cognee-drift
+cognee-drift: cognee-check-env ## Detect drift (stale/outdated indexed content)
+	@echo "Detecting drift in knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory drift
+
+.PHONY: cognee-repair
+cognee-repair: cognee-check-env ## Repair drifted entries (DRY_RUN=1 for preview)
+	@echo "Repairing drifted entries..."
+	@cd devtools/agent-memory && uv run agent-memory repair \
+		$(if $(filter 1,$(DRY_RUN)),--dry-run,)
+
+.PHONY: cognee-reset
+cognee-reset: cognee-check-env ## Full reset (CONFIRM=1 required for safety)
+ifndef CONFIRM
+	$(error CONFIRM=1 required. This will DELETE all indexed content. Usage: make cognee-reset CONFIRM=1)
+endif
+	@echo "Resetting knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory reset --confirm
+
+.PHONY: cognee-test
+cognee-test: cognee-check-env ## Run quality validation tests (VERBOSE=1, THRESHOLD=N)
+	@echo "Running quality validation tests..."
+	@cd devtools/agent-memory && uv run agent-memory test \
+		$(if $(filter 1,$(VERBOSE)),--verbose,) \
+		$(if $(THRESHOLD),--threshold $(THRESHOLD),)
