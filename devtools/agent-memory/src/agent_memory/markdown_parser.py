@@ -53,11 +53,17 @@ FRONTMATTER_PATTERN = re.compile(
 Uses [ \\t]* instead of \\s* to avoid ReDoS from backtracking with mixed whitespace.
 """
 
-H1_PATTERN = re.compile(r"^#[ \t]+([^\n]+)$", re.MULTILINE)
-"""Matches first-level headings (# Title)."""
+H1_PATTERN = re.compile(r"^#[ \t]+(\S[^\n]*)$", re.MULTILINE)
+"""Matches first-level headings (# Title).
 
-HEADER_PATTERN = re.compile(r"^(#{1,6})[ \t]+([^\n]+)$", re.MULTILINE)
-"""Matches all heading levels (# through ######)."""
+Uses \\S as boundary to prevent backtracking - content must start with non-whitespace.
+"""
+
+HEADER_PATTERN = re.compile(r"^(#{1,6})[ \t]+(\S[^\n]*)$", re.MULTILINE)
+"""Matches all heading levels (# through ######).
+
+Uses \\S as boundary to prevent backtracking - content must start with non-whitespace.
+"""
 
 
 def _extract_frontmatter(content: str) -> tuple[dict[str, Any], str]:
