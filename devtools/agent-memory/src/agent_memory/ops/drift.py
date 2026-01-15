@@ -238,22 +238,27 @@ def detect_drift(
                 modified.append(file_path)
 
     # Detect renamed files (same hash, different path)
-    # Build hash -> path maps
-    stored_hash_to_path: dict[str, str] = {}
+    # Build hash -> path maps (supporting multiple files per hash to handle duplicates)
+    stored_hash_to_paths: dict[str, list[str]] = {}
     for path, file_hash in checksums.items():
-        stored_hash_to_path[file_hash] = path
+        stored_hash_to_paths.setdefault(file_hash, []).append(path)
 
-    current_hash_to_path: dict[str, str] = {}
+    current_hash_to_paths: dict[str, list[str]] = {}
     for path, content in filesystem_content.items():
-        current_hash_to_path[compute_content_hash(content)] = path
+        current_hash_to_paths.setdefault(compute_content_hash(content), []).append(path)
 
     renamed: list[list[str]] = []
-    for stored_hash, stored_path in stored_hash_to_path.items():
-        if stored_hash in current_hash_to_path:
-            current_path = current_hash_to_path[stored_hash]
-            if current_path != stored_path:
-                # Same content, different path = renamed
-                renamed.append([stored_path, current_path])
+    for stored_hash, stored_paths in stored_hash_to_paths.items():
+        if stored_hash in current_hash_to_paths:
+            current_paths = current_hash_to_paths[stored_hash]
+            # Only detect rename when unambiguous: one stored path, one current path
+            # and paths are different (actual rename, not same file)
+            if len(stored_paths) == 1 and len(current_paths) == 1:
+                stored_path = stored_paths[0]
+                current_path = current_paths[0]
+                if current_path != stored_path:
+                    # Same content, different path = renamed
+                    renamed.append([stored_path, current_path])
 
     # Unchanged files (in both with same hash)
     unchanged: list[str] = []
