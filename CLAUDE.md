@@ -555,6 +555,48 @@ Linear app                      # Team progress view
 - N/A (plugin system is stateless; dbt profiles.yml is file-based output) (001-compute-plugin)
 - Python 3.10+ (Cognee requirement, matches floe standard) (10a-agent-memory)
 - Cognee Cloud (SaaS) - managed vector + graph storage, no self-hosted backends (10a-agent-memory)
+- Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation) (10b-agent-memory-quality)
+- Cognee Cloud (SaaS) - REST API integration, no local storage (10b-agent-memory-quality)
+
+## Cognee Cloud API Quirks (CRITICAL)
+
+**IMPORTANT**: The Cognee Cloud REST API uses **camelCase** field names, NOT snake_case.
+
+### Field Name Requirements
+
+| Endpoint | Wrong (snake_case) | Correct (camelCase) |
+|----------|-------------------|---------------------|
+| `/api/add` | `data`, `dataset_name` | `textData`, `datasetName` |
+| `/api/search` | `search_type`, `top_k` | `searchType`, `topK` |
+| `/api/cognify` | `datasets` | `datasets` (already correct) |
+
+**Bug History**: Using `"data"` instead of `"textData"` causes the API to use its default value
+`["Warning: long-term memory may contain dad jokes!"]` for ALL content. This bug was discovered
+2026-01-16 after all synced content was replaced with this default.
+
+### Response Format Variations
+
+The Cognee API returns different formats - implementation must handle all:
+```python
+# Format 1: Direct list
+[{"content": "...", "score": 0.9}, ...]
+
+# Format 2: Dict with results
+{"results": [{"content": "...", "score": 0.9}, ...]}
+
+# Format 3: Dict with data
+{"data": [{"content": "...", "score": 0.9}, ...]}
+
+# Format 4: Nested search_result
+[{"search_result": ["text1", "text2"], "dataset_id": "..."}, ...]
+```
+
+### Contract Tests Required
+
+All Cognee API integrations MUST have contract tests that validate field names. See:
+- `devtools/agent-memory/tests/contract/test_cognee_api_contract.py`
+- Epic 10B for validation requirements
 
 ## Recent Changes
+- 10b-agent-memory-quality: Added Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation)
 - 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)

@@ -866,6 +866,49 @@ def search(
 
 
 @app.command()
+def memify(
+    dataset: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset",
+            "-d",
+            help="Dataset to optimize. Uses default dataset if not specified.",
+        ),
+    ] = None,
+) -> None:
+    """Optimize knowledge graph using memify post-processing pipeline.
+
+    Memify improves search relevance by:
+    - Pruning stale nodes (removes outdated knowledge)
+    - Strengthening frequent connections
+    - Adding derived facts and associations
+
+    Run this after sync + cognify to enhance graph quality without rebuilding.
+
+    Example:
+        agent-memory sync --all && agent-memory memify --dataset floe
+    """
+    config = _load_config()
+    if config is None:
+        raise typer.Exit(code=1)
+
+    client = CogneeClient(config)
+
+    async def _memify() -> None:
+        try:
+            effective_dataset = dataset or config.default_dataset
+            typer.echo(f"Running memify on dataset: {effective_dataset}")
+
+            await client.memify(dataset_name=effective_dataset)
+
+            typer.secho("Memify completed successfully!", fg=typer.colors.GREEN)
+        except CogneeClientError as e:
+            _exit_with_error(str(e))
+
+    _run_async(_memify())
+
+
+@app.command()
 def coverage(
     verbose: Annotated[
         bool,
@@ -1167,9 +1210,8 @@ def reset(
         )
         typer.echo()
         typer.echo("This will delete ALL indexed content including:")
-        typer.echo("  - Knowledge graph data")
-        typer.echo("  - Vector embeddings")
-        typer.echo("  - Metadata and cache")
+        typer.echo("  - All datasets and their knowledge graph nodes")
+        typer.echo("  - Vector embeddings and metadata")
         typer.echo("  - Local state files (.cognee/state.json, .cognee/checksums.json)")
         typer.echo()
         typer.echo("To proceed, run:")
@@ -1181,16 +1223,10 @@ def reset(
     async def _reset() -> None:
         try:
             typer.echo("Pruning Cognee Cloud system...")
-            typer.echo("  Clearing graph data...")
-            typer.echo("  Clearing vector embeddings...")
-            typer.echo("  Clearing metadata...")
+            typer.echo("  Deleting all datasets (with graph nodes)...")
 
-            # Prune the Cognee system
-            await client.prune_system(
-                graph=True,
-                vector=True,
-                metadata=True,
-            )
+            # Prune the Cognee system (deletes all datasets with hard mode)
+            await client.prune_system()
 
             typer.secho("  Cognee Cloud pruned", fg=typer.colors.GREEN)
 

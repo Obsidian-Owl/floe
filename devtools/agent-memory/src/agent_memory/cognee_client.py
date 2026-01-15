@@ -90,6 +90,37 @@ class CogneeClient:
             cognee_url=config.cognee_api_url,
         )
 
+    @property
+    def _api_prefix(self) -> str:
+        """Get the API path prefix based on configured version.
+
+        Returns:
+            '/api/v1' if version is 'v1', '/api' if version is empty.
+
+        Example:
+            >>> client._api_prefix
+            '/api/v1'
+        """
+        version = self._config.cognee_api_version
+        if version:
+            return f"/api/{version}"
+        return "/api"
+
+    def _endpoint(self, path: str) -> str:
+        """Build full endpoint path with version prefix.
+
+        Args:
+            path: Endpoint path without /api prefix (e.g., '/datasets', '/search').
+
+        Returns:
+            Full endpoint path (e.g., '/api/v1/datasets').
+
+        Example:
+            >>> client._endpoint('/datasets')
+            '/api/v1/datasets'
+        """
+        return f"{self._api_prefix}{path}"
+
     async def validate_connection(self) -> float:
         """Validate connection to Cognee Cloud.
 
@@ -114,7 +145,7 @@ class CogneeClient:
         try:
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(
-                    f"{self._config.cognee_api_url}/api/health",
+                    f"{self._config.cognee_api_url}{self._endpoint('/health')}",
                     headers={"X-Api-Key": self._config.cognee_api_key.get_secret_value()},
                     timeout=10.0,
                 )
@@ -173,7 +204,7 @@ class CogneeClient:
 
         Args:
             method: HTTP method (GET, POST, DELETE).
-            endpoint: API endpoint path (e.g., "/api/add").
+            endpoint: API endpoint path (e.g., "/api/v1/add").
             json_data: Optional JSON body data.
             timeout: Request timeout in seconds.
 
@@ -247,7 +278,7 @@ class CogneeClient:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{self._config.cognee_api_url}/api/health",
+                    f"{self._config.cognee_api_url}{self._endpoint('/health')}",
                     headers={"X-Api-Key": self._config.cognee_api_key.get_secret_value()},
                     timeout=10.0,
                 )
@@ -370,12 +401,12 @@ class CogneeClient:
 
         try:
             # Use REST API to add content
-            # Cognee Cloud API expects data as list of text strings
+            # Cognee Cloud API expects textData as list of text strings (camelCase)
             response = await self._make_request(
                 "POST",
-                "/api/add",
+                self._endpoint("/add"),
                 json_data={
-                    "data": content_list,
+                    "textData": content_list,
                     "datasetName": dataset_name,
                 },
             )
@@ -412,7 +443,7 @@ class CogneeClient:
 
             response = await self._make_request(
                 "POST",
-                "/api/cognify",
+                self._endpoint("/cognify"),
                 json_data=json_data,
                 timeout=DEFAULT_TIMEOUT_SECONDS,  # Cognify can take a while
             )
@@ -429,6 +460,54 @@ class CogneeClient:
         except Exception as e:
             self._log.error("cognify_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Cognify failed: {e}") from e
+
+    async def memify(self, dataset_name: str | None = None) -> None:
+        """Optimize knowledge graph using memify post-processing pipeline.
+
+        Memify is an incremental graph optimization pipeline that:
+        - Prunes stale nodes (removes outdated knowledge)
+        - Strengthens frequent connections (increases edge weights)
+        - Reweights edges based on usage patterns
+        - Adds derived facts (infers new relationships)
+
+        Call this after cognify to improve search relevance over time
+        without rebuilding the entire knowledge graph.
+
+        Args:
+            dataset_name: Dataset to optimize. If None, uses default dataset.
+
+        Raises:
+            CogneeClientError: If memify operation fails.
+
+        Example:
+            >>> # After sync and cognify
+            >>> await client.memify(dataset_name="floe")
+            >>> # Now search will return more relevant results
+        """
+        from cogwit_sdk import CogwitConfig, cogwit
+
+        effective_dataset = dataset_name or self._config.default_dataset
+        self._log.info("memify_started", dataset=effective_dataset)
+
+        try:
+            # Use Cognee Cloud SDK for memify (not available via REST API)
+            sdk_config = CogwitConfig(
+                api_key=self._config.cognee_api_key.get_secret_value()
+            )
+            sdk = cogwit(sdk_config)
+
+            result = await sdk.memify(dataset_name=effective_dataset)
+
+            # Check for errors
+            if hasattr(result, "error") and result.error:
+                raise CogneeClientError(f"Memify failed: {result.error}")
+
+            self._log.info("memify_completed", dataset=effective_dataset)
+        except CogneeClientError:
+            raise
+        except Exception as e:
+            self._log.error("memify_failed", dataset=effective_dataset, error=str(e))
+            raise CogneeClientError(f"Memify failed: {e}") from e
 
     async def codify(self, repo_path: str, dataset_name: str | None = None) -> None:
         """Analyze code repository and build knowledge graph.
@@ -488,11 +567,11 @@ class CogneeClient:
         )
 
         try:
-            # Build request payload
+            # Build request payload (Cognee API uses camelCase)
             json_data: dict[str, Any] = {
                 "query": query,
-                "search_type": search_type,
-                "top_k": effective_top_k,
+                "searchType": search_type,
+                "topK": effective_top_k,
             }
             if dataset_name:
                 json_data["datasets"] = [dataset_name]
@@ -500,7 +579,7 @@ class CogneeClient:
             # Use REST API for search
             response = await self._make_request(
                 "POST",
-                "/api/search",
+                self._endpoint("/search"),
                 json_data=json_data,
             )
 
@@ -579,7 +658,11 @@ class CogneeClient:
             raise CogneeClientError(f"Search failed: {e}") from e
 
     async def delete_dataset(self, dataset_name: str) -> None:
-        """Delete a dataset from Cognee via REST API.
+        """Delete a dataset from Cognee via REST API with hard mode.
+
+        Uses hard delete mode to ensure both the dataset metadata AND
+        the associated knowledge graph nodes are removed. This prevents
+        data contamination from orphaned graph nodes.
 
         Args:
             dataset_name: Name of dataset to delete.
@@ -591,7 +674,7 @@ class CogneeClient:
 
         try:
             # First, list datasets to get the UUID for the given name
-            list_response = await self._make_request("GET", "/api/datasets")
+            list_response = await self._make_request("GET", self._endpoint("/datasets"))
 
             if list_response.status_code != 200:
                 error_detail = list_response.text
@@ -627,10 +710,11 @@ class CogneeClient:
                 # Dataset doesn't exist, consider this a success
                 return
 
-            # Now delete by UUID
+            # Delete dataset by UUID
+            # Note: DELETE /api/datasets/{id} removes the dataset and its data
             response = await self._make_request(
                 "DELETE",
-                f"/api/datasets/{dataset_id}",
+                f"{self._endpoint('/datasets')}/{dataset_id}",
             )
 
             if response.status_code not in (200, 204):
@@ -660,7 +744,7 @@ class CogneeClient:
         try:
             response = await self._make_request(
                 "GET",
-                "/api/datasets",
+                self._endpoint("/datasets"),
             )
 
             if response.status_code != 200:
@@ -740,9 +824,9 @@ class CogneeClient:
         self._log.info("get_status_started", dataset=dataset_name)
 
         try:
-            endpoint = "/api/status"
+            endpoint = self._endpoint("/status")
             if dataset_name:
-                endpoint = f"/api/datasets/{dataset_name}/status"
+                endpoint = f"{self._endpoint('/datasets')}/{dataset_name}/status"
 
             response = await self._make_request("GET", endpoint)
 
@@ -761,63 +845,33 @@ class CogneeClient:
             self._log.error("get_status_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Get status failed: {e}") from e
 
-    async def prune_system(
-        self,
-        *,
-        graph: bool = True,
-        vector: bool = True,
-        metadata: bool = True,
-    ) -> None:
-        """Prune system data (graph, vector, metadata) via REST API.
+    async def prune_system(self) -> None:
+        """Reset all data by deleting all datasets with hard mode.
 
-        This performs a full reset of the knowledge graph system.
+        This performs a full reset by deleting all datasets, which also
+        removes their associated knowledge graph nodes (hard delete mode).
 
-        Args:
-            graph: Delete graph data.
-            vector: Delete vector embeddings.
-            metadata: Delete metadata/cache.
+        Use this to completely clean the Cognee Cloud account of all data.
 
         Raises:
-            CogneeClientError: If prune operation fails.
+            CogneeClientError: If deletion of any dataset fails.
+
+        Note:
+            This operation cannot be undone. All data will be permanently deleted.
         """
-        self._log.info(
-            "prune_system_started",
-            graph=graph,
-            vector=vector,
-            metadata=metadata,
-        )
+        self._log.info("prune_system_started")
 
         try:
-            # Try the prune endpoint first
-            response = await self._make_request(
-                "DELETE",
-                "/api/prune",
-                json_data={
-                    "graph": graph,
-                    "vector": vector,
-                    "metadata": metadata,
-                },
-            )
+            datasets = await self.list_datasets()
+            deleted_count = 0
 
-            if response.status_code in (200, 204):
-                self._log.info("prune_system_completed")
-                return
+            for ds in datasets:
+                await self.delete_dataset(ds)  # Uses hard delete mode
+                deleted_count += 1
 
-            # If prune endpoint doesn't exist (404), fall back to deleting all datasets
-            if response.status_code == 404:
-                self._log.info(
-                    "prune_endpoint_not_found",
-                    message="Falling back to dataset deletion",
-                )
-                datasets = await self.list_datasets()
-                for ds in datasets:
-                    await self.delete_dataset(ds)
-                self._log.info("prune_system_completed", fallback="dataset_deletion")
-                return
-
-            error_detail = response.text
-            raise CogneeClientError(
-                f"Prune system failed with status {response.status_code}: {error_detail}"
+            self._log.info(
+                "prune_system_completed",
+                datasets_deleted=deleted_count,
             )
         except CogneeClientError:
             raise

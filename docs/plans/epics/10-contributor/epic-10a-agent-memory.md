@@ -11,14 +11,18 @@ Cognee Cloud integration provides persistent, graph-augmented memory for **AI co
 
 ## Status
 
-- [ ] Specification created
-- [ ] Tasks generated
-- [ ] Linear issues created
-- [ ] Implementation started
+- [x] Specification created
+- [x] Tasks generated
+- [x] Linear issues created
+- [x] Implementation started
 - [ ] Tests passing
 - [ ] Complete
 
-**Linear Project**: TBD (to be created via /speckit.taskstolinear)
+**Linear Project**: FLO (floe)
+
+**Critical Bug Found (2026-01-16)**: API field name mismatch (`"data"` vs `"textData"`) caused
+all synced content to be replaced with Cognee's default value. Code fixes applied; validation
+and testing improvements tracked in [Epic 10B](./epic-10b-agent-memory-validation.md).
 
 ---
 

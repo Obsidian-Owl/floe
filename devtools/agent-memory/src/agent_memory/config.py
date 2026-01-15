@@ -76,6 +76,10 @@ class AgentMemoryConfig(BaseSettings):
         ...,
         description="Cognee Cloud API key (from COGNEE_API_KEY environment variable)",
     )
+    cognee_api_version: str = Field(
+        default="",
+        description="Cognee API version ('' for /api/, 'v1' for /api/v1/ when available)",
+    )
 
     # LLM settings (for cognify)
     llm_provider: Literal["openai", "anthropic"] = Field(
