@@ -961,18 +961,74 @@ def coverage(
 
 
 @app.command()
-def drift() -> None:
+def drift(
+    output_format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Output format: table, json"),
+    ] = "table",
+) -> None:
     """Detect drift between indexed content and filesystem.
 
-    Identifies files that have changed since indexing.
+    Identifies files that have changed since last indexing:
+    - Modified: Same path, different content
+    - Deleted: Indexed but no longer on filesystem
+    - Renamed: Same content, different path
+
+    Examples:
+        agent-memory drift                 # Show summary
+        agent-memory drift --format json   # JSON output
     """
     config = _load_config()
     if config is None:
         raise typer.Exit(code=1)
 
-    typer.echo("Drift detection:")
-    typer.secho("  Not yet implemented - requires ops/drift.py", fg=typer.colors.YELLOW)
-    # Will be implemented in Phase 4
+    from agent_memory.ops.drift import detect_drift
+
+    report = detect_drift(config)
+
+    if output_format == "json":
+        typer.echo(report.model_dump_json(indent=2))
+        return
+
+    # Table format output
+    typer.secho("Drift Report", fg=typer.colors.CYAN, bold=True)
+    typer.echo()
+
+    # Summary
+    if report.has_drift:
+        typer.secho(f"  Drift detected: {report.total_drifted} file(s)", fg=typer.colors.YELLOW)
+    else:
+        typer.secho("  No drift detected", fg=typer.colors.GREEN)
+    typer.echo()
+
+    # Modified files
+    if report.modified_files:
+        typer.secho(f"Modified ({len(report.modified_files)}):", fg=typer.colors.YELLOW)
+        for f in report.modified_files:
+            typer.echo(f"  {f}")
+        typer.echo()
+
+    # Deleted files
+    if report.deleted_files:
+        typer.secho(f"Deleted ({len(report.deleted_files)}):", fg=typer.colors.RED)
+        for f in report.deleted_files:
+            typer.echo(f"  {f}")
+        typer.echo()
+
+    # Renamed files
+    if report.renamed_files:
+        typer.secho(f"Renamed ({len(report.renamed_files)}):", fg=typer.colors.BLUE)
+        for old_path, new_path in report.renamed_files:
+            typer.echo(f"  {old_path} -> {new_path}")
+        typer.echo()
+
+    # Unchanged summary
+    if report.unchanged_files:
+        typer.echo(f"Unchanged: {len(report.unchanged_files)} file(s)")
+
+    # Exit with appropriate code
+    if report.has_drift:
+        raise typer.Exit(code=1)
 
 
 @app.command()
