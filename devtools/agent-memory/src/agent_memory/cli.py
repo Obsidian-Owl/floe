@@ -1229,18 +1229,98 @@ def reset(
 
 
 @app.command()
-def test() -> None:
-    """Run knowledge graph test queries.
+def test(
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Show detailed results for each query"),
+    ] = False,
+    threshold: Annotated[
+        float,
+        typer.Option("--threshold", "-t", help="Pass rate threshold (default: 100)"),
+    ] = 100.0,
+) -> None:
+    """Run quality validation tests against the knowledge graph.
 
-    Validates indexed content with sample queries.
+    Executes test queries and validates that expected keywords appear in results.
+    Returns exit code 0 if pass rate meets threshold, 1 otherwise.
+
+    Examples:
+        agent-memory test                 # Run with default queries
+        agent-memory test --verbose       # Show detailed results
+        agent-memory test --threshold 80  # Pass if >=80% queries pass
     """
+    from agent_memory.ops.quality import (
+        QualityReport,
+        TestQuery,
+        create_default_test_queries,
+        validate_quality,
+    )
+
     config = _load_config()
     if config is None:
         raise typer.Exit(code=1)
 
-    typer.echo("Running test queries...")
-    typer.secho("  Not yet implemented - requires test infrastructure", fg=typer.colors.YELLOW)
-    # Will be implemented in Phase 5
+    client = CogneeClient(config)
+
+    async def _run_tests() -> QualityReport:
+        # Get default test queries
+        test_queries = create_default_test_queries()
+
+        typer.echo(f"Running {len(test_queries)} quality validation tests...")
+        typer.echo()
+
+        report = await validate_quality(client, test_queries)
+
+        # Display results
+        for result in report.results:
+            if result.passed:
+                status = typer.style("PASS", fg=typer.colors.GREEN)
+            else:
+                status = typer.style("FAIL", fg=typer.colors.RED)
+
+            typer.echo(f"  [{status}] {result.query}")
+
+            if verbose:
+                if result.result_count > 0:
+                    typer.echo(f"         Results: {result.result_count}")
+                if result.found_keywords:
+                    typer.echo(f"         Found: {', '.join(result.found_keywords)}")
+                if result.missing_keywords:
+                    typer.echo(
+                        f"         Missing: {', '.join(result.missing_keywords)}"
+                    )
+                if result.error:
+                    typer.echo(f"         Error: {result.error}")
+
+        typer.echo()
+
+        # Summary
+        if report.all_passed:
+            typer.secho(
+                f"All tests passed ({report.passed_tests}/{report.total_tests})",
+                fg=typer.colors.GREEN,
+            )
+        else:
+            typer.secho(
+                f"Tests: {report.passed_tests}/{report.total_tests} passed "
+                f"({report.pass_rate:.1f}%)",
+                fg=typer.colors.YELLOW if report.pass_rate >= threshold else typer.colors.RED,
+            )
+
+        return report
+
+    try:
+        report = _run_async(_run_tests())
+
+        # Exit code based on threshold
+        if report.pass_rate >= threshold:
+            raise typer.Exit(code=0)
+        else:
+            typer.echo(f"\nFailed: Pass rate {report.pass_rate:.1f}% < {threshold}% threshold")
+            raise typer.Exit(code=1)
+
+    except CogneeClientError as e:
+        _exit_with_error(str(e))
 
 
 @app.command()
