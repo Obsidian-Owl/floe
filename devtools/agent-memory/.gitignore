@@ -1,0 +1,6 @@
+# Agent Memory local state
+# These files contain local indexing state and file checksums
+# They should not be committed as they contain hashes that trigger secret detection
+.cognee/checksums.json
+.cognee/state.json
+.cognee/checkpoint.json

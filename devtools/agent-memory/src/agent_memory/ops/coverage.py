@@ -243,8 +243,12 @@ async def analyze_coverage(
         if checksums_path.exists():
             with checksums_path.open() as f:
                 checksums_data = json.load(f)
-                # Extract file paths from checksums data
-                indexed_files = list(checksums_data.keys())
+                # Extract file paths from checksums data and resolve relative paths
+                # Relative paths in checksums.json are relative to base_path (where CLI runs from)
+                indexed_files = []
+                for rel_path in checksums_data:
+                    abs_path = (base_path / rel_path).resolve()
+                    indexed_files.append(str(abs_path))
         else:
             indexed_files = []
 
