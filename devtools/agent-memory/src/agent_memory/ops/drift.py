@@ -205,11 +205,17 @@ def detect_drift(
         checksums_path = base_path / ".cognee" / "checksums.json"
         if checksums_path.exists():
             with checksums_path.open() as f:
-                checksums = json.load(f)
+                raw_checksums = json.load(f)
+                # Convert relative paths to absolute paths for comparison
+                # Relative paths in checksums.json are relative to base_path (where CLI runs from)
+                checksums = {}
+                for rel_path, file_hash in raw_checksums.items():
+                    abs_path = str((base_path / rel_path).resolve())
+                    checksums[abs_path] = file_hash
         else:
             checksums = {}
 
-    # Get current filesystem files
+    # Get current filesystem files (returns absolute paths)
     filesystem_files = get_all_configured_files(config, base_path)
 
     # Build filesystem content map (path -> content)
