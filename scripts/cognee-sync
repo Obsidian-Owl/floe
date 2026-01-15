@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# scripts/cognee-sync
+# Wrapper script for Cognee knowledge graph sync, designed for git hook integration.
+#
+# Usage:
+#   ./scripts/cognee-sync                    # Sync all configured sources
+#   ./scripts/cognee-sync --files "a.py b.py" # Sync specific files
+#   ./scripts/cognee-sync --async            # Run in background (non-blocking)
+#   ./scripts/cognee-sync --all              # Full sync (all sources)
+#   ./scripts/cognee-sync --dry-run          # Show what would sync
+#
+# Environment:
+#   COGNEE_API_KEY  - Required: Cognee Cloud API key
+#   OPENAI_API_KEY  - Required: OpenAI API key for embeddings
+#
+# Log output: .cognee/sync.log
+#
+# Installed by: scripts/setup-hooks.sh (for git hook integration)
+# Re-run 'make setup-hooks' after modifications
+
+set -euo pipefail
+
+# Find repo root (works with worktrees)
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+LOG_DIR="$REPO_ROOT/.cognee"
+LOG_FILE="$LOG_DIR/sync.log"
+
+# Ensure log directory exists
+mkdir -p "$LOG_DIR"
+
+# Parse arguments
+ASYNC_MODE=false
+FILES=""
+ALL_MODE=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --async|-a)
+            ASYNC_MODE=true
+            shift
+            ;;
+        --files|-f)
+            FILES="$2"
+            shift 2
+            ;;
+        --all)
+            ALL_MODE=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: cognee-sync [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --files, -f FILES   Sync specific files (space-separated)"
+            echo "  --async, -a         Run in background (non-blocking for hooks)"
+            echo "  --all               Full sync of all sources"
+            echo "  --dry-run           Show what would sync without syncing"
+            echo "  -h, --help          Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Use --help for usage information" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Log function with timestamp
+log() {
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[$timestamp] $*" >> "$LOG_FILE"
+}
+
+# Build command
+build_command() {
+    local cmd="uv run agent-memory sync"
+
+    if [[ -n "$FILES" ]]; then
+        # Note: sync command doesn't support --files yet (T025)
+        # For now, log the intent
+        log "INFO: File-specific sync requested for: $FILES"
+        log "INFO: File-specific sync not yet implemented (see T025)"
+    fi
+
+    if [[ "$ALL_MODE" == "true" ]]; then
+        log "INFO: Full sync requested"
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "INFO: Dry-run mode"
+        echo "echo '[DRY-RUN] Would execute: $cmd'"
+        return
+    fi
+
+    echo "$cmd"
+}
+
+# Execute sync
+run_sync() {
+    local cmd
+    cmd="$(build_command)"
+
+    log "INFO: Starting sync"
+    log "INFO: Command: $cmd"
+    log "INFO: Working directory: $REPO_ROOT/devtools/agent-memory"
+
+    # Change to agent-memory directory for uv context
+    cd "$REPO_ROOT/devtools/agent-memory"
+
+    # Check environment variables
+    if [[ -z "${COGNEE_API_KEY:-}" ]]; then
+        log "ERROR: COGNEE_API_KEY not set"
+        echo "ERROR: COGNEE_API_KEY environment variable is not set" >&2
+        exit 1
+    fi
+
+    if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+        log "ERROR: OPENAI_API_KEY not set"
+        echo "ERROR: OPENAI_API_KEY environment variable is not set" >&2
+        exit 1
+    fi
+
+    # Execute command and capture output
+    if eval "$cmd" >> "$LOG_FILE" 2>&1; then
+        log "INFO: Sync completed successfully"
+        echo "Cognee sync completed. Log: $LOG_FILE"
+    else
+        local exit_code=$?
+        log "ERROR: Sync failed with exit code $exit_code"
+        echo "Cognee sync failed. Check log: $LOG_FILE" >&2
+        exit $exit_code
+    fi
+}
+
+# Main execution
+main() {
+    if [[ "$ASYNC_MODE" == "true" ]]; then
+        # Run in background (non-blocking for git hooks)
+        log "INFO: Starting async sync"
+        (run_sync &) &
+        disown
+        echo "Cognee sync started in background. Log: $LOG_FILE"
+    else
+        run_sync
+    fi
+}
+
+main

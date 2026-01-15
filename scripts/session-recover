@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Session Recovery Script for Claude Code Integration
+#
+# This script integrates agent-memory session recovery with bd prime.
+# It attempts to recover prior session context from the knowledge graph
+# based on the current working directory or specified work area.
+#
+# Usage:
+#   ./scripts/session-recover [--work-area AREA] [--quiet]
+#
+# Environment:
+#   COGNEE_API_KEY - Required for Cognee Cloud access
+#   OPENAI_API_KEY - Required for embeddings
+#
+# Example:
+#   ./scripts/session-recover --work-area "plugin-system"
+#   ./scripts/session-recover  # Auto-detects from current directory
+#
+# Exit codes:
+#   0 - Success (context found or no prior context)
+#   1 - Error (missing dependencies or API failure)
+#
+# Implementation: T050 (FLO-635)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENT_MEMORY_DIR="$REPO_ROOT/devtools/agent-memory"
+
+# Parse arguments
+WORK_AREA=""
+QUIET=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --work-area|-w)
+            WORK_AREA="$2"
+            shift 2
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--work-area AREA] [--quiet]"
+            echo ""
+            echo "Options:"
+            echo "  --work-area, -w  Topic/area to recover context for"
+            echo "  --quiet, -q      Suppress non-essential output"
+            echo "  --help, -h       Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Check if agent-memory is available
+if [[ ! -d "$AGENT_MEMORY_DIR" ]]; then
+    [[ "$QUIET" != true ]] && echo "agent-memory not found at $AGENT_MEMORY_DIR" >&2
+    exit 0  # Non-intrusive exit - don't fail if agent-memory not available
+fi
+
+# Check for required environment variables
+if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
+    [[ "$QUIET" != true ]] && echo "Session recovery skipped: COGNEE_API_KEY or OPENAI_API_KEY not set"
+    exit 0  # Non-intrusive exit
+fi
+
+# Auto-detect work area from current directory if not specified
+if [[ -z "$WORK_AREA" ]]; then
+    # Use the current branch name or directory name as work area hint
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+        if [[ -n "$BRANCH" && "$BRANCH" != "main" && "$BRANCH" != "master" ]]; then
+            # Extract feature name from branch (e.g., "10a-agent-memory" from "10a-agent-memory")
+            WORK_AREA="$BRANCH"
+        fi
+    fi
+
+    # Fall back to current directory name
+    if [[ -z "$WORK_AREA" ]]; then
+        WORK_AREA="$(basename "$PWD")"
+    fi
+fi
+
+[[ "$QUIET" != true ]] && echo "Recovering session context for: $WORK_AREA"
+
+# Run session-recover command
+cd "$AGENT_MEMORY_DIR"
+if uv run agent-memory session-recover --work-area "$WORK_AREA" 2>/dev/null; then
+    exit 0
+else
+    # Non-intrusive exit - don't fail if recovery doesn't find anything
+    [[ "$QUIET" != true ]] && echo "No prior session context available for '$WORK_AREA'"
+    exit 0
+fi

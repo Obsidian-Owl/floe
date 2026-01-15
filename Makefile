@@ -29,8 +29,27 @@ help: ## Show this help message
 	@echo "  make typecheck       Run type checking (mypy)"
 	@echo "  make check           Run all CI checks (lint + typecheck + test)"
 	@echo ""
+	@echo "Agent Memory (Cognee):"
+	@echo "  make cognee-health   Check Cognee Cloud connectivity"
+	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
+	@echo "  make cognee-search   Search knowledge graph (QUERY=\"...\" required)"
+	@echo "  make cognee-codify   Extract and index Python docstrings (PATTERN=\"...\")"
+	@echo "  make cognee-sync     Sync changed files (FILES=\"...\", DRY_RUN=1, ALL=1)"
+	@echo ""
+	@echo "MCP Server (Claude Code Integration):"
+	@echo "  make cognee-mcp-start  Start Cognee MCP server (DETACH=1, PORT=...)"
+	@echo "  make cognee-mcp-stop   Stop running MCP server"
+	@echo "  make cognee-mcp-config Generate MCP configuration (INSTALL=1)"
+	@echo ""
+	@echo "Agent Memory Operations:"
+	@echo "  make cognee-coverage   Analyze coverage (filesystem vs indexed)"
+	@echo "  make cognee-drift      Detect drift (stale/outdated content)"
+	@echo "  make cognee-repair     Repair drifted entries (DRY_RUN=1)"
+	@echo "  make cognee-reset      Full reset (CONFIRM=1 required)"
+	@echo "  make cognee-test       Run quality validation (VERBOSE=1, THRESHOLD=N)"
+	@echo ""
 	@echo "Setup:"
-	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit)"
+	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit + Cognee)"
 	@echo ""
 	@echo "Use 'make <target>' to run a command."
 
@@ -119,3 +138,110 @@ clean: ## Clean generated files
 traceability: ## Check requirement traceability coverage
 	@echo "Checking requirement traceability..."
 	@uv run python -m testing.traceability --all --threshold 80
+
+# ============================================================
+# Agent Memory (Cognee Integration)
+# ============================================================
+
+.PHONY: cognee-check-env
+cognee-check-env: ## Verify required Cognee environment variables are set
+	@if [ -z "$$COGNEE_API_KEY" ]; then \
+		echo "ERROR: COGNEE_API_KEY environment variable is not set" >&2; \
+		echo "Get your API key from https://www.cognee.ai/" >&2; \
+		exit 1; \
+	fi
+	@if [ -z "$$OPENAI_API_KEY" ]; then \
+		echo "ERROR: OPENAI_API_KEY environment variable is not set" >&2; \
+		echo "Get your API key from https://platform.openai.com/" >&2; \
+		exit 1; \
+	fi
+
+.PHONY: cognee-health
+cognee-health: cognee-check-env ## Run Cognee Cloud health check
+	@echo "Checking Cognee Cloud connectivity..."
+	@cd devtools/agent-memory && uv run agent-memory health
+
+.PHONY: cognee-init
+cognee-init: cognee-check-env ## Initialize Cognee knowledge graph (PROGRESS=1 for progress bar, RESUME=1 to resume)
+	@echo "Initializing Cognee knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory init \
+		$(if $(filter 1,$(PROGRESS)),--progress,) \
+		$(if $(filter 1,$(RESUME)),--resume,)
+
+.PHONY: cognee-search
+cognee-search: cognee-check-env ## Search knowledge graph (QUERY="..." required)
+ifndef QUERY
+	$(error QUERY is required. Usage: make cognee-search QUERY="your search query")
+endif
+	@echo "Searching knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory search "$(QUERY)"
+
+.PHONY: cognee-codify
+cognee-codify: cognee-check-env ## Extract and index Python docstrings (PATTERN="..." for specific files)
+	@echo "Extracting and indexing Python docstrings..."
+	@cd devtools/agent-memory && uv run agent-memory codify \
+		$(if $(PATTERN),--pattern "$(PATTERN)",)
+
+.PHONY: cognee-sync
+cognee-sync: cognee-check-env ## Sync changed files to knowledge graph (FILES="...", DRY_RUN=1, ALL=1)
+	@echo "Syncing files to knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory sync \
+		$(if $(FILES),--files $(FILES),) \
+		$(if $(filter 1,$(DRY_RUN)),--dry-run,) \
+		$(if $(filter 1,$(ALL)),--all,)
+
+# ============================================================
+# MCP Server (Claude Code Integration)
+# ============================================================
+
+.PHONY: cognee-mcp-start
+cognee-mcp-start: cognee-check-env ## Start Cognee MCP server (DETACH=1, PORT=...)
+	@echo "Starting Cognee MCP server..."
+	@./scripts/cognee-mcp-start \
+		$(if $(filter 1,$(DETACH)),--detach,) \
+		$(if $(PORT),--port $(PORT),)
+
+.PHONY: cognee-mcp-stop
+cognee-mcp-stop: ## Stop running Cognee MCP server
+	@echo "Stopping Cognee MCP server..."
+	@./scripts/cognee-mcp-start --stop
+
+.PHONY: cognee-mcp-config
+cognee-mcp-config: ## Generate MCP configuration (INSTALL=1 to update .claude/mcp.json)
+	@cd devtools/agent-memory && uv run agent-memory mcp-config \
+		$(if $(filter 1,$(INSTALL)),--install,)
+
+# ============================================================
+# Agent Memory Operations (Coverage, Drift, Reset, Test)
+# ============================================================
+
+.PHONY: cognee-coverage
+cognee-coverage: cognee-check-env ## Analyze coverage (filesystem vs indexed content)
+	@echo "Analyzing knowledge graph coverage..."
+	@cd devtools/agent-memory && uv run agent-memory coverage
+
+.PHONY: cognee-drift
+cognee-drift: cognee-check-env ## Detect drift (stale/outdated indexed content)
+	@echo "Detecting drift in knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory drift
+
+.PHONY: cognee-repair
+cognee-repair: cognee-check-env ## Repair drifted entries (DRY_RUN=1 for preview)
+	@echo "Repairing drifted entries..."
+	@cd devtools/agent-memory && uv run agent-memory repair \
+		$(if $(filter 1,$(DRY_RUN)),--dry-run,)
+
+.PHONY: cognee-reset
+cognee-reset: cognee-check-env ## Full reset (CONFIRM=1 required for safety)
+ifndef CONFIRM
+	$(error CONFIRM=1 required. This will DELETE all indexed content. Usage: make cognee-reset CONFIRM=1)
+endif
+	@echo "Resetting knowledge graph..."
+	@cd devtools/agent-memory && uv run agent-memory reset --confirm
+
+.PHONY: cognee-test
+cognee-test: cognee-check-env ## Run quality validation tests (VERBOSE=1, THRESHOLD=N)
+	@echo "Running quality validation tests..."
+	@cd devtools/agent-memory && uv run agent-memory test \
+		$(if $(filter 1,$(VERBOSE)),--verbose,) \
+		$(if $(THRESHOLD),--threshold $(THRESHOLD),)

@@ -1,0 +1,159 @@
+# Agent Memory Configuration Schema
+# JSON Schema for .cognee/config.yaml validation
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "https://floe.dev/schemas/agent-memory/config.yaml"
+title: "Agent Memory Configuration"
+description: "Configuration schema for Epic 10A Agent Memory (Cognee Integration)"
+type: object
+
+required:
+  - version
+
+properties:
+  version:
+    type: string
+    description: "Configuration schema version"
+    pattern: "^[0-9]+\\.[0-9]+$"
+    default: "1.0"
+
+  cognee:
+    type: object
+    description: "Cognee Cloud settings"
+    properties:
+      api_url:
+        type: string
+        format: uri
+        description: "Cognee Cloud API endpoint"
+        default: "https://api.cognee.ai"
+      api_key_env:
+        type: string
+        description: "Environment variable containing API key"
+        default: "COGNEE_API_KEY"
+    additionalProperties: false
+
+  llm:
+    type: object
+    description: "LLM provider settings for cognify"
+    properties:
+      provider:
+        type: string
+        enum: ["openai", "anthropic", "ollama"]
+        description: "LLM provider"
+        default: "openai"
+      model:
+        type: string
+        description: "Model name for entity extraction"
+        default: "gpt-4o-mini"
+      api_key_env:
+        type: string
+        description: "Environment variable containing LLM API key"
+        default: "OPENAI_API_KEY"
+    additionalProperties: false
+
+  datasets:
+    type: object
+    description: "Dataset naming and configuration"
+    properties:
+      architecture:
+        type: string
+        description: "Dataset name for architecture docs"
+        default: "architecture"
+      governance:
+        type: string
+        description: "Dataset name for constitution/rules"
+        default: "governance"
+      codebase:
+        type: string
+        description: "Dataset name for docstrings"
+        default: "codebase"
+      skills:
+        type: string
+        description: "Dataset name for Claude skills"
+        default: "skills"
+    additionalProperties: false
+
+  sources:
+    type: array
+    description: "Content sources to index"
+    items:
+      type: object
+      required:
+        - path
+        - dataset
+      properties:
+        path:
+          type: string
+          description: "Path or glob pattern"
+        dataset:
+          type: string
+          description: "Target dataset name"
+        file_extensions:
+          type: array
+          items:
+            type: string
+          description: "File extensions to include"
+          default: [".md"]
+        exclude_patterns:
+          type: array
+          items:
+            type: string
+          description: "Glob patterns to exclude"
+          default: []
+      additionalProperties: false
+
+  operations:
+    type: object
+    description: "Operational settings"
+    properties:
+      batch_size:
+        type: integer
+        minimum: 1
+        maximum: 100
+        description: "Items per batch for cognify"
+        default: 20
+      search_top_k:
+        type: integer
+        minimum: 1
+        maximum: 50
+        description: "Default number of search results"
+        default: 10
+      default_search_type:
+        type: string
+        enum: ["GRAPH_COMPLETION", "RAG_COMPLETION", "CHUNKS", "CODE"]
+        description: "Default search strategy"
+        default: "GRAPH_COMPLETION"
+    additionalProperties: false
+
+additionalProperties: false
+
+# Example configuration
+examples:
+  - version: "1.0"
+    cognee:
+      api_url: "https://api.cognee.ai"
+      api_key_env: "COGNEE_API_KEY"
+    llm:
+      provider: "openai"
+      model: "gpt-4o-mini"
+      api_key_env: "OPENAI_API_KEY"
+    datasets:
+      architecture: "architecture"
+      governance: "governance"
+      codebase: "codebase"
+      skills: "skills"
+    sources:
+      - path: "docs/architecture/**/*.md"
+        dataset: "architecture"
+        file_extensions: [".md"]
+      - path: ".specify/memory/constitution.md"
+        dataset: "governance"
+      - path: ".claude/rules/*.md"
+        dataset: "governance"
+      - path: "packages/*/src/**/*.py"
+        dataset: "codebase"
+        file_extensions: [".py"]
+    operations:
+      batch_size: 20
+      search_top_k: 10
+      default_search_type: "GRAPH_COMPLETION"

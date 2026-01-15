@@ -1,0 +1,221 @@
+# Cognee Sync Orchestration Interface
+# Internal API contract for sync operations
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "https://floe.dev/schemas/agent-memory/cognee-sync.yaml"
+title: "Cognee Sync Interface"
+description: "Interface contract for CogneeSync orchestration class"
+type: object
+
+definitions:
+  SyncOperation:
+    type: object
+    description: "A sync operation request"
+    required:
+      - operation_type
+    properties:
+      operation_type:
+        type: string
+        enum: ["init", "sync", "rebuild", "repair"]
+        description: "Type of sync operation"
+      datasets:
+        type: array
+        items:
+          type: string
+        description: "Datasets to operate on (empty = all)"
+      files:
+        type: array
+        items:
+          type: string
+        description: "Specific files to sync (for incremental)"
+      force:
+        type: boolean
+        default: false
+        description: "Force operation even if checks fail"
+      dry_run:
+        type: boolean
+        default: false
+        description: "Report what would be done without doing it"
+
+  SyncResult:
+    type: object
+    description: "Result of a sync operation"
+    required:
+      - success
+      - operation_type
+    properties:
+      success:
+        type: boolean
+        description: "Whether operation completed successfully"
+      operation_type:
+        type: string
+        description: "Type of operation that was performed"
+      duration_ms:
+        type: integer
+        minimum: 0
+        description: "Operation duration in milliseconds"
+      files_processed:
+        type: integer
+        minimum: 0
+        description: "Number of files processed"
+      files_failed:
+        type: integer
+        minimum: 0
+        description: "Number of files that failed"
+      errors:
+        type: array
+        items:
+          $ref: "#/definitions/SyncError"
+        description: "Errors encountered during operation"
+      warnings:
+        type: array
+        items:
+          type: string
+        description: "Non-fatal warnings"
+
+  SyncError:
+    type: object
+    required:
+      - code
+      - message
+    properties:
+      code:
+        type: string
+        enum:
+          - "CONNECTION_FAILED"
+          - "AUTHENTICATION_FAILED"
+          - "RATE_LIMITED"
+          - "FILE_NOT_FOUND"
+          - "PARSE_ERROR"
+          - "COGNIFY_FAILED"
+          - "TIMEOUT"
+          - "UNKNOWN"
+        description: "Error code"
+      message:
+        type: string
+        description: "Human-readable error message"
+      file_path:
+        type: string
+        description: "File that caused error (if applicable)"
+      details:
+        type: object
+        description: "Additional error details"
+
+# CogneeSync class interface
+interface:
+  class_name: "CogneeSync"
+  description: "Orchestrates sync operations between filesystem and Cognee Cloud"
+
+  methods:
+    init:
+      description: "Initialize knowledge graph with all configured sources"
+      parameters:
+        - name: progress_callback
+          type: "Callable[[int, int, str], None] | None"
+          description: "Progress callback (current, total, message)"
+      returns:
+        $ref: "#/definitions/SyncResult"
+      raises:
+        - "ConnectionError: If Cognee Cloud unreachable"
+        - "AuthenticationError: If credentials invalid"
+
+    sync_changed:
+      description: "Sync only files changed since last sync"
+      parameters:
+        - name: files
+          type: "list[Path] | None"
+          description: "Specific files to sync (None = detect from git)"
+      returns:
+        $ref: "#/definitions/SyncResult"
+
+    rebuild:
+      description: "Full rebuild of all datasets"
+      parameters:
+        - name: datasets
+          type: "list[str] | None"
+          description: "Datasets to rebuild (None = all)"
+        - name: confirm
+          type: "bool"
+          default: false
+          description: "Must be True to proceed"
+      returns:
+        $ref: "#/definitions/SyncResult"
+      raises:
+        - "ValueError: If confirm=False"
+
+    repair:
+      description: "Repair drifted entries without full rebuild"
+      parameters:
+        - name: drift_report
+          type: "DriftReport"
+          description: "Drift report from detect_drift()"
+      returns:
+        $ref: "#/definitions/SyncResult"
+
+    detect_drift:
+      description: "Detect stale/orphaned entries"
+      parameters: []
+      returns:
+        type: "DriftReport"
+        description: "Report of drifted entries"
+
+    get_coverage:
+      description: "Compare indexed content to filesystem"
+      parameters: []
+      returns:
+        type: "CoverageReport"
+        description: "Coverage analysis report"
+
+    health_check:
+      description: "Check system health"
+      parameters: []
+      returns:
+        type: "HealthStatus"
+        description: "Health status of all components"
+
+# CLI commands mapping
+cli_commands:
+  cognee-init:
+    method: init
+    description: "Initialize knowledge graph"
+    options:
+      --resume: "Resume from checkpoint if available"
+      --progress: "Show progress bar"
+
+  cognee-sync:
+    method: sync_changed
+    description: "Sync changed files"
+    options:
+      --files: "Specific files to sync"
+      --all: "Sync all files (not just changed)"
+
+  cognee-rebuild:
+    method: rebuild
+    description: "Full rebuild"
+    options:
+      --datasets: "Datasets to rebuild"
+      --confirm: "Required to proceed"
+
+  cognee-repair:
+    method: repair
+    description: "Repair drifted entries"
+    options:
+      --dry-run: "Show what would be repaired"
+
+  cognee-drift:
+    method: detect_drift
+    description: "Detect drift"
+    options:
+      --format: "Output format (table, json)"
+
+  cognee-coverage:
+    method: get_coverage
+    description: "Coverage analysis"
+    options:
+      --format: "Output format (table, json)"
+
+  cognee-health:
+    method: health_check
+    description: "Health check"
+    options:
+      --verbose: "Show detailed status"

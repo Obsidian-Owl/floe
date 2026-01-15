@@ -205,7 +205,8 @@ else
 fi
 
 # Check for existing spec with this Epic ID
-EXISTING_SPEC=$(check_existing_epic_spec "$SPECS_DIR" "$EPIC_ID")
+# Use || true to prevent set -e from exiting when function returns 1 (no spec found)
+EXISTING_SPEC=$(check_existing_epic_spec "$SPECS_DIR" "$EPIC_ID") || true
 if [ -n "$EXISTING_SPEC" ]; then
     >&2 echo "[specify] Warning: Existing spec found for Epic $EPIC_ID: $EXISTING_SPEC"
     >&2 echo "[specify] Creating new feature branch, but spec directory already exists."

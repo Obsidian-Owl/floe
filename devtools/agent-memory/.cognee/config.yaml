@@ -1,0 +1,27 @@
+# Agent Memory Configuration
+# Content sources for Cognee knowledge graph
+
+content_sources:
+  # Architecture documentation
+  - source_type: directory
+    path: ../../docs/architecture
+    dataset: architecture
+    file_extensions:
+      - .md
+    exclude_patterns:
+      - "**/draft-*"
+      - "**/archive/**"
+
+  # Project governance (constitution, rules)
+  - source_type: directory
+    path: ../../.specify/memory
+    dataset: governance
+    file_extensions:
+      - .md
+
+  # Claude rules
+  - source_type: directory
+    path: ../../.claude/rules
+    dataset: governance
+    file_extensions:
+      - .md

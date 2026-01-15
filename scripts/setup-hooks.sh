@@ -22,7 +22,7 @@ mkdir -p "$HOOKS_DIR"
 
 # Backup existing hooks if they exist and weren't created by this script
 BACKUP_DIR="$HOOKS_DIR/backup.$(date +%Y%m%d-%H%M%S)"
-HOOKS_TO_INSTALL="pre-commit pre-push prepare-commit-msg post-checkout post-merge"
+HOOKS_TO_INSTALL="pre-commit post-commit pre-push prepare-commit-msg post-checkout post-merge"
 NEEDS_BACKUP=false
 
 for hook in $HOOKS_TO_INSTALL; do
@@ -71,6 +71,24 @@ else
     echo "ERROR: pre-commit not found - code quality checks cannot run" >&2
     echo "  Install: uv add pre-commit --dev && make setup-hooks" >&2
     exit 1
+fi
+HOOK
+
+# Post-commit hook (runs after successful commit - triggers Cognee sync)
+cat > "$HOOKS_DIR/post-commit" << 'HOOK'
+#!/usr/bin/env sh
+# AUTO-GENERATED - Do not edit manually
+# Cognee knowledge graph sync hook
+# Installed by: scripts/setup-hooks.sh
+# Re-run 'make setup-hooks' to regenerate
+
+# Get repo root (works with worktrees)
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Run Cognee sync in async mode (non-blocking)
+# Only sync if the cognee-sync script exists
+if [ -x "$REPO_ROOT/scripts/cognee-sync" ]; then
+    "$REPO_ROOT/scripts/cognee-sync" --async 2>/dev/null &
 fi
 HOOK
 
@@ -125,21 +143,30 @@ if command -v bd >/dev/null 2>&1; then
 fi
 HOOK
 
-# Post-merge hook (bd only - for merge tracking)
+# Post-merge hook (bd + Cognee full rebuild)
 cat > "$HOOKS_DIR/post-merge" << 'HOOK'
 #!/usr/bin/env sh
 # AUTO-GENERATED - Do not edit manually
-# bd (beads) hook for merge tracking
+# Chained hook: bd (beads) + Cognee full rebuild
 # Installed by: scripts/setup-hooks.sh
 # Re-run 'make setup-hooks' to regenerate
 
+# 1. Run bd hooks (beads merge tracking)
 if command -v bd >/dev/null 2>&1; then
-    exec bd hooks run post-merge "$@"
+    bd hooks run post-merge "$@"
+fi
+
+# 2. Run Cognee full sync in async mode (non-blocking)
+# Full rebuild on merge since many files may have changed
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [ -x "$REPO_ROOT/scripts/cognee-sync" ]; then
+    "$REPO_ROOT/scripts/cognee-sync" --all --async 2>/dev/null &
 fi
 HOOK
 
 # Make all hooks executable
 chmod +x "$HOOKS_DIR/pre-commit" \
+         "$HOOKS_DIR/post-commit" \
          "$HOOKS_DIR/pre-push" \
          "$HOOKS_DIR/prepare-commit-msg" \
          "$HOOKS_DIR/post-checkout" \
@@ -148,10 +175,11 @@ chmod +x "$HOOKS_DIR/pre-commit" \
 echo ""
 echo "Hooks installed successfully:"
 echo "  - pre-commit:         bd + ruff, bandit, trailing-whitespace, etc."
+echo "  - post-commit:        Cognee async sync (non-blocking)"
 echo "  - pre-push:           bd + mypy --strict, pytest unit tests"
 echo "  - prepare-commit-msg: bd (issue references)"
 echo "  - post-checkout:      bd (branch tracking)"
-echo "  - post-merge:         bd (merge tracking)"
+echo "  - post-merge:         bd + Cognee full rebuild (non-blocking)"
 echo ""
 echo "Note: Run 'make setup-hooks' again after 'bd hooks install' or 'pre-commit install'"
 echo "      to restore chained hooks."

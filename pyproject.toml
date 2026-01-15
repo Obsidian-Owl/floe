@@ -97,6 +97,14 @@ select = [
 exclude_dirs = ["tests", "packages/floe-core/tests"]
 skips = ["B101"]  # Allow assert statements (used in tests)
 
+[tool.uv-secure.vulnerability_criteria]
+# GHSA-5j53-63w8-8625: OAuth/CSRF vulnerability in fastapi-users 14.0.2
+# Severity: Moderate (5.9/10)
+# Impact: Not exploitable - agent-memory is internal tooling without OAuth/SSO
+# Root cause: cognee pins fastapi-users<15.0.0 (transitive dependency)
+# When cognee updates their dependency constraint, remove this ignore
+ignore_vulnerabilities = ["GHSA-5j53-63w8-8625"]
+
 [tool.coverage.run]
 source = ["packages/floe-core/src"]
 branch = true

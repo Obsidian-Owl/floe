@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# scripts/cognee-mcp-start
+# Start the Cognee MCP server Docker container for Claude Code integration.
+#
+# Usage:
+#   ./scripts/cognee-mcp-start                # Start interactive (foreground)
+#   ./scripts/cognee-mcp-start --detach       # Start in background (detached)
+#   ./scripts/cognee-mcp-start --port 9000    # Custom port
+#   ./scripts/cognee-mcp-start --stop         # Stop running container
+#
+# Environment:
+#   COGNEE_API_KEY  - Required: Cognee Cloud API key
+#   OPENAI_API_KEY  - Required: OpenAI API key for embeddings
+#
+# After starting, configure Claude Code:
+#   agent-memory mcp-config --install
+#
+# See: devtools/agent-memory/docs/quickstart.md
+
+set -euo pipefail
+
+# Container name for easy management
+CONTAINER_NAME="cognee-mcp-server"
+DEFAULT_PORT=8000
+IMAGE="cognee/cognee-mcp:main"
+
+# Parse arguments
+DETACH_MODE=false
+STOP_MODE=false
+PORT="$DEFAULT_PORT"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --detach|-d)
+            DETACH_MODE=true
+            shift
+            ;;
+        --port|-p)
+            PORT="$2"
+            shift 2
+            ;;
+        --stop)
+            STOP_MODE=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: cognee-mcp-start [OPTIONS]"
+            echo ""
+            echo "Start the Cognee MCP server for Claude Code integration."
+            echo ""
+            echo "Options:"
+            echo "  --detach, -d        Run in background (detached mode)"
+            echo "  --port, -p PORT     Port to expose (default: 8000)"
+            echo "  --stop              Stop running container"
+            echo "  -h, --help          Show this help message"
+            echo ""
+            echo "Environment Variables:"
+            echo "  COGNEE_API_KEY      Cognee Cloud API key (required)"
+            echo "  OPENAI_API_KEY      OpenAI API key for embeddings (required)"
+            echo ""
+            echo "After starting, configure Claude Code with:"
+            echo "  agent-memory mcp-config --install"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Use --help for usage information" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Stop container if requested
+if [[ "$STOP_MODE" == "true" ]]; then
+    if docker ps -q -f "name=$CONTAINER_NAME" | grep -q .; then
+        echo "Stopping $CONTAINER_NAME..."
+        docker stop "$CONTAINER_NAME"
+        echo "Container stopped."
+    else
+        echo "Container $CONTAINER_NAME is not running."
+    fi
+    exit 0
+fi
+
+# Check environment variables
+check_env() {
+    local missing=false
+
+    if [[ -z "${COGNEE_API_KEY:-}" ]]; then
+        echo "ERROR: COGNEE_API_KEY environment variable is not set" >&2
+        echo "Get your API key from https://www.cognee.ai/" >&2
+        missing=true
+    fi
+
+    if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+        echo "ERROR: OPENAI_API_KEY environment variable is not set" >&2
+        echo "Get your API key from https://platform.openai.com/" >&2
+        missing=true
+    fi
+
+    if [[ "$missing" == "true" ]]; then
+        exit 1
+    fi
+}
+
+# Check if container is already running
+check_existing() {
+    if docker ps -q -f "name=$CONTAINER_NAME" | grep -q .; then
+        echo "Container $CONTAINER_NAME is already running on port $PORT"
+        echo "Use --stop to stop it first, or access it at http://localhost:$PORT/mcp"
+        exit 0
+    fi
+
+    # Remove stopped container with same name if exists
+    if docker ps -aq -f "name=$CONTAINER_NAME" | grep -q .; then
+        docker rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    fi
+}
+
+# Start the container
+start_container() {
+    local run_flags
+
+    if [[ "$DETACH_MODE" == "true" ]]; then
+        run_flags="-d --rm"
+    else
+        run_flags="--rm -it"
+    fi
+
+    echo "Starting Cognee MCP server..."
+    echo "  Image: $IMAGE"
+    echo "  Port: $PORT"
+    echo "  Mode: $(if [[ "$DETACH_MODE" == "true" ]]; then echo "detached"; else echo "interactive"; fi)"
+    echo ""
+
+    # Run the container
+    # shellcheck disable=SC2086
+    docker run $run_flags \
+        --name "$CONTAINER_NAME" \
+        -e TRANSPORT_MODE=http \
+        -e LLM_API_KEY="$OPENAI_API_KEY" \
+        -e API_URL=https://api.cognee.ai \
+        -e API_TOKEN="$COGNEE_API_KEY" \
+        -p "$PORT:8000" \
+        "$IMAGE"
+
+    if [[ "$DETACH_MODE" == "true" ]]; then
+        echo ""
+        echo "Cognee MCP server started in background."
+        echo "  URL: http://localhost:$PORT/mcp"
+        echo ""
+        echo "Configure Claude Code with:"
+        echo "  agent-memory mcp-config --install"
+        echo ""
+        echo "To stop the server:"
+        echo "  ./scripts/cognee-mcp-start --stop"
+    fi
+}
+
+# Main execution
+main() {
+    check_env
+    check_existing
+    start_container
+}
+
+main
