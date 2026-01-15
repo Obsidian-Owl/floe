@@ -392,8 +392,8 @@ class TestHandleMalformedDocstring:
         # Should not crash - malformed sections handled gracefully
         entry = incomplete_entries[0]
         assert entry.docstring is not None
-        # Sections may be empty or partially parsed, but no exception
-        assert entry.sections is not None or entry.sections is None
+        # Sections should be either a dict (possibly empty) or None
+        assert entry.sections is None or isinstance(entry.sections, dict)
 
     @pytest.mark.requirement("FR-006")
     def test_class_without_docstring(
