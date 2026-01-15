@@ -1040,18 +1040,104 @@ def repair(
 ) -> None:
     """Repair drift issues by re-indexing changed files.
 
-    Re-indexes files detected as stale by drift detection.
+    For each type of drift:
+    - Modified: Re-index the file with updated content
+    - Deleted: Remove from checksums (already gone from filesystem)
+    - Renamed: Update path in checksums
+
+    Examples:
+        agent-memory repair            # Fix all drift
+        agent-memory repair --dry-run  # Show what would be fixed
     """
     config = _load_config()
     if config is None:
         raise typer.Exit(code=1)
 
+    from agent_memory.ops.drift import detect_drift, compute_content_hash
+
+    report = detect_drift(config)
+
+    if not report.has_drift:
+        typer.secho("No drift detected - nothing to repair", fg=typer.colors.GREEN)
+        raise typer.Exit(code=0)
+
+    typer.secho("Repair Report", fg=typer.colors.CYAN, bold=True)
+    typer.echo()
+
     if dry_run:
-        typer.echo("Repair (dry-run):")
-    else:
-        typer.echo("Repair:")
-    typer.secho("  Not yet implemented - requires ops/repair.py", fg=typer.colors.YELLOW)
-    # Will be implemented in Phase 4
+        typer.secho("[DRY RUN] Would perform the following repairs:", fg=typer.colors.YELLOW)
+        typer.echo()
+
+        if report.modified_files:
+            typer.echo(f"  Re-index {len(report.modified_files)} modified file(s):")
+            for f in report.modified_files:
+                typer.echo(f"    - {f}")
+
+        if report.deleted_files:
+            typer.echo(f"  Remove {len(report.deleted_files)} deleted file(s) from checksums:")
+            for f in report.deleted_files:
+                typer.echo(f"    - {f}")
+
+        if report.renamed_files:
+            typer.echo(f"  Update {len(report.renamed_files)} renamed file(s) in checksums:")
+            for old_path, new_path in report.renamed_files:
+                typer.echo(f"    - {old_path} -> {new_path}")
+
+        raise typer.Exit(code=0)
+
+    # Load current checksums
+    checksums_path = Path(".cognee") / "checksums.json"
+    checksums: dict[str, str] = {}
+    if checksums_path.exists():
+        checksums = json.loads(checksums_path.read_text())
+
+    client = CogneeClient(config)
+
+    async def _repair() -> None:
+        nonlocal checksums
+        repaired_count = 0
+
+        # Handle modified files - re-index
+        if report.modified_files:
+            typer.echo(f"Re-indexing {len(report.modified_files)} modified file(s)...")
+            for file_path in report.modified_files:
+                path_obj = Path(file_path)
+                if path_obj.exists():
+                    try:
+                        typer.echo(f"  {file_path}")
+                        content = path_obj.read_text(encoding="utf-8", errors="replace")
+                        await client.add_content(content, config.codebase_dataset)
+                        checksums[file_path] = compute_content_hash(content)
+                        repaired_count += 1
+                    except Exception as e:
+                        typer.secho(f"    Error: {e}", fg=typer.colors.RED)
+
+        # Handle deleted files - remove from checksums
+        if report.deleted_files:
+            typer.echo(f"Removing {len(report.deleted_files)} deleted file(s) from checksums...")
+            for file_path in report.deleted_files:
+                if file_path in checksums:
+                    del checksums[file_path]
+                    repaired_count += 1
+                    typer.echo(f"  {file_path}")
+
+        # Handle renamed files - update path in checksums
+        if report.renamed_files:
+            typer.echo(f"Updating {len(report.renamed_files)} renamed file(s) in checksums...")
+            for old_path, new_path in report.renamed_files:
+                if old_path in checksums:
+                    # Move checksum to new path
+                    checksums[new_path] = checksums.pop(old_path)
+                    repaired_count += 1
+                    typer.echo(f"  {old_path} -> {new_path}")
+
+        # Save updated checksums
+        checksums_path.write_text(json.dumps(checksums, indent=2))
+
+        typer.echo()
+        typer.secho(f"Repair complete: {repaired_count} file(s) repaired", fg=typer.colors.GREEN)
+
+    _run_async(_repair())
 
 
 @app.command()
