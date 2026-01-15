@@ -683,6 +683,40 @@ class CogneeClient:
             self._log.error("list_datasets_failed", error=str(e))
             raise CogneeClientError(f"List datasets failed: {e}") from e
 
+    async def delete_test_datasets(self) -> int:
+        """Delete all datasets with 'test_' prefix.
+
+        This is a safety utility for cleaning up test artifacts.
+        Should only be called in test teardown or manual cleanup.
+
+        Returns:
+            Number of datasets deleted.
+
+        Note:
+            Best-effort cleanup - individual delete failures are logged but
+            don't stop the cleanup process.
+
+        Example:
+            >>> deleted = await client.delete_test_datasets()
+            >>> print(f"Cleaned up {deleted} test datasets")
+        """
+        self._log.info("delete_test_datasets_started")
+
+        dataset_names = await self.list_datasets()
+        test_datasets = [name for name in dataset_names if name.startswith("test_")]
+
+        deleted = 0
+        for name in test_datasets:
+            try:
+                await self.delete_dataset(name)
+                deleted += 1
+            except CogneeClientError as e:
+                self._log.warning("delete_test_dataset_failed", dataset=name, error=str(e))
+                # Continue cleanup despite individual failures
+
+        self._log.info("delete_test_datasets_completed", deleted=deleted, total=len(test_datasets))
+        return deleted
+
     async def get_status(self, dataset_name: str | None = None) -> dict[str, Any]:
         """Get pipeline status for a dataset via REST API.
 

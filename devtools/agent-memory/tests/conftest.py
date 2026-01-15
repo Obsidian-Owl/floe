@@ -5,12 +5,14 @@ Provides shared fixtures across all test tiers:
 - Real client fixture for integration tests (with credential check)
 - Test data fixtures for common scenarios
 - Session context fixtures
+- Test dataset isolation (test_ prefix with auto-cleanup)
 
 Implementation: T051 (FLO-636)
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
@@ -20,6 +22,48 @@ import pytest
 
 if TYPE_CHECKING:
     from agent_memory.session import DecisionRecord, SessionContext
+
+
+# =============================================================================
+# Test Isolation Utilities
+# =============================================================================
+
+
+def generate_test_dataset_name(base: str = "test") -> str:
+    """Generate unique test dataset name with prefix.
+
+    All integration test datasets use this format to:
+    1. Avoid polluting production datasets
+    2. Enable cleanup via test_ prefix matching
+    3. Prevent test interference via unique suffixes
+
+    Args:
+        base: Base name for the dataset (default: "test").
+
+    Returns:
+        Unique dataset name in format: test_{base}_{uuid8}
+
+    Example:
+        >>> name = generate_test_dataset_name("architecture")
+        >>> name  # "test_architecture_a1b2c3d4"
+    """
+    suffix = uuid.uuid4().hex[:8]
+    return f"test_{base}_{suffix}"
+
+
+@pytest.fixture
+def test_dataset_name() -> str:
+    """Provide a unique test dataset name.
+
+    Returns:
+        Unique dataset name with test_ prefix.
+
+    Example:
+        >>> def test_something(test_dataset_name):
+        ...     # test_dataset_name is "test_test_a1b2c3d4"
+        ...     await client.add_content("data", test_dataset_name)
+    """
+    return generate_test_dataset_name()
 
 
 # =============================================================================
