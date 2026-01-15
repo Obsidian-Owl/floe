@@ -13,13 +13,15 @@ Usage:
     agent-memory drift
     agent-memory repair [--dry-run]
     agent-memory reset [--confirm]
-    agent-memory test
+    agent-memory test [--verbose] [--threshold N]
+    agent-memory session-save [--issues IDS] [--decisions DESCS]
 
 Example:
     >>> agent-memory init
     >>> agent-memory health
     >>> agent-memory search "how do plugins work"
     >>> agent-memory codify --progress
+    >>> agent-memory session-save --issues "FLO-123" --summary "Implemented auth"
 """
 
 from __future__ import annotations
@@ -1053,7 +1055,7 @@ def repair(
     if config is None:
         raise typer.Exit(code=1)
 
-    from agent_memory.ops.drift import detect_drift, compute_content_hash
+    from agent_memory.ops.drift import compute_content_hash, detect_drift
 
     report = detect_drift(config)
 
@@ -1251,7 +1253,6 @@ def test(
     """
     from agent_memory.ops.quality import (
         QualityReport,
-        TestQuery,
         create_default_test_queries,
         validate_quality,
     )
@@ -1318,6 +1319,103 @@ def test(
         else:
             typer.echo(f"\nFailed: Pass rate {report.pass_rate:.1f}% < {threshold}% threshold")
             raise typer.Exit(code=1)
+
+    except CogneeClientError as e:
+        _exit_with_error(str(e))
+
+
+@app.command(name="session-save")
+def session_save(
+    issues: Annotated[
+        str | None,
+        typer.Option(
+            "--issues",
+            "-i",
+            help="Comma-separated list of issue IDs (e.g., FLO-123,FLO-456)",
+        ),
+    ] = None,
+    decisions: Annotated[
+        str | None,
+        typer.Option(
+            "--decisions",
+            "-d",
+            help="Comma-separated list of decisions made during the session",
+        ),
+    ] = None,
+    work_areas: Annotated[
+        str | None,
+        typer.Option(
+            "--work-areas",
+            "-w",
+            help="Comma-separated list of files/areas being worked on",
+        ),
+    ] = None,
+    summary: Annotated[
+        str | None,
+        typer.Option(
+            "--summary",
+            "-s",
+            help="Summary of the session conversation",
+        ),
+    ] = None,
+    dataset: Annotated[
+        str,
+        typer.Option(
+            "--dataset",
+            help="Dataset name to store context in (default: sessions)",
+        ),
+    ] = "sessions",
+) -> None:
+    """Save session context to the knowledge graph.
+
+    Captures the current session context including active issues,
+    decisions made, work areas touched, and an optional summary.
+    This context can later be retrieved for session recovery.
+
+    Example:
+        agent-memory session-save --issues "FLO-123,FLO-456"
+        agent-memory session-save --decisions "Use REST API,Add caching"
+        agent-memory session-save --issues "FLO-123" --summary "Implemented auth"
+    """
+    from agent_memory.session import capture_session_context, save_session_context
+
+    config = _load_config()
+    if config is None:
+        raise typer.Exit(code=1)
+
+    # Parse comma-separated arguments
+    issue_list = [i.strip() for i in issues.split(",")] if issues else []
+    decision_list = [d.strip() for d in decisions.split(",")] if decisions else []
+    work_area_list = [w.strip() for w in work_areas.split(",")] if work_areas else []
+
+    # Capture session context
+    context = capture_session_context(
+        active_issues=issue_list,
+        decisions=decision_list,
+        work_areas=work_area_list if work_area_list else None,
+        summary=summary,
+    )
+
+    async def _save_context() -> None:
+        client = CogneeClient(config)
+        await save_session_context(client, context, dataset=dataset)
+
+    try:
+        _run_async(_save_context())
+
+        # Display success information
+        typer.secho("Session context saved successfully!", fg=typer.colors.GREEN)
+        typer.echo(f"  Session ID: {context.session_id}")
+        typer.echo(f"  Captured at: {context.captured_at.isoformat()}")
+
+        if issue_list:
+            typer.echo(f"  Issues: {', '.join(issue_list)}")
+        if decision_list:
+            typer.echo(f"  Decisions: {len(decision_list)}")
+        if work_area_list:
+            typer.echo(f"  Work areas: {len(work_area_list)}")
+        if summary:
+            typer.echo(f"  Summary: {summary[:50]}{'...' if len(summary) > 50 else ''}")
 
     except CogneeClientError as e:
         _exit_with_error(str(e))
