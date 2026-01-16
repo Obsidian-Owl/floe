@@ -597,6 +597,27 @@ All Cognee API integrations MUST have contract tests that validate field names. 
 - `devtools/agent-memory/tests/contract/test_cognee_api_contract.py`
 - Epic 10B for validation requirements
 
+### Memify: SDK-Only (FR-006, FR-007)
+
+The `memify` command uses the **Cognee Cloud SDK** (`cogwit`), NOT the REST API.
+
+**Why SDK instead of REST:**
+- Memify is NOT available via the Cognee Cloud REST API
+- The SDK handles incremental graph optimization server-side
+- Error responses from SDK differ from REST API errors
+
+**SDK Integration Pattern:**
+```python
+from cognee.modules.cognee_cloud import cogwit, CogwitConfig
+
+sdk_config = CogwitConfig(api_key=api_key)
+sdk = cogwit(sdk_config)
+result = await sdk.memify(dataset_name="my_dataset")
+```
+
+**Error Handling:** SDK errors require separate handling from REST API errors.
+See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_client.py`.
+
 ## Recent Changes
 - 10b-agent-memory-quality: Added Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation)
 - 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)
