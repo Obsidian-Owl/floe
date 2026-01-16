@@ -1,0 +1,14 @@
+{
+  "$schema": "./manifest.schema.json",
+  "schema_version": "1.0.0",
+  "description": "Ralph Wiggum orchestration state for floe development",
+  "active_agents": [],
+  "completed_today": [],
+  "statistics": {
+    "total_tasks_completed": 0,
+    "average_duration_minutes": 0,
+    "average_iterations": 0,
+    "blocked_count": 0
+  },
+  "last_updated": null
+}

@@ -75,6 +75,7 @@ pip-delete-this-directory.txt
 # Testing artifacts
 target/
 .hypothesis/
+tests/ralph/*.log
 
 # Documentation builds
 docs/_build/

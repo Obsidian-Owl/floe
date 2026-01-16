@@ -1,0 +1,155 @@
+# Ralph Wiggum Workflow Configuration
+# Automated parallel agent orchestration for floe development
+
+version: "1.0.0"
+
+orchestration:
+  # Maximum parallel agents (dynamic based on dependencies)
+  max_parallel_agents: 10
+
+  # Maximum iterations per task before BLOCKED signal
+  max_iterations_per_task: 15
+
+  # Auto-cleanup stale worktrees after N hours
+  stale_worktree_hours: 24
+
+  # Enable automatic cleanup
+  auto_cleanup: true
+
+  # Worktree naming pattern
+  worktree_pattern: "floe-agent-{epic}-{task_slug}"
+
+quality_gates:
+  # All gates run per iteration
+  per_iteration:
+    - lint          # uv run ruff check . --fix && uv run ruff format .
+    - typecheck     # uv run mypy --strict packages/ plugins/
+    - unit_tests    # uv run pytest tests/unit/ -v --tb=short
+    - security      # /security-review
+    - constitution  # validate-constitution.py
+
+  # Gates run before PR creation
+  pre_pr:
+    - test_review       # /speckit.test-review
+    - security_review   # /security-review (full)
+    - contract_tests    # uv run pytest tests/contract/
+    - integration_check # /speckit.integration-check
+    - arch_review       # /arch-review
+
+linear:
+  # Team for issue queries
+  team: "floe"
+
+  # Project prefix for feature work
+  project_prefix: "floe"
+
+  # Status types (queried dynamically, not hardcoded names)
+  status_types:
+    ready: ["backlog", "unstarted"]
+    claimed: ["started"]
+    complete: ["completed"]
+    blocked: ["canceled"]
+
+worktrees:
+  # Base directory for worktrees (relative to repo root)
+  base_dir: ".."
+
+  # Branch naming pattern
+  branch_pattern: "{epic}/{task_slug}"
+
+  # Files to copy to each worktree's .agent/ directory
+  agent_files:
+    - templates/PROMPT.md
+    - templates/plan.json
+    - templates/activity.md
+
+signals:
+  # Completion signal agent outputs when done
+  complete: "COMPLETE"
+
+  # Blocked signal when human intervention needed
+  blocked: "BLOCKED"
+
+  # Ready for review signal when all tasks complete
+  ready_for_review: "READY_FOR_REVIEW"
+
+notifications:
+  # Enable Slack notifications (requires SLACK_WEBHOOK_URL)
+  slack: false
+
+  # Enable Linear comments for status updates
+  linear_comments: true
+
+  # Events to notify on
+  events:
+    - task_complete
+    - task_blocked
+    - all_complete
+    - security_finding
+
+resilience:
+  # Pre-flight check requirements
+  preflight_checks:
+    linear: required      # BLOCK immediately if unavailable
+    cognee: optional      # WARN + buffer locally if unavailable
+    git: required         # BLOCK if git unavailable
+    direnv: required      # BLOCK if not installed/allowed (worktrees need environment)
+
+  # Session checkpoint configuration
+  checkpoints:
+    auto_checkpoint_interval: 5  # Every 5 iterations
+    local_backup: true           # Save to .ralph/session/checkpoints/
+    memory_backup: true          # Save to agent-memory (Cognee)
+    session_ttl_hours: 48        # Retain session data for 48 hours
+    max_checkpoints: 10          # Keep last 10 checkpoints per session
+
+  # Confidence thresholds for decision making
+  confidence:
+    file_modification: 0.8       # High confidence needed for file changes
+    linear_update: 0.9           # Very high for external system updates
+    architecture_decision: 0.7   # 70% threshold for arch decisions
+    test_creation: 0.6           # Lower, tests will verify
+
+  # Memory write-ahead buffer configuration
+  memory_buffer:
+    enabled: true
+    buffer_dir: ".ralph/memory-buffer"
+    max_retry_attempts: 3
+    auto_sync_on_reconnect: true
+    sync_on_session_start: true
+    synced_retention_hours: 24   # Keep synced entries for verification
+
+  # Recovery settings
+  recovery:
+    auto_save_on_block: true     # Save state when BLOCKED signal
+    auto_save_on_error: true     # Save state on unexpected errors
+    recovery_prompt_enabled: true # Show recovery instructions
+
+# Testing configuration for Ralph workflow
+testing:
+  # Dry-run mode configuration
+  dry_run:
+    enabled: false                 # Default off; set RALPH_DRY_RUN=true to enable
+    log_operations: true           # Log what would be executed
+    skip_git_operations: true      # Don't create worktrees/branches
+    skip_linear_updates: true      # Don't update Linear issues
+    skip_memory_writes: true       # Don't write to Cognee
+
+  # Isolation settings for tests
+  isolation:
+    use_temp_repo: true            # Clone to tmp for test isolation
+    remove_remote: true            # Remove origin to prevent accidental push
+    unique_namespaces: true        # Generate unique namespace per test
+
+  # Test execution settings
+  execution:
+    timeout_seconds: 300           # Test timeout (5 minutes)
+    parallel_tests: false          # Disable parallel tests for Ralph suite
+    fail_fast: true                # Stop on first failure for debugging
+
+  # Markers for pytest
+  markers:
+    ralph: "Ralph Wiggum workflow tests"
+    dry_run: "Tests that run in dry-run mode"
+    requires_git: "Tests requiring git operations"
+    worktree: "Tests involving git worktree lifecycle"

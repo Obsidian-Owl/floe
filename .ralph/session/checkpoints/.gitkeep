@@ -1,0 +1,2 @@
+# Session checkpoint files for recovery
+# Format: {session_id}-{checkpoint_num}.json
