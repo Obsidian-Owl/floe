@@ -227,6 +227,12 @@ def init(
 
     typer.secho("Initialized .cognee/ directory", fg=typer.colors.GREEN)
     typer.echo(f"  Cognee API URL: {config.cognee_api_url}")
+    typer.echo(f"  Deployment Mode: {config.cognee_deployment_mode}")
+    if config.cognee_deployment_mode == "cloud":
+        typer.secho(
+            "  Note: Cognee Cloud does not support memify. Use self-hosted for full features.",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo(f"  LLM Provider: {config.llm_provider}")
 
     # Validate connection to Cognee Cloud

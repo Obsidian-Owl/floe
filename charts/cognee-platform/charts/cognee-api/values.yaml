@@ -1,0 +1,144 @@
+# Cognee API - Default Values
+
+replicaCount: 1
+
+image:
+  repository: cognee/cognee
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: cognee.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: false
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# LLM configuration
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  existingSecret: cognee-llm-credentials
+  secretKey: api-key
+
+# Embedding configuration
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+
+# Database configuration
+database:
+  postgresql:
+    enabled: true
+    host: ""
+    port: 5432
+    database: cognee
+    existingSecret: ""
+    secretKeys:
+      username: username
+      password: password
+
+  neo4j:
+    enabled: true
+    host: ""
+    port: 7687
+    existingSecret: cognee-neo4j-credentials
+    secretKey: password
+
+  redis:
+    enabled: true
+    host: ""
+    port: 6379
+    existingSecret: cognee-redis-credentials
+    secretKey: password
+
+# Health check configuration
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 3
+
+# Environment variables (non-secret)
+env: []
+
+# Extra volumes
+extraVolumes: []
+
+# Extra volume mounts
+extraVolumeMounts: []

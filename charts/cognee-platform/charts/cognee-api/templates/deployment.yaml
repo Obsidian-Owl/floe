@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cognee-api.fullname" . }}
+  labels:
+    {{- include "cognee-api.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cognee-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "cognee-api.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cognee-api.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            # LLM Configuration
+            - name: LLM_PROVIDER
+              value: {{ .Values.llm.provider | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.llm.model | quote }}
+            {{- if .Values.llm.existingSecret }}
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.existingSecret }}
+                  key: {{ .Values.llm.secretKey }}
+            {{- end }}
+
+            # Embedding Configuration
+            - name: EMBEDDING_PROVIDER
+              value: {{ .Values.embedding.provider | quote }}
+            - name: EMBEDDING_MODEL
+              value: {{ .Values.embedding.model | quote }}
+
+            # PostgreSQL Configuration
+            {{- if .Values.database.postgresql.enabled }}
+            - name: POSTGRES_HOST
+              value: {{ include "cognee-api.postgresql.host" . | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.postgresql.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.database.postgresql.database | quote }}
+            {{- if .Values.database.postgresql.existingSecret }}
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.postgresql.existingSecret }}
+                  key: {{ .Values.database.postgresql.secretKeys.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.postgresql.existingSecret }}
+                  key: {{ .Values.database.postgresql.secretKeys.password }}
+            {{- end }}
+            {{- end }}
+
+            # Neo4j Configuration
+            {{- if .Values.database.neo4j.enabled }}
+            - name: NEO4J_HOST
+              value: {{ include "cognee-api.neo4j.host" . | quote }}
+            - name: NEO4J_PORT
+              value: {{ .Values.database.neo4j.port | quote }}
+            {{- if .Values.database.neo4j.existingSecret }}
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.neo4j.existingSecret }}
+                  key: {{ .Values.database.neo4j.secretKey }}
+            {{- end }}
+            {{- end }}
+
+            # Redis Configuration
+            {{- if .Values.database.redis.enabled }}
+            - name: REDIS_HOST
+              value: {{ include "cognee-api.redis.host" . | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.database.redis.port | quote }}
+            {{- if .Values.database.redis.existingSecret }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.redis.existingSecret }}
+                  key: {{ .Values.database.redis.secretKey }}
+            {{- end }}
+            {{- end }}
+
+            # Additional environment variables
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

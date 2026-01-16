@@ -55,10 +55,23 @@ class AgentMemoryConfig(BaseSettings):
     Environment variables take precedence over YAML values.
 
     Environment Variables:
-        COGNEE_API_KEY: Cognee Cloud API key (required)
-        COGNEE_API_URL: Cognee Cloud API endpoint (optional)
+        COGNEE_API_KEY: Cognee API key (required)
+        COGNEE_API_URL: Cognee API endpoint (optional, defaults to Cloud)
+        COGNEE_DEPLOYMENT_MODE: 'cloud' or 'self_hosted' (optional)
         OPENAI_API_KEY: OpenAI API key for cognify (required if llm_provider=openai)
         ANTHROPIC_API_KEY: Anthropic API key (required if llm_provider=anthropic)
+
+    Deployment Modes:
+        cloud: Uses Cognee Cloud (api.cognee.ai). Note: memify endpoint not available.
+        self_hosted: Uses self-hosted Cognee. All endpoints including memify available.
+
+    Example (Cloud):
+        COGNEE_API_URL=https://api.cognee.ai
+        COGNEE_DEPLOYMENT_MODE=cloud
+
+    Example (Self-Hosted):
+        COGNEE_API_URL=https://cognee.internal.example.com
+        COGNEE_DEPLOYMENT_MODE=self_hosted
     """
 
     model_config = SettingsConfigDict(
@@ -67,18 +80,25 @@ class AgentMemoryConfig(BaseSettings):
         extra="ignore",
     )
 
-    # Cognee Cloud settings
+    # Cognee API settings
     cognee_api_url: str = Field(
         default="https://api.cognee.ai",
-        description="Cognee Cloud API endpoint",
+        description="Cognee API endpoint (Cloud or self-hosted)",
     )
     cognee_api_key: SecretStr = Field(
         ...,
-        description="Cognee Cloud API key (from COGNEE_API_KEY environment variable)",
+        description="Cognee API key (from COGNEE_API_KEY environment variable)",
     )
     cognee_api_version: str = Field(
         default="",
         description="Cognee API version ('' for /api/, 'v1' for /api/v1/ when available)",
+    )
+    cognee_deployment_mode: Literal["cloud", "self_hosted"] = Field(
+        default="cloud",
+        description=(
+            "Deployment mode: 'cloud' for Cognee Cloud (api.cognee.ai), "
+            "'self_hosted' for self-hosted Cognee (all endpoints available)"
+        ),
     )
 
     # LLM settings (for cognify)
