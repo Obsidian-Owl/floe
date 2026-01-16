@@ -9,6 +9,7 @@ Tests for helper functions used by the sync command, including:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,7 +24,20 @@ from agent_memory.cli import (
 from agent_memory.config import AgentMemoryConfig, ContentSource
 
 if TYPE_CHECKING:
-    pass
+    from collections.abc import Generator
+
+
+@pytest.fixture(autouse=True)
+def mock_config_env_vars(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """Set mock environment variables for all tests in this module.
+
+    AgentMemoryConfig requires cognee_api_key and openai_api_key (when
+    llm_provider is 'openai'). This fixture provides mock values for
+    unit tests that don't need real API access.
+    """
+    monkeypatch.setenv("COGNEE_API_KEY", "test-api-key-for-unit-tests")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key-for-unit-tests")
+    yield
 
 
 @pytest.fixture

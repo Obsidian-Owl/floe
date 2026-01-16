@@ -107,12 +107,35 @@ class TestMemifyCommand:
 
 
 class TestMemifyClient:
-    """Tests for CogneeClient.memify method."""
+    """Tests for CogneeClient.memify method.
+
+    These tests mock the cogwit_sdk module to test memify functionality
+    without requiring the SDK to be installed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def mock_cogwit_sdk(self) -> None:
+        """Mock the cogwit_sdk module before tests run."""
+        import sys
+
+        # Create mock module
+        mock_module = MagicMock()
+        mock_module.CogwitConfig = MagicMock()
+        mock_module.cogwit = MagicMock()
+
+        # Insert into sys.modules before the import can fail
+        sys.modules["cogwit_sdk"] = mock_module
+        yield
+        # Cleanup
+        if "cogwit_sdk" in sys.modules:
+            del sys.modules["cogwit_sdk"]
 
     @pytest.mark.requirement("FR-023")
     @pytest.mark.asyncio
     async def test_memify_calls_sdk(self) -> None:
         """Test memify calls the Cognee SDK."""
+        import sys
+
         from agent_memory.cognee_client import CogneeClient
 
         mock_config = MagicMock()
@@ -122,20 +145,21 @@ class TestMemifyClient:
 
         client = CogneeClient(mock_config)
 
-        # Patch at the cogwit_sdk module level since it's imported inside the function
-        with patch("cogwit_sdk.cogwit") as mock_cogwit_func:
-            mock_sdk = MagicMock()
-            mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None))
-            mock_cogwit_func.return_value = mock_sdk
+        # Setup the mock SDK behavior
+        mock_sdk = MagicMock()
+        mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None))
+        sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
 
-            await client.memify(dataset_name="test_dataset")
+        await client.memify(dataset_name="test_dataset")
 
-            mock_sdk.memify.assert_called_once_with(dataset_name="test_dataset")
+        mock_sdk.memify.assert_called_once_with(dataset_name="test_dataset")
 
     @pytest.mark.requirement("FR-023")
     @pytest.mark.asyncio
     async def test_memify_uses_default_dataset(self) -> None:
         """Test memify uses default dataset when none specified."""
+        import sys
+
         from agent_memory.cognee_client import CogneeClient
 
         mock_config = MagicMock()
@@ -145,19 +169,21 @@ class TestMemifyClient:
 
         client = CogneeClient(mock_config)
 
-        with patch("cogwit_sdk.cogwit") as mock_cogwit_func:
-            mock_sdk = MagicMock()
-            mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None))
-            mock_cogwit_func.return_value = mock_sdk
+        # Setup the mock SDK behavior
+        mock_sdk = MagicMock()
+        mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None))
+        sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
 
-            await client.memify()  # No dataset specified
+        await client.memify()  # No dataset specified
 
-            mock_sdk.memify.assert_called_once_with(dataset_name="default_ds")
+        mock_sdk.memify.assert_called_once_with(dataset_name="default_ds")
 
     @pytest.mark.requirement("FR-023")
     @pytest.mark.asyncio
     async def test_memify_raises_on_sdk_error(self) -> None:
         """Test memify raises CogneeClientError on SDK error."""
+        import sys
+
         from agent_memory.cognee_client import CogneeClient, CogneeClientError
 
         mock_config = MagicMock()
@@ -167,18 +193,20 @@ class TestMemifyClient:
 
         client = CogneeClient(mock_config)
 
-        with patch("cogwit_sdk.cogwit") as mock_cogwit_func:
-            mock_sdk = MagicMock()
-            mock_sdk.memify = AsyncMock(return_value=MagicMock(error="Graph not found"))
-            mock_cogwit_func.return_value = mock_sdk
+        # Setup the mock SDK to return an error
+        mock_sdk = MagicMock()
+        mock_sdk.memify = AsyncMock(return_value=MagicMock(error="Graph not found"))
+        sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
 
-            with pytest.raises(CogneeClientError, match="Memify failed"):
-                await client.memify(dataset_name="test_dataset")
+        with pytest.raises(CogneeClientError, match="Memify failed"):
+            await client.memify(dataset_name="test_dataset")
 
     @pytest.mark.requirement("FR-023")
     @pytest.mark.asyncio
     async def test_memify_raises_on_exception(self) -> None:
         """Test memify wraps exceptions in CogneeClientError."""
+        import sys
+
         from agent_memory.cognee_client import CogneeClient, CogneeClientError
 
         mock_config = MagicMock()
@@ -188,8 +216,8 @@ class TestMemifyClient:
 
         client = CogneeClient(mock_config)
 
-        with patch("cogwit_sdk.cogwit") as mock_cogwit_func:
-            mock_cogwit_func.side_effect = Exception("Network error")
+        # Setup the mock SDK to raise an exception
+        sys.modules["cogwit_sdk"].cogwit.side_effect = Exception("Network error")
 
-            with pytest.raises(CogneeClientError, match="Memify failed"):
-                await client.memify(dataset_name="test_dataset")
+        with pytest.raises(CogneeClientError, match="Memify failed"):
+            await client.memify(dataset_name="test_dataset")
