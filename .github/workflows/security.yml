@@ -1,5 +1,5 @@
 # Security Review Workflow
-# Runs Claude Code security review on PRs and pushes to main
+# Runs Claude Code security review on PRs only (not pushes - already reviewed in PR)
 # See: https://github.com/anthropics/claude-code-security-review
 #
 # Security: All actions pinned to full SHA hashes
@@ -16,14 +16,16 @@ on:
       - '**.yaml'
       - '**.yml'
       - '**.sh'
-  push:
-    branches: [main]
-    paths:
-      - '**.py'
-      - '**.sql'
-      - '**.yaml'
-      - '**.yml'
-      - '**.sh'
+    # Exclude documentation-only changes
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.claude/**/*.md'
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   security-review:
@@ -43,6 +45,7 @@ jobs:
         uses: anthropics/claude-code-action@de8e0b9c42c6cb58e904c857f164aa072244c1ac  # beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           direct_prompt: |
             Perform a security review of the changed files. Focus on:
 
