@@ -495,6 +495,10 @@ def sync(
         str,
         typer.Option("--since", "-s", help="Git reference to compare against for changes"),
     ] = "HEAD~1",
+    verify: Annotated[
+        bool,
+        typer.Option("--verify/--no-verify", help="Verify content is searchable after sync (FR-011)"),
+    ] = False,
 ) -> None:
     """Sync changed files to Cognee Cloud.
 
@@ -507,6 +511,7 @@ def sync(
         agent-memory sync --files src/foo.py # Sync specific files
         agent-memory sync --dry-run          # Show what would sync
         agent-memory sync --since main       # Sync changes since main branch
+        agent-memory sync --verify           # Verify content is searchable after sync
     """
     config = _load_config()
     if config is None:
@@ -585,12 +590,12 @@ def sync(
             # Sync markdown files
             if md_files:
                 typer.echo(f"\nSyncing {len(md_files)} markdown file(s)...")
-                await _sync_markdown_files(client, config, md_files)
+                await _sync_markdown_files(client, config, md_files, verify=verify)
 
             # Sync Python files (extract docstrings)
             if py_files:
                 typer.echo(f"\nSyncing {len(py_files)} Python file(s)...")
-                await _sync_python_files(client, config, py_files)
+                await _sync_python_files(client, config, py_files, verify=verify)
 
             # Run cognify if requested
             if cognify and (md_files or py_files):
@@ -680,7 +685,11 @@ def _is_under_path(file: Path, paths: set[Path]) -> bool:
 
 
 async def _sync_markdown_files(
-    client: CogneeClient, config: AgentMemoryConfig, files: list[Path]
+    client: CogneeClient,
+    config: AgentMemoryConfig,
+    files: list[Path],
+    *,
+    verify: bool = False,
 ) -> None:
     """Sync markdown files to Cognee.
 
@@ -688,6 +697,7 @@ async def _sync_markdown_files(
         client: Cognee client.
         config: Configuration.
         files: Markdown files to sync.
+        verify: If True, verify content is searchable after add (FR-011).
     """
     for file_path in files:
         try:
@@ -707,13 +717,18 @@ async def _sync_markdown_files(
                     "source_path": str(file_path),
                     "title": parsed.title or file_path.stem,
                 },
+                verify=verify,
             )
         except Exception as e:
             typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
 
 
 async def _sync_python_files(
-    client: CogneeClient, config: AgentMemoryConfig, files: list[Path]
+    client: CogneeClient,
+    config: AgentMemoryConfig,
+    files: list[Path],
+    *,
+    verify: bool = False,
 ) -> None:
     """Sync Python files by extracting docstrings.
 
@@ -721,6 +736,7 @@ async def _sync_python_files(
         client: Cognee client.
         config: Configuration.
         files: Python files to sync.
+        verify: If True, verify content is searchable after add (FR-011).
     """
     for file_path in files:
         try:
@@ -748,6 +764,7 @@ async def _sync_python_files(
                         "name": entry.name,
                         "line_number": entry.line_number,
                     },
+                    verify=verify,
                 )
 
             typer.echo(f"    Added {len(entries)} docstring(s)")
