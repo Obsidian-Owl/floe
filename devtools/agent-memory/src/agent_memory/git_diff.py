@@ -15,16 +15,44 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import re
 import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Safe pattern for git references (commits, branches, tags, relative refs)
+# Allows: alphanumeric, dots, slashes, tildes, carets, hyphens, underscores, colons
+# Examples: HEAD~1, main, feature/my-branch, v1.0.0, abc123def, HEAD^2, origin/main
+_SAFE_GIT_REF_PATTERN = re.compile(r"^[a-zA-Z0-9._/~^:\-]+$")
 
 
 class GitError(Exception):
     """Error executing git command."""
 
     pass
+
+
+def _validate_git_ref(ref: str) -> None:
+    """Validate a git reference for safe subprocess usage.
+
+    Defense-in-depth: While shell=False prevents shell injection,
+    this validation ensures only valid git references are passed.
+
+    Args:
+        ref: Git reference to validate.
+
+    Raises:
+        GitError: If the reference contains invalid characters.
+    """
+    if not ref:
+        raise GitError("Git reference cannot be empty")
+    if not _SAFE_GIT_REF_PATTERN.match(ref):
+        raise GitError(
+            f"Invalid git reference: {ref!r}. "
+            "Only alphanumeric characters, dots, slashes, tildes, "
+            "carets, hyphens, underscores, and colons are allowed."
+        )
 
 
 def get_repo_root() -> Path:
@@ -92,6 +120,9 @@ def get_changed_files(
         >>> # Get changes on a feature branch
         >>> changed = get_changed_files(since="main")
     """
+    # Validate git reference (defense-in-depth)
+    _validate_git_ref(since)
+
     repo_root = get_repo_root()
     changed_files: set[str] = set()
 
