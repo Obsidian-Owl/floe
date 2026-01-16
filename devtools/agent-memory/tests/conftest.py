@@ -51,6 +51,78 @@ def generate_test_dataset_name(base: str = "test") -> str:
     return f"test_{base}_{suffix}"
 
 
+class TestDatasetFixture:
+    """Helper class for managing unique test datasets with cleanup tracking.
+
+    Provides unique dataset names and tracks created datasets for cleanup.
+    Used by integration tests to ensure test isolation and prevent pollution
+    of production datasets.
+
+    Implementation: T005 (FLO-693)
+
+    Attributes:
+        datasets: Set of dataset names created during the test.
+
+    Example:
+        >>> fixture = TestDatasetFixture()
+        >>> name = fixture.create("architecture")
+        >>> print(name)  # "test_architecture_a1b2c3d4"
+        >>> fixture.datasets  # {"test_architecture_a1b2c3d4"}
+        >>> # After test, cleanup:
+        >>> for dataset in fixture.datasets:
+        ...     await client.delete_dataset(dataset)
+    """
+
+    def __init__(self) -> None:
+        """Initialize with empty dataset tracking."""
+        self.datasets: set[str] = set()
+
+    def create(self, base: str = "test") -> str:
+        """Create a unique dataset name and track it for cleanup.
+
+        Args:
+            base: Base name for the dataset (default: "test").
+
+        Returns:
+            Unique dataset name in format: test_{base}_{uuid8}
+
+        Example:
+            >>> fixture = TestDatasetFixture()
+            >>> name = fixture.create("contract")
+            >>> name.startswith("test_contract_")
+            True
+        """
+        name = generate_test_dataset_name(base)
+        self.datasets.add(name)
+        return name
+
+    def clear(self) -> None:
+        """Clear the tracked datasets.
+
+        Call this after cleanup has been performed.
+        """
+        self.datasets.clear()
+
+
+@pytest.fixture
+def test_dataset_fixture() -> TestDatasetFixture:
+    """Provide a TestDatasetFixture for managing test datasets.
+
+    Returns:
+        Fresh TestDatasetFixture instance.
+
+    Example:
+        >>> async def test_isolation(test_dataset_fixture, cognee_client):
+        ...     dataset = test_dataset_fixture.create("isolation")
+        ...     await cognee_client.add_content("data", dataset)
+        ...     # Test logic...
+        ...     # Cleanup tracked datasets
+        ...     for ds in test_dataset_fixture.datasets:
+        ...         await cognee_client.delete_dataset(ds)
+    """
+    return TestDatasetFixture()
+
+
 @pytest.fixture
 def test_dataset_name() -> str:
     """Provide a unique test dataset name.
