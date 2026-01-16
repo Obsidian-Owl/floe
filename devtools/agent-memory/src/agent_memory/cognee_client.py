@@ -1,8 +1,10 @@
-"""Cognee Cloud client wrapper with async operations and retry logic.
+"""Cognee Cloud client wrapper with async operations and resilient retry logic.
 
 Provides a thin wrapper around the Cognee Cloud REST API with:
 - Structured logging via structlog
-- Retry logic for transient failures
+- Resilient retry logic with exponential backoff and jitter
+- Circuit breaker to prevent hammering dead services
+- Connection pooling for efficient HTTP connections
 - Health check via httpx
 - Type-safe configuration
 
@@ -28,17 +30,34 @@ from typing import TYPE_CHECKING, Any, Literal
 import httpx
 import structlog
 
+from agent_memory.resilience import (
+    CircuitBreaker,
+    RetryConfig,
+    calculate_backoff,
+    parse_retry_after,
+)
+
 if TYPE_CHECKING:
     from agent_memory.config import AgentMemoryConfig
     from agent_memory.models import HealthStatus, SearchResult
 
 logger = structlog.get_logger(__name__)
 
-# Retry configuration
-DEFAULT_MAX_RETRIES = 3
-DEFAULT_RETRY_DELAY_SECONDS = 1.0
+# Legacy constants for backwards compatibility
+DEFAULT_MAX_RETRIES = 5  # Increased from 3 for mobile network resilience
+DEFAULT_RETRY_DELAY_SECONDS = 2.0  # Increased from 1.0
 DEFAULT_TIMEOUT_SECONDS = 300.0  # 5 minutes for cognify operations
-RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
+RETRYABLE_STATUS_CODES = frozenset({408, 409, 429, 500, 502, 503, 504})
+
+# Retryable exceptions - network/TLS errors that may be transient
+RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.RemoteProtocolError,
+    httpx.ProxyError,  # CRITICAL: 502 Bad Gateway comes through as ProxyError
+    ssl.SSLError,  # Transient TLS errors (record layer failure, etc.)
+)
 
 
 class CogneeClientError(Exception):
@@ -69,13 +88,22 @@ class CognifyTimeoutError(CogneeClientError):
     """
 
 
+class CogneeServiceUnavailableError(CogneeClientError):
+    """Service unavailable - circuit breaker is open.
+
+    Raised when too many consecutive failures have occurred and the
+    circuit breaker is preventing further requests to allow recovery.
+    """
+
+
 class CogneeClient:
     """Async client wrapper for Cognee Cloud REST API.
 
     Provides a simplified interface to the Cognee Cloud API with:
     - Automatic configuration from AgentMemoryConfig
     - Structured logging for all operations
-    - Retry logic for transient failures
+    - Resilient retry logic with exponential backoff and jitter
+    - Circuit breaker to prevent hammering failing services
     - Health check endpoint
 
     Uses REST API instead of local SDK to ensure LLM processing
@@ -83,6 +111,8 @@ class CogneeClient:
 
     Args:
         config: Agent memory configuration with API credentials.
+        retry_config: Optional retry configuration. Defaults to 5 retries
+            with exponential backoff (2s base, 60s max).
 
     Example:
         >>> config = get_config()
@@ -92,17 +122,24 @@ class CogneeClient:
         'healthy'
     """
 
-    def __init__(self, config: AgentMemoryConfig) -> None:
-        """Initialize the Cognee client.
+    def __init__(
+        self,
+        config: AgentMemoryConfig,
+        retry_config: RetryConfig | None = None,
+    ) -> None:
+        """Initialize the Cognee client with resilience features.
 
         Args:
             config: Configuration with Cognee API credentials.
+            retry_config: Optional retry configuration for network resilience.
 
         Note:
             Call validate_connection() after initialization to verify
             connectivity to Cognee Cloud.
         """
         self._config = config
+        self._retry_config = retry_config or RetryConfig()
+        self._circuit_breaker = CircuitBreaker()
         self._log = logger.bind(
             cognee_url=config.cognee_api_url,
         )
@@ -217,7 +254,13 @@ class CogneeClient:
         json_data: dict[str, Any] | None = None,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> httpx.Response:
-        """Make an authenticated HTTP request to Cognee Cloud.
+        """Make an authenticated HTTP request with resilient retry logic.
+
+        Features:
+        - Circuit breaker: Prevents hammering dead services
+        - Exponential backoff with jitter: Prevents thundering herd
+        - Retry-After header respect: Honors rate limiting
+        - Comprehensive exception handling: SSL, Proxy, Timeout, etc.
 
         Args:
             method: HTTP method (GET, POST, DELETE).
@@ -229,12 +272,27 @@ class CogneeClient:
             HTTP response.
 
         Raises:
-            CogneeClientError: If request fails after retries.
+            CogneeServiceUnavailableError: If circuit breaker is open.
+            CogneeClientError: If request fails after all retries.
         """
+        # Check circuit breaker before attempting request
+        if not self._circuit_breaker.can_execute():
+            self._log.error(
+                "circuit_breaker_open",
+                endpoint=endpoint,
+                failure_count=self._circuit_breaker.failure_count,
+            )
+            raise CogneeServiceUnavailableError(
+                f"Service unavailable - circuit breaker open after "
+                f"{self._circuit_breaker.failure_count} failures. "
+                f"Will retry automatically after recovery timeout."
+            )
+
         url = f"{self._config.cognee_api_url}{endpoint}"
         last_error: Exception | None = None
+        config = self._retry_config
 
-        for attempt in range(DEFAULT_MAX_RETRIES):
+        for attempt in range(config.max_retries):
             try:
                 async with httpx.AsyncClient(follow_redirects=True) as client:
                     response = await client.request(
@@ -245,33 +303,52 @@ class CogneeClient:
                         timeout=timeout,
                     )
 
+                    # Handle retryable HTTP status codes
                     if response.status_code in RETRYABLE_STATUS_CODES:
+                        # Honor Retry-After header for rate limiting (429)
+                        if response.status_code == 429:
+                            retry_after = parse_retry_after(
+                                response.headers.get("Retry-After")
+                            )
+                            delay = retry_after or calculate_backoff(attempt, config)
+                        else:
+                            delay = calculate_backoff(attempt, config)
+
                         self._log.warning(
-                            "request_retryable_error",
+                            "request_retryable_status",
                             status_code=response.status_code,
                             attempt=attempt + 1,
+                            max_retries=config.max_retries,
+                            delay_seconds=round(delay, 2),
                         )
-                        await asyncio.sleep(DEFAULT_RETRY_DELAY_SECONDS * (attempt + 1))
+                        await asyncio.sleep(delay)
                         continue
 
+                    # Success - record it and return
+                    self._circuit_breaker.record_success()
                     return response
 
-            except (
-                httpx.TimeoutException,
-                httpx.ConnectError,
-                httpx.ReadError,
-                httpx.RemoteProtocolError,
-                ssl.SSLError,  # Transient TLS errors (record layer failure, etc.)
-            ) as e:
+            except RETRYABLE_EXCEPTIONS as e:
                 last_error = e
+                delay = calculate_backoff(attempt, config)
+
                 self._log.warning(
                     "request_connection_error",
+                    error_type=type(e).__name__,
                     error=str(e),
                     attempt=attempt + 1,
+                    max_retries=config.max_retries,
+                    delay_seconds=round(delay, 2),
                 )
-                await asyncio.sleep(DEFAULT_RETRY_DELAY_SECONDS * (attempt + 1))
+                await asyncio.sleep(delay)
 
-        msg = f"Request failed after {DEFAULT_MAX_RETRIES} attempts"
+        # All retries exhausted - record failure for circuit breaker
+        self._circuit_breaker.record_failure()
+
+        msg = (
+            f"Request failed after {config.max_retries} attempts. "
+            f"Circuit breaker state: {self._circuit_breaker.state.value}"
+        )
         raise CogneeClientError(msg) from last_error
 
     async def health_check(self) -> HealthStatus:

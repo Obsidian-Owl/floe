@@ -558,8 +558,11 @@ class TestErrorHandling:
         import ssl
 
         from agent_memory.cognee_client import CogneeClient, CogneeClientError
+        from agent_memory.resilience import RetryConfig
 
-        client = CogneeClient(mock_config)
+        # Use a config with fewer retries for faster tests
+        retry_config = RetryConfig(max_retries=3, base_delay=0.01, jitter=False)
+        client = CogneeClient(mock_config, retry_config=retry_config)
 
         # Create an SSL error to simulate transient TLS failure
         ssl_error = ssl.SSLError(1, "[SSL] record layer failure (_ssl.c:2580)")
@@ -584,10 +587,54 @@ class TestErrorHandling:
             with pytest.raises(CogneeClientError, match="Request failed after"):
                 await client._make_request("POST", "/api/add", json_data={"data": "test"})
 
-            # Should have retried DEFAULT_MAX_RETRIES times (3)
-            from agent_memory.cognee_client import DEFAULT_MAX_RETRIES
+            # Should have retried max_retries times
+            assert call_count == 3
 
-            assert call_count == DEFAULT_MAX_RETRIES
+    @pytest.mark.requirement("FR-008")
+    async def test_proxy_error_triggers_retry(
+        self,
+        mock_config: MagicMock,
+    ) -> None:
+        """Test that ProxyError (502 Bad Gateway) triggers retries.
+
+        httpx.ProxyError is raised when a proxy returns an error like 502.
+        This was a critical bug - 502s were coming as ProxyError exceptions
+        rather than status codes, bypassing retry logic.
+
+        Requirement: FR-008
+        """
+        from agent_memory.cognee_client import CogneeClient, CogneeClientError
+        from agent_memory.resilience import RetryConfig
+
+        # Use a config with fewer retries for faster tests
+        retry_config = RetryConfig(max_retries=3, base_delay=0.01, jitter=False)
+        client = CogneeClient(mock_config, retry_config=retry_config)
+
+        # Create a ProxyError to simulate 502 Bad Gateway
+        proxy_error = httpx.ProxyError("502 Bad Gateway")
+
+        # Track call count to verify retries
+        call_count = 0
+
+        async def mock_request(*args: Any, **kwargs: Any) -> Any:
+            nonlocal call_count
+            call_count += 1
+            raise proxy_error
+
+        with (
+            patch("httpx.AsyncClient") as mock_async_client,
+        ):
+            mock_client_instance = AsyncMock()
+            mock_client_instance.request.side_effect = mock_request
+            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_async_client.return_value = mock_client_instance
+
+            with pytest.raises(CogneeClientError, match="Request failed after"):
+                await client._make_request("POST", "/api/add", json_data={"data": "test"})
+
+            # Should have retried max_retries times
+            assert call_count == 3
 
 
 class TestSearchResultMetadata:
