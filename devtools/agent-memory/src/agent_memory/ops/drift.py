@@ -39,7 +39,7 @@ class DriftReport(BaseModel):
     modified_files: list[str] = Field(default_factory=list, description="Modified content")
     unchanged_files: list[str] = Field(default_factory=list, description="No changes")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def has_drift(self) -> bool:
         """Check if any drift was detected.
@@ -49,7 +49,7 @@ class DriftReport(BaseModel):
         """
         return bool(self.deleted_files or self.renamed_files or self.modified_files)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def total_drifted(self) -> int:
         """Count total number of drifted files.

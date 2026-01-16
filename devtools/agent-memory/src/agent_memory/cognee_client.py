@@ -675,7 +675,8 @@ class CogneeClient:
                     f"Get dataset status failed with status {response.status_code}: {error_detail}"
                 )
 
-            return response.json()
+            result: dict[str, Any] = response.json()
+            return result
         except CogneeClientError:
             raise
         except Exception as e:
@@ -771,7 +772,7 @@ class CogneeClient:
             ... else:
             ...     print("Memify not available (Cognee Cloud limitation)")
         """
-        from cogwit_sdk import CogwitConfig, cogwit
+        from cogwit_sdk import CogwitConfig, cogwit  # type: ignore[import-untyped]
 
         effective_dataset = dataset_name or self._config.default_dataset
         self._log.info("memify_started", dataset=effective_dataset)

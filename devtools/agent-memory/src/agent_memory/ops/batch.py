@@ -38,7 +38,7 @@ class BatchProgress(BaseModel):
     total_files: int = Field(ge=0, description="Total files to process")
     current_file: str = Field(default="", description="Current file being processed")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def progress_percentage(self) -> float:
         """Calculate progress as percentage.
@@ -70,7 +70,7 @@ class BatchResult(BaseModel):
     duration_seconds: float = Field(ge=0, description="Duration in seconds")
     resumed_from_checkpoint: bool = Field(default=False, description="Resumed from checkpoint")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def success_rate(self) -> float:
         """Calculate success rate as percentage.
@@ -82,7 +82,7 @@ class BatchResult(BaseModel):
             return 100.0
         return (self.successful_files / self.total_files) * 100
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def has_failures(self) -> bool:
         """Check if any files failed.
