@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-timeout>=2.0",  # Test timeout enforcement for E2E tests
     "pytest-codspeed>=3.0",  # Performance benchmarking with CodSpeed
     "mypy>=1.8",
     "ruff>=0.3",
@@ -34,10 +35,10 @@ dependencies = [
 
 [tool.uv]
 # Supply chain protection: 3-day cooldown for new package versions
-# Applied when running `uv lock` - prevents locking in very new packages
+# Set UV_EXCLUDE_NEWER dynamically in CI/scripts (uv 0.5.x only supports dates, not durations)
+# Example: UV_EXCLUDE_NEWER=$(date -v-3d +%Y-%m-%d) uv lock
 # CI installs from lock file directly (no re-resolution)
 # See: https://mkennedy.codes/posts/devops-python-supply-chain-security/
-exclude-newer = "P3D"
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
@@ -56,6 +57,8 @@ pythonpath = [
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short --import-mode=importlib"
+timeout = 300  # Default 5 min timeout for E2E tests (overridable per-test)
+timeout_method = "signal"  # Use signal-based timeout (works on Unix)
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
     "slow: Marks tests as slow (> 1 second)",
@@ -68,6 +71,7 @@ markers = [
     "dry_run: Marks tests that run in dry-run mode (no side effects)",
     "requires_git: Marks tests requiring git operations",
     "worktree: Marks tests involving git worktree lifecycle",
+    "real_agent: Marks tests that invoke real Claude Code agents (costs API credits)",
 ]
 
 [tool.mypy]

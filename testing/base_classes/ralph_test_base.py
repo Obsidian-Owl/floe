@@ -192,56 +192,80 @@ class RalphTestBase(IntegrationTestBase):
         if self.dry_run_mode:
             return
 
-        if not worktree_path.exists():
-            return
+        # Get branch name BEFORE removing worktree (even if path doesn't exist)
+        branch_name = self._extract_branch_for_worktree(worktree_path)
 
-        try:
-            # Get branch name before removing
-            result = subprocess.run(
-                ["git", "worktree", "list", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+        # Fallback: infer branch name from worktree path if not found in worktree list
+        # Pattern: worktree path ends with test-ralph-{name}-{uuid}
+        # Branch: test/test-ralph-{name}-{uuid}
+        if branch_name is None:
+            worktree_dirname = worktree_path.name
+            if worktree_dirname.startswith("test-ralph-"):
+                branch_name = f"test/{worktree_dirname}"
 
-            branch_name = None
-            for line in result.stdout.split("\n"):
-                if line.startswith("worktree ") and str(worktree_path) in line:
-                    # Next line after worktree path should be HEAD
-                    # We need to find the branch line
-                    pass
-                if line.startswith("branch "):
-                    branch_name = line.replace("branch refs/heads/", "")
-
-            # Remove worktree
-            subprocess.run(
-                ["git", "worktree", "remove", str(worktree_path), "--force"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-            # Delete branch if we found it
-            if branch_name and branch_name.startswith("test/"):
+        if worktree_path.exists():
+            try:
+                # Remove worktree
                 subprocess.run(
-                    ["git", "branch", "-D", branch_name],
-                    check=False,  # Don't fail if branch already deleted
+                    ["git", "worktree", "remove", str(worktree_path), "--force"],
+                    check=True,
                     capture_output=True,
                     text=True,
                 )
-
-        except subprocess.CalledProcessError:
-            # Force cleanup if git fails
-            if worktree_path.exists():
+            except subprocess.CalledProcessError:
+                # Force cleanup if git fails
                 shutil.rmtree(worktree_path, ignore_errors=True)
 
-        # Prune worktree metadata
+        # Prune worktree metadata BEFORE deleting branch
+        # Git won't delete a branch if it thinks a worktree is using it,
+        # even if the directory is gone. Pruning first clears stale refs.
         subprocess.run(
             ["git", "worktree", "prune"],
             check=False,
             capture_output=True,
             text=True,
         )
+
+        # Delete branch if we found it (now safe after pruning)
+        if branch_name and branch_name.startswith("test/"):
+            subprocess.run(
+                ["git", "branch", "-D", branch_name],
+                check=False,  # Don't fail if branch already deleted
+                capture_output=True,
+                text=True,
+            )
+
+    def _extract_branch_for_worktree(self, worktree_path: Path) -> str | None:
+        """Extract branch name for a specific worktree.
+
+        Parses `git worktree list --porcelain` output to find the branch
+        associated with the given worktree path.
+
+        Args:
+            worktree_path: Path to the worktree.
+
+        Returns:
+            Branch name (without refs/heads/ prefix) or None if not found.
+        """
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        lines = result.stdout.strip().split("\n")
+        found_worktree = False
+
+        for line in lines:
+            if line.startswith("worktree ") and str(worktree_path) in line:
+                found_worktree = True
+            elif found_worktree and line.startswith("branch "):
+                return line.replace("branch refs/heads/", "")
+            elif found_worktree and line == "":
+                # End of this worktree entry, branch not found
+                break
+
+        return None
 
     def _enable_direnv(self, worktree_path: Path) -> None:
         """Enable direnv in a worktree.
@@ -433,6 +457,65 @@ class RalphTestBase(IntegrationTestBase):
             True if RALPH_DRY_RUN environment variable is set to 'true'.
         """
         return os.environ.get("RALPH_DRY_RUN", "").lower() == "true"
+
+    @staticmethod
+    def cleanup_stale_worktrees(max_age_hours: int = 24) -> list[Path]:
+        """Remove test worktrees older than max_age_hours.
+
+        Scans for worktrees matching the test-ralph-* pattern and removes
+        any that are older than the specified age.
+
+        Args:
+            max_age_hours: Maximum age in hours before worktree is considered stale.
+                          Defaults to 24 hours.
+
+        Returns:
+            List of paths that were removed.
+
+        Example:
+            # Clean up worktrees older than 12 hours
+            removed = RalphTestBase.cleanup_stale_worktrees(max_age_hours=12)
+            print(f"Removed {len(removed)} stale worktrees")
+        """
+        from datetime import datetime, timezone
+
+        removed: list[Path] = []
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        now = datetime.now(timezone.utc)
+        for line in result.stdout.split("\n"):
+            if line.startswith("worktree "):
+                path = Path(line.replace("worktree ", ""))
+                if path.exists() and "test-ralph" in str(path):
+                    # Check directory age via mtime
+                    mtime = datetime.fromtimestamp(
+                        path.stat().st_mtime, tz=timezone.utc
+                    )
+                    age_hours = (now - mtime).total_seconds() / 3600
+                    if age_hours > max_age_hours:
+                        # Remove stale worktree
+                        subprocess.run(
+                            ["git", "worktree", "remove", str(path), "--force"],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        )
+                        removed.append(path)
+
+        # Prune any orphaned worktree metadata
+        subprocess.run(
+            ["git", "worktree", "prune"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        return removed
 
 
 # Module exports
