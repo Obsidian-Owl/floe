@@ -36,8 +36,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock
 
+    from agent_memory.cognee_client import CogneeClient
     from tests.contract.conftest import PayloadCapture
 
 
@@ -52,7 +53,7 @@ class TestAddContentContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test add_content sends textData field (not data).
 
@@ -77,7 +78,7 @@ class TestAddContentContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test add_content does NOT use wrong field name 'data'.
 
@@ -101,7 +102,7 @@ class TestAddContentContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test add_content sends datasetName field (not dataset_name).
 
@@ -124,7 +125,7 @@ class TestAddContentContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test add_content does NOT use wrong field name 'dataset_name'.
 
@@ -152,7 +153,7 @@ class TestSearchContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test search sends searchType field (not search_type).
 
@@ -175,7 +176,7 @@ class TestSearchContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test search does NOT use wrong field name 'search_type'.
 
@@ -196,7 +197,7 @@ class TestSearchContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test search sends topK field (not top_k).
 
@@ -219,7 +220,7 @@ class TestSearchContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test search does NOT use wrong field name 'top_k'.
 
@@ -247,7 +248,7 @@ class TestCognifyContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test cognify sends datasets field for dataset scoping.
 
@@ -270,7 +271,7 @@ class TestCognifyContract:
         self,
         mock_request: AsyncMock,
         payload_capture: PayloadCapture,
-        cognee_client: MagicMock,
+        cognee_client: CogneeClient,
     ) -> None:
         """Test cognify without dataset_name sends empty payload.
 
@@ -281,8 +282,12 @@ class TestCognifyContract:
         # Act
         await cognee_client.cognify()
 
-        # Assert - no datasets field when not specified
+        # Assert - datasets field should not be present OR should be None
+        # (Either is acceptable since both mean "process all datasets")
         json_data = payload_capture.last_json_data
-        assert "datasets" not in json_data or json_data.get("datasets") is None, (
-            "cognify without dataset should not include 'datasets' field."
+        datasets_value = json_data.get("datasets")
+        datasets_is_absent_or_none = "datasets" not in json_data or datasets_value is None
+        assert datasets_is_absent_or_none, (
+            f"cognify without dataset should not include 'datasets' field or it should be None. "
+            f"Got: datasets={datasets_value!r}"
         )

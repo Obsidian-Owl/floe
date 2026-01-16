@@ -12,8 +12,8 @@ Requirements Covered:
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -123,60 +123,82 @@ class TestCircuitBreaker:
     @pytest.mark.requirement("FR-008")
     def test_half_open_after_recovery_timeout(self) -> None:
         """Test circuit transitions to half-open after timeout."""
-        config = CircuitBreakerConfig(failure_threshold=1, recovery_timeout=0.1)
+        config = CircuitBreakerConfig(failure_threshold=1, recovery_timeout=30.0)
         breaker = CircuitBreaker(config)
 
-        # Open the circuit
-        breaker.record_failure()
-        assert breaker.state == CircuitState.OPEN
-        assert breaker.can_execute() is False
+        # Mock time.monotonic to control time flow
+        mock_time = 1000.0
 
-        # Wait for recovery timeout
-        time.sleep(0.15)
+        def mock_monotonic() -> float:
+            return mock_time
 
-        # Should now be half-open
-        assert breaker.can_execute() is True
-        assert breaker.state == CircuitState.HALF_OPEN
+        with patch("agent_memory.resilience.time.monotonic", side_effect=mock_monotonic):
+            # Open the circuit
+            breaker.record_failure()
+            assert breaker.state == CircuitState.OPEN
+            assert breaker.can_execute() is False
+
+        # Advance time past recovery timeout
+        mock_time = 1031.0  # 31 seconds later (> 30s recovery_timeout)
+
+        with patch("agent_memory.resilience.time.monotonic", return_value=mock_time):
+            # Should now be half-open
+            assert breaker.can_execute() is True
+            assert breaker.state == CircuitState.HALF_OPEN
 
     @pytest.mark.requirement("FR-008")
     def test_half_open_closes_on_success(self) -> None:
         """Test circuit closes after successes in half-open."""
         config = CircuitBreakerConfig(
             failure_threshold=1,
-            recovery_timeout=0.01,
+            recovery_timeout=30.0,
             success_threshold=2,
         )
         breaker = CircuitBreaker(config)
 
-        # Open and wait for half-open
-        breaker.record_failure()
-        time.sleep(0.02)
-        breaker.can_execute()  # Triggers half-open
+        # Mock time.monotonic for controlled time flow
+        mock_time = 1000.0
 
-        assert breaker.state == CircuitState.HALF_OPEN
+        with patch("agent_memory.resilience.time.monotonic", return_value=mock_time):
+            # Open the circuit
+            breaker.record_failure()
 
-        breaker.record_success()
-        assert breaker.state == CircuitState.HALF_OPEN  # Need 2 successes
+        # Advance time past recovery timeout
+        mock_time = 1031.0
 
-        breaker.record_success()
-        assert breaker.state == CircuitState.CLOSED
+        with patch("agent_memory.resilience.time.monotonic", return_value=mock_time):
+            breaker.can_execute()  # Triggers half-open
+            assert breaker.state == CircuitState.HALF_OPEN
+
+            breaker.record_success()
+            assert breaker.state == CircuitState.HALF_OPEN  # Need 2 successes
+
+            breaker.record_success()
+            assert breaker.state == CircuitState.CLOSED
 
     @pytest.mark.requirement("FR-008")
     def test_half_open_reopens_on_failure(self) -> None:
         """Test circuit reopens if failure during half-open."""
-        config = CircuitBreakerConfig(failure_threshold=1, recovery_timeout=0.01)
+        config = CircuitBreakerConfig(failure_threshold=1, recovery_timeout=30.0)
         breaker = CircuitBreaker(config)
 
-        # Open and wait for half-open
-        breaker.record_failure()
-        time.sleep(0.02)
-        breaker.can_execute()  # Triggers half-open
+        # Mock time.monotonic for controlled time flow
+        mock_time = 1000.0
 
-        assert breaker.state == CircuitState.HALF_OPEN
+        with patch("agent_memory.resilience.time.monotonic", return_value=mock_time):
+            # Open the circuit
+            breaker.record_failure()
 
-        # Failure in half-open should reopen
-        breaker.record_failure()
-        assert breaker.state == CircuitState.OPEN
+        # Advance time past recovery timeout
+        mock_time = 1031.0
+
+        with patch("agent_memory.resilience.time.monotonic", return_value=mock_time):
+            breaker.can_execute()  # Triggers half-open
+            assert breaker.state == CircuitState.HALF_OPEN
+
+            # Failure in half-open should reopen
+            breaker.record_failure()
+            assert breaker.state == CircuitState.OPEN
 
     @pytest.mark.requirement("FR-008")
     def test_reset_returns_to_initial_state(self) -> None:
