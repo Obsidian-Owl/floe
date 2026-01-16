@@ -84,17 +84,18 @@ if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
     exit 0  # Non-intrusive exit
 fi
 
-# Build command
-CMD="uv run agent-memory session-save --decisions \"$DECISIONS\""
-if [[ -n "$ISSUES" ]]; then
-    CMD="$CMD --issues \"$ISSUES\""
-fi
-
-# Run save
+# Run save - use direct invocation without eval to prevent command injection
 cd "$AGENT_MEMORY_DIR"
-eval "$CMD" 2>/dev/null || {
-    [[ "$QUIET" != true ]] && echo "Failed to save to agent-memory - continuing without" >&2
-    exit 0
-}
+if [[ -n "$ISSUES" ]]; then
+    uv run agent-memory session-save --decisions "$DECISIONS" --issues "$ISSUES" 2>/dev/null || {
+        [[ "$QUIET" != true ]] && echo "Failed to save to agent-memory - continuing without" >&2
+        exit 0
+    }
+else
+    uv run agent-memory session-save --decisions "$DECISIONS" 2>/dev/null || {
+        [[ "$QUIET" != true ]] && echo "Failed to save to agent-memory - continuing without" >&2
+        exit 0
+    }
+fi
 
 [[ "$QUIET" != true ]] && echo "Decisions saved to agent-memory"

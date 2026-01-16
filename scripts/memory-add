@@ -126,11 +126,6 @@ echo "$CONTENT" > "$TEMP_FILE"
 trap "rm -f $TEMP_FILE" EXIT
 
 # Use Python to add content via the client
-VERIFY_FLAG=""
-if [[ "$VERIFY" == true ]]; then
-    VERIFY_FLAG="--verify"
-fi
-
 uv run python -c "
 import asyncio
 import sys
