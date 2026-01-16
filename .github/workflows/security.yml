@@ -32,6 +32,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write  # Required for OIDC authentication
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
