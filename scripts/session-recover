@@ -92,9 +92,31 @@ fi
 # Run session-recover command
 cd "$AGENT_MEMORY_DIR"
 if uv run agent-memory session-recover --work-area "$WORK_AREA" 2>/dev/null; then
-    exit 0
+    :  # Success, continue to epic check
 else
-    # Non-intrusive exit - don't fail if recovery doesn't find anything
+    # Non-intrusive - don't fail if recovery doesn't find anything
     [[ "$QUIET" != true ]] && echo "No prior session context available for '$WORK_AREA'"
-    exit 0
 fi
+
+# Check for epic auto-mode state file
+EPIC_AUTO_MODE="$REPO_ROOT/.agent/epic-auto-mode"
+if [[ -f "$EPIC_AUTO_MODE" ]]; then
+    cat << 'EOF'
+
+================================================================================
+EPIC AUTO-MODE DETECTED
+================================================================================
+
+You were implementing tasks in auto-mode before context compaction.
+
+To continue automatic implementation:
+  /speckit.implement-epic
+
+To implement tasks one at a time:
+  /speckit.implement
+
+================================================================================
+EOF
+fi
+
+exit 0

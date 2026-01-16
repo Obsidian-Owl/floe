@@ -130,7 +130,8 @@ bd linear sync --pull
 /speckit.taskstolinear  # Create Linear issues with Epic labels
 
 # 2. Implementation (Linear-coordinated)
-/speckit.implement  # Auto-selects ready task, syncs Linear
+/speckit.implement       # One task at a time (with confirmation)
+/speckit.implement-epic  # ALL tasks (auto-continues, no confirmation)
 
 # 3. Test Quality Review
 /speckit.test-review  # Pre-PR validation
