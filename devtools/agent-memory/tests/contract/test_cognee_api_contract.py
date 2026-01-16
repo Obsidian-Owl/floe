@@ -276,18 +276,17 @@ class TestCognifyContract:
         """Test cognify without dataset_name sends empty payload.
 
         When no dataset is specified, cognify processes all datasets.
+        The implementation sends an empty JSON object {} (no datasets field).
 
         Requirement: FR-005
         """
         # Act
         await cognee_client.cognify()
 
-        # Assert - datasets field should not be present OR should be None
-        # (Either is acceptable since both mean "process all datasets")
+        # Assert - datasets field should NOT be present (empty payload)
+        # Implementation sends {} when no dataset specified (see cognee_client.py:622-624)
         json_data = payload_capture.last_json_data
-        datasets_value = json_data.get("datasets")
-        datasets_is_absent_or_none = "datasets" not in json_data or datasets_value is None
-        assert datasets_is_absent_or_none, (
-            f"cognify without dataset should not include 'datasets' field or it should be None. "
-            f"Got: datasets={datasets_value!r}"
+        assert "datasets" not in json_data, (
+            f"cognify without dataset should send empty payload (no 'datasets' field). "
+            f"Got: {json_data!r}"
         )

@@ -9,25 +9,10 @@ Requirements Covered:
 
 from __future__ import annotations
 
-import uuid
-
 import pytest
 
-
-def generate_test_dataset_name(base: str = "test") -> str:
-    """Generate unique test dataset name with prefix.
-
-    This is the same implementation as in conftest.py, but duplicated here
-    to avoid circular import issues with pytest's conftest loading.
-
-    Args:
-        base: Base name for the dataset (default: "test").
-
-    Returns:
-        Unique dataset name in format: test_{base}_{uuid8}
-    """
-    suffix = uuid.uuid4().hex[:8]
-    return f"test_{base}_{suffix}"
+# Import shared utilities from canonical location
+from agent_memory.testing import generate_test_dataset_name
 
 
 class TestGenerateTestDatasetName:

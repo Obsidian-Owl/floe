@@ -13,29 +13,15 @@ Note: Unit tests for generate_test_dataset_name are in tests/unit/test_dataset_u
 
 from __future__ import annotations
 
-import uuid
 from typing import TYPE_CHECKING
 
 import pytest
 
+# Import shared utilities from canonical location
+from agent_memory.testing import generate_test_dataset_name
+
 if TYPE_CHECKING:
     from agent_memory.cognee_client import CogneeClient
-
-
-def generate_test_dataset_name(base: str = "test") -> str:
-    """Generate unique test dataset name with prefix.
-
-    Note: Canonical implementation is in tests/conftest.py, but we can't import
-    from conftest directly. This is a local copy for use in these integration tests.
-
-    Args:
-        base: Base name for the dataset (default: "test").
-
-    Returns:
-        Unique dataset name in format: test_{base}_{uuid8}
-    """
-    suffix = uuid.uuid4().hex[:8]
-    return f"test_{base}_{suffix}"
 
 
 @pytest.mark.requirement("FR-006")

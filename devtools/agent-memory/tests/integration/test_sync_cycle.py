@@ -312,6 +312,7 @@ async def test_search_with_no_results(
 
     # Should return without error, possibly with 0 results
     # (or low-relevance results depending on Cognee's behavior)
-    assert result is not None
+    assert isinstance(result.results, list), "Search results should be a list"
+    assert result.total_count >= 0, "Total count should be non-negative"
     assert result.query == "quantum computing neural networks blockchain"
     # Cleanup handled by unique_dataset_name fixture

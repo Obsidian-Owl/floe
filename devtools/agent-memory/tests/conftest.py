@@ -12,13 +12,15 @@ Implementation: T051 (FLO-636)
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
+
+# Import shared utilities from canonical location
+from agent_memory.testing import generate_test_dataset_name
 
 if TYPE_CHECKING:
     from agent_memory.session import DecisionRecord, SessionContext
@@ -27,28 +29,6 @@ if TYPE_CHECKING:
 # =============================================================================
 # Test Isolation Utilities
 # =============================================================================
-
-
-def generate_test_dataset_name(base: str = "test") -> str:
-    """Generate unique test dataset name with prefix.
-
-    All integration test datasets use this format to:
-    1. Avoid polluting production datasets
-    2. Enable cleanup via test_ prefix matching
-    3. Prevent test interference via unique suffixes
-
-    Args:
-        base: Base name for the dataset (default: "test").
-
-    Returns:
-        Unique dataset name in format: test_{base}_{uuid8}
-
-    Example:
-        >>> name = generate_test_dataset_name("architecture")
-        >>> name  # "test_architecture_a1b2c3d4"
-    """
-    suffix = uuid.uuid4().hex[:8]
-    return f"test_{base}_{suffix}"
 
 
 class TestDatasetFixture:
