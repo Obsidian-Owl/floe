@@ -16,8 +16,9 @@ bd linear sync --pull
 # 2. See available work
 bd ready
 
-# 3. Implement a task
-/speckit.implement
+# 3. Implement tasks
+/speckit.implement       # One at a time (with confirmation)
+/speckit.implement-epic  # ALL tasks (auto-continues)
 
 # 4. Sync back to Linear
 bd linear sync --pull
@@ -197,6 +198,9 @@ The full chain enables auditing:
 
 # 9. Continue implementing
 /speckit.implement  # Auto-implements next ready task
+
+# Alternative: Auto-implement ALL tasks
+/speckit.implement-epic  # No confirmation, stops when blocked or complete
 ```
 
 ### Parallel Workflow
@@ -805,6 +809,7 @@ Check dependency integrity:
 - **Commands**:
   - [speckit.taskstolinear](../../.claude/commands/speckit.taskstolinear.md)
   - [speckit.implement](../../.claude/commands/speckit.implement.md)
+  - [speckit.implement-epic](../../.claude/commands/speckit.implement-epic.md)
 - **Linear Resources**:
   - Initiative: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
   - Team: floe-runtime

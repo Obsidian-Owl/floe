@@ -535,7 +535,7 @@ The **agent-memory** system provides persistent context across sessions via a Co
 
 - **Session Start**: Hook automatically queries for prior context (see startup logs)
 - **SpecKit Skills**: `/speckit.plan` and `/speckit.specify` search memory before decisions
-- **Ralph Skills**: `/ralph.resume` recovers context from agent-memory
+- **Epic Recovery**: SessionStart hook detects `.agent/epic-auto-mode` after compaction
 
 ### If Agent-Memory Unavailable
 
