@@ -297,8 +297,13 @@ class TestSchemaBackwardsCompatibility:
 
         # Should have all required fields
         required = [
-            "task_id", "linear_id", "epic", "status",
-            "subtasks", "iteration", "max_iterations",
+            "task_id",
+            "linear_id",
+            "epic",
+            "status",
+            "subtasks",
+            "iteration",
+            "max_iterations",
         ]
         for field in required:
             assert field in v1_plan, f"Missing required field: {field}"

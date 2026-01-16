@@ -46,9 +46,7 @@ class TestFullWorkflow(RalphTestBase):
         # 3. SIMULATE AGENT WORK: Create a file and commit
         test_file = worktree / "agent_output.py"
         test_file.write_text(
-            '"""Agent-generated module."""\n\n'
-            "def hello() -> str:\n"
-            '    return "Hello from agent"\n'
+            '"""Agent-generated module."""\n\ndef hello() -> str:\n    return "Hello from agent"\n'
         )
 
         subprocess.run(["git", "add", "."], cwd=worktree, check=True)

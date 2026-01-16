@@ -134,9 +134,7 @@ def mock_linear_mcp() -> Generator[MagicMock, None, None]:
     mock = MagicMock()
 
     # Default responses for common operations
-    mock.list_teams.return_value = [
-        {"id": "team-1", "name": "floe", "key": "FLO"}
-    ]
+    mock.list_teams.return_value = [{"id": "team-1", "name": "floe", "key": "FLO"}]
 
     mock.list_issues.return_value = [
         {

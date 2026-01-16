@@ -40,15 +40,12 @@ def agent_state_dir(tmp_path: Path) -> Path:
 
     # Create activity.md
     (agent_dir / "activity.md").write_text(
-        "# Agent Activity Log\n\n"
-        "## Session Start\n\n"
-        "- Initialized at test start\n"
+        "# Agent Activity Log\n\n## Session Start\n\n- Initialized at test start\n"
     )
 
     # Create PROMPT.md
     (agent_dir / "PROMPT.md").write_text(
-        "# Agent Instructions\n\n"
-        "This is a test agent. Follow the plan.json subtasks.\n"
+        "# Agent Instructions\n\nThis is a test agent. Follow the plan.json subtasks.\n"
     )
 
     # Create constitution.md (copy from .specify/memory if exists)
@@ -57,9 +54,7 @@ def agent_state_dir(tmp_path: Path) -> Path:
         (agent_dir / "constitution.md").write_text(constitution_path.read_text())
     else:
         (agent_dir / "constitution.md").write_text(
-            "# Test Constitution\n\n"
-            "1. Tests MUST pass\n"
-            "2. Code MUST be clean\n"
+            "# Test Constitution\n\n1. Tests MUST pass\n2. Code MUST be clean\n"
         )
 
     return agent_dir

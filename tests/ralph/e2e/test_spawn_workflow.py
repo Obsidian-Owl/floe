@@ -61,15 +61,12 @@ class TestSpawnWorkflow(RalphTestBase):
 
         # Create activity.md
         (agent_dir / "activity.md").write_text(
-            "# Agent Activity Log\n\n"
-            "## Session Start\n"
-            "- Initialized by test\n"
+            "# Agent Activity Log\n\n## Session Start\n- Initialized by test\n"
         )
 
         # Create PROMPT.md
         (agent_dir / "PROMPT.md").write_text(
-            "# Agent Instructions\n\n"
-            "Follow the plan.json subtasks.\n"
+            "# Agent Instructions\n\nFollow the plan.json subtasks.\n"
         )
 
         # Verify all files created

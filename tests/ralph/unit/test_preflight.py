@@ -174,9 +174,7 @@ class TestCogneeCheck:
 
     @pytest.mark.requirement("ralph-preflight-006")
     @pytest.mark.ralph
-    def test_cognee_check_no_api_key(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_cognee_check_no_api_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Cognee check warns when API key not set.
 
         Missing COGNEE_API_KEY should produce a warning, not block.
@@ -246,9 +244,7 @@ class TestMemoryBufferCheck:
 
     @pytest.mark.requirement("ralph-preflight-009")
     @pytest.mark.ralph
-    def test_memory_buffer_check_empty(
-        self, memory_buffer_dir: Path
-    ) -> None:
+    def test_memory_buffer_check_empty(self, memory_buffer_dir: Path) -> None:
         """Memory buffer check passes when buffer is empty."""
         # Fixture creates empty buffer structure
         # Patch the path to use our fixture
@@ -261,9 +257,7 @@ class TestMemoryBufferCheck:
 
     @pytest.mark.requirement("ralph-preflight-010")
     @pytest.mark.ralph
-    def test_memory_buffer_check_with_pending(
-        self, memory_buffer_dir: Path
-    ) -> None:
+    def test_memory_buffer_check_with_pending(self, memory_buffer_dir: Path) -> None:
         """Memory buffer check reports pending entries."""
         # Add a pending entry
         pending_dir = memory_buffer_dir / "pending"

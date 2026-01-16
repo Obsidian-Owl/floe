@@ -394,9 +394,9 @@ class RalphTestBase(IntegrationTestBase):
         current = self._capture_state_snapshot()
 
         # Compare branch
-        assert (
-            current.git_branch == self._state_snapshot.git_branch
-        ), f"Branch changed: {self._state_snapshot.git_branch} -> {current.git_branch}"
+        assert current.git_branch == self._state_snapshot.git_branch, (
+            f"Branch changed: {self._state_snapshot.git_branch} -> {current.git_branch}"
+        )
 
         # Compare status (excluding test worktrees)
         assert current.git_status == self._state_snapshot.git_status, (
@@ -495,9 +495,7 @@ class RalphTestBase(IntegrationTestBase):
                 path = Path(line.replace("worktree ", ""))
                 if path.exists() and "test-ralph" in str(path):
                     # Check directory age via mtime
-                    mtime = datetime.fromtimestamp(
-                        path.stat().st_mtime, tz=timezone.utc
-                    )
+                    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
                     age_hours = (now - mtime).total_seconds() / 3600
                     if age_hours > max_age_hours:
                         # Remove stale worktree

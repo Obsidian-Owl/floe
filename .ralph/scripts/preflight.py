@@ -212,7 +212,7 @@ def check_direnv() -> PreflightResult:
                 service="direnv",
                 message="direnv not installed - required for worktree environment",
                 recoverable=True,
-                action="Install direnv: brew install direnv && eval \"$(direnv hook bash)\"",
+                action='Install direnv: brew install direnv && eval "$(direnv hook bash)"',
             )
 
         # Check if .envrc is allowed in current directory
@@ -254,7 +254,7 @@ def check_direnv() -> PreflightResult:
             service="direnv",
             message="direnv not installed - required for worktrees",
             recoverable=True,
-            action="Install direnv: brew install direnv && eval \"$(direnv hook bash)\"",
+            action='Install direnv: brew install direnv && eval "$(direnv hook bash)"',
         )
     except subprocess.TimeoutExpired:
         return PreflightResult(

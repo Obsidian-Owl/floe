@@ -43,9 +43,7 @@ PYDANTIC_V1_PATTERNS = [
 ]
 
 
-def check_principle_1_technology_ownership(
-    file_path: Path, content: str
-) -> list[Violation]:
+def check_principle_1_technology_ownership(file_path: Path, content: str) -> list[Violation]:
     """Check Principle I: Technology Ownership - dbt owns SQL."""
     violations = []
 
@@ -73,9 +71,7 @@ def check_principle_1_technology_ownership(
     return violations
 
 
-def check_principle_4_contract_driven(
-    file_path: Path, content: str
-) -> list[Violation]:
+def check_principle_4_contract_driven(file_path: Path, content: str) -> list[Violation]:
     """Check Principle IV: Contract-Driven Integration - Pydantic v2 syntax."""
     violations = []
 
@@ -95,9 +91,7 @@ def check_principle_4_contract_driven(
     return violations
 
 
-def check_principle_5_k8s_native_testing(
-    file_path: Path, content: str
-) -> list[Violation]:
+def check_principle_5_k8s_native_testing(file_path: Path, content: str) -> list[Violation]:
     """Check Principle V: K8s-Native Testing - no hardcoded sleeps."""
     violations = []
 
@@ -118,17 +112,13 @@ def check_principle_5_k8s_native_testing(
     return violations
 
 
-def check_principle_6_security_first(
-    file_path: Path, content: str
-) -> list[Violation]:
+def check_principle_6_security_first(file_path: Path, content: str) -> list[Violation]:
     """Check Principle VI: Security First."""
     violations = []
 
     # Check for dangerous subprocess usage
     if re.search(r"subprocess\.(run|call|Popen).*shell\s*=\s*True", content):
-        for match in re.finditer(
-            r"subprocess\.(run|call|Popen).*shell\s*=\s*True", content
-        ):
+        for match in re.finditer(r"subprocess\.(run|call|Popen).*shell\s*=\s*True", content):
             line_num = content[: match.start()].count("\n") + 1
             violations.append(
                 Violation(

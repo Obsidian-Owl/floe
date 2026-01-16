@@ -238,7 +238,8 @@ class TestWorktreeDryRun(RalphTestBase):
     @pytest.mark.worktree
     @pytest.mark.dry_run
     def test_dry_run_no_worktree_created(
-        self, ralph_dry_run_env: None  # noqa: ARG002
+        self,
+        ralph_dry_run_env: None,  # noqa: ARG002
     ) -> None:
         """Dry-run mode doesn't create actual worktrees.
 

@@ -299,7 +299,7 @@ class TestQualityGateChain(RalphTestBase):
         code_file.write_text(
             '"""Module with issues."""\n\n'
             "def bad_function(x,y,z):\n"  # Bad formatting
-            '    return x+y+z\n'
+            "    return x+y+z\n"
         )
 
         subprocess.run(["git", "add", "."], cwd=worktree, check=True)

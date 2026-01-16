@@ -111,11 +111,11 @@ def get_count() -> str:
 
         # Create pyproject.toml for mypy config
         pyproject = worktree / "pyproject.toml"
-        pyproject.write_text('''\
+        pyproject.write_text("""\
 [tool.mypy]
 python_version = "3.10"
 strict = true
-''')
+""")
 
         # Verify the file has type errors before agent runs
         pre_result = subprocess.run(
@@ -142,9 +142,12 @@ Do NOT create any new files.
             [
                 "claude",
                 "-p",  # Print mode (non-interactive)
-                "--model", "haiku",  # Fast and cheap
-                "--max-budget-usd", "0.20",
-                "--allowedTools", "Read,Edit,Bash",
+                "--model",
+                "haiku",  # Fast and cheap
+                "--max-budget-usd",
+                "0.20",
+                "--allowedTools",
+                "Read,Edit,Bash",
                 "--dangerously-skip-permissions",
                 prompt,
             ],
@@ -166,8 +169,7 @@ Do NOT create any new files.
 
         # Verify worktree still exists
         assert worktree.exists(), (
-            f"Worktree was deleted during test.\n"
-            f"Agent stderr: {result.stderr[:500]}"
+            f"Worktree was deleted during test.\nAgent stderr: {result.stderr[:500]}"
         )
 
         # Verify mypy now passes
@@ -189,9 +191,7 @@ Do NOT create any new files.
 
         # Write diagnostics for analysis
         if worktree.exists():
-            (worktree / ".diagnostics.json").write_text(
-                json.dumps(diagnostics, indent=2)
-            )
+            (worktree / ".diagnostics.json").write_text(json.dumps(diagnostics, indent=2))
 
         # Assert quality
         assert post_result.returncode == 0, (
@@ -265,9 +265,12 @@ Do NOT create any new files.
             [
                 "claude",
                 "-p",
-                "--model", "haiku",
-                "--max-budget-usd", "0.20",
-                "--allowedTools", "Read,Edit,Bash",
+                "--model",
+                "haiku",
+                "--max-budget-usd",
+                "0.20",
+                "--allowedTools",
+                "Read,Edit,Bash",
                 "--dangerously-skip-permissions",
                 prompt,
             ],
@@ -287,8 +290,7 @@ Do NOT create any new files.
 
         # Verify worktree still exists
         assert worktree.exists(), (
-            f"Worktree was deleted during test.\n"
-            f"Agent stderr: {result.stderr[:500]}"
+            f"Worktree was deleted during test.\nAgent stderr: {result.stderr[:500]}"
         )
 
         # Verify ruff now passes
@@ -375,9 +377,12 @@ Use pytest style. Run the tests to verify they pass.
             [
                 "claude",
                 "-p",
-                "--model", "haiku",
-                "--max-budget-usd", "0.30",
-                "--allowedTools", "Read,Edit,Write,Bash",
+                "--model",
+                "haiku",
+                "--max-budget-usd",
+                "0.30",
+                "--allowedTools",
+                "Read,Edit,Write,Bash",
                 "--dangerously-skip-permissions",
                 prompt,
             ],
@@ -405,8 +410,7 @@ Use pytest style. Run the tests to verify they pass.
         # Verify test file was created
         test_file = worktree / "test_calculator.py"
         assert test_file.exists(), (
-            f"Agent should create test_calculator.py\n"
-            f"Files in worktree: {list(worktree.iterdir())}"
+            f"Agent should create test_calculator.py\nFiles in worktree: {list(worktree.iterdir())}"
         )
 
         # Verify tests pass
@@ -425,16 +429,13 @@ Use pytest style. Run the tests to verify they pass.
             )
 
         assert test_result.returncode == 0, (
-            f"Tests should pass.\n"
-            f"pytest output: {test_result.stdout}\n"
-            f"stderr: {test_result.stderr}"
+            f"Tests should pass.\npytest output: {test_result.stdout}\nstderr: {test_result.stderr}"
         )
 
         # Verify minimum test count
         passed_count = test_result.stdout.count(" PASSED")
         assert passed_count >= 6, (
-            f"Expected at least 6 passing tests, got {passed_count}\n"
-            f"Output: {test_result.stdout}"
+            f"Expected at least 6 passing tests, got {passed_count}\nOutput: {test_result.stdout}"
         )
 
     @pytest.mark.e2e
@@ -483,23 +484,29 @@ class userManager:  # Bad class name
 
         # Create pyproject.toml
         pyproject = worktree / "pyproject.toml"
-        pyproject.write_text('''\
+        pyproject.write_text("""\
 [tool.mypy]
 python_version = "3.10"
 strict = true
 
 [tool.ruff]
 line-length = 100
-''')
+""")
 
         # Capture initial state (used in diagnostics below)
         initial_lint = subprocess.run(
             ["ruff", "check", str(broken_file)],
-            capture_output=True, text=True, cwd=worktree, check=False
+            capture_output=True,
+            text=True,
+            cwd=worktree,
+            check=False,
         )
         initial_type = subprocess.run(
             ["mypy", "--strict", str(broken_file)],
-            capture_output=True, text=True, cwd=worktree, check=False
+            capture_output=True,
+            text=True,
+            cwd=worktree,
+            check=False,
         )
         initial_lint_errors = initial_lint.stdout.count(" error") + initial_lint.stdout.count(": ")
         initial_type_errors = initial_type.stdout.count("error:")
@@ -525,9 +532,12 @@ Run all three checks to verify your work.
             [
                 "claude",
                 "-p",
-                "--model", "sonnet",  # Use sonnet for complex task
-                "--max-budget-usd", "0.50",
-                "--allowedTools", "Read,Edit,Write,Bash",
+                "--model",
+                "sonnet",  # Use sonnet for complex task
+                "--max-budget-usd",
+                "0.50",
+                "--allowedTools",
+                "Read,Edit,Write,Bash",
                 "--dangerously-skip-permissions",
                 prompt,
             ],
@@ -547,18 +557,23 @@ Run all three checks to verify your work.
 
         # Verify worktree still exists
         assert worktree.exists(), (
-            f"Worktree was deleted during test.\n"
-            f"Agent stderr: {result.stderr[:500]}"
+            f"Worktree was deleted during test.\nAgent stderr: {result.stderr[:500]}"
         )
 
         # Run quality gates
         lint_result = subprocess.run(
             ["ruff", "check", str(broken_file)],
-            capture_output=True, text=True, cwd=worktree, check=False
+            capture_output=True,
+            text=True,
+            cwd=worktree,
+            check=False,
         )
         type_result = subprocess.run(
             ["mypy", "--strict", str(broken_file)],
-            capture_output=True, text=True, cwd=worktree, check=False
+            capture_output=True,
+            text=True,
+            cwd=worktree,
+            check=False,
         )
 
         # Check for test file
@@ -567,7 +582,10 @@ Run all three checks to verify your work.
         if test_file.exists():
             test_result = subprocess.run(
                 ["python", "-m", "pytest", str(test_file), "-v"],
-                capture_output=True, text=True, cwd=worktree, check=False
+                capture_output=True,
+                text=True,
+                cwd=worktree,
+                check=False,
             )
 
         # Compile results
@@ -585,16 +603,16 @@ Run all three checks to verify your work.
         }
 
         if worktree.exists():
-            (worktree / ".quality_results.json").write_text(
-                json.dumps(results, indent=2)
-            )
+            (worktree / ".quality_results.json").write_text(json.dumps(results, indent=2))
 
         # Assert all gates pass
-        gates_passed = sum([
-            results["lint_passed"],
-            results["type_passed"],
-            results["tests_passed"],
-        ])
+        gates_passed = sum(
+            [
+                results["lint_passed"],
+                results["type_passed"],
+                results["tests_passed"],
+            ]
+        )
 
         assert gates_passed >= 2, (
             f"Agent should pass at least 2/3 quality gates.\n"

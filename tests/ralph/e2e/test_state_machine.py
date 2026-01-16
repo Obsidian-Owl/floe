@@ -246,9 +246,7 @@ class TestStateMachine(RalphTestBase):
         for i in range(3):
             plan["subtasks"][i]["passes"] = True
             plan["iteration"] = i + 2
-            plan["history"].append(
-                {"iteration": i + 2, "action": f"Completed subtask {i + 1}"}
-            )
+            plan["history"].append({"iteration": i + 2, "action": f"Completed subtask {i + 1}"})
             (agent_dir / "plan.json").write_text(json.dumps(plan, indent=2))
 
             # Re-read to verify persistence
