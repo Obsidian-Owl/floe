@@ -52,6 +52,22 @@ class CogneeConnectionError(CogneeClientError):
     """Failed to connect to Cognee Cloud."""
 
 
+class VerificationError(CogneeClientError):
+    """Content verification failed after write.
+
+    Raised when verify=True is passed to add_content and the content
+    is not found in a subsequent search.
+    """
+
+
+class CognifyTimeoutError(CogneeClientError):
+    """Cognify status polling timed out.
+
+    Raised when wait_for_completion=True is passed to cognify and the
+    operation does not complete within the specified timeout.
+    """
+
+
 class CogneeClient:
     """Async client wrapper for Cognee Cloud REST API.
 
@@ -380,6 +396,8 @@ class CogneeClient:
         dataset_name: str,
         *,
         metadata: dict[str, Any] | None = None,
+        verify: bool = False,
+        verify_timeout: float = 30.0,
     ) -> None:
         """Add content to a Cognee dataset via REST API.
 
@@ -387,9 +405,12 @@ class CogneeClient:
             content: Text content or list of content to add.
             dataset_name: Target dataset name.
             metadata: Optional metadata to attach (currently unused by API).
+            verify: If True, verify content is searchable after write (FR-009).
+            verify_timeout: Timeout in seconds for verification search (default: 30s).
 
         Raises:
             CogneeClientError: If adding content fails.
+            VerificationError: If verify=True and content not found in search.
         """
         content_list = [content] if isinstance(content, str) else content
 
@@ -397,6 +418,7 @@ class CogneeClient:
             "add_content_started",
             dataset=dataset_name,
             content_count=len(content_list),
+            verify=verify,
         )
 
         try:
@@ -418,22 +440,98 @@ class CogneeClient:
                 )
 
             self._log.info("add_content_completed", dataset=dataset_name)
+
+            # Perform read-after-write verification if requested (FR-010)
+            if verify:
+                await self._verify_content_searchable(
+                    content_list[0] if len(content_list) == 1 else content_list[0],
+                    dataset_name,
+                    timeout=verify_timeout,
+                )
+
         except CogneeClientError:
             raise
         except Exception as e:
             self._log.error("add_content_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Failed to add content: {e}") from e
 
-    async def cognify(self, dataset_name: str | None = None) -> None:
+    async def _verify_content_searchable(
+        self,
+        content_sample: str,
+        dataset_name: str,
+        timeout: float = 30.0,
+    ) -> None:
+        """Verify content is searchable via read-after-write check.
+
+        Searches for a sample of the added content to verify it was stored
+        and is searchable. Raises VerificationError if not found.
+
+        Args:
+            content_sample: Sample of content to search for.
+            dataset_name: Dataset where content was added.
+            timeout: Timeout for the verification search.
+
+        Raises:
+            VerificationError: If content is not found in search results.
+        """
+        self._log.debug(
+            "verify_content_started",
+            dataset=dataset_name,
+            sample_length=len(content_sample),
+        )
+
+        # Use first 100 chars as search query to avoid long queries
+        search_query = content_sample[:100] if len(content_sample) > 100 else content_sample
+
+        # Search for the content
+        result = await self.search(
+            search_query,
+            dataset_name=dataset_name,
+            top_k=5,
+        )
+
+        # Check if any result contains the content
+        found = False
+        for item in result.results:
+            if content_sample[:50] in item.content:
+                found = True
+                break
+
+        if not found:
+            self._log.error(
+                "verify_content_failed",
+                dataset=dataset_name,
+                reason="Content not found in search results",
+            )
+            raise VerificationError(
+                f"Content not found in search results after write to dataset '{dataset_name}'"
+            )
+
+    async def cognify(
+        self,
+        dataset_name: str | None = None,
+        *,
+        wait_for_completion: bool = False,
+        poll_interval: float = 5.0,
+        timeout: float = 300.0,
+    ) -> None:
         """Process content into knowledge graph using LLM via REST API.
 
         Args:
             dataset_name: Optional dataset to cognify. If None, cognifies all.
+            wait_for_completion: If True, poll status until complete (FR-012).
+            poll_interval: Seconds between status polls (default: 5s).
+            timeout: Maximum seconds to wait for completion (default: 300s, FR-013).
 
         Raises:
             CogneeClientError: If cognify operation fails.
+            CognifyTimeoutError: If wait_for_completion=True and timeout exceeded.
         """
-        self._log.info("cognify_started", dataset=dataset_name or "all")
+        self._log.info(
+            "cognify_started",
+            dataset=dataset_name or "all",
+            wait_for_completion=wait_for_completion,
+        )
 
         try:
             # Use REST API - LLM processing happens server-side
@@ -454,12 +552,107 @@ class CogneeClient:
                     f"Cognify failed with status {response.status_code}: {error_detail}"
                 )
 
+            # If wait_for_completion, poll status until done (FR-012)
+            if wait_for_completion and dataset_name:
+                await self._wait_for_cognify_completion(
+                    dataset_name,
+                    poll_interval=poll_interval,
+                    timeout=timeout,
+                )
+
             self._log.info("cognify_completed", dataset=dataset_name or "all")
         except CogneeClientError:
             raise
         except Exception as e:
             self._log.error("cognify_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Cognify failed: {e}") from e
+
+    async def get_dataset_status(self, dataset_name: str) -> dict[str, Any]:
+        """Get the status of a dataset's cognify processing.
+
+        Args:
+            dataset_name: Name of the dataset to check.
+
+        Returns:
+            Status dict with at least {"status": "PROCESSING"|"COMPLETED"|"FAILED"}.
+
+        Raises:
+            CogneeClientError: If status check fails.
+        """
+        try:
+            response = await self._make_request(
+                "GET",
+                self._endpoint(f"/datasets/{dataset_name}/status"),
+            )
+
+            if response.status_code != 200:
+                error_detail = response.text
+                raise CogneeClientError(
+                    f"Get dataset status failed with status {response.status_code}: {error_detail}"
+                )
+
+            return response.json()
+        except CogneeClientError:
+            raise
+        except Exception as e:
+            self._log.error("get_dataset_status_failed", dataset=dataset_name, error=str(e))
+            raise CogneeClientError(f"Failed to get dataset status: {e}") from e
+
+    async def _wait_for_cognify_completion(
+        self,
+        dataset_name: str,
+        poll_interval: float = 5.0,
+        timeout: float = 300.0,
+    ) -> None:
+        """Wait for cognify processing to complete with polling.
+
+        Polls the dataset status endpoint until status is COMPLETED or FAILED,
+        or until timeout is exceeded.
+
+        Args:
+            dataset_name: Name of the dataset being cognified.
+            poll_interval: Seconds between status polls.
+            timeout: Maximum seconds to wait.
+
+        Raises:
+            CognifyTimeoutError: If timeout exceeded before completion.
+            CogneeClientError: If cognify fails.
+        """
+        start_time = time.monotonic()
+
+        self._log.debug(
+            "cognify_polling_started",
+            dataset=dataset_name,
+            poll_interval=poll_interval,
+            timeout=timeout,
+        )
+
+        while True:
+            elapsed = time.monotonic() - start_time
+            if elapsed >= timeout:
+                raise CognifyTimeoutError(
+                    f"Cognify for dataset '{dataset_name}' timed out after {timeout}s"
+                )
+
+            status_data = await self.get_dataset_status(dataset_name)
+            status = status_data.get("status", "UNKNOWN")
+
+            self._log.debug(
+                "cognify_status_poll",
+                dataset=dataset_name,
+                status=status,
+                elapsed=elapsed,
+            )
+
+            if status == "COMPLETED":
+                return
+            elif status == "FAILED":
+                error_msg = status_data.get("error", "Unknown error")
+                raise CogneeClientError(
+                    f"Cognify failed for dataset '{dataset_name}': {error_msg}"
+                )
+
+            await asyncio.sleep(poll_interval)
 
     async def memify(self, dataset_name: str | None = None) -> None:
         """Optimize knowledge graph using memify post-processing pipeline.

@@ -629,3 +629,357 @@ class TestSearchResultMetadata:
             result = await cognee_client.search("test query")
 
             assert result.results[0].source_path == "/fallback/path.md"
+
+
+class TestVerifyParameter:
+    """Unit tests for verify parameter in add_content.
+
+    Tests that the verify parameter triggers read-after-write verification.
+
+    Implementation: T030, T030a (FLO-687, FLO-688)
+    Requirements: FR-009, FR-010
+    """
+
+    @pytest.fixture
+    def mock_config(self) -> MagicMock:
+        """Create mock configuration."""
+        config = MagicMock()
+        config.cognee_api_url = "https://api.cognee.ai"
+        config.cognee_api_key.get_secret_value.return_value = "test-api-key"
+        config.cognee_api_version = "v1"
+        config.search_top_k = 5
+        return config
+
+    @pytest.fixture
+    def cognee_client(self, mock_config: MagicMock) -> Any:
+        """Create CogneeClient with mock config."""
+        from agent_memory.cognee_client import CogneeClient
+
+        return CogneeClient(mock_config)
+
+    @pytest.mark.requirement("FR-009")
+    async def test_verify_true_triggers_verification(
+        self,
+        cognee_client: Any,
+    ) -> None:
+        """Test verify=True triggers read-after-write verification.
+
+        When verify=True, add_content should:
+        1. Add the content via POST /add
+        2. Search for the content to verify it was stored
+        3. Raise VerificationError if content not found
+
+        Requirement: FR-009
+        """
+        add_response = MagicMock()
+        add_response.status_code = 200
+        add_response.text = "{}"
+
+        # Search response includes the added content (verification passes)
+        search_response = MagicMock()
+        search_response.status_code = 200
+        search_response.json.return_value = [
+            {"content": "test verification content", "score": 0.95}
+        ]
+
+        call_count = 0
+
+        async def mock_request(
+            method: str,
+            endpoint: str,
+            *,
+            json_data: dict[str, Any] | None = None,
+            timeout: float = 300.0,
+        ) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if "/add" in endpoint:
+                return add_response
+            if "/search" in endpoint:
+                return search_response
+            return add_response
+
+        with patch.object(
+            cognee_client,
+            "_make_request",
+            new=AsyncMock(side_effect=mock_request),
+        ):
+            # Call with verify=True
+            await cognee_client.add_content(
+                "test verification content",
+                "test_dataset",
+                verify=True,
+            )
+
+            # Should have made 2 requests: add + search
+            assert call_count == 2
+
+    @pytest.mark.requirement("FR-009")
+    async def test_verify_false_skips_verification(
+        self,
+        cognee_client: Any,
+    ) -> None:
+        """Test verify=False (default) skips verification.
+
+        When verify=False (the default), add_content should:
+        1. Add the content via POST /add
+        2. NOT search for verification
+
+        Requirement: FR-009
+        """
+        add_response = MagicMock()
+        add_response.status_code = 200
+        add_response.text = "{}"
+
+        call_count = 0
+        endpoints_called: list[str] = []
+
+        async def mock_request(
+            method: str,
+            endpoint: str,
+            *,
+            json_data: dict[str, Any] | None = None,
+            timeout: float = 300.0,
+        ) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            endpoints_called.append(endpoint)
+            return add_response
+
+        with patch.object(
+            cognee_client,
+            "_make_request",
+            new=AsyncMock(side_effect=mock_request),
+        ):
+            # Call with default verify=False
+            await cognee_client.add_content(
+                "test content",
+                "test_dataset",
+            )
+
+            # Should have made only 1 request: add (no search)
+            assert call_count == 1
+            assert "/search" not in endpoints_called[0]
+
+    @pytest.mark.requirement("FR-010")
+    async def test_verify_raises_on_content_not_found(
+        self,
+        cognee_client: Any,
+    ) -> None:
+        """Test verify=True raises VerificationError if content not found.
+
+        When verification search doesn't find the added content,
+        a VerificationError should be raised.
+
+        Requirement: FR-010
+        """
+        from agent_memory.cognee_client import VerificationError
+
+        add_response = MagicMock()
+        add_response.status_code = 200
+        add_response.text = "{}"
+
+        # Search response is empty (verification fails)
+        search_response = MagicMock()
+        search_response.status_code = 200
+        search_response.json.return_value = []
+
+        async def mock_request(
+            method: str,
+            endpoint: str,
+            *,
+            json_data: dict[str, Any] | None = None,
+            timeout: float = 300.0,
+        ) -> MagicMock:
+            if "/add" in endpoint:
+                return add_response
+            if "/search" in endpoint:
+                return search_response
+            return add_response
+
+        with patch.object(
+            cognee_client,
+            "_make_request",
+            new=AsyncMock(side_effect=mock_request),
+        ):
+            with pytest.raises(VerificationError, match="not found in search"):
+                await cognee_client.add_content(
+                    "content that wont be found",
+                    "test_dataset",
+                    verify=True,
+                )
+
+
+class TestCognifyStatusPolling:
+    """Unit tests for status polling in cognify.
+
+    Tests the wait_for_completion parameter that enables status polling.
+
+    Implementation: T031 (FLO-686)
+    Requirements: FR-012, FR-013
+    """
+
+    @pytest.fixture
+    def mock_config(self) -> MagicMock:
+        """Create mock configuration."""
+        config = MagicMock()
+        config.cognee_api_url = "https://api.cognee.ai"
+        config.cognee_api_key.get_secret_value.return_value = "test-api-key"
+        config.cognee_api_version = "v1"
+        config.search_top_k = 5
+        return config
+
+    @pytest.fixture
+    def cognee_client(self, mock_config: MagicMock) -> Any:
+        """Create CogneeClient with mock config."""
+        from agent_memory.cognee_client import CogneeClient
+
+        return CogneeClient(mock_config)
+
+    @pytest.mark.requirement("FR-012")
+    async def test_wait_for_completion_polls_status(
+        self,
+        cognee_client: Any,
+    ) -> None:
+        """Test wait_for_completion=True polls status endpoint.
+
+        When wait_for_completion=True, cognify should:
+        1. Start cognify via POST /cognify
+        2. Poll GET /datasets/{name}/status until complete
+        3. Return when status is "COMPLETED"
+
+        Requirement: FR-012
+        """
+        cognify_response = MagicMock()
+        cognify_response.status_code = 202  # Accepted (async processing)
+        cognify_response.text = "{}"
+
+        # First status check: processing, second: completed
+        status_responses = [
+            {"status": "PROCESSING"},
+            {"status": "COMPLETED"},
+        ]
+        status_index = 0
+
+        async def mock_request(
+            method: str,
+            endpoint: str,
+            *,
+            json_data: dict[str, Any] | None = None,
+            timeout: float = 300.0,
+        ) -> MagicMock:
+            nonlocal status_index
+            if "/cognify" in endpoint:
+                return cognify_response
+            if "/status" in endpoint:
+                response = MagicMock()
+                response.status_code = 200
+                response.json.return_value = status_responses[
+                    min(status_index, len(status_responses) - 1)
+                ]
+                status_index += 1
+                return response
+            return cognify_response
+
+        with patch.object(
+            cognee_client,
+            "_make_request",
+            new=AsyncMock(side_effect=mock_request),
+        ):
+            # Use short polling interval for test speed
+            await cognee_client.cognify(
+                dataset_name="test_dataset",
+                wait_for_completion=True,
+                poll_interval=0.01,  # 10ms for fast test
+            )
+
+            # Should have polled status at least once
+            assert status_index >= 1
+
+    @pytest.mark.requirement("FR-012")
+    async def test_wait_for_completion_false_skips_polling(
+        self,
+        cognee_client: Any,
+    ) -> None:
+        """Test wait_for_completion=False (default) skips polling.
+
+        When wait_for_completion=False (the default), cognify should:
+        1. Start cognify via POST /cognify
+        2. Return immediately without polling
+
+        Requirement: FR-012
+        """
+        cognify_response = MagicMock()
+        cognify_response.status_code = 202
+        cognify_response.text = "{}"
+
+        endpoints_called: list[str] = []
+
+        async def mock_request(
+            method: str,
+            endpoint: str,
+            *,
+            json_data: dict[str, Any] | None = None,
+            timeout: float = 300.0,
+        ) -> MagicMock:
+            endpoints_called.append(endpoint)
+            return cognify_response
+
+        with patch.object(
+            cognee_client,
+            "_make_request",
+            new=AsyncMock(side_effect=mock_request),
+        ):
+            await cognee_client.cognify(dataset_name="test_dataset")
+
+            # Should only call cognify, not status
+            assert len(endpoints_called) == 1
+            assert "/cognify" in endpoints_called[0]
+            assert not any("/status" in ep for ep in endpoints_called)
+
+    @pytest.mark.requirement("FR-013")
+    async def test_status_polling_timeout(
+        self,
+        cognee_client: Any,
+    ) -> None:
+        """Test status polling respects timeout.
+
+        If status polling exceeds the timeout, a TimeoutError should be raised.
+
+        Requirement: FR-013
+        """
+        from agent_memory.cognee_client import CognifyTimeoutError
+
+        cognify_response = MagicMock()
+        cognify_response.status_code = 202
+        cognify_response.text = "{}"
+
+        # Status always returns "PROCESSING" (never completes)
+        async def mock_request(
+            method: str,
+            endpoint: str,
+            *,
+            json_data: dict[str, Any] | None = None,
+            timeout: float = 300.0,
+        ) -> MagicMock:
+            if "/cognify" in endpoint:
+                return cognify_response
+            if "/status" in endpoint:
+                response = MagicMock()
+                response.status_code = 200
+                response.json.return_value = {"status": "PROCESSING"}
+                return response
+            return cognify_response
+
+        with patch.object(
+            cognee_client,
+            "_make_request",
+            new=AsyncMock(side_effect=mock_request),
+        ):
+            with pytest.raises(CognifyTimeoutError, match="timed out"):
+                await cognee_client.cognify(
+                    dataset_name="test_dataset",
+                    wait_for_completion=True,
+                    poll_interval=0.01,
+                    timeout=0.05,  # 50ms timeout for fast test
+                )
