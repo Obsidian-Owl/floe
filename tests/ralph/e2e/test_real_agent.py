@@ -156,11 +156,18 @@ Do NOT create any new files.
             check=False,
         )
 
-        # Log agent output for debugging
-        agent_log = worktree / ".agent_output.log"
-        agent_log.write_text(
-            f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}\n\n"
-            f"RETURN CODE: {result.returncode}"
+        # Log agent output for debugging (defensive: worktree may not exist)
+        if worktree.exists():
+            agent_log = worktree / ".agent_output.log"
+            agent_log.write_text(
+                f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}\n\n"
+                f"RETURN CODE: {result.returncode}"
+            )
+
+        # Verify worktree still exists
+        assert worktree.exists(), (
+            f"Worktree was deleted during test.\n"
+            f"Agent stderr: {result.stderr[:500]}"
         )
 
         # Verify mypy now passes
@@ -181,9 +188,10 @@ Do NOT create any new files.
         }
 
         # Write diagnostics for analysis
-        (worktree / ".diagnostics.json").write_text(
-            json.dumps(diagnostics, indent=2)
-        )
+        if worktree.exists():
+            (worktree / ".diagnostics.json").write_text(
+                json.dumps(diagnostics, indent=2)
+            )
 
         # Assert quality
         assert post_result.returncode == 0, (
@@ -271,9 +279,16 @@ Do NOT create any new files.
             check=False,
         )
 
-        # Log agent output
-        (worktree / ".agent_output.log").write_text(
-            f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        # Log agent output (defensive: worktree may not exist)
+        if worktree.exists():
+            (worktree / ".agent_output.log").write_text(
+                f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+            )
+
+        # Verify worktree still exists
+        assert worktree.exists(), (
+            f"Worktree was deleted during test.\n"
+            f"Agent stderr: {result.stderr[:500]}"
         )
 
         # Verify ruff now passes
@@ -374,9 +389,17 @@ Use pytest style. Run the tests to verify they pass.
             check=False,
         )
 
-        # Log agent output
-        (worktree / ".agent_output.log").write_text(
-            f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        # Log agent output (defensive: worktree may not exist if agent failed early)
+        if worktree.exists():
+            (worktree / ".agent_output.log").write_text(
+                f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+            )
+
+        # Verify worktree still exists (agent shouldn't delete it)
+        assert worktree.exists(), (
+            f"Worktree was deleted during test.\n"
+            f"Agent stdout: {result.stdout[:500]}\n"
+            f"Agent stderr: {result.stderr[:500]}"
         )
 
         # Verify test file was created
@@ -396,9 +419,10 @@ Use pytest style. Run the tests to verify they pass.
         )
 
         # Write test output for analysis
-        (worktree / ".test_output.log").write_text(
-            f"STDOUT:\n{test_result.stdout}\n\nSTDERR:\n{test_result.stderr}"
-        )
+        if worktree.exists():
+            (worktree / ".test_output.log").write_text(
+                f"STDOUT:\n{test_result.stdout}\n\nSTDERR:\n{test_result.stderr}"
+            )
 
         assert test_result.returncode == 0, (
             f"Tests should pass.\n"
@@ -515,9 +539,16 @@ Run all three checks to verify your work.
             check=False,
         )
 
-        # Log everything
-        (worktree / ".agent_output.log").write_text(
-            f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+        # Log everything (defensive: worktree may not exist)
+        if worktree.exists():
+            (worktree / ".agent_output.log").write_text(
+                f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
+            )
+
+        # Verify worktree still exists
+        assert worktree.exists(), (
+            f"Worktree was deleted during test.\n"
+            f"Agent stderr: {result.stderr[:500]}"
         )
 
         # Run quality gates
@@ -553,9 +584,10 @@ Run all three checks to verify your work.
             "final_code": broken_file.read_text(),
         }
 
-        (worktree / ".quality_results.json").write_text(
-            json.dumps(results, indent=2)
-        )
+        if worktree.exists():
+            (worktree / ".quality_results.json").write_text(
+                json.dumps(results, indent=2)
+            )
 
         # Assert all gates pass
         gates_passed = sum([
