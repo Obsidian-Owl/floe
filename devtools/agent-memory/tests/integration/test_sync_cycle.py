@@ -146,9 +146,10 @@ async def test_cognify_architecture_docs(
     # Run cognify to process into knowledge graph
     await cognee_client.cognify(dataset_name=unique_dataset_name)
 
-    # Verify content is searchable
+    # Verify content is searchable (scoped to our test dataset)
     result = await cognee_client.search(
         query="plugin system architecture",
+        dataset_name=unique_dataset_name,  # CRITICAL: scope to test dataset
         search_type="GRAPH_COMPLETION",
         top_k=5,
     )
@@ -180,9 +181,10 @@ async def test_search_returns_relevant_results(
     # Cognify the content
     await cognee_client.cognify(dataset_name=unique_dataset_name)
 
-    # Search for specific terms that should match
+    # Search for specific terms that should match (scoped to test dataset)
     result = await cognee_client.search(
         query="entry point discovery importlib",
+        dataset_name=unique_dataset_name,  # CRITICAL: scope to test dataset
         search_type="GRAPH_COMPLETION",
         top_k=5,
     )
@@ -218,9 +220,10 @@ async def test_cognify_constitution_principles(
     # Cognify
     await cognee_client.cognify(dataset_name=unique_dataset_name)
 
-    # Search for constitution-specific terms
+    # Search for constitution-specific terms (scoped to test dataset)
     result = await cognee_client.search(
         query="technology ownership dbt SQL",
+        dataset_name=unique_dataset_name,  # CRITICAL: scope to test dataset
         search_type="GRAPH_COMPLETION",
         top_k=5,
     )
@@ -258,16 +261,18 @@ async def test_multiple_documents_searchable(
     # Cognify all content
     await cognee_client.cognify(dataset_name=unique_dataset_name)
 
-    # Search for ADR-specific content
+    # Search for ADR-specific content (scoped to test dataset)
     adr_result = await cognee_client.search(
         query="plugin entry point discovery",
+        dataset_name=unique_dataset_name,  # CRITICAL: scope to test dataset
         search_type="GRAPH_COMPLETION",
         top_k=5,
     )
 
-    # Search for constitution-specific content
+    # Search for constitution-specific content (scoped to test dataset)
     constitution_result = await cognee_client.search(
         query="contract driven integration CompiledArtifacts",
+        dataset_name=unique_dataset_name,  # CRITICAL: scope to test dataset
         search_type="GRAPH_COMPLETION",
         top_k=5,
     )
@@ -297,15 +302,17 @@ async def test_search_with_no_results(
 
     await cognee_client.cognify(dataset_name=unique_dataset_name)
 
-    # Search for completely unrelated content
+    # Search for completely unrelated content (scoped to test dataset)
     result = await cognee_client.search(
         query="quantum computing neural networks blockchain",
+        dataset_name=unique_dataset_name,  # CRITICAL: scope to test dataset
         search_type="GRAPH_COMPLETION",
         top_k=5,
     )
 
     # Should return without error, possibly with 0 results
     # (or low-relevance results depending on Cognee's behavior)
-    assert result is not None
+    assert isinstance(result.results, list), "Search results should be a list"
+    assert result.total_count >= 0, "Total count should be non-negative"
     assert result.query == "quantum computing neural networks blockchain"
     # Cleanup handled by unique_dataset_name fixture

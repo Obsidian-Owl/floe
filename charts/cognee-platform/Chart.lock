@@ -1,0 +1,12 @@
+dependencies:
+- name: cognee-api
+  repository: file://./charts/cognee-api
+  version: 0.1.0
+- name: neo4j
+  repository: https://helm.neo4j.com/neo4j
+  version: 5.25.1
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 20.6.0
+digest: sha256:53c45b7ef795c80e400dcf1d5a5f346541b7ae2324ca4e86b0498e132bbb5572
+generated: "2026-01-16T15:42:30.173264+11:00"

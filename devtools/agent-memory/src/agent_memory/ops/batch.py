@@ -38,7 +38,7 @@ class BatchProgress(BaseModel):
     total_files: int = Field(ge=0, description="Total files to process")
     current_file: str = Field(default="", description="Current file being processed")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def progress_percentage(self) -> float:
         """Calculate progress as percentage.
@@ -70,7 +70,7 @@ class BatchResult(BaseModel):
     duration_seconds: float = Field(ge=0, description="Duration in seconds")
     resumed_from_checkpoint: bool = Field(default=False, description="Resumed from checkpoint")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def success_rate(self) -> float:
         """Calculate success rate as percentage.
@@ -82,7 +82,7 @@ class BatchResult(BaseModel):
             return 100.0
         return (self.successful_files / self.total_files) * 100
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def has_failures(self) -> bool:
         """Check if any files failed.
@@ -250,7 +250,7 @@ async def batch_load(
                 path_obj = Path(file_path)
                 content = path_obj.read_text(encoding="utf-8", errors="replace")
                 # Use default dataset - caller can customize via ContentSource
-                await client.add_content(content, config.codebase_dataset)
+                await client.add_content(content, config.default_dataset)
                 successful.append(file_path)
             except Exception:
                 failed.append(file_path)

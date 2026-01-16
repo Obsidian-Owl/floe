@@ -16,6 +16,7 @@ from agent_memory.git_diff import (
     GitError,
     _matches_any_pattern,
     _matches_double_star_pattern,
+    _validate_git_ref,
     get_changed_files,
     get_repo_root,
     get_staged_files,
@@ -337,3 +338,65 @@ class TestPatternMatching:
 
         # Doesn't match wrong pattern
         assert not _matches_double_star_pattern("foo.py", "**/test_*.py")
+
+
+class TestGitRefValidation:
+    """Tests for git reference validation (security hardening)."""
+
+    @pytest.mark.requirement("FR-012")
+    def test_valid_git_refs(self) -> None:
+        """Test that valid git references pass validation."""
+        valid_refs = [
+            "HEAD",
+            "HEAD~1",
+            "HEAD^2",
+            "main",
+            "master",
+            "feature/my-branch",
+            "origin/main",
+            "v1.0.0",
+            "abc123def",
+            "refs/heads/main",
+            "HEAD~10",
+            "main..HEAD",
+            "main...HEAD",
+        ]
+        for ref in valid_refs:
+            # Should not raise
+            _validate_git_ref(ref)
+
+    @pytest.mark.requirement("FR-012")
+    def test_invalid_git_refs_special_chars(self) -> None:
+        """Test that refs with shell metacharacters are rejected."""
+        invalid_refs = [
+            "HEAD; rm -rf /",  # Command injection attempt
+            "$(whoami)",  # Command substitution
+            "`id`",  # Backtick command substitution
+            "main && echo pwned",  # Command chaining
+            "HEAD | cat /etc/passwd",  # Pipe injection
+            "branch>output",  # Redirection
+            "branch<input",  # Input redirection
+            "branch$VAR",  # Variable expansion
+            "branch'quoted",  # Single quote
+            'branch"quoted',  # Double quote
+            "branch\\escaped",  # Backslash
+            "branch\nnewline",  # Newline
+            "branch\ttab",  # Tab
+            "branch space",  # Space
+        ]
+        for ref in invalid_refs:
+            with pytest.raises(GitError, match="Invalid git reference"):
+                _validate_git_ref(ref)
+
+    @pytest.mark.requirement("FR-012")
+    def test_empty_git_ref(self) -> None:
+        """Test that empty refs are rejected."""
+        with pytest.raises(GitError, match="cannot be empty"):
+            _validate_git_ref("")
+
+    @pytest.mark.requirement("FR-012")
+    def test_get_changed_files_validates_since(self, tmp_path: Path) -> None:
+        """Test that get_changed_files validates the since parameter."""
+        # Should fail validation before even trying to run git
+        with pytest.raises(GitError, match="Invalid git reference"):
+            get_changed_files(since="HEAD; rm -rf /")

@@ -57,7 +57,7 @@ class HealthCheckResult(BaseModel):
         default_factory=dict, description="Component health statuses"
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def is_healthy(self) -> bool:
         """Check if overall status is healthy.
@@ -67,7 +67,7 @@ class HealthCheckResult(BaseModel):
         """
         return self.overall_status == "healthy"
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def has_issues(self) -> bool:
         """Check if any component has issues.

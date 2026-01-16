@@ -33,7 +33,7 @@ class CoverageReport(BaseModel):
     missing_files: list[str] = Field(default_factory=list, description="Files not indexed")
     extra_files: list[str] = Field(default_factory=list, description="Stale indexed files")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def coverage_percentage(self) -> float:
         """Calculate coverage as percentage.
@@ -45,7 +45,7 @@ class CoverageReport(BaseModel):
             return 100.0
         return (self.indexed_files / self.total_files) * 100
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def is_complete(self) -> bool:
         """Check if coverage is complete (100%).

@@ -51,9 +51,9 @@ class TestResetCommand:
             result = runner.invoke(app, ["reset"])
 
             assert result.exit_code == 1
-            assert "Knowledge graph data" in result.output
+            assert "All datasets" in result.output
+            assert "knowledge graph nodes" in result.output
             assert "Vector embeddings" in result.output
-            assert "Metadata and cache" in result.output
             assert "agent-memory reset --confirm" in result.output
 
     @pytest.mark.requirement("FR-022")
@@ -89,12 +89,8 @@ class TestResetCommand:
 
             _result = runner.invoke(app, ["reset", "--confirm"])
 
-            # Should call prune_system
-            mock_client.prune_system.assert_called_once_with(
-                graph=True,
-                vector=True,
-                metadata=True,
-            )
+            # Should call prune_system (no parameters - it deletes all datasets)
+            mock_client.prune_system.assert_called_once()
 
     @pytest.mark.requirement("FR-022")
     def test_reset_deletes_state_files(
@@ -230,41 +226,16 @@ class TestResetCommand:
 
 
 class TestPruneSystemClient:
-    """Tests for CogneeClient.prune_system method."""
+    """Tests for CogneeClient.prune_system method.
+
+    Note: prune_system() now works by deleting all datasets with hard mode.
+    The /api/prune endpoint does not exist in Cognee Cloud.
+    """
 
     @pytest.mark.requirement("FR-022")
     @pytest.mark.asyncio
-    async def test_prune_system_calls_api(self) -> None:
-        """Test prune_system calls the prune API endpoint."""
-        from agent_memory.cognee_client import CogneeClient
-
-        mock_config = MagicMock()
-        mock_config.cognee_api_url = "https://api.cognee.cloud"
-        mock_config.cognee_api_key.get_secret_value.return_value = "test-key"
-
-        client = CogneeClient(mock_config)
-
-        with patch.object(client, "_make_request") as mock_request:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_request.return_value = mock_response
-
-            await client.prune_system(graph=True, vector=True, metadata=True)
-
-            mock_request.assert_called_once_with(
-                "DELETE",
-                "/api/prune",
-                json_data={
-                    "graph": True,
-                    "vector": True,
-                    "metadata": True,
-                },
-            )
-
-    @pytest.mark.requirement("FR-022")
-    @pytest.mark.asyncio
-    async def test_prune_system_fallback_on_404(self) -> None:
-        """Test prune_system falls back to dataset deletion on 404."""
+    async def test_prune_system_deletes_all_datasets(self) -> None:
+        """Test prune_system lists and deletes all datasets."""
         from agent_memory.cognee_client import CogneeClient
 
         mock_config = MagicMock()
@@ -274,51 +245,26 @@ class TestPruneSystemClient:
         client = CogneeClient(mock_config)
 
         with (
-            patch.object(client, "_make_request") as mock_request,
-            patch.object(client, "list_datasets") as mock_list,
-            patch.object(client, "delete_dataset") as mock_delete,
+            patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list,
+            patch.object(client, "delete_dataset", new_callable=AsyncMock) as mock_delete,
         ):
-            # First call returns 404, triggering fallback
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            mock_request.return_value = mock_response
-
-            mock_list.return_value = ["dataset1", "dataset2"]
+            mock_list.return_value = ["dataset1", "dataset2", "dataset3"]
             mock_delete.return_value = None
 
             await client.prune_system()
 
-            # Should list and delete all datasets
+            # Should list all datasets
             mock_list.assert_called_once()
-            assert mock_delete.call_count == 2
+            # Should delete each dataset (with hard mode internally)
+            assert mock_delete.call_count == 3
             mock_delete.assert_any_call("dataset1")
             mock_delete.assert_any_call("dataset2")
+            mock_delete.assert_any_call("dataset3")
 
     @pytest.mark.requirement("FR-022")
     @pytest.mark.asyncio
-    async def test_prune_system_raises_on_error(self) -> None:
-        """Test prune_system raises on non-404 errors."""
-        from agent_memory.cognee_client import CogneeClient, CogneeClientError
-
-        mock_config = MagicMock()
-        mock_config.cognee_api_url = "https://api.cognee.cloud"
-        mock_config.cognee_api_key.get_secret_value.return_value = "test-key"
-
-        client = CogneeClient(mock_config)
-
-        with patch.object(client, "_make_request") as mock_request:
-            mock_response = MagicMock()
-            mock_response.status_code = 500
-            mock_response.text = "Internal Server Error"
-            mock_request.return_value = mock_response
-
-            with pytest.raises(CogneeClientError, match="Prune system failed"):
-                await client.prune_system()
-
-    @pytest.mark.requirement("FR-022")
-    @pytest.mark.asyncio
-    async def test_prune_system_selective_options(self) -> None:
-        """Test prune_system passes selective options to API."""
+    async def test_prune_system_handles_empty_datasets(self) -> None:
+        """Test prune_system handles case with no datasets."""
         from agent_memory.cognee_client import CogneeClient
 
         mock_config = MagicMock()
@@ -327,20 +273,55 @@ class TestPruneSystemClient:
 
         client = CogneeClient(mock_config)
 
-        with patch.object(client, "_make_request") as mock_request:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_request.return_value = mock_response
+        with (
+            patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list,
+            patch.object(client, "delete_dataset", new_callable=AsyncMock) as mock_delete,
+        ):
+            mock_list.return_value = []
 
-            # Only prune graph, not vector or metadata
-            await client.prune_system(graph=True, vector=False, metadata=False)
+            await client.prune_system()
 
-            mock_request.assert_called_once_with(
-                "DELETE",
-                "/api/prune",
-                json_data={
-                    "graph": True,
-                    "vector": False,
-                    "metadata": False,
-                },
-            )
+            # Should list datasets
+            mock_list.assert_called_once()
+            # Should not call delete (no datasets to delete)
+            mock_delete.assert_not_called()
+
+    @pytest.mark.requirement("FR-022")
+    @pytest.mark.asyncio
+    async def test_prune_system_raises_on_list_error(self) -> None:
+        """Test prune_system raises when list_datasets fails."""
+        from agent_memory.cognee_client import CogneeClient, CogneeClientError
+
+        mock_config = MagicMock()
+        mock_config.cognee_api_url = "https://api.cognee.cloud"
+        mock_config.cognee_api_key.get_secret_value.return_value = "test-key"
+
+        client = CogneeClient(mock_config)
+
+        with patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list:
+            mock_list.side_effect = CogneeClientError("Connection failed")
+
+            with pytest.raises(CogneeClientError, match="Connection failed"):
+                await client.prune_system()
+
+    @pytest.mark.requirement("FR-022")
+    @pytest.mark.asyncio
+    async def test_prune_system_raises_on_delete_error(self) -> None:
+        """Test prune_system raises when delete_dataset fails."""
+        from agent_memory.cognee_client import CogneeClient, CogneeClientError
+
+        mock_config = MagicMock()
+        mock_config.cognee_api_url = "https://api.cognee.cloud"
+        mock_config.cognee_api_key.get_secret_value.return_value = "test-key"
+
+        client = CogneeClient(mock_config)
+
+        with (
+            patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list,
+            patch.object(client, "delete_dataset", new_callable=AsyncMock) as mock_delete,
+        ):
+            mock_list.return_value = ["dataset1", "dataset2"]
+            mock_delete.side_effect = CogneeClientError("Delete failed")
+
+            with pytest.raises(CogneeClientError, match="Delete failed"):
+                await client.prune_system()
