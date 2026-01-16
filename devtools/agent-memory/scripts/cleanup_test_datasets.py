@@ -50,7 +50,7 @@ async def main() -> int:
     print(f"\nDeleting {len(test_datasets)} test datasets...")
     deleted = await client.delete_test_datasets()
 
-    print(f"\nCleanup complete:")
+    print("\nCleanup complete:")
     print(f"  - Deleted: {deleted}")
     print(f"  - Failed: {len(test_datasets) - deleted}")
 
