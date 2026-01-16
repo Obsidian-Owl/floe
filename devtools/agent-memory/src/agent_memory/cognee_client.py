@@ -21,6 +21,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import ssl
 import time
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -260,6 +261,7 @@ class CogneeClient:
                 httpx.ConnectError,
                 httpx.ReadError,
                 httpx.RemoteProtocolError,
+                ssl.SSLError,  # Transient TLS errors (record layer failure, etc.)
             ) as e:
                 last_error = e
                 self._log.warning(
