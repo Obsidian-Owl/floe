@@ -503,7 +503,9 @@ def sync(
     ] = "HEAD~1",
     verify: Annotated[
         bool,
-        typer.Option("--verify/--no-verify", help="Verify content is searchable after sync (FR-011)"),
+        typer.Option(
+            "--verify/--no-verify", help="Verify content is searchable after sync (FR-011)"
+        ),
     ] = False,
 ) -> None:
     """Sync changed files to Cognee Cloud.
@@ -964,7 +966,9 @@ def memify(
                 typer.echo("  - cognify: Builds the knowledge graph")
                 typer.echo("  - search: Queries the graph (working)")
                 typer.echo()
-                typer.echo("Memify is an optional optimization, not required for basic functionality.")
+                typer.echo(
+                    "Memify is an optional optimization, not required for basic functionality."
+                )
         except CogneeClientError as e:
             _exit_with_error(str(e))
 

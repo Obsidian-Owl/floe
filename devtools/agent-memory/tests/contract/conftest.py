@@ -66,11 +66,13 @@ class PayloadCapture:
             endpoint: API endpoint path.
             json_data: Request body as dict.
         """
-        self.requests.append({
-            "method": method,
-            "endpoint": endpoint,
-            "json_data": json_data or {},
-        })
+        self.requests.append(
+            {
+                "method": method,
+                "endpoint": endpoint,
+                "json_data": json_data or {},
+            }
+        )
 
     @property
     def last_request(self) -> dict[str, Any]:
@@ -168,6 +170,7 @@ def mock_request(
         ...     assert "textData" in payload_capture.last_json_data
         ...     assert payload_capture.last_json_data["textData"] == ["test content"]
     """
+
     async def capture_request(
         method: str,
         endpoint: str,

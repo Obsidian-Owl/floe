@@ -27,9 +27,7 @@ class TestGenerateTestDatasetName:
         - Name has unique suffix (uuid)
         """
         test_dataset_name = generate_test_dataset_name()
-        assert test_dataset_name.startswith(
-            "test_"
-        ), f"Expected test_ prefix: {test_dataset_name}"
+        assert test_dataset_name.startswith("test_"), f"Expected test_ prefix: {test_dataset_name}"
         # Should be format: test_test_{uuid8}
         parts = test_dataset_name.split("_")
         assert len(parts) >= 3, f"Expected format test_test_<uuid>: {test_dataset_name}"

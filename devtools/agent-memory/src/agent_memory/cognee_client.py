@@ -307,9 +307,7 @@ class CogneeClient:
                     if response.status_code in RETRYABLE_STATUS_CODES:
                         # Honor Retry-After header for rate limiting (429)
                         if response.status_code == 429:
-                            retry_after = parse_retry_after(
-                                response.headers.get("Retry-After")
-                            )
+                            retry_after = parse_retry_after(response.headers.get("Retry-After"))
                             delay = retry_after or calculate_backoff(attempt, config)
                         else:
                             delay = calculate_backoff(attempt, config)
@@ -581,9 +579,7 @@ class CogneeClient:
                 reason="No search results returned",
                 query_preview=search_query[:50],
             )
-            raise VerificationError(
-                f"No search results for content in dataset '{dataset_name}'"
-            )
+            raise VerificationError(f"No search results for content in dataset '{dataset_name}'")
 
         self._log.debug(
             "verify_content_completed",
@@ -733,9 +729,7 @@ class CogneeClient:
                 return
             elif status == "FAILED":
                 error_msg = status_data.get("error", "Unknown error")
-                raise CogneeClientError(
-                    f"Cognify failed for dataset '{dataset_name}': {error_msg}"
-                )
+                raise CogneeClientError(f"Cognify failed for dataset '{dataset_name}': {error_msg}")
 
             await asyncio.sleep(poll_interval)
 
@@ -779,9 +773,7 @@ class CogneeClient:
 
         try:
             # Use Cognee Cloud SDK for memify
-            sdk_config = CogwitConfig(
-                api_key=self._config.cognee_api_key.get_secret_value()
-            )
+            sdk_config = CogwitConfig(api_key=self._config.cognee_api_key.get_secret_value())
             sdk = cogwit(sdk_config)
 
             result = await sdk.memify(dataset_name=effective_dataset)

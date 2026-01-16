@@ -115,9 +115,7 @@ class TestAddContentContract:
 
         # Assert - correct field name is used
         json_data = payload_capture.last_json_data
-        assert "datasetName" in json_data, (
-            "add_content MUST use 'datasetName' field (camelCase). "
-        )
+        assert "datasetName" in json_data, "add_content MUST use 'datasetName' field (camelCase). "
         assert json_data["datasetName"] == "my_dataset"
 
     @pytest.mark.requirement("FR-002")
@@ -166,9 +164,7 @@ class TestSearchContract:
 
         # Assert - correct field name is used
         json_data = payload_capture.last_json_data
-        assert "searchType" in json_data, (
-            "search MUST use 'searchType' field (camelCase). "
-        )
+        assert "searchType" in json_data, "search MUST use 'searchType' field (camelCase). "
         assert json_data["searchType"] == "GRAPH_COMPLETION"
 
     @pytest.mark.requirement("FR-003")
@@ -188,8 +184,7 @@ class TestSearchContract:
         # Assert - wrong field name is NOT used
         json_data = payload_capture.last_json_data
         assert "search_type" not in json_data, (
-            "search MUST NOT use 'search_type' (snake_case). "
-            "Use 'searchType' (camelCase) instead."
+            "search MUST NOT use 'search_type' (snake_case). Use 'searchType' (camelCase) instead."
         )
 
     @pytest.mark.requirement("FR-004")
@@ -210,9 +205,7 @@ class TestSearchContract:
 
         # Assert - correct field name is used
         json_data = payload_capture.last_json_data
-        assert "topK" in json_data, (
-            "search MUST use 'topK' field (camelCase). "
-        )
+        assert "topK" in json_data, "search MUST use 'topK' field (camelCase). "
         assert json_data["topK"] == 10
 
     @pytest.mark.requirement("FR-004")
@@ -232,8 +225,7 @@ class TestSearchContract:
         # Assert - wrong field name is NOT used
         json_data = payload_capture.last_json_data
         assert "top_k" not in json_data, (
-            "search MUST NOT use 'top_k' (snake_case). "
-            "Use 'topK' (camelCase) instead."
+            "search MUST NOT use 'top_k' (snake_case). Use 'topK' (camelCase) instead."
         )
 
 

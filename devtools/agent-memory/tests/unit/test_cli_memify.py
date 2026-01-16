@@ -257,9 +257,7 @@ class TestMemifyClient:
 
         # Setup the mock SDK to raise an exception containing "Not Found"
         mock_sdk = MagicMock()
-        mock_sdk.memify = AsyncMock(
-            side_effect=Exception("{'detail': 'Not Found'}")
-        )
+        mock_sdk.memify = AsyncMock(side_effect=Exception("{'detail': 'Not Found'}"))
         mock_sdk_module.cogwit.return_value = mock_sdk
 
         with patch.dict(sys.modules, {"cogwit_sdk": mock_sdk_module}):

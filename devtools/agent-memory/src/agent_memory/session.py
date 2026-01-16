@@ -178,9 +178,7 @@ async def retrieve_session_context(
     """
     # Search for relevant session context (scoped to sessions dataset)
     query = f"session context for {work_area}"
-    search_result = await client.search(
-        query, dataset_name=dataset, search_type=search_type
-    )
+    search_result = await client.search(query, dataset_name=dataset, search_type=search_type)
 
     if not search_result.results:
         return None

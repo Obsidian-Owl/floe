@@ -298,9 +298,7 @@ class TestPruneSystemClient:
 
         client = CogneeClient(mock_config)
 
-        with patch.object(
-            client, "list_datasets", new_callable=AsyncMock
-        ) as mock_list:
+        with patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list:
             mock_list.side_effect = CogneeClientError("Connection failed")
 
             with pytest.raises(CogneeClientError, match="Connection failed"):
