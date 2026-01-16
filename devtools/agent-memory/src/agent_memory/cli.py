@@ -227,6 +227,12 @@ def init(
 
     typer.secho("Initialized .cognee/ directory", fg=typer.colors.GREEN)
     typer.echo(f"  Cognee API URL: {config.cognee_api_url}")
+    typer.echo(f"  Deployment Mode: {config.cognee_deployment_mode}")
+    if config.cognee_deployment_mode == "cloud":
+        typer.secho(
+            "  Note: Cognee Cloud does not support memify. Use self-hosted for full features.",
+            fg=typer.colors.YELLOW,
+        )
     typer.echo(f"  LLM Provider: {config.llm_provider}")
 
     # Validate connection to Cognee Cloud
@@ -495,6 +501,12 @@ def sync(
         str,
         typer.Option("--since", "-s", help="Git reference to compare against for changes"),
     ] = "HEAD~1",
+    verify: Annotated[
+        bool,
+        typer.Option(
+            "--verify/--no-verify", help="Verify content is searchable after sync (FR-011)"
+        ),
+    ] = False,
 ) -> None:
     """Sync changed files to Cognee Cloud.
 
@@ -507,6 +519,7 @@ def sync(
         agent-memory sync --files src/foo.py # Sync specific files
         agent-memory sync --dry-run          # Show what would sync
         agent-memory sync --since main       # Sync changes since main branch
+        agent-memory sync --verify           # Verify content is searchable after sync
     """
     config = _load_config()
     if config is None:
@@ -517,6 +530,7 @@ def sync(
     async def _sync() -> None:
         try:
             files_to_sync: list[Path] = []
+            datasets_to_cognify: set[str] = set()  # Track datasets for cognify
 
             if files:
                 # Explicit files specified
@@ -585,17 +599,21 @@ def sync(
             # Sync markdown files
             if md_files:
                 typer.echo(f"\nSyncing {len(md_files)} markdown file(s)...")
-                await _sync_markdown_files(client, config, md_files)
+                md_datasets = await _sync_markdown_files(client, config, md_files, verify=verify)
+                datasets_to_cognify.update(md_datasets)
 
             # Sync Python files (extract docstrings)
             if py_files:
                 typer.echo(f"\nSyncing {len(py_files)} Python file(s)...")
-                await _sync_python_files(client, config, py_files)
+                py_datasets = await _sync_python_files(client, config, py_files, verify=verify)
+                datasets_to_cognify.update(py_datasets)
 
-            # Run cognify if requested
-            if cognify and (md_files or py_files):
-                typer.echo("\nRunning cognify...")
-                await client.cognify(dataset_name=dataset)
+            # Run cognify for each dataset that had files synced
+            if cognify and datasets_to_cognify:
+                typer.echo("\nRunning cognify for synced datasets...")
+                for ds in datasets_to_cognify:
+                    typer.echo(f"  Cognifying dataset: {ds}")
+                    await client.cognify(dataset_name=ds)
                 typer.secho("Cognify completed", fg=typer.colors.GREEN)
 
             typer.secho(
@@ -680,15 +698,25 @@ def _is_under_path(file: Path, paths: set[Path]) -> bool:
 
 
 async def _sync_markdown_files(
-    client: CogneeClient, config: AgentMemoryConfig, files: list[Path]
-) -> None:
+    client: CogneeClient,
+    config: AgentMemoryConfig,
+    files: list[Path],
+    *,
+    verify: bool = False,
+) -> set[str]:
     """Sync markdown files to Cognee.
 
     Args:
         client: Cognee client.
         config: Configuration.
         files: Markdown files to sync.
+        verify: If True, verify content is searchable after add (FR-011).
+
+    Returns:
+        Set of dataset names that received content.
     """
+    datasets_used: set[str] = set()
+
     for file_path in files:
         try:
             typer.echo(f"  Processing: {file_path}")
@@ -707,21 +735,35 @@ async def _sync_markdown_files(
                     "source_path": str(file_path),
                     "title": parsed.title or file_path.stem,
                 },
+                verify=verify,
             )
+            datasets_used.add(dataset_name)
         except Exception as e:
             typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
 
+    return datasets_used
+
 
 async def _sync_python_files(
-    client: CogneeClient, config: AgentMemoryConfig, files: list[Path]
-) -> None:
+    client: CogneeClient,
+    config: AgentMemoryConfig,
+    files: list[Path],
+    *,
+    verify: bool = False,
+) -> set[str]:
     """Sync Python files by extracting docstrings.
 
     Args:
         client: Cognee client.
         config: Configuration.
         files: Python files to sync.
+        verify: If True, verify content is searchable after add (FR-011).
+
+    Returns:
+        Set of dataset names that received content.
     """
+    datasets_used: set[str] = set()
+
     for file_path in files:
         try:
             typer.echo(f"  Processing: {file_path}")
@@ -734,7 +776,7 @@ async def _sync_python_files(
                 continue
 
             # Determine dataset
-            dataset_name = config.codebase_dataset
+            dataset_name = config.default_dataset
 
             # Format and add to Cognee
             for entry in entries:
@@ -748,16 +790,24 @@ async def _sync_python_files(
                         "name": entry.name,
                         "line_number": entry.line_number,
                     },
+                    verify=verify,
                 )
 
+            datasets_used.add(dataset_name)
             typer.echo(f"    Added {len(entries)} docstring(s)")
 
         except Exception as e:
             typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
 
+    return datasets_used
+
 
 def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
     """Determine the appropriate dataset for a file.
+
+    All knowledge content goes to a single unified dataset for maximum
+    knowledge graph connectivity. Content sources can override this
+    if explicitly configured.
 
     Args:
         file_path: Path to the file.
@@ -766,7 +816,7 @@ def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
     Returns:
         Dataset name for the file.
     """
-    # Check if file matches any content source
+    # Check if file matches any content source (allows explicit overrides)
     for source in config.content_sources:
         if source.source_type == "file" and source.path == file_path:
             return source.dataset
@@ -777,15 +827,8 @@ def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
             except ValueError:
                 continue
 
-    # Default dataset based on file type
-    if file_path.suffix == ".py":
-        return config.codebase_dataset
-    if "architecture" in str(file_path).lower() or "docs" in str(file_path).lower():
-        return config.architecture_dataset
-    if "claude" in str(file_path).lower() or "rules" in str(file_path).lower():
-        return config.governance_dataset
-
-    return config.architecture_dataset  # Default
+    # Default: single unified dataset for all knowledge
+    return config.default_dataset
 
 
 @app.command()
@@ -825,33 +868,26 @@ def search(
 
     async def _search() -> None:
         try:
-            result = await client.search(query, search_type=search_type, top_k=top_k)
-
-            # Filter results by dataset if specified
-            filtered_results = result.results
-            if dataset:
-                filtered_results = [
-                    item
-                    for item in result.results
-                    if item.dataset == dataset or (item.source_path and dataset in item.source_path)
-                ]
+            # Pass dataset to API for server-side scoping (not client-side filtering)
+            result = await client.search(
+                query,
+                dataset_name=dataset,
+                search_type=search_type,
+                top_k=top_k,
+            )
 
             typer.echo(f"Query: {result.query}")
             typer.echo(f"Search type: {result.search_type}")
             if dataset:
-                typer.echo(f"Dataset filter: {dataset}")
-            typer.echo(
-                f"Results: {len(filtered_results)}"
-                f"{f' (filtered from {result.total_count})' if dataset else ''}"
-                f" (in {result.execution_time_ms}ms)"
-            )
+                typer.echo(f"Dataset: {dataset}")
+            typer.echo(f"Results: {result.total_count} (in {result.execution_time_ms}ms)")
             typer.echo()
 
-            if not filtered_results:
+            if not result.results:
                 typer.secho("No results found", fg=typer.colors.YELLOW)
                 return
 
-            for i, item in enumerate(filtered_results, 1):
+            for i, item in enumerate(result.results, 1):
                 typer.secho(f"[{i}]", fg=typer.colors.CYAN, nl=False)
                 if item.source_path:
                     typer.echo(f" {item.source_path}")
@@ -873,6 +909,70 @@ def search(
             _exit_with_error(str(e))
 
     _run_async(_search())
+
+
+@app.command()
+def memify(
+    dataset: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset",
+            "-d",
+            help="Dataset to optimize. Uses default dataset if not specified.",
+        ),
+    ] = None,
+) -> None:
+    """Optimize knowledge graph using memify post-processing pipeline.
+
+    Memify improves search relevance by:
+    - Pruning stale nodes (removes outdated knowledge)
+    - Strengthening frequent connections
+    - Adding derived facts and associations
+
+    Run this after sync + cognify to enhance graph quality without rebuilding.
+
+    Note: Memify is only available with self-hosted Cognee. Cognee Cloud
+    (api.cognee.ai) does not currently expose this endpoint.
+
+    Example:
+        agent-memory sync --all && agent-memory memify --dataset floe
+    """
+    config = _load_config()
+    if config is None:
+        raise typer.Exit(code=1)
+
+    client = CogneeClient(config)
+
+    async def _memify() -> None:
+        try:
+            effective_dataset = dataset or config.default_dataset
+            typer.echo(f"Running memify on dataset: {effective_dataset}")
+
+            success = await client.memify(dataset_name=effective_dataset)
+
+            if success:
+                typer.secho("Memify completed successfully!", fg=typer.colors.GREEN)
+            else:
+                typer.secho(
+                    "Memify not available: Cognee Cloud does not expose the memify endpoint.",
+                    fg=typer.colors.YELLOW,
+                )
+                typer.echo()
+                typer.echo("This is a known limitation of Cognee Cloud (api.cognee.ai).")
+                typer.echo("The memify endpoint is only available in self-hosted Cognee.")
+                typer.echo()
+                typer.echo("Your knowledge graph is still functional:")
+                typer.echo("  - sync: Adds content to the graph")
+                typer.echo("  - cognify: Builds the knowledge graph")
+                typer.echo("  - search: Queries the graph (working)")
+                typer.echo()
+                typer.echo(
+                    "Memify is an optional optimization, not required for basic functionality."
+                )
+        except CogneeClientError as e:
+            _exit_with_error(str(e))
+
+    _run_async(_memify())
 
 
 @app.command()
@@ -1112,7 +1212,7 @@ def repair(
                     try:
                         typer.echo(f"  {file_path}")
                         content = path_obj.read_text(encoding="utf-8", errors="replace")
-                        await client.add_content(content, config.codebase_dataset)
+                        await client.add_content(content, config.default_dataset)
                         checksums[file_path] = compute_content_hash(content)
                         repaired_count += 1
                     except Exception as e:
@@ -1177,9 +1277,8 @@ def reset(
         )
         typer.echo()
         typer.echo("This will delete ALL indexed content including:")
-        typer.echo("  - Knowledge graph data")
-        typer.echo("  - Vector embeddings")
-        typer.echo("  - Metadata and cache")
+        typer.echo("  - All datasets and their knowledge graph nodes")
+        typer.echo("  - Vector embeddings and metadata")
         typer.echo("  - Local state files (.cognee/state.json, .cognee/checksums.json)")
         typer.echo()
         typer.echo("To proceed, run:")
@@ -1191,16 +1290,10 @@ def reset(
     async def _reset() -> None:
         try:
             typer.echo("Pruning Cognee Cloud system...")
-            typer.echo("  Clearing graph data...")
-            typer.echo("  Clearing vector embeddings...")
-            typer.echo("  Clearing metadata...")
+            typer.echo("  Deleting all datasets (with graph nodes)...")
 
-            # Prune the Cognee system
-            await client.prune_system(
-                graph=True,
-                vector=True,
-                metadata=True,
-            )
+            # Prune the Cognee system (deletes all datasets with hard mode)
+            await client.prune_system()
 
             typer.secho("  Cognee Cloud pruned", fg=typer.colors.GREEN)
 
@@ -1577,7 +1670,7 @@ def codify(
         raise typer.Exit(code=0)
 
     client = CogneeClient(config)
-    dataset_name = config.codebase_dataset
+    dataset_name = config.default_dataset
 
     async def _codify_content() -> None:
         cognee_dir = Path(".cognee")

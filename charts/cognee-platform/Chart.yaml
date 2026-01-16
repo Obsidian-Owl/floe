@@ -1,0 +1,38 @@
+apiVersion: v2
+name: cognee-platform
+description: Self-hosted Cognee platform for agent memory with memify support
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Cognee platform dependencies
+dependencies:
+  - name: cognee-api
+    version: 0.1.0
+    repository: file://./charts/cognee-api
+    condition: cognee-api.enabled
+
+  - name: neo4j
+    version: 5.25.1
+    repository: https://helm.neo4j.com/neo4j
+    condition: neo4j.enabled
+    alias: neo4j
+
+  - name: redis
+    version: 20.6.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+
+keywords:
+  - cognee
+  - agent-memory
+  - knowledge-graph
+  - llm
+  - rag
+
+maintainers:
+  - name: floe-platform
+    email: platform@floe.dev
+
+annotations:
+  category: AI/ML

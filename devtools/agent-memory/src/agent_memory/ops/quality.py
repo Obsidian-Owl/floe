@@ -69,7 +69,7 @@ class QualityReport(BaseModel):
     failed_tests: int = Field(ge=0, description="Tests that failed")
     results: list[TestResult] = Field(default_factory=list, description="Test results")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def pass_rate(self) -> float:
         """Calculate pass rate as percentage.
@@ -81,7 +81,7 @@ class QualityReport(BaseModel):
             return 100.0
         return (self.passed_tests / self.total_tests) * 100
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def all_passed(self) -> bool:
         """Check if all tests passed.

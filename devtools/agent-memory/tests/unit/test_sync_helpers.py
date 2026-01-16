@@ -23,7 +23,20 @@ from agent_memory.cli import (
 from agent_memory.config import AgentMemoryConfig, ContentSource
 
 if TYPE_CHECKING:
-    pass
+    from collections.abc import Generator
+
+
+@pytest.fixture(autouse=True)
+def mock_config_env_vars(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """Set mock environment variables for all tests in this module.
+
+    AgentMemoryConfig requires cognee_api_key and openai_api_key (when
+    llm_provider is 'openai'). This fixture provides mock values for
+    unit tests that don't need real API access.
+    """
+    monkeypatch.setenv("COGNEE_API_KEY", "test-api-key-for-unit-tests")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key-for-unit-tests")
+    yield
 
 
 @pytest.fixture
@@ -269,93 +282,37 @@ class TestGetDatasetForFile:
         assert dataset == "documentation"
 
     @pytest.mark.requirement("FR-012")
-    def test_python_file_defaults_to_codebase(self, tmp_path: Path) -> None:
-        """Test Python file defaults to codebase_dataset."""
+    def test_all_files_default_to_unified_dataset(self, tmp_path: Path) -> None:
+        """Test all file types default to unified default_dataset.
+
+        Since we use a single unified dataset for maximum knowledge graph
+        connectivity, all files not matched by a ContentSource should
+        default to config.default_dataset.
+        """
+        # Create various file types
         py_file = tmp_path / "main.py"
         py_file.write_text("print('hello')")
 
-        config = AgentMemoryConfig(
-            content_sources=[],
-            codebase_dataset="my-codebase",
-        )
-
-        dataset = _get_dataset_for_file(py_file, config)
-        assert dataset == "my-codebase"
-
-    @pytest.mark.requirement("FR-012")
-    def test_architecture_file_defaults_to_architecture(self, tmp_path: Path) -> None:
-        """Test architecture file defaults to architecture_dataset."""
         arch_dir = tmp_path / "architecture"
         arch_dir.mkdir()
         arch_file = arch_dir / "design.md"
         arch_file.write_text("# Architecture")
 
-        config = AgentMemoryConfig(
-            content_sources=[],
-            architecture_dataset="my-architecture",
-        )
-
-        dataset = _get_dataset_for_file(arch_file, config)
-        assert dataset == "my-architecture"
-
-    @pytest.mark.requirement("FR-012")
-    def test_docs_file_defaults_to_architecture(self, tmp_path: Path) -> None:
-        """Test docs file defaults to architecture_dataset."""
-        docs_dir = tmp_path / "docs"
-        docs_dir.mkdir()
-        doc_file = docs_dir / "readme.md"
-        doc_file.write_text("# README")
-
-        config = AgentMemoryConfig(
-            content_sources=[],
-            architecture_dataset="my-architecture",
-        )
-
-        dataset = _get_dataset_for_file(doc_file, config)
-        assert dataset == "my-architecture"
-
-    @pytest.mark.requirement("FR-012")
-    def test_claude_file_defaults_to_governance(self, tmp_path: Path) -> None:
-        """Test .claude file defaults to governance_dataset."""
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
         claude_file = claude_dir / "config.md"
         claude_file.write_text("# Claude Config")
 
-        config = AgentMemoryConfig(
-            content_sources=[],
-            governance_dataset="my-governance",
-        )
-
-        dataset = _get_dataset_for_file(claude_file, config)
-        assert dataset == "my-governance"
-
-    @pytest.mark.requirement("FR-012")
-    def test_rules_file_defaults_to_governance(self, tmp_path: Path) -> None:
-        """Test rules file defaults to governance_dataset."""
-        rules_dir = tmp_path / "rules"
-        rules_dir.mkdir()
-        rules_file = rules_dir / "policy.md"
-        rules_file.write_text("# Policy")
-
-        config = AgentMemoryConfig(
-            content_sources=[],
-            governance_dataset="my-governance",
-        )
-
-        dataset = _get_dataset_for_file(rules_file, config)
-        assert dataset == "my-governance"
-
-    @pytest.mark.requirement("FR-012")
-    def test_unknown_file_defaults_to_architecture(self, tmp_path: Path) -> None:
-        """Test unknown file type defaults to architecture_dataset."""
         unknown_file = tmp_path / "random.txt"
         unknown_file.write_text("random content")
 
         config = AgentMemoryConfig(
             content_sources=[],
-            architecture_dataset="default-architecture",
+            default_dataset="unified-knowledge",
         )
 
-        dataset = _get_dataset_for_file(unknown_file, config)
-        assert dataset == "default-architecture"
+        # All files should default to the unified dataset
+        assert _get_dataset_for_file(py_file, config) == "unified-knowledge"
+        assert _get_dataset_for_file(arch_file, config) == "unified-knowledge"
+        assert _get_dataset_for_file(claude_file, config) == "unified-knowledge"
+        assert _get_dataset_for_file(unknown_file, config) == "unified-knowledge"

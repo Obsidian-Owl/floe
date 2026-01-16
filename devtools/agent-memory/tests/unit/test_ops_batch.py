@@ -272,7 +272,7 @@ class TestBatchLoad:
         # Mock config and client
         mock_config = MagicMock()
         mock_config.batch_size = 2
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
         mock_client.add_content = AsyncMock()
@@ -309,7 +309,7 @@ class TestBatchLoad:
 
         mock_config = MagicMock()
         mock_config.batch_size = 10
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
         # First call succeeds, second fails
@@ -347,7 +347,7 @@ class TestBatchLoad:
 
         mock_config = MagicMock()
         mock_config.batch_size = 10
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
         mock_client.add_content = AsyncMock()
@@ -386,7 +386,7 @@ class TestBatchLoad:
 
         mock_config = MagicMock()
         mock_config.batch_size = 2
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
         # Fail on third file to leave checkpoint
@@ -437,7 +437,7 @@ class TestBatchLoad:
 
         mock_config = MagicMock()
         mock_config.batch_size = 10
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
         mock_client.add_content = AsyncMock()
@@ -471,7 +471,7 @@ class TestBatchLoad:
 
         mock_config = MagicMock()
         mock_config.batch_size = 10
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
         mock_client.add_content = AsyncMock()
@@ -496,7 +496,7 @@ class TestBatchLoad:
 
         mock_config = MagicMock()
         mock_config.batch_size = 10
-        mock_config.codebase_dataset = "test"
+        mock_config.default_dataset = "test"
 
         mock_client = AsyncMock()
 
