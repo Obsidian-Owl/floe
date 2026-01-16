@@ -399,9 +399,11 @@ class RalphTestBase(IntegrationTestBase):
         ), f"Branch changed: {self._state_snapshot.git_branch} -> {current.git_branch}"
 
         # Compare status (excluding test worktrees)
-        assert (
-            current.git_status == self._state_snapshot.git_status
-        ), f"Git status changed:\nBefore:\n{self._state_snapshot.git_status}\nAfter:\n{current.git_status}"
+        assert current.git_status == self._state_snapshot.git_status, (
+            f"Git status changed:\n"
+            f"Before:\n{self._state_snapshot.git_status}\n"
+            f"After:\n{current.git_status}"
+        )
 
     def generate_test_plan_json(
         self,

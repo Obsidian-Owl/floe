@@ -23,7 +23,6 @@ from preflight import (
     check_cognee,
     check_direnv,
     check_git,
-    check_manifest,
     check_memory_buffer,
     format_report,
     run_preflight,

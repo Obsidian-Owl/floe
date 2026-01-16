@@ -79,7 +79,11 @@ class TestLintGate:
         Validates that well-formatted code passes the lint gate.
         """
         test_file = tmp_path / "clean_code.py"
-        test_file.write_text('"""Module docstring."""\n\n\ndef func() -> str:\n    """Return hello."""\n    return "hello"\n')
+        clean_code = (
+            '"""Module docstring."""\n\n\n'
+            'def func() -> str:\n    """Return hello."""\n    return "hello"\n'
+        )
+        test_file.write_text(clean_code)
 
         result = subprocess.run(
             ["uv", "run", "ruff", "check", str(test_file)],
