@@ -510,6 +510,49 @@ floe/
 
 ---
 
+## Memory Workflow
+
+The **agent-memory** system provides persistent context across sessions via a Cognee Cloud knowledge graph.
+
+### Quick Reference
+
+```bash
+# Search for prior decisions/context
+./scripts/memory-search "plugin architecture"
+
+# Save decisions for future sessions
+./scripts/memory-save --decisions "Chose Pydantic v2 for validation" --issues "FLO-123"
+
+# Add content to knowledge graph
+./scripts/memory-add "Important: Use camelCase for Cognee API fields"
+./scripts/memory-add --file docs/architecture/new-pattern.md
+```
+
+### When to Use
+
+| Action | Command | When |
+|--------|---------|------|
+| **Search** | `./scripts/memory-search` | Before making architecture decisions |
+| **Save** | `./scripts/memory-save` | After making significant decisions |
+| **Add** | `./scripts/memory-add` | When creating reusable knowledge |
+
+### Automatic Integration
+
+- **Session Start**: Hook automatically queries for prior context (see startup logs)
+- **SpecKit Skills**: `/speckit.plan` and `/speckit.specify` search memory before decisions
+- **Ralph Skills**: `/ralph.resume` recovers context from agent-memory
+
+### If Agent-Memory Unavailable
+
+All memory operations are **non-blocking**. If `COGNEE_API_KEY` or `OPENAI_API_KEY` are not set:
+- Scripts exit gracefully (exit code 0)
+- Workflow continues without memory integration
+- Decisions are still captured in plan artifacts and Linear comments
+
+**See**: `devtools/agent-memory/` for full documentation
+
+---
+
 ## Getting Help
 
 ```bash
