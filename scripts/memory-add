@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# Memory Add Script for Claude Code Integration
+#
+# Simple wrapper for adding content to the agent-memory knowledge graph.
+# Use this when you want to add specific content that should be searchable.
+#
+# Usage:
+#   ./scripts/memory-add "Content to add to knowledge graph"
+#   ./scripts/memory-add --file path/to/document.md
+#   echo "content" | ./scripts/memory-add --stdin
+#
+# Environment:
+#   COGNEE_API_KEY - Required for Cognee Cloud access
+#   OPENAI_API_KEY - Required for embeddings
+#
+# Exit codes:
+#   0 - Success (added or gracefully skipped)
+#   1 - Error (missing required arguments)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENT_MEMORY_DIR="$REPO_ROOT/devtools/agent-memory"
+
+# Default values
+CONTENT=""
+FILE=""
+STDIN=false
+DATASET="floe"
+VERIFY=false
+QUIET=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --file|-f)
+            FILE="$2"
+            shift 2
+            ;;
+        --stdin)
+            STDIN=true
+            shift
+            ;;
+        --dataset|-d)
+            DATASET="$2"
+            shift 2
+            ;;
+        --verify|-v)
+            VERIFY=true
+            shift
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 \"content\" | --file PATH | --stdin [options]"
+            echo ""
+            echo "Add content to the agent-memory knowledge graph."
+            echo ""
+            echo "Input (one required):"
+            echo "  \"content\"        Direct content string"
+            echo "  --file, -f PATH  Read content from file"
+            echo "  --stdin          Read content from stdin"
+            echo ""
+            echo "Options:"
+            echo "  --dataset, -d    Target dataset (default: floe)"
+            echo "  --verify, -v     Verify content is searchable after add"
+            echo "  --quiet, -q      Suppress non-essential output"
+            echo "  --help, -h       Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0 \"Important architecture decision: use Pydantic v2\""
+            echo "  $0 --file docs/architecture/new-pattern.md"
+            echo "  cat notes.md | $0 --stdin"
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            CONTENT="$1"
+            shift
+            ;;
+    esac
+done
+
+# Get content from appropriate source
+if [[ "$STDIN" == true ]]; then
+    CONTENT=$(cat)
+elif [[ -n "$FILE" ]]; then
+    if [[ ! -f "$FILE" ]]; then
+        echo "Error: File not found: $FILE" >&2
+        exit 1
+    fi
+    CONTENT=$(cat "$FILE")
+fi
+
+# Validate content
+if [[ -z "$CONTENT" ]]; then
+    echo "Error: No content provided" >&2
+    echo "Usage: $0 \"content\" | --file PATH | --stdin" >&2
+    exit 1
+fi
+
+# Check if agent-memory is available
+if [[ ! -d "$AGENT_MEMORY_DIR" ]]; then
+    [[ "$QUIET" != true ]] && echo "agent-memory not available" >&2
+    exit 0  # Non-intrusive exit
+fi
+
+# Check for required environment variables
+if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
+    [[ "$QUIET" != true ]] && echo "Memory add skipped: COGNEE_API_KEY or OPENAI_API_KEY not set" >&2
+    exit 0  # Non-intrusive exit
+fi
+
+# Build Python command for adding content
+cd "$AGENT_MEMORY_DIR"
+
+# Create a temporary file for the content to avoid shell escaping issues
+TEMP_FILE=$(mktemp)
+echo "$CONTENT" > "$TEMP_FILE"
+trap "rm -f $TEMP_FILE" EXIT
+
+# Use Python to add content via the client
+uv run python -c "
+import asyncio
+import sys
+from pathlib import Path
+
+async def add_content():
+    from agent_memory.cognee_client import CogneeClient
+    from agent_memory.config import load_config
+
+    config = load_config()
+    client = CogneeClient(config)
+
+    content = Path('$TEMP_FILE').read_text()
+    verify = '$VERIFY' == 'true'
+
+    await client.add_content(
+        content=content,
+        dataset_name='$DATASET',
+        verify=verify
+    )
+    print('Content added to agent-memory ($DATASET dataset)')
+
+asyncio.run(add_content())
+" 2>/dev/null || {
+    [[ "$QUIET" != true ]] && echo "Failed to add content to agent-memory" >&2
+    exit 0
+}

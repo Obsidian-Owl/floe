@@ -99,6 +99,14 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
    - If yes: loop back to step 2
    - If no or none remaining: display session summary and Linear project URL
 
+10. **Save Session Decisions** (end of session):
+    - If implementation involved significant decisions, save them for future reference:
+      ```bash
+      ./scripts/memory-save --decisions "{key decisions made}" --issues "{LinearIDs}"
+      ```
+    - This enables future sessions to recover context and maintain consistency
+    - If agent-memory unavailable, decisions are captured in Linear comments (step 8)
+
 ## Tool Patterns
 
 **Linear MCP tools** (never hardcode status names - always query first):
@@ -146,3 +154,4 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 - **[speckit.tasks](./speckit.tasks.md)** - Generate tasks.md
 - **[speckit.taskstolinear](./speckit.taskstolinear.md)** - Create Linear issues from tasks
 - **`.specify/memory/constitution.md`** - Project principles (TDD, SOLID, atomic commits)
+- **Memory Scripts** - `./scripts/memory-{search,save,add}` for knowledge graph integration

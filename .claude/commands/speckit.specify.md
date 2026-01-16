@@ -24,7 +24,16 @@ The text the user typed after `/speckit.specify` in the triggering message **is*
 
 Given that feature description, do this:
 
-1. **Identify the Epic this feature belongs to**:
+1. **Query Agent-Memory for Related Context** (if available):
+   - Search for prior work related to this feature domain:
+     ```bash
+     ./scripts/memory-search "{feature keywords}"
+     ```
+   - Look for: existing patterns, prior decisions, related features
+   - Use findings to inform scope and avoid contradicting prior decisions
+   - If agent-memory unavailable, continue without (non-blocking)
+
+2. **Identify the Epic this feature belongs to**:
 
    All features MUST be associated with an Epic from the project's Epic Overview.
 
@@ -38,14 +47,14 @@ Given that feature description, do this:
    - If unclear from the feature description, use the AskUserQuestion tool to ask which Epic this belongs to
    - Provide suggested options based on the Epic names in EPIC-OVERVIEW.md
 
-2. **Generate a concise short name** (2-4 words) for the branch:
+3. **Generate a concise short name** (2-4 words) for the branch:
    - Analyze the feature description and extract the most meaningful keywords
    - Create a 2-4 word short name that captures the essence of the feature
    - Use action-noun format when possible (e.g., "manifest-validation", "plugin-discovery")
    - Preserve technical terms and acronyms (OAuth2, API, JWT, etc.)
    - Keep it concise but descriptive enough to understand the feature at a glance
 
-3. **Check for existing specs for this Epic**:
+4. **Check for existing specs for this Epic**:
 
    a. First, fetch all remote branches to ensure we have the latest information:
 
@@ -75,9 +84,9 @@ Given that feature description, do this:
    - The JSON output will contain BRANCH_NAME, SPEC_FILE paths, and EPIC_ID
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
 
-4. Load `.specify/templates/spec-template.md` to understand required sections.
+5. Load `.specify/templates/spec-template.md` to understand required sections.
 
-5. Follow this execution flow:
+6. Follow this execution flow:
 
     1. Parse user description from Input
        If empty: ERROR "No feature description provided"
@@ -97,9 +106,9 @@ Given that feature description, do this:
     7. Identify Key Entities (if data involved)
     8. Return: SUCCESS (spec ready for planning)
 
-6. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
+7. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
 
-7. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
+8. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
 
    a. **Create Spec Quality Checklist**: Generate a checklist file at `FEATURE_DIR/checklists/requirements.md` using the checklist template structure with these validation items:
 
@@ -191,7 +200,7 @@ Given that feature description, do this:
 
    d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
 
-8. Report completion with branch name, spec file path, checklist results, Epic ID, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
+9. Report completion with branch name, spec file path, checklist results, Epic ID, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
 
 **NOTE:** The script creates and checks out the new branch and initializes the spec file before writing.
 

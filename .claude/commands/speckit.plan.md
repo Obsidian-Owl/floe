@@ -22,9 +22,18 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 1. **Setup**: Run `.specify/scripts/bash/setup-plan.sh --json` from repo root and parse JSON for FEATURE_SPEC, IMPL_PLAN, SPECS_DIR, BRANCH. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
-2. **Load context**: Read FEATURE_SPEC and `.specify/memory/constitution.md`. Load IMPL_PLAN template (already copied).
+2. **Query Agent-Memory for Prior Context** (if available):
+   - Search for prior decisions related to this feature domain:
+     ```bash
+     ./scripts/memory-search "architecture decisions for {feature_domain}"
+     ```
+   - Look for: prior technology choices, rejected alternatives, lessons learned
+   - Document any relevant findings in research.md under "Prior Decisions" section
+   - If agent-memory unavailable, continue without (non-blocking)
 
-3. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
+3. **Load context**: Read FEATURE_SPEC and `.specify/memory/constitution.md`. Load IMPL_PLAN template (already copied).
+
+4. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")
    - Fill Constitution Check section from constitution
    - Evaluate gates (ERROR if violations unjustified)
@@ -33,7 +42,18 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Phase 1: Update agent context by running the agent script
    - Re-evaluate Constitution Check post-design
 
-4. **Stop and report**: Command ends after Phase 2 planning. Report branch, IMPL_PLAN path, and generated artifacts.
+5. **Stop and report**: Command ends after Phase 2 planning. Report branch, IMPL_PLAN path, and generated artifacts.
+
+6. **Capture Decisions to Agent-Memory** (if available):
+   - Extract key decisions from research.md and plan.md:
+     - Technology choices made
+     - Alternatives that were rejected (and why)
+     - Architecture patterns selected
+   - Save to agent-memory for future sessions:
+     ```bash
+     ./scripts/memory-save --decisions "Chose {technology} for {purpose}; Rejected {alternative} because {reason}" --issues "{Linear issue IDs}"
+     ```
+   - If agent-memory unavailable, decisions are still captured in plan artifacts (non-blocking)
 
 ## Phases
 
