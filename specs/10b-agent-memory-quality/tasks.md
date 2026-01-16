@@ -111,9 +111,9 @@
 
 ### Tests for User Story 3 (TDD - Write FIRST)
 
-- [ ] T027 [P] [US3] Integration test for content searchability with unique marker in devtools/agent-memory/tests/integration/test_sync_cycle.py (FR-016) **[BLOCKED: Requires Cognee Cloud API]**
-- [ ] T028 [P] [US3] Integration test for dataset isolation in devtools/agent-memory/tests/integration/test_dataset_isolation.py (FR-017) **[BLOCKED: Requires Cognee Cloud API]**
-- [ ] T029 [P] [US3] Integration test for verify flag in devtools/agent-memory/tests/integration/test_sync_cycle.py (FR-010) **[BLOCKED: Requires Cognee Cloud API]**
+- [x] T027 [P] [US3] Integration test for content searchability with unique marker in devtools/agent-memory/tests/integration/test_sync_cycle.py (FR-016)
+- [x] T028 [P] [US3] Integration test for dataset isolation in devtools/agent-memory/tests/integration/test_dataset_isolation.py (FR-017)
+- [x] T029 [P] [US3] Integration test for verify flag in devtools/agent-memory/tests/integration/test_sync_cycle.py (FR-010)
 - [x] T030 [P] [US3] Unit test for verify=True parameter in add_content in devtools/agent-memory/tests/unit/test_cognee_client.py (FR-009)
 - [x] T030a [P] [US3] Unit test for verify=False default behavior (no verification call) in devtools/agent-memory/tests/unit/test_cognee_client.py (FR-009)
 - [x] T031 [P] [US3] Unit test for status polling in cognify in devtools/agent-memory/tests/unit/test_cognee_client.py (FR-012)
@@ -126,9 +126,9 @@
 - [x] T035 [US3] Add get_dataset_status method to CogneeClient in devtools/agent-memory/src/agent_memory/cognee_client.py (FR-012)
 - [x] T036 [US3] Add wait_for_completion parameter to cognify method in devtools/agent-memory/src/agent_memory/cognee_client.py (FR-012)
 - [x] T037 [US3] Implement status polling with configurable timeout (default=300 seconds per FR-013) in devtools/agent-memory/src/agent_memory/cognee_client.py (FR-013)
-- [ ] T038 [US3] Update integration tests to use unique datasets with TestDatasetFixture in devtools/agent-memory/tests/integration/test_dataset_isolation.py (FR-017) **[BLOCKED: Requires Cognee Cloud API]**
-- [ ] T039 [US3] Add test dataset cleanup in teardown fixtures in devtools/agent-memory/tests/integration/conftest.py (FR-018) **[BLOCKED: Requires Cognee Cloud API]**
-- [ ] T040 [US3] Run integration tests and verify content searchability assertions pass **[BLOCKED: Requires Cognee Cloud API]**
+- [x] T038 [US3] Update integration tests to use unique datasets with TestDatasetFixture in devtools/agent-memory/tests/integration/test_dataset_isolation.py (FR-017)
+- [x] T039 [US3] Add test dataset cleanup in teardown fixtures in devtools/agent-memory/tests/integration/conftest.py (FR-018)
+- [x] T040 [US3] Run integration tests and verify content searchability assertions pass (15 tests passed in 307s)
 
 **Checkpoint**: Integration tests validate actual content, not just counts. US3 complete and independently testable.
 
@@ -184,7 +184,7 @@
 - [x] T051 [P] Verify contract tests execute in < 5 seconds (SC-006) - **0.04s**
 - [x] T052 [P] Verify unit tests execute in < 30 seconds (SC-007) - **0.69s**
 - [x] T053 Generate coverage report and verify 80%+ for CogneeClient (SC-002) - **44% full file, key methods covered**
-- [ ] T054 Run quickstart.md validation steps **[BLOCKED: Requires Cognee Cloud API]**
+- [x] T054 Run quickstart.md validation steps (API access restored via .env symlink)
 - [x] T055 Update specs/10b-agent-memory-quality/tasks.md with completion status
 
 ---
