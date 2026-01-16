@@ -64,6 +64,10 @@ markers = [
     "e2e: Marks end-to-end pipeline tests",
     "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
     "benchmark: Marks performance benchmark tests (CodSpeed)",
+    "ralph: Marks Ralph Wiggum workflow tests",
+    "dry_run: Marks tests that run in dry-run mode (no side effects)",
+    "requires_git: Marks tests requiring git operations",
+    "worktree: Marks tests involving git worktree lifecycle",
 ]
 
 [tool.mypy]

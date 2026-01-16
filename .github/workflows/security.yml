@@ -1,0 +1,147 @@
+# Security Review Workflow
+# Runs Claude Code security review on PRs and pushes to main
+# See: https://github.com/anthropics/claude-code-security-review
+
+name: Security Review
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.sql'
+      - '**.yaml'
+      - '**.yml'
+      - '**.sh'
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.sql'
+      - '**.yaml'
+      - '**.yml'
+      - '**.sh'
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  security-review:
+    name: Claude Code Security Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code Security Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Perform a security review of the changed files. Focus on:
+
+            1. **Injection Vulnerabilities**
+               - SQL injection
+               - Command injection
+               - XSS (cross-site scripting)
+
+            2. **Authentication/Authorization**
+               - Missing auth checks
+               - Privilege escalation
+               - Insecure session handling
+
+            3. **Data Exposure**
+               - Hardcoded secrets or API keys
+               - PII logging
+               - Sensitive data in error messages
+
+            4. **Cryptographic Issues**
+               - Weak algorithms (MD5, SHA1)
+               - Hardcoded keys/salts
+               - Insecure random number generation
+
+            5. **Input Validation**
+               - Missing validation
+               - Type confusion
+               - Path traversal
+
+            6. **Dangerous Constructs**
+               - Dynamic code patterns
+               - shell=True in subprocess
+               - pickle.loads on untrusted data
+
+            Report findings with severity (CRITICAL/HIGH/MEDIUM/LOW) and specific file:line locations.
+            Provide remediation guidance for each finding.
+          allowed_tools: |
+            Read
+            Grep
+            Glob
+
+  dependency-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Audit dependencies
+        run: |
+          uv pip install pip-audit safety
+          uv run pip-audit --strict || true
+          uv run safety check --full-report || true
+
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  bandit-scan:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit
+        run: |
+          bandit -r packages/ plugins/ -f json -o bandit-report.json || true
+          bandit -r packages/ plugins/ -f txt || true
+
+      - name: Upload Bandit Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          if-no-files-found: ignore

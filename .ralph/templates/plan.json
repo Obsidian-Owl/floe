@@ -1,0 +1,49 @@
+{
+  "$schema": "../plan.schema.json",
+  "task_id": "${TASK_ID}",
+  "linear_id": "${LINEAR_ID}",
+  "epic": "${EPIC}",
+  "branch": "${BRANCH}",
+  "worktree_path": "${WORKTREE_PATH}",
+  "status": "pending",
+  "iteration": 0,
+  "max_iterations": 15,
+  "started_at": null,
+  "completed_at": null,
+  "subtasks": [
+    {
+      "id": "${TASK_ID}.1",
+      "description": "Write tests for the feature",
+      "passes": false,
+      "started_at": null,
+      "completed_at": null,
+      "iteration_completed": null
+    },
+    {
+      "id": "${TASK_ID}.2",
+      "description": "Implement the feature",
+      "passes": false,
+      "started_at": null,
+      "completed_at": null,
+      "iteration_completed": null
+    },
+    {
+      "id": "${TASK_ID}.3",
+      "description": "Validate constitution compliance",
+      "passes": false,
+      "started_at": null,
+      "completed_at": null,
+      "iteration_completed": null
+    }
+  ],
+  "discovered_subtasks": [],
+  "gate_results": {
+    "lint": null,
+    "typecheck": null,
+    "unit_tests": null,
+    "security": null,
+    "constitution": null
+  },
+  "commits": [],
+  "notes": []
+}

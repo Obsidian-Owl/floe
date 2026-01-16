@@ -44,7 +44,7 @@ make demo-e2e          # End-to-end validation
 |-------|----------|
 | **Architecture** | `docs/architecture/` - Four-layer model, plugin system, OCI registry |
 | **Testing Strategy** | `TESTING.md` - K8s-native testing, test organization |
-| **Workflow Integration** | `docs/guides/linear-workflow.md` - SpecKit + Beads + Linear |
+| **Workflow Integration** | `docs/guides/workflow/` - Three-phase development workflow |
 | **ADRs** | `docs/architecture/adr/` - Architectural decisions |
 
 ---
@@ -95,50 +95,56 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 ## Development Workflow
 
-### SpecKit + Beads + Linear Integration
+### Three-Phase Workflow
 
-**Source of Truth**: Linear (issue tracking)
-**Local Cache**: Beads (offline work)
+The floe workflow combines collaborative design with automated implementation.
+
+```
+Phase A: Collaborative Design     [Human + AI]
+    |
+    v
+Phase B: Automated Implementation [AI Only - Ralph Wiggum + Worktrees]
+    |
+    v
+Phase C: Collaborative Pre-PR     [Human + AI]
+```
+
+**Source of Truth**: Linear (issue tracking via MCP)
 **Planning**: SpecKit (feature breakdown)
+**Automation**: Ralph Wiggum pattern with git worktrees
+
+### Phase A: Design & Planning (Collaborative)
 
 ```bash
-# 1. Sync from Linear
-bd linear sync --pull
-
-# 2. See available work
-/speckit.implement
-
-# 3. Auto-implement next ready task
-/speckit.implement  # Claims task, updates Linear, commits
-
-# 4. Review test quality before PR
-/speckit.test-review
-
-# 5. Create PR (if tests pass)
-# Commit and push handled by /speckit.implement
-```
-
-**Complete Workflow**: See `docs/guides/linear-workflow.md`
-
-### Development Cycle
-
-```bash
-# 1. Planning (Epic → Tasks → Linear issues)
-/speckit.specify    # Create spec.md
-/speckit.plan       # Generate plan.md
-/speckit.tasks      # Break down to tasks
+/speckit.specify        # Create spec.md
+/speckit.plan           # Generate plan.md (with constitution gates)
+/speckit.tasks          # Break down to tasks
 /speckit.taskstolinear  # Create Linear issues with Epic labels
-
-# 2. Implementation (Linear-coordinated)
-/speckit.implement  # Auto-selects ready task, syncs Linear
-
-# 3. Test Quality Review
-/speckit.test-review  # Pre-PR validation
-
-# 4. PR Creation
-# Code committed by /speckit.implement
-# Tests validated by /speckit.test-review
+# Human confirms: "Ready for automated implementation"
 ```
+
+### Phase B: Automated Implementation
+
+```bash
+/ralph.spawn [epic]     # Create worktrees for ready tasks
+/ralph.status           # Monitor agent progress
+# Agents run in parallel with embedded quality gates
+# All agents signal COMPLETE → READY_FOR_REVIEW
+```
+
+### Phase C: Pre-PR Review (Collaborative)
+
+```bash
+/ralph.integrate [epic]    # Rebase and prepare for review
+/speckit.test-review       # Semantic test quality analysis
+/security-review           # Security vulnerability scan
+/arch-review               # Architecture alignment check
+# Human confirms: "Ready for PR"
+gh pr create --base main
+/ralph.cleanup             # Remove worktrees after merge
+```
+
+**Complete Workflow**: See `docs/guides/workflow/`
 
 ---
 
@@ -515,9 +521,8 @@ make help                       # Makefile targets
 /speckit.test-review            # Pre-PR test quality review
 make test                       # Run all tests (K8s)
 
-# Debugging
-bd stats                        # Beads issue statistics
-bd ready                        # See available work
+# Workflow
+/ralph.status                   # See active agents and progress
 Linear app                      # Team progress view
 ```
 
@@ -529,8 +534,9 @@ Linear app                      # Team progress view
 
 - **Architecture**: `docs/architecture/ARCHITECTURE-SUMMARY.md`
 - **Testing**: `TESTING.md`
-- **Linear Workflow**: `docs/guides/linear-workflow.md`
+- **Workflow**: `docs/guides/workflow/` (Three-phase development)
 - **Constitution**: `.specify/memory/constitution.md` (8 core principles)
+- **Ralph Config**: `.ralph/config.yaml` (Orchestration settings)
 
 ---
 
