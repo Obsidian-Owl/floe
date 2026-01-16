@@ -522,6 +522,7 @@ def sync(
     async def _sync() -> None:
         try:
             files_to_sync: list[Path] = []
+            datasets_to_cognify: set[str] = set()  # Track datasets for cognify
 
             if files:
                 # Explicit files specified
@@ -590,17 +591,21 @@ def sync(
             # Sync markdown files
             if md_files:
                 typer.echo(f"\nSyncing {len(md_files)} markdown file(s)...")
-                await _sync_markdown_files(client, config, md_files, verify=verify)
+                md_datasets = await _sync_markdown_files(client, config, md_files, verify=verify)
+                datasets_to_cognify.update(md_datasets)
 
             # Sync Python files (extract docstrings)
             if py_files:
                 typer.echo(f"\nSyncing {len(py_files)} Python file(s)...")
-                await _sync_python_files(client, config, py_files, verify=verify)
+                py_datasets = await _sync_python_files(client, config, py_files, verify=verify)
+                datasets_to_cognify.update(py_datasets)
 
-            # Run cognify if requested
-            if cognify and (md_files or py_files):
-                typer.echo("\nRunning cognify...")
-                await client.cognify(dataset_name=dataset)
+            # Run cognify for each dataset that had files synced
+            if cognify and datasets_to_cognify:
+                typer.echo("\nRunning cognify for synced datasets...")
+                for ds in datasets_to_cognify:
+                    typer.echo(f"  Cognifying dataset: {ds}")
+                    await client.cognify(dataset_name=ds)
                 typer.secho("Cognify completed", fg=typer.colors.GREEN)
 
             typer.secho(
@@ -690,7 +695,7 @@ async def _sync_markdown_files(
     files: list[Path],
     *,
     verify: bool = False,
-) -> None:
+) -> set[str]:
     """Sync markdown files to Cognee.
 
     Args:
@@ -698,7 +703,12 @@ async def _sync_markdown_files(
         config: Configuration.
         files: Markdown files to sync.
         verify: If True, verify content is searchable after add (FR-011).
+
+    Returns:
+        Set of dataset names that received content.
     """
+    datasets_used: set[str] = set()
+
     for file_path in files:
         try:
             typer.echo(f"  Processing: {file_path}")
@@ -719,8 +729,11 @@ async def _sync_markdown_files(
                 },
                 verify=verify,
             )
+            datasets_used.add(dataset_name)
         except Exception as e:
             typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
+
+    return datasets_used
 
 
 async def _sync_python_files(
@@ -729,7 +742,7 @@ async def _sync_python_files(
     files: list[Path],
     *,
     verify: bool = False,
-) -> None:
+) -> set[str]:
     """Sync Python files by extracting docstrings.
 
     Args:
@@ -737,7 +750,12 @@ async def _sync_python_files(
         config: Configuration.
         files: Python files to sync.
         verify: If True, verify content is searchable after add (FR-011).
+
+    Returns:
+        Set of dataset names that received content.
     """
+    datasets_used: set[str] = set()
+
     for file_path in files:
         try:
             typer.echo(f"  Processing: {file_path}")
@@ -767,10 +785,13 @@ async def _sync_python_files(
                     verify=verify,
                 )
 
+            datasets_used.add(dataset_name)
             typer.echo(f"    Added {len(entries)} docstring(s)")
 
         except Exception as e:
             typer.secho(f"  Error processing {file_path}: {e}", fg=typer.colors.RED)
+
+    return datasets_used
 
 
 def _get_dataset_for_file(file_path: Path, config: AgentMemoryConfig) -> str:
@@ -902,6 +923,9 @@ def memify(
 
     Run this after sync + cognify to enhance graph quality without rebuilding.
 
+    Note: Memify is only available with self-hosted Cognee. Cognee Cloud
+    (api.cognee.ai) does not currently expose this endpoint.
+
     Example:
         agent-memory sync --all && agent-memory memify --dataset floe
     """
@@ -916,9 +940,25 @@ def memify(
             effective_dataset = dataset or config.default_dataset
             typer.echo(f"Running memify on dataset: {effective_dataset}")
 
-            await client.memify(dataset_name=effective_dataset)
+            success = await client.memify(dataset_name=effective_dataset)
 
-            typer.secho("Memify completed successfully!", fg=typer.colors.GREEN)
+            if success:
+                typer.secho("Memify completed successfully!", fg=typer.colors.GREEN)
+            else:
+                typer.secho(
+                    "Memify not available: Cognee Cloud does not expose the memify endpoint.",
+                    fg=typer.colors.YELLOW,
+                )
+                typer.echo()
+                typer.echo("This is a known limitation of Cognee Cloud (api.cognee.ai).")
+                typer.echo("The memify endpoint is only available in self-hosted Cognee.")
+                typer.echo()
+                typer.echo("Your knowledge graph is still functional:")
+                typer.echo("  - sync: Adds content to the graph")
+                typer.echo("  - cognify: Builds the knowledge graph")
+                typer.echo("  - search: Queries the graph (working)")
+                typer.echo()
+                typer.echo("Memify is an optional optimization, not required for basic functionality.")
         except CogneeClientError as e:
             _exit_with_error(str(e))
 

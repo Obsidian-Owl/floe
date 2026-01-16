@@ -802,7 +802,7 @@ class TestVerifyParameter:
             "_make_request",
             new=AsyncMock(side_effect=mock_request),
         ):
-            with pytest.raises(VerificationError, match="not found in search"):
+            with pytest.raises(VerificationError, match="No search results"):
                 await cognee_client.add_content(
                     "content that wont be found",
                     "test_dataset",

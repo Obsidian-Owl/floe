@@ -35,7 +35,7 @@ class TestMemifyCommand:
             mock_config.return_value = config
 
             mock_client = MagicMock()
-            mock_client.memify = AsyncMock()
+            mock_client.memify = AsyncMock(return_value=True)
             mock_client_class.return_value = mock_client
 
             result = runner.invoke(app, ["memify"])
@@ -59,7 +59,7 @@ class TestMemifyCommand:
             mock_config.return_value = config
 
             mock_client = MagicMock()
-            mock_client.memify = AsyncMock()
+            mock_client.memify = AsyncMock(return_value=True)
             mock_client_class.return_value = mock_client
 
             result = runner.invoke(app, ["memify", "--dataset", "custom"])
@@ -67,6 +67,35 @@ class TestMemifyCommand:
             assert result.exit_code == 0
             mock_client.memify.assert_called_once_with(dataset_name="custom")
             assert "Running memify on dataset: custom" in result.output
+
+    @pytest.mark.requirement("FR-023")
+    def test_memify_shows_warning_when_not_available(self) -> None:
+        """Test memify shows helpful warning when endpoint not available.
+
+        Cognee Cloud does not expose the memify endpoint. When this happens,
+        the CLI should show a helpful message explaining the limitation
+        instead of failing with an error.
+        """
+        from agent_memory.cli import app
+
+        with (
+            patch("agent_memory.cli._load_config") as mock_config,
+            patch("agent_memory.cli.CogneeClient") as mock_client_class,
+        ):
+            config = MagicMock()
+            config.default_dataset = "floe"
+            mock_config.return_value = config
+
+            mock_client = MagicMock()
+            mock_client.memify = AsyncMock(return_value=False)  # Not available
+            mock_client_class.return_value = mock_client
+
+            result = runner.invoke(app, ["memify"])
+
+            assert result.exit_code == 0  # Should not fail
+            assert "Memify not available" in result.output
+            assert "Cognee Cloud" in result.output
+            assert "knowledge graph is still functional" in result.output
 
     @pytest.mark.requirement("FR-023")
     def test_memify_handles_error(self) -> None:
@@ -133,7 +162,7 @@ class TestMemifyClient:
     @pytest.mark.requirement("FR-023")
     @pytest.mark.asyncio
     async def test_memify_calls_sdk(self) -> None:
-        """Test memify calls the Cognee SDK."""
+        """Test memify calls the Cognee SDK and returns True on success."""
         import sys
 
         from agent_memory.cognee_client import CogneeClient
@@ -147,11 +176,12 @@ class TestMemifyClient:
 
         # Setup the mock SDK behavior
         mock_sdk = MagicMock()
-        mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None))
+        mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None, detail=None))
         sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
 
-        await client.memify(dataset_name="test_dataset")
+        result = await client.memify(dataset_name="test_dataset")
 
+        assert result is True
         mock_sdk.memify.assert_called_once_with(dataset_name="test_dataset")
 
     @pytest.mark.requirement("FR-023")
@@ -171,12 +201,74 @@ class TestMemifyClient:
 
         # Setup the mock SDK behavior
         mock_sdk = MagicMock()
-        mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None))
+        mock_sdk.memify = AsyncMock(return_value=MagicMock(error=None, detail=None))
         sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
 
-        await client.memify()  # No dataset specified
+        result = await client.memify()  # No dataset specified
 
+        assert result is True
         mock_sdk.memify.assert_called_once_with(dataset_name="default_ds")
+
+    @pytest.mark.requirement("FR-023")
+    @pytest.mark.asyncio
+    async def test_memify_returns_false_when_not_found(self) -> None:
+        """Test memify returns False when endpoint not available.
+
+        Cognee Cloud (api.cognee.ai) does not expose the memify endpoint.
+        The SDK returns MemifyError(status=404, error={'detail': 'Not Found'}).
+        """
+        import sys
+
+        from agent_memory.cognee_client import CogneeClient
+
+        mock_config = MagicMock()
+        mock_config.cognee_api_url = "https://api.cognee.cloud"
+        mock_config.cognee_api_key.get_secret_value.return_value = "test-key"
+        mock_config.default_dataset = "floe"
+
+        client = CogneeClient(mock_config)
+
+        # Create a mock MemifyError class to mimic the real SDK response
+        # The class name MUST be "MemifyError" for the type check to work
+        class MemifyError:  # noqa: N801  # Class name matches SDK
+            def __init__(self) -> None:
+                self.status = 404
+                self.error = {"detail": "Not Found"}
+
+        # Setup the mock SDK to return a MemifyError with status 404
+        mock_sdk = MagicMock()
+        mock_sdk.memify = AsyncMock(return_value=MemifyError())
+        sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
+
+        result = await client.memify(dataset_name="test_dataset")
+
+        assert result is False
+
+    @pytest.mark.requirement("FR-023")
+    @pytest.mark.asyncio
+    async def test_memify_returns_false_on_not_found_exception(self) -> None:
+        """Test memify returns False when SDK raises Not Found exception."""
+        import sys
+
+        from agent_memory.cognee_client import CogneeClient
+
+        mock_config = MagicMock()
+        mock_config.cognee_api_url = "https://api.cognee.cloud"
+        mock_config.cognee_api_key.get_secret_value.return_value = "test-key"
+        mock_config.default_dataset = "floe"
+
+        client = CogneeClient(mock_config)
+
+        # Setup the mock SDK to raise an exception containing "Not Found"
+        mock_sdk = MagicMock()
+        mock_sdk.memify = AsyncMock(
+            side_effect=Exception("{'detail': 'Not Found'}")
+        )
+        sys.modules["cogwit_sdk"].cogwit.return_value = mock_sdk
+
+        result = await client.memify(dataset_name="test_dataset")
+
+        assert result is False
 
     @pytest.mark.requirement("FR-023")
     @pytest.mark.asyncio

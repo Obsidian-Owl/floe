@@ -463,8 +463,10 @@ class CogneeClient:
     ) -> None:
         """Verify content is searchable via read-after-write check.
 
-        Searches for a sample of the added content to verify it was stored
-        and is searchable. Raises VerificationError if not found.
+        Uses count-based verification: checks that search returns at least
+        one result. This approach is more reliable than substring matching
+        because Cognee's graph search returns graph-derived summaries,
+        not the original text.
 
         Args:
             content_sample: Sample of content to search for.
@@ -472,7 +474,7 @@ class CogneeClient:
             timeout: Timeout for the verification search.
 
         Raises:
-            VerificationError: If content is not found in search results.
+            VerificationError: If no search results are returned.
         """
         self._log.debug(
             "verify_content_started",
@@ -490,22 +492,25 @@ class CogneeClient:
             top_k=5,
         )
 
-        # Check if any result contains the content
-        found = False
-        for item in result.results:
-            if content_sample[:50] in item.content:
-                found = True
-                break
-
-        if not found:
+        # Count-based verification: at least one result indicates content is indexed
+        # Note: We don't do substring matching because Cognee returns graph-derived
+        # summaries, not the original text. Having any results is sufficient.
+        if result.total_count == 0:
             self._log.error(
                 "verify_content_failed",
                 dataset=dataset_name,
-                reason="Content not found in search results",
+                reason="No search results returned",
+                query_preview=search_query[:50],
             )
             raise VerificationError(
-                f"Content not found in search results after write to dataset '{dataset_name}'"
+                f"No search results for content in dataset '{dataset_name}'"
             )
+
+        self._log.debug(
+            "verify_content_completed",
+            dataset=dataset_name,
+            result_count=result.total_count,
+        )
 
     async def cognify(
         self,
@@ -654,7 +659,7 @@ class CogneeClient:
 
             await asyncio.sleep(poll_interval)
 
-    async def memify(self, dataset_name: str | None = None) -> None:
+    async def memify(self, dataset_name: str | None = None) -> bool:
         """Optimize knowledge graph using memify post-processing pipeline.
 
         Memify is an incremental graph optimization pipeline that:
@@ -666,16 +671,26 @@ class CogneeClient:
         Call this after cognify to improve search relevance over time
         without rebuilding the entire knowledge graph.
 
+        Note: Memify is only available in self-hosted Cognee. Cognee Cloud
+        (api.cognee.ai) does not currently expose this endpoint. When called
+        against Cognee Cloud, this method returns False without error.
+
         Args:
             dataset_name: Dataset to optimize. If None, uses default dataset.
 
+        Returns:
+            True if memify succeeded, False if endpoint is not available.
+
         Raises:
-            CogneeClientError: If memify operation fails.
+            CogneeClientError: If memify operation fails (not due to missing endpoint).
 
         Example:
             >>> # After sync and cognify
-            >>> await client.memify(dataset_name="floe")
-            >>> # Now search will return more relevant results
+            >>> success = await client.memify(dataset_name="floe")
+            >>> if success:
+            ...     print("Graph optimized")
+            ... else:
+            ...     print("Memify not available (Cognee Cloud limitation)")
         """
         from cogwit_sdk import CogwitConfig, cogwit
 
@@ -683,7 +698,7 @@ class CogneeClient:
         self._log.info("memify_started", dataset=effective_dataset)
 
         try:
-            # Use Cognee Cloud SDK for memify (not available via REST API)
+            # Use Cognee Cloud SDK for memify
             sdk_config = CogwitConfig(
                 api_key=self._config.cognee_api_key.get_secret_value()
             )
@@ -691,15 +706,53 @@ class CogneeClient:
 
             result = await sdk.memify(dataset_name=effective_dataset)
 
-            # Check for errors
+            # Check for MemifyError with status 404 - endpoint doesn't exist
+            # The SDK returns MemifyError(status=404, error={'detail': 'Not Found'})
+            result_type = type(result).__name__
+            if result_type == "MemifyError":
+                # Check for 404 Not Found - endpoint doesn't exist in Cognee Cloud
+                if hasattr(result, "status") and result.status == 404:
+                    self._log.warning(
+                        "memify_not_available",
+                        dataset=effective_dataset,
+                        reason="Memify endpoint not available in Cognee Cloud (404)",
+                    )
+                    return False
+                # Other errors from the SDK
+                error_msg = getattr(result, "error", str(result))
+                raise CogneeClientError(f"Memify failed: {error_msg}")
+
+            # Check for dict responses (e.g., {'detail': 'Not Found'})
+            if isinstance(result, dict):
+                if result.get("detail") == "Not Found":
+                    self._log.warning(
+                        "memify_not_available",
+                        dataset=effective_dataset,
+                        reason="Memify endpoint not available in Cognee Cloud",
+                    )
+                    return False
+                if result.get("error"):
+                    raise CogneeClientError(f"Memify failed: {result['error']}")
+
+            # Check for object with error attribute
             if hasattr(result, "error") and result.error:
                 raise CogneeClientError(f"Memify failed: {result.error}")
 
             self._log.info("memify_completed", dataset=effective_dataset)
+            return True
         except CogneeClientError:
             raise
         except Exception as e:
-            self._log.error("memify_failed", dataset=effective_dataset, error=str(e))
+            error_str = str(e)
+            # Handle 404 Not Found from API
+            if "Not Found" in error_str or "'detail': 'Not Found'" in error_str:
+                self._log.warning(
+                    "memify_not_available",
+                    dataset=effective_dataset,
+                    reason="Memify endpoint not available in Cognee Cloud",
+                )
+                return False
+            self._log.error("memify_failed", dataset=effective_dataset, error=error_str)
             raise CogneeClientError(f"Memify failed: {e}") from e
 
     async def codify(self, repo_path: str, dataset_name: str | None = None) -> None:
