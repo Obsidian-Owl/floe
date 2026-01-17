@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from floe_iceberg.errors import (
+    CompactionError,
     IncompatibleSchemaChangeError,
     NoSuchNamespaceError,
     NoSuchTableError,
@@ -1396,21 +1397,37 @@ class IcebergTableManager:
             target_file_size_bytes=strategy.target_file_size_bytes,
         )
 
-        # Execute compaction using the compaction module
-        result = execute_compaction(table, strategy)
-        files_rewritten = result.files_rewritten
+        try:
+            # Execute compaction using the compaction module
+            result = execute_compaction(table, strategy)
+            files_rewritten = result.files_rewritten
 
-        # Set files rewritten span attribute
-        span.set_attribute("files.rewritten", files_rewritten)
+            # Set files rewritten span attribute
+            span.set_attribute("files.rewritten", files_rewritten)
 
-        self._log.info(
-            "compact_table_completed",
-            table_identifier=table_identifier,
-            strategy_type=strategy.strategy_type.value,
-            files_rewritten=files_rewritten,
-        )
+            self._log.info(
+                "compact_table_completed",
+                table_identifier=table_identifier,
+                strategy_type=strategy.strategy_type.value,
+                files_rewritten=files_rewritten,
+            )
 
-        return files_rewritten
+            return files_rewritten
+
+        except CompactionError as e:
+            # Record error on OTel span and re-raise
+            from opentelemetry.trace import Status, StatusCode
+
+            span.set_status(Status(StatusCode.ERROR, "Compaction failed"))
+            span.record_exception(e)
+
+            self._log.error(
+                "compact_table_failed",
+                table_identifier=table_identifier,
+                strategy_type=strategy.strategy_type.value,
+                error=str(e),
+            )
+            raise
 
 
 __all__ = ["IcebergTableManager"]

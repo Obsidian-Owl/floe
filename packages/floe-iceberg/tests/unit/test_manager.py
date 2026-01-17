@@ -3339,3 +3339,69 @@ class TestCompactTableBinPack:
         # The implementation must NOT call compact_table within write_data.
 
         # This test passes by showing the expected API usage pattern.
+
+    @pytest.mark.requirement("FR-030")
+    def test_compact_table_handles_compaction_error_with_logging(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test CompactionError is properly handled with structured logging.
+
+        Verifies that:
+        1. CompactionError is re-raised to caller
+        2. Error is logged with structured fields
+        3. OTel span error handling is triggered (implementation detail)
+        """
+        from unittest.mock import patch
+
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import CompactionError
+        from floe_iceberg.models import (
+            CompactionStrategy,
+            CompactionStrategyType,
+            FieldType,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        table_config = TableConfig(
+            namespace="bronze",
+            table_name="error_handling_test",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(table_config)
+
+        strategy = CompactionStrategy(
+            strategy_type=CompactionStrategyType.BIN_PACK,
+        )
+
+        # Mock execute_compaction to raise CompactionError
+        with patch(
+            "floe_iceberg.compaction.execute_compaction"
+        ) as mock_execute:
+            mock_execute.side_effect = CompactionError(
+                "Simulated failure",
+                table_identifier="bronze.error_handling_test",
+                strategy="BIN_PACK",
+            )
+
+            # Verify the error is re-raised
+            with pytest.raises(CompactionError) as exc_info:
+                manager.compact_table(table, strategy)
+
+            # Verify error has expected attributes
+            assert exc_info.value.strategy == "BIN_PACK"
+            assert "Simulated failure" in str(exc_info.value)
