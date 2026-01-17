@@ -9,6 +9,26 @@ Fixtures:
     integration_catalog_plugin: CatalogPlugin wrapping real Polaris
     integration_storage_plugin: StoragePlugin wrapping real S3/MinIO
 
+Test Credentials Pattern
+------------------------
+This module uses default credentials that match the K8s service bootstrap
+configuration in ``testing/k8s/services/``. This is an **intentional design**:
+
+1. **Polaris** (``test-admin:test-secret``):
+   - Matches ``testing/k8s/services/polaris.yaml`` POLARIS_BOOTSTRAP_CREDENTIALS
+   - Override via: ``POLARIS_CREDENTIAL`` environment variable
+
+2. **MinIO** (``minioadmin:minioadmin123``):
+   - Matches ``testing/k8s/services/minio.yaml`` root user configuration
+   - Override via: ``MINIO_ACCESS_KEY`` and ``MINIO_SECRET_KEY`` environment variables
+
+**Why defaults?** Integration tests run in Kind clusters where services are
+bootstrapped with known credentials. The defaults enable zero-config local
+testing while environment variables allow CI/CD override for different environments.
+
+**Security Note**: These are TEST-ONLY credentials. Production systems MUST use
+secure credential management (Kubernetes Secrets, HashiCorp Vault, etc.).
+
 Note:
     No __init__.py files in test directories - pytest uses importlib mode.
 """
@@ -20,11 +40,9 @@ import uuid
 from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
-
 from testing.fixtures.polaris import (
     PolarisConfig,
     create_polaris_catalog,
-    create_test_namespace,
     drop_test_namespace,
 )
 from testing.fixtures.services import get_effective_host
@@ -166,7 +184,7 @@ class IntegrationPolarisCatalogPlugin:
         namespace, table_name = parts
 
         # Convert schema dict to PyIceberg Schema
-        from pyiceberg.schema import Schema
+        from pyiceberg.schema import NestedField, Schema
         from pyiceberg.types import (
             BooleanType,
             DateType,
@@ -178,7 +196,6 @@ class IntegrationPolarisCatalogPlugin:
             TimestampType,
             TimestamptzType,
         )
-        from pyiceberg.schema import NestedField
 
         type_mapping = {
             "boolean": BooleanType(),

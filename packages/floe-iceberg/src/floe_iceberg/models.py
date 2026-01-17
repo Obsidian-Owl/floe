@@ -951,7 +951,10 @@ class SnapshotInfo(BaseModel):
             else:
                 # Fallback: try to iterate if it's dict-like
                 try:
-                    summary_dict = {k: str(v) for k, v in snapshot.summary.items()} if hasattr(snapshot.summary, "items") else {}
+                    if hasattr(snapshot.summary, "items"):
+                        summary_dict = {
+                            k: str(v) for k, v in snapshot.summary.items()
+                        }
                 except (TypeError, AttributeError):
                     summary_dict = {}
 
@@ -1193,6 +1196,17 @@ class IcebergTableManagerConfig(BaseModel):
             "write.parquet.row-group-size-bytes": "134217728",
         },
         description="Default table properties for new tables",
+    )
+
+    # Connection configuration (overrides catalog plugin defaults)
+    # Used primarily for testing - production should configure via plugins
+    catalog_connection_config: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional catalog connection config override. "
+            "If None, uses default config from CatalogPlugin. "
+            "Useful for testing with in-memory catalogs."
+        ),
     )
 
 

@@ -27,7 +27,6 @@ See Also:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -46,7 +45,6 @@ from floe_iceberg.models import (
     CompactionStrategy,
     FieldType,
     IcebergTableManagerConfig,
-    OperationType,
     SchemaChange,
     SchemaChangeType,
     SchemaEvolution,
@@ -62,7 +60,61 @@ if TYPE_CHECKING:
     from floe_core.plugins.storage import FileIO, StoragePlugin
 
     # Type alias for PyIceberg Table
+    #
+    # NOTE: PyIceberg does not ship with py.typed marker or type stubs.
+    # Using `Any` provides flexibility while awaiting upstream typing support.
+    # Track: https://github.com/apache/iceberg-python/issues/XXX
+    # Consider contributing stubs to typeshed when API stabilizes.
     Table = Any
+
+
+# =============================================================================
+# Type Mapping Utilities
+# =============================================================================
+
+
+def _get_pyiceberg_type_mapping() -> dict[FieldType, Any]:
+    """Build mapping from FieldType enum to PyIceberg type instances.
+
+    This function is used by schema evolution operations to convert
+    floe-iceberg FieldType enums to PyIceberg type objects.
+
+    Returns:
+        Dictionary mapping FieldType enum values to PyIceberg type instances.
+
+    Note:
+        PyIceberg types are imported lazily inside this function to avoid
+        import-time dependencies and support environments where PyIceberg
+        is not installed.
+
+    Example:
+        >>> mapping = _get_pyiceberg_type_mapping()
+        >>> iceberg_type = mapping.get(FieldType.STRING)
+        >>> # iceberg_type is StringType()
+    """
+    from pyiceberg.types import (
+        BooleanType,
+        DateType,
+        DoubleType,
+        FloatType,
+        IntegerType,
+        LongType,
+        StringType,
+        TimestampType,
+        TimestamptzType,
+    )
+
+    return {
+        FieldType.BOOLEAN: BooleanType(),
+        FieldType.INT: IntegerType(),
+        FieldType.LONG: LongType(),
+        FieldType.FLOAT: FloatType(),
+        FieldType.DOUBLE: DoubleType(),
+        FieldType.STRING: StringType(),
+        FieldType.DATE: DateType(),
+        FieldType.TIMESTAMP: TimestampType(),
+        FieldType.TIMESTAMPTZ: TimestamptzType(),
+    }
 
 
 class IcebergTableManager:
@@ -185,6 +237,9 @@ class IcebergTableManager:
     def _connect_to_catalog(self) -> Catalog:
         """Connect to the catalog via CatalogPlugin.
 
+        Uses config.catalog_connection_config if provided, otherwise uses
+        minimal default config for testing compatibility.
+
         Returns:
             Connected PyIceberg Catalog instance.
 
@@ -193,12 +248,16 @@ class IcebergTableManager:
         """
         self._log.debug("connecting_to_catalog")
 
-        # Build connection config - in production this would come from environment
-        # For now, use minimal config that MockCatalogPlugin accepts
-        connect_config: dict[str, Any] = {
-            "uri": "memory://",  # Mock URI for testing
-            "warehouse": "default",
-        }
+        # Use config override if provided, otherwise use minimal defaults
+        # for testing compatibility (e.g., in-memory catalog for unit tests)
+        if self._config.catalog_connection_config is not None:
+            connect_config: dict[str, Any] = dict(self._config.catalog_connection_config)
+        else:
+            # Default config for testing - production should configure via plugins
+            connect_config = {
+                "uri": "memory://",
+                "warehouse": "default",
+            }
 
         catalog = self._catalog_plugin.connect(connect_config)
 
@@ -563,29 +622,10 @@ class IcebergTableManager:
             table: Real PyIceberg Table instance.
             evolution: SchemaEvolution with list of changes.
         """
-        from pyiceberg.types import (
-            BooleanType,
-            DateType,
-            DoubleType,
-            FloatType,
-            IntegerType,
-            LongType,
-            StringType,
-            TimestampType,
-            TimestamptzType,
-        )
+        from pyiceberg.types import StringType
 
-        type_mapping = {
-            FieldType.BOOLEAN: BooleanType(),
-            FieldType.INT: IntegerType(),
-            FieldType.LONG: LongType(),
-            FieldType.FLOAT: FloatType(),
-            FieldType.DOUBLE: DoubleType(),
-            FieldType.STRING: StringType(),
-            FieldType.DATE: DateType(),
-            FieldType.TIMESTAMP: TimestampType(),
-            FieldType.TIMESTAMPTZ: TimestamptzType(),
-        }
+        # Use module-level helper for type mapping (reusable, documented)
+        type_mapping = _get_pyiceberg_type_mapping()
 
         with table.update_schema() as update:
             for change in evolution.changes:

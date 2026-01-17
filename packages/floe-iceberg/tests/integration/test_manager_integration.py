@@ -12,12 +12,10 @@ Tests:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pyarrow as pa
 import pytest
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
