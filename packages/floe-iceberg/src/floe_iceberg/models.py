@@ -23,7 +23,7 @@ Configuration Models:
     IcebergTableManagerConfig: Manager configuration
     IcebergIOManagerConfig: Dagster IOManager configuration
 
-Data Models (implemented in later tasks):
+Data Models:
     SchemaField, TableSchema: Schema definition
     PartitionField, PartitionSpec: Partitioning
     TableConfig: Table creation
@@ -1009,6 +1009,93 @@ class WriteConfig(BaseModel):
 
 
 # =============================================================================
+# Compaction Configuration Models
+# =============================================================================
+
+
+# Default target file size: 128MB
+DEFAULT_TARGET_FILE_SIZE_BYTES = 134217728
+"""Default target file size for compaction (128MB).
+
+This is the recommended file size for Iceberg tables to balance
+read performance and metadata overhead.
+"""
+
+
+class CompactionStrategy(BaseModel):
+    """Configuration for table compaction operations.
+
+    Defines how data files should be rewritten during compaction to optimize
+    storage and query performance. Supports bin-pack and sort strategies.
+
+    Attributes:
+        strategy_type: Compaction strategy (BIN_PACK or SORT).
+        target_file_size_bytes: Target size for output files (default 128MB).
+        sort_columns: Columns to sort by (required for SORT strategy).
+        max_concurrent_file_group_rewrites: Maximum parallel rewrite tasks.
+
+    Example:
+        >>> # Bin-pack strategy (default)
+        >>> strategy = CompactionStrategy()
+        >>> strategy.strategy_type
+        <CompactionStrategyType.BIN_PACK: 'bin_pack'>
+        >>> strategy.target_file_size_bytes
+        134217728
+
+        >>> # Sort strategy
+        >>> strategy = CompactionStrategy(
+        ...     strategy_type=CompactionStrategyType.SORT,
+        ...     sort_columns=["date", "customer_id"],
+        ...     target_file_size_bytes=256 * 1024 * 1024,  # 256MB
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    strategy_type: CompactionStrategyType = Field(
+        default=CompactionStrategyType.BIN_PACK,
+        description="Compaction strategy (BIN_PACK or SORT)",
+    )
+
+    # Target file size
+    target_file_size_bytes: int = Field(
+        default=DEFAULT_TARGET_FILE_SIZE_BYTES,  # 128MB
+        ge=1048576,  # 1MB minimum
+        le=1073741824,  # 1GB maximum
+        description="Target file size in bytes (1MB - 1GB)",
+    )
+
+    # For SORT strategy
+    sort_columns: list[str] | None = Field(
+        default=None,
+        description="Columns to sort by (for SORT strategy)",
+    )
+
+    # Parallelism
+    max_concurrent_file_group_rewrites: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="Maximum concurrent file group rewrites",
+    )
+
+    @model_validator(mode="after")
+    def validate_sort_requires_columns(self) -> "CompactionStrategy":
+        """Validate that sort_columns is provided when strategy_type is SORT.
+
+        Returns:
+            Self if validation passes.
+
+        Raises:
+            ValueError: If strategy_type is SORT but sort_columns is not provided.
+        """
+        if self.strategy_type == CompactionStrategyType.SORT and not self.sort_columns:
+            msg = "sort_columns is required when strategy_type is SORT"
+            raise ValueError(msg)
+        return self
+
+
+# =============================================================================
 # Manager Configuration Models
 # =============================================================================
 
@@ -1146,6 +1233,7 @@ class IcebergIOManagerConfig(BaseModel):
 __all__ = [
     # Constants
     "IDENTIFIER_PATTERN",
+    "DEFAULT_TARGET_FILE_SIZE_BYTES",
     # Enumerations
     "FieldType",
     "PartitionTransform",
@@ -1167,6 +1255,8 @@ __all__ = [
     "SnapshotInfo",
     # Write configuration
     "WriteConfig",
+    # Compaction configuration
+    "CompactionStrategy",
     # Configuration models
     "IcebergTableManagerConfig",
     "IcebergIOManagerConfig",

@@ -10,8 +10,10 @@ import re
 import pytest
 
 from floe_iceberg.models import (
+    DEFAULT_TARGET_FILE_SIZE_BYTES,
     IDENTIFIER_PATTERN,
     CommitStrategy,
+    CompactionStrategy,
     CompactionStrategyType,
     FieldType,
     IcebergIOManagerConfig,
@@ -1698,3 +1700,137 @@ class TestWriteConfig:
             join_columns=["id"],
         )
         assert config.join_columns == ["id"]
+
+
+# =============================================================================
+# CompactionStrategy Tests
+# =============================================================================
+
+
+class TestCompactionStrategy:
+    """Tests for CompactionStrategy model."""
+
+    @pytest.mark.requirement("FR-030")
+    def test_default_values(self) -> None:
+        """Test CompactionStrategy has sensible defaults.
+
+        Acceptance criteria from T090:
+        - CompactionStrategy model with ConfigDict(frozen=True, extra="forbid")
+        - Default target_file_size_bytes of 128MB
+        """
+        strategy = CompactionStrategy()
+
+        assert strategy.strategy_type == CompactionStrategyType.BIN_PACK
+        assert strategy.target_file_size_bytes == DEFAULT_TARGET_FILE_SIZE_BYTES
+        assert strategy.target_file_size_bytes == 134217728  # 128MB
+        assert strategy.sort_columns is None
+        assert strategy.max_concurrent_file_group_rewrites == 5
+
+    @pytest.mark.requirement("FR-030")
+    def test_bin_pack_strategy(self) -> None:
+        """Test BIN_PACK strategy configuration."""
+        strategy = CompactionStrategy(
+            strategy_type=CompactionStrategyType.BIN_PACK,
+            target_file_size_bytes=256 * 1024 * 1024,  # 256MB
+        )
+
+        assert strategy.strategy_type == CompactionStrategyType.BIN_PACK
+        assert strategy.target_file_size_bytes == 268435456  # 256MB
+
+    @pytest.mark.requirement("FR-031")
+    def test_sort_strategy(self) -> None:
+        """Test SORT strategy requires sort_columns."""
+        strategy = CompactionStrategy(
+            strategy_type=CompactionStrategyType.SORT,
+            sort_columns=["date", "customer_id"],
+            target_file_size_bytes=128 * 1024 * 1024,  # 128MB
+        )
+
+        assert strategy.strategy_type == CompactionStrategyType.SORT
+        assert strategy.sort_columns == ["date", "customer_id"]
+
+    @pytest.mark.requirement("FR-031")
+    def test_sort_strategy_requires_sort_columns(self) -> None:
+        """Test SORT strategy validation requires sort_columns."""
+        with pytest.raises(ValueError, match="sort_columns is required"):
+            CompactionStrategy(strategy_type=CompactionStrategyType.SORT)
+
+    @pytest.mark.requirement("FR-030")
+    def test_target_file_size_validation_min(self) -> None:
+        """Test target_file_size_bytes minimum validation (1MB)."""
+        with pytest.raises(ValueError):
+            CompactionStrategy(target_file_size_bytes=500000)  # < 1MB
+
+    @pytest.mark.requirement("FR-030")
+    def test_target_file_size_validation_max(self) -> None:
+        """Test target_file_size_bytes maximum validation (1GB)."""
+        with pytest.raises(ValueError):
+            CompactionStrategy(target_file_size_bytes=2 * 1024 * 1024 * 1024)  # 2GB
+
+    @pytest.mark.requirement("FR-030")
+    def test_target_file_size_boundaries(self) -> None:
+        """Test target_file_size_bytes accepts boundary values."""
+        # Minimum: 1MB
+        min_strategy = CompactionStrategy(target_file_size_bytes=1048576)
+        assert min_strategy.target_file_size_bytes == 1048576
+
+        # Maximum: 1GB
+        max_strategy = CompactionStrategy(target_file_size_bytes=1073741824)
+        assert max_strategy.target_file_size_bytes == 1073741824
+
+    @pytest.mark.requirement("FR-032")
+    def test_max_concurrent_file_group_rewrites(self) -> None:
+        """Test max_concurrent_file_group_rewrites configuration."""
+        strategy = CompactionStrategy(max_concurrent_file_group_rewrites=10)
+        assert strategy.max_concurrent_file_group_rewrites == 10
+
+    @pytest.mark.requirement("FR-032")
+    def test_max_concurrent_file_group_rewrites_validation(self) -> None:
+        """Test max_concurrent_file_group_rewrites validation bounds."""
+        # Minimum: 1
+        min_strategy = CompactionStrategy(max_concurrent_file_group_rewrites=1)
+        assert min_strategy.max_concurrent_file_group_rewrites == 1
+
+        # Maximum: 100
+        max_strategy = CompactionStrategy(max_concurrent_file_group_rewrites=100)
+        assert max_strategy.max_concurrent_file_group_rewrites == 100
+
+        # Below minimum
+        with pytest.raises(ValueError):
+            CompactionStrategy(max_concurrent_file_group_rewrites=0)
+
+        # Above maximum
+        with pytest.raises(ValueError):
+            CompactionStrategy(max_concurrent_file_group_rewrites=101)
+
+    @pytest.mark.requirement("FR-030")
+    def test_frozen(self) -> None:
+        """Test CompactionStrategy is immutable (frozen=True)."""
+        strategy = CompactionStrategy()
+        with pytest.raises(Exception):
+            strategy.target_file_size_bytes = 100  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-030")
+    def test_extra_forbid(self) -> None:
+        """Test CompactionStrategy rejects extra fields (extra='forbid')."""
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            CompactionStrategy(unknown_field="value")  # type: ignore[call-arg]
+
+    @pytest.mark.requirement("FR-030")
+    def test_all_strategy_types(self) -> None:
+        """Test all CompactionStrategyType values can be used."""
+        for strategy_type in CompactionStrategyType:
+            if strategy_type == CompactionStrategyType.SORT:
+                strategy = CompactionStrategy(
+                    strategy_type=strategy_type,
+                    sort_columns=["col1"],
+                )
+            else:
+                strategy = CompactionStrategy(strategy_type=strategy_type)
+            assert strategy.strategy_type == strategy_type
+
+    @pytest.mark.requirement("FR-030")
+    def test_default_constant_value(self) -> None:
+        """Test DEFAULT_TARGET_FILE_SIZE_BYTES constant is 128MB."""
+        assert DEFAULT_TARGET_FILE_SIZE_BYTES == 134217728  # 128MB
+        assert DEFAULT_TARGET_FILE_SIZE_BYTES == 128 * 1024 * 1024
