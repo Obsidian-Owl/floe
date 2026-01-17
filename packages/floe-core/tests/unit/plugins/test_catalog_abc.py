@@ -49,7 +49,7 @@ class TestCatalogPluginABCInstantiation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def connect(self, config: dict[str, Any]) -> Catalog:
                 _ = config
@@ -98,7 +98,7 @@ class TestCatalogPluginABCInstantiation:
 
         assert plugin.name == "mock-catalog"
         assert plugin.version == "1.0.0"
-        assert plugin.floe_api_version == "0.1"
+        assert plugin.floe_api_version == "1.0"
 
 
 class TestCatalogPluginDefaultImplementations:
@@ -125,7 +125,7 @@ class TestCatalogPluginDefaultImplementations:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def connect(self, config: dict[str, Any]) -> Catalog:
                 _ = config
@@ -193,7 +193,7 @@ class TestCatalogPluginDefaultImplementations:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def connect(self, config: dict[str, Any]) -> Catalog:
                 _ = config
@@ -280,7 +280,7 @@ class TestCatalogPluginInheritance:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def connect(self, config: dict[str, Any]) -> Catalog:
                 _ = config
@@ -360,7 +360,7 @@ class TestCatalogPluginMethods:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def connect(self, config: dict[str, Any]) -> Catalog:
                 _ = config

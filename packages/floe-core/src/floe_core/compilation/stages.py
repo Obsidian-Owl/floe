@@ -107,10 +107,13 @@ class CompilationStage(str, Enum):
         return descriptions[self]
 
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
+
+from floe_core.telemetry.tracing import create_span
 
 if TYPE_CHECKING:
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
@@ -131,6 +134,8 @@ def compile_pipeline(
     4. ENFORCE: Policy enforcement (placeholder for governance)
     5. COMPILE: Transform compilation and dbt profile generation
     6. GENERATE: Build final CompiledArtifacts
+
+    Each stage is wrapped in an OpenTelemetry span for observability (FR-013).
 
     Args:
         spec_path: Path to floe.yaml file.
@@ -159,70 +164,149 @@ def compile_pipeline(
 
     log = logger.bind(spec_path=str(spec_path), manifest_path=str(manifest_path))
 
-    # Stage 1: LOAD - Parse YAML files
-    log.info("compilation_stage_start", stage=CompilationStage.LOAD.value)
-    spec = load_floe_spec(spec_path)
-    manifest = load_manifest(manifest_path)
-    log.info(
-        "compilation_stage_complete",
-        stage=CompilationStage.LOAD.value,
-        product_name=spec.metadata.name,
-    )
+    # Track total compilation time
+    pipeline_start = time.perf_counter()
 
-    # Stage 2: VALIDATE - Schema validation (done during LOAD via Pydantic)
-    log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
-    # Validation happens automatically in Pydantic models
-    log.info("compilation_stage_complete", stage=CompilationStage.VALIDATE.value)
+    # Parent span for entire compilation pipeline
+    with create_span(
+        "compile.pipeline",
+        attributes={
+            "compile.spec_path": str(spec_path),
+            "compile.manifest_path": str(manifest_path),
+        },
+    ) as pipeline_span:
+        # Stage 1: LOAD - Parse YAML files
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.load",
+            attributes={"compile.stage": CompilationStage.LOAD.value},
+        ):
+            log.info("compilation_stage_start", stage=CompilationStage.LOAD.value)
+            spec = load_floe_spec(spec_path)
+            manifest = load_manifest(manifest_path)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.LOAD.value,
+                product_name=spec.metadata.name,
+                duration_ms=round(duration_ms, 2),
+            )
 
-    # Stage 3: RESOLVE - Plugin and manifest inheritance resolution
-    log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
-    resolved_manifest = resolve_manifest_inheritance(manifest)
-    plugins = resolve_plugins(resolved_manifest)
-    transforms = resolve_transform_compute(spec, resolved_manifest)
-    log.info(
-        "compilation_stage_complete",
-        stage=CompilationStage.RESOLVE.value,
-        compute_plugin=plugins.compute.type,
-        orchestrator_plugin=plugins.orchestrator.type,
-        model_count=len(transforms.models),
-    )
+        # Stage 2: VALIDATE - Schema validation (done during LOAD via Pydantic)
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.validate",
+            attributes={"compile.stage": CompilationStage.VALIDATE.value},
+        ):
+            log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
+            # Validation happens automatically in Pydantic models
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.VALIDATE.value,
+                duration_ms=round(duration_ms, 2),
+            )
 
-    # Stage 4: ENFORCE - Policy enforcement
-    log.info("compilation_stage_start", stage=CompilationStage.ENFORCE.value)
-    # Placeholder for governance enforcement (future epic)
-    log.info("compilation_stage_complete", stage=CompilationStage.ENFORCE.value)
+        # Stage 3: RESOLVE - Plugin and manifest inheritance resolution
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.resolve",
+            attributes={"compile.stage": CompilationStage.RESOLVE.value},
+        ) as resolve_span:
+            log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
+            resolved_manifest = resolve_manifest_inheritance(manifest)
+            plugins = resolve_plugins(resolved_manifest)
+            transforms = resolve_transform_compute(spec, resolved_manifest)
+            # Add resolution details as span attributes
+            resolve_span.set_attribute("compile.compute_plugin", plugins.compute.type)
+            resolve_span.set_attribute("compile.orchestrator_plugin", plugins.orchestrator.type)
+            resolve_span.set_attribute("compile.model_count", len(transforms.models))
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.RESOLVE.value,
+                compute_plugin=plugins.compute.type,
+                orchestrator_plugin=plugins.orchestrator.type,
+                model_count=len(transforms.models),
+                duration_ms=round(duration_ms, 2),
+            )
 
-    # Stage 5: COMPILE - Transform compilation and dbt profile generation
-    log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-    # Generate dbt profiles using compute plugin
-    dbt_profiles = generate_dbt_profiles(
-        plugins=plugins,
-        product_name=spec.metadata.name,
-    )
-    log.info(
-        "compilation_stage_complete",
-        stage=CompilationStage.COMPILE.value,
-        profile_name=spec.metadata.name,
-    )
+        # Stage 4: ENFORCE - Policy enforcement
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.enforce",
+            attributes={"compile.stage": CompilationStage.ENFORCE.value},
+        ):
+            log.info("compilation_stage_start", stage=CompilationStage.ENFORCE.value)
+            # Placeholder for governance enforcement (future epic)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.ENFORCE.value,
+                duration_ms=round(duration_ms, 2),
+            )
 
-    # Stage 6: GENERATE - Build final CompiledArtifacts
-    log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)
-    artifacts = build_artifacts(
-        spec=spec,
-        manifest=resolved_manifest,
-        plugins=plugins,
-        transforms=transforms,
-        dbt_profiles=dbt_profiles,
-        spec_path=spec_path,
-        manifest_path=manifest_path,
-    )
-    log.info(
-        "compilation_stage_complete",
-        stage=CompilationStage.GENERATE.value,
-        version=artifacts.version,
-    )
+        # Stage 5: COMPILE - Transform compilation and dbt profile generation
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.compile",
+            attributes={"compile.stage": CompilationStage.COMPILE.value},
+        ) as compile_span:
+            log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
+            # Generate dbt profiles using compute plugin
+            dbt_profiles = generate_dbt_profiles(
+                plugins=plugins,
+                product_name=spec.metadata.name,
+            )
+            compile_span.set_attribute("compile.profile_name", spec.metadata.name)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.COMPILE.value,
+                profile_name=spec.metadata.name,
+                duration_ms=round(duration_ms, 2),
+            )
 
-    return artifacts
+        # Stage 6: GENERATE - Build final CompiledArtifacts
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.generate",
+            attributes={"compile.stage": CompilationStage.GENERATE.value},
+        ) as generate_span:
+            log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)
+            artifacts = build_artifacts(
+                spec=spec,
+                manifest=resolved_manifest,
+                plugins=plugins,
+                transforms=transforms,
+                dbt_profiles=dbt_profiles,
+                spec_path=spec_path,
+                manifest_path=manifest_path,
+            )
+            generate_span.set_attribute("compile.artifacts_version", artifacts.version)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.GENERATE.value,
+                version=artifacts.version,
+                duration_ms=round(duration_ms, 2),
+            )
+
+        # Set final attributes on parent span
+        pipeline_span.set_attribute("compile.product_name", spec.metadata.name)
+        pipeline_span.set_attribute("compile.artifacts_version", artifacts.version)
+
+        # Log total compilation time
+        total_duration_ms = (time.perf_counter() - pipeline_start) * 1000
+        pipeline_span.set_attribute("compile.total_duration_ms", round(total_duration_ms, 2))
+        log.info(
+            "compilation_complete",
+            product_name=spec.metadata.name,
+            version=artifacts.version,
+            total_duration_ms=round(total_duration_ms, 2),
+        )
+
+        return artifacts
 
 
 __all__ = ["CompilationStage", "compile_pipeline"]

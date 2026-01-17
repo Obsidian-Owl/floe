@@ -7,14 +7,16 @@ Tests validation of CompiledArtifacts v0.2.0 extensions including:
 - ResolvedTransforms model
 - ResolvedGovernance model
 - Extended CompiledArtifacts fields
+- YAML serialization (T060)
 
-Task: T023
-Requirements: FR-003, FR-007
+Task: T023, T060
+Requirements: FR-003, FR-007, FR-011
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -479,3 +481,237 @@ class TestCompiledArtifactsExtensions:
         assert artifacts.transforms is not None
         assert artifacts.dbt_profiles is not None
         assert artifacts.governance is not None
+
+
+class TestYamlSerialization:
+    """Tests for YAML file serialization (T060).
+
+    These tests validate FR-011: YAML format support for CompiledArtifacts.
+    Tests are written in TDD style - they FAIL until to_yaml_file/from_yaml_file
+    are implemented in T062-T063.
+
+    Requirements: FR-011
+    """
+
+    @pytest.fixture
+    def full_artifacts(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> CompiledArtifacts:
+        """Create a fully-populated CompiledArtifacts for YAML tests."""
+        return CompiledArtifacts(
+            version="0.2.0",
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            mode="simple",
+            observability=sample_observability_config,
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.9.0"),
+                orchestrator=PluginRef(type="dagster", version="1.5.0"),
+                catalog=PluginRef(type="polaris", version="0.1.0"),
+            ),
+            transforms=ResolvedTransforms(
+                models=[
+                    ResolvedModel(name="stg_customers", compute="duckdb", tags=["staging"]),
+                    ResolvedModel(
+                        name="fct_orders",
+                        compute="duckdb",
+                        tags=["fact"],
+                        depends_on=["stg_customers"],
+                    ),
+                ],
+                default_compute="duckdb",
+            ),
+            dbt_profiles={
+                "test-product": {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {"type": "duckdb", "path": ":memory:"},
+                    },
+                }
+            },
+            governance=ResolvedGovernance(
+                pii_encryption="required",
+                audit_logging="enabled",
+                policy_enforcement_level="strict",
+                data_retention_days=90,
+            ),
+        )
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_yaml_file_writes_valid_yaml(
+        self,
+        full_artifacts: CompiledArtifacts,
+        tmp_path: Path,
+    ) -> None:
+        """Test that to_yaml_file writes a valid YAML file.
+
+        Validates:
+        - File is created at specified path
+        - Content is valid YAML (parseable)
+        - Parent directories are created if needed
+        """
+        yaml_path = tmp_path / "target" / "compiled_artifacts.yaml"
+
+        # This should write the artifacts to YAML
+        full_artifacts.to_yaml_file(yaml_path)
+
+        # File must exist
+        assert yaml_path.exists(), "YAML file was not created"
+
+        # Content must be valid YAML
+        import yaml
+
+        content = yaml_path.read_text()
+        parsed = yaml.safe_load(content)
+        assert isinstance(parsed, dict), "YAML content must be a dictionary"
+
+    @pytest.mark.requirement("FR-011")
+    def test_from_yaml_file_reads_correctly(
+        self,
+        full_artifacts: CompiledArtifacts,
+        tmp_path: Path,
+    ) -> None:
+        """Test that from_yaml_file reads YAML correctly.
+
+        Validates:
+        - Artifacts can be loaded from YAML file
+        - Loaded artifacts have correct type
+        - Key fields are preserved
+        """
+        yaml_path = tmp_path / "compiled_artifacts.yaml"
+
+        # Write then read back
+        full_artifacts.to_yaml_file(yaml_path)
+        loaded = CompiledArtifacts.from_yaml_file(yaml_path)
+
+        # Must be correct type
+        assert isinstance(loaded, CompiledArtifacts)
+
+        # Key fields preserved
+        assert loaded.version == full_artifacts.version
+        assert loaded.mode == full_artifacts.mode
+        assert loaded.metadata.product_name == full_artifacts.metadata.product_name
+
+    @pytest.mark.requirement("FR-011")
+    def test_yaml_json_semantic_equivalence(
+        self,
+        full_artifacts: CompiledArtifacts,
+        tmp_path: Path,
+    ) -> None:
+        """Test that YAML and JSON produce semantically equivalent artifacts.
+
+        Validates:
+        - Roundtrip through YAML produces identical artifact to JSON roundtrip
+        - All fields are preserved in both formats
+        """
+        json_path = tmp_path / "artifacts.json"
+        yaml_path = tmp_path / "artifacts.yaml"
+
+        # Write to both formats
+        full_artifacts.to_json_file(json_path)
+        full_artifacts.to_yaml_file(yaml_path)
+
+        # Load from both formats
+        from_json = CompiledArtifacts.from_json_file(json_path)
+        from_yaml = CompiledArtifacts.from_yaml_file(yaml_path)
+
+        # They should be semantically equivalent
+        # Compare via model_dump to avoid datetime comparison issues
+        assert from_json.model_dump(mode="json") == from_yaml.model_dump(mode="json")
+
+    @pytest.mark.requirement("FR-011")
+    def test_yaml_preserves_all_fields(
+        self,
+        full_artifacts: CompiledArtifacts,
+        tmp_path: Path,
+    ) -> None:
+        """Test that YAML serialization preserves all artifact fields.
+
+        Validates each major section is preserved through roundtrip:
+        - metadata
+        - identity
+        - observability
+        - plugins
+        - transforms
+        - dbt_profiles
+        - governance
+        """
+        yaml_path = tmp_path / "full_artifacts.yaml"
+
+        # Roundtrip
+        full_artifacts.to_yaml_file(yaml_path)
+        loaded = CompiledArtifacts.from_yaml_file(yaml_path)
+
+        # Metadata preserved
+        assert loaded.metadata.product_name == full_artifacts.metadata.product_name
+        assert loaded.metadata.product_version == full_artifacts.metadata.product_version
+        assert loaded.metadata.floe_version == full_artifacts.metadata.floe_version
+
+        # Identity preserved
+        assert loaded.identity.product_id == full_artifacts.identity.product_id
+        assert loaded.identity.domain == full_artifacts.identity.domain
+        assert loaded.identity.repository == full_artifacts.identity.repository
+
+        # Observability preserved
+        assert loaded.observability.lineage == full_artifacts.observability.lineage
+        assert loaded.observability.lineage_namespace == full_artifacts.observability.lineage_namespace
+
+        # Plugins preserved
+        assert loaded.plugins is not None
+        assert loaded.plugins.compute.type == "duckdb"
+        assert loaded.plugins.orchestrator.type == "dagster"
+        assert loaded.plugins.catalog is not None
+        assert loaded.plugins.catalog.type == "polaris"
+
+        # Transforms preserved
+        assert loaded.transforms is not None
+        assert len(loaded.transforms.models) == 2
+        assert loaded.transforms.models[0].name == "stg_customers"
+        assert loaded.transforms.models[1].name == "fct_orders"
+        assert loaded.transforms.models[1].depends_on == ["stg_customers"]
+        assert loaded.transforms.default_compute == "duckdb"
+
+        # dbt_profiles preserved
+        assert loaded.dbt_profiles is not None
+        assert "test-product" in loaded.dbt_profiles
+        assert loaded.dbt_profiles["test-product"]["target"] == "dev"
+
+        # Governance preserved
+        assert loaded.governance is not None
+        assert loaded.governance.pii_encryption == "required"
+        assert loaded.governance.audit_logging == "enabled"
+        assert loaded.governance.policy_enforcement_level == "strict"
+        assert loaded.governance.data_retention_days == 90
+
+    @pytest.mark.requirement("FR-011")
+    def test_from_yaml_file_not_found(self, tmp_path: Path) -> None:
+        """Test that from_yaml_file raises FileNotFoundError for missing file."""
+        nonexistent = tmp_path / "nonexistent.yaml"
+
+        with pytest.raises(FileNotFoundError):
+            CompiledArtifacts.from_yaml_file(nonexistent)
+
+    @pytest.mark.requirement("FR-011")
+    def test_from_yaml_file_invalid_yaml(self, tmp_path: Path) -> None:
+        """Test that from_yaml_file raises error for invalid YAML."""
+        invalid_yaml_path = tmp_path / "invalid.yaml"
+        invalid_yaml_path.write_text("{ invalid yaml: [no closing bracket")
+
+        # Should raise YAML parse error
+        import yaml
+
+        with pytest.raises(yaml.YAMLError):
+            CompiledArtifacts.from_yaml_file(invalid_yaml_path)
+
+    @pytest.mark.requirement("FR-011")
+    def test_from_yaml_file_validation_error(self, tmp_path: Path) -> None:
+        """Test that from_yaml_file raises ValidationError for invalid schema."""
+        invalid_schema_path = tmp_path / "invalid_schema.yaml"
+        # Valid YAML but missing required fields
+        invalid_schema_path.write_text("version: '0.2.0'\nmode: simple\n")
+
+        with pytest.raises(ValidationError):
+            CompiledArtifacts.from_yaml_file(invalid_schema_path)

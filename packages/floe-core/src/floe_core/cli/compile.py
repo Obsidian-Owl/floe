@@ -15,7 +15,6 @@ See Also:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -97,6 +96,14 @@ def create_parser() -> argparse.ArgumentParser:
         help="Suppress non-error output",
     )
 
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["json", "yaml"],
+        default=None,
+        help="Output format: json (default) or yaml. If not specified, detected from output file extension.",
+    )
+
     return parser
 
 
@@ -159,7 +166,7 @@ def run_compile(args: argparse.Namespace) -> int:
             return 0
 
         # Write output
-        output_path = _write_artifacts(artifacts, args.output, args.quiet)
+        output_path = _write_artifacts(artifacts, args.output, args.format, args.quiet)
 
         if not args.quiet:
             log.info(
@@ -188,16 +195,39 @@ def run_compile(args: argparse.Namespace) -> int:
         return error.stage.exit_code
 
 
+def _detect_format_from_extension(path: Path) -> str | None:
+    """Detect output format from file extension.
+
+    Args:
+        path: Path to check for extension.
+
+    Returns:
+        'json', 'yaml', or None if not detectable.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return "json"
+    elif suffix in (".yaml", ".yml"):
+        return "yaml"
+    return None
+
+
 def _write_artifacts(
     artifacts: "CompiledArtifacts",
-    output_dir: Path,
+    output_path: Path,
+    output_format: str | None,
     quiet: bool,
 ) -> Path:
-    """Write CompiledArtifacts to output directory.
+    """Write CompiledArtifacts to output path.
+
+    If output_path has a file extension (.json, .yaml, .yml), writes directly
+    to that path and uses the extension to detect format (unless --format overrides).
+    Otherwise treats it as a directory and writes compiled_artifacts.{format} inside.
 
     Args:
         artifacts: Compiled artifacts to write.
-        output_dir: Directory to write to.
+        output_path: Output file or directory path.
+        output_format: Output format ('json' or 'yaml'), or None to detect from extension.
         quiet: Whether to suppress output.
 
     Returns:
@@ -206,16 +236,31 @@ def _write_artifacts(
     # Late import to avoid circular dependencies
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts  # noqa: F401
 
-    # Create output directory if needed
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Detect if output_path is a file (has extension) or directory
+    detected_format = _detect_format_from_extension(output_path)
 
-    # Write to file
-    output_path = output_dir / "compiled_artifacts.json"
-    output_path.write_text(
-        json.dumps(artifacts.model_dump(mode="json", by_alias=True), indent=2)
-    )
+    if detected_format is not None:
+        # output_path is a file path - use it directly
+        # Format flag overrides extension detection; if not specified, use detected
+        final_format = output_format if output_format is not None else detected_format
+        final_path = output_path
+        # Create parent directory if needed
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        # output_path is a directory - write compiled_artifacts.{format} inside
+        # Default to JSON if no format specified
+        final_format = output_format if output_format is not None else "json"
+        output_path.mkdir(parents=True, exist_ok=True)
+        extension = "yaml" if final_format == "yaml" else "json"
+        final_path = output_path / f"compiled_artifacts.{extension}"
 
-    return output_path
+    # Write using appropriate method
+    if final_format == "yaml":
+        artifacts.to_yaml_file(final_path)
+    else:
+        artifacts.to_json_file(final_path)
+
+    return final_path
 
 
 def _print_success(message: str, quiet: bool) -> None:

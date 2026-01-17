@@ -327,3 +327,289 @@ plugins:
 
         assert exc_info.value.error.code == "E201"
         assert "compute" in exc_info.value.error.message.lower()
+
+
+class TestOpenTelemetryTracing:
+    """Tests for OpenTelemetry tracing in compilation pipeline (FR-013)."""
+
+    @pytest.mark.requirement("FR-013")
+    def test_compile_pipeline_creates_parent_span(self, tmp_path: Path) -> None:
+        """Test that compile_pipeline creates a parent span for the pipeline."""
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.tracing import set_tracer
+
+        # Set up in-memory span exporter
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        set_tracer(provider.get_tracer("floe_core.telemetry"))
+
+        try:
+            # Create minimal valid spec
+            spec_path = tmp_path / "floe.yaml"
+            spec_path.write_text("""
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+""")
+
+            manifest_path = tmp_path / "manifest.yaml"
+            manifest_path.write_text("""
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+""")
+
+            compile_pipeline(spec_path, manifest_path)
+
+            # Get exported spans
+            spans = exporter.get_finished_spans()
+            span_names = [span.name for span in spans]
+
+            # Verify parent span exists
+            assert "compile.pipeline" in span_names
+
+            # Verify all stage spans exist
+            assert "compile.load" in span_names
+            assert "compile.validate" in span_names
+            assert "compile.resolve" in span_names
+            assert "compile.enforce" in span_names
+            assert "compile.compile" in span_names
+            assert "compile.generate" in span_names
+
+        finally:
+            # Reset tracer
+            set_tracer(None)
+
+    @pytest.mark.requirement("FR-013")
+    def test_compile_pipeline_span_attributes(self, tmp_path: Path) -> None:
+        """Test that compilation spans have correct attributes."""
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.tracing import set_tracer
+
+        # Set up in-memory span exporter
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        set_tracer(provider.get_tracer("floe_core.telemetry"))
+
+        try:
+            spec_path = tmp_path / "floe.yaml"
+            spec_path.write_text("""
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+""")
+
+            manifest_path = tmp_path / "manifest.yaml"
+            manifest_path.write_text("""
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+""")
+
+            compile_pipeline(spec_path, manifest_path)
+
+            spans = exporter.get_finished_spans()
+
+            # Find the pipeline span
+            pipeline_span = next(
+                (s for s in spans if s.name == "compile.pipeline"), None
+            )
+            assert pipeline_span is not None
+            assert "compile.product_name" in dict(pipeline_span.attributes)
+            assert pipeline_span.attributes["compile.product_name"] == "test-product"
+
+            # Find the resolve span
+            resolve_span = next(
+                (s for s in spans if s.name == "compile.resolve"), None
+            )
+            assert resolve_span is not None
+            assert resolve_span.attributes["compile.stage"] == "RESOLVE"
+            assert resolve_span.attributes["compile.compute_plugin"] == "duckdb"
+
+        finally:
+            set_tracer(None)
+
+
+class TestTimingLogging:
+    """Tests for timing information logging in compilation pipeline (T067)."""
+
+    @pytest.mark.requirement("SC-001")
+    def test_compile_pipeline_logs_duration_ms(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that compile_pipeline logs duration_ms for each stage."""
+        import structlog
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        # Configure structlog to use standard logging for capture
+        structlog.configure(
+            processors=[
+                structlog.processors.KeyValueRenderer(),
+            ],
+            wrapper_class=structlog.make_filtering_bound_logger(0),
+            context_class=dict,
+            logger_factory=structlog.PrintLoggerFactory(),
+            cache_logger_on_first_use=True,
+        )
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+""")
+
+        # Capture stdout where structlog prints
+        import io
+        import sys
+
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+
+        try:
+            compile_pipeline(spec_path, manifest_path)
+        finally:
+            sys.stdout = old_stdout
+
+        output = captured.getvalue()
+
+        # Check that duration_ms appears in output for each stage
+        assert "duration_ms=" in output
+        # Check total compilation time logged
+        assert "total_duration_ms=" in output
+
+    @pytest.mark.requirement("SC-001")
+    def test_compile_pipeline_logs_total_duration(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test that compile_pipeline logs total compilation duration."""
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.tracing import set_tracer
+
+        # Set up tracer to capture span attributes
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        set_tracer(provider.get_tracer("floe_core.telemetry"))
+
+        try:
+            spec_path = tmp_path / "floe.yaml"
+            spec_path.write_text("""
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+""")
+
+            manifest_path = tmp_path / "manifest.yaml"
+            manifest_path.write_text("""
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+""")
+
+            compile_pipeline(spec_path, manifest_path)
+
+            spans = exporter.get_finished_spans()
+            pipeline_span = next(
+                (s for s in spans if s.name == "compile.pipeline"), None
+            )
+
+            assert pipeline_span is not None
+            # Check that total duration is captured as attribute
+            assert "compile.total_duration_ms" in dict(pipeline_span.attributes)
+            duration = pipeline_span.attributes["compile.total_duration_ms"]
+            assert isinstance(duration, (int, float))
+            assert duration > 0
+
+        finally:
+            set_tracer(None)

@@ -563,10 +563,38 @@ class CompiledArtifacts(BaseModel):
 
         See Also:
             - from_json_file: Load artifacts from JSON
+            - to_yaml_file: Write artifacts to YAML
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(self.model_dump(mode="json", by_alias=True), indent=2)
+        )
+
+    def to_yaml_file(self, path: Path) -> None:
+        """Write CompiledArtifacts to a YAML file.
+
+        Uses PyYAML for serialization with human-readable formatting.
+        The YAML output is semantically equivalent to JSON output.
+
+        Args:
+            path: Path to write the YAML file.
+
+        Example:
+            >>> artifacts = CompiledArtifacts(...)
+            >>> artifacts.to_yaml_file(Path("target/compiled_artifacts.yaml"))
+
+        See Also:
+            - from_yaml_file: Load artifacts from YAML
+            - to_json_file: Write artifacts to JSON
+        """
+        import yaml
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Use model_dump with mode="json" to ensure datetime serialization
+        data = self.model_dump(mode="json", by_alias=True)
+        path.write_text(
+            yaml.safe_dump(data, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
         )
 
     @classmethod
@@ -594,8 +622,44 @@ class CompiledArtifacts(BaseModel):
 
         See Also:
             - to_json_file: Write artifacts to JSON
+            - from_yaml_file: Load artifacts from YAML
         """
         data = json.loads(path.read_text())
+        return cls.model_validate(data)
+
+    @classmethod
+    def from_yaml_file(cls, path: Path) -> "CompiledArtifacts":
+        """Load CompiledArtifacts from a YAML file.
+
+        Uses PyYAML for parsing and Pydantic's model_validate for validation.
+        YAML is parsed first, then validated against the schema.
+
+        Args:
+            path: Path to the YAML file.
+
+        Returns:
+            CompiledArtifacts instance.
+
+        Raises:
+            FileNotFoundError: If file does not exist.
+            yaml.YAMLError: If YAML syntax is invalid.
+            pydantic.ValidationError: If schema validation fails.
+
+        Example:
+            >>> artifacts = CompiledArtifacts.from_yaml_file(
+            ...     Path("target/compiled_artifacts.yaml")
+            ... )
+            >>> artifacts.version
+            '0.2.0'
+
+        See Also:
+            - to_yaml_file: Write artifacts to YAML
+            - from_json_file: Load artifacts from JSON
+        """
+        import yaml
+
+        content = path.read_text(encoding="utf-8")
+        data = yaml.safe_load(content)
         return cls.model_validate(data)
 
     @classmethod

@@ -25,12 +25,11 @@ from __future__ import annotations
 # Current floe plugin API version
 # This is the version of the plugin API that this platform provides.
 # Plugins declare which API version they require.
-# Note: 0.x versions indicate unstable API (pre-1.0 release)
-FLOE_PLUGIN_API_VERSION: str = "0.1"
+FLOE_PLUGIN_API_VERSION: str = "1.0"
 
 # Minimum supported plugin API version for backward compatibility
 # Plugins requiring versions below this are not supported.
-FLOE_PLUGIN_API_MIN_VERSION: str = "0.1"
+FLOE_PLUGIN_API_MIN_VERSION: str = "1.0"
 
 
 def is_compatible(plugin_api_version: str, platform_api_version: str) -> bool:

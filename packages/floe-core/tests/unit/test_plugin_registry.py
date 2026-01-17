@@ -52,7 +52,7 @@ def mock_plugin() -> PluginMetadata:
 
         @property
         def floe_api_version(self) -> str:
-            return "0.1"  # Current platform API version
+            return "1.0"  # Current platform API version
 
     return TestPlugin()
 
@@ -490,7 +490,7 @@ class TestPluginRegistryGet:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         ep = mock_entry_point("lazy", "floe.computes", "pkg:LazyPlugin")
         ep.load.return_value = LazyPlugin
@@ -541,7 +541,7 @@ class TestPluginRegistryGet:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         ep = mock_entry_point("cached", "floe.computes", "pkg:CachedPlugin")
         ep.load.return_value = CachedPlugin
@@ -581,7 +581,7 @@ class TestPluginRegistryList:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         class Plugin2(PluginMetadata):
             @property
@@ -594,7 +594,7 @@ class TestPluginRegistryList:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         ep1 = mock_entry_point("plugin1", "floe.computes", "pkg:Plugin1")
         ep1.load.return_value = Plugin1
@@ -865,7 +865,7 @@ class TestPluginRegistryVersionCompatibility:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"  # Compatible
+                return "1.0"  # Compatible
 
         class BadPlugin(PluginMetadata):
             @property
@@ -928,7 +928,7 @@ class TestPluginRegistryVersionCompatibility:
         error_msg = str(exc_info.value)
         assert "test-error-msg" in error_msg
         assert "99.0" in error_msg
-        assert "0.1" in error_msg  # Platform version
+        assert "1.0" in error_msg  # Platform version
 
 
 class TestPluginRegistryDuplicateHandling:
@@ -973,7 +973,7 @@ class TestPluginRegistryDuplicateHandling:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         class Plugin2(PluginMetadata):
             @property
@@ -986,7 +986,7 @@ class TestPluginRegistryDuplicateHandling:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         registry = PluginRegistry()
 
@@ -1030,7 +1030,7 @@ class TestPluginRegistryConfiguration:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return TestConfig
@@ -1072,7 +1072,7 @@ class TestPluginRegistryConfiguration:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return ConfigWithDefaults
@@ -1132,7 +1132,7 @@ class TestPluginRegistryConfiguration:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return StoredConfig
@@ -1206,7 +1206,7 @@ class TestPluginRegistryValidationErrors:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return StrictConfig
@@ -1244,7 +1244,7 @@ class TestPluginRegistryValidationErrors:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return TypedConfig
@@ -1282,7 +1282,7 @@ class TestPluginRegistryValidationErrors:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return BoundedConfig
@@ -1327,7 +1327,7 @@ class TestPluginRegistryValidationErrors:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return NestedConfig
@@ -1372,7 +1372,7 @@ class TestPluginRegistryValidationErrors:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return MultiFieldConfig
@@ -1416,7 +1416,7 @@ class TestPluginRegistryValidationErrors:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return RequiredConfig
@@ -1460,7 +1460,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 nonlocal startup_called
@@ -1492,7 +1492,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 nonlocal startup_count
@@ -1527,7 +1527,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 raise ValueError("Startup failed!")
@@ -1563,7 +1563,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 time.sleep(2)  # Sleep longer than timeout
@@ -1613,7 +1613,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 pass
@@ -1655,7 +1655,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 pass
@@ -1674,7 +1674,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 pass
@@ -1715,7 +1715,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 pass
@@ -1754,7 +1754,7 @@ class TestPluginRegistryLifecycleHooks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 pass
@@ -1800,7 +1800,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 return HealthStatus(state=HealthState.HEALTHY)
@@ -1832,7 +1832,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 return HealthStatus(
@@ -1867,7 +1867,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 raise RuntimeError("Health check failed!")
@@ -1901,7 +1901,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 time.sleep(2)  # Slow health check
@@ -1934,7 +1934,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 return HealthStatus(state=HealthState.HEALTHY)
@@ -1950,7 +1950,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 return HealthStatus(state=HealthState.DEGRADED)
@@ -1996,7 +1996,7 @@ class TestPluginRegistryHealthChecks:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def health_check(self) -> HealthStatus:
                 return HealthStatus(state=HealthState.HEALTHY)
@@ -2061,7 +2061,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         registry = PluginRegistry()
         plugin = SinglePlugin()
@@ -2089,7 +2089,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         class PluginB(PluginMetadata):
             @property
@@ -2102,7 +2102,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         registry = PluginRegistry()
         plugins = [PluginA(), PluginB()]
@@ -2133,7 +2133,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         class PluginB(PluginMetadata):
             @property
@@ -2146,7 +2146,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2163,7 +2163,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2203,7 +2203,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         class PluginC(PluginMetadata):
             @property
@@ -2216,7 +2216,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2233,7 +2233,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2250,7 +2250,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2290,7 +2290,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2323,7 +2323,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def startup(self) -> None:
                 activation_order.append("base")
@@ -2339,7 +2339,7 @@ class TestPluginRegistryDependencyResolution:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2390,7 +2390,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2422,7 +2422,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2439,7 +2439,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2474,7 +2474,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2491,7 +2491,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2508,7 +2508,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2544,7 +2544,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2561,7 +2561,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2596,7 +2596,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2613,7 +2613,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2645,7 +2645,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         class CycleX(PluginMetadata):
             @property
@@ -2658,7 +2658,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -2675,7 +2675,7 @@ class TestPluginRegistryCircularDependencyDetection:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:

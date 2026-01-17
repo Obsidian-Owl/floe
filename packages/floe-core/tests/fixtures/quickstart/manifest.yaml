@@ -1,0 +1,24 @@
+# manifest.yaml - Platform configuration (from quickstart.md)
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: acme-platform
+  version: 2.0.0
+  owner: platform-team@acme.com
+
+plugins:
+  compute:
+    type: duckdb
+    config:
+      threads: 4
+  orchestrator:
+    type: dagster
+  catalog:
+    type: polaris
+    config:
+      uri: https://polaris.acme.com/api/catalog
+
+governance:
+  pii_encryption: required
+  audit_logging: enabled
+  policy_enforcement_level: strict
