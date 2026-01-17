@@ -25,4 +25,6 @@ See Also:
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from floe_core.cli.main import main
+
+__all__: list[str] = ["main"]

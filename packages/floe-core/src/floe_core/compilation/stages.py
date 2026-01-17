@@ -107,4 +107,123 @@ class CompilationStage(str, Enum):
         return descriptions[self]
 
 
-__all__ = ["CompilationStage"]
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import structlog
+
+if TYPE_CHECKING:
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+logger = structlog.get_logger(__name__)
+
+
+def compile_pipeline(
+    spec_path: Path,
+    manifest_path: Path,
+) -> "CompiledArtifacts":
+    """Execute the 6-stage compilation pipeline.
+
+    Transforms FloeSpec + PlatformManifest into CompiledArtifacts through:
+    1. LOAD: Parse YAML files
+    2. VALIDATE: Schema validation (done during LOAD via Pydantic)
+    3. RESOLVE: Plugin and manifest inheritance resolution
+    4. ENFORCE: Policy enforcement (placeholder for governance)
+    5. COMPILE: Transform compilation and dbt profile generation
+    6. GENERATE: Build final CompiledArtifacts
+
+    Args:
+        spec_path: Path to floe.yaml file.
+        manifest_path: Path to manifest.yaml file.
+
+    Returns:
+        CompiledArtifacts ready for serialization.
+
+    Raises:
+        CompilationException: If any stage fails.
+
+    Example:
+        >>> artifacts = compile_pipeline(Path("floe.yaml"), Path("manifest.yaml"))
+        >>> artifacts.version
+        '0.2.0'
+    """
+    # Local imports to avoid circular dependency (stages <- errors <- loader <- stages)
+    from floe_core.compilation.builder import build_artifacts
+    from floe_core.compilation.loader import load_floe_spec, load_manifest
+    from floe_core.compilation.resolver import (
+        resolve_manifest_inheritance,
+        resolve_plugins,
+        resolve_transform_compute,
+    )
+
+    log = logger.bind(spec_path=str(spec_path), manifest_path=str(manifest_path))
+
+    # Stage 1: LOAD - Parse YAML files
+    log.info("compilation_stage_start", stage=CompilationStage.LOAD.value)
+    spec = load_floe_spec(spec_path)
+    manifest = load_manifest(manifest_path)
+    log.info(
+        "compilation_stage_complete",
+        stage=CompilationStage.LOAD.value,
+        product_name=spec.metadata.name,
+    )
+
+    # Stage 2: VALIDATE - Schema validation (done during LOAD via Pydantic)
+    log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
+    # Validation happens automatically in Pydantic models
+    log.info("compilation_stage_complete", stage=CompilationStage.VALIDATE.value)
+
+    # Stage 3: RESOLVE - Plugin and manifest inheritance resolution
+    log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
+    resolved_manifest = resolve_manifest_inheritance(manifest)
+    plugins = resolve_plugins(resolved_manifest)
+    transforms = resolve_transform_compute(spec, resolved_manifest)
+    log.info(
+        "compilation_stage_complete",
+        stage=CompilationStage.RESOLVE.value,
+        compute_plugin=plugins.compute.type,
+        orchestrator_plugin=plugins.orchestrator.type,
+        model_count=len(transforms.models),
+    )
+
+    # Stage 4: ENFORCE - Policy enforcement
+    log.info("compilation_stage_start", stage=CompilationStage.ENFORCE.value)
+    # Placeholder for governance enforcement (future epic)
+    log.info("compilation_stage_complete", stage=CompilationStage.ENFORCE.value)
+
+    # Stage 5: COMPILE - Transform compilation and dbt profile generation
+    log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
+    # Generate basic dbt profiles
+    dbt_profiles: dict[str, Any] = {
+        "default": {
+            "target": "dev",
+            "outputs": {
+                "dev": {
+                    "type": plugins.compute.type,
+                }
+            },
+        }
+    }
+    log.info("compilation_stage_complete", stage=CompilationStage.COMPILE.value)
+
+    # Stage 6: GENERATE - Build final CompiledArtifacts
+    log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)
+    artifacts = build_artifacts(
+        spec=spec,
+        manifest=resolved_manifest,
+        plugins=plugins,
+        transforms=transforms,
+        dbt_profiles=dbt_profiles,
+        spec_path=spec_path,
+        manifest_path=manifest_path,
+    )
+    log.info(
+        "compilation_stage_complete",
+        stage=CompilationStage.GENERATE.value,
+        version=artifacts.version,
+    )
+
+    return artifacts
+
+
+__all__ = ["CompilationStage", "compile_pipeline"]

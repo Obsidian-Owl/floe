@@ -42,6 +42,9 @@ dev = [
     "jsonschema>=4.0",  # For JSON Schema validation in tests
 ]
 
+[project.scripts]
+floe = "floe_core.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/Obsidian-Owl/floe"
 Documentation = "https://github.com/Obsidian-Owl/floe/tree/main/docs"
