@@ -43,6 +43,7 @@ from floe_iceberg.errors import (
 from floe_iceberg.telemetry import traced
 from floe_iceberg.models import (
     CommitStrategy,
+    CompactionStrategy,
     CompactionStrategyType,
     FieldType,
     IcebergTableManagerConfig,
@@ -1339,7 +1340,7 @@ class IcebergTableManager:
     def compact_table(
         self,
         table: Table,
-        strategy: CompactionStrategyType = CompactionStrategyType.BIN_PACK,
+        strategy: CompactionStrategy | None = None,
     ) -> int:
         """Compact table data files to optimize query performance.
 
@@ -1351,16 +1352,28 @@ class IcebergTableManager:
 
         Args:
             table: PyIceberg Table object.
-            strategy: Compaction strategy to use. Defaults to BIN_PACK.
+            strategy: CompactionStrategy configuration. Defaults to BIN_PACK
+                with 128MB target file size.
 
         Returns:
             Number of files rewritten during compaction.
 
+        Raises:
+            CompactionError: If compaction fails.
+
         Example:
-            >>> # Compact table using bin-pack strategy
-            >>> files_rewritten = manager.compact_table(table)
+            >>> from floe_iceberg.models import CompactionStrategy, CompactionStrategyType
+            >>> strategy = CompactionStrategy(
+            ...     strategy_type=CompactionStrategyType.BIN_PACK,
+            ...     target_file_size_bytes=134217728,  # 128MB
+            ... )
+            >>> files_rewritten = manager.compact_table(table, strategy)
             >>> print(f"Rewrote {files_rewritten} files")
         """
+        # Use default strategy if not provided
+        if strategy is None:
+            strategy = CompactionStrategy()
+
         # Set span attributes for observability
         from opentelemetry import trace
 
@@ -1368,12 +1381,17 @@ class IcebergTableManager:
         span.set_attribute(
             "table.identifier", str(getattr(table, "identifier", "unknown"))
         )
-        span.set_attribute("strategy.type", strategy.value)
+        span.set_attribute("strategy.type", strategy.strategy_type.value)
+        span.set_attribute("strategy.target_file_size_bytes", strategy.target_file_size_bytes)
+        span.set_attribute(
+            "strategy.max_concurrent_rewrites", strategy.max_concurrent_file_group_rewrites
+        )
 
         self._log.debug(
             "compact_table_requested",
             table_identifier=getattr(table, "identifier", None),
-            strategy=strategy.value,
+            strategy_type=strategy.strategy_type.value,
+            target_file_size_bytes=strategy.target_file_size_bytes,
         )
 
         # Compaction logic will be implemented in T093-T096
@@ -1386,7 +1404,7 @@ class IcebergTableManager:
         self._log.info(
             "compact_table_completed",
             table_identifier=getattr(table, "identifier", None),
-            strategy=strategy.value,
+            strategy_type=strategy.strategy_type.value,
             files_rewritten=files_rewritten,
         )
 
