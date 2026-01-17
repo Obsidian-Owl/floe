@@ -5,8 +5,8 @@
   "branch": "2b-compilation-pipeline",
   "started_at": "2026-01-17T01:40:10.870123Z",
   "total_tasks": 73,
-  "completed_before_compact": 5,
-  "compaction_count": 0,
-  "last_task": "T005",
-  "last_linear_id": "FLO-517"
+  "completed_before_compact": 23,
+  "compaction_count": 1,
+  "last_task": "T023",
+  "last_linear_id": "FLO-535"
 }
