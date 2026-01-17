@@ -81,7 +81,7 @@ partition_spec = PartitionSpec(
 config = TableConfig(
     namespace="bronze",
     table_name="customers",
-    schema=schema,
+    table_schema=schema,
     partition_spec=partition_spec,
 )
 ```
@@ -112,7 +112,7 @@ data = pa.Table.from_pylist([
 ])
 
 # Write with default settings (append, fast commit)
-snapshot = manager.write_data(
+table = manager.write_data(
     table=table,
     data=data,
     config=WriteConfig(
@@ -122,7 +122,9 @@ snapshot = manager.write_data(
     ),
 )
 
-print(f"Created snapshot {snapshot.snapshot_id} with {snapshot.added_records} records")
+# Get latest snapshot info
+snapshots = manager.list_snapshots(table)
+print(f"Created snapshot {snapshots[0].snapshot_id} with operation: {snapshots[0].operation}")
 ```
 
 ## Common Operations
@@ -148,7 +150,7 @@ filtered = table.scan(
 ```python
 new_data = pa.Table.from_pylist([...])
 
-snapshot = manager.write_data(
+table = manager.write_data(
     table=table,
     data=new_data,
     config=WriteConfig(
@@ -260,11 +262,11 @@ defs = Definitions(
     assets=[customers_bronze, customers_silver],
     resources={
         "iceberg": IcebergIOManager(
-            table_manager=manager,
             config=IcebergIOManagerConfig(
                 namespace="bronze",
                 default_write_mode=WriteMode.APPEND,
             ),
+            iceberg_manager=manager,
         ),
     },
 )
