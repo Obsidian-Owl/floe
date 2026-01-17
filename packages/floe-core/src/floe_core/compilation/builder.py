@@ -15,15 +15,24 @@ See Also:
 
 from __future__ import annotations
 
+import hashlib
+import subprocess
+from datetime import datetime
 from pathlib import Path
-
 from floe_core.schemas.compiled_artifacts import (
+    CompilationMetadata,
     CompiledArtifacts,
+    ObservabilityConfig,
+    ProductIdentity,
     ResolvedPlugins,
     ResolvedTransforms,
 )
 from floe_core.schemas.floe_spec import FloeSpec
 from floe_core.schemas.manifest import PlatformManifest
+from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+# Package version - should match pyproject.toml
+FLOE_VERSION = "0.2.0"
 
 
 def build_artifacts(
@@ -64,8 +73,53 @@ def build_artifacts(
         >>> artifacts.metadata.product_name
         'my-pipeline'
     """
-    # TODO: Implement in T034
-    raise NotImplementedError("build_artifacts not yet implemented (T034)")
+    # Compute source hash
+    source_hash = compute_source_hash(spec_path, manifest_path)
+
+    # Build compilation metadata
+    metadata = CompilationMetadata(
+        compiled_at=datetime.now(),
+        floe_version=FLOE_VERSION,
+        source_hash=source_hash,
+        product_name=spec.metadata.name,
+        product_version=spec.metadata.version,
+    )
+
+    # Build product identity
+    identity = ProductIdentity(
+        product_id=f"default.{spec.metadata.name.replace('-', '_')}",
+        domain="default",
+        repository="",  # Would come from git remote in production
+    )
+
+    # Build observability config
+    observability = ObservabilityConfig(
+        telemetry=TelemetryConfig(
+            enabled=True,
+            resource_attributes=ResourceAttributes(
+                service_name=spec.metadata.name,
+                service_version=spec.metadata.version,
+                deployment_environment="dev",
+                floe_namespace="default",
+                floe_product_name=spec.metadata.name,
+                floe_product_version=spec.metadata.version,
+                floe_mode="dev",
+            ),
+        ),
+        lineage=True,
+        lineage_namespace=spec.metadata.name,
+    )
+
+    return CompiledArtifacts(
+        version="0.2.0",
+        metadata=metadata,
+        identity=identity,
+        mode="simple",
+        observability=observability,
+        plugins=plugins,
+        transforms=transforms,
+        dbt_profiles=dict(dbt_profiles),  # type: ignore[arg-type]
+    )
 
 
 def compute_source_hash(
@@ -85,8 +139,23 @@ def compute_source_hash(
         >>> compute_source_hash(Path("floe.yaml"), Path("manifest.yaml"))
         'sha256:abc123...'
     """
-    # TODO: Implement in T034
-    raise NotImplementedError("compute_source_hash not yet implemented (T034)")
+    hasher = hashlib.sha256()
+
+    # Hash spec file if provided
+    if spec_path and spec_path.exists():
+        content = spec_path.read_bytes()
+        hasher.update(content)
+
+    # Hash manifest file if provided
+    if manifest_path and manifest_path.exists():
+        content = manifest_path.read_bytes()
+        hasher.update(content)
+
+    # If no files provided, hash empty string
+    if not spec_path and not manifest_path:
+        hasher.update(b"")
+
+    return f"sha256:{hasher.hexdigest()}"
 
 
 def get_git_commit() -> str | None:
@@ -99,8 +168,18 @@ def get_git_commit() -> str | None:
         >>> get_git_commit()
         'abc123def456...'
     """
-    # TODO: Implement in T034
-    raise NotImplementedError("get_git_commit not yet implemented (T034)")
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return None
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
 
 
 __all__ = [

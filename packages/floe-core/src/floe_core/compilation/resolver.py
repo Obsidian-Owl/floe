@@ -16,12 +16,41 @@ See Also:
 
 from __future__ import annotations
 
+from floe_core.compilation.errors import CompilationError, CompilationException
+from floe_core.compilation.stages import CompilationStage
 from floe_core.schemas.compiled_artifacts import (
+    PluginRef,
+    ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
 )
 from floe_core.schemas.floe_spec import FloeSpec
 from floe_core.schemas.manifest import PlatformManifest
+
+# Default plugin version when not specified
+DEFAULT_PLUGIN_VERSION = "0.0.0"
+
+
+def _to_plugin_ref(
+    plugin: object,
+    default_version: str = DEFAULT_PLUGIN_VERSION,
+) -> PluginRef | None:
+    """Convert PluginSelection to PluginRef.
+
+    Args:
+        plugin: PluginSelection instance or None.
+        default_version: Version to use if not specified.
+
+    Returns:
+        PluginRef or None if plugin is None.
+    """
+    if plugin is None:
+        return None
+    # PluginSelection has type, version, config, connection_secret_ref
+    plugin_type = getattr(plugin, "type", "")
+    version = getattr(plugin, "version", None) or default_version
+    config = getattr(plugin, "config", None)
+    return PluginRef(type=plugin_type, version=version, config=config)
 
 
 def resolve_plugins(manifest: PlatformManifest) -> ResolvedPlugins:
@@ -41,8 +70,40 @@ def resolve_plugins(manifest: PlatformManifest) -> ResolvedPlugins:
         >>> plugins.compute.type
         'duckdb'
     """
-    # TODO: Implement in T031
-    raise NotImplementedError("resolve_plugins not yet implemented (T031)")
+    plugins = manifest.plugins
+
+    # Validate required plugins
+    if plugins.compute is None:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message="Required plugin 'compute' not found in platform manifest",
+                suggestion="Add a compute plugin to the manifest plugins section",
+                context={"manifest": manifest.metadata.name},
+            )
+        )
+
+    if plugins.orchestrator is None:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message="Required plugin 'orchestrator' not found in platform manifest",
+                suggestion="Add an orchestrator plugin to the manifest plugins section",
+                context={"manifest": manifest.metadata.name},
+            )
+        )
+
+    # Build ResolvedPlugins
+    return ResolvedPlugins(
+        compute=_to_plugin_ref(plugins.compute),  # type: ignore[arg-type]
+        orchestrator=_to_plugin_ref(plugins.orchestrator),  # type: ignore[arg-type]
+        catalog=_to_plugin_ref(plugins.catalog),
+        storage=_to_plugin_ref(plugins.storage),
+        ingestion=_to_plugin_ref(plugins.ingestion),
+        semantic=_to_plugin_ref(plugins.semantic_layer),
+    )
 
 
 def resolve_manifest_inheritance(
@@ -52,6 +113,10 @@ def resolve_manifest_inheritance(
 
     For enterprise/domain manifests with parent references,
     resolves the full inheritance chain and merges configuration.
+
+    Note: Full 3-tier inheritance (OCI registry loading) is not yet
+    implemented. This function currently returns the manifest as-is
+    for 2-tier mode (scope=None).
 
     Args:
         manifest: Platform manifest (may have parent reference).
@@ -66,8 +131,14 @@ def resolve_manifest_inheritance(
         >>> resolved = resolve_manifest_inheritance(domain_manifest)
         >>> resolved.plugins.compute  # May be inherited from enterprise
     """
-    # TODO: Implement in T032
-    raise NotImplementedError("resolve_manifest_inheritance not yet implemented (T032)")
+    # For 2-tier mode (no parent), return as-is
+    if manifest.parent_manifest is None:
+        return manifest
+
+    # 3-tier mode: would need to load parent from OCI registry
+    # This is deferred to a later epic (OCI registry integration)
+    # For now, return the manifest as-is
+    return manifest
 
 
 def resolve_transform_compute(
@@ -95,8 +166,47 @@ def resolve_transform_compute(
         >>> transforms.models[0].compute
         'duckdb'
     """
-    # TODO: Implement in T033
-    raise NotImplementedError("resolve_transform_compute not yet implemented (T033)")
+    # Get default compute from manifest
+    default_compute = None
+
+    # Check if manifest has defaults section with compute
+    defaults = getattr(manifest, "defaults", None)
+    if defaults and isinstance(defaults, dict) and "compute" in defaults:
+        default_compute = defaults["compute"]
+
+    # If no explicit default, use the compute plugin type
+    if default_compute is None and manifest.plugins.compute is not None:
+        default_compute = manifest.plugins.compute.type
+
+    if default_compute is None:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message="No default compute target available",
+                suggestion="Add a compute plugin to the manifest or specify defaults.compute",
+                context={"manifest": manifest.metadata.name},
+            )
+        )
+
+    # Resolve each transform
+    resolved_models: list[ResolvedModel] = []
+    for transform in spec.transforms:
+        # Use explicit compute override if specified, otherwise default
+        compute = transform.compute if transform.compute else default_compute
+        resolved_models.append(
+            ResolvedModel(
+                name=transform.name,
+                compute=compute,
+                tags=transform.tags,
+                depends_on=transform.depends_on,
+            )
+        )
+
+    return ResolvedTransforms(
+        models=resolved_models,
+        default_compute=default_compute,
+    )
 
 
 __all__ = [
