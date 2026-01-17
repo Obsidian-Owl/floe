@@ -1,0 +1,12 @@
+{
+  "mode": "epic-auto",
+  "feature_dir": "specs/2b-compilation-pipeline",
+  "epic_name": "2b-compilation-pipeline",
+  "branch": "2b-compilation-pipeline",
+  "started_at": "2026-01-17T01:40:10.870123Z",
+  "total_tasks": 73,
+  "completed_before_compact": 5,
+  "compaction_count": 0,
+  "last_task": "T005",
+  "last_linear_id": "FLO-517"
+}
