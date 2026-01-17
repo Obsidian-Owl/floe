@@ -274,26 +274,70 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
     def _get_write_config(self, context: OutputContext) -> WriteConfig:
         """Get write configuration, with metadata overrides.
 
+        Reads write configuration from asset metadata, falling back to
+        config defaults. Supports the following metadata keys:
+
+        - `iceberg_write_mode` or `write_mode`: Write mode (append, overwrite, upsert)
+        - `iceberg_partition_column`: Partition column for overwrite filtering
+        - `iceberg_join_columns`: Join columns for upsert mode
+
         Args:
-            context: Dagster output context.
+            context: Dagster output context with optional metadata.
 
         Returns:
             WriteConfig for the write operation.
+
+        Example:
+            Asset metadata for overwrite with partition filter:
+            >>> @asset(metadata={
+            ...     "iceberg_write_mode": "overwrite",
+            ...     "iceberg_partition_column": "date",
+            ... })
+            ... def daily_events() -> pa.Table:
+            ...     ...
         """
-        # Start with default mode from config
+        # Start with defaults from config
         mode = self._config.default_write_mode
         commit_strategy = self._config.default_commit_strategy
+        overwrite_filter: str | None = None
+        join_columns: list[str] | None = None
 
         # Check for metadata overrides
         metadata = getattr(context, "metadata", None) or {}
 
-        if "write_mode" in metadata:
-            mode_str = metadata["write_mode"]
-            if hasattr(mode_str, "value"):
-                mode_str = mode_str.value
-            mode = WriteMode(mode_str)
+        # Write mode: prefer iceberg_write_mode, fall back to write_mode
+        write_mode_str = metadata.get("iceberg_write_mode") or metadata.get("write_mode")
+        if write_mode_str is not None:
+            # Handle MetadataValue objects that have .value attribute
+            if hasattr(write_mode_str, "value"):
+                write_mode_str = write_mode_str.value
+            mode = WriteMode(write_mode_str)
 
-        return WriteConfig(mode=mode, commit_strategy=commit_strategy)
+        # Partition column for overwrite filtering
+        partition_col = metadata.get("iceberg_partition_column")
+        if partition_col is not None:
+            if hasattr(partition_col, "value"):
+                partition_col = partition_col.value
+            # Build overwrite filter expression
+            # Future: support partition value from context.partition_key
+            overwrite_filter = partition_col
+
+        # Join columns for upsert mode
+        join_cols = metadata.get("iceberg_join_columns")
+        if join_cols is not None:
+            if hasattr(join_cols, "value"):
+                join_cols = join_cols.value
+            if isinstance(join_cols, str):
+                join_columns = [join_cols]
+            elif isinstance(join_cols, (list, tuple)):
+                join_columns = list(join_cols)
+
+        return WriteConfig(
+            mode=mode,
+            commit_strategy=commit_strategy,
+            overwrite_filter=overwrite_filter,
+            join_columns=join_columns,
+        )
 
     def _get_asset_key_str(self, context: OutputContext) -> str:
         """Get asset key as string from output context.

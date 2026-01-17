@@ -199,6 +199,58 @@ class TestIcebergIOManagerHandleOutput:
 
         assert write_config.mode == WriteMode.OVERWRITE
 
+    @pytest.mark.requirement("FR-038")
+    def test_handle_output_iceberg_write_mode_metadata(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output reads iceberg_write_mode from metadata.
+
+        Acceptance criteria from T086:
+        - Read write mode from asset metadata (iceberg_write_mode)
+        """
+        # Use iceberg_write_mode metadata key
+        mock_output_context.metadata = {"iceberg_write_mode": "overwrite"}
+
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify write_data was called with OVERWRITE mode
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+        from floe_iceberg.models import WriteMode
+
+        assert write_config.mode == WriteMode.OVERWRITE
+
+    @pytest.mark.requirement("FR-039")
+    def test_handle_output_iceberg_partition_column_metadata(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output reads iceberg_partition_column from metadata.
+
+        Acceptance criteria from T086:
+        - Read partition column from metadata (iceberg_partition_column)
+        """
+        # Use iceberg_partition_column metadata key
+        mock_output_context.metadata = {
+            "iceberg_write_mode": "overwrite",
+            "iceberg_partition_column": "date",
+        }
+
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify write_data was called with overwrite_filter
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+
+        assert write_config.overwrite_filter == "date"
+
     @pytest.mark.requirement("FR-037")
     def test_handle_output_generates_table_identifier(
         self,
