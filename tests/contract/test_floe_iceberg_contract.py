@@ -11,13 +11,9 @@ Contract tests ensure:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import pytest
-
-if TYPE_CHECKING:
-    pass
-
 
 # =============================================================================
 # Interface Protocol Tests
@@ -386,3 +382,58 @@ class TestCrossPackageIntegration:
         assert not pattern.match("123_table")
         assert not pattern.match("_private")
         assert not pattern.match("")
+
+
+# =============================================================================
+# Golden Fixture Backwards Compatibility Tests
+# =============================================================================
+
+
+class TestGoldenFixtureBackwardsCompatibility:
+    """Tests that current models can parse golden fixtures from previous versions.
+
+    These tests ensure backwards compatibility - if a user has saved
+    configuration JSON from v1.0, the current version must still parse it.
+    """
+
+    @pytest.mark.requirement("FR-045")
+    def test_v1_0_iceberg_table_manager_config_parses(self) -> None:
+        """Test that v1.0 IcebergTableManagerConfig golden fixture still parses."""
+        import json
+        from pathlib import Path
+
+        from floe_iceberg.models import IcebergTableManagerConfig
+
+        fixture_path = Path(__file__).parent / "fixtures" / "v1.0_iceberg_table_manager_config.json"
+        fixture_data = json.loads(fixture_path.read_text())
+
+        # Should parse without error
+        config = IcebergTableManagerConfig.model_validate(fixture_data)
+
+        # Verify key fields are preserved
+        assert config.max_commit_retries == 3
+        assert config.default_retention_days == 7
+        assert config.min_snapshots_to_keep == 10
+        assert config.default_table_properties["write.format.default"] == "parquet"
+
+    @pytest.mark.requirement("FR-045")
+    def test_iceberg_table_manager_config_roundtrip(self) -> None:
+        """Test that IcebergTableManagerConfig can roundtrip through JSON."""
+        import json
+
+        from floe_iceberg.models import IcebergTableManagerConfig
+
+        # Create config with non-default values
+        original = IcebergTableManagerConfig(
+            max_commit_retries=5,
+            default_retention_days=14,
+        )
+
+        # Serialize to JSON and back
+        json_str = original.model_dump_json()
+        parsed = IcebergTableManagerConfig.model_validate(json.loads(json_str))
+
+        # Should be equivalent
+        assert parsed.max_commit_retries == original.max_commit_retries
+        assert parsed.default_retention_days == original.default_retention_days
+        assert parsed.default_commit_strategy == original.default_commit_strategy

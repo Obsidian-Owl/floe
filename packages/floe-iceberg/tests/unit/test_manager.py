@@ -381,7 +381,8 @@ class TestIcebergTableManagerCreateTable:
         table = manager.create_table(config)
 
         # Table should have identifier attribute matching config
-        assert hasattr(table, "identifier") or table is not None
+        assert table is not None
+        assert hasattr(table, "identifier")
 
     @pytest.mark.requirement("FR-012")
     def test_create_table_with_partitioning(

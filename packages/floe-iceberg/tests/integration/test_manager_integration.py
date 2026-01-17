@@ -159,6 +159,9 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
         table2 = manager.create_table(table_config, if_not_exists=True)
         assert table2 is not None
 
+        # Verify both point to the same table (idempotence check)
+        assert table1.identifier == table2.identifier
+
     # =========================================================================
     # T098: write_data with real S3
     # =========================================================================

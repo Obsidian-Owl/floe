@@ -94,7 +94,7 @@ class TestBinPackCompactionExecutor:
     @pytest.mark.requirement("FR-031")
     def test_execute_with_custom_target_size(self) -> None:
         """Test executor respects target_file_size_bytes."""
-        from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.compaction import BinPackCompactionExecutor, CompactionResult
         from floe_iceberg.models import CompactionStrategy, CompactionStrategyType
 
         executor = BinPackCompactionExecutor()
@@ -108,7 +108,11 @@ class TestBinPackCompactionExecutor:
         )
 
         result = executor.execute(mock_table, strategy)
-        assert result is not None
+
+        # Verify result structure (can't verify config was used in mock scenario)
+        assert isinstance(result, CompactionResult)
+        assert result.files_rewritten >= 0
+        assert result.bytes_rewritten >= 0
 
     @pytest.mark.requirement("FR-031")
     def test_execute_with_custom_parallelism(self) -> None:
