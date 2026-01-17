@@ -66,7 +66,9 @@ def setup_otel_tracer_provider() -> Generator[None, None, None]:
 
     yield
 
-    # No cleanup needed - leave the real provider in place
+    # Reset after session to avoid affecting other test suites
+    trace._TRACER_PROVIDER_SET_ONCE._done = False
+    trace._TRACER_PROVIDER = TracerProvider()
 
 
 def pytest_configure(config: pytest.Config) -> None:
