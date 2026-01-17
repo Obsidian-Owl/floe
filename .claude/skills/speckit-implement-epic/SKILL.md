@@ -155,11 +155,16 @@ This skill enforces project principles:
 Update `.agent/epic-auto-mode` with progress:
 ```python
 import json
-state = json.load(open(".agent/epic-auto-mode"))
+
+with open(".agent/epic-auto-mode") as f:
+    state = json.load(f)
+
 state["last_task"] = "{TaskID}"
 state["last_linear_id"] = "{LinearID}"
 state["completed_before_compact"] = {current completed count}
-json.dump(state, open(".agent/epic-auto-mode", "w"), indent=2)
+
+with open(".agent/epic-auto-mode", "w") as f:
+    json.dump(state, f, indent=2)
 ```
 
 ### Step 9: Auto-Continue

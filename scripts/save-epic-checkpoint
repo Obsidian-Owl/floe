@@ -33,12 +33,14 @@ if head -1 "$STATE_FILE" | grep -q "^{"; then
         MAPPING_FILE="$REPO_ROOT/$FEATURE_DIR/.linear-mapping.json"
         COMPLETED=$(python3 -c "
 import json
-with open('$MAPPING_FILE') as f:
+import sys
+mapping_file = sys.argv[1]
+with open(mapping_file) as f:
     data = json.load(f)
     mappings = data.get('mappings', {})
     completed = sum(1 for m in mappings.values() if m.get('status') == 'completed')
     print(completed)
-" 2>/dev/null || echo "0")
+" "$MAPPING_FILE" 2>/dev/null || echo "0")
 
         # Update the state file with latest info
         python3 -c "
@@ -46,16 +48,19 @@ import json
 import sys
 from datetime import datetime
 
-with open('$STATE_FILE') as f:
+state_file = sys.argv[1]
+completed_count = int(sys.argv[2])
+
+with open(state_file) as f:
     state = json.load(f)
 
 state['last_checkpoint'] = datetime.utcnow().isoformat() + 'Z'
-state['completed_before_compact'] = $COMPLETED
+state['completed_before_compact'] = completed_count
 state['compaction_count'] = state.get('compaction_count', 0) + 1
 
-with open('$STATE_FILE', 'w') as f:
+with open(state_file, 'w') as f:
     json.dump(state, f, indent=2)
-" 2>/dev/null || true
+" "$STATE_FILE" "$COMPLETED" 2>/dev/null || true
     fi
 else
     # Legacy format (just "epic-auto-mode" text) - try to upgrade
@@ -81,40 +86,52 @@ else
         if [[ -f "$MAPPING_FILE" ]]; then
             TOTAL_TASKS=$(python3 -c "
 import json
-with open('$MAPPING_FILE') as f:
+import sys
+mapping_file = sys.argv[1]
+with open(mapping_file) as f:
     data = json.load(f)
     print(len(data.get('mappings', {})))
-" 2>/dev/null || echo "0")
+" "$MAPPING_FILE" 2>/dev/null || echo "0")
             COMPLETED=$(python3 -c "
 import json
-with open('$MAPPING_FILE') as f:
+import sys
+mapping_file = sys.argv[1]
+with open(mapping_file) as f:
     data = json.load(f)
     mappings = data.get('mappings', {})
     completed = sum(1 for m in mappings.values() if m.get('status') == 'completed')
     print(completed)
-" 2>/dev/null || echo "0")
+" "$MAPPING_FILE" 2>/dev/null || echo "0")
         fi
 
         # Upgrade to JSON format
         python3 -c "
 import json
+import sys
 from datetime import datetime
+
+feature_dir = sys.argv[1]
+epic_name = sys.argv[2]
+branch = sys.argv[3]
+state_file = sys.argv[4]
+total_tasks = int(sys.argv[5])
+completed = int(sys.argv[6])
 
 state = {
     'mode': 'epic-auto',
-    'feature_dir': '$FEATURE_DIR',
-    'epic_name': '$EPIC_NAME',
-    'branch': '$BRANCH',
+    'feature_dir': feature_dir,
+    'epic_name': epic_name,
+    'branch': branch,
     'started_at': datetime.utcnow().isoformat() + 'Z',
     'last_checkpoint': datetime.utcnow().isoformat() + 'Z',
-    'total_tasks': $TOTAL_TASKS,
-    'completed_before_compact': $COMPLETED,
+    'total_tasks': total_tasks,
+    'completed_before_compact': completed,
     'compaction_count': 1
 }
 
-with open('$STATE_FILE', 'w') as f:
+with open(state_file, 'w') as f:
     json.dump(state, f, indent=2)
-" 2>/dev/null || true
+" "$FEATURE_DIR" "$EPIC_NAME" "$BRANCH" "$STATE_FILE" "$TOTAL_TASKS" "$COMPLETED" 2>/dev/null || true
     fi
 fi
 
