@@ -970,3 +970,792 @@ class TestIcebergTableManagerTableExists:
 
         # Should no longer exist
         assert manager.table_exists("bronze.todrop") is False
+
+
+# =============================================================================
+# Evolve Schema Tests - Add Column (T035)
+# =============================================================================
+
+
+class TestIcebergTableManagerEvolveSchemaAddColumn:
+    """Tests for IcebergTableManager.evolve_schema() - add column operations."""
+
+    @pytest.mark.requirement("FR-017")
+    def test_evolve_schema_add_nullable_column(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema adds nullable column successfully."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        # Create initial table
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_add",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Evolve schema - add nullable column (required=False)
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=2,
+                        name="email",
+                        field_type=FieldType.STRING,
+                        required=False,
+                    ),
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-017")
+    def test_evolve_schema_add_required_column_fails(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema rejects adding required column (breaking change)."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import IncompatibleSchemaChangeError
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_fail",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Adding required column is a breaking change
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=2,
+                        name="required_field",
+                        field_type=FieldType.STRING,
+                        required=True,  # Required = breaking change
+                    ),
+                ),
+            ],
+            allow_incompatible_changes=False,
+        )
+
+        with pytest.raises(IncompatibleSchemaChangeError):
+            manager.evolve_schema(table, evolution)
+
+    @pytest.mark.requirement("FR-017")
+    def test_evolve_schema_add_column_with_doc(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema adds column with documentation."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_doc",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Add column with documentation
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=2,
+                        name="phone",
+                        field_type=FieldType.STRING,
+                        required=False,
+                        doc="Customer phone number in E.164 format",
+                    ),
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-017")
+    def test_evolve_schema_add_multiple_columns(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema adds multiple columns atomically."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_multi",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Add multiple columns in one evolution
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=2, name="email", field_type=FieldType.STRING
+                    ),
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=3, name="phone", field_type=FieldType.STRING
+                    ),
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=4, name="created_at", field_type=FieldType.TIMESTAMPTZ
+                    ),
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+
+# =============================================================================
+# Evolve Schema Tests - Rename Column (T036)
+# =============================================================================
+
+
+class TestIcebergTableManagerEvolveSchemaRenameColumn:
+    """Tests for IcebergTableManager.evolve_schema() - rename column operations."""
+
+    @pytest.mark.requirement("FR-018")
+    def test_evolve_schema_rename_column(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema renames column successfully."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_rename",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="old_name", field_type=FieldType.STRING),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Rename column
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.RENAME_COLUMN,
+                    source_column="old_name",
+                    new_name="new_name",
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-018")
+    def test_evolve_schema_rename_nonexistent_column_fails(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema fails when renaming nonexistent column."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import SchemaEvolutionError
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_rename_fail",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Try to rename nonexistent column
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.RENAME_COLUMN,
+                    source_column="nonexistent",
+                    new_name="new_name",
+                ),
+            ]
+        )
+
+        with pytest.raises(SchemaEvolutionError):
+            manager.evolve_schema(table, evolution)
+
+
+# =============================================================================
+# Evolve Schema Tests - Widen Type (T037)
+# =============================================================================
+
+
+class TestIcebergTableManagerEvolveSchemaWidenType:
+    """Tests for IcebergTableManager.evolve_schema() - type widening operations."""
+
+    @pytest.mark.requirement("FR-019")
+    def test_evolve_schema_widen_int_to_long(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema widens int to long."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_widen",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.INT),
+                    SchemaField(field_id=2, name="amount", field_type=FieldType.FLOAT),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Widen int to long
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.WIDEN_TYPE,
+                    source_column="id",
+                    target_type=FieldType.LONG,
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-019")
+    def test_evolve_schema_widen_float_to_double(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema widens float to double."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_widen_float",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="amount", field_type=FieldType.FLOAT),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Widen float to double
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.WIDEN_TYPE,
+                    source_column="amount",
+                    target_type=FieldType.DOUBLE,
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-019")
+    def test_evolve_schema_invalid_widen_fails(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema rejects invalid type widening."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import IncompatibleSchemaChangeError
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_widen_fail",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="name", field_type=FieldType.STRING),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Invalid widening: string to int (narrowing, not widening)
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.WIDEN_TYPE,
+                    source_column="name",
+                    target_type=FieldType.INT,
+                ),
+            ]
+        )
+
+        with pytest.raises(IncompatibleSchemaChangeError):
+            manager.evolve_schema(table, evolution)
+
+
+# =============================================================================
+# Evolve Schema Tests - Incompatible Changes (T038)
+# =============================================================================
+
+
+class TestIcebergTableManagerEvolveSchemaIncompatible:
+    """Tests for IcebergTableManager.evolve_schema() - incompatible change handling."""
+
+    @pytest.mark.requirement("FR-020")
+    def test_evolve_schema_delete_column_blocked_by_default(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test DELETE_COLUMN is blocked when allow_incompatible_changes=False."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import IncompatibleSchemaChangeError
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_delete_blocked",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="deprecated", field_type=FieldType.STRING),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Delete column with allow_incompatible_changes=False (default)
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.DELETE_COLUMN,
+                    source_column="deprecated",
+                ),
+            ],
+            allow_incompatible_changes=False,
+        )
+
+        with pytest.raises(IncompatibleSchemaChangeError):
+            manager.evolve_schema(table, evolution)
+
+    @pytest.mark.requirement("FR-020")
+    def test_evolve_schema_delete_column_allowed_with_flag(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test DELETE_COLUMN succeeds when allow_incompatible_changes=True."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_delete_allowed",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="deprecated", field_type=FieldType.STRING),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Delete column with allow_incompatible_changes=True
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.DELETE_COLUMN,
+                    source_column="deprecated",
+                ),
+            ],
+            allow_incompatible_changes=True,
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-020")
+    def test_evolve_schema_mixed_changes_with_incompatible(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test mixed changes blocked if any is incompatible and flag is False."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import IncompatibleSchemaChangeError
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_mixed_blocked",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="deprecated", field_type=FieldType.STRING),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Mix of compatible and incompatible changes
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(
+                        field_id=3, name="new_field", field_type=FieldType.STRING
+                    ),
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.DELETE_COLUMN,
+                    source_column="deprecated",
+                ),
+            ],
+            allow_incompatible_changes=False,
+        )
+
+        with pytest.raises(IncompatibleSchemaChangeError):
+            manager.evolve_schema(table, evolution)
+
+    @pytest.mark.requirement("FR-021")
+    def test_evolve_schema_update_doc(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema updates column documentation."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_update_doc",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(
+                        field_id=2,
+                        name="customer_id",
+                        field_type=FieldType.STRING,
+                        doc="Old documentation",
+                    ),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Update documentation
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.UPDATE_DOC,
+                    source_column="customer_id",
+                    new_doc="Updated documentation - customer unique identifier",
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
+
+    @pytest.mark.requirement("FR-020")
+    def test_evolve_schema_make_optional(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test evolve_schema makes required column optional."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SchemaChange,
+            SchemaChangeType,
+            SchemaEvolution,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="evolve_make_optional",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG, required=True),
+                    SchemaField(
+                        field_id=2, name="required_field", field_type=FieldType.STRING, required=True
+                    ),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Make required column optional (safe operation)
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.MAKE_OPTIONAL,
+                    source_column="required_field",
+                ),
+            ]
+        )
+
+        updated_table = manager.evolve_schema(table, evolution)
+
+        assert updated_table is not None
