@@ -1,10 +1,6 @@
 ---
+name: speckit-integration-check
 description: Validate this Epic branch against main and detect contract changes before PR creation
-handoffs:
-  - label: "Review tests"
-    agent: speckit.test-review
-    prompt: "Integration check passed. Review test quality?"
-    send: false
 ---
 
 ## User Input
@@ -23,15 +19,30 @@ Validate that this Epic branch is ready to merge to main by detecting:
 - Test failures when rebased on latest main
 - Architecture compliance issues
 
-This command answers: **Is this Epic safe to merge?**
+This skill answers: **Is this Epic safe to merge?**
 
 ## Operating Constraints
 
 **READ-ONLY ANALYSIS**: Do not modify any files or create commits. Output analysis and recommendations only.
 
-**CURRENT BRANCH FOCUS**: This command validates the current worktree's branch against main. It does not attempt to merge multiple Epic branches together (the user manages cross-Epic coordination via Linear).
+**CURRENT BRANCH FOCUS**: This skill validates the current worktree's branch against main. It does not attempt to merge multiple Epic branches together (the user manages cross-Epic coordination via Linear).
 
 **REBASE SIMULATION**: The validation simulates a rebase on main without actually modifying the branch. If conflicts are detected, report them without resolution.
+
+## Memory Integration
+
+### After Completion
+Save pre-PR decisions:
+```bash
+./scripts/memory-save --decisions "Integration check for {epic}: {findings}" --issues "{LinearIDs}"
+```
+
+## Constitution Alignment
+
+This skill validates adherence to project principles:
+- **Contract-Driven**: CompiledArtifacts changes are flagged
+- **Technology Ownership**: Import boundaries checked
+- **K8s-Native**: Architecture compliance verified
 
 ## Execution Steps
 
@@ -157,34 +168,11 @@ Produce a structured markdown report.
 **Commits behind main**: {N}
 **Last rebased**: {date or "Never"}
 
-{If conflicts exist:}
-
-#### Conflicts Detected
-
-| File | Type | Action Required |
-|------|------|-----------------|
-| {path} | {type} | {recommendation} |
-
 ---
 
 ### Contract Analysis
 
-{If no contract changes:}
-No contract files modified in this branch.
-
-{If contract changes detected:}
-
-#### Modified Contracts
-
-| File | Change Type | Impact |
-|------|-------------|--------|
-| {path} | {Additive/Breaking} | {affected packages} |
-
-#### Change Details
-
-**{file-path}**:
-- {description of change}
-- Affected consumers: {list of importing packages}
+{Contract change details}
 
 ---
 
@@ -192,44 +180,17 @@ No contract files modified in this branch.
 
 **Contract Tests**: {pass}/{total}
 
-{If failures:}
-| Test | Status | Error |
-|------|--------|-------|
-| {test-name} | Failed | {brief error} |
-
 ---
 
 ### Architecture Compliance
 
-{Summary of import boundary and layer violation checks}
-
-| Check | Status | Details |
-|-------|--------|---------|
-| Import boundaries | {status} | {violations found or "Clean"} |
-| Layer compliance | {status} | {violations found or "Clean"} |
-| Plugin patterns | {status} | {issues found or "Correct"} |
+{Import boundary and layer violation checks}
 
 ---
 
 ### Recommendations
 
-{Based on readiness level:}
-
-**Ready**:
-1. Create PR targeting main
-2. Request review from {suggested reviewers based on files changed}
-3. Merge when approved
-
-**Caution**:
-1. {Specific action for contract changes}
-2. {Specific action for conflicts}
-3. Coordinate with team on merge timing
-4. Consider notifying other Epic owners of contract changes
-
-**Blocked**:
-1. {Specific blocker and resolution steps}
-2. Re-run `/speckit.integration-check` after resolving
-3. Do not create PR until status is Ready or Caution
+{Based on readiness level}
 
 ---
 
@@ -257,13 +218,6 @@ No contract files modified in this branch.
 - Renamed field or method
 - Changed method signature (parameters, return type)
 
-### Merge Conflict Guidance
-
-When conflicts are detected, provide actionable guidance:
-- For schema conflicts: Recommend reviewing both changes and merging semantically
-- For test conflicts: Recommend keeping both test cases
-- For implementation conflicts: Recommend rebasing and resolving manually
-
 ### Architecture Boundaries
 
 Flag violations of these boundaries:
@@ -279,11 +233,12 @@ Flag violations of these boundaries:
 - **When main has advanced** significantly since last rebase
 - **Before merging** to catch last-minute conflicts
 
-## Related Commands
+## Handoff
 
-- `/speckit.test-review` - Detailed test quality analysis
-- `/speckit.implement` - Task implementation workflow
-- `/speckit.analyze` - Cross-artifact consistency check
+After completing this skill:
+- **Review tests**: Run `/speckit.test-review` if needed
+- **Create PR**: Run `/speckit.pr` when Ready
+- **Fix issues**: Address Blocked/Caution items first
 
 ## References
 

@@ -1,4 +1,5 @@
 ---
+name: speckit-taskstolinear
 description: Convert tasks.md to Linear issues and reconcile completed work bidirectionally.
 ---
 
@@ -12,16 +13,26 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Overview
 
-This command creates Linear issues from tasks.md with Project organization, requirements traceability, and bidirectional reconciliation.
+This skill creates Linear issues from tasks.md with Project organization, requirements traceability, and bidirectional reconciliation.
 
 **What it does**:
 1. Validates tasks.md (duplicates, format)
 2. Creates Linear issues under the appropriate Project
-3. Reconciles bidirectionally (Linear status ↔ tasks.md checkboxes)
+3. Reconciles bidirectionally (Linear status: tasks.md checkboxes)
 4. Sets up blocking dependencies between issues
 5. Syncs to Beads cache
 
 **Detailed patterns**: [Linear Workflow Guide](../../../docs/guides/linear-workflow.md)
+
+## Memory Integration
+
+This skill is primarily CRUD operations - no memory search/save needed.
+
+## Constitution Alignment
+
+This skill enforces project principles:
+- **Traceability**: Every task linked to Linear for visibility
+- **Single Source of Truth**: Linear owns status, Beads is local cache
 
 ## Outline
 
@@ -56,8 +67,8 @@ This command creates Linear issues from tasks.md with Project organization, requ
 5. **Query Linear for Existing Issues**
    - Query project issues via `mcp__plugin_linear_linear__list_issues({project: projectId})`
    - Query status names via `mcp__plugin_linear_linear__list_issue_statuses` (never hardcode!)
-   - Build status → type mapping (e.g., "Done" → `completed`)
-   - Build reverse map: Linear ID → Task ID from existing mapping
+   - Build status: type mapping (e.g., "Done": `completed`)
+   - Build reverse map: Linear ID: Task ID from existing mapping
    - Identify tasks marked complete in Linear but not in tasks.md
 
 6. **Create Linear Issues**
@@ -73,7 +84,7 @@ This command creates Linear issues from tasks.md with Project organization, requ
        - `labels`: [epic label name] (e.g., `["epic:10a"]`)
        - `title`, `description`, `priority`, `state`
        - `links`: GitHub doc URLs
-     - Store mapping: task ID → Linear ID, identifier, URL
+     - Store mapping: task ID: Linear ID, identifier, URL
 
 7. **Create Dependencies**
    - **After all issues exist** (Linear IDs required)
@@ -177,8 +188,14 @@ Components:
 | Linear MCP unavailable | MCP not configured | Check API key configuration |
 | Dependencies failed | Blocking task not in mapping | Ensure all tasks have issues first |
 
+## Handoff
+
+After completing this skill:
+- **Start implementing**: Run `/speckit.implement` to execute tasks
+- **Batch implement**: Run `/speckit.implement-epic` for automatic continuation
+
 ## References
 
 - **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Architecture, mapping format, detailed patterns
-- **[speckit.tasks](./speckit.tasks.md)** - Generate tasks.md
-- **[speckit.implement](./speckit.implement.md)** - Execute tasks after Linear sync
+- **[speckit.tasks](../speckit-tasks/SKILL.md)** - Generate tasks.md
+- **[speckit.implement](../speckit-implement/SKILL.md)** - Execute tasks after Linear sync

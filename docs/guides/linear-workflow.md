@@ -20,10 +20,14 @@ bd ready
 /speckit.implement       # One at a time (with confirmation)
 /speckit.implement-epic  # ALL tasks (auto-continues)
 
-# 4. Sync back to Linear
-bd linear sync --pull
+# 4. Pre-PR validation
+/speckit.test-review        # Test quality check
+/speckit.integration-check  # Contract and merge readiness
 
-# 5. Check Linear for team progress
+# 5. Create PR with Linear links
+/speckit.pr  # Generates PR body, links all Linear issues
+
+# 6. Check Linear for team progress
 # Initiative: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
 # Epic docs: docs/plans/epics/
 ```
@@ -806,10 +810,13 @@ Check dependency integrity:
 - **Epic Documentation**: [docs/plans/epics/](../plans/epics/) - All 21 Epic specifications
 - **Initiative Overview**: [docs/plans/EPIC-OVERVIEW.md](../plans/EPIC-OVERVIEW.md) - Dependency graph, parallelization
 - **Requirements Traceability**: [docs/plans/REQUIREMENTS-TRACEABILITY.md](../plans/REQUIREMENTS-TRACEABILITY.md) - Full REQ→Epic mapping
-- **Commands**:
-  - [speckit.taskstolinear](../../.claude/commands/speckit.taskstolinear.md)
-  - [speckit.implement](../../.claude/commands/speckit.implement.md)
-  - [speckit.implement-epic](../../.claude/commands/speckit.implement-epic.md)
+- **Skills**:
+  - [speckit-taskstolinear](../../.claude/skills/speckit-taskstolinear/SKILL.md)
+  - [speckit-implement](../../.claude/skills/speckit-implement/SKILL.md)
+  - [speckit-implement-epic](../../.claude/skills/speckit-implement-epic/SKILL.md)
+  - [speckit-test-review](../../.claude/skills/speckit-test-review/SKILL.md)
+  - [speckit-integration-check](../../.claude/skills/speckit-integration-check/SKILL.md)
+  - [speckit-pr](../../.claude/skills/speckit-pr/SKILL.md)
 - **Linear Resources**:
   - Initiative: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
   - Team: floe-runtime

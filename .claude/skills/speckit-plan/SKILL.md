@@ -1,13 +1,6 @@
 ---
+name: speckit-plan
 description: Execute the implementation planning workflow using the plan template to generate design artifacts.
-handoffs: 
-  - label: Create Tasks
-    agent: speckit.tasks
-    prompt: Break the plan into tasks
-    send: true
-  - label: Create Checklist
-    agent: speckit.checklist
-    prompt: Create a checklist for the following domain...
 ---
 
 ## User Input
@@ -17,6 +10,35 @@ $ARGUMENTS
 ```
 
 You **MUST** consider the user input before proceeding (if not empty).
+
+## Memory Integration
+
+### Before Starting
+Search for prior architecture decisions:
+```bash
+./scripts/memory-search "architecture decisions for {feature_domain}"
+```
+
+Look for: prior technology choices, rejected alternatives, lessons learned.
+Document any relevant findings in research.md under "Prior Decisions" section.
+
+### After Completion
+Save key decisions for future sessions:
+```bash
+./scripts/memory-save --decisions "Chose {technology} for {purpose}; Rejected {alternative} because {reason}" --issues "{Linear issue IDs}"
+```
+
+What to save:
+- Technology choices made
+- Alternatives that were rejected (and why)
+- Architecture patterns selected
+
+## Constitution Alignment
+
+This skill enforces project principles:
+- **Technology Ownership**: Respect boundaries (dbt owns SQL, Dagster owns orchestration)
+- **Contract-Driven**: CompiledArtifacts is the sole integration contract
+- **K8s-Native**: All designs must be Kubernetes-native
 
 ## Outline
 
@@ -60,9 +82,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 ### Phase 0: Outline & Research
 
 1. **Extract unknowns from Technical Context** above:
-   - For each NEEDS CLARIFICATION → research task
-   - For each dependency → best practices task
-   - For each integration → patterns task
+   - For each NEEDS CLARIFICATION: research task
+   - For each dependency: best practices task
+   - For each integration: patterns task
 
 2. **Generate and dispatch research agents**:
 
@@ -85,13 +107,13 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 **Prerequisites:** `research.md` complete
 
-1. **Extract entities from feature spec** → `data-model.md`:
+1. **Extract entities from feature spec**: `data-model.md`:
    - Entity name, fields, relationships
    - Validation rules from requirements
    - State transitions if applicable
 
 2. **Generate API contracts** from functional requirements:
-   - For each user action → endpoint
+   - For each user action: endpoint
    - Use standard REST/GraphQL patterns
    - Output OpenAPI/GraphQL schema to `/contracts/`
 
@@ -104,7 +126,19 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 **Output**: data-model.md, /contracts/*, quickstart.md, agent-specific file
 
-## Key rules
+## Key Rules
 
 - Use absolute paths
 - ERROR on gate failures or unresolved clarifications
+
+## Handoff
+
+After completing this skill:
+- **Generate tasks**: Run `/speckit.tasks` to create actionable task list
+- **Create checklist**: Run `/speckit.checklist` to create quality checklist
+
+## References
+
+- **`.specify/templates/plan-template.md`** - Plan template
+- **`.specify/memory/constitution.md`** - Project principles
+- **`docs/architecture/`** - Architecture documentation

@@ -24,6 +24,14 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
+  # Secret detection with entropy analysis (replaces custom regex)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^\.beads/
+
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -62,6 +70,17 @@ repos:
         additional_dependencies: ["bandit[toml]"]
         exclude: ^(tests/|packages/.*/tests/)
 
+  # Constitution validation (lightweight - branch naming, quick architecture checks)
+  - repo: local
+    hooks:
+      - id: constitution-check
+        name: constitution validation
+        entry: scripts/pre-commit-constitution.sh
+        language: script
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+
   # ==========================================================
   # Pre-push hooks (slower, run before push)
   # Uses local hooks to match CI exactly (reads pyproject.toml)
@@ -73,6 +92,15 @@ repos:
       - id: mypy-strict
         name: mypy (strict)
         entry: uv run mypy --strict packages/
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
+      # Architecture boundary enforcement
+      - id: import-linter
+        name: import-linter (architecture)
+        entry: uv run lint-imports
         language: system
         types: [python]
         stages: [pre-push]

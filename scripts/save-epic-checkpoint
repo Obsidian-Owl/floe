@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Save Epic Checkpoint - Runs before compaction via PreCompact hook
+#
+# This script captures the current epic implementation state before
+# context compaction occurs. The state is saved to .agent/epic-auto-mode
+# in JSON format for recovery after compaction.
+#
+# Usage: Called automatically by PreCompact hook
+#
+# Exit codes:
+#   0 - Success (checkpoint saved or no epic active)
+#   1 - Error writing checkpoint
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+STATE_FILE="$REPO_ROOT/.agent/epic-auto-mode"
+
+# Only run if epic auto-mode is active
+if [[ ! -f "$STATE_FILE" ]]; then
+    exit 0
+fi
+
+# Check if state file is already JSON (enhanced format)
+if head -1 "$STATE_FILE" | grep -q "^{"; then
+    # Already JSON format - update timestamp and completed count
+    CURRENT_STATE=$(cat "$STATE_FILE")
+    FEATURE_DIR=$(echo "$CURRENT_STATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('feature_dir',''))" 2>/dev/null || echo "")
+
+    if [[ -n "$FEATURE_DIR" && -f "$REPO_ROOT/$FEATURE_DIR/.linear-mapping.json" ]]; then
+        # Count completed tasks from Linear mapping
+        MAPPING_FILE="$REPO_ROOT/$FEATURE_DIR/.linear-mapping.json"
+        COMPLETED=$(python3 -c "
+import json
+with open('$MAPPING_FILE') as f:
+    data = json.load(f)
+    mappings = data.get('mappings', {})
+    completed = sum(1 for m in mappings.values() if m.get('status') == 'completed')
+    print(completed)
+" 2>/dev/null || echo "0")
+
+        # Update the state file with latest info
+        python3 -c "
+import json
+import sys
+from datetime import datetime
+
+with open('$STATE_FILE') as f:
+    state = json.load(f)
+
+state['last_checkpoint'] = datetime.utcnow().isoformat() + 'Z'
+state['completed_before_compact'] = $COMPLETED
+state['compaction_count'] = state.get('compaction_count', 0) + 1
+
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=2)
+" 2>/dev/null || true
+    fi
+else
+    # Legacy format (just "epic-auto-mode" text) - try to upgrade
+    # Detect feature directory from git branch or current directory
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    FEATURE_DIR=""
+
+    # Try to find feature directory from common patterns
+    for dir in specs/*/ .specify/*/; do
+        if [[ -f "${dir}.linear-mapping.json" ]]; then
+            FEATURE_DIR="${dir%/}"
+            break
+        fi
+    done
+
+    if [[ -n "$FEATURE_DIR" ]]; then
+        EPIC_NAME=$(basename "$FEATURE_DIR")
+        MAPPING_FILE="$REPO_ROOT/$FEATURE_DIR/.linear-mapping.json"
+
+        # Count tasks
+        TOTAL_TASKS=0
+        COMPLETED=0
+        if [[ -f "$MAPPING_FILE" ]]; then
+            TOTAL_TASKS=$(python3 -c "
+import json
+with open('$MAPPING_FILE') as f:
+    data = json.load(f)
+    print(len(data.get('mappings', {})))
+" 2>/dev/null || echo "0")
+            COMPLETED=$(python3 -c "
+import json
+with open('$MAPPING_FILE') as f:
+    data = json.load(f)
+    mappings = data.get('mappings', {})
+    completed = sum(1 for m in mappings.values() if m.get('status') == 'completed')
+    print(completed)
+" 2>/dev/null || echo "0")
+        fi
+
+        # Upgrade to JSON format
+        python3 -c "
+import json
+from datetime import datetime
+
+state = {
+    'mode': 'epic-auto',
+    'feature_dir': '$FEATURE_DIR',
+    'epic_name': '$EPIC_NAME',
+    'branch': '$BRANCH',
+    'started_at': datetime.utcnow().isoformat() + 'Z',
+    'last_checkpoint': datetime.utcnow().isoformat() + 'Z',
+    'total_tasks': $TOTAL_TASKS,
+    'completed_before_compact': $COMPLETED,
+    'compaction_count': 1
+}
+
+with open('$STATE_FILE', 'w') as f:
+    json.dump(state, f, indent=2)
+" 2>/dev/null || true
+    fi
+fi
+
+exit 0

@@ -6,6 +6,91 @@
 
 ---
 
+## Epic Auto-Mode Recovery (CRITICAL - Read After Every Compaction)
+
+**THIS SECTION IS CRITICAL**: After context compaction, skill instructions are lost but this file survives. Check for active workflows immediately.
+
+### Check for Active Epic Auto-Mode
+
+```bash
+# Check if epic auto-mode was active before compaction
+if [ -f ".agent/epic-auto-mode" ]; then
+    cat .agent/epic-auto-mode  # Contains epic context
+fi
+```
+
+**If `.agent/epic-auto-mode` exists, YOU MUST:**
+
+1. **Read the state file** to understand current context:
+   ```bash
+   cat .agent/epic-auto-mode
+   ```
+
+2. **Continue implementing automatically** - do NOT wait for user prompt
+
+3. **Follow the epic auto-mode workflow**:
+   - Sync from Linear to get current task status
+   - Find next ready task (status: backlog/unstarted)
+   - Implement the task (TDD, SOLID, atomic commits)
+   - Update Linear status to Done
+   - Create Linear comment with completion summary
+   - Commit changes
+   - **Loop to next task immediately** (no confirmation)
+
+4. **Only stop for**:
+   - Design questions requiring user validation → Use `AskUserQuestion` tool
+   - All tasks completed → Output "EPIC COMPLETE" banner, remove state file
+   - Task blocked by dependency → Output "EPIC BLOCKED" banner, keep state file
+
+### State File Format
+
+The `.agent/epic-auto-mode` file contains JSON with recovery context:
+```json
+{
+  "mode": "epic-auto",
+  "feature_dir": "specs/epic-name",
+  "epic_name": "epic-name",
+  "started_at": "2026-01-17T10:30:00Z",
+  "last_task": "T005",
+  "last_linear_id": "FLO-123",
+  "total_tasks": 15,
+  "completed_before_compact": 4
+}
+```
+
+### Recovery Procedure
+
+After compaction with active epic-auto-mode:
+
+1. Read `.agent/epic-auto-mode` for context
+2. Read `{feature_dir}/.linear-mapping.json` for task mappings
+3. Query Linear for current status of all tasks
+4. Find next task with status `backlog` or `unstarted`
+5. **Resume implementation immediately** - you are in auto-mode
+
+**DO NOT** ask the user "should I continue?" - the existence of the state file IS the user's instruction to continue.
+
+### Cancellation
+
+**To cancel epic auto-mode**, the user can:
+1. **Remove the state file manually**: `rm .agent/epic-auto-mode`
+2. **Send a cancel message**: Type "cancel" or "stop" during implementation
+3. **Use Ctrl+C**: Interrupt Claude Code execution
+
+If cancelled mid-epic, Claude should acknowledge and NOT resume unless explicitly asked.
+
+### Completion Cleanup
+
+**CRITICAL**: When epic completes successfully, remove the state file **IMMEDIATELY BEFORE** any other output:
+
+```bash
+rm -f .agent/epic-auto-mode  # FIRST - prevents confusion on compaction
+```
+
+Then output the completion banner. This order prevents edge cases where compaction occurs between banner and cleanup.
+
+---
+
 ## Vision
 
 **floe** is an open platform (Apache 2.0) for building internal data platforms.
@@ -111,11 +196,12 @@ bd linear sync --pull
 # 3. Auto-implement next ready task
 /speckit.implement  # Claims task, updates Linear, commits
 
-# 4. Review test quality before PR
-/speckit.test-review
+# 4. Pre-PR validation
+/speckit.test-review        # Test quality
+/speckit.integration-check  # Contract stability, merge readiness
 
-# 5. Create PR (if tests pass)
-# Commit and push handled by /speckit.implement
+# 5. Create PR
+/speckit.pr  # Links Linear issues, generates summary
 ```
 
 **Complete Workflow**: See `docs/guides/linear-workflow.md`
@@ -125,6 +211,7 @@ bd linear sync --pull
 ```bash
 # 1. Planning (Epic → Tasks → Linear issues)
 /speckit.specify    # Create spec.md
+/speckit.clarify    # Ask clarifying questions
 /speckit.plan       # Generate plan.md
 /speckit.tasks      # Break down to tasks
 /speckit.taskstolinear  # Create Linear issues with Epic labels
@@ -133,12 +220,12 @@ bd linear sync --pull
 /speckit.implement       # One task at a time (with confirmation)
 /speckit.implement-epic  # ALL tasks (auto-continues, no confirmation)
 
-# 3. Test Quality Review
-/speckit.test-review  # Pre-PR validation
+# 3. Pre-PR Review
+/speckit.test-review        # Test quality validation
+/speckit.integration-check  # Contract and merge readiness check
 
 # 4. PR Creation
-# Code committed by /speckit.implement
-# Tests validated by /speckit.test-review
+/speckit.pr  # Creates PR with Linear links, quality summary
 ```
 
 ---

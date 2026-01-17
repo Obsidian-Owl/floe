@@ -1,10 +1,6 @@
 ---
-description: Implement ALL tasks in the current epic until completion (auto-loop, no confirmation)
-handoffs:
-  - label: "Review tests"
-    agent: speckit.test-review
-    prompt: "Epic complete. Review test quality?"
-    send: false
+name: speckit-implement-epic
+description: Implement ALL tasks in the current epic until completion (auto-loop, no confirmation). Use when batch processing tasks, automating implementation, or running unattended task completion.
 ---
 
 ## User Input
@@ -15,21 +11,63 @@ $ARGUMENTS
 
 ## Overview
 
-This command implements ALL tasks in an epic sequentially, auto-continuing
-after each task completes. Use `/speckit.implement` instead if you want
-manual confirmation between tasks.
+This skill implements ALL tasks in an epic sequentially, auto-continuing after each task completes. Use `/speckit.implement` instead if you want manual confirmation between tasks.
 
 **Stops only when:**
 1. ALL tasks are Done (success)
 2. A task is BLOCKED (requires human intervention)
 3. Context window compacts (SessionStart hook will remind to continue)
 
+## Memory Integration
+
+### Before Starting
+Search for epic-level context:
+```bash
+./scripts/memory-search "epic {epic-name} architecture decisions"
+```
+
+### After Completion
+Save all decisions made during the epic:
+```bash
+./scripts/memory-save --decisions "{all key decisions from epic}" --issues "{all LinearIDs}"
+```
+
+What to save:
+- Architecture patterns established during epic
+- Reusable implementation patterns discovered
+- Gotchas and lessons learned
+
+## Constitution Alignment
+
+This skill enforces project principles:
+- **TDD**: Every task includes tests first
+- **SOLID**: Clean interfaces and single responsibility
+- **Atomic Commits**: Each task commits independently (300-600 LOC)
+
 ## Setup
 
 1. **Create state file** (for recovery after compaction):
    ```bash
    mkdir -p .agent
-   echo "epic-auto-mode" > .agent/epic-auto-mode
+   ```
+   Then write JSON state file using Python or inline:
+   ```python
+   import json
+   from datetime import datetime
+
+   state = {
+       "mode": "epic-auto",
+       "feature_dir": "{FEATURE_DIR from prerequisites}",
+       "epic_name": "{basename of feature_dir}",
+       "branch": "{current git branch}",
+       "started_at": datetime.utcnow().isoformat() + "Z",
+       "total_tasks": {count from .linear-mapping.json},
+       "completed_before_compact": 0,
+       "compaction_count": 0
+   }
+
+   with open(".agent/epic-auto-mode", "w") as f:
+       json.dump(state, f, indent=2)
    ```
 
 2. **Run prerequisite checks**:
@@ -60,8 +98,8 @@ manual confirmation between tasks.
 - For each task in mapping, query Linear via `mcp__plugin_linear_linear__get_issue` for current status
 - Build ready list: issues with status type `backlog` or `unstarted`
 - If no ready tasks:
-  - Check if all tasks have status type `completed` → "EPIC COMPLETE"
-  - Otherwise check for blocked tasks → "EPIC BLOCKED"
+  - Check if all tasks have status type `completed`: "EPIC COMPLETE"
+  - Otherwise check for blocked tasks: "EPIC BLOCKED"
 
 ### Step 2: Output Progress Marker
 
@@ -112,7 +150,19 @@ manual confirmation between tasks.
   ```
 - Commit changes: `{type}(scope): {title} ({TaskID}, {LinearID})`
 
-### Step 8: Auto-Continue
+### Step 8: Update State File
+
+Update `.agent/epic-auto-mode` with progress:
+```python
+import json
+state = json.load(open(".agent/epic-auto-mode"))
+state["last_task"] = "{TaskID}"
+state["last_linear_id"] = "{LinearID}"
+state["completed_before_compact"] = {current completed count}
+json.dump(state, open(".agent/epic-auto-mode", "w"), indent=2)
+```
+
+### Step 9: Auto-Continue
 
 **NO confirmation prompt** - Loop back to Step 1 immediately.
 
@@ -122,6 +172,14 @@ manual confirmation between tasks.
 
 When all tasks have status type `completed`:
 
+**CRITICAL: Remove state file IMMEDIATELY before any other output:**
+```bash
+rm -f .agent/epic-auto-mode
+```
+
+**Why first?** If compaction happens after the banner but before cleanup, the file would still exist and Claude would try to resume. Removing first ensures clean state.
+
+Then output the completion banner:
 ```
 ================================================================================
 EPIC COMPLETE
@@ -131,16 +189,13 @@ Feature: {feature-name}
 Tasks completed: {count}
 Total commits: {count}
 
+Epic auto-mode has ended. State file removed.
+
 Next steps:
   1. /speckit.test-review - Review test quality
   2. /speckit.integration-check - Validate integration
-  3. gh pr create - Create pull request
+  3. /speckit.pr - Create pull request with Linear links
 ================================================================================
-```
-
-Then remove state file:
-```bash
-rm -f .agent/epic-auto-mode
 ```
 
 ### EPIC BLOCKED
@@ -166,28 +221,46 @@ State saved in: .agent/epic-auto-mode
 
 ## Context Recovery
 
-After compaction, SessionStart hook fires and runs `scripts/session-recover`.
-The script checks for `.agent/epic-auto-mode` and outputs:
+After compaction, Claude automatically recovers via **CLAUDE.md instructions** (which survive compaction verbatim).
 
+### How It Works
+
+1. **PreCompact hook** (`scripts/save-epic-checkpoint`) captures current state before compaction
+2. **Compaction occurs** - conversation summarized, but files survive
+3. **CLAUDE.md is reloaded** from disk (verbatim, not summarized)
+4. **CLAUDE.md instructs Claude** to check for `.agent/epic-auto-mode`
+5. **If file exists**, Claude reads state and **continues implementing automatically**
+
+### State File Contents
+
+```json
+{
+  "mode": "epic-auto",
+  "feature_dir": "specs/epic-name",
+  "epic_name": "epic-name",
+  "branch": "feat/epic-name",
+  "started_at": "2026-01-17T10:30:00Z",
+  "last_task": "T005",
+  "last_linear_id": "FLO-123",
+  "total_tasks": 15,
+  "completed_before_compact": 4,
+  "compaction_count": 1
+}
 ```
-================================================================================
-EPIC AUTO-MODE DETECTED
-================================================================================
 
-You were implementing tasks in auto-mode.
+### Recovery Behavior
 
-To continue automatic implementation:
-  /speckit.implement-epic
+**Claude MUST NOT ask the user "should I continue?"** - the existence of the state file IS the user's instruction to continue automatically.
 
-To implement tasks one at a time:
-  /speckit.implement
-
-================================================================================
-```
+After compaction, Claude:
+1. Reads `.agent/epic-auto-mode` for context
+2. Queries Linear for current task status
+3. Finds next ready task
+4. **Resumes implementation immediately** without prompting
 
 ## Tool Patterns
 
-Same as `/speckit.implement` - see that command for Linear MCP tool reference.
+Same as `/speckit.implement` - see that skill for Linear MCP tool reference.
 
 ## Key Differences from /speckit.implement
 
@@ -207,8 +280,15 @@ Same as `/speckit.implement` - see that command for Linear MCP tool reference.
 | Validation fails | Tests/lint fail | Fix in-place, don't skip |
 | API error | Linear/network issue | Retry once, then BLOCKED |
 
+## Handoff
+
+After completing this skill:
+- **Review tests**: Run `/speckit.test-review` to validate test quality
+- **Check integration**: Run `/speckit.integration-check` before PR
+- **Create PR**: Run `/speckit.pr` to create pull request with Linear links
+
 ## References
 
-- **[speckit.implement](./speckit.implement.md)** - Single-task implementation with confirmation
+- **[speckit.implement](../speckit-implement/SKILL.md)** - Single-task implementation with confirmation
 - **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Architecture, traceability
 - **`.specify/memory/constitution.md`** - Project principles

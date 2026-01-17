@@ -1,10 +1,6 @@
 ---
-description: Implement the next ready task from Linear issue tracker with SpecKit integration
-handoffs:
-  - label: "Review tests"
-    agent: speckit.test-review
-    prompt: "Implementation complete. Review test quality?"
-    send: false
+name: speckit-implement
+description: Implement the next ready task from Linear issue tracker with SpecKit integration. Use when implementing tasks, working on Linear issues, or continuing feature development.
 ---
 
 ## User Input
@@ -17,13 +13,44 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Overview
 
-This command bridges SpecKit planning with Linear/Beads execution tracking.
+This skill bridges SpecKit planning with Linear/Beads execution tracking.
 
 **Architecture**: Linear is the source of truth. Beads is a local cache. See [Linear Workflow Guide](../../../docs/guides/linear-workflow.md).
 
 **Modes**:
 - **No arguments**: Auto-select first ready task
 - **With selector**: Implement specific task (number, Task ID `T###`, or Linear ID `FLO-###`)
+
+## Memory Integration
+
+### Before Starting
+Search for relevant implementation patterns:
+```bash
+./scripts/memory-search "implementation patterns for {component type}"
+```
+
+Query patterns:
+- For plugins: `"plugin implementation patterns"`
+- For schemas: `"Pydantic schema patterns"`
+- For tests: `"testing patterns for {feature}"`
+
+### After Completion
+Save key decisions for future sessions:
+```bash
+./scripts/memory-save --decisions "{key decisions made}" --issues "{LinearIDs}"
+```
+
+What to save:
+- Implementation patterns that worked well
+- Gotchas and edge cases discovered
+- Architecture decisions made during implementation
+
+## Constitution Alignment
+
+This skill enforces project principles from `.specify/memory/constitution.md`:
+- **TDD**: Tests first, implementation second
+- **SOLID**: Single responsibility, clean interfaces
+- **Atomic Commits**: 300-600 LOC per commit, focused changes
 
 ## Outline
 
@@ -41,10 +68,10 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 
 3. **Task Selection**
    - Parse $ARGUMENTS for selector (first token):
-     - Empty → auto-select first ready task
-     - Number (`1`, `2`, `3`) → position in displayed ready list
-     - Task ID (`T001`, `T042`) → match by task ID in mapping
-     - Linear ID (`FLO-33`, `FLO-108`) → match by Linear identifier
+     - Empty: auto-select first ready task
+     - Number (`1`, `2`, `3`): position in displayed ready list
+     - Task ID (`T001`, `T042`): match by task ID in mapping
+     - Linear ID (`FLO-33`, `FLO-108`): match by Linear identifier
    - Verify task not blocked: query with `includeRelations: true`, check `blockedBy` is empty
    - ERROR if blocked and show which issues block it
 
@@ -120,11 +147,11 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 | `mcp__plugin_linear_linear__create_comment({issueId, body})` | Add closure comment |
 
 **Status type mapping**:
-- `unstarted` → "Todo" (ready to work)
-- `backlog` → "Backlog" (ready to work)
-- `started` → "In Progress" (claimed)
-- `completed` → "Done" (finished)
-- `canceled` → "Canceled" (abandoned)
+- `unstarted`: "Todo" (ready to work)
+- `backlog`: "Backlog" (ready to work)
+- `started`: "In Progress" (claimed)
+- `completed`: "Done" (finished)
+- `canceled`: "Canceled" (abandoned)
 
 ## Key Rules
 
@@ -148,10 +175,17 @@ This command bridges SpecKit planning with Linear/Beads execution tracking.
 | Status not found | Team uses custom status names | Query statuses, match by `type` |
 | Commit rejected | Pre-commit hook failure | Fix linting/type errors |
 
+## Handoff
+
+After completing this skill:
+- **Review tests**: Run `/speckit.test-review` to validate test quality
+- **Continue implementing**: Run `/speckit.implement` again for next task
+- **Batch implementation**: Run `/speckit.implement-epic` for automatic continuation
+
 ## References
 
 - **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Architecture, traceability, detailed patterns
-- **[speckit.tasks](./speckit.tasks.md)** - Generate tasks.md
-- **[speckit.taskstolinear](./speckit.taskstolinear.md)** - Create Linear issues from tasks
+- **[speckit.tasks](../speckit-tasks/SKILL.md)** - Generate tasks.md
+- **[speckit.taskstolinear](../speckit-taskstolinear/SKILL.md)** - Create Linear issues from tasks
 - **`.specify/memory/constitution.md`** - Project principles (TDD, SOLID, atomic commits)
 - **Memory Scripts** - `./scripts/memory-{search,save,add}` for knowledge graph integration

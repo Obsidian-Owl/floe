@@ -1,10 +1,6 @@
 ---
+name: speckit-test-review
 description: Review test quality before PR - semantic analysis of test design, not just linting
-handoffs:
-  - label: "Commit changes"
-    agent: git-commit
-    prompt: "Tests reviewed. Commit changes?"
-    send: false
 ---
 
 ## User Input
@@ -37,6 +33,21 @@ Plus floe-specific checks:
 **SEMANTIC ANALYSIS**: Read and understand tests, don't just grep for patterns.
 
 **TIERED OUTPUT**: Full analysis for problems, brief summary for clean tests.
+
+## Memory Integration
+
+### After Completion
+Save quality findings:
+```bash
+./scripts/memory-save --decisions "Test review for {feature}: {key findings}" --issues "{LinearIDs}"
+```
+
+## Constitution Alignment
+
+This skill validates test adherence to project principles:
+- **TDD**: Tests should exist before implementation
+- **Traceability**: Tests should have requirement markers
+- **No Skip**: Tests should FAIL, not skip
 
 ## Execution Steps
 
@@ -105,7 +116,7 @@ Return your Architecture Compliance Report.")
 
 **You handle this phase directly.**
 
-Synthesize all reports into a unified strategic assessment:
+Synthesize all reports into a unified strategic assessment.
 
 ## Output Format
 
@@ -122,10 +133,10 @@ Synthesize all reports into a unified strategic assessment:
 
 | Aspect | Status | Key Finding |
 |--------|--------|-------------|
-| Test Design Quality | ✅/⚠️/❌ | [summary from test-reviewer] |
-| Plugin Coverage | ✅/⚠️/❌ | [summary from plugin-quality] |
-| Contract Stability | ✅/⚠️/❌ | [summary from contract-stability] |
-| Architecture Compliance | ✅/⚠️/❌ | [summary from architecture-compliance] |
+| Test Design Quality | status | [summary from test-reviewer] |
+| Plugin Coverage | status | [summary from plugin-quality] |
+| Contract Stability | status | [summary from contract-stability] |
+| Architecture Compliance | status | [summary from architecture-compliance] |
 
 **Overall**: [One sentence assessment]
 
@@ -213,15 +224,15 @@ Synthesize all reports into a unified strategic assessment:
 - When investigating test failures
 - When asked "are my tests good?"
 
-## Example Usage
+## Handoff
 
-```bash
-# Review all changed tests
-/speckit.test-review
+After completing this skill:
+- **Fix issues**: Address P0/P1 issues identified
+- **Check integration**: Run `/speckit.integration-check` before PR
+- **Create PR**: Run `/speckit.pr` when tests pass
 
-# Review specific file
-/speckit.test-review packages/floe-core/tests/unit/test_plugin_registry.py
+## References
 
-# Focus on a specific concern
-/speckit.test-review --focus design-quality
-```
+- **`TESTING.md`** - Testing standards
+- **`.claude/rules/testing-standards.md`** - Testing rules
+- **`.claude/rules/test-organization.md`** - Test organization
