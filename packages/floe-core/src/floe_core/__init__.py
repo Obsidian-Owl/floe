@@ -1,6 +1,9 @@
 """floe-core: Core plugin registry, schemas, and interfaces for the floe data platform.
 
 This package provides:
+- FloeSpec, CompiledArtifacts: Key schema types for data product definition
+- compile_pipeline: 6-stage compilation pipeline (Epic 2B)
+- CompilationError, CompilationStage: Structured error handling
 - PluginRegistry: Singleton for discovering and managing plugins
 - PluginMetadata: Base ABC for all plugin types
 - PluginType: Enum defining the 12 plugin categories
@@ -11,6 +14,11 @@ This package provides:
 - Telemetry: OpenTelemetry SDK integration (floe_core.telemetry)
 
 Example:
+    >>> from floe_core import FloeSpec, CompiledArtifacts, compile_pipeline
+    >>> artifacts = compile_pipeline(Path("floe.yaml"), Path("manifest.yaml"))
+    >>> artifacts.version
+    '0.2.0'
+
     >>> from floe_core import get_registry, PluginType
     >>> registry = get_registry()
     >>> registry.discover_all()
@@ -35,8 +43,9 @@ Example:
     >>> status = ConnectionStatus.HEALTHY
 
 See Also:
+    - floe_core.compilation: 6-stage compilation pipeline
     - floe_core.plugins: All plugin ABCs with supporting dataclasses
-    - floe_core.schemas: Manifest schema definitions
+    - floe_core.schemas: Manifest and FloeSpec schema definitions
     - floe_core.telemetry: OpenTelemetry integration
     - floe_core.compute_config: Compute configuration models
     - floe_core.compute_errors: Compute error hierarchy
@@ -50,8 +59,22 @@ __version__ = "0.1.0"
 # Schemas submodule (imported for explicit re-export)
 from floe_core import schemas as schemas  # noqa: PLC0414
 
+# Key schema exports (convenience imports from schemas submodule)
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_core.schemas.floe_spec import FloeSpec
+
 # Telemetry submodule (explicit re-export)
 from floe_core import telemetry as telemetry  # noqa: PLC0414
+
+# Compilation pipeline (Epic 2B)
+from floe_core.compilation.errors import (
+    CompilationError,
+    CompilationException,
+)
+from floe_core.compilation.stages import (
+    CompilationStage,
+    compile_pipeline,
+)
 
 # Compiler functions
 from floe_core.compiler import (
@@ -166,8 +189,10 @@ from floe_core.version_compat import (
 __all__: list[str] = [
     # Package version
     "__version__",
-    # Schemas submodule
+    # Schemas submodule and key exports
     "schemas",
+    "CompiledArtifacts",
+    "FloeSpec",
     # Telemetry submodule and exports
     "telemetry",
     "TelemetryConfig",
@@ -175,6 +200,11 @@ __all__: list[str] = [
     "ResourceAttributes",
     "SamplingConfig",
     "ProviderState",
+    # Compilation pipeline (Epic 2B)
+    "CompilationError",
+    "CompilationException",
+    "CompilationStage",
+    "compile_pipeline",
     # Plugin type categories
     "PluginType",
     # Plugin error hierarchy
