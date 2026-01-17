@@ -11,6 +11,16 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
+## Usage Modes
+
+| Mode | Command | Scope | When to Use |
+|------|---------|-------|-------------|
+| **Changed Files** | `/speckit.test-review` | Tests changed vs main | Before PR (default) |
+| **Full Audit** | `/speckit.test-review --all` | ALL test files | Quality gate, periodic audit |
+| **Specific Files** | `/speckit.test-review path/to/test.py` | Named files | Targeted review |
+
+**Important**: Use `--all` to catch pre-existing issues, not just changes in current branch.
+
 ## Goal
 
 Perform a comprehensive test quality review that answers: **Are these tests actually good tests?**
@@ -55,17 +65,35 @@ This skill validates test adherence to project principles:
 
 **You handle this phase directly.**
 
-```bash
-# Get current branch
-git rev-parse --abbrev-ref HEAD
+**Parse user input to determine mode:**
 
-# Get changed test files
-git diff --name-only main...HEAD | grep -E 'tests.*\.py$'
+1. **If `--all` flag present**: Full codebase audit
+   ```bash
+   # Get ALL test files in the codebase
+   find packages/*/tests plugins/*/tests tests/ testing/tests -name "test_*.py" -type f 2>/dev/null
+   ```
 
-# If no changed tests, check for specific file in user input
-```
+2. **If specific file path provided**: Review that file
+   ```bash
+   # Verify file exists
+   ls -la <provided-path>
+   ```
 
-If no test files to review, inform user and stop.
+3. **Default (no args)**: Changed files only
+   ```bash
+   # Get current branch
+   git rev-parse --abbrev-ref HEAD
+
+   # Get changed test files
+   git diff --name-only main...HEAD | grep -E 'tests.*\.py$'
+   ```
+
+**Report mode to user:**
+- `--all` mode: "Running FULL CODEBASE audit on N test files"
+- Specific file: "Reviewing specified file: <path>"
+- Default: "Reviewing N test files changed vs main"
+
+If no test files to review in default mode, suggest using `--all` for full audit.
 
 **Output**: List of test files to analyze, classified by type:
 - Unit: `*/tests/unit/*.py` or no marker
@@ -219,10 +247,16 @@ Synthesize all reports into a unified strategic assessment.
 
 ## When to Use
 
-- Before creating a PR with test changes
-- After writing new tests
-- When investigating test failures
-- When asked "are my tests good?"
+| Situation | Recommended Mode |
+|-----------|------------------|
+| Before creating a PR | `/speckit.test-review` (changed files) |
+| After writing new tests | `/speckit.test-review` (changed files) |
+| When investigating test failures | `/speckit.test-review path/to/test.py` |
+| When asked "are my tests good?" | `/speckit.test-review --all` |
+| **Quality gate / periodic audit** | `/speckit.test-review --all` |
+| **Fixing pre-existing issues** | `/speckit.test-review --all` |
+
+**Key Insight**: Default mode only reviews changed files. Use `--all` to catch issues that existed before your branch.
 
 ## Handoff
 

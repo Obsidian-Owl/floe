@@ -188,14 +188,14 @@ class TestPluginImplementationContract:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         plugin = MinimalPlugin()
 
         # Required properties work
         assert plugin.name == "minimal-test"
         assert plugin.version == "1.0.0"
-        assert plugin.floe_api_version == "0.1"
+        assert plugin.floe_api_version == "1.0"
 
         # Default implementations work
         assert plugin.description == ""
@@ -233,7 +233,7 @@ class TestPluginImplementationContract:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def dependencies(self) -> list[str]:
@@ -271,7 +271,7 @@ class TestPluginImplementationContract:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return TestConfig
@@ -313,7 +313,7 @@ class TestRegistryIntegrationContract:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
         registry = PluginRegistry()
         plugin = TestPlugin()
@@ -366,7 +366,7 @@ class TestRegistryIntegrationContract:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             def get_config_schema(self) -> type[BaseModel]:
                 return PluginConfig

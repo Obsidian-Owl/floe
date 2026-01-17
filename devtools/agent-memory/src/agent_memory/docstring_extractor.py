@@ -206,7 +206,7 @@ def _get_method_names(node: ast.ClassDef) -> list[str]:
     """
     methods: list[str] = []
     for item in node.body:
-        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
             methods.append(item.name)
     return methods
 
@@ -284,7 +284,7 @@ def extract_docstrings(path: Path) -> list[DocstringEntry]:
 
             # Extract method docstrings
             for item in node.body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
                     method_docstring = ast.get_docstring(item)
                     if method_docstring:
                         entries.append(
@@ -299,7 +299,7 @@ def extract_docstrings(path: Path) -> list[DocstringEntry]:
                             )
                         )
 
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             # Check if this is a top-level function (not a method)
             # We already handle methods inside class bodies above
             # ast.walk visits all nodes, so we need to check parent

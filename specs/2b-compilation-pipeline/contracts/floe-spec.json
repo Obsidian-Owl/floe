@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/floe-spec/v1",
+  "title": "FloeSpec",
+  "description": "Data product configuration schema for floe.yaml",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "transforms"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "floe.dev/v1",
+      "description": "API version for schema compatibility"
+    },
+    "kind": {
+      "type": "string",
+      "const": "FloeSpec",
+      "description": "Resource kind discriminator"
+    },
+    "metadata": {
+      "$ref": "#/$defs/FloeMetadata"
+    },
+    "platform": {
+      "$ref": "#/$defs/PlatformRef"
+    },
+    "transforms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/TransformSpec"
+      },
+      "description": "List of dbt models/transforms"
+    },
+    "schedule": {
+      "$ref": "#/$defs/ScheduleSpec"
+    }
+  },
+  "$defs": {
+    "FloeMetadata": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "minLength": 1,
+          "maxLength": 63,
+          "description": "Product name (DNS-compatible)"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?(\\+[a-zA-Z0-9.]+)?$",
+          "description": "Product version (semver)"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Human-readable description"
+        },
+        "owner": {
+          "type": "string",
+          "description": "Owner email or team name"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Key-value labels for categorization"
+        }
+      }
+    },
+    "PlatformRef": {
+      "type": "object",
+      "required": ["manifest"],
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "type": "string",
+          "description": "OCI URI or local path to platform manifest"
+        }
+      }
+    },
+    "TransformSpec": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "description": "Model name (must exist in dbt project)"
+        },
+        "compute": {
+          "type": "string",
+          "description": "Compute target override (null = platform default)"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "dbt tags for selection"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Explicit dependencies (model names)"
+        }
+      }
+    },
+    "ScheduleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cron": {
+          "type": "string",
+          "pattern": "^(@(annually|yearly|monthly|weekly|daily|hourly)|((\\*|[0-9,\\-\\/]+)\\s+){4}(\\*|[0-9,\\-\\/]+))$",
+          "description": "Cron expression"
+        },
+        "timezone": {
+          "type": "string",
+          "default": "UTC",
+          "description": "IANA timezone"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether schedule is active"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "apiVersion": "floe.dev/v1",
+      "kind": "FloeSpec",
+      "metadata": {
+        "name": "customer-360",
+        "version": "1.0.0",
+        "description": "Customer 360 data product",
+        "owner": "analytics-team@acme.com"
+      },
+      "platform": {
+        "manifest": "oci://registry.acme.com/floe/platform:v1"
+      },
+      "transforms": [
+        {
+          "name": "stg_customers",
+          "tags": ["staging"]
+        },
+        {
+          "name": "int_customer_orders",
+          "compute": "spark",
+          "depends_on": ["stg_customers", "stg_orders"]
+        },
+        {
+          "name": "mart_customer_360",
+          "tags": ["marts"],
+          "depends_on": ["int_customer_orders"]
+        }
+      ],
+      "schedule": {
+        "cron": "0 6 * * *",
+        "timezone": "America/New_York"
+      }
+    }
+  ]
+}

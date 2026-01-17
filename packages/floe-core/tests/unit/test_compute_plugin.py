@@ -58,7 +58,7 @@ class TestComputePluginABCInstantiation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             # Missing is_self_hosted
 
@@ -94,7 +94,7 @@ class TestComputePluginABCInstantiation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def is_self_hosted(self) -> bool:
@@ -131,7 +131,7 @@ class TestComputePluginABCInstantiation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def is_self_hosted(self) -> bool:
@@ -168,7 +168,7 @@ class TestComputePluginABCInstantiation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def is_self_hosted(self) -> bool:
@@ -205,7 +205,7 @@ class TestComputePluginABCInstantiation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def is_self_hosted(self) -> bool:
@@ -355,7 +355,7 @@ class TestCompletePluginImplementation:
 
             @property
             def floe_api_version(self) -> str:
-                return "0.1"
+                return "1.0"
 
             @property
             def is_self_hosted(self) -> bool:
@@ -389,7 +389,7 @@ class TestCompletePluginImplementation:
         # Verify plugin has correct name and version (not just existence)
         assert complete_plugin.name == "test-complete"
         assert complete_plugin.version == "1.0.0"
-        assert complete_plugin.floe_api_version == "0.1"
+        assert complete_plugin.floe_api_version == "1.0"
 
     @pytest.mark.requirement("001-FR-001")
     def test_complete_plugin_is_self_hosted(self, complete_plugin: ComputePlugin) -> None:

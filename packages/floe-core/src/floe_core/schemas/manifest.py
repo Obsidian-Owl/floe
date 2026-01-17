@@ -222,6 +222,10 @@ class PlatformManifest(BaseModel):
         default=None,
         description="Domain list of approved data products",
     )
+    defaults: dict[str, str] | None = Field(
+        default=None,
+        description="Default settings (e.g., compute: duckdb)",
+    )
 
     @model_validator(mode="after")
     def validate_scope_constraints(self) -> PlatformManifest:

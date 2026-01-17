@@ -1,0 +1,36 @@
+# floe.yaml - Data product configuration (from quickstart.md)
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: customer-360
+  version: 1.0.0
+  description: Customer 360 data product
+  owner: analytics-team@acme.com
+  labels:
+    domain: analytics
+    tier: gold
+
+# Reference platform manifest (optional - uses local if not specified)
+platform:
+  manifest: oci://registry.acme.com/floe/platform:v1
+
+# Define transforms (dbt models)
+transforms:
+  - name: stg_customers
+    tags: [staging]
+
+  - name: int_customer_orders
+    compute: spark  # Override compute for this model
+    dependsOn:
+      - stg_customers
+      - stg_orders
+
+  - name: mart_customer_360
+    tags: [marts]
+    dependsOn:
+      - int_customer_orders
+
+# Optional scheduling
+schedule:
+  cron: "0 6 * * *"
+  timezone: America/New_York

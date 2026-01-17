@@ -308,5 +308,5 @@ class TestSampleOrderData:
     def test_amount_is_numeric(self) -> None:
         """Test amount is a valid number."""
         order = sample_order_data()
-        assert isinstance(order["amount"], (int, float))
+        assert isinstance(order["amount"], int | float)
         assert order["amount"] > 0

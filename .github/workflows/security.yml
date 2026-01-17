@@ -1,15 +1,22 @@
 # Security Review Workflow
-# Runs Claude Code security review on PRs only (not pushes - already reviewed in PR)
+# Runs Claude Code security review ONCE per PR (not on every push)
 # See: https://github.com/anthropics/claude-code-security-review
 #
 # Security: All actions pinned to full SHA hashes
 # To update: gh api repos/OWNER/REPO/git/refs/tags/VERSION --jq '.object.sha'
+#
+# Cost Optimization: Claude security review only runs on:
+# - PR opened (first review)
+# - Draft marked ready for review
+# NOT on every push (synchronize event) - too expensive
 
 name: Security Review
 
 on:
   pull_request:
     branches: [main]
+    # Only run on PR open or ready-for-review, NOT on every push
+    types: [opened, ready_for_review]
     paths:
       - '**.py'
       - '**.sql'

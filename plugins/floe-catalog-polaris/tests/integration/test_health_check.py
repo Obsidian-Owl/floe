@@ -108,7 +108,7 @@ class TestHealthCheckIntegration(IntegrationTestBase):
 
         # Response time should be a positive number
         response_time = status.details["response_time_ms"]
-        assert isinstance(response_time, (int, float))
+        assert isinstance(response_time, int | float)
         assert response_time >= 0
 
     @pytest.mark.requirement("FR-051")

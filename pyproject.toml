@@ -53,6 +53,7 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",
     ".",  # Enable import of 'testing' module from project root
 ]
@@ -175,4 +176,9 @@ forbidden_modules = [
     "snowflake",
     "databricks",
     "pyspark",
+]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20250915",
 ]

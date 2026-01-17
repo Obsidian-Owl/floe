@@ -161,6 +161,6 @@ class TestVersionConstants:
     @pytest.mark.requirement("SC-004")
     def test_current_version_values(self) -> None:
         """Test current version values are as expected."""
-        # Current version is 0.1 (pre-1.0 unstable API)
-        assert FLOE_PLUGIN_API_VERSION == "0.1"
-        assert FLOE_PLUGIN_API_MIN_VERSION == "0.1"
+        # Current version is 1.0 (stable API)
+        assert FLOE_PLUGIN_API_VERSION == "1.0"
+        assert FLOE_PLUGIN_API_MIN_VERSION == "1.0"

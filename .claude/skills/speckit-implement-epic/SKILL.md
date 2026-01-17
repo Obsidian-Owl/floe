@@ -18,6 +18,55 @@ This skill implements ALL tasks in an epic sequentially, auto-continuing after e
 2. A task is BLOCKED (requires human intervention)
 3. Context window compacts (SessionStart hook will remind to continue)
 
+---
+
+## CRITICAL: Spec Context Loading (MANDATORY)
+
+**You MUST load ALL spec artifacts into context and KEEP THEM LOADED throughout the entire epic.**
+
+This is NON-NEGOTIABLE. Implementation without full spec context leads to:
+- Deviations from agreed design
+- Missing requirements
+- Inconsistent architecture decisions
+- Wasted rework
+
+### Required Artifacts (Load All, Keep All)
+
+| Artifact | Purpose | Location |
+|----------|---------|----------|
+| **spec.md** | Feature requirements, acceptance criteria | `$FEATURE_DIR/spec.md` |
+| **plan.md** | Architecture decisions, component design | `$FEATURE_DIR/plan.md` |
+| **tasks.md** | Task breakdown with dependencies | `$FEATURE_DIR/tasks.md` |
+| **research.md** | Technology research, patterns (if exists) | `$FEATURE_DIR/research.md` |
+| **data-model.md** | Schema design, contracts (if exists) | `$FEATURE_DIR/data-model.md` |
+| **contracts/** | Contract definitions (if exists) | `$FEATURE_DIR/contracts/*.md` |
+| **.linear-mapping.json** | Task-to-Linear ID mappings | `$FEATURE_DIR/.linear-mapping.json` |
+| **constitution.md** | Project principles (TDD, SOLID) | `.specify/memory/constitution.md` |
+
+### Loading Protocol
+
+**At the START of epic auto-mode (before any task):**
+
+```bash
+# 1. Identify feature directory
+FEATURE_DIR=$(./specify/scripts/bash/check-prerequisites.sh --json | jq -r '.feature_dir')
+
+# 2. Load ALL spec artifacts (use Read tool for each)
+Read: $FEATURE_DIR/spec.md
+Read: $FEATURE_DIR/plan.md
+Read: $FEATURE_DIR/tasks.md
+Read: $FEATURE_DIR/research.md       # if exists
+Read: $FEATURE_DIR/data-model.md     # if exists
+Read: $FEATURE_DIR/contracts/*.md    # if exists
+Read: .specify/memory/constitution.md
+```
+
+**After EVERY context compaction**: Re-read ALL artifacts immediately. The summary WILL lose critical details. This is your FIRST action after recovery.
+
+**Throughout the epic**: These artifacts define the "what" and "why" of every task. Reference them continuously. Every implementation decision must align with the documented design.
+
+---
+
 ## Memory Integration
 
 ### Before Starting
@@ -115,12 +164,19 @@ This skill enforces project principles:
   - `state`: "In Progress"
   - `assignee`: "me"
 
-### Step 4: Load Context
+### Step 4: Load Context (CRITICAL - See "Spec Context Loading" above)
 
-- Read task details from `$FEATURE_DIR/tasks.md`
-- Load `spec.md` and `plan.md` from FEATURE_DIR
-- Load `.specify/memory/constitution.md` for project principles
+- **Load ALL spec artifacts** per the CRITICAL section above:
+  - `$FEATURE_DIR/spec.md` - Full feature specification
+  - `$FEATURE_DIR/plan.md` - Architecture and design decisions
+  - `$FEATURE_DIR/tasks.md` - Task details for current task
+  - `$FEATURE_DIR/research.md` - Technology research (if exists)
+  - `$FEATURE_DIR/data-model.md` - Schema design (if exists)
+  - `$FEATURE_DIR/contracts/*.md` - Contract definitions (if exists)
+  - `.specify/memory/constitution.md` - Project principles
+- **This is NON-NEGOTIABLE** - do NOT proceed without full context
 - Use Explore subagents for codebase understanding
+- **After compaction recovery**: This step is your FIRST action - re-read ALL artifacts
 
 ### Step 5: Implement
 
@@ -258,10 +314,13 @@ After compaction, Claude automatically recovers via **CLAUDE.md instructions** (
 **Claude MUST NOT ask the user "should I continue?"** - the existence of the state file IS the user's instruction to continue automatically.
 
 After compaction, Claude:
-1. Reads `.agent/epic-auto-mode` for context
-2. Queries Linear for current task status
-3. Finds next ready task
-4. **Resumes implementation immediately** without prompting
+1. Reads `.agent/epic-auto-mode` for recovery state
+2. **IMMEDIATELY re-reads ALL spec artifacts** (spec.md, plan.md, tasks.md, research.md, data-model.md, contracts/*, constitution.md)
+3. Queries Linear for current task status
+4. Finds next ready task
+5. **Resumes implementation immediately** without prompting
+
+**CRITICAL**: Step 2 (reloading spec artifacts) is NON-NEGOTIABLE. The compaction summary WILL lose critical design details. You MUST re-read the full files to maintain implementation quality.
 
 ## Tool Patterns
 

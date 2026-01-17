@@ -93,12 +93,14 @@ class PluginSelection(BaseModel):
 
     Attributes:
         type: Plugin name (e.g., "duckdb", "snowflake", "dagster")
+        version: Plugin version (semver) for reproducibility
         config: Plugin-specific configuration options
         connection_secret_ref: Reference to K8s Secret for credentials
 
     Example:
         >>> selection = PluginSelection(
         ...     type="duckdb",
+        ...     version="0.9.0",
         ...     config={"threads": 4, "memory_limit": "8GB"},
         ...     connection_secret_ref="db-credentials"
         ... )
@@ -107,6 +109,7 @@ class PluginSelection(BaseModel):
 
     Validation Rules:
         - type: Required, must match registered plugin name (validated at runtime)
+        - version: Optional semver string for reproducibility
         - config: Optional dict for plugin-specific settings
         - connection_secret_ref: Optional K8s Secret name for credentials
 
@@ -122,10 +125,12 @@ class PluginSelection(BaseModel):
             "examples": [
                 {
                     "type": "duckdb",
+                    "version": "0.9.0",
                     "config": {"threads": 4},
                 },
                 {
                     "type": "snowflake",
+                    "version": "2.0.0",
                     "connection_secret_ref": "snowflake-credentials",
                 },
             ]
@@ -140,6 +145,12 @@ class PluginSelection(BaseModel):
             examples=["duckdb", "snowflake", "dagster", "polaris"],
         ),
     ]
+    version: str | None = Field(
+        default=None,
+        pattern=r"^\d+\.\d+\.\d+$",
+        description="Plugin version (semver) for reproducibility",
+        examples=["0.9.0", "1.2.3"],
+    )
     config: dict[str, Any] | None = Field(
         default=None,
         description="Plugin-specific configuration options",
