@@ -2973,7 +2973,7 @@ class TestIcebergTableManagerWriteDataCommitRetry:
         )
 
         # Verify config is stored
-        assert manager._config.retry_base_delay_seconds == 2.0
+        assert manager._config.retry_base_delay_seconds == pytest.approx(2.0)
 
         table_config = TableConfig(
             namespace="bronze",
