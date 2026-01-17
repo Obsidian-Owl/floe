@@ -10,7 +10,7 @@ Note:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -444,7 +444,7 @@ class TestIcebergIOManagerLoadInput:
         mock_table = MagicMock()
         mock_iceberg_manager.load_table.return_value = mock_table
 
-        result = io_manager.load_input(mock_input_context)
+        io_manager.load_input(mock_input_context)
 
         # Verify table was loaded
         mock_iceberg_manager.load_table.assert_called_once()

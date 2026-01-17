@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 
 from floe_iceberg.models import (
     DEFAULT_TARGET_FILE_SIZE_BYTES,
@@ -28,7 +29,6 @@ from floe_iceberg.models import (
     WriteConfig,
     WriteMode,
 )
-
 
 # =============================================================================
 # IDENTIFIER_PATTERN Tests
@@ -381,7 +381,7 @@ class TestIcebergTableManagerConfig:
     def test_frozen(self) -> None:
         """Test config is immutable (frozen)."""
         config = IcebergTableManagerConfig()
-        with pytest.raises(Exception):  # ValidationError for frozen models
+        with pytest.raises(PydanticValidationError):  # ValidationError for frozen models
             config.max_commit_retries = 5  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-045")
@@ -462,7 +462,7 @@ class TestIcebergIOManagerConfig:
     def test_frozen(self) -> None:
         """Test config is immutable (frozen)."""
         config = IcebergIOManagerConfig(namespace="test")
-        with pytest.raises(Exception):  # ValidationError for frozen models
+        with pytest.raises(PydanticValidationError):  # ValidationError for frozen models
             config.namespace = "changed"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-037")
@@ -598,7 +598,7 @@ class TestSchemaField:
             name="test",
             field_type=FieldType.STRING,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             field.name = "changed"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-012")
@@ -667,7 +667,7 @@ class TestTableSchema:
         schema = TableSchema(
             fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             schema.fields = []  # type: ignore[misc]
 
 
@@ -762,7 +762,7 @@ class TestPartitionField:
             name="test",
             transform=PartitionTransform.IDENTITY,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             field.name = "changed"  # type: ignore[misc]
 
 
@@ -829,7 +829,7 @@ class TestPartitionSpec:
         from floe_iceberg.models import PartitionSpec
 
         spec = PartitionSpec()
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             spec.fields = []  # type: ignore[misc]
 
 
@@ -977,7 +977,7 @@ class TestTableConfig:
                 fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
             ),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             config.namespace = "changed"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-013")
@@ -1236,7 +1236,7 @@ class TestSchemaChange:
             change_type=SchemaChangeType.ADD_COLUMN,
             field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             change.change_type = SchemaChangeType.DELETE_COLUMN  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-017")
@@ -1377,7 +1377,7 @@ class TestSchemaEvolution:
                 )
             ]
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             evolution.allow_incompatible_changes = True  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-017")
@@ -1537,7 +1537,7 @@ class TestSnapshotInfo:
             timestamp_ms=1705500000000,
             operation=OperationType.APPEND,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             info.snapshot_id = 456  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-003")
@@ -1650,7 +1650,7 @@ class TestWriteConfig:
     def test_frozen(self) -> None:
         """Test WriteConfig is immutable."""
         config = WriteConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             config.mode = WriteMode.OVERWRITE  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-003")
@@ -1807,7 +1807,7 @@ class TestCompactionStrategy:
     def test_frozen(self) -> None:
         """Test CompactionStrategy is immutable (frozen=True)."""
         strategy = CompactionStrategy()
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             strategy.target_file_size_bytes = 100  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-030")

@@ -25,7 +25,6 @@ from floe_iceberg.errors import (
     WriteError,
 )
 
-
 # =============================================================================
 # Base Exception Tests
 # =============================================================================
@@ -63,7 +62,7 @@ class TestIcebergError:
     @pytest.mark.requirement("FR-001")
     def test_can_be_caught_as_exception(self) -> None:
         """Test IcebergError can be caught as Exception."""
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 - intentional: testing inheritance
             raise IcebergError("Test error")
 
     @pytest.mark.requirement("FR-001")
@@ -483,7 +482,9 @@ class TestExceptionHierarchy:
         ]
 
         for exc in exceptions:
-            assert isinstance(exc, IcebergError), f"{type(exc).__name__} should inherit from IcebergError"
+            assert isinstance(exc, IcebergError), (
+                f"{type(exc).__name__} should inherit from IcebergError"
+            )
 
     @pytest.mark.requirement("FR-001")
     def test_catch_all_with_iceberg_error(self) -> None:

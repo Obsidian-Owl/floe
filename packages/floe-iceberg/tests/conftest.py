@@ -38,7 +38,7 @@ class MockCatalog:
         _parent_plugin: Reference to parent MockCatalogPlugin for table info.
     """
 
-    def __init__(self, parent_plugin: "MockCatalogPlugin | None" = None) -> None:
+    def __init__(self, parent_plugin: MockCatalogPlugin | None = None) -> None:
         """Initialize mock catalog with empty collections.
 
         Args:

@@ -8,7 +8,7 @@ Note: Tests are written TDD-style before implementation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -1739,7 +1739,10 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG, required=True),
                     SchemaField(
-                        field_id=2, name="required_field", field_type=FieldType.STRING, required=True
+                        field_id=2,
+                        name="required_field",
+                        field_type=FieldType.STRING,
+                        required=True,
                     ),
                 ]
             ),
@@ -1779,9 +1782,9 @@ class TestIcebergTableManagerListSnapshots:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
+            SchemaField,
             SnapshotInfo,
             TableConfig,
-            SchemaField,
             TableSchema,
         )
 
@@ -1820,8 +1823,8 @@ class TestIcebergTableManagerListSnapshots:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -1860,8 +1863,8 @@ class TestIcebergTableManagerListSnapshots:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -1907,8 +1910,8 @@ class TestIcebergTableManagerRollbackToSnapshot:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -1948,8 +1951,8 @@ class TestIcebergTableManagerRollbackToSnapshot:
         from floe_iceberg.errors import SnapshotNotFoundError
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -1985,8 +1988,8 @@ class TestIcebergTableManagerRollbackToSnapshot:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -2035,8 +2038,8 @@ class TestIcebergTableManagerExpireSnapshots:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -2074,8 +2077,8 @@ class TestIcebergTableManagerExpireSnapshots:
         from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -2105,7 +2108,8 @@ class TestIcebergTableManagerExpireSnapshots:
         # Even with older_than_days=0, should keep min_snapshots_to_keep
         expired_count = manager.expire_snapshots(table, older_than_days=0)
 
-        snapshots = manager.list_snapshots(table)
+        # list_snapshots verifies the expiration didn't break the table
+        _ = manager.list_snapshots(table)
         # Should still have at least min_snapshots_to_keep (or however many exist if less)
         assert isinstance(expired_count, int)
 
@@ -2119,8 +2123,8 @@ class TestIcebergTableManagerExpireSnapshots:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -2158,8 +2162,8 @@ class TestIcebergTableManagerExpireSnapshots:
         from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
         from floe_iceberg.models import (
             FieldType,
-            TableConfig,
             SchemaField,
+            TableConfig,
             TableSchema,
         )
 
@@ -2532,7 +2536,6 @@ class TestIcebergTableManagerWriteDataOverwrite:
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
-            OperationType,
             SchemaField,
             TableConfig,
             TableSchema,
@@ -3297,6 +3300,8 @@ class TestCompactTableBinPack:
 
         FR-032: Compaction MUST NOT be auto-triggered; orchestrator is responsible.
         """
+        import pyarrow as pa
+
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             FieldType,
@@ -3306,8 +3311,6 @@ class TestCompactTableBinPack:
             WriteConfig,
             WriteMode,
         )
-
-        import pyarrow as pa
 
         mock_catalog_plugin.create_namespace("bronze")
 
