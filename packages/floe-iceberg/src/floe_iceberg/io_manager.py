@@ -350,15 +350,30 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
     def _read_table_data(self, table: Any) -> Any:
         """Read all data from an Iceberg table.
 
+        Scans the entire table and returns the data as a PyArrow Table.
+        Future enhancements may include partition filtering, column selection,
+        and row filtering.
+
         Args:
-            table: PyIceberg Table object.
+            table: PyIceberg Table object with scan() method.
 
         Returns:
-            PyArrow Table with all data.
+            PyArrow Table with all data from the Iceberg table.
+
+        Note:
+            For mock tables in tests that don't have a scan() method,
+            this returns None to allow test isolation.
         """
-        # Reading implementation is a stub - will be fully implemented in T084
-        # For mock tables in tests, return empty data
-        return None
+        # Use PyIceberg's scan().to_arrow() pattern for reading
+        # This returns all data from the table as a PyArrow Table
+        scan_method = getattr(table, "scan", None)
+        if scan_method is None:
+            # Mock table in tests - return None
+            return None
+
+        # Execute scan and convert to PyArrow
+        scan = scan_method()
+        return scan.to_arrow()
 
 
 __all__ = ["IcebergIOManager", "is_dagster_available"]

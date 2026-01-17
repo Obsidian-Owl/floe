@@ -1,0 +1,438 @@
+"""Unit tests for floe_iceberg.io_manager module.
+
+Tests IcebergIOManager for Dagster asset integration.
+
+Note:
+    No __init__.py files in test directories - pytest uses importlib mode
+    which causes namespace collisions with __init__.py files.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock, PropertyMock
+
+import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def mock_iceberg_manager() -> MagicMock:
+    """Create a mock IcebergTableManager for testing.
+
+    Returns:
+        MagicMock configured as IcebergTableManager.
+    """
+    manager = MagicMock()
+    manager.table_exists.return_value = True
+    manager.load_table.return_value = MagicMock()
+    manager.write_data.return_value = MagicMock()
+    return manager
+
+
+@pytest.fixture
+def io_manager_config() -> Any:
+    """Create IcebergIOManagerConfig for testing.
+
+    Returns:
+        IcebergIOManagerConfig instance.
+    """
+    from floe_iceberg.models import IcebergIOManagerConfig
+
+    return IcebergIOManagerConfig(namespace="bronze")
+
+
+@pytest.fixture
+def io_manager(
+    io_manager_config: Any, mock_iceberg_manager: MagicMock
+) -> Generator[Any, None, None]:
+    """Create IcebergIOManager for testing.
+
+    Args:
+        io_manager_config: Configuration for the IOManager.
+        mock_iceberg_manager: Mock IcebergTableManager.
+
+    Yields:
+        IcebergIOManager instance.
+    """
+    from floe_iceberg.io_manager import IcebergIOManager
+
+    yield IcebergIOManager(
+        config=io_manager_config,
+        iceberg_manager=mock_iceberg_manager,
+    )
+
+
+@pytest.fixture
+def mock_output_context() -> MagicMock:
+    """Create a mock Dagster OutputContext.
+
+    Returns:
+        MagicMock configured as OutputContext.
+    """
+    context = MagicMock()
+    context.asset_key = MagicMock()
+    context.asset_key.path = ["customers"]
+    context.metadata = {}
+    return context
+
+
+@pytest.fixture
+def mock_pyarrow_table() -> MagicMock:
+    """Create a mock PyArrow Table.
+
+    Returns:
+        MagicMock configured as PyArrow Table.
+    """
+    table = MagicMock()
+    table.schema = MagicMock()
+    table.num_rows = 100
+    return table
+
+
+# =============================================================================
+# IcebergIOManager handle_output Tests
+# =============================================================================
+
+
+class TestIcebergIOManagerHandleOutput:
+    """Tests for IcebergIOManager.handle_output() method."""
+
+    @pytest.mark.requirement("FR-037")
+    def test_handle_output_pyarrow_table(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output writes PyArrow Table to Iceberg.
+
+        Acceptance criteria from T079:
+        - Test PyArrow Table output
+        """
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify table was loaded
+        mock_iceberg_manager.load_table.assert_called_once()
+
+        # Verify data was written
+        mock_iceberg_manager.write_data.assert_called_once()
+        call_args = mock_iceberg_manager.write_data.call_args
+        assert call_args[0][1] == mock_pyarrow_table  # Second arg is data
+
+    @pytest.mark.requirement("FR-037")
+    def test_handle_output_creates_table_on_first_write(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output creates table if it doesn't exist.
+
+        Acceptance criteria from T079:
+        - Test table creation on first write
+        """
+        # Table doesn't exist initially
+        mock_iceberg_manager.table_exists.return_value = False
+
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify table existence was checked
+        mock_iceberg_manager.table_exists.assert_called_once()
+
+    @pytest.mark.requirement("FR-038")
+    def test_handle_output_appends_to_existing_table(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output appends data to existing table.
+
+        Acceptance criteria from T079:
+        - Test append to existing table
+        """
+        # Table exists
+        mock_iceberg_manager.table_exists.return_value = True
+
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify write_data was called with APPEND mode (default)
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]  # Third arg is write_config
+        from floe_iceberg.models import WriteMode
+
+        assert write_config.mode == WriteMode.APPEND
+
+    @pytest.mark.requirement("FR-038")
+    def test_handle_output_metadata_write_mode_override(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output uses metadata to override write mode.
+
+        Acceptance criteria from T079:
+        - Test metadata-based write mode override
+        """
+        # Set metadata to override write mode
+        mock_output_context.metadata = {"write_mode": "overwrite"}
+
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify write_data was called with OVERWRITE mode
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]  # Third arg is write_config
+        from floe_iceberg.models import WriteMode
+
+        assert write_config.mode == WriteMode.OVERWRITE
+
+    @pytest.mark.requirement("FR-037")
+    def test_handle_output_generates_table_identifier(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test handle_output generates correct table identifier from asset key."""
+        mock_output_context.asset_key.path = ["dim", "customers"]
+
+        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify load_table was called with correct identifier
+        # With default pattern {asset_key} and namespace bronze:
+        # bronze.dim_customers
+        call_args = mock_iceberg_manager.load_table.call_args
+        table_identifier = call_args[0][0]
+        assert table_identifier == "bronze.dim_customers"
+
+    @pytest.mark.requirement("FR-037")
+    def test_handle_output_uses_config_namespace(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_output_context: MagicMock,
+        mock_pyarrow_table: MagicMock,
+    ) -> None:
+        """Test handle_output uses namespace from config."""
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        config = IcebergIOManagerConfig(namespace="silver")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(mock_output_context, mock_pyarrow_table)
+
+        # Verify correct namespace used
+        call_args = mock_iceberg_manager.load_table.call_args
+        table_identifier = call_args[0][0]
+        assert table_identifier.startswith("silver.")
+
+
+# =============================================================================
+# IcebergIOManager Table Identifier Tests
+# =============================================================================
+
+
+class TestIcebergIOManagerTableIdentifier:
+    """Tests for table identifier generation from asset keys."""
+
+    @pytest.mark.requirement("FR-037")
+    def test_get_table_identifier_simple_asset_key(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+    ) -> None:
+        """Test table identifier for simple single-part asset key."""
+        mock_output_context.asset_key.path = ["orders"]
+
+        identifier = io_manager._get_table_identifier(mock_output_context)
+
+        assert identifier == "bronze.orders"
+
+    @pytest.mark.requirement("FR-037")
+    def test_get_table_identifier_multi_part_asset_key(
+        self,
+        io_manager: Any,
+        mock_output_context: MagicMock,
+    ) -> None:
+        """Test table identifier for multi-part asset key."""
+        mock_output_context.asset_key.path = ["dim", "customers"]
+
+        identifier = io_manager._get_table_identifier(mock_output_context)
+
+        assert identifier == "bronze.dim_customers"
+
+    @pytest.mark.requirement("FR-037")
+    def test_get_table_identifier_custom_pattern(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_output_context: MagicMock,
+    ) -> None:
+        """Test table identifier with custom table name pattern."""
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        config = IcebergIOManagerConfig(
+            namespace="bronze",
+            table_name_pattern="raw_{asset_key}",
+        )
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+        mock_output_context.asset_key.path = ["orders"]
+
+        identifier = io_mgr._get_table_identifier(mock_output_context)
+
+        assert identifier == "bronze.raw_orders"
+
+
+# =============================================================================
+# IcebergIOManager load_input Tests
+# =============================================================================
+
+
+@pytest.fixture
+def mock_input_context() -> MagicMock:
+    """Create a mock Dagster InputContext.
+
+    Returns:
+        MagicMock configured as InputContext.
+    """
+    context = MagicMock()
+    context.upstream_output = MagicMock()
+    context.upstream_output.asset_key = MagicMock()
+    context.upstream_output.asset_key.path = ["customers"]
+    return context
+
+
+class TestIcebergIOManagerLoadInput:
+    """Tests for IcebergIOManager.load_input() method."""
+
+    @pytest.mark.requirement("FR-039")
+    def test_load_input_existing_table(
+        self,
+        io_manager: Any,
+        mock_input_context: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test load_input loads existing table as PyArrow Table.
+
+        Acceptance criteria from T080:
+        - Test loading existing table as PyArrow Table
+        """
+        mock_table = MagicMock()
+        mock_iceberg_manager.load_table.return_value = mock_table
+
+        result = io_manager.load_input(mock_input_context)
+
+        # Verify table was loaded
+        mock_iceberg_manager.load_table.assert_called_once()
+        call_args = mock_iceberg_manager.load_table.call_args
+        table_identifier = call_args[0][0]
+        assert table_identifier == "bronze.customers"
+
+    @pytest.mark.requirement("FR-039")
+    def test_load_input_no_such_table_error(
+        self,
+        io_manager: Any,
+        mock_input_context: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test load_input raises NoSuchTableError for non-existent table.
+
+        Acceptance criteria from T080:
+        - Test NoSuchTableError handling
+        """
+        from floe_iceberg.errors import NoSuchTableError
+
+        mock_iceberg_manager.load_table.side_effect = NoSuchTableError(
+            "Table not found", table_identifier="bronze.missing"
+        )
+
+        with pytest.raises(NoSuchTableError, match="Table not found"):
+            io_manager.load_input(mock_input_context)
+
+    @pytest.mark.requirement("FR-039")
+    def test_load_input_upstream_asset_key(
+        self,
+        io_manager: Any,
+        mock_input_context: MagicMock,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test load_input uses upstream asset key for table identifier."""
+        mock_input_context.upstream_output.asset_key.path = ["dim", "products"]
+
+        io_manager.load_input(mock_input_context)
+
+        # Verify load_table was called with correct identifier
+        call_args = mock_iceberg_manager.load_table.call_args
+        table_identifier = call_args[0][0]
+        assert table_identifier == "bronze.dim_products"
+
+    @pytest.mark.requirement("FR-039")
+    def test_load_input_uses_config_namespace(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_input_context: MagicMock,
+    ) -> None:
+        """Test load_input uses namespace from config."""
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        config = IcebergIOManagerConfig(namespace="silver")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.load_input(mock_input_context)
+
+        # Verify correct namespace used
+        call_args = mock_iceberg_manager.load_table.call_args
+        table_identifier = call_args[0][0]
+        assert table_identifier.startswith("silver.")
+
+    @pytest.mark.requirement("FR-040")
+    def test_load_input_uses_scan_to_arrow(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_input_context: MagicMock,
+    ) -> None:
+        """Test load_input uses table.scan().to_arrow() pattern.
+
+        Acceptance criteria from T084:
+        - Return table.scan().to_arrow()
+        """
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        # Create mock table with scan().to_arrow() chain
+        mock_arrow_table = MagicMock()
+        mock_scan = MagicMock()
+        mock_scan.to_arrow.return_value = mock_arrow_table
+
+        mock_table = MagicMock()
+        mock_table.scan.return_value = mock_scan
+
+        mock_iceberg_manager.load_table.return_value = mock_table
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        result = io_mgr.load_input(mock_input_context)
+
+        # Verify scan().to_arrow() chain was called
+        mock_table.scan.assert_called_once()
+        mock_scan.to_arrow.assert_called_once()
+        assert result == mock_arrow_table
+
+
+__all__ = []
