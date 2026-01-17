@@ -92,9 +92,62 @@ fi
 # Run session-recover command
 cd "$AGENT_MEMORY_DIR"
 if uv run agent-memory session-recover --work-area "$WORK_AREA" 2>/dev/null; then
-    exit 0
+    :  # Success, continue to epic check
 else
-    # Non-intrusive exit - don't fail if recovery doesn't find anything
+    # Non-intrusive - don't fail if recovery doesn't find anything
     [[ "$QUIET" != true ]] && echo "No prior session context available for '$WORK_AREA'"
-    exit 0
 fi
+
+# Check for epic auto-mode state file
+EPIC_AUTO_MODE="$REPO_ROOT/.agent/epic-auto-mode"
+if [[ -f "$EPIC_AUTO_MODE" ]]; then
+    # Check if JSON format (enhanced) or legacy text
+    if head -1 "$EPIC_AUTO_MODE" | grep -q "^{"; then
+        # Enhanced JSON format - extract details
+        EPIC_NAME=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('epic_name', 'unknown'))" 2>/dev/null || echo "unknown")
+        FEATURE_DIR=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('feature_dir', ''))" 2>/dev/null || echo "")
+        LAST_TASK=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('last_task', 'N/A'))" 2>/dev/null || echo "N/A")
+        COMPLETED=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('completed_before_compact', 0))" 2>/dev/null || echo "0")
+        TOTAL=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('total_tasks', '?'))" 2>/dev/null || echo "?")
+        COMPACTIONS=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('compaction_count', 0))" 2>/dev/null || echo "0")
+
+        cat << EOF
+
+================================================================================
+EPIC AUTO-MODE ACTIVE - AUTOMATIC RECOVERY REQUIRED
+================================================================================
+
+Epic: $EPIC_NAME
+Feature Dir: $FEATURE_DIR
+Progress: $COMPLETED / $TOTAL tasks completed
+Last Task: $LAST_TASK
+Compactions: $COMPACTIONS
+
+ACTION REQUIRED: Read .agent/epic-auto-mode and continue implementing.
+DO NOT ask user for confirmation - auto-mode means continue automatically.
+
+State file: $EPIC_AUTO_MODE
+================================================================================
+EOF
+    else
+        # Legacy text format
+        cat << 'EOF'
+
+================================================================================
+EPIC AUTO-MODE DETECTED
+================================================================================
+
+You were implementing tasks in auto-mode before context compaction.
+
+To continue automatic implementation:
+  /speckit.implement-epic
+
+To implement tasks one at a time:
+  /speckit.implement
+
+================================================================================
+EOF
+    fi
+fi
+
+exit 0

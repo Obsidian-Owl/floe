@@ -6,6 +6,91 @@
 
 ---
 
+## Epic Auto-Mode Recovery (CRITICAL - Read After Every Compaction)
+
+**THIS SECTION IS CRITICAL**: After context compaction, skill instructions are lost but this file survives. Check for active workflows immediately.
+
+### Check for Active Epic Auto-Mode
+
+```bash
+# Check if epic auto-mode was active before compaction
+if [ -f ".agent/epic-auto-mode" ]; then
+    cat .agent/epic-auto-mode  # Contains epic context
+fi
+```
+
+**If `.agent/epic-auto-mode` exists, YOU MUST:**
+
+1. **Read the state file** to understand current context:
+   ```bash
+   cat .agent/epic-auto-mode
+   ```
+
+2. **Continue implementing automatically** - do NOT wait for user prompt
+
+3. **Follow the epic auto-mode workflow**:
+   - Sync from Linear to get current task status
+   - Find next ready task (status: backlog/unstarted)
+   - Implement the task (TDD, SOLID, atomic commits)
+   - Update Linear status to Done
+   - Create Linear comment with completion summary
+   - Commit changes
+   - **Loop to next task immediately** (no confirmation)
+
+4. **Only stop for**:
+   - Design questions requiring user validation → Use `AskUserQuestion` tool
+   - All tasks completed → Output "EPIC COMPLETE" banner, remove state file
+   - Task blocked by dependency → Output "EPIC BLOCKED" banner, keep state file
+
+### State File Format
+
+The `.agent/epic-auto-mode` file contains JSON with recovery context:
+```json
+{
+  "mode": "epic-auto",
+  "feature_dir": "specs/epic-name",
+  "epic_name": "epic-name",
+  "started_at": "2026-01-17T10:30:00Z",
+  "last_task": "T005",
+  "last_linear_id": "FLO-123",
+  "total_tasks": 15,
+  "completed_before_compact": 4
+}
+```
+
+### Recovery Procedure
+
+After compaction with active epic-auto-mode:
+
+1. Read `.agent/epic-auto-mode` for context
+2. Read `{feature_dir}/.linear-mapping.json` for task mappings
+3. Query Linear for current status of all tasks
+4. Find next task with status `backlog` or `unstarted`
+5. **Resume implementation immediately** - you are in auto-mode
+
+**DO NOT** ask the user "should I continue?" - the existence of the state file IS the user's instruction to continue.
+
+### Cancellation
+
+**To cancel epic auto-mode**, the user can:
+1. **Remove the state file manually**: `rm .agent/epic-auto-mode`
+2. **Send a cancel message**: Type "cancel" or "stop" during implementation
+3. **Use Ctrl+C**: Interrupt Claude Code execution
+
+If cancelled mid-epic, Claude should acknowledge and NOT resume unless explicitly asked.
+
+### Completion Cleanup
+
+**CRITICAL**: When epic completes successfully, remove the state file **IMMEDIATELY BEFORE** any other output:
+
+```bash
+rm -f .agent/epic-auto-mode  # FIRST - prevents confusion on compaction
+```
+
+Then output the completion banner. This order prevents edge cases where compaction occurs between banner and cleanup.
+
+---
+
 ## Vision
 
 **floe** is an open platform (Apache 2.0) for building internal data platforms.
@@ -44,7 +129,7 @@ make demo-e2e          # End-to-end validation
 |-------|----------|
 | **Architecture** | `docs/architecture/` - Four-layer model, plugin system, OCI registry |
 | **Testing Strategy** | `TESTING.md` - K8s-native testing, test organization |
-| **Workflow Integration** | `docs/guides/workflow/` - Three-phase development workflow |
+| **Workflow Integration** | `docs/guides/linear-workflow.md` - SpecKit + Beads + Linear |
 | **ADRs** | `docs/architecture/adr/` - Architectural decisions |
 
 ---
@@ -95,56 +180,53 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 ## Development Workflow
 
-### Three-Phase Workflow
+### SpecKit + Beads + Linear Integration
 
-The floe workflow combines collaborative design with automated implementation.
-
-```
-Phase A: Collaborative Design     [Human + AI]
-    |
-    v
-Phase B: Automated Implementation [AI Only - Ralph Wiggum + Worktrees]
-    |
-    v
-Phase C: Collaborative Pre-PR     [Human + AI]
-```
-
-**Source of Truth**: Linear (issue tracking via MCP)
+**Source of Truth**: Linear (issue tracking)
+**Local Cache**: Beads (offline work)
 **Planning**: SpecKit (feature breakdown)
-**Automation**: Ralph Wiggum pattern with git worktrees
-
-### Phase A: Design & Planning (Collaborative)
 
 ```bash
-/speckit.specify        # Create spec.md
-/speckit.plan           # Generate plan.md (with constitution gates)
-/speckit.tasks          # Break down to tasks
+# 1. Sync from Linear
+bd linear sync --pull
+
+# 2. See available work
+/speckit.implement
+
+# 3. Auto-implement next ready task
+/speckit.implement  # Claims task, updates Linear, commits
+
+# 4. Pre-PR validation
+/speckit.test-review        # Test quality
+/speckit.integration-check  # Contract stability, merge readiness
+
+# 5. Create PR
+/speckit.pr  # Links Linear issues, generates summary
+```
+
+**Complete Workflow**: See `docs/guides/linear-workflow.md`
+
+### Development Cycle
+
+```bash
+# 1. Planning (Epic → Tasks → Linear issues)
+/speckit.specify    # Create spec.md
+/speckit.clarify    # Ask clarifying questions
+/speckit.plan       # Generate plan.md
+/speckit.tasks      # Break down to tasks
 /speckit.taskstolinear  # Create Linear issues with Epic labels
-# Human confirms: "Ready for automated implementation"
+
+# 2. Implementation (Linear-coordinated)
+/speckit.implement       # One task at a time (with confirmation)
+/speckit.implement-epic  # ALL tasks (auto-continues, no confirmation)
+
+# 3. Pre-PR Review
+/speckit.test-review        # Test quality validation
+/speckit.integration-check  # Contract and merge readiness check
+
+# 4. PR Creation
+/speckit.pr  # Creates PR with Linear links, quality summary
 ```
-
-### Phase B: Automated Implementation
-
-```bash
-/ralph.spawn [epic]     # Create worktrees for ready tasks
-/ralph.status           # Monitor agent progress
-# Agents run in parallel with embedded quality gates
-# All agents signal COMPLETE → READY_FOR_REVIEW
-```
-
-### Phase C: Pre-PR Review (Collaborative)
-
-```bash
-/ralph.integrate [epic]    # Rebase and prepare for review
-/speckit.test-review       # Semantic test quality analysis
-/security-review           # Security vulnerability scan
-/arch-review               # Architecture alignment check
-# Human confirms: "Ready for PR"
-gh pr create --base main
-/ralph.cleanup             # Remove worktrees after merge
-```
-
-**Complete Workflow**: See `docs/guides/workflow/`
 
 ---
 
@@ -540,7 +622,7 @@ The **agent-memory** system provides persistent context across sessions via a Co
 
 - **Session Start**: Hook automatically queries for prior context (see startup logs)
 - **SpecKit Skills**: `/speckit.plan` and `/speckit.specify` search memory before decisions
-- **Ralph Skills**: `/ralph.resume` recovers context from agent-memory
+- **Epic Recovery**: SessionStart hook detects `.agent/epic-auto-mode` after compaction
 
 ### If Agent-Memory Unavailable
 
@@ -564,8 +646,9 @@ make help                       # Makefile targets
 /speckit.test-review            # Pre-PR test quality review
 make test                       # Run all tests (K8s)
 
-# Workflow
-/ralph.status                   # See active agents and progress
+# Debugging
+bd stats                        # Beads issue statistics
+bd ready                        # See available work
 Linear app                      # Team progress view
 ```
 
@@ -577,9 +660,8 @@ Linear app                      # Team progress view
 
 - **Architecture**: `docs/architecture/ARCHITECTURE-SUMMARY.md`
 - **Testing**: `TESTING.md`
-- **Workflow**: `docs/guides/workflow/` (Three-phase development)
+- **Linear Workflow**: `docs/guides/linear-workflow.md`
 - **Constitution**: `.specify/memory/constitution.md` (8 core principles)
-- **Ralph Config**: `.ralph/config.yaml` (Orchestration settings)
 
 ---
 

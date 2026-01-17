@@ -16,11 +16,10 @@ on:
       - '**.yaml'
       - '**.yml'
       - '**.sh'
-    # Exclude documentation-only changes
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
-      - '.claude/**/*.md'
+      # Exclude documentation-only changes (negation patterns)
+      - '!docs/**'
+      - '!*.md'
+      - '!.claude/**/*.md'
 
 # Cancel in-progress runs for the same PR
 concurrency:

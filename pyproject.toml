@@ -17,6 +17,8 @@ dependencies = [
     "ruff>=0.3",
     "pre-commit>=3.0",
     "bandit[toml]>=1.7",
+    "detect-secrets>=1.5.0",  # Secret detection with entropy analysis
+    "import-linter>=2.0",  # Architecture boundary enforcement
     "uv-secure>=0.5.0",  # Security audit native to uv.lock files
     "types-psycopg2>=2.9",  # Type stubs for psycopg2
     "types-requests>=2.31",  # Type stubs for requests
@@ -67,11 +69,6 @@ markers = [
     "e2e: Marks end-to-end pipeline tests",
     "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
     "benchmark: Marks performance benchmark tests (CodSpeed)",
-    "ralph: Marks Ralph Wiggum workflow tests",
-    "dry_run: Marks tests that run in dry-run mode (no side effects)",
-    "requires_git: Marks tests requiring git operations",
-    "worktree: Marks tests involving git worktree lifecycle",
-    "real_agent: Marks tests that invoke real Claude Code agents (costs API credits)",
 ]
 
 [tool.mypy]
@@ -127,3 +124,55 @@ exclude_lines = [
 ]
 fail_under = 80
 show_missing = true
+
+# ==========================================================
+# Import Linter: Architecture boundary enforcement
+# Run: uv run lint-imports
+# ==========================================================
+
+[tool.importlinter]
+root_packages = [
+    "floe_core",
+    "floe_catalog_polaris",
+    "floe_compute_duckdb",
+]
+include_external_packages = true
+
+# Contract: dbt owns SQL - no SQL parsing in other packages
+[[tool.importlinter.contracts]]
+name = "dbt owns SQL"
+type = "forbidden"
+source_modules = [
+    "floe_core",
+    "floe_catalog_polaris",
+    "floe_compute_duckdb",
+]
+forbidden_modules = [
+    "sqlparse",
+    "sqlglot",
+    "sql_metadata",
+]
+
+# Contract: Core independence from orchestrators
+[[tool.importlinter.contracts]]
+name = "Core independence from orchestrators"
+type = "forbidden"
+source_modules = ["floe_core"]
+forbidden_modules = [
+    "dagster",
+    "dagster_dbt",
+    "airflow",
+    "prefect",
+]
+
+# Contract: Core independence from specific compute implementations
+[[tool.importlinter.contracts]]
+name = "Core independence from compute implementations"
+type = "forbidden"
+source_modules = ["floe_core"]
+forbidden_modules = [
+    "duckdb",
+    "snowflake",
+    "databricks",
+    "pyspark",
+]
