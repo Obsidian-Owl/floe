@@ -27,4 +27,18 @@ See Also:
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from floe_core.compilation.errors import (
+    ERROR_CODES,
+    CompilationError,
+    CompilationException,
+)
+from floe_core.compilation.stages import CompilationStage
+
+__all__ = [
+    # Stages
+    "CompilationStage",
+    # Errors
+    "CompilationError",
+    "CompilationException",
+    "ERROR_CODES",
+]
