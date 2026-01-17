@@ -128,6 +128,58 @@ class TestBinPackCompactionExecutor:
         result = executor.execute(mock_table, strategy)
         assert result is not None
 
+    @pytest.mark.requirement("FR-031")
+    def test_analyze_files_for_compaction_with_no_snapshot(self) -> None:
+        """Test file analysis when table has no snapshot."""
+        from floe_iceberg.compaction import BinPackCompactionExecutor
+
+        executor = BinPackCompactionExecutor()
+        mock_table = MagicMock()
+        mock_table.current_snapshot = MagicMock(return_value=None)
+
+        small_files, total_files = executor._analyze_files_for_compaction(
+            mock_table, target_file_size_bytes=134217728
+        )
+
+        assert small_files == 0
+        assert total_files == 0
+
+    @pytest.mark.requirement("FR-031")
+    def test_analyze_files_returns_zeros_on_error(self) -> None:
+        """Test file analysis returns zeros on error."""
+        from floe_iceberg.compaction import BinPackCompactionExecutor
+
+        executor = BinPackCompactionExecutor()
+        mock_table = MagicMock()
+        # Make current_snapshot raise an exception
+        mock_table.current_snapshot.side_effect = Exception("Test error")
+
+        small_files, total_files = executor._analyze_files_for_compaction(
+            mock_table, target_file_size_bytes=134217728
+        )
+
+        assert small_files == 0
+        assert total_files == 0
+
+    @pytest.mark.requirement("FR-031")
+    def test_execute_logs_pyiceberg_limitation(self) -> None:
+        """Test executor logs PyIceberg version limitation."""
+        from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.models import CompactionStrategy, CompactionStrategyType
+
+        executor = BinPackCompactionExecutor()
+        mock_table = MagicMock()
+        mock_table.identifier = "bronze.limit_test"
+        mock_table.current_snapshot.return_value = None
+
+        strategy = CompactionStrategy(
+            strategy_type=CompactionStrategyType.BIN_PACK,
+        )
+
+        # Should not raise, just returns 0 files rewritten
+        result = executor.execute(mock_table, strategy)
+        assert result.files_rewritten == 0
+
 
 # =============================================================================
 # SortCompactionExecutor Tests

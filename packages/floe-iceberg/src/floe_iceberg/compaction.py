@@ -156,6 +156,12 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
     Combines small files into larger files up to the target file size.
     This is the default compaction strategy for optimizing file count.
 
+    Note:
+        PyIceberg 0.10.0 does not yet support native file rewriting.
+        This implementation analyzes files and logs compaction candidates,
+        returning 0 files rewritten until PyIceberg adds rewrite support.
+        When rewrite support is added, this will use table.rewrite_data_files().
+
     Example:
         >>> executor = BinPackCompactionExecutor()
         >>> strategy = CompactionStrategy(
@@ -165,6 +171,66 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
         >>> result = executor.execute(table, strategy)
     """
 
+    def _analyze_files_for_compaction(
+        self,
+        table: Table,
+        target_file_size_bytes: int,
+    ) -> tuple[int, int]:
+        """Analyze table files to find compaction candidates.
+
+        Args:
+            table: PyIceberg Table to analyze.
+            target_file_size_bytes: Target file size threshold.
+
+        Returns:
+            Tuple of (small_file_count, total_file_count).
+        """
+        try:
+            # Get current snapshot's data files
+            snapshot = getattr(table, "current_snapshot", None)
+            if snapshot is None or callable(snapshot):
+                snapshot = table.current_snapshot() if callable(
+                    getattr(table, "current_snapshot", None)
+                ) else None
+
+            if snapshot is None:
+                return (0, 0)
+
+            # Count files below target size
+            small_file_count = 0
+            total_file_count = 0
+
+            # Try to access manifest files
+            manifests = getattr(snapshot, "manifests", None)
+            if manifests is None and callable(getattr(snapshot, "manifests", None)):
+                try:
+                    manifests = snapshot.manifests(table.io)
+                except Exception:
+                    manifests = None
+
+            if manifests:
+                for manifest in manifests:
+                    try:
+                        entries = getattr(manifest, "fetch_manifest_entry", None)
+                        if entries and callable(entries):
+                            for entry in entries(table.io):
+                                file_size = getattr(
+                                    getattr(entry, "data_file", None),
+                                    "file_size_in_bytes",
+                                    0,
+                                )
+                                total_file_count += 1
+                                if file_size < target_file_size_bytes:
+                                    small_file_count += 1
+                    except Exception:
+                        continue
+
+            return (small_file_count, total_file_count)
+
+        except Exception:
+            # If analysis fails, return zeros
+            return (0, 0)
+
     def execute(
         self,
         table: Table,
@@ -173,6 +239,11 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
         """Execute bin-pack compaction.
 
         Combines small files into larger files up to target_file_size_bytes.
+
+        Note:
+            PyIceberg 0.10.0 does not support native file rewriting.
+            This method analyzes files and logs candidates, but returns
+            0 files rewritten until PyIceberg adds rewrite_data_files().
 
         Args:
             table: PyIceberg Table to compact.
@@ -194,26 +265,53 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
         )
 
         try:
-            # TODO: Implement actual bin-pack compaction using PyIceberg
-            # This will be implemented in T095 using table.rewrite_data_files()
+            # Analyze files for compaction candidates
+            small_files, total_files = self._analyze_files_for_compaction(
+                table, strategy.target_file_size_bytes
+            )
+
+            self._log.debug(
+                "bin_pack_analysis_complete",
+                table_identifier=table_identifier,
+                small_files_count=small_files,
+                total_files_count=total_files,
+            )
+
+            # PyIceberg 0.10.0 does not support rewrite_data_files() yet.
+            # When PyIceberg adds this API, implement:
             #
-            # Placeholder implementation:
-            # result = table.rewrite_data_files(
-            #     target_size_bytes=strategy.target_file_size_bytes,
-            #     max_concurrent_file_group_rewrites=strategy.max_concurrent_file_group_rewrites,
-            # )
-            # files_rewritten = result.rewritten_data_files_count()
+            # if hasattr(table, 'rewrite_data_files'):
+            #     result = table.rewrite_data_files(
+            #         target_size_bytes=strategy.target_file_size_bytes,
+            #         max_concurrent_file_group_rewrites=strategy.max_concurrent_file_group_rewrites,
+            #     )
+            #     files_rewritten = result.rewritten_data_files_count()
+            # else:
+            #     files_rewritten = 0
 
             files_rewritten = 0
+
+            if small_files > 0:
+                self._log.info(
+                    "bin_pack_compaction_candidates_found",
+                    table_identifier=table_identifier,
+                    small_files_count=small_files,
+                    message="PyIceberg 0.10.0 does not support rewrite_data_files(). "
+                    "Compaction will be available when PyIceberg adds this API.",
+                )
 
             self._log.info(
                 "bin_pack_compaction_completed",
                 table_identifier=table_identifier,
                 files_rewritten=files_rewritten,
+                small_files_analyzed=small_files,
+                total_files_analyzed=total_files,
             )
 
             return CompactionResult(
                 files_rewritten=files_rewritten,
+                files_removed=0,
+                files_added=0,
             )
 
         except Exception as e:
