@@ -76,9 +76,7 @@ class TestResolvePlugins:
     """Tests for resolve_plugins function."""
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_resolve_plugins_returns_type(
-        self, simple_manifest: PlatformManifest
-    ) -> None:
+    def test_resolve_plugins_returns_type(self, simple_manifest: PlatformManifest) -> None:
         """Test that resolve_plugins returns ResolvedPlugins."""
         from floe_core.compilation.resolver import resolve_plugins
         from floe_core.schemas.compiled_artifacts import ResolvedPlugins
@@ -356,9 +354,7 @@ class TestValidateComputeCredentials:
             """Config schema with optional credential fields."""
 
             account: str = Field(..., description="Required account")
-            password: SecretStr | None = Field(
-                default=None, description="Optional password"
-            )
+            password: SecretStr | None = Field(default=None, description="Optional password")
 
         mock_plugin = MagicMock()
         mock_plugin.name = "snowflake"

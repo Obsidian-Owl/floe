@@ -70,7 +70,7 @@ def create_floe_spec(num_models: int) -> dict[str, Any]:
         # Add dependencies for non-first models
         if i > 0:
             # Each model depends on the previous one
-            model["dependsOn"] = [f"model_{i-1:03d}"]
+            model["dependsOn"] = [f"model_{i - 1:03d}"]
 
         # Override compute for some models
         if i % 10 == 5:

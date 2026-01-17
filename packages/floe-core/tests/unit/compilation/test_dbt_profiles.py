@@ -389,9 +389,7 @@ class TestErrorHandling:
 
         mock_plugin = MagicMock()
         mock_plugin.name = "duckdb"
-        mock_plugin.generate_dbt_profile.side_effect = ValueError(
-            "Invalid configuration"
-        )
+        mock_plugin.generate_dbt_profile.side_effect = ValueError("Invalid configuration")
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.1.0", config=None),

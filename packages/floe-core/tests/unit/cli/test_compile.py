@@ -56,14 +56,19 @@ class TestCreateParser:
         from floe_core.cli.compile import create_parser
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", "floe.yaml",
-            "--manifest", "manifest.yaml",
-            "--output", "build/",
-            "--dry-run",
-            "--validate-only",
-            "--verbose",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                "floe.yaml",
+                "--manifest",
+                "manifest.yaml",
+                "--output",
+                "build/",
+                "--dry-run",
+                "--validate-only",
+                "--verbose",
+            ]
+        )
 
         assert args.spec == Path("floe.yaml")
         assert args.manifest == Path("manifest.yaml")
@@ -78,10 +83,14 @@ class TestCreateParser:
         from floe_core.cli.compile import create_parser
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", "floe.yaml",
-            "--manifest", "manifest.yaml",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                "floe.yaml",
+                "--manifest",
+                "manifest.yaml",
+            ]
+        )
 
         assert args.output == Path("target")
 
@@ -124,12 +133,17 @@ plugins:
         output_dir = tmp_path / "output"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -170,12 +184,17 @@ plugins:
         nested_output = tmp_path / "deeply" / "nested" / "output"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(nested_output),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(nested_output),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -217,13 +236,18 @@ plugins:
         output_dir = tmp_path / "output"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--dry-run",
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--dry-run",
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -264,13 +288,18 @@ plugins:
         output_dir = tmp_path / "output"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--validate-only",
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--validate-only",
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -311,12 +340,17 @@ plugins:
         output_dir = tmp_path / "output"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--quiet",
+            ]
+        )
 
         run_compile(args)
 
@@ -363,12 +397,17 @@ plugins:
 """)
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(tmp_path / "output"),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(tmp_path / "output"),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
         assert exit_code == 0
@@ -394,12 +433,17 @@ plugins:
 """)
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(tmp_path / "nonexistent.yaml"),
-            "--manifest", str(manifest_path),
-            "--output", str(tmp_path / "output"),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(tmp_path / "nonexistent.yaml"),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(tmp_path / "output"),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
         assert exit_code == 1  # LOAD stage error
@@ -436,12 +480,17 @@ plugins:
 """)
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(tmp_path / "output"),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(tmp_path / "output"),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
         assert exit_code == 1  # LOAD/VALIDATE stage error
@@ -476,12 +525,17 @@ plugins:
 """)  # Missing compute plugin!
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(tmp_path / "output"),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(tmp_path / "output"),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
         assert exit_code == 2  # RESOLVE stage error
@@ -557,11 +611,16 @@ plugins:
         parser = create_parser()
 
         # This should NOT raise - --format should be accepted
-        args = parser.parse_args([
-            "--spec", "floe.yaml",
-            "--manifest", "manifest.yaml",
-            "--format", "json",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                "floe.yaml",
+                "--manifest",
+                "manifest.yaml",
+                "--format",
+                "json",
+            ]
+        )
 
         assert args.format == "json"
 
@@ -576,13 +635,19 @@ plugins:
         spec_path, manifest_path, output_dir = setup_files
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--format", "json",
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--format",
+                "json",
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -607,13 +672,19 @@ plugins:
         spec_path, manifest_path, output_dir = setup_files
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--format", "yaml",
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--format",
+                "yaml",
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -636,12 +707,17 @@ plugins:
         spec_path, manifest_path, output_dir = setup_files
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--quiet",
+            ]
+        )
 
         # Default should be None (detect from extension, fallback to JSON)
         assert args.format is None
@@ -672,12 +748,17 @@ plugins:
         output_file = tmp_path / "output" / "my_artifacts.json"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_file),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_file),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -712,12 +793,17 @@ plugins:
         output_file = tmp_path / "output" / "my_artifacts.yaml"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_file),
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_file),
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -755,13 +841,19 @@ plugins:
         output_dir = tmp_path / "output"
 
         parser = create_parser()
-        args = parser.parse_args([
-            "--spec", str(spec_path),
-            "--manifest", str(manifest_path),
-            "--output", str(output_dir),
-            "--format", "yaml",
-            "--quiet",
-        ])
+        args = parser.parse_args(
+            [
+                "--spec",
+                str(spec_path),
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_dir),
+                "--format",
+                "yaml",
+                "--quiet",
+            ]
+        )
 
         exit_code = run_compile(args)
 
@@ -784,8 +876,13 @@ plugins:
 
         # Should reject invalid format
         with pytest.raises(SystemExit):
-            parser.parse_args([
-                "--spec", "floe.yaml",
-                "--manifest", "manifest.yaml",
-                "--format", "xml",  # Invalid format
-            ])
+            parser.parse_args(
+                [
+                    "--spec",
+                    "floe.yaml",
+                    "--manifest",
+                    "manifest.yaml",
+                    "--format",
+                    "xml",  # Invalid format
+                ]
+            )

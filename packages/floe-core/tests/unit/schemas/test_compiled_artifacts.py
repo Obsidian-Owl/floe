@@ -658,8 +658,7 @@ class TestYamlSerialization:
         # Observability preserved
         assert loaded.observability.lineage == full_artifacts.observability.lineage
         assert (
-            loaded.observability.lineage_namespace
-            == full_artifacts.observability.lineage_namespace
+            loaded.observability.lineage_namespace == full_artifacts.observability.lineage_namespace
         )
 
         # Plugins preserved

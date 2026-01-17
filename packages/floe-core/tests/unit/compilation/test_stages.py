@@ -91,9 +91,7 @@ class TestCompilePipeline:
     """Tests for compile_pipeline orchestrator function."""
 
     @pytest.mark.requirement("FR-031")
-    def test_compile_pipeline_returns_compiled_artifacts(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_pipeline_returns_compiled_artifacts(self, tmp_path: Path) -> None:
         """Test that compile_pipeline returns CompiledArtifacts."""
         from floe_core.compilation.stages import compile_pipeline
         from floe_core.schemas.compiled_artifacts import CompiledArtifacts
@@ -314,9 +312,7 @@ plugins:
         assert exc_info.value.error.code == "E001"
 
     @pytest.mark.requirement("FR-031")
-    def test_compile_pipeline_missing_compute_plugin(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_pipeline_missing_compute_plugin(self, tmp_path: Path) -> None:
         """Test that compile_pipeline fails without compute plugin."""
         from floe_core.compilation.errors import CompilationException
         from floe_core.compilation.stages import compile_pipeline
@@ -479,17 +475,13 @@ plugins:
             spans = exporter.get_finished_spans()
 
             # Find the pipeline span
-            pipeline_span = next(
-                (s for s in spans if s.name == "compile.pipeline"), None
-            )
+            pipeline_span = next((s for s in spans if s.name == "compile.pipeline"), None)
             assert pipeline_span is not None
             assert "compile.product_name" in dict(pipeline_span.attributes)
             assert pipeline_span.attributes["compile.product_name"] == "test-product"
 
             # Find the resolve span
-            resolve_span = next(
-                (s for s in spans if s.name == "compile.resolve"), None
-            )
+            resolve_span = next((s for s in spans if s.name == "compile.resolve"), None)
             assert resolve_span is not None
             assert resolve_span.attributes["compile.stage"] == "RESOLVE"
             assert resolve_span.attributes["compile.compute_plugin"] == "duckdb"
@@ -624,9 +616,7 @@ plugins:
             compile_pipeline(spec_path, manifest_path)
 
             spans = exporter.get_finished_spans()
-            pipeline_span = next(
-                (s for s in spans if s.name == "compile.pipeline"), None
-            )
+            pipeline_span = next((s for s in spans if s.name == "compile.pipeline"), None)
 
             assert pipeline_span is not None
             # Check that total duration is captured as attribute

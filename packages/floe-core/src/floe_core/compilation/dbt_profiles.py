@@ -213,10 +213,7 @@ def generate_dbt_profiles(
                     stage=CompilationStage.RESOLVE,
                     code="E303",
                     message=f"Failed to generate dbt profile for '{compute_type}'",
-                    suggestion=(
-                        "Check compute plugin configuration. "
-                        f"Error: {e}"
-                    ),
+                    suggestion=(f"Check compute plugin configuration. Error: {e}"),
                     context={
                         "compute_type": compute_type,
                         "environment": env,
