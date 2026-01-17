@@ -16,7 +16,7 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -56,8 +56,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         content = path.read_text(encoding="utf-8")
         data = yaml.safe_load(content)
         if data is None:
-            data = {}
-        return data
+            return {}
+        return cast(dict[str, Any], data)
     except yaml.YAMLError as e:
         raise CompilationException(
             CompilationError(
@@ -92,9 +92,14 @@ def _validate_model(
         return model_class.model_validate(data)
     except ValidationError as e:
         # Extract first error for message
-        first_error = e.errors()[0] if e.errors() else {"msg": "Validation failed"}
-        field_path = ".".join(str(loc) for loc in first_error.get("loc", []))
-        error_msg = first_error.get("msg", "Invalid value")
+        errors = e.errors()
+        if errors:
+            first_error = errors[0]
+            field_path = ".".join(str(loc) for loc in first_error.get("loc", []))
+            error_msg = str(first_error.get("msg", "Invalid value"))
+        else:
+            field_path = ""
+            error_msg = "Validation failed"
 
         raise CompilationException(
             CompilationError(

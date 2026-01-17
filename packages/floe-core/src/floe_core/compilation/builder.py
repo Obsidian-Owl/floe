@@ -19,6 +19,8 @@ import hashlib
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -40,7 +42,7 @@ def build_artifacts(
     manifest: PlatformManifest,
     plugins: ResolvedPlugins,
     transforms: ResolvedTransforms,
-    dbt_profiles: dict[str, object],
+    dbt_profiles: dict[str, Any],
     *,
     spec_path: Path | None = None,
     manifest_path: Path | None = None,
@@ -115,10 +117,11 @@ def build_artifacts(
         metadata=metadata,
         identity=identity,
         mode="simple",
+        inheritance_chain=[],
         observability=observability,
         plugins=plugins,
         transforms=transforms,
-        dbt_profiles=dict(dbt_profiles),  # type: ignore[arg-type]
+        dbt_profiles=dbt_profiles,
     )
 
 

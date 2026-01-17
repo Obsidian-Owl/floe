@@ -40,6 +40,7 @@ dev = [
     "mypy>=1.8",
     "ruff>=0.3",
     "jsonschema>=4.0",  # For JSON Schema validation in tests
+    "types-PyYAML>=6.0",  # Type stubs for PyYAML
 ]
 
 [project.scripts]

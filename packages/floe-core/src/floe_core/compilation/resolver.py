@@ -16,7 +16,12 @@ See Also:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from floe_core.compilation.errors import CompilationError, CompilationException
+
+if TYPE_CHECKING:
+    from floe_core.plugin_metadata import PluginMetadata
 from floe_core.compilation.stages import CompilationStage
 from floe_core.schemas.compiled_artifacts import (
     PluginRef,
@@ -209,24 +214,28 @@ def resolve_transform_compute(
     )
 
 
-def get_compute_plugin(plugin_type: str) -> object:
+def get_compute_plugin(plugin_type: str) -> "PluginMetadata":
     """Load a compute plugin by type name.
 
     Args:
         plugin_type: Plugin type (e.g., "duckdb", "snowflake").
 
     Returns:
-        ComputePlugin instance.
+        PluginMetadata instance (specifically ComputePlugin).
 
     Raises:
         CompilationException: If plugin not found.
     """
+    from floe_core.plugin_metadata import PluginMetadata
     from floe_core.plugin_registry import get_registry
     from floe_core.plugin_types import PluginType
 
     try:
         registry = get_registry()
-        return registry.get(PluginType.COMPUTE, plugin_type)
+        plugin = registry.get(PluginType.COMPUTE, plugin_type)
+        # registry.get returns PluginMetadata
+        assert isinstance(plugin, PluginMetadata)
+        return plugin
     except Exception as e:
         raise CompilationException(
             CompilationError(
@@ -267,7 +276,7 @@ def validate_compute_credentials(plugins: ResolvedPlugins) -> None:
     plugin = get_compute_plugin(compute_type)
 
     # Get the config schema from the plugin
-    schema = plugin.get_config_schema()  # type: ignore[union-attr]
+    schema = plugin.get_config_schema()
 
     # If no schema, no validation required (e.g., DuckDB)
     if schema is None:
