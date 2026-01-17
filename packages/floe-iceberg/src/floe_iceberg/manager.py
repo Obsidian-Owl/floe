@@ -1370,17 +1370,19 @@ class IcebergTableManager:
             >>> files_rewritten = manager.compact_table(table, strategy)
             >>> print(f"Rewrote {files_rewritten} files")
         """
+        from floe_iceberg.compaction import execute_compaction
+
         # Use default strategy if not provided
         if strategy is None:
             strategy = CompactionStrategy()
+
+        table_identifier = str(getattr(table, "identifier", "unknown"))
 
         # Set span attributes for observability
         from opentelemetry import trace
 
         span = trace.get_current_span()
-        span.set_attribute(
-            "table.identifier", str(getattr(table, "identifier", "unknown"))
-        )
+        span.set_attribute("table.identifier", table_identifier)
         span.set_attribute("strategy.type", strategy.strategy_type.value)
         span.set_attribute("strategy.target_file_size_bytes", strategy.target_file_size_bytes)
         span.set_attribute(
@@ -1389,21 +1391,21 @@ class IcebergTableManager:
 
         self._log.debug(
             "compact_table_requested",
-            table_identifier=getattr(table, "identifier", None),
+            table_identifier=table_identifier,
             strategy_type=strategy.strategy_type.value,
             target_file_size_bytes=strategy.target_file_size_bytes,
         )
 
-        # Compaction logic will be implemented in T093-T096
-        # For now, this is a stub that demonstrates the interface
-        files_rewritten = 0
+        # Execute compaction using the compaction module
+        result = execute_compaction(table, strategy)
+        files_rewritten = result.files_rewritten
 
         # Set files rewritten span attribute
         span.set_attribute("files.rewritten", files_rewritten)
 
         self._log.info(
             "compact_table_completed",
-            table_identifier=getattr(table, "identifier", None),
+            table_identifier=table_identifier,
             strategy_type=strategy.strategy_type.value,
             files_rewritten=files_rewritten,
         )
