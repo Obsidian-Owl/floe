@@ -41,11 +41,8 @@ from floe_iceberg.errors import (
     TableAlreadyExistsError,
     ValidationError,
 )
-from floe_iceberg.telemetry import traced
 from floe_iceberg.models import (
-    CommitStrategy,
     CompactionStrategy,
-    CompactionStrategyType,
     FieldType,
     IcebergTableManagerConfig,
     OperationType,
@@ -57,6 +54,7 @@ from floe_iceberg.models import (
     WriteConfig,
     WriteMode,
 )
+from floe_iceberg.telemetry import traced
 
 if TYPE_CHECKING:
     from floe_core.plugins.catalog import Catalog, CatalogPlugin
@@ -974,7 +972,10 @@ class IcebergTableManager:
         # Create new rollback snapshot
         import time
 
-        new_snapshot_id = max(s.get("snapshot_id", 0) for s in snapshots_data) + 1 if snapshots_data else 1
+        if snapshots_data:
+            new_snapshot_id = max(s.get("snapshot_id", 0) for s in snapshots_data) + 1
+        else:
+            new_snapshot_id = 1
         rollback_snapshot = {
             "snapshot_id": new_snapshot_id,
             "timestamp_ms": int(time.time() * 1000),
@@ -1017,7 +1018,10 @@ class IcebergTableManager:
             >>> expired_count = manager.expire_snapshots(table, older_than_days=30)
             >>> print(f"Expired {expired_count} snapshots")
         """
-        retention_days = older_than_days if older_than_days is not None else self._config.default_retention_days
+        if older_than_days is not None:
+            retention_days = older_than_days
+        else:
+            retention_days = self._config.default_retention_days
 
         # Set span attributes for observability
         from opentelemetry import trace

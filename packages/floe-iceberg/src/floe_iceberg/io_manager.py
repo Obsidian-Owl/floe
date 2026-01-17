@@ -195,7 +195,10 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
             if self._config.infer_schema_from_data:
                 self._create_table_from_data(table_identifier, obj)
             else:
-                msg = f"Table '{table_identifier}' does not exist and infer_schema_from_data is False"
+                msg = (
+                    f"Table '{table_identifier}' does not exist "
+                    "and infer_schema_from_data is False"
+                )
                 raise ValueError(msg)
 
         # Load table and write data
@@ -361,7 +364,7 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
                 join_cols = join_cols.value
             if isinstance(join_cols, str):
                 join_columns = [join_cols]
-            elif isinstance(join_cols, (list, tuple)):
+            elif isinstance(join_cols, list | tuple):
                 join_columns = list(join_cols)
 
         return WriteConfig(

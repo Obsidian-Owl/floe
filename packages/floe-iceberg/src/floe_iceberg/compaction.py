@@ -283,7 +283,7 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
             # if hasattr(table, 'rewrite_data_files'):
             #     result = table.rewrite_data_files(
             #         target_size_bytes=strategy.target_file_size_bytes,
-            #         max_concurrent_file_group_rewrites=strategy.max_concurrent_file_group_rewrites,
+            #         max_concurrent_rewrites=strategy.max_concurrent_file_group_rewrites,
             #     )
             #     files_rewritten = result.rewritten_data_files_count()
             # else:

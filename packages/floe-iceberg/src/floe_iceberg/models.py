@@ -46,7 +46,16 @@ Example:
 from __future__ import annotations
 
 from enum import Enum
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+if TYPE_CHECKING:
+    import pyiceberg.partitioning
+    import pyiceberg.schema
+    import pyiceberg.table
+    import pyiceberg.transforms
+    import pyiceberg.types
 
 # =============================================================================
 # Module Constants (SonarQube S1192 Compliance)
@@ -361,7 +370,7 @@ class TableSchema(BaseModel):
         description="List of schema fields",
     )
 
-    def to_pyiceberg_schema(self) -> "pyiceberg.schema.Schema":
+    def to_pyiceberg_schema(self) -> pyiceberg.schema.Schema:
         """Convert to PyIceberg Schema object.
 
         Returns:
@@ -387,7 +396,7 @@ class TableSchema(BaseModel):
             )
         return Schema(*nested_fields)
 
-    def _convert_field_type(self, field: SchemaField) -> "pyiceberg.types.IcebergType":
+    def _convert_field_type(self, field: SchemaField) -> pyiceberg.types.IcebergType:
         """Convert FieldType enum to PyIceberg type.
 
         Args:
@@ -517,8 +526,8 @@ class PartitionSpec(BaseModel):
     )
 
     def to_pyiceberg_spec(
-        self, schema: "pyiceberg.schema.Schema"
-    ) -> "pyiceberg.partitioning.PartitionSpec":
+        self, schema: pyiceberg.schema.Schema
+    ) -> pyiceberg.partitioning.PartitionSpec:
         """Convert to PyIceberg PartitionSpec.
 
         Args:
@@ -548,7 +557,7 @@ class PartitionSpec(BaseModel):
 
     def _get_transform(
         self, field: PartitionField
-    ) -> "pyiceberg.transforms.Transform":
+    ) -> pyiceberg.transforms.Transform:
         """Get PyIceberg transform for field.
 
         Args:
@@ -656,7 +665,7 @@ class TableConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_partition_spec(self) -> "TableConfig":
+    def validate_partition_spec(self) -> TableConfig:
         """Validate partition specification against table schema.
 
         Validates:
@@ -908,7 +917,7 @@ class SnapshotInfo(BaseModel):
         return int(self.summary.get("added-records-count", "0"))
 
     @classmethod
-    def from_pyiceberg_snapshot(cls, snapshot: "pyiceberg.table.Snapshot") -> "SnapshotInfo":
+    def from_pyiceberg_snapshot(cls, snapshot: pyiceberg.table.Snapshot) -> SnapshotInfo:
         """Create SnapshotInfo from a PyIceberg Snapshot.
 
         Args:
@@ -993,7 +1002,7 @@ class WriteConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_upsert_requires_join_columns(self) -> "WriteConfig":
+    def validate_upsert_requires_join_columns(self) -> WriteConfig:
         """Validate that join_columns is provided when mode is UPSERT.
 
         Returns:
@@ -1080,7 +1089,7 @@ class CompactionStrategy(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_sort_requires_columns(self) -> "CompactionStrategy":
+    def validate_sort_requires_columns(self) -> CompactionStrategy:
         """Validate that sort_columns is provided when strategy_type is SORT.
 
         Returns:
