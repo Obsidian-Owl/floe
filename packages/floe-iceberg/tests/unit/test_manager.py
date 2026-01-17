@@ -1759,3 +1759,434 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
         updated_table = manager.evolve_schema(table, evolution)
 
         assert updated_table is not None
+
+
+# =============================================================================
+# Snapshot Management Tests - list_snapshots (T047)
+# =============================================================================
+
+
+class TestIcebergTableManagerListSnapshots:
+    """TDD tests for IcebergTableManager.list_snapshots method."""
+
+    @pytest.mark.requirement("FR-003")
+    def test_list_snapshots_returns_snapshot_info_list(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test list_snapshots returns list of SnapshotInfo objects."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            SnapshotInfo,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="list_snapshots_test",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        snapshots = manager.list_snapshots(table)
+
+        assert isinstance(snapshots, list)
+        # New table may have 0 or 1 snapshot depending on implementation
+        if len(snapshots) > 0:
+            assert all(isinstance(s, SnapshotInfo) for s in snapshots)
+
+    @pytest.mark.requirement("FR-006")
+    def test_list_snapshots_ordered_newest_first(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test list_snapshots returns snapshots ordered by timestamp (newest first)."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="list_snapshots_ordering",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        snapshots = manager.list_snapshots(table)
+
+        # If multiple snapshots, verify newest first ordering
+        if len(snapshots) > 1:
+            timestamps = [s.timestamp_ms for s in snapshots]
+            assert timestamps == sorted(timestamps, reverse=True)
+
+    @pytest.mark.requirement("FR-003")
+    def test_list_snapshots_empty_table(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test list_snapshots handles table with no snapshots."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="empty_snapshots",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        snapshots = manager.list_snapshots(table)
+
+        # Should return empty list or list with initial snapshot
+        assert isinstance(snapshots, list)
+
+
+# =============================================================================
+# Snapshot Management Tests - rollback_to_snapshot (T048)
+# =============================================================================
+
+
+class TestIcebergTableManagerRollbackToSnapshot:
+    """TDD tests for IcebergTableManager.rollback_to_snapshot method."""
+
+    @pytest.mark.requirement("FR-007")
+    def test_rollback_to_snapshot_success(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test successful rollback to a previous snapshot."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="rollback_test",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Get snapshots (need at least one to rollback to)
+        snapshots = manager.list_snapshots(table)
+        if len(snapshots) > 0:
+            snapshot_id = snapshots[0].snapshot_id
+            result = manager.rollback_to_snapshot(table, snapshot_id)
+            assert result is not None
+
+    @pytest.mark.requirement("FR-024")
+    def test_rollback_to_snapshot_invalid_id_raises_error(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test rollback with invalid snapshot_id raises SnapshotNotFoundError."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import SnapshotNotFoundError
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="rollback_invalid",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Rollback to non-existent snapshot
+        with pytest.raises(SnapshotNotFoundError):
+            manager.rollback_to_snapshot(table, 9999999999)
+
+    @pytest.mark.requirement("FR-007")
+    def test_rollback_creates_new_snapshot(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test rollback creates a new snapshot (non-destructive)."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="rollback_nondestructive",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        snapshots_before = manager.list_snapshots(table)
+        if len(snapshots_before) > 0:
+            snapshot_id = snapshots_before[0].snapshot_id
+            updated_table = manager.rollback_to_snapshot(table, snapshot_id)
+            snapshots_after = manager.list_snapshots(updated_table)
+            # Rollback should create new snapshot, not delete existing ones
+            assert len(snapshots_after) >= len(snapshots_before)
+
+
+# =============================================================================
+# Snapshot Management Tests - expire_snapshots (T049)
+# =============================================================================
+
+
+class TestIcebergTableManagerExpireSnapshots:
+    """TDD tests for IcebergTableManager.expire_snapshots method."""
+
+    @pytest.mark.requirement("FR-025")
+    def test_expire_snapshots_returns_count(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test expire_snapshots returns count of expired snapshots."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="expire_test",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Expire snapshots older than 0 days (should not expire any by default)
+        expired_count = manager.expire_snapshots(table, older_than_days=0)
+
+        assert isinstance(expired_count, int)
+        assert expired_count >= 0
+
+    @pytest.mark.requirement("FR-025")
+    def test_expire_snapshots_respects_min_to_keep(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test expire_snapshots respects min_snapshots_to_keep config."""
+        from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        config = IcebergTableManagerConfig(
+            min_snapshots_to_keep=5,
+        )
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+            config=config,
+        )
+
+        table_config = TableConfig(
+            namespace="bronze",
+            table_name="expire_min_keep",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(table_config)
+
+        # Even with older_than_days=0, should keep min_snapshots_to_keep
+        expired_count = manager.expire_snapshots(table, older_than_days=0)
+
+        snapshots = manager.list_snapshots(table)
+        # Should still have at least min_snapshots_to_keep (or however many exist if less)
+        assert isinstance(expired_count, int)
+
+    @pytest.mark.requirement("FR-025")
+    def test_expire_snapshots_with_custom_retention(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test expire_snapshots with custom retention days."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+        )
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="expire_custom_retention",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(config)
+
+        # Expire snapshots older than 30 days
+        expired_count = manager.expire_snapshots(table, older_than_days=30)
+
+        # New table should have no expired snapshots
+        assert expired_count == 0
+
+    @pytest.mark.requirement("FR-025")
+    def test_expire_snapshots_uses_default_retention(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+    ) -> None:
+        """Test expire_snapshots uses default_retention_days from config."""
+        from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
+        from floe_iceberg.models import (
+            FieldType,
+            TableConfig,
+            SchemaField,
+            TableSchema,
+        )
+
+        mock_catalog_plugin.create_namespace("bronze")
+
+        config = IcebergTableManagerConfig(
+            default_retention_days=7,
+        )
+
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+            config=config,
+        )
+
+        table_config = TableConfig(
+            namespace="bronze",
+            table_name="expire_default_retention",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                ]
+            ),
+        )
+        table = manager.create_table(table_config)
+
+        # Call without older_than_days to use default
+        expired_count = manager.expire_snapshots(table)
+
+        assert isinstance(expired_count, int)

@@ -791,6 +791,114 @@ class SchemaEvolution(BaseModel):
 
 
 # =============================================================================
+# Snapshot Models
+# =============================================================================
+
+
+class SnapshotInfo(BaseModel):
+    """Information about an Iceberg table snapshot.
+
+    Provides a Pydantic-wrapped view of PyIceberg Snapshot metadata,
+    with computed properties for common metrics.
+
+    Attributes:
+        snapshot_id: Unique snapshot identifier.
+        timestamp_ms: Snapshot creation time in milliseconds since epoch.
+        operation: Operation that created the snapshot.
+        summary: Snapshot summary metrics (e.g., added-files-count).
+        parent_id: Parent snapshot ID (None for first snapshot).
+
+    Properties:
+        added_files: Number of files added in this snapshot.
+        added_records: Number of records added in this snapshot.
+
+    Example:
+        >>> info = SnapshotInfo(
+        ...     snapshot_id=1234567890,
+        ...     timestamp_ms=1705500000000,
+        ...     operation=OperationType.APPEND,
+        ...     summary={"added-files-count": "5", "added-records-count": "1000"},
+        ... )
+        >>> info.added_files
+        5
+        >>> info.added_records
+        1000
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    snapshot_id: int = Field(
+        ...,
+        description="Unique snapshot identifier",
+    )
+    timestamp_ms: int = Field(
+        ...,
+        ge=0,
+        description="Snapshot creation time in milliseconds since epoch",
+    )
+    operation: OperationType = Field(
+        ...,
+        description="Operation that created the snapshot",
+    )
+    summary: dict[str, str] = Field(
+        default_factory=dict,
+        description="Snapshot summary metrics",
+    )
+    parent_id: int | None = Field(
+        default=None,
+        description="Parent snapshot ID (None for first snapshot)",
+    )
+
+    @property
+    def added_files(self) -> int:
+        """Number of files added in this snapshot.
+
+        Returns:
+            Count of added files, 0 if not in summary.
+        """
+        return int(self.summary.get("added-files-count", "0"))
+
+    @property
+    def added_records(self) -> int:
+        """Number of records added in this snapshot.
+
+        Returns:
+            Count of added records, 0 if not in summary.
+        """
+        return int(self.summary.get("added-records-count", "0"))
+
+    @classmethod
+    def from_pyiceberg_snapshot(cls, snapshot: "pyiceberg.table.Snapshot") -> "SnapshotInfo":
+        """Create SnapshotInfo from a PyIceberg Snapshot.
+
+        Args:
+            snapshot: PyIceberg Snapshot object.
+
+        Returns:
+            SnapshotInfo instance with data from the snapshot.
+        """
+        # Map PyIceberg operation string to OperationType enum
+        operation_mapping = {
+            "append": OperationType.APPEND,
+            "overwrite": OperationType.OVERWRITE,
+            "delete": OperationType.DELETE,
+            "replace": OperationType.REPLACE,
+        }
+        operation = operation_mapping.get(
+            snapshot.summary.operation if snapshot.summary else "append",
+            OperationType.APPEND,
+        )
+
+        return cls(
+            snapshot_id=snapshot.snapshot_id,
+            timestamp_ms=snapshot.timestamp_ms,
+            operation=operation,
+            summary=dict(snapshot.summary) if snapshot.summary else {},
+            parent_id=snapshot.parent_snapshot_id,
+        )
+
+
+# =============================================================================
 # Manager Configuration Models
 # =============================================================================
 
@@ -945,6 +1053,8 @@ __all__ = [
     # Schema evolution models
     "SchemaChange",
     "SchemaEvolution",
+    # Snapshot models
+    "SnapshotInfo",
     # Configuration models
     "IcebergTableManagerConfig",
     "IcebergIOManagerConfig",

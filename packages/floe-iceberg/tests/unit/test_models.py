@@ -22,6 +22,7 @@ from floe_iceberg.models import (
     SchemaChangeType,
     SchemaEvolution,
     SchemaField,
+    SnapshotInfo,
     WriteMode,
 )
 
@@ -1298,3 +1299,140 @@ class TestSchemaEvolution:
         assert SchemaChangeType.WIDEN_TYPE in change_types
         assert SchemaChangeType.MAKE_OPTIONAL in change_types
         assert SchemaChangeType.UPDATE_DOC in change_types
+
+
+# =============================================================================
+# SnapshotInfo Tests
+# =============================================================================
+
+
+class TestSnapshotInfo:
+    """Tests for SnapshotInfo model."""
+
+    @pytest.mark.requirement("FR-003")
+    def test_minimal_snapshot_info(self) -> None:
+        """Test SnapshotInfo creation with minimal fields."""
+        info = SnapshotInfo(
+            snapshot_id=1234567890,
+            timestamp_ms=1705500000000,
+            operation=OperationType.APPEND,
+        )
+        assert info.snapshot_id == 1234567890
+        assert info.timestamp_ms == 1705500000000
+        assert info.operation == OperationType.APPEND
+        assert info.summary == {}
+        assert info.parent_id is None
+
+    @pytest.mark.requirement("FR-006")
+    def test_snapshot_info_with_all_fields(self) -> None:
+        """Test SnapshotInfo creation with all fields."""
+        summary = {
+            "added-files-count": "5",
+            "added-records-count": "1000",
+            "added-data-files": "5",
+        }
+        info = SnapshotInfo(
+            snapshot_id=1234567890,
+            timestamp_ms=1705500000000,
+            operation=OperationType.OVERWRITE,
+            summary=summary,
+            parent_id=1234567889,
+        )
+        assert info.snapshot_id == 1234567890
+        assert info.operation == OperationType.OVERWRITE
+        assert info.summary == summary
+        assert info.parent_id == 1234567889
+
+    @pytest.mark.requirement("FR-022")
+    def test_added_files_property(self) -> None:
+        """Test added_files computed property from summary."""
+        info = SnapshotInfo(
+            snapshot_id=123,
+            timestamp_ms=1705500000000,
+            operation=OperationType.APPEND,
+            summary={"added-files-count": "10"},
+        )
+        assert info.added_files == 10
+
+    @pytest.mark.requirement("FR-022")
+    def test_added_files_property_default(self) -> None:
+        """Test added_files returns 0 when not in summary."""
+        info = SnapshotInfo(
+            snapshot_id=123,
+            timestamp_ms=1705500000000,
+            operation=OperationType.APPEND,
+        )
+        assert info.added_files == 0
+
+    @pytest.mark.requirement("FR-022")
+    def test_added_records_property(self) -> None:
+        """Test added_records computed property from summary."""
+        info = SnapshotInfo(
+            snapshot_id=123,
+            timestamp_ms=1705500000000,
+            operation=OperationType.APPEND,
+            summary={"added-records-count": "5000"},
+        )
+        assert info.added_records == 5000
+
+    @pytest.mark.requirement("FR-022")
+    def test_added_records_property_default(self) -> None:
+        """Test added_records returns 0 when not in summary."""
+        info = SnapshotInfo(
+            snapshot_id=123,
+            timestamp_ms=1705500000000,
+            operation=OperationType.APPEND,
+        )
+        assert info.added_records == 0
+
+    @pytest.mark.requirement("FR-006")
+    def test_all_operation_types(self) -> None:
+        """Test SnapshotInfo with all operation types."""
+        for op_type in OperationType:
+            info = SnapshotInfo(
+                snapshot_id=123,
+                timestamp_ms=1705500000000,
+                operation=op_type,
+            )
+            assert info.operation == op_type
+
+    @pytest.mark.requirement("FR-003")
+    def test_frozen(self) -> None:
+        """Test SnapshotInfo is immutable."""
+        info = SnapshotInfo(
+            snapshot_id=123,
+            timestamp_ms=1705500000000,
+            operation=OperationType.APPEND,
+        )
+        with pytest.raises(Exception):
+            info.snapshot_id = 456  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-003")
+    def test_extra_forbid(self) -> None:
+        """Test SnapshotInfo rejects extra fields."""
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            SnapshotInfo(
+                snapshot_id=123,
+                timestamp_ms=1705500000000,
+                operation=OperationType.APPEND,
+                unknown="value",  # type: ignore[call-arg]
+            )
+
+    @pytest.mark.requirement("FR-022")
+    def test_timestamp_non_negative(self) -> None:
+        """Test timestamp_ms must be non-negative."""
+        with pytest.raises(ValueError):
+            SnapshotInfo(
+                snapshot_id=123,
+                timestamp_ms=-1,
+                operation=OperationType.APPEND,
+            )
+
+    @pytest.mark.requirement("FR-003")
+    def test_required_fields(self) -> None:
+        """Test required fields are enforced."""
+        with pytest.raises(ValueError, match="Field required"):
+            SnapshotInfo(  # type: ignore[call-arg]
+                snapshot_id=123,
+                # Missing timestamp_ms and operation
+            )

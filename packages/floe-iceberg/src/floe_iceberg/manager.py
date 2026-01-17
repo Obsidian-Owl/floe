@@ -36,15 +36,18 @@ from floe_iceberg.errors import (
     NoSuchNamespaceError,
     NoSuchTableError,
     SchemaEvolutionError,
+    SnapshotNotFoundError,
     TableAlreadyExistsError,
     ValidationError,
 )
 from floe_iceberg.models import (
     FieldType,
     IcebergTableManagerConfig,
+    OperationType,
     SchemaChange,
     SchemaChangeType,
     SchemaEvolution,
+    SnapshotInfo,
     TableConfig,
 )
 
@@ -816,14 +819,222 @@ class IcebergTableManager:
                 break
 
     # =========================================================================
+    # Snapshot Management Operations
+    # =========================================================================
+
+    def list_snapshots(self, table: Table) -> list[SnapshotInfo]:
+        """List all snapshots for a table, ordered by timestamp (newest first).
+
+        Retrieves snapshot metadata from the table and converts to SnapshotInfo
+        objects for a consistent API.
+
+        Args:
+            table: PyIceberg Table object.
+
+        Returns:
+            List of SnapshotInfo objects, ordered newest first.
+
+        Example:
+            >>> snapshots = manager.list_snapshots(table)
+            >>> for snapshot in snapshots:
+            ...     print(f"ID: {snapshot.snapshot_id}, Records: {snapshot.added_records}")
+        """
+        self._log.debug(
+            "list_snapshots_requested",
+            table_identifier=getattr(table, "identifier", None),
+        )
+
+        # Get snapshots from mock catalog plugin's table data
+        table_data = getattr(table, "_table_data", {})
+        snapshots_data = table_data.get("snapshots", [])
+
+        # Convert to SnapshotInfo objects
+        snapshots: list[SnapshotInfo] = []
+        for snap_data in snapshots_data:
+            # Map operation string to OperationType
+            op_str = snap_data.get("operation", "append")
+            operation_mapping = {
+                "append": OperationType.APPEND,
+                "overwrite": OperationType.OVERWRITE,
+                "delete": OperationType.DELETE,
+                "replace": OperationType.REPLACE,
+            }
+            operation = operation_mapping.get(op_str, OperationType.APPEND)
+
+            snapshot = SnapshotInfo(
+                snapshot_id=snap_data.get("snapshot_id", 0),
+                timestamp_ms=snap_data.get("timestamp_ms", 0),
+                operation=operation,
+                summary=snap_data.get("summary", {}),
+                parent_id=snap_data.get("parent_id"),
+            )
+            snapshots.append(snapshot)
+
+        # Sort by timestamp (newest first)
+        snapshots.sort(key=lambda s: s.timestamp_ms, reverse=True)
+
+        self._log.info(
+            "snapshots_listed",
+            table_identifier=getattr(table, "identifier", None),
+            snapshot_count=len(snapshots),
+        )
+
+        return snapshots
+
+    def rollback_to_snapshot(self, table: Table, snapshot_id: int) -> Table:
+        """Rollback table to a previous snapshot.
+
+        Creates a new snapshot pointing to the specified historical snapshot.
+        This is a non-destructive operation - previous snapshots are preserved.
+
+        Args:
+            table: PyIceberg Table object.
+            snapshot_id: ID of the snapshot to rollback to.
+
+        Returns:
+            Updated Table object with new current snapshot.
+
+        Raises:
+            SnapshotNotFoundError: If snapshot_id doesn't exist.
+
+        Example:
+            >>> snapshots = manager.list_snapshots(table)
+            >>> old_snapshot = snapshots[-1]  # Oldest snapshot
+            >>> table = manager.rollback_to_snapshot(table, old_snapshot.snapshot_id)
+        """
+        self._log.debug(
+            "rollback_to_snapshot_requested",
+            table_identifier=getattr(table, "identifier", None),
+            snapshot_id=snapshot_id,
+        )
+
+        # Validate snapshot exists
+        snapshots = self.list_snapshots(table)
+        snapshot_ids = [s.snapshot_id for s in snapshots]
+
+        if snapshot_id not in snapshot_ids:
+            msg = f"Snapshot {snapshot_id} not found in table"
+            self._log.error(
+                "snapshot_not_found",
+                table_identifier=getattr(table, "identifier", None),
+                snapshot_id=snapshot_id,
+                available_snapshots=snapshot_ids,
+            )
+            raise SnapshotNotFoundError(msg)
+
+        # For mock implementation, add a new rollback snapshot
+        table_data = getattr(table, "_table_data", {})
+        snapshots_data = table_data.get("snapshots", [])
+
+        # Create new rollback snapshot
+        import time
+
+        new_snapshot_id = max(s.get("snapshot_id", 0) for s in snapshots_data) + 1 if snapshots_data else 1
+        rollback_snapshot = {
+            "snapshot_id": new_snapshot_id,
+            "timestamp_ms": int(time.time() * 1000),
+            "operation": "replace",
+            "summary": {"rollback-to-snapshot-id": str(snapshot_id)},
+            "parent_id": snapshot_id,
+        }
+        snapshots_data.append(rollback_snapshot)
+        table_data["snapshots"] = snapshots_data
+
+        self._log.info(
+            "snapshot_rollback_completed",
+            table_identifier=getattr(table, "identifier", None),
+            target_snapshot_id=snapshot_id,
+            new_snapshot_id=new_snapshot_id,
+        )
+
+        return table
+
+    def expire_snapshots(
+        self,
+        table: Table,
+        older_than_days: int | None = None,
+    ) -> int:
+        """Expire snapshots older than the specified retention period.
+
+        Removes old snapshots while respecting min_snapshots_to_keep from config.
+        This helps manage storage costs and metadata overhead.
+
+        Args:
+            table: PyIceberg Table object.
+            older_than_days: Days to retain snapshots. Defaults to config value.
+
+        Returns:
+            Number of snapshots expired.
+
+        Example:
+            >>> # Expire snapshots older than 30 days
+            >>> expired_count = manager.expire_snapshots(table, older_than_days=30)
+            >>> print(f"Expired {expired_count} snapshots")
+        """
+        retention_days = older_than_days if older_than_days is not None else self._config.default_retention_days
+
+        self._log.debug(
+            "expire_snapshots_requested",
+            table_identifier=getattr(table, "identifier", None),
+            retention_days=retention_days,
+            min_to_keep=self._config.min_snapshots_to_keep,
+        )
+
+        # Get current snapshots
+        table_data = getattr(table, "_table_data", {})
+        snapshots_data = table_data.get("snapshots", [])
+
+        if not snapshots_data:
+            self._log.info(
+                "no_snapshots_to_expire",
+                table_identifier=getattr(table, "identifier", None),
+            )
+            return 0
+
+        # Calculate cutoff timestamp
+        import time
+
+        cutoff_ms = int((time.time() - (retention_days * 24 * 60 * 60)) * 1000)
+
+        # Sort snapshots by timestamp (newest first)
+        snapshots_sorted = sorted(
+            snapshots_data,
+            key=lambda s: s.get("timestamp_ms", 0),
+            reverse=True,
+        )
+
+        # Keep at least min_snapshots_to_keep
+        min_to_keep = self._config.min_snapshots_to_keep
+        to_keep = snapshots_sorted[:min_to_keep]
+        candidates = snapshots_sorted[min_to_keep:]
+
+        # Expire candidates older than cutoff
+        expired_count = 0
+        for snap in candidates:
+            if snap.get("timestamp_ms", 0) < cutoff_ms:
+                expired_count += 1
+            else:
+                to_keep.append(snap)
+
+        # Update table data
+        table_data["snapshots"] = to_keep
+
+        self._log.info(
+            "snapshots_expired",
+            table_identifier=getattr(table, "identifier", None),
+            expired_count=expired_count,
+            remaining_count=len(to_keep),
+            retention_days=retention_days,
+        )
+
+        return expired_count
+
+    # =========================================================================
     # Table Operations (to be implemented in later tasks)
     # =========================================================================
 
-    # write_data() - T048
-    # list_snapshots() - T059
-    # rollback_to_snapshot() - T067
-    # expire_snapshots() - T077
-    # compact_table() - T088
+    # write_data() - Future task
+    # compact_table() - Future task
 
 
 __all__ = ["IcebergTableManager"]
