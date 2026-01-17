@@ -56,7 +56,6 @@ if TYPE_CHECKING:
     import pyiceberg.table
     import pyiceberg.transforms
     import pyiceberg.types
-    from pyiceberg.table import Snapshot
     from pyiceberg.transforms import Transform
 
 # =============================================================================
@@ -919,26 +918,25 @@ class SnapshotInfo(BaseModel):
         return int(self.summary.get("added-records-count", "0"))
 
     @classmethod
-    def from_pyiceberg_snapshot(cls, snapshot: Snapshot) -> SnapshotInfo:
+    def from_pyiceberg_snapshot(cls, snapshot: Any) -> SnapshotInfo:
         """Create SnapshotInfo from a PyIceberg Snapshot.
 
         Args:
-            snapshot: PyIceberg Snapshot object.
+            snapshot: PyIceberg Snapshot object (pyiceberg.table.Snapshot).
 
         Returns:
             SnapshotInfo instance with data from the snapshot.
         """
         # Map PyIceberg operation string to OperationType enum
-        operation_mapping = {
+        operation_mapping: dict[str, OperationType] = {
             "append": OperationType.APPEND,
             "overwrite": OperationType.OVERWRITE,
             "delete": OperationType.DELETE,
             "replace": OperationType.REPLACE,
         }
-        operation = operation_mapping.get(
-            snapshot.summary.operation if snapshot.summary else "append",
-            OperationType.APPEND,
-        )
+        # Convert Operation enum to string for lookup (PyIceberg returns Operation enum)
+        op_str = str(snapshot.summary.operation) if snapshot.summary else "append"
+        operation = operation_mapping.get(op_str, OperationType.APPEND)
 
         # Convert PyIceberg Summary object to plain dict
         # The Summary object may have additional_properties or be dict-like

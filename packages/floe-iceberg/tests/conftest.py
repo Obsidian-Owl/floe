@@ -76,11 +76,27 @@ class MockCatalog:
             mock_table = MagicMock()
             mock_table.identifier = identifier
             mock_table.metadata_location = f"s3://warehouse/{identifier}/metadata/v1.metadata.json"
-            mock_table.schema.return_value = MagicMock()
+
+            # Create a proper mock schema with fields
+            mock_schema = MagicMock()
+            schema_info = table_info.get("schema", {})
+
+            # Build mock fields from schema info
+            mock_fields = []
+            for field_dict in schema_info.get("fields", []):
+                mock_field = MagicMock()
+                mock_field.name = field_dict.get("name", "")
+                mock_field.field_id = field_dict.get("field_id", 0)
+                mock_field.required = field_dict.get("required", False)
+                mock_fields.append(mock_field)
+
+            mock_schema.fields = mock_fields
+            mock_table.schema.return_value = mock_schema
+
             mock_table.current_snapshot.return_value = None
             # Store table data for testing (schema, snapshots, etc.)
             mock_table._table_data = {
-                "schema": table_info.get("schema", {}),
+                "schema": schema_info,
                 "snapshots": [],
                 "properties": table_info.get("properties", {}),
             }
