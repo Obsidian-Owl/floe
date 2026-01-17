@@ -463,3 +463,527 @@ class TestIcebergIOManagerConfig:
         """Test config rejects extra fields."""
         with pytest.raises(ValueError, match="Extra inputs are not permitted"):
             IcebergIOManagerConfig(namespace="test", unknown="value")  # type: ignore[call-arg]
+
+
+# =============================================================================
+# SchemaField Tests
+# =============================================================================
+
+
+class TestSchemaField:
+    """Tests for SchemaField model."""
+
+    @pytest.mark.requirement("FR-012")
+    def test_minimal_field(self) -> None:
+        """Test SchemaField with minimal required fields."""
+        from floe_iceberg.models import SchemaField
+
+        field = SchemaField(
+            field_id=1,
+            name="customer_id",
+            field_type=FieldType.LONG,
+        )
+        assert field.field_id == 1
+        assert field.name == "customer_id"
+        assert field.field_type == FieldType.LONG
+        assert field.required is False
+        assert field.doc is None
+
+    @pytest.mark.requirement("FR-012")
+    def test_field_with_all_attributes(self) -> None:
+        """Test SchemaField with all attributes."""
+        from floe_iceberg.models import SchemaField
+
+        field = SchemaField(
+            field_id=1,
+            name="customer_id",
+            field_type=FieldType.LONG,
+            required=True,
+            doc="Primary customer identifier",
+        )
+        assert field.required is True
+        assert field.doc == "Primary customer identifier"
+
+    @pytest.mark.requirement("FR-012")
+    def test_decimal_field_with_precision_scale(self) -> None:
+        """Test SchemaField for decimal type with precision/scale."""
+        from floe_iceberg.models import SchemaField
+
+        field = SchemaField(
+            field_id=1,
+            name="amount",
+            field_type=FieldType.DECIMAL,
+            precision=10,
+            scale=2,
+        )
+        assert field.precision == 10
+        assert field.scale == 2
+
+    @pytest.mark.requirement("FR-012")
+    def test_field_id_validation_positive(self) -> None:
+        """Test field_id must be positive."""
+        from floe_iceberg.models import SchemaField
+
+        with pytest.raises(ValueError, match="greater than or equal to 1"):
+            SchemaField(
+                field_id=0,
+                name="test",
+                field_type=FieldType.STRING,
+            )
+
+    @pytest.mark.requirement("FR-012")
+    def test_name_pattern_validation(self) -> None:
+        """Test name must match IDENTIFIER_PATTERN."""
+        from floe_iceberg.models import SchemaField
+
+        with pytest.raises(ValueError, match="String should match pattern"):
+            SchemaField(
+                field_id=1,
+                name="123invalid",
+                field_type=FieldType.STRING,
+            )
+
+    @pytest.mark.requirement("FR-012")
+    def test_name_empty_validation(self) -> None:
+        """Test name cannot be empty."""
+        from floe_iceberg.models import SchemaField
+
+        with pytest.raises(ValueError, match="String should have at least 1 character"):
+            SchemaField(
+                field_id=1,
+                name="",
+                field_type=FieldType.STRING,
+            )
+
+    @pytest.mark.requirement("FR-012")
+    def test_precision_range_validation(self) -> None:
+        """Test precision must be 1-38."""
+        from floe_iceberg.models import SchemaField
+
+        with pytest.raises(ValueError, match="less than or equal to 38"):
+            SchemaField(
+                field_id=1,
+                name="amount",
+                field_type=FieldType.DECIMAL,
+                precision=39,
+            )
+
+    @pytest.mark.requirement("FR-012")
+    def test_scale_non_negative_validation(self) -> None:
+        """Test scale must be non-negative."""
+        from floe_iceberg.models import SchemaField
+
+        with pytest.raises(ValueError, match="greater than or equal to 0"):
+            SchemaField(
+                field_id=1,
+                name="amount",
+                field_type=FieldType.DECIMAL,
+                scale=-1,
+            )
+
+    @pytest.mark.requirement("FR-012")
+    def test_frozen(self) -> None:
+        """Test SchemaField is immutable."""
+        from floe_iceberg.models import SchemaField
+
+        field = SchemaField(
+            field_id=1,
+            name="test",
+            field_type=FieldType.STRING,
+        )
+        with pytest.raises(Exception):
+            field.name = "changed"  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-012")
+    def test_extra_forbid(self) -> None:
+        """Test SchemaField rejects extra fields."""
+        from floe_iceberg.models import SchemaField
+
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            SchemaField(
+                field_id=1,
+                name="test",
+                field_type=FieldType.STRING,
+                unknown="value",  # type: ignore[call-arg]
+            )
+
+
+# =============================================================================
+# TableSchema Tests
+# =============================================================================
+
+
+class TestTableSchema:
+    """Tests for TableSchema model."""
+
+    @pytest.mark.requirement("FR-012")
+    def test_minimal_schema(self) -> None:
+        """Test TableSchema with single field."""
+        from floe_iceberg.models import SchemaField, TableSchema
+
+        schema = TableSchema(
+            fields=[
+                SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+            ]
+        )
+        assert len(schema.fields) == 1
+
+    @pytest.mark.requirement("FR-012")
+    def test_multi_field_schema(self) -> None:
+        """Test TableSchema with multiple fields."""
+        from floe_iceberg.models import SchemaField, TableSchema
+
+        schema = TableSchema(
+            fields=[
+                SchemaField(field_id=1, name="id", field_type=FieldType.LONG, required=True),
+                SchemaField(field_id=2, name="name", field_type=FieldType.STRING),
+                SchemaField(field_id=3, name="created_at", field_type=FieldType.TIMESTAMPTZ),
+            ]
+        )
+        assert len(schema.fields) == 3
+        assert schema.fields[0].required is True
+        assert schema.fields[1].name == "name"
+
+    @pytest.mark.requirement("FR-012")
+    def test_empty_fields_validation(self) -> None:
+        """Test TableSchema requires at least one field."""
+        from floe_iceberg.models import TableSchema
+
+        with pytest.raises(ValueError, match="List should have at least 1 item"):
+            TableSchema(fields=[])
+
+    @pytest.mark.requirement("FR-012")
+    def test_frozen(self) -> None:
+        """Test TableSchema is immutable."""
+        from floe_iceberg.models import SchemaField, TableSchema
+
+        schema = TableSchema(
+            fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+        )
+        with pytest.raises(Exception):
+            schema.fields = []  # type: ignore[misc]
+
+
+# =============================================================================
+# PartitionField Tests
+# =============================================================================
+
+
+class TestPartitionField:
+    """Tests for PartitionField model."""
+
+    @pytest.mark.requirement("FR-014")
+    def test_minimal_partition_field(self) -> None:
+        """Test PartitionField with minimal fields."""
+        from floe_iceberg.models import PartitionField
+
+        field = PartitionField(
+            source_field_id=1,
+            partition_field_id=1000,
+            name="date_day",
+            transform=PartitionTransform.DAY,
+        )
+        assert field.source_field_id == 1
+        assert field.partition_field_id == 1000
+        assert field.name == "date_day"
+        assert field.transform == PartitionTransform.DAY
+
+    @pytest.mark.requirement("FR-014")
+    def test_bucket_partition_field(self) -> None:
+        """Test PartitionField with bucket transform."""
+        from floe_iceberg.models import PartitionField
+
+        field = PartitionField(
+            source_field_id=1,
+            partition_field_id=1000,
+            name="id_bucket",
+            transform=PartitionTransform.BUCKET,
+            num_buckets=16,
+        )
+        assert field.transform == PartitionTransform.BUCKET
+        assert field.num_buckets == 16
+
+    @pytest.mark.requirement("FR-014")
+    def test_truncate_partition_field(self) -> None:
+        """Test PartitionField with truncate transform."""
+        from floe_iceberg.models import PartitionField
+
+        field = PartitionField(
+            source_field_id=1,
+            partition_field_id=1000,
+            name="str_truncate",
+            transform=PartitionTransform.TRUNCATE,
+            width=10,
+        )
+        assert field.transform == PartitionTransform.TRUNCATE
+        assert field.width == 10
+
+    @pytest.mark.requirement("FR-014")
+    def test_partition_field_id_min_validation(self) -> None:
+        """Test partition_field_id must be >= 1000."""
+        from floe_iceberg.models import PartitionField
+
+        with pytest.raises(ValueError, match="greater than or equal to 1000"):
+            PartitionField(
+                source_field_id=1,
+                partition_field_id=999,
+                name="test",
+                transform=PartitionTransform.IDENTITY,
+            )
+
+    @pytest.mark.requirement("FR-014")
+    def test_source_field_id_positive_validation(self) -> None:
+        """Test source_field_id must be positive."""
+        from floe_iceberg.models import PartitionField
+
+        with pytest.raises(ValueError, match="greater than or equal to 1"):
+            PartitionField(
+                source_field_id=0,
+                partition_field_id=1000,
+                name="test",
+                transform=PartitionTransform.IDENTITY,
+            )
+
+    @pytest.mark.requirement("FR-014")
+    def test_frozen(self) -> None:
+        """Test PartitionField is immutable."""
+        from floe_iceberg.models import PartitionField
+
+        field = PartitionField(
+            source_field_id=1,
+            partition_field_id=1000,
+            name="test",
+            transform=PartitionTransform.IDENTITY,
+        )
+        with pytest.raises(Exception):
+            field.name = "changed"  # type: ignore[misc]
+
+
+# =============================================================================
+# PartitionSpec Tests
+# =============================================================================
+
+
+class TestPartitionSpec:
+    """Tests for PartitionSpec model."""
+
+    @pytest.mark.requirement("FR-014")
+    def test_empty_partition_spec(self) -> None:
+        """Test PartitionSpec can be empty (unpartitioned)."""
+        from floe_iceberg.models import PartitionSpec
+
+        spec = PartitionSpec()
+        assert len(spec.fields) == 0
+
+    @pytest.mark.requirement("FR-014")
+    def test_single_partition_field(self) -> None:
+        """Test PartitionSpec with single field."""
+        from floe_iceberg.models import PartitionField, PartitionSpec
+
+        spec = PartitionSpec(
+            fields=[
+                PartitionField(
+                    source_field_id=1,
+                    partition_field_id=1000,
+                    name="date_day",
+                    transform=PartitionTransform.DAY,
+                )
+            ]
+        )
+        assert len(spec.fields) == 1
+
+    @pytest.mark.requirement("FR-014")
+    def test_multiple_partition_fields(self) -> None:
+        """Test PartitionSpec with multiple fields."""
+        from floe_iceberg.models import PartitionField, PartitionSpec
+
+        spec = PartitionSpec(
+            fields=[
+                PartitionField(
+                    source_field_id=1,
+                    partition_field_id=1000,
+                    name="date_day",
+                    transform=PartitionTransform.DAY,
+                ),
+                PartitionField(
+                    source_field_id=2,
+                    partition_field_id=1001,
+                    name="region_bucket",
+                    transform=PartitionTransform.BUCKET,
+                    num_buckets=8,
+                ),
+            ]
+        )
+        assert len(spec.fields) == 2
+
+    @pytest.mark.requirement("FR-014")
+    def test_frozen(self) -> None:
+        """Test PartitionSpec is immutable."""
+        from floe_iceberg.models import PartitionSpec
+
+        spec = PartitionSpec()
+        with pytest.raises(Exception):
+            spec.fields = []  # type: ignore[misc]
+
+
+# =============================================================================
+# TableConfig Tests
+# =============================================================================
+
+
+class TestTableConfig:
+    """Tests for TableConfig model."""
+
+    @pytest.mark.requirement("FR-013")
+    def test_minimal_config(self) -> None:
+        """Test TableConfig with minimal fields."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="customers",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        assert config.namespace == "bronze"
+        assert config.table_name == "customers"
+        assert config.partition_spec is None
+        assert config.location is None
+        assert config.properties == {}
+
+    @pytest.mark.requirement("FR-013")
+    def test_identifier_property(self) -> None:
+        """Test identifier property returns full table name."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="customers",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        assert config.identifier == "bronze.customers"
+
+    @pytest.mark.requirement("FR-013")
+    def test_config_with_partition(self) -> None:
+        """Test TableConfig with partition specification."""
+        from floe_iceberg.models import (
+            PartitionField,
+            PartitionSpec,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        config = TableConfig(
+            namespace="silver",
+            table_name="orders",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                    SchemaField(field_id=2, name="order_date", field_type=FieldType.DATE),
+                ]
+            ),
+            partition_spec=PartitionSpec(
+                fields=[
+                    PartitionField(
+                        source_field_id=2,
+                        partition_field_id=1000,
+                        name="order_date_day",
+                        transform=PartitionTransform.DAY,
+                    )
+                ]
+            ),
+        )
+        assert config.partition_spec is not None
+        assert len(config.partition_spec.fields) == 1
+
+    @pytest.mark.requirement("FR-013")
+    def test_config_with_location(self) -> None:
+        """Test TableConfig with custom location."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="customers",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+            location="s3://my-bucket/bronze/customers",
+        )
+        assert config.location == "s3://my-bucket/bronze/customers"
+
+    @pytest.mark.requirement("FR-013")
+    def test_config_with_properties(self) -> None:
+        """Test TableConfig with custom properties."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="customers",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+            properties={"write.format.default": "avro"},
+        )
+        assert config.properties["write.format.default"] == "avro"
+
+    @pytest.mark.requirement("FR-013")
+    def test_namespace_pattern_validation(self) -> None:
+        """Test namespace must match IDENTIFIER_PATTERN."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        with pytest.raises(ValueError, match="String should match pattern"):
+            TableConfig(
+                namespace="123invalid",
+                table_name="customers",
+                table_schema=TableSchema(
+                    fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+                ),
+            )
+
+    @pytest.mark.requirement("FR-013")
+    def test_table_name_pattern_validation(self) -> None:
+        """Test table_name must match IDENTIFIER_PATTERN."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        with pytest.raises(ValueError, match="String should match pattern"):
+            TableConfig(
+                namespace="bronze",
+                table_name="_invalid",
+                table_schema=TableSchema(
+                    fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+                ),
+            )
+
+    @pytest.mark.requirement("FR-013")
+    def test_frozen(self) -> None:
+        """Test TableConfig is immutable."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        config = TableConfig(
+            namespace="bronze",
+            table_name="customers",
+            table_schema=TableSchema(
+                fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+            ),
+        )
+        with pytest.raises(Exception):
+            config.namespace = "changed"  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-013")
+    def test_extra_forbid(self) -> None:
+        """Test TableConfig rejects extra fields."""
+        from floe_iceberg.models import SchemaField, TableConfig, TableSchema
+
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            TableConfig(
+                namespace="bronze",
+                table_name="customers",
+                table_schema=TableSchema(
+                    fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+                ),
+                unknown="value",  # type: ignore[call-arg]
+            )

@@ -262,6 +262,410 @@ class CompactionStrategyType(str, Enum):
 
 
 # =============================================================================
+# Schema and Partition Models
+# =============================================================================
+
+
+class SchemaField(BaseModel):
+    """Definition of a single schema field for Iceberg tables.
+
+    Represents a column in an Iceberg table schema with all metadata
+    required for PyIceberg conversion.
+
+    Attributes:
+        field_id: Unique field ID (immutable for schema evolution).
+        name: Field name (must match IDENTIFIER_PATTERN).
+        field_type: Iceberg data type.
+        required: Whether field is required (NOT NULL).
+        doc: Optional field documentation.
+        precision: Decimal precision (1-38, required for DECIMAL type).
+        scale: Decimal scale (>= 0, optional for DECIMAL type).
+
+    Example:
+        >>> field = SchemaField(
+        ...     field_id=1,
+        ...     name="customer_id",
+        ...     field_type=FieldType.LONG,
+        ...     required=True,
+        ...     doc="Primary customer identifier",
+        ... )
+        >>> field.name
+        'customer_id'
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field_id: int = Field(
+        ...,
+        ge=1,
+        description="Unique field ID (immutable for evolution)",
+    )
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=IDENTIFIER_PATTERN,
+        description="Field name",
+    )
+    field_type: FieldType = Field(
+        ...,
+        description="Field data type",
+    )
+    required: bool = Field(
+        default=False,
+        description="Whether field is required (NOT NULL)",
+    )
+    doc: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Field documentation",
+    )
+    # For decimal type
+    precision: int | None = Field(
+        default=None,
+        ge=1,
+        le=38,
+        description="Decimal precision",
+    )
+    scale: int | None = Field(
+        default=None,
+        ge=0,
+        description="Decimal scale",
+    )
+
+
+class TableSchema(BaseModel):
+    """Iceberg table schema definition.
+
+    Contains a list of fields that define the table structure.
+    Provides conversion to PyIceberg Schema objects.
+
+    Attributes:
+        fields: List of schema fields (at least one required).
+
+    Example:
+        >>> from floe_iceberg.models import TableSchema, SchemaField, FieldType
+        >>> schema = TableSchema(fields=[
+        ...     SchemaField(field_id=1, name="id", field_type=FieldType.LONG, required=True),
+        ...     SchemaField(field_id=2, name="name", field_type=FieldType.STRING),
+        ... ])
+        >>> len(schema.fields)
+        2
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    fields: list[SchemaField] = Field(
+        ...,
+        min_length=1,
+        description="List of schema fields",
+    )
+
+    def to_pyiceberg_schema(self) -> "pyiceberg.schema.Schema":
+        """Convert to PyIceberg Schema object.
+
+        Returns:
+            PyIceberg Schema instance.
+
+        Raises:
+            ImportError: If pyiceberg is not installed.
+        """
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import NestedField
+
+        nested_fields = []
+        for field in self.fields:
+            iceberg_type = self._convert_field_type(field)
+            nested_fields.append(
+                NestedField(
+                    field_id=field.field_id,
+                    name=field.name,
+                    field_type=iceberg_type,
+                    required=field.required,
+                    doc=field.doc,
+                )
+            )
+        return Schema(*nested_fields)
+
+    def _convert_field_type(self, field: SchemaField) -> "pyiceberg.types.IcebergType":
+        """Convert FieldType enum to PyIceberg type.
+
+        Args:
+            field: SchemaField to convert.
+
+        Returns:
+            PyIceberg type instance.
+        """
+        from pyiceberg import types
+
+        type_mapping: dict[FieldType, type] = {
+            FieldType.BOOLEAN: types.BooleanType,
+            FieldType.INT: types.IntegerType,
+            FieldType.LONG: types.LongType,
+            FieldType.FLOAT: types.FloatType,
+            FieldType.DOUBLE: types.DoubleType,
+            FieldType.DATE: types.DateType,
+            FieldType.TIME: types.TimeType,
+            FieldType.TIMESTAMP: types.TimestampType,
+            FieldType.TIMESTAMPTZ: types.TimestamptzType,
+            FieldType.STRING: types.StringType,
+            FieldType.UUID: types.UUIDType,
+            FieldType.BINARY: types.BinaryType,
+            FieldType.FIXED: types.FixedType,
+        }
+
+        if field.field_type == FieldType.DECIMAL:
+            return types.DecimalType(field.precision or 38, field.scale or 0)
+
+        if field.field_type == FieldType.FIXED:
+            # Fixed requires length, use precision as length if provided
+            return types.FixedType(field.precision or 16)
+
+        type_class = type_mapping.get(field.field_type)
+        if type_class is None:
+            msg = f"Unknown field type: {field.field_type}"
+            raise ValueError(msg)
+        return type_class()
+
+
+class PartitionField(BaseModel):
+    """Definition of a partition field for Iceberg tables.
+
+    Specifies how a source column is transformed for partitioning.
+
+    Attributes:
+        source_field_id: Source field ID to partition by.
+        partition_field_id: Partition field ID (convention: >= 1000).
+        name: Partition field name.
+        transform: Transform to apply.
+        num_buckets: Number of buckets (for BUCKET transform).
+        width: Truncation width (for TRUNCATE transform).
+
+    Example:
+        >>> field = PartitionField(
+        ...     source_field_id=1,
+        ...     partition_field_id=1000,
+        ...     name="day_partition",
+        ...     transform=PartitionTransform.DAY,
+        ... )
+        >>> field.transform
+        <PartitionTransform.DAY: 'day'>
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_field_id: int = Field(
+        ...,
+        ge=1,
+        description="Source field ID to partition by",
+    )
+    partition_field_id: int = Field(
+        ...,
+        ge=1000,
+        description="Partition field ID (convention: start at 1000)",
+    )
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Partition field name",
+    )
+    transform: PartitionTransform = Field(
+        ...,
+        description="Transform to apply",
+    )
+    # For bucket/truncate transforms
+    num_buckets: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of buckets (for bucket transform)",
+    )
+    width: int | None = Field(
+        default=None,
+        ge=1,
+        description="Truncation width (for truncate transform)",
+    )
+
+
+class PartitionSpec(BaseModel):
+    """Partition specification for an Iceberg table.
+
+    Defines how data is partitioned for storage optimization.
+    Provides conversion to PyIceberg PartitionSpec objects.
+
+    Attributes:
+        fields: List of partition fields (can be empty for unpartitioned).
+
+    Example:
+        >>> spec = PartitionSpec(fields=[
+        ...     PartitionField(
+        ...         source_field_id=1,
+        ...         partition_field_id=1000,
+        ...         name="date_day",
+        ...         transform=PartitionTransform.DAY,
+        ...     ),
+        ... ])
+        >>> len(spec.fields)
+        1
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    fields: list[PartitionField] = Field(
+        default_factory=list,
+        description="List of partition fields",
+    )
+
+    def to_pyiceberg_spec(
+        self, schema: "pyiceberg.schema.Schema"
+    ) -> "pyiceberg.partitioning.PartitionSpec":
+        """Convert to PyIceberg PartitionSpec.
+
+        Args:
+            schema: PyIceberg Schema for field resolution.
+
+        Returns:
+            PyIceberg PartitionSpec instance.
+
+        Raises:
+            ImportError: If pyiceberg is not installed.
+        """
+        from pyiceberg.partitioning import PartitionField as PyPartitionField
+        from pyiceberg.partitioning import PartitionSpec as PyPartitionSpec
+
+        py_fields = []
+        for field in self.fields:
+            transform = self._get_transform(field)
+            py_fields.append(
+                PyPartitionField(
+                    source_id=field.source_field_id,
+                    field_id=field.partition_field_id,
+                    transform=transform,
+                    name=field.name,
+                )
+            )
+        return PyPartitionSpec(*py_fields)
+
+    def _get_transform(
+        self, field: PartitionField
+    ) -> "pyiceberg.transforms.Transform":
+        """Get PyIceberg transform for field.
+
+        Args:
+            field: PartitionField to get transform for.
+
+        Returns:
+            PyIceberg Transform instance.
+        """
+        from pyiceberg.transforms import (
+            BucketTransform,
+            DayTransform,
+            HourTransform,
+            IdentityTransform,
+            MonthTransform,
+            TruncateTransform,
+            YearTransform,
+        )
+
+        transform_mapping: dict[PartitionTransform, type] = {
+            PartitionTransform.IDENTITY: IdentityTransform,
+            PartitionTransform.YEAR: YearTransform,
+            PartitionTransform.MONTH: MonthTransform,
+            PartitionTransform.DAY: DayTransform,
+            PartitionTransform.HOUR: HourTransform,
+        }
+
+        if field.transform == PartitionTransform.BUCKET:
+            return BucketTransform(field.num_buckets or 16)
+        if field.transform == PartitionTransform.TRUNCATE:
+            return TruncateTransform(field.width or 10)
+
+        transform_class = transform_mapping.get(field.transform)
+        if transform_class is None:
+            msg = f"Unknown partition transform: {field.transform}"
+            raise ValueError(msg)
+        return transform_class()
+
+
+class TableConfig(BaseModel):
+    """Configuration for Iceberg table creation.
+
+    Defines schema, partitioning, and table properties for creating
+    a new Iceberg table.
+
+    Attributes:
+        namespace: Catalog namespace (e.g., 'bronze', 'silver').
+        table_name: Table name within namespace.
+        table_schema: Iceberg schema definition with fields.
+        partition_spec: Optional partition specification.
+        location: Custom storage location (optional).
+        properties: Custom table properties.
+
+    Example:
+        >>> config = TableConfig(
+        ...     namespace="bronze",
+        ...     table_name="customers",
+        ...     table_schema=TableSchema(fields=[
+        ...         SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+        ...     ]),
+        ... )
+        >>> config.identifier
+        'bronze.customers'
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Table identifier
+    namespace: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=IDENTIFIER_PATTERN,
+        description="Catalog namespace (e.g., 'bronze', 'silver')",
+    )
+    table_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=IDENTIFIER_PATTERN,
+        description="Table name within namespace",
+    )
+
+    # Schema definition (named table_schema to avoid shadowing BaseModel.schema)
+    table_schema: TableSchema = Field(
+        ...,
+        description="Iceberg schema definition with fields",
+    )
+
+    # Partitioning (optional)
+    partition_spec: PartitionSpec | None = Field(
+        default=None,
+        description="Partition specification for the table",
+    )
+
+    # Storage location (optional, defaults to warehouse)
+    location: str | None = Field(
+        default=None,
+        description="Custom storage location (e.g., 's3://bucket/path')",
+    )
+
+    # Custom properties
+    properties: dict[str, str] = Field(
+        default_factory=dict,
+        description="Custom table properties",
+    )
+
+    @property
+    def identifier(self) -> str:
+        """Full table identifier (namespace.table_name).
+
+        Returns:
+            Full qualified table identifier.
+        """
+        return f"{self.namespace}.{self.table_name}"
+
+
+# =============================================================================
 # Manager Configuration Models
 # =============================================================================
 
@@ -407,6 +811,12 @@ __all__ = [
     "CommitStrategy",
     "OperationType",
     "CompactionStrategyType",
+    # Schema and partition models
+    "SchemaField",
+    "TableSchema",
+    "PartitionField",
+    "PartitionSpec",
+    "TableConfig",
     # Configuration models
     "IcebergTableManagerConfig",
     "IcebergIOManagerConfig",

@@ -158,6 +158,13 @@ class TestFloeIcebergPublicApi:
         assert "OperationType" in models_all
         assert "CompactionStrategyType" in models_all
 
+        # Schema and partition models
+        assert "SchemaField" in models_all
+        assert "TableSchema" in models_all
+        assert "PartitionField" in models_all
+        assert "PartitionSpec" in models_all
+        assert "TableConfig" in models_all
+
         # Configuration models
         assert "IcebergTableManagerConfig" in models_all
         assert "IcebergIOManagerConfig" in models_all
@@ -251,6 +258,72 @@ class TestModelSchemaStability:
             "namespace",
             "table_name_pattern",
             "infer_schema_from_data",
+        }
+
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
+
+    @pytest.mark.requirement("FR-012")
+    def test_schema_field_has_required_fields(self) -> None:
+        """Test SchemaField has all required fields."""
+        from floe_iceberg.models import SchemaField
+
+        field_names = set(SchemaField.model_fields.keys())
+
+        expected_fields = {
+            "field_id",
+            "name",
+            "field_type",
+            "required",
+            "doc",
+            "precision",
+            "scale",
+        }
+
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
+
+    @pytest.mark.requirement("FR-012")
+    def test_table_schema_has_required_fields(self) -> None:
+        """Test TableSchema has required fields."""
+        from floe_iceberg.models import TableSchema
+
+        field_names = set(TableSchema.model_fields.keys())
+
+        expected_fields = {"fields"}
+
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
+
+    @pytest.mark.requirement("FR-014")
+    def test_partition_field_has_required_fields(self) -> None:
+        """Test PartitionField has all required fields."""
+        from floe_iceberg.models import PartitionField
+
+        field_names = set(PartitionField.model_fields.keys())
+
+        expected_fields = {
+            "source_field_id",
+            "partition_field_id",
+            "name",
+            "transform",
+            "num_buckets",
+            "width",
+        }
+
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
+
+    @pytest.mark.requirement("FR-013")
+    def test_table_config_has_required_fields(self) -> None:
+        """Test TableConfig has all required fields."""
+        from floe_iceberg.models import TableConfig
+
+        field_names = set(TableConfig.model_fields.keys())
+
+        expected_fields = {
+            "namespace",
+            "table_name",
+            "table_schema",
+            "partition_spec",
+            "location",
+            "properties",
         }
 
         assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
