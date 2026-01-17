@@ -246,9 +246,7 @@ class MockCatalogPlugin:
         """
         if namespace in self._namespaces:
             del self._namespaces[namespace]
-            self._catalog.namespaces = [
-                ns for ns in self._catalog.namespaces if ns[0] != namespace
-            ]
+            self._catalog.namespaces = [ns for ns in self._catalog.namespaces if ns[0] != namespace]
             if namespace in self._catalog.tables:
                 del self._catalog.tables[namespace]
 

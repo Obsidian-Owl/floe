@@ -558,9 +558,7 @@ class PartitionSpec(BaseModel):
             )
         return PyPartitionSpec(*py_fields)
 
-    def _get_transform(
-        self, field: PartitionField
-    ) -> Transform[Any, Any]:
+    def _get_transform(self, field: PartitionField) -> Transform[Any, Any]:
         """Get PyIceberg transform for field.
 
         Args:
@@ -952,9 +950,7 @@ class SnapshotInfo(BaseModel):
                 # Fallback: try to iterate if it's dict-like
                 try:
                     if hasattr(snapshot.summary, "items"):
-                        summary_dict = {
-                            k: str(v) for k, v in snapshot.summary.items()
-                        }
+                        summary_dict = {k: str(v) for k, v in snapshot.summary.items()}
                 except (TypeError, AttributeError):
                     summary_dict = {}
 

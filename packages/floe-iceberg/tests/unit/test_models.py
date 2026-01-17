@@ -605,9 +605,7 @@ class TestTableSchema:
         """Test TableSchema is immutable."""
         from floe_iceberg.models import SchemaField, TableSchema
 
-        schema = TableSchema(
-            fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
-        )
+        schema = TableSchema(fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)])
         with pytest.raises(PydanticValidationError):
             schema.fields = []  # type: ignore[misc]
 

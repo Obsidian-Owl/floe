@@ -189,9 +189,11 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
             # Get current snapshot's data files
             snapshot = getattr(table, "current_snapshot", None)
             if snapshot is None or callable(snapshot):
-                snapshot = table.current_snapshot() if callable(
-                    getattr(table, "current_snapshot", None)
-                ) else None
+                snapshot = (
+                    table.current_snapshot()
+                    if callable(getattr(table, "current_snapshot", None))
+                    else None
+                )
 
             if snapshot is None:
                 return (0, 0)

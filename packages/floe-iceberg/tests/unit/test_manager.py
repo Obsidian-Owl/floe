@@ -1182,15 +1182,11 @@ class TestIcebergTableManagerEvolveSchemaAddColumn:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(
-                        field_id=2, name="email", field_type=FieldType.STRING
-                    ),
+                    field=SchemaField(field_id=2, name="email", field_type=FieldType.STRING),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(
-                        field_id=3, name="phone", field_type=FieldType.STRING
-                    ),
+                    field=SchemaField(field_id=3, name="phone", field_type=FieldType.STRING),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
@@ -1636,9 +1632,7 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(
-                        field_id=3, name="new_field", field_type=FieldType.STRING
-                    ),
+                    field=SchemaField(field_id=3, name="new_field", field_type=FieldType.STRING),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.DELETE_COLUMN,
@@ -2244,10 +2238,12 @@ class TestIcebergTableManagerWriteDataAppend:
         table = manager.create_table(table_config)
 
         # Create PyArrow Table with data
-        arrow_table = pa.table({
-            "id": [1, 2, 3],
-            "name": ["Alice", "Bob", "Charlie"],
-        })
+        arrow_table = pa.table(
+            {
+                "id": [1, 2, 3],
+                "name": ["Alice", "Bob", "Charlie"],
+            }
+        )
 
         write_config = WriteConfig(mode=WriteMode.APPEND)
 
@@ -2458,17 +2454,21 @@ class TestIcebergTableManagerWriteDataOverwrite:
         table = manager.create_table(table_config)
 
         # Initial data
-        initial_data = pa.table({
-            "id": [1, 2, 3],
-            "value": ["a", "b", "c"],
-        })
+        initial_data = pa.table(
+            {
+                "id": [1, 2, 3],
+                "value": ["a", "b", "c"],
+            }
+        )
         manager.write_data(table, initial_data, WriteConfig(mode=WriteMode.APPEND))
 
         # Overwrite with new data
-        new_data = pa.table({
-            "id": [4, 5],
-            "value": ["d", "e"],
-        })
+        new_data = pa.table(
+            {
+                "id": [4, 5],
+                "value": ["d", "e"],
+            }
+        )
         write_config = WriteConfig(mode=WriteMode.OVERWRITE)
 
         result = manager.write_data(table, new_data, write_config)
@@ -2513,10 +2513,12 @@ class TestIcebergTableManagerWriteDataOverwrite:
         table = manager.create_table(table_config)
 
         # Overwrite only specific partition
-        new_data = pa.table({
-            "id": [10, 11],
-            "date": ["2024-01-01", "2024-01-01"],
-        })
+        new_data = pa.table(
+            {
+                "id": [10, 11],
+                "date": ["2024-01-01", "2024-01-01"],
+            }
+        )
         write_config = WriteConfig(
             mode=WriteMode.OVERWRITE,
             overwrite_filter="date = '2024-01-01'",
@@ -2623,10 +2625,12 @@ class TestIcebergTableManagerWriteDataUpsert:
         table = manager.create_table(table_config)
 
         # Upsert data with single join column
-        data = pa.table({
-            "id": [1, 2, 3],
-            "value": ["a", "b", "c"],
-        })
+        data = pa.table(
+            {
+                "id": [1, 2, 3],
+                "value": ["a", "b", "c"],
+            }
+        )
         write_config = WriteConfig(
             mode=WriteMode.UPSERT,
             join_columns=["id"],
@@ -2675,11 +2679,13 @@ class TestIcebergTableManagerWriteDataUpsert:
         table = manager.create_table(table_config)
 
         # Upsert data with multiple join columns
-        data = pa.table({
-            "id": [1, 1, 2],
-            "date": ["2024-01-01", "2024-01-02", "2024-01-01"],
-            "value": ["a", "b", "c"],
-        })
+        data = pa.table(
+            {
+                "id": [1, 1, 2],
+                "date": ["2024-01-01", "2024-01-02", "2024-01-01"],
+                "value": ["a", "b", "c"],
+            }
+        )
         write_config = WriteConfig(
             mode=WriteMode.UPSERT,
             join_columns=["id", "date"],
@@ -3393,9 +3399,7 @@ class TestCompactTableBinPack:
         )
 
         # Mock execute_compaction to raise CompactionError
-        with patch(
-            "floe_iceberg.compaction.execute_compaction"
-        ) as mock_execute:
+        with patch("floe_iceberg.compaction.execute_compaction") as mock_execute:
             mock_execute.side_effect = CompactionError(
                 "Simulated failure",
                 table_identifier="bronze.error_handling_test",

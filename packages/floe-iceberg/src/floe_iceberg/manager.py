@@ -460,9 +460,7 @@ class IcebergTableManager:
         table_name = parts[1]
 
         # Check if namespace exists (mock-specific attribute for unit testing)
-        namespaces: list[str] | None = getattr(
-            self._catalog_plugin, "_namespaces", None
-        )
+        namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
         if namespaces is not None and namespace not in namespaces:
             return False
 
@@ -487,9 +485,7 @@ class IcebergTableManager:
             NoSuchNamespaceError: If namespace doesn't exist.
         """
         # Mock-specific attribute access for unit testing
-        namespaces: list[str] | None = getattr(
-            self._catalog_plugin, "_namespaces", None
-        )
+        namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
         if namespaces is not None and namespace not in namespaces:
             msg = f"Namespace '{namespace}' does not exist"
             raise NoSuchNamespaceError(msg)
@@ -767,9 +763,7 @@ class IcebergTableManager:
         # In mock, check via catalog plugin's table schema (mock-specific)
         table_id = getattr(table, "identifier", None)
         if table_id is not None:
-            tables: dict[str, Any] | None = getattr(
-                self._catalog_plugin, "_tables", None
-            )
+            tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
             if tables is not None:
                 table_data = tables.get(table_id)
                 if table_data is not None:
@@ -790,9 +784,7 @@ class IcebergTableManager:
         """
         table_id = getattr(table, "identifier", None)
         if table_id is not None:
-            tables: dict[str, Any] | None = getattr(
-                self._catalog_plugin, "_tables", None
-            )
+            tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
             if tables is not None:
                 table_data = tables.get(table_id)
                 if table_data is not None:

@@ -225,10 +225,12 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
         table = manager.create_table(table_config)
 
         # Prepare test data
-        data = pa.table({
-            "id": [1, 2, 3],
-            "name": ["Alice", "Bob", "Charlie"],
-        })
+        data = pa.table(
+            {
+                "id": [1, 2, 3],
+                "name": ["Alice", "Bob", "Charlie"],
+            }
+        )
 
         # Write data
         write_config = WriteConfig(mode=WriteMode.APPEND)
@@ -280,15 +282,11 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
 
         # Write initial data
         initial_data = pa.table({"id": [1, 2], "value": ["old1", "old2"]})
-        table = manager.write_data(
-            table, initial_data, WriteConfig(mode=WriteMode.APPEND)
-        )
+        table = manager.write_data(table, initial_data, WriteConfig(mode=WriteMode.APPEND))
 
         # Overwrite with new data
         new_data = pa.table({"id": [3], "value": ["new"]})
-        table = manager.write_data(
-            table, new_data, WriteConfig(mode=WriteMode.OVERWRITE)
-        )
+        table = manager.write_data(table, new_data, WriteConfig(mode=WriteMode.OVERWRITE))
 
         # Verify only new data exists
         result = table.scan().to_arrow()
@@ -350,9 +348,7 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
 
         # Write initial data
         initial_data = pa.table({"id": [1, 2], "name": ["Alice", "Bob"]})
-        table = manager.write_data(
-            table, initial_data, WriteConfig(mode=WriteMode.APPEND)
-        )
+        table = manager.write_data(table, initial_data, WriteConfig(mode=WriteMode.APPEND))
 
         # Evolve schema - add email column
         evolution = SchemaEvolution(
@@ -486,9 +482,7 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
         # Make multiple writes to create snapshots
         for i in range(3):
             data = pa.table({"id": [i * 10 + j for j in range(3)]})
-            table = manager.write_data(
-                table, data, WriteConfig(mode=WriteMode.APPEND)
-            )
+            table = manager.write_data(table, data, WriteConfig(mode=WriteMode.APPEND))
 
         # List snapshots
         snapshots = manager.list_snapshots(table)
