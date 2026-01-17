@@ -938,11 +938,26 @@ class SnapshotInfo(BaseModel):
             OperationType.APPEND,
         )
 
+        # Convert PyIceberg Summary object to plain dict
+        # The Summary object may have additional_properties or be dict-like
+        summary_dict: dict[str, str] = {}
+        if snapshot.summary:
+            if hasattr(snapshot.summary, "additional_properties"):
+                summary_dict = dict(snapshot.summary.additional_properties)
+            elif hasattr(snapshot.summary, "_additional_properties"):
+                summary_dict = dict(snapshot.summary._additional_properties)
+            else:
+                # Fallback: try to iterate if it's dict-like
+                try:
+                    summary_dict = {k: str(v) for k, v in snapshot.summary.items()} if hasattr(snapshot.summary, "items") else {}
+                except (TypeError, AttributeError):
+                    summary_dict = {}
+
         return cls(
             snapshot_id=snapshot.snapshot_id,
             timestamp_ms=snapshot.timestamp_ms,
             operation=operation,
-            summary=dict(snapshot.summary) if snapshot.summary else {},
+            summary=summary_dict,
             parent_id=snapshot.parent_snapshot_id,
         )
 

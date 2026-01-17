@@ -27,6 +27,7 @@ See Also:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -527,17 +528,87 @@ class IcebergTableManager:
         # Validate all changes before applying any
         self._validate_schema_evolution(table, evolution)
 
-        # Apply each change
-        for change in evolution.changes:
-            self._apply_schema_change(table, change)
+        # Check if this is a real PyIceberg table (has update_schema method)
+        if hasattr(table, "update_schema") and callable(getattr(table, "update_schema")):
+            # Real PyIceberg table - use actual schema evolution
+            self._apply_real_schema_changes(table, evolution)
+        else:
+            # Mock table - use in-memory schema tracking
+            for change in evolution.changes:
+                self._apply_schema_change(table, change)
 
         self._log.info(
             "schema_evolved",
             num_changes=len(evolution.changes),
         )
 
-        # Return the table (in real PyIceberg, this would reload)
+        # Refresh to get updated schema if supported
+        if hasattr(table, "refresh"):
+            table.refresh()
+
         return table
+
+    def _apply_real_schema_changes(
+        self,
+        table: Table,
+        evolution: SchemaEvolution,
+    ) -> None:
+        """Apply schema changes to a real PyIceberg table.
+
+        Args:
+            table: Real PyIceberg Table instance.
+            evolution: SchemaEvolution with list of changes.
+        """
+        from pyiceberg.types import (
+            BooleanType,
+            DateType,
+            DoubleType,
+            FloatType,
+            IntegerType,
+            LongType,
+            StringType,
+            TimestampType,
+            TimestamptzType,
+        )
+
+        type_mapping = {
+            FieldType.BOOLEAN: BooleanType(),
+            FieldType.INT: IntegerType(),
+            FieldType.LONG: LongType(),
+            FieldType.FLOAT: FloatType(),
+            FieldType.DOUBLE: DoubleType(),
+            FieldType.STRING: StringType(),
+            FieldType.DATE: DateType(),
+            FieldType.TIMESTAMP: TimestampType(),
+            FieldType.TIMESTAMPTZ: TimestamptzType(),
+        }
+
+        with table.update_schema() as update:
+            for change in evolution.changes:
+                if change.change_type == SchemaChangeType.ADD_COLUMN:
+                    if change.field:
+                        iceberg_type = type_mapping.get(change.field.field_type, StringType())
+                        update.add_column(
+                            change.field.name,
+                            iceberg_type,
+                            doc=change.field.doc,
+                        )
+
+                elif change.change_type == SchemaChangeType.RENAME_COLUMN:
+                    if change.source_column and change.new_name:
+                        update.rename_column(change.source_column, change.new_name)
+
+                elif change.change_type == SchemaChangeType.MAKE_OPTIONAL:
+                    if change.source_column:
+                        update.make_column_optional(change.source_column)
+
+                elif change.change_type == SchemaChangeType.DELETE_COLUMN:
+                    if change.source_column:
+                        update.delete_column(change.source_column)
+
+                elif change.change_type == SchemaChangeType.UPDATE_DOC:
+                    if change.source_column and change.new_doc is not None:
+                        update.update_column(change.source_column, doc=change.new_doc)
 
     def _validate_schema_evolution(
         self,
@@ -872,7 +943,25 @@ class IcebergTableManager:
             table_identifier=getattr(table, "identifier", None),
         )
 
-        # Get snapshots from mock catalog plugin's table data
+        # Check if this is a real PyIceberg table (has snapshots method/property)
+        if hasattr(table, "snapshots") and callable(getattr(table, "snapshots")):
+            # Real PyIceberg table - use actual snapshots via classmethod
+            snapshots: list[SnapshotInfo] = []
+            for snap in table.snapshots():
+                snapshot_info = SnapshotInfo.from_pyiceberg_snapshot(snap)
+                snapshots.append(snapshot_info)
+
+            # Sort by timestamp_ms (newest first)
+            snapshots.sort(key=lambda s: s.timestamp_ms, reverse=True)
+
+            self._log.info(
+                "snapshots_listed",
+                table_identifier=getattr(table, "identifier", None),
+                snapshot_count=len(snapshots),
+            )
+            return snapshots
+
+        # Mock table - use in-memory snapshot tracking
         table_data = getattr(table, "_table_data", {})
         snapshots_data = table_data.get("snapshots", [])
 
@@ -965,7 +1054,43 @@ class IcebergTableManager:
             )
             raise SnapshotNotFoundError(msg)
 
-        # For mock implementation, add a new rollback snapshot
+        # Check if this is a real PyIceberg table (has manage_snapshots method)
+        if hasattr(table, "manage_snapshots") and callable(getattr(table, "manage_snapshots")):
+            # Real PyIceberg table - use actual rollback
+            manage_snapshots = table.manage_snapshots()
+
+            # Check if set_current_snapshot is available (PyIceberg 0.11+)
+            if hasattr(manage_snapshots, "set_current_snapshot"):
+                manage_snapshots.set_current_snapshot(snapshot_id).commit()
+            elif hasattr(manage_snapshots, "rollback_to_snapshot"):
+                # Alternative API if available
+                manage_snapshots.rollback_to_snapshot(snapshot_id).commit()
+            else:
+                # PyIceberg 0.10.0 doesn't support snapshot rollback yet
+                msg = (
+                    "Snapshot rollback not supported in PyIceberg "
+                    f"{__import__('pyiceberg').__version__}. "
+                    "Upgrade to PyIceberg 0.11+ for this feature."
+                )
+                self._log.error(
+                    "rollback_not_supported",
+                    table_identifier=getattr(table, "identifier", None),
+                    pyiceberg_version=__import__("pyiceberg").__version__,
+                )
+                raise NotImplementedError(msg)
+
+            # Refresh to get the updated state
+            if hasattr(table, "refresh"):
+                table.refresh()
+
+            self._log.info(
+                "snapshot_rollback_completed",
+                table_identifier=getattr(table, "identifier", None),
+                target_snapshot_id=snapshot_id,
+            )
+            return table
+
+        # Mock implementation - add a new rollback snapshot
         table_data = getattr(table, "_table_data", {})
         snapshots_data = table_data.get("snapshots", [])
 
@@ -1201,32 +1326,42 @@ class IcebergTableManager:
             commit_strategy=config.commit_strategy.value,
         )
 
-        # Create new snapshot for append
-        table_data = getattr(table, "_table_data", {})
-        snapshots = table_data.get("snapshots", [])
+        # Check if this is a real PyIceberg table (has append method)
+        if hasattr(table, "append") and callable(getattr(table, "append")):
+            # Real PyIceberg table - use actual append
+            table.append(data)
+            # Refresh to get latest snapshot
+            if hasattr(table, "refresh"):
+                table.refresh()
+            current_snapshot = table.current_snapshot()
+            snapshot_id = current_snapshot.snapshot_id if current_snapshot else 0
+        else:
+            # Mock table - use in-memory snapshot tracking
+            table_data = getattr(table, "_table_data", {})
+            snapshots = table_data.get("snapshots", [])
 
-        import time
+            import time
 
-        new_snapshot_id = len(snapshots) + 1
-        new_snapshot = {
-            "snapshot_id": new_snapshot_id,
-            "timestamp_ms": int(time.time() * 1000),
-            "operation": "append",
-            "summary": {
+            snapshot_id = len(snapshots) + 1
+            new_snapshot = {
+                "snapshot_id": snapshot_id,
+                "timestamp_ms": int(time.time() * 1000),
                 "operation": "append",
-                "added-files-count": "1",
-                "added-records-count": str(len(data) if hasattr(data, "__len__") else 0),
-                **config.snapshot_properties,
-            },
-            "parent_id": snapshots[-1]["snapshot_id"] if snapshots else None,
-        }
-        snapshots.append(new_snapshot)
-        table_data["snapshots"] = snapshots
+                "summary": {
+                    "operation": "append",
+                    "added-files-count": "1",
+                    "added-records-count": str(len(data) if hasattr(data, "__len__") else 0),
+                    **config.snapshot_properties,
+                },
+                "parent_id": snapshots[-1]["snapshot_id"] if snapshots else None,
+            }
+            snapshots.append(new_snapshot)
+            table_data["snapshots"] = snapshots
 
         self._log.debug(
             "write_append_completed",
             table_identifier=getattr(table, "identifier", None),
-            snapshot_id=new_snapshot_id,
+            snapshot_id=snapshot_id,
         )
 
         return table
@@ -1253,32 +1388,42 @@ class IcebergTableManager:
             has_filter=config.overwrite_filter is not None,
         )
 
-        # Create new snapshot for overwrite
-        table_data = getattr(table, "_table_data", {})
-        snapshots = table_data.get("snapshots", [])
+        # Check if this is a real PyIceberg table (has overwrite method)
+        if hasattr(table, "overwrite") and callable(getattr(table, "overwrite")):
+            # Real PyIceberg table - use actual overwrite
+            table.overwrite(data)
+            # Refresh to get latest snapshot
+            if hasattr(table, "refresh"):
+                table.refresh()
+            current_snapshot = table.current_snapshot()
+            snapshot_id = current_snapshot.snapshot_id if current_snapshot else 0
+        else:
+            # Mock table - use in-memory snapshot tracking
+            table_data = getattr(table, "_table_data", {})
+            snapshots = table_data.get("snapshots", [])
 
-        import time
+            import time
 
-        new_snapshot_id = len(snapshots) + 1
-        new_snapshot = {
-            "snapshot_id": new_snapshot_id,
-            "timestamp_ms": int(time.time() * 1000),
-            "operation": "overwrite",
-            "summary": {
+            snapshot_id = len(snapshots) + 1
+            new_snapshot = {
+                "snapshot_id": snapshot_id,
+                "timestamp_ms": int(time.time() * 1000),
                 "operation": "overwrite",
-                "added-files-count": "1",
-                "added-records-count": str(len(data) if hasattr(data, "__len__") else 0),
-                **config.snapshot_properties,
-            },
-            "parent_id": snapshots[-1]["snapshot_id"] if snapshots else None,
-        }
-        snapshots.append(new_snapshot)
-        table_data["snapshots"] = snapshots
+                "summary": {
+                    "operation": "overwrite",
+                    "added-files-count": "1",
+                    "added-records-count": str(len(data) if hasattr(data, "__len__") else 0),
+                    **config.snapshot_properties,
+                },
+                "parent_id": snapshots[-1]["snapshot_id"] if snapshots else None,
+            }
+            snapshots.append(new_snapshot)
+            table_data["snapshots"] = snapshots
 
         self._log.debug(
             "write_overwrite_completed",
             table_identifier=getattr(table, "identifier", None),
-            snapshot_id=new_snapshot_id,
+            snapshot_id=snapshot_id,
         )
 
         return table
