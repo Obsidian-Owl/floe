@@ -136,13 +136,9 @@ class TestFloeIcebergPublicApi:
 
         assert "IcebergTableManagerConfig" in __all__
 
-    @pytest.mark.requirement("FR-037")
-    def test_package_exports_io_manager(self) -> None:
-        """Test IcebergIOManager is exported from package."""
-        from floe_iceberg import __all__
-
-        assert "IcebergIOManager" in __all__
-        assert "IcebergIOManagerConfig" in __all__
+    # Note: IcebergIOManager is NOT exported from floe-iceberg
+    # IOManager belongs in orchestrator plugins (Epic 4B)
+    # FR-037 to FR-040 are deferred to floe-orchestrator-dagster
 
     @pytest.mark.requirement("FR-001")
     def test_models_module_exports(self) -> None:
@@ -167,7 +163,7 @@ class TestFloeIcebergPublicApi:
 
         # Configuration models
         assert "IcebergTableManagerConfig" in models_all
-        assert "IcebergIOManagerConfig" in models_all
+        # Note: IcebergIOManagerConfig is NOT in models - it belongs in orchestrator plugins
 
         # Constants
         assert "IDENTIFIER_PATTERN" in models_all
@@ -243,24 +239,9 @@ class TestModelSchemaStability:
         assert isinstance(config.default_commit_strategy, CommitStrategy)
         assert isinstance(config.default_table_properties, dict)
 
-    @pytest.mark.requirement("FR-037")
-    def test_iceberg_io_manager_config_has_required_fields(self) -> None:
-        """Test IcebergIOManagerConfig has all required fields."""
-        from floe_iceberg.models import IcebergIOManagerConfig
-
-        # Get model fields
-        field_names = set(IcebergIOManagerConfig.model_fields.keys())
-
-        # Required fields from data-model.md
-        expected_fields = {
-            "default_write_mode",
-            "default_commit_strategy",
-            "namespace",
-            "table_name_pattern",
-            "infer_schema_from_data",
-        }
-
-        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
+    # Note: test_iceberg_io_manager_config_has_required_fields was removed
+    # IcebergIOManagerConfig is NOT part of floe-iceberg (see Epic 4B)
+    # FR-037 requirements are deferred to floe-orchestrator-dagster plugin
 
     @pytest.mark.requirement("FR-012")
     def test_schema_field_has_required_fields(self) -> None:

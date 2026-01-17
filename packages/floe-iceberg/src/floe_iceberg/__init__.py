@@ -7,6 +7,10 @@ schema evolution, writes, and snapshot management.
 IcebergTableManager is NOT a plugin - Iceberg is enforced (ADR-0005), not pluggable.
 It accepts CatalogPlugin and StoragePlugin via dependency injection.
 
+Note: IOManager for Dagster integration is NOT part of this package. Orchestrator-specific
+integrations belong in the respective orchestrator plugins (e.g., floe-orchestrator-dagster).
+floe-iceberg is orchestrator-agnostic.
+
 Example:
     >>> from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
     >>> from floe_iceberg.models import TableConfig, WriteConfig, WriteMode
@@ -21,7 +25,6 @@ Example:
 
 Modules:
     manager: IcebergTableManager class
-    io_manager: IcebergIOManager for Dagster integration
     models: Pydantic configuration models
     errors: Custom exception types
     telemetry: OpenTelemetry instrumentation
@@ -32,19 +35,15 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 __all__ = [
-    # Core manager (implemented in later tasks)
+    # Core manager (orchestrator-agnostic)
     "IcebergTableManager",
     "IcebergTableManagerConfig",
-    # IOManager for Dagster (implemented in later tasks)
-    "IcebergIOManager",
-    "IcebergIOManagerConfig",
-    # Models - will be populated as implemented
-    # Errors - will be populated as implemented
+    # Note: IOManager is NOT exported here - it belongs in orchestrator plugins
+    # See: plugins/floe-orchestrator-dagster/ (Epic 4B)
 ]
 
 
 # Lazy imports to avoid circular dependencies and improve startup time
-# These will be uncommented as the modules are implemented
 def __getattr__(name: str) -> object:
     """Lazy import of package components."""
     if name == "IcebergTableManager":
@@ -55,13 +54,7 @@ def __getattr__(name: str) -> object:
         from floe_iceberg.models import IcebergTableManagerConfig
 
         return IcebergTableManagerConfig
-    if name == "IcebergIOManager":
-        from floe_iceberg.io_manager import IcebergIOManager
-
-        return IcebergIOManager
-    if name == "IcebergIOManagerConfig":
-        from floe_iceberg.models import IcebergIOManagerConfig
-
-        return IcebergIOManagerConfig
+    # Note: IcebergIOManager is NOT available from floe-iceberg
+    # IOManager belongs in orchestrator plugins (e.g., floe-orchestrator-dagster)
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

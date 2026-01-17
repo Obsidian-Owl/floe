@@ -1,8 +1,11 @@
 """Pydantic models and enumerations for floe-iceberg package.
 
 This module defines all configuration models and enumerations used by
-IcebergTableManager and IcebergIOManager. All models use Pydantic v2 syntax
-with strict validation.
+IcebergTableManager. All models use Pydantic v2 syntax with strict validation.
+
+Note: IOManager-related configuration is NOT part of this package. Orchestrator-specific
+integrations belong in the respective orchestrator plugins (e.g., floe-orchestrator-dagster).
+floe-iceberg is orchestrator-agnostic.
 
 Models are designed for immutability (frozen=True) and strict validation
 (extra="forbid") to ensure data integrity.
@@ -21,7 +24,6 @@ Enumerations:
 
 Configuration Models:
     IcebergTableManagerConfig: Manager configuration
-    IcebergIOManagerConfig: Dagster IOManager configuration
 
 Data Models:
     SchemaField, TableSchema: Schema definition
@@ -1194,60 +1196,9 @@ class IcebergTableManagerConfig(BaseModel):
     )
 
 
-class IcebergIOManagerConfig(BaseModel):
-    """Configuration for Dagster IcebergIOManager.
-
-    Controls how Dagster assets are mapped to Iceberg tables and
-    how data is written.
-
-    Attributes:
-        default_write_mode: Default write mode for assets.
-        default_commit_strategy: Default commit strategy.
-        namespace: Default namespace for tables.
-        table_name_pattern: Pattern for generating table names from asset keys.
-        infer_schema_from_data: Infer schema from first write if table doesn't exist.
-
-    Example:
-        >>> config = IcebergIOManagerConfig(
-        ...     namespace="bronze",
-        ...     table_name_pattern="{asset_key}",
-        ... )
-        >>> config.default_write_mode
-        <WriteMode.APPEND: 'append'>
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    # Default write behavior
-    default_write_mode: WriteMode = Field(
-        default=WriteMode.APPEND,
-        description="Default write mode for assets",
-    )
-    default_commit_strategy: CommitStrategy = Field(
-        default=CommitStrategy.FAST_APPEND,
-        description="Default commit strategy",
-    )
-
-    # Namespace mapping
-    namespace: str = Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        pattern=IDENTIFIER_PATTERN,
-        description="Default namespace for tables",
-    )
-
-    # Table name pattern
-    table_name_pattern: str = Field(
-        default="{asset_key}",
-        description="Pattern for generating table names from asset keys",
-    )
-
-    # Schema inference
-    infer_schema_from_data: bool = Field(
-        default=True,
-        description="Infer schema from first write if table doesn't exist",
-    )
+# Note: IcebergIOManagerConfig is NOT part of floe-iceberg.
+# IOManager configuration belongs in orchestrator plugins (e.g., floe-orchestrator-dagster).
+# floe-iceberg is orchestrator-agnostic - see docs/architecture/component-ownership.md
 
 
 # =============================================================================
@@ -1283,5 +1234,5 @@ __all__ = [
     "CompactionStrategy",
     # Configuration models
     "IcebergTableManagerConfig",
-    "IcebergIOManagerConfig",
+    # Note: IcebergIOManagerConfig is NOT exported - see orchestrator plugins
 ]

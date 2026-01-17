@@ -17,7 +17,6 @@ from floe_iceberg.models import (
     CompactionStrategy,
     CompactionStrategyType,
     FieldType,
-    IcebergIOManagerConfig,
     IcebergTableManagerConfig,
     OperationType,
     PartitionTransform,
@@ -29,6 +28,9 @@ from floe_iceberg.models import (
     WriteConfig,
     WriteMode,
 )
+
+# Note: IcebergIOManagerConfig is NOT part of floe-iceberg
+# IOManager configuration belongs in orchestrator plugins (Epic 4B)
 
 # =============================================================================
 # IDENTIFIER_PATTERN Tests
@@ -400,76 +402,15 @@ class TestIcebergTableManagerConfig:
 
 
 # =============================================================================
-# IcebergIOManagerConfig Tests
+# Note: IcebergIOManagerConfig Tests Removed
 # =============================================================================
-
-
-class TestIcebergIOManagerConfig:
-    """Tests for IcebergIOManagerConfig model."""
-
-    @pytest.mark.requirement("FR-037")
-    def test_required_namespace(self) -> None:
-        """Test namespace is required."""
-        with pytest.raises(ValueError, match="Field required"):
-            IcebergIOManagerConfig()  # type: ignore[call-arg]
-
-    @pytest.mark.requirement("FR-037")
-    def test_minimal_config(self) -> None:
-        """Test config with only required fields."""
-        config = IcebergIOManagerConfig(namespace="bronze")
-        assert config.namespace == "bronze"
-        assert config.default_write_mode == WriteMode.APPEND
-        assert config.default_commit_strategy == CommitStrategy.FAST_APPEND
-        assert config.table_name_pattern == "{asset_key}"
-        assert config.infer_schema_from_data is True
-
-    @pytest.mark.requirement("FR-037")
-    def test_custom_values(self) -> None:
-        """Test config accepts custom values."""
-        config = IcebergIOManagerConfig(
-            namespace="silver",
-            default_write_mode=WriteMode.UPSERT,
-            default_commit_strategy=CommitStrategy.MERGE_COMMIT,
-            table_name_pattern="dim_{asset_key}",
-            infer_schema_from_data=False,
-        )
-        assert config.namespace == "silver"
-        assert config.default_write_mode == WriteMode.UPSERT
-        assert config.default_commit_strategy == CommitStrategy.MERGE_COMMIT
-        assert config.table_name_pattern == "dim_{asset_key}"
-        assert config.infer_schema_from_data is False
-
-    @pytest.mark.requirement("FR-037")
-    def test_namespace_validation_pattern(self) -> None:
-        """Test namespace must match IDENTIFIER_PATTERN."""
-        with pytest.raises(ValueError, match="String should match pattern"):
-            IcebergIOManagerConfig(namespace="123invalid")
-
-    @pytest.mark.requirement("FR-037")
-    def test_namespace_validation_empty(self) -> None:
-        """Test namespace cannot be empty."""
-        with pytest.raises(ValueError, match="String should have at least 1 character"):
-            IcebergIOManagerConfig(namespace="")
-
-    @pytest.mark.requirement("FR-037")
-    def test_namespace_validation_max_length(self) -> None:
-        """Test namespace max length."""
-        long_name = "a" * 256
-        with pytest.raises(ValueError, match="String should have at most 255 characters"):
-            IcebergIOManagerConfig(namespace=long_name)
-
-    @pytest.mark.requirement("FR-037")
-    def test_frozen(self) -> None:
-        """Test config is immutable (frozen)."""
-        config = IcebergIOManagerConfig(namespace="test")
-        with pytest.raises(PydanticValidationError):  # ValidationError for frozen models
-            config.namespace = "changed"  # type: ignore[misc]
-
-    @pytest.mark.requirement("FR-037")
-    def test_extra_forbid(self) -> None:
-        """Test config rejects extra fields."""
-        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-            IcebergIOManagerConfig(namespace="test", unknown="value")  # type: ignore[call-arg]
+#
+# IcebergIOManagerConfig and its tests were removed from floe-iceberg as part
+# of an architectural cleanup. IOManager is orchestrator-specific and belongs
+# in the floe-orchestrator-dagster plugin (Epic 4B).
+#
+# FR-037 to FR-040 (IOManager requirements) are deferred to Epic 4B.
+# See: docs/plans/epics/04-core-plugins/epic-04b-orchestrator-plugin.md
 
 
 # =============================================================================
