@@ -42,6 +42,7 @@ from floe_core import (
 )
 from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
+from pyiceberg.schema import Schema as IcebergSchema
 
 from floe_catalog_polaris.config import PolarisCatalogConfig
 from floe_catalog_polaris.errors import PYICEBERG_EXCEPTION_TYPES, map_pyiceberg_error
@@ -519,7 +520,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
     def create_table(
         self,
         identifier: str,
-        schema: dict[str, Any],
+        schema: IcebergSchema | dict[str, Any],
         location: str | None = None,
         properties: dict[str, str] | None = None,
     ) -> None:
@@ -530,7 +531,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
         Args:
             identifier: Full table identifier (e.g., "bronze.customers").
-            schema: Iceberg schema definition as a dictionary with:
+            schema: Iceberg schema as PyIceberg Schema object or dictionary with:
                 - type: "struct"
                 - fields: List of field definitions with id, name, type, required
             location: Optional storage location override (e.g., "s3://bucket/path").
