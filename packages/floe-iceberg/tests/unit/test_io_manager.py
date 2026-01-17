@@ -133,7 +133,6 @@ class TestIcebergIOManagerHandleOutput:
         self,
         io_manager: Any,
         mock_output_context: MagicMock,
-        mock_pyarrow_table: MagicMock,
         mock_iceberg_manager: MagicMock,
     ) -> None:
         """Test handle_output creates table if it doesn't exist.
@@ -141,13 +140,70 @@ class TestIcebergIOManagerHandleOutput:
         Acceptance criteria from T079:
         - Test table creation on first write
         """
+        import pyarrow as pa
+
+        # Create real PyArrow table (needed for schema inference)
+        pa_table = pa.table({"id": [1], "name": ["a"]})
+
         # Table doesn't exist initially
         mock_iceberg_manager.table_exists.return_value = False
 
-        io_manager.handle_output(mock_output_context, mock_pyarrow_table)
+        io_manager.handle_output(mock_output_context, pa_table)
 
         # Verify table existence was checked
         mock_iceberg_manager.table_exists.assert_called_once()
+
+        # Verify create_table was called for schema inference
+        mock_iceberg_manager.create_table.assert_called_once()
+
+    @pytest.mark.requirement("FR-039")
+    def test_handle_output_infers_schema_on_first_write(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_output_context: MagicMock,
+    ) -> None:
+        """Test handle_output infers schema from PyArrow Table on first write.
+
+        Acceptance criteria from T087:
+        - Detect if table exists
+        - If not, infer schema from PyArrow Table
+        - Create table with inferred schema
+        - Then write data
+        """
+        import pyarrow as pa
+
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        # Create real PyArrow table with schema
+        pa_table = pa.table({
+            "id": [1, 2, 3],
+            "name": ["a", "b", "c"],
+            "value": [1.1, 2.2, 3.3],
+        })
+
+        # Table doesn't exist initially
+        mock_iceberg_manager.table_exists.return_value = False
+
+        config = IcebergIOManagerConfig(namespace="bronze", infer_schema_from_data=True)
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(mock_output_context, pa_table)
+
+        # Verify create_table was called
+        mock_iceberg_manager.create_table.assert_called_once()
+
+        # Verify the TableConfig has correct namespace and table name
+        call_args = mock_iceberg_manager.create_table.call_args
+        table_config = call_args[0][0]
+        assert table_config.namespace == "bronze"
+        assert table_config.table_name == "customers"
+
+        # Verify schema was inferred with 3 fields
+        assert len(table_config.table_schema.fields) == 3
+
+        # Verify write_data was called after table creation
+        mock_iceberg_manager.write_data.assert_called_once()
 
     @pytest.mark.requirement("FR-038")
     def test_handle_output_appends_to_existing_table(
