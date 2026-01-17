@@ -209,8 +209,107 @@ def resolve_transform_compute(
     )
 
 
+def get_compute_plugin(plugin_type: str) -> object:
+    """Load a compute plugin by type name.
+
+    Args:
+        plugin_type: Plugin type (e.g., "duckdb", "snowflake").
+
+    Returns:
+        ComputePlugin instance.
+
+    Raises:
+        CompilationException: If plugin not found.
+    """
+    from floe_core.plugin_registry import get_registry
+    from floe_core.plugin_types import PluginType
+
+    try:
+        registry = get_registry()
+        return registry.get(PluginType.COMPUTE, plugin_type)
+    except Exception as e:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.VALIDATE,
+                code="E201",
+                message=f"Compute plugin '{plugin_type}' not found",
+                suggestion="Ensure the compute plugin is installed and registered",
+                context={"plugin_type": plugin_type},
+            )
+        ) from e
+
+
+def validate_compute_credentials(plugins: ResolvedPlugins) -> None:
+    """Validate that required compute credentials are configured.
+
+    Loads the compute plugin and checks its config schema for required fields.
+    For plugins without a schema (like DuckDB), validation passes.
+    For plugins with schemas, validates that required fields are present.
+
+    This validation runs at the VALIDATE stage, before profile generation,
+    to provide early feedback on missing configuration.
+
+    Args:
+        plugins: ResolvedPlugins with compute plugin configuration.
+
+    Raises:
+        CompilationException: If required credentials are missing (E107).
+
+    Example:
+        >>> plugins = resolve_plugins(manifest)
+        >>> validate_compute_credentials(plugins)  # Raises if missing credentials
+    """
+    compute_ref = plugins.compute
+    compute_type = compute_ref.type
+    compute_config = compute_ref.config or {}
+
+    # Load the compute plugin to get its schema
+    plugin = get_compute_plugin(compute_type)
+
+    # Get the config schema from the plugin
+    schema = plugin.get_config_schema()  # type: ignore[union-attr]
+
+    # If no schema, no validation required (e.g., DuckDB)
+    if schema is None:
+        return
+
+    # Get required fields from the Pydantic model schema
+    # Required fields are those without defaults in model_fields
+    required_fields: list[str] = []
+    for field_name, field_info in schema.model_fields.items():
+        # Field is required if it has no default and no default_factory
+        if field_info.is_required():
+            required_fields.append(field_name)
+
+    # Check which required fields are missing from config
+    missing_fields = [f for f in required_fields if f not in compute_config]
+
+    if missing_fields:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.VALIDATE,
+                code="E107",
+                message=(
+                    f"Missing required credentials for compute plugin '{compute_type}': "
+                    f"{', '.join(missing_fields)}"
+                ),
+                suggestion=(
+                    f"Add the following fields to the compute plugin config: "
+                    f"{', '.join(missing_fields)}"
+                ),
+                context={
+                    "plugin_type": compute_type,
+                    "missing_fields": missing_fields,
+                    "provided_fields": list(compute_config.keys()),
+                },
+            )
+        )
+
+
 __all__ = [
+    "get_compute_plugin",
     "resolve_plugins",
     "resolve_manifest_inheritance",
     "resolve_transform_compute",
+    "validate_compute_credentials",
 ]

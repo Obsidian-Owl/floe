@@ -108,7 +108,7 @@ class CompilationStage(str, Enum):
 
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -149,6 +149,7 @@ def compile_pipeline(
     """
     # Local imports to avoid circular dependency (stages <- errors <- loader <- stages)
     from floe_core.compilation.builder import build_artifacts
+    from floe_core.compilation.dbt_profiles import generate_dbt_profiles
     from floe_core.compilation.loader import load_floe_spec, load_manifest
     from floe_core.compilation.resolver import (
         resolve_manifest_inheritance,
@@ -193,18 +194,16 @@ def compile_pipeline(
 
     # Stage 5: COMPILE - Transform compilation and dbt profile generation
     log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-    # Generate basic dbt profiles
-    dbt_profiles: dict[str, Any] = {
-        "default": {
-            "target": "dev",
-            "outputs": {
-                "dev": {
-                    "type": plugins.compute.type,
-                }
-            },
-        }
-    }
-    log.info("compilation_stage_complete", stage=CompilationStage.COMPILE.value)
+    # Generate dbt profiles using compute plugin
+    dbt_profiles = generate_dbt_profiles(
+        plugins=plugins,
+        product_name=spec.metadata.name,
+    )
+    log.info(
+        "compilation_stage_complete",
+        stage=CompilationStage.COMPILE.value,
+        profile_name=spec.metadata.name,
+    )
 
     # Stage 6: GENERATE - Build final CompiledArtifacts
     log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)

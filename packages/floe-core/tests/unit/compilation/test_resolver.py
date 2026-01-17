@@ -215,3 +215,243 @@ class TestResolveTransformCompute:
 
         transforms = resolve_transform_compute(simple_floe_spec, manifest_with_defaults)
         assert transforms.default_compute == "duckdb"
+
+
+class TestValidateComputeCredentials:
+    """Tests for validate_compute_credentials function."""
+
+    @pytest.mark.requirement("2B-FR-006")
+    def test_duckdb_no_credentials_required(self, simple_manifest: PlatformManifest) -> None:
+        """Test that DuckDB (self-hosted) requires no credentials - validation passes."""
+        from unittest.mock import patch
+
+        from floe_core.compilation.resolver import (
+            resolve_plugins,
+            validate_compute_credentials,
+        )
+
+        with patch("floe_core.plugin_registry.is_compatible", return_value=True):
+            plugins = resolve_plugins(simple_manifest)
+            # Should not raise - DuckDB requires no credentials
+            validate_compute_credentials(plugins)
+
+    @pytest.mark.requirement("2B-FR-006")
+    def test_missing_required_credentials_fails(self) -> None:
+        """Test that missing required credentials raises CompilationException."""
+        from unittest.mock import MagicMock, patch
+
+        from pydantic import BaseModel, Field, SecretStr
+
+        from floe_core.compilation.errors import CompilationException
+        from floe_core.compilation.resolver import validate_compute_credentials
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        # Create a mock plugin with a config schema requiring credentials
+        class MockConfig(BaseModel):
+            """Config schema with required credential fields."""
+
+            account: str = Field(..., description="Required account")
+            password: SecretStr = Field(..., description="Required password")
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "snowflake"
+        mock_plugin.get_config_schema.return_value = MockConfig
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(
+                type="snowflake",
+                version="0.1.0",
+                config={"account": "test_account"},  # Missing password
+            ),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config=None),
+            catalog=None,
+            storage=None,
+            ingestion=None,
+            semantic=None,
+        )
+
+        with (
+            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch(
+                "floe_core.compilation.resolver.get_compute_plugin",
+                return_value=mock_plugin,
+            ),
+        ):
+            with pytest.raises(CompilationException) as exc_info:
+                validate_compute_credentials(plugins)
+
+            assert exc_info.value.error.code == "E107"
+            assert "password" in exc_info.value.error.message.lower()
+
+    @pytest.mark.requirement("2B-FR-006")
+    def test_credentials_present_passes(self) -> None:
+        """Test that validation passes when all required credentials present."""
+        from unittest.mock import MagicMock, patch
+
+        from pydantic import BaseModel, Field
+
+        from floe_core.compilation.resolver import validate_compute_credentials
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        # Create a mock plugin with a config schema
+        class MockConfig(BaseModel):
+            """Config schema with required fields."""
+
+            account: str = Field(..., description="Required account")
+            database: str = Field(default="default", description="Optional database")
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "snowflake"
+        mock_plugin.get_config_schema.return_value = MockConfig
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(
+                type="snowflake",
+                version="0.1.0",
+                config={"account": "test_account"},  # Required field present
+            ),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config=None),
+            catalog=None,
+            storage=None,
+            ingestion=None,
+            semantic=None,
+        )
+
+        with (
+            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch(
+                "floe_core.compilation.resolver.get_compute_plugin",
+                return_value=mock_plugin,
+            ),
+        ):
+            # Should not raise
+            validate_compute_credentials(plugins)
+
+    @pytest.mark.requirement("2B-FR-006")
+    def test_optional_credentials_not_required(self) -> None:
+        """Test that optional credential fields are not required."""
+        from unittest.mock import MagicMock, patch
+
+        from pydantic import BaseModel, Field, SecretStr
+
+        from floe_core.compilation.resolver import validate_compute_credentials
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        # Create a mock plugin with optional credentials
+        class MockConfig(BaseModel):
+            """Config schema with optional credential fields."""
+
+            account: str = Field(..., description="Required account")
+            password: SecretStr | None = Field(
+                default=None, description="Optional password"
+            )
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "snowflake"
+        mock_plugin.get_config_schema.return_value = MockConfig
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(
+                type="snowflake",
+                version="0.1.0",
+                config={"account": "test_account"},  # Password is optional
+            ),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config=None),
+            catalog=None,
+            storage=None,
+            ingestion=None,
+            semantic=None,
+        )
+
+        with (
+            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch(
+                "floe_core.compilation.resolver.get_compute_plugin",
+                return_value=mock_plugin,
+            ),
+        ):
+            # Should not raise - password is optional
+            validate_compute_credentials(plugins)
+
+    @pytest.mark.requirement("2B-FR-006")
+    def test_plugin_without_schema_passes(self) -> None:
+        """Test that plugins without config schema pass validation."""
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.compilation.resolver import validate_compute_credentials
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "simple_plugin"
+        mock_plugin.get_config_schema.return_value = None  # No schema
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="simple_plugin", version="0.1.0", config=None),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config=None),
+            catalog=None,
+            storage=None,
+            ingestion=None,
+            semantic=None,
+        )
+
+        with (
+            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch(
+                "floe_core.compilation.resolver.get_compute_plugin",
+                return_value=mock_plugin,
+            ),
+        ):
+            # Should not raise - no schema means no requirements
+            validate_compute_credentials(plugins)
+
+    @pytest.mark.requirement("2B-FR-006")
+    def test_suggestion_lists_missing_fields(self) -> None:
+        """Test that error suggestion lists the missing credential fields."""
+        from unittest.mock import MagicMock, patch
+
+        from pydantic import BaseModel, Field, SecretStr
+
+        from floe_core.compilation.errors import CompilationException
+        from floe_core.compilation.resolver import validate_compute_credentials
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        class MockConfig(BaseModel):
+            """Config schema with multiple required fields."""
+
+            account: str = Field(..., description="Account ID")
+            username: str = Field(..., description="Username")
+            password: SecretStr = Field(..., description="Password")
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "snowflake"
+        mock_plugin.get_config_schema.return_value = MockConfig
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(
+                type="snowflake",
+                version="0.1.0",
+                config={},  # All required fields missing
+            ),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config=None),
+            catalog=None,
+            storage=None,
+            ingestion=None,
+            semantic=None,
+        )
+
+        with (
+            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch(
+                "floe_core.compilation.resolver.get_compute_plugin",
+                return_value=mock_plugin,
+            ),
+        ):
+            with pytest.raises(CompilationException) as exc_info:
+                validate_compute_credentials(plugins)
+
+            suggestion = exc_info.value.error.suggestion
+            assert suggestion is not None
+            # Should list all missing fields
+            assert "account" in suggestion
+            assert "username" in suggestion
+            assert "password" in suggestion

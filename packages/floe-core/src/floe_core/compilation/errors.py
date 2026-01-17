@@ -188,6 +188,7 @@ ERROR_CODES = {
     "E104": "Environment-specific field in FloeSpec",
     "E105": "Invalid transform name",
     "E106": "Duplicate transform names",
+    "E107": "Missing required compute credentials",
     # RESOLVE errors
     "E201": "Plugin not found in platform manifest",
     "E202": "Invalid plugin version",

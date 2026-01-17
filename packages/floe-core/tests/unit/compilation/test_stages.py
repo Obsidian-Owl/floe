@@ -10,12 +10,20 @@ Requirements:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 
 if TYPE_CHECKING:
     pass
+
+
+@pytest.fixture(autouse=True)
+def patch_version_compat() -> Any:
+    """Patch version compatibility to allow DuckDB plugin (1.0) with platform (0.1)."""
+    with patch("floe_core.plugin_registry.is_compatible", return_value=True):
+        yield
 
 
 class TestCompilationStage:
@@ -250,8 +258,9 @@ plugins:
         result = compile_pipeline(spec_path, manifest_path)
 
         assert result.dbt_profiles is not None
-        assert "default" in result.dbt_profiles
-        assert result.dbt_profiles["default"]["target"] == "dev"
+        # Profile is named after the product (test-product)
+        assert "test-product" in result.dbt_profiles
+        assert result.dbt_profiles["test-product"]["target"] == "dev"
 
     @pytest.mark.requirement("FR-031")
     def test_compile_pipeline_file_not_found(self, tmp_path: Path) -> None:

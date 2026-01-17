@@ -27,6 +27,11 @@ See Also:
 
 from __future__ import annotations
 
+from floe_core.compilation.dbt_profiles import (
+    format_env_var_placeholder,
+    generate_dbt_profiles,
+    get_compute_plugin,
+)
 from floe_core.compilation.errors import (
     ERROR_CODES,
     CompilationError,
@@ -37,6 +42,10 @@ from floe_core.compilation.stages import CompilationStage
 __all__ = [
     # Stages
     "CompilationStage",
+    # dbt profiles
+    "format_env_var_placeholder",
+    "generate_dbt_profiles",
+    "get_compute_plugin",
     # Errors
     "CompilationError",
     "CompilationException",
