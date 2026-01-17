@@ -655,6 +655,46 @@ class TableConfig(BaseModel):
         description="Custom table properties",
     )
 
+    @model_validator(mode="after")
+    def validate_partition_spec(self) -> "TableConfig":
+        """Validate partition specification against table schema.
+
+        Validates:
+        - Each partition field's source_field_id exists in table_schema
+        - Partition field names are unique
+
+        Returns:
+            Self if validation passes.
+
+        Raises:
+            ValueError: If partition validation fails.
+        """
+        if self.partition_spec is None or not self.partition_spec.fields:
+            return self
+
+        # Build set of valid field IDs from schema
+        valid_field_ids = {field.field_id for field in self.table_schema.fields}
+
+        # Validate source_field_ids exist in schema
+        for part_field in self.partition_spec.fields:
+            if part_field.source_field_id not in valid_field_ids:
+                msg = (
+                    f"Partition field '{part_field.name}' has source_field_id "
+                    f"{part_field.source_field_id} not found in schema. "
+                    f"Valid field IDs: {sorted(valid_field_ids)}"
+                )
+                raise ValueError(msg)
+
+        # Validate partition field names are unique
+        partition_names: list[str] = []
+        for part_field in self.partition_spec.fields:
+            if part_field.name in partition_names:
+                msg = f"Duplicate partition field name: '{part_field.name}'"
+                raise ValueError(msg)
+            partition_names.append(part_field.name)
+
+        return self
+
     @property
     def identifier(self) -> str:
         """Full table identifier (namespace.table_name).

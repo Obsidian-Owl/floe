@@ -993,6 +993,136 @@ class TestTableConfig:
                 unknown="value",  # type: ignore[call-arg]
             )
 
+    @pytest.mark.requirement("FR-016")
+    def test_partition_source_field_exists_in_schema(self) -> None:
+        """Test TableConfig validates partition source_field_id exists in schema.
+
+        Acceptance criteria from T068:
+        - Validate source_field_id exists in schema
+        - Raise ValidationError with descriptive message
+        """
+        from floe_iceberg.models import (
+            PartitionField,
+            PartitionSpec,
+            PartitionTransform,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        # Schema has field_id=1, but partition references field_id=999
+        with pytest.raises(ValueError, match="source_field_id 999.*not found in schema"):
+            TableConfig(
+                namespace="bronze",
+                table_name="events",
+                table_schema=TableSchema(
+                    fields=[
+                        SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
+                    ]
+                ),
+                partition_spec=PartitionSpec(
+                    fields=[
+                        PartitionField(
+                            source_field_id=999,  # Does not exist in schema
+                            partition_field_id=1000,
+                            name="date_day",
+                            transform=PartitionTransform.DAY,
+                        ),
+                    ]
+                ),
+            )
+
+    @pytest.mark.requirement("FR-016")
+    def test_partition_field_names_must_be_unique(self) -> None:
+        """Test TableConfig validates partition field names are unique.
+
+        Acceptance criteria from T068:
+        - Validate partition field names are unique
+        - Raise ValidationError with descriptive message
+        """
+        from floe_iceberg.models import (
+            PartitionField,
+            PartitionSpec,
+            PartitionTransform,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        with pytest.raises(ValueError, match="Duplicate partition field name.*date_part"):
+            TableConfig(
+                namespace="bronze",
+                table_name="events",
+                table_schema=TableSchema(
+                    fields=[
+                        SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
+                        SchemaField(field_id=2, name="created_at", field_type=FieldType.TIMESTAMP),
+                    ]
+                ),
+                partition_spec=PartitionSpec(
+                    fields=[
+                        PartitionField(
+                            source_field_id=1,
+                            partition_field_id=1000,
+                            name="date_part",  # Duplicate name
+                            transform=PartitionTransform.DAY,
+                        ),
+                        PartitionField(
+                            source_field_id=2,
+                            partition_field_id=1001,
+                            name="date_part",  # Duplicate name - should fail
+                            transform=PartitionTransform.HOUR,
+                        ),
+                    ]
+                ),
+            )
+
+    @pytest.mark.requirement("FR-016")
+    def test_partition_validation_with_valid_config(self) -> None:
+        """Test TableConfig accepts valid partition configuration.
+
+        Ensures validation doesn't reject valid configurations.
+        """
+        from floe_iceberg.models import (
+            PartitionField,
+            PartitionSpec,
+            PartitionTransform,
+            SchemaField,
+            TableConfig,
+            TableSchema,
+        )
+
+        # This should succeed - valid configuration
+        config = TableConfig(
+            namespace="bronze",
+            table_name="events",
+            table_schema=TableSchema(
+                fields=[
+                    SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
+                    SchemaField(field_id=2, name="customer_id", field_type=FieldType.LONG),
+                ]
+            ),
+            partition_spec=PartitionSpec(
+                fields=[
+                    PartitionField(
+                        source_field_id=1,  # Exists in schema
+                        partition_field_id=1000,
+                        name="date_day",  # Unique name
+                        transform=PartitionTransform.DAY,
+                    ),
+                    PartitionField(
+                        source_field_id=2,  # Exists in schema
+                        partition_field_id=1001,
+                        name="customer_bucket",  # Unique name
+                        transform=PartitionTransform.BUCKET,
+                        num_buckets=16,
+                    ),
+                ]
+            ),
+        )
+        assert config.partition_spec is not None
+        assert len(config.partition_spec.fields) == 2
+
 
 # =============================================================================
 # SchemaChange Tests

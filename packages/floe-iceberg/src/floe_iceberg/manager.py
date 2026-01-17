@@ -40,8 +40,10 @@ from floe_iceberg.errors import (
     TableAlreadyExistsError,
     ValidationError,
 )
+from floe_iceberg.telemetry import traced
 from floe_iceberg.models import (
     CommitStrategy,
+    CompactionStrategyType,
     FieldType,
     IcebergTableManagerConfig,
     OperationType,
@@ -253,6 +255,10 @@ class IcebergTableManager:
     # Table Operations
     # =========================================================================
 
+    @traced(
+        operation_name="iceberg.create_table",
+        attributes={"operation": "create"},
+    )
     def create_table(
         self,
         config: TableConfig,
@@ -287,7 +293,14 @@ class IcebergTableManager:
             >>> # Idempotent creation
             >>> table = manager.create_table(config, if_not_exists=True)
         """
+        from opentelemetry import trace
+
         identifier = config.identifier
+
+        # Add span attributes for telemetry
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", identifier)
+        span.set_attribute("table.namespace", config.namespace)
 
         self._log.debug(
             "create_table_requested",
@@ -457,6 +470,10 @@ class IcebergTableManager:
         FieldType.FLOAT: {FieldType.DOUBLE},
     }
 
+    @traced(
+        operation_name="iceberg.evolve_schema",
+        attributes={"operation": "evolve_schema"},
+    )
     def evolve_schema(
         self,
         table: Table,
@@ -494,6 +511,13 @@ class IcebergTableManager:
             ... )
             >>> table = manager.evolve_schema(table, evolution)
         """
+        from opentelemetry import trace
+
+        # Add span attributes for telemetry
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
+        span.set_attribute("changes.count", len(evolution.changes))
+
         self._log.debug(
             "evolve_schema_requested",
             num_changes=len(evolution.changes),
@@ -825,6 +849,7 @@ class IcebergTableManager:
     # Snapshot Management Operations
     # =========================================================================
 
+    @traced(operation_name="iceberg.list_snapshots")
     def list_snapshots(self, table: Table) -> list[SnapshotInfo]:
         """List all snapshots for a table, ordered by timestamp (newest first).
 
@@ -876,6 +901,13 @@ class IcebergTableManager:
         # Sort by timestamp (newest first)
         snapshots.sort(key=lambda s: s.timestamp_ms, reverse=True)
 
+        # Add span attributes
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
+        span.set_attribute("snapshots.count", len(snapshots))
+
         self._log.info(
             "snapshots_listed",
             table_identifier=getattr(table, "identifier", None),
@@ -884,6 +916,7 @@ class IcebergTableManager:
 
         return snapshots
 
+    @traced(operation_name="iceberg.rollback")
     def rollback_to_snapshot(self, table: Table, snapshot_id: int) -> Table:
         """Rollback table to a previous snapshot.
 
@@ -905,6 +938,13 @@ class IcebergTableManager:
             >>> old_snapshot = snapshots[-1]  # Oldest snapshot
             >>> table = manager.rollback_to_snapshot(table, old_snapshot.snapshot_id)
         """
+        from opentelemetry import trace
+
+        # Add span attributes
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
+        span.set_attribute("target.snapshot_id", snapshot_id)
+
         self._log.debug(
             "rollback_to_snapshot_requested",
             table_identifier=getattr(table, "identifier", None),
@@ -952,6 +992,7 @@ class IcebergTableManager:
 
         return table
 
+    @traced(operation_name="iceberg.expire_snapshots")
     def expire_snapshots(
         self,
         table: Table,
@@ -976,6 +1017,12 @@ class IcebergTableManager:
         """
         retention_days = older_than_days if older_than_days is not None else self._config.default_retention_days
 
+        # Set span attributes for observability
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", str(getattr(table, "identifier", "unknown")))
+
         self._log.debug(
             "expire_snapshots_requested",
             table_identifier=getattr(table, "identifier", None),
@@ -988,6 +1035,7 @@ class IcebergTableManager:
         snapshots_data = table_data.get("snapshots", [])
 
         if not snapshots_data:
+            span.set_attribute("expired.count", 0)
             self._log.info(
                 "no_snapshots_to_expire",
                 table_identifier=getattr(table, "identifier", None),
@@ -1022,6 +1070,9 @@ class IcebergTableManager:
         # Update table data
         table_data["snapshots"] = to_keep
 
+        # Set expired count span attribute
+        span.set_attribute("expired.count", expired_count)
+
         self._log.info(
             "snapshots_expired",
             table_identifier=getattr(table, "identifier", None),
@@ -1036,6 +1087,9 @@ class IcebergTableManager:
     # Write Operations
     # =========================================================================
 
+    @traced(
+        operation_name="iceberg.write_data",
+    )
     def write_data(
         self,
         table: Table,
@@ -1073,6 +1127,14 @@ class IcebergTableManager:
             ... )
             >>> table = manager.write_data(table, data, config)
         """
+        from opentelemetry import trace
+
+        # Add span attributes for telemetry
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
+        span.set_attribute("write.mode", config.mode.value)
+        span.set_attribute("commit.strategy", config.commit_strategy.value)
+
         self._log.debug(
             "write_data_requested",
             table_identifier=getattr(table, "identifier", None),
@@ -1270,10 +1332,65 @@ class IcebergTableManager:
         return table
 
     # =========================================================================
-    # Future Operations (to be implemented in later tasks)
+    # Compaction Operations
     # =========================================================================
 
-    # compact_table() - Future task
+    @traced(operation_name="iceberg.compact_table")
+    def compact_table(
+        self,
+        table: Table,
+        strategy: CompactionStrategyType = CompactionStrategyType.BIN_PACK,
+    ) -> int:
+        """Compact table data files to optimize query performance.
+
+        Rewrites small files into larger files using the specified strategy.
+        This reduces metadata overhead and improves query performance.
+
+        Note: The orchestrator (Dagster) is responsible for scheduling when
+        to call this method. This method only performs the execution.
+
+        Args:
+            table: PyIceberg Table object.
+            strategy: Compaction strategy to use. Defaults to BIN_PACK.
+
+        Returns:
+            Number of files rewritten during compaction.
+
+        Example:
+            >>> # Compact table using bin-pack strategy
+            >>> files_rewritten = manager.compact_table(table)
+            >>> print(f"Rewrote {files_rewritten} files")
+        """
+        # Set span attributes for observability
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        span.set_attribute(
+            "table.identifier", str(getattr(table, "identifier", "unknown"))
+        )
+        span.set_attribute("strategy.type", strategy.value)
+
+        self._log.debug(
+            "compact_table_requested",
+            table_identifier=getattr(table, "identifier", None),
+            strategy=strategy.value,
+        )
+
+        # Compaction logic will be implemented in T093-T096
+        # For now, this is a stub that demonstrates the interface
+        files_rewritten = 0
+
+        # Set files rewritten span attribute
+        span.set_attribute("files.rewritten", files_rewritten)
+
+        self._log.info(
+            "compact_table_completed",
+            table_identifier=getattr(table, "identifier", None),
+            strategy=strategy.value,
+            files_rewritten=files_rewritten,
+        )
+
+        return files_rewritten
 
 
 __all__ = ["IcebergTableManager"]

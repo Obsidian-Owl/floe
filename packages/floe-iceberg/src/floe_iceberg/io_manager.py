@@ -281,6 +281,10 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
         - `iceberg_partition_column`: Partition column for overwrite filtering
         - `iceberg_join_columns`: Join columns for upsert mode
 
+        For partitioned assets (DailyPartitionsDefinition, etc.), automatically:
+        - Switches to overwrite mode
+        - Builds partition filter from context.partition_key
+
         Args:
             context: Dagster output context with optional metadata.
 
@@ -295,6 +299,11 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
             ... })
             ... def daily_events() -> pa.Table:
             ...     ...
+
+            Partitioned asset (automatic overwrite):
+            >>> @asset(partitions_def=DailyPartitionsDefinition(start_date="2024-01-01"))
+            ... def daily_events() -> pa.Table:
+            ...     ...
         """
         # Start with defaults from config
         mode = self._config.default_write_mode
@@ -305,6 +314,10 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
         # Check for metadata overrides
         metadata = getattr(context, "metadata", None) or {}
 
+        # Check if this is a partitioned asset
+        partition_key = self._get_partition_key(context)
+        is_partitioned = partition_key is not None
+
         # Write mode: prefer iceberg_write_mode, fall back to write_mode
         write_mode_str = metadata.get("iceberg_write_mode") or metadata.get("write_mode")
         if write_mode_str is not None:
@@ -312,15 +325,34 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
             if hasattr(write_mode_str, "value"):
                 write_mode_str = write_mode_str.value
             mode = WriteMode(write_mode_str)
+        elif is_partitioned:
+            # For partitioned assets, default to overwrite mode
+            mode = WriteMode.OVERWRITE
+            self._log.debug(
+                "partitioned_asset_detected",
+                partition_key=partition_key,
+                auto_write_mode="overwrite",
+            )
 
         # Partition column for overwrite filtering
         partition_col = metadata.get("iceberg_partition_column")
         if partition_col is not None:
             if hasattr(partition_col, "value"):
                 partition_col = partition_col.value
-            # Build overwrite filter expression
-            # Future: support partition value from context.partition_key
-            overwrite_filter = partition_col
+            # Build overwrite filter expression with partition value
+            if is_partitioned:
+                overwrite_filter = self._build_partition_filter(partition_col, partition_key)
+            else:
+                overwrite_filter = partition_col
+        elif is_partitioned:
+            # Auto-detect partition column from metadata or use default
+            auto_partition_col = metadata.get("iceberg_auto_partition_column")
+            if auto_partition_col is not None:
+                if hasattr(auto_partition_col, "value"):
+                    auto_partition_col = auto_partition_col.value
+                overwrite_filter = self._build_partition_filter(
+                    auto_partition_col, partition_key
+                )
 
         # Join columns for upsert mode
         join_cols = metadata.get("iceberg_join_columns")
@@ -338,6 +370,85 @@ class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
             overwrite_filter=overwrite_filter,
             join_columns=join_columns,
         )
+
+    def _is_partitioned_asset(self, context: OutputContext) -> bool:
+        """Check if context is for a partitioned asset.
+
+        Detects partitioned assets by checking for partition_key attribute
+        on the context, which is present for DailyPartitionsDefinition,
+        MonthlyPartitionsDefinition, and other Dagster partition types.
+
+        Args:
+            context: Dagster output context.
+
+        Returns:
+            True if the asset has partitions, False otherwise.
+        """
+        return self._get_partition_key(context) is not None
+
+    def _get_partition_key(self, context: OutputContext) -> str | None:
+        """Get partition key from output context.
+
+        Extracts the partition key from the Dagster context. The partition key
+        is a string representation of the partition, e.g., "2024-01-15" for
+        DailyPartitionsDefinition.
+
+        Args:
+            context: Dagster output context.
+
+        Returns:
+            Partition key string if asset is partitioned, None otherwise.
+
+        Example:
+            For DailyPartitionsDefinition(start_date="2024-01-01"):
+            >>> partition_key = self._get_partition_key(context)
+            >>> partition_key
+            '2024-01-15'
+        """
+        # Dagster's OutputContext has partition_key attribute for partitioned assets
+        partition_key = getattr(context, "partition_key", None)
+        if partition_key is None:
+            return None
+
+        # Handle cases where partition_key might be a complex object
+        # Check for MultiPartitionsDefinition by looking for keys_by_dimension dict
+        keys_by_dim = getattr(partition_key, "keys_by_dimension", None)
+        if keys_by_dim is not None and isinstance(keys_by_dim, dict):
+            # MultiPartitionsDefinition - get first key for now
+            if keys_by_dim:
+                return str(next(iter(keys_by_dim.values())))
+            return None
+
+        # Simple partition key (string)
+        return str(partition_key)
+
+    def _build_partition_filter(
+        self, partition_column: str, partition_key: str | None
+    ) -> str | None:
+        """Build Iceberg partition filter from column and key.
+
+        Constructs a filter expression for overwriting specific partitions
+        in an Iceberg table. The filter is used with WriteConfig.overwrite_filter.
+
+        Args:
+            partition_column: Name of the partition column in the Iceberg table.
+            partition_key: Partition value from Dagster context.
+
+        Returns:
+            Filter expression string, e.g., "date = '2024-01-15'", or None
+            if partition_key is None.
+
+        Note:
+            Currently supports simple equality filters. Complex partition
+            expressions (ranges, lists) may be added in future versions.
+        """
+        if partition_key is None:
+            return None
+
+        # Build simple equality filter
+        # Note: This assumes the partition column type matches the key format
+        # For date columns, Dagster's DailyPartitionsDefinition uses YYYY-MM-DD
+        return f"{partition_column} = '{partition_key}'"
 
     def _get_asset_key_str(self, context: OutputContext) -> str:
         """Get asset key as string from output context.

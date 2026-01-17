@@ -75,12 +75,14 @@ def mock_output_context() -> MagicMock:
     """Create a mock Dagster OutputContext.
 
     Returns:
-        MagicMock configured as OutputContext.
+        MagicMock configured as OutputContext (non-partitioned).
     """
     context = MagicMock()
     context.asset_key = MagicMock()
     context.asset_key.path = ["customers"]
     context.metadata = {}
+    # Explicitly set partition_key to None for non-partitioned assets
+    context.partition_key = None
     return context
 
 
@@ -541,6 +543,240 @@ class TestIcebergIOManagerLoadInput:
         mock_table.scan.assert_called_once()
         mock_scan.to_arrow.assert_called_once()
         assert result == mock_arrow_table
+
+
+# =============================================================================
+# IcebergIOManager Partitioned Asset Tests
+# =============================================================================
+
+
+class TestIcebergIOManagerPartitionedAssets:
+    """Tests for IcebergIOManager partitioned asset support."""
+
+    @pytest.mark.requirement("FR-039")
+    def test_detect_partitioned_asset_from_context(
+        self,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test detecting partitioned asset from context.
+
+        Acceptance criteria from T088:
+        - Detect partitioned asset from context
+        """
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        # Create partitioned context (has partition_key)
+        partitioned_context = MagicMock()
+        partitioned_context.partition_key = "2024-01-15"
+        partitioned_context.asset_key = MagicMock()
+        partitioned_context.asset_key.path = ["daily_events"]
+        partitioned_context.metadata = {}
+
+        # Create non-partitioned context (no partition_key)
+        non_partitioned_context = MagicMock()
+        non_partitioned_context.partition_key = None
+        non_partitioned_context.asset_key = MagicMock()
+        non_partitioned_context.asset_key.path = ["events"]
+        non_partitioned_context.metadata = {}
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        # Partitioned asset should be detected
+        assert io_mgr._is_partitioned_asset(partitioned_context) is True
+        assert io_mgr._get_partition_key(partitioned_context) == "2024-01-15"
+
+        # Non-partitioned asset should not be detected
+        assert io_mgr._is_partitioned_asset(non_partitioned_context) is False
+        assert io_mgr._get_partition_key(non_partitioned_context) is None
+
+    @pytest.mark.requirement("FR-039")
+    def test_partitioned_asset_auto_overwrite_mode(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_pyarrow_table: MagicMock,
+    ) -> None:
+        """Test partitioned asset automatically uses overwrite mode.
+
+        Acceptance criteria from T088:
+        - Use overwrite mode with partition filter for partitioned writes
+        """
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig, WriteMode
+
+        # Create partitioned context
+        context = MagicMock()
+        context.partition_key = "2024-01-15"
+        context.asset_key = MagicMock()
+        context.asset_key.path = ["daily_events"]
+        context.metadata = {}
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(context, mock_pyarrow_table)
+
+        # Verify write_data was called with OVERWRITE mode
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+
+        assert write_config.mode == WriteMode.OVERWRITE
+
+    @pytest.mark.requirement("FR-040")
+    def test_partition_key_to_filter_mapping(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_pyarrow_table: MagicMock,
+    ) -> None:
+        """Test mapping Dagster partition key to Iceberg partition filter.
+
+        Acceptance criteria from T088:
+        - Map Dagster partition key to Iceberg partition filter
+        """
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        # Create partitioned context with partition column metadata
+        context = MagicMock()
+        context.partition_key = "2024-01-15"
+        context.asset_key = MagicMock()
+        context.asset_key.path = ["daily_events"]
+        context.metadata = {"iceberg_partition_column": "date"}
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(context, mock_pyarrow_table)
+
+        # Verify overwrite_filter was built correctly
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+
+        assert write_config.overwrite_filter == "date = '2024-01-15'"
+
+    @pytest.mark.requirement("FR-040")
+    def test_daily_partitions_definition_support(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_pyarrow_table: MagicMock,
+    ) -> None:
+        """Test support for DailyPartitionsDefinition.
+
+        Acceptance criteria from T088:
+        - Support DailyPartitionsDefinition
+        """
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig, WriteMode
+
+        # Simulate DailyPartitionsDefinition context
+        # Dagster uses YYYY-MM-DD format for daily partitions
+        context = MagicMock()
+        context.partition_key = "2024-03-20"  # Daily partition key
+        context.asset_key = MagicMock()
+        context.asset_key.path = ["sales"]
+        context.metadata = {
+            "iceberg_partition_column": "event_date",
+        }
+
+        config = IcebergIOManagerConfig(namespace="silver")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(context, mock_pyarrow_table)
+
+        # Verify correct handling
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+
+        # Should use overwrite mode
+        assert write_config.mode == WriteMode.OVERWRITE
+
+        # Should build correct filter
+        assert write_config.overwrite_filter == "event_date = '2024-03-20'"
+
+    @pytest.mark.requirement("FR-039")
+    def test_partitioned_asset_explicit_write_mode_override(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_pyarrow_table: MagicMock,
+    ) -> None:
+        """Test explicit write mode overrides partitioned auto-overwrite.
+
+        Verifies that explicit metadata write_mode takes precedence over
+        the automatic overwrite mode for partitioned assets.
+        """
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig, WriteMode
+
+        # Create partitioned context with explicit append mode
+        context = MagicMock()
+        context.partition_key = "2024-01-15"
+        context.asset_key = MagicMock()
+        context.asset_key.path = ["events"]
+        context.metadata = {"iceberg_write_mode": "append"}
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(context, mock_pyarrow_table)
+
+        # Verify explicit mode overrides auto-overwrite
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+
+        assert write_config.mode == WriteMode.APPEND
+
+    @pytest.mark.requirement("FR-040")
+    def test_build_partition_filter(
+        self,
+        mock_iceberg_manager: MagicMock,
+    ) -> None:
+        """Test _build_partition_filter generates correct filter expression."""
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        # Test with date partition
+        filter_expr = io_mgr._build_partition_filter("date", "2024-01-15")
+        assert filter_expr == "date = '2024-01-15'"
+
+        # Test with month partition
+        filter_expr = io_mgr._build_partition_filter("month", "2024-01")
+        assert filter_expr == "month = '2024-01'"
+
+        # Test with None partition key
+        filter_expr = io_mgr._build_partition_filter("date", None)
+        assert filter_expr is None
+
+    @pytest.mark.requirement("FR-040")
+    def test_auto_partition_column_metadata(
+        self,
+        mock_iceberg_manager: MagicMock,
+        mock_pyarrow_table: MagicMock,
+    ) -> None:
+        """Test iceberg_auto_partition_column metadata for partitioned assets."""
+        from floe_iceberg.io_manager import IcebergIOManager
+        from floe_iceberg.models import IcebergIOManagerConfig
+
+        # Create partitioned context with auto partition column
+        context = MagicMock()
+        context.partition_key = "2024-01-15"
+        context.asset_key = MagicMock()
+        context.asset_key.path = ["events"]
+        context.metadata = {"iceberg_auto_partition_column": "processing_date"}
+
+        config = IcebergIOManagerConfig(namespace="bronze")
+        io_mgr = IcebergIOManager(config=config, iceberg_manager=mock_iceberg_manager)
+
+        io_mgr.handle_output(context, mock_pyarrow_table)
+
+        # Verify auto partition column was used
+        call_args = mock_iceberg_manager.write_data.call_args
+        write_config = call_args[0][2]
+
+        assert write_config.overwrite_filter == "processing_date = '2024-01-15'"
 
 
 __all__ = []
