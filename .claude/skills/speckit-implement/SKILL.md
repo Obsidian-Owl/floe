@@ -21,6 +21,55 @@ This skill bridges SpecKit planning with Linear/Beads execution tracking.
 - **No arguments**: Auto-select first ready task
 - **With selector**: Implement specific task (number, Task ID `T###`, or Linear ID `FLO-###`)
 
+---
+
+## CRITICAL: Spec Context Loading (MANDATORY)
+
+**You MUST load ALL spec artifacts into context BEFORE implementing any task.**
+
+This is NON-NEGOTIABLE. Implementation without full spec context leads to:
+- Deviations from agreed design
+- Missing requirements
+- Inconsistent architecture decisions
+- Wasted rework
+
+### Required Artifacts (Load All)
+
+| Artifact | Purpose | Location |
+|----------|---------|----------|
+| **spec.md** | Feature requirements, acceptance criteria | `$FEATURE_DIR/spec.md` |
+| **plan.md** | Architecture decisions, component design | `$FEATURE_DIR/plan.md` |
+| **tasks.md** | Task breakdown with dependencies | `$FEATURE_DIR/tasks.md` |
+| **research.md** | Technology research, patterns (if exists) | `$FEATURE_DIR/research.md` |
+| **data-model.md** | Schema design, contracts (if exists) | `$FEATURE_DIR/data-model.md` |
+| **contracts/** | Contract definitions (if exists) | `$FEATURE_DIR/contracts/*.md` |
+| **.linear-mapping.json** | Task-to-Linear ID mappings | `$FEATURE_DIR/.linear-mapping.json` |
+| **constitution.md** | Project principles (TDD, SOLID) | `.specify/memory/constitution.md` |
+
+### Loading Protocol
+
+**At the START of every implementation session:**
+
+```bash
+# 1. Identify feature directory
+FEATURE_DIR=$(./specify/scripts/bash/check-prerequisites.sh --json | jq -r '.feature_dir')
+
+# 2. Load ALL spec artifacts (use Read tool for each)
+Read: $FEATURE_DIR/spec.md
+Read: $FEATURE_DIR/plan.md
+Read: $FEATURE_DIR/tasks.md
+Read: $FEATURE_DIR/research.md       # if exists
+Read: $FEATURE_DIR/data-model.md     # if exists
+Read: $FEATURE_DIR/contracts/*.md    # if exists
+Read: .specify/memory/constitution.md
+```
+
+**After context compaction**: Re-read ALL artifacts immediately. The summary may lose critical details.
+
+**During implementation**: Reference spec.md and plan.md continuously. Every decision must align with the documented design.
+
+---
+
 ## Memory Integration
 
 ### Before Starting
@@ -83,10 +132,16 @@ This skill enforces project principles from `.specify/memory/constitution.md`:
      - `assignee`: "me"
    - Display confirmation with Linear URL
 
-5. **Load Context**
-   - Read task details from `$FEATURE_DIR/tasks.md` (parse task line for phase, user story, description)
-   - Load `spec.md` and `plan.md` from FEATURE_DIR
-   - Load `.specify/memory/constitution.md` for project principles
+5. **Load Context (CRITICAL - See "Spec Context Loading" above)**
+   - **Load ALL spec artifacts** per the CRITICAL section above:
+     - `$FEATURE_DIR/spec.md` - Full feature specification
+     - `$FEATURE_DIR/plan.md` - Architecture and design decisions
+     - `$FEATURE_DIR/tasks.md` - Parse task line for phase, user story, description
+     - `$FEATURE_DIR/research.md` - Technology research (if exists)
+     - `$FEATURE_DIR/data-model.md` - Schema design (if exists)
+     - `$FEATURE_DIR/contracts/*.md` - Contract definitions (if exists)
+     - `.specify/memory/constitution.md` - Project principles
+   - **This is NON-NEGOTIABLE** - do NOT proceed without full context
    - Display: phase, user story, task description, Linear URL
    - Use Explore subagents to ensure you deeply understand the codebase and target architecture
    - Validate any ambiguity with the AskUserQuestions tool
