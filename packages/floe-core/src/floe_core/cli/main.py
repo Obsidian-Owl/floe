@@ -22,9 +22,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from typing import NoReturn
 
-    # Type alias for subparsers - avoids quoting in function signature
-    SubParsersAction = argparse._SubParsersAction[argparse.ArgumentParser]
-
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser with subcommands.
@@ -57,7 +54,7 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def _add_compile_subparser(
-    subparsers: SubParsersAction,
+    subparsers: Any,
 ) -> None:
     """Add the compile subcommand to subparsers.
 
