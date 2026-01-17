@@ -1,0 +1,364 @@
+"""Dagster IOManager for Iceberg table operations.
+
+This module provides IcebergIOManager, a Dagster IOManager that handles
+reading and writing PyArrow Tables to/from Iceberg tables.
+
+IcebergIOManager integrates with Dagster's asset framework, automatically
+mapping asset keys to Iceberg table identifiers and supporting partitioned
+asset outputs.
+
+Example:
+    >>> from dagster import Definitions, asset
+    >>> from floe_iceberg import IcebergIOManager, IcebergIOManagerConfig
+    >>>
+    >>> @asset
+    ... def customers() -> pa.Table:
+    ...     return pa.table({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+    >>>
+    >>> io_manager = IcebergIOManager(
+    ...     config=IcebergIOManagerConfig(namespace="bronze"),
+    ...     iceberg_manager=manager,
+    ... )
+
+See Also:
+    - IcebergIOManagerConfig: Configuration model for the IOManager
+    - IcebergTableManager: Underlying table operations
+
+Note:
+    This module requires the optional 'dagster' dependency.
+    Install with: pip install floe-iceberg[dagster]
+
+    When Dagster is not installed, IcebergIOManager can still be used
+    as a standalone class with duck-typed contexts, but won't integrate
+    with Dagster's resource system.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+import structlog
+
+from floe_iceberg.models import IcebergIOManagerConfig, WriteConfig, WriteMode
+
+if TYPE_CHECKING:
+    from floe_iceberg.manager import IcebergTableManager
+
+# =============================================================================
+# Type Definitions
+# =============================================================================
+
+# Dagster types - imported at runtime to avoid hard dependency
+# These are duck-typed for flexibility
+OutputContext = Any  # dagster.OutputContext
+InputContext = Any  # dagster.InputContext
+
+# =============================================================================
+# Dagster Integration
+# =============================================================================
+
+# Try to import Dagster's ConfigurableIOManager for proper inheritance
+# Falls back to object if Dagster is not installed
+_DAGSTER_AVAILABLE: bool
+try:
+    from dagster import ConfigurableIOManager as _DagsterConfigurableIOManager
+
+    _DAGSTER_AVAILABLE = True
+except ImportError:
+    _DagsterConfigurableIOManager = object  # type: ignore[misc, assignment]
+    _DAGSTER_AVAILABLE = False
+
+
+def is_dagster_available() -> bool:
+    """Check if Dagster is available for IOManager integration.
+
+    Returns:
+        True if dagster package is installed and ConfigurableIOManager
+        can be imported, False otherwise.
+
+    Example:
+        >>> from floe_iceberg.io_manager import is_dagster_available
+        >>> if is_dagster_available():
+        ...     # Use full Dagster integration
+        ...     pass
+    """
+    return _DAGSTER_AVAILABLE
+
+
+# =============================================================================
+# IcebergIOManager
+# =============================================================================
+
+
+class IcebergIOManager(_DagsterConfigurableIOManager):  # type: ignore[misc]
+    """Dagster IOManager for reading and writing Iceberg tables.
+
+    Handles asset outputs by writing PyArrow Tables to Iceberg tables,
+    and asset inputs by reading from Iceberg tables.
+
+    This class inherits from Dagster's ConfigurableIOManager when Dagster
+    is installed, enabling proper integration with Dagster's resource system.
+    When Dagster is not installed, it functions as a standalone IOManager.
+
+    Attributes:
+        config: IOManager configuration (IcebergIOManagerConfig).
+        iceberg_manager: IcebergTableManager for table operations.
+
+    Example:
+        >>> from floe_iceberg import IcebergIOManager, IcebergIOManagerConfig
+        >>> from floe_iceberg.manager import IcebergTableManager
+        >>>
+        >>> # Create manager with catalog and storage plugins
+        >>> manager = IcebergTableManager(catalog_plugin, storage_plugin)
+        >>>
+        >>> # Create IOManager
+        >>> io_manager = IcebergIOManager(
+        ...     config=IcebergIOManagerConfig(namespace="bronze"),
+        ...     iceberg_manager=manager,
+        ... )
+        >>>
+        >>> # Use with Dagster Definitions
+        >>> from dagster import Definitions
+        >>> defs = Definitions(
+        ...     assets=[...],
+        ...     resources={"io_manager": io_manager},
+        ... )
+
+    Note:
+        When using with Dagster, the IcebergIOManager should be registered
+        as a resource in your Definitions. The IOManager handles:
+        - Asset key to table identifier mapping
+        - Write mode configuration via asset metadata
+        - Schema inference on first write (optional)
+        - Partitioned asset support
+    """
+
+    def __init__(
+        self,
+        config: IcebergIOManagerConfig,
+        iceberg_manager: IcebergTableManager,
+    ) -> None:
+        """Initialize IcebergIOManager.
+
+        Args:
+            config: IOManager configuration specifying namespace, write mode,
+                and table naming patterns.
+            iceberg_manager: IcebergTableManager instance for table operations.
+                The manager should be pre-configured with catalog and storage
+                plugins.
+
+        Example:
+            >>> config = IcebergIOManagerConfig(
+            ...     namespace="bronze",
+            ...     default_write_mode=WriteMode.APPEND,
+            ... )
+            >>> io_manager = IcebergIOManager(
+            ...     config=config,
+            ...     iceberg_manager=manager,
+            ... )
+        """
+        # Note: We don't call super().__init__() when Dagster is available
+        # because ConfigurableIOManager uses Pydantic-style initialization.
+        # Our constructor pattern works with both Dagster and standalone usage.
+        self._config = config
+        self._manager = iceberg_manager
+        self._log = structlog.get_logger(__name__)
+
+    def handle_output(self, context: OutputContext, obj: Any) -> None:
+        """Handle asset output by writing to Iceberg table.
+
+        Writes a PyArrow Table to the appropriate Iceberg table based on
+        the asset key and configuration.
+
+        Args:
+            context: Dagster output context with asset metadata.
+            obj: PyArrow Table to write.
+
+        Raises:
+            TypeError: If obj is not a PyArrow Table.
+        """
+        # Get table identifier from context
+        table_identifier = self._get_table_identifier(context)
+
+        self._log.debug(
+            "handle_output_start",
+            table_identifier=table_identifier,
+            asset_key=self._get_asset_key_str(context),
+        )
+
+        # Get write config (may be overridden by metadata)
+        write_config = self._get_write_config(context)
+
+        # Check if table exists
+        if not self._manager.table_exists(table_identifier):
+            # Create table on first write if schema inference is enabled
+            if self._config.infer_schema_from_data:
+                self._create_table_from_data(table_identifier, obj)
+            else:
+                msg = f"Table '{table_identifier}' does not exist and infer_schema_from_data is False"
+                raise ValueError(msg)
+
+        # Load table and write data
+        table = self._manager.load_table(table_identifier)
+        self._manager.write_data(table, obj, write_config)
+
+        self._log.info(
+            "handle_output_complete",
+            table_identifier=table_identifier,
+            write_mode=write_config.mode.value,
+        )
+
+    def load_input(self, context: InputContext) -> Any:
+        """Load asset input from Iceberg table.
+
+        Reads data from an Iceberg table and returns it as a PyArrow Table.
+
+        Args:
+            context: Dagster input context with asset metadata.
+
+        Returns:
+            PyArrow Table with the table data.
+
+        Raises:
+            NoSuchTableError: If the table doesn't exist.
+        """
+        # Get table identifier from upstream asset
+        table_identifier = self._get_table_identifier_for_input(context)
+
+        self._log.debug(
+            "load_input_start",
+            table_identifier=table_identifier,
+            asset_key=self._get_upstream_asset_key_str(context),
+        )
+
+        # Load table
+        table = self._manager.load_table(table_identifier)
+
+        # Read data (scan entire table for now)
+        # Future: support partition filtering based on partition key
+        data = self._read_table_data(table)
+
+        self._log.info(
+            "load_input_complete",
+            table_identifier=table_identifier,
+        )
+
+        return data
+
+    def _get_table_identifier(self, context: OutputContext) -> str:
+        """Generate table identifier from output context.
+
+        Args:
+            context: Dagster output context.
+
+        Returns:
+            Full table identifier (namespace.table_name).
+        """
+        asset_key = self._get_asset_key_str(context)
+        table_name = self._config.table_name_pattern.format(asset_key=asset_key)
+        return f"{self._config.namespace}.{table_name}"
+
+    def _get_table_identifier_for_input(self, context: InputContext) -> str:
+        """Generate table identifier from input context.
+
+        Args:
+            context: Dagster input context.
+
+        Returns:
+            Full table identifier (namespace.table_name).
+        """
+        asset_key = self._get_upstream_asset_key_str(context)
+        table_name = self._config.table_name_pattern.format(asset_key=asset_key)
+        return f"{self._config.namespace}.{table_name}"
+
+    def _get_write_config(self, context: OutputContext) -> WriteConfig:
+        """Get write configuration, with metadata overrides.
+
+        Args:
+            context: Dagster output context.
+
+        Returns:
+            WriteConfig for the write operation.
+        """
+        # Start with default mode from config
+        mode = self._config.default_write_mode
+        commit_strategy = self._config.default_commit_strategy
+
+        # Check for metadata overrides
+        metadata = getattr(context, "metadata", None) or {}
+
+        if "write_mode" in metadata:
+            mode_str = metadata["write_mode"]
+            if hasattr(mode_str, "value"):
+                mode_str = mode_str.value
+            mode = WriteMode(mode_str)
+
+        return WriteConfig(mode=mode, commit_strategy=commit_strategy)
+
+    def _get_asset_key_str(self, context: OutputContext) -> str:
+        """Get asset key as string from output context.
+
+        Args:
+            context: Dagster output context.
+
+        Returns:
+            Asset key as underscore-separated string.
+        """
+        asset_key = getattr(context, "asset_key", None)
+        if asset_key is None:
+            return "unknown"
+        # Dagster asset keys can be multi-part
+        path = getattr(asset_key, "path", None)
+        if path:
+            return "_".join(path)
+        return str(asset_key)
+
+    def _get_upstream_asset_key_str(self, context: InputContext) -> str:
+        """Get upstream asset key as string from input context.
+
+        Args:
+            context: Dagster input context.
+
+        Returns:
+            Upstream asset key as underscore-separated string.
+        """
+        upstream_output = getattr(context, "upstream_output", None)
+        if upstream_output is None:
+            return "unknown"
+        asset_key = getattr(upstream_output, "asset_key", None)
+        if asset_key is None:
+            return "unknown"
+        path = getattr(asset_key, "path", None)
+        if path:
+            return "_".join(path)
+        return str(asset_key)
+
+    def _create_table_from_data(self, table_identifier: str, data: Any) -> None:
+        """Create table with schema inferred from data.
+
+        Args:
+            table_identifier: Full table identifier.
+            data: PyArrow Table to infer schema from.
+        """
+        # Schema inference is a stub - will be fully implemented in T087
+        self._log.info(
+            "creating_table_from_data",
+            table_identifier=table_identifier,
+        )
+        # Implementation deferred to T087
+
+    def _read_table_data(self, table: Any) -> Any:
+        """Read all data from an Iceberg table.
+
+        Args:
+            table: PyIceberg Table object.
+
+        Returns:
+            PyArrow Table with all data.
+        """
+        # Reading implementation is a stub - will be fully implemented in T084
+        # For mock tables in tests, return empty data
+        return None
+
+
+__all__ = ["IcebergIOManager", "is_dagster_available"]
