@@ -113,7 +113,7 @@ testing/tests/unit/test_orchestrator_fixtures.py  # Fixture tests
 - [ ] `DagsterOrchestratorPlugin` implements ABC
 - [ ] Assets generated from CompiledArtifacts
 - [ ] dbt models become Dagster assets
-- [ ] IOManager for Iceberg tables
+- [ ] IOManager for Iceberg tables (implemented HERE, not in floe-iceberg)
 
 ### US3: Schedule Generation (P1)
 **As a** data engineer
@@ -146,6 +146,27 @@ testing/tests/unit/test_orchestrator_fixtures.py  # Fixture tests
 - Assets are generated at compile-time, not runtime
 - Dagster resources wrap compute/catalog/storage plugins
 - Airflow adapter uses TaskFlow API (Airflow 3.x)
+
+### Architectural Learnings from Epic 4D
+
+**IOManager Placement Decision (from Epic 4D review):**
+
+During Epic 4D implementation, IcebergIOManager was incorrectly placed in floe-iceberg.
+This violated the pluggable architecture principle and was removed in a cleanup commit.
+
+| What Happened | Why It's Wrong | Correct Approach |
+|---------------|----------------|------------------|
+| IOManager in floe-iceberg | floe-iceberg is orchestrator-agnostic storage | IOManager in orchestrator plugin |
+| Hardcoded Dagster imports | Violates manifest-driven plugin selection | Plugin creates IOManager via create_definitions() |
+| Storage package depends on orchestrator | Inverts dependency direction | Orchestrator depends on storage |
+
+**Correct Architecture (implement in Epic 4B):**
+- `floe-iceberg` provides `IcebergTableManager` (pure storage utility)
+- `floe-orchestrator-dagster` creates `IcebergIOManager` using IcebergTableManager
+- IOManager is instantiated by `OrchestratorPlugin.create_definitions()`
+- Manifest configuration determines which orchestrator plugin is loaded
+
+**Note**: FR-037 to FR-040 (IOManager requirements) were deferred from Epic 4D to this epic.
 
 ### Risks
 | Risk | Likelihood | Impact | Mitigation |

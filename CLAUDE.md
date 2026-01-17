@@ -684,6 +684,8 @@ Linear app                      # Team progress view
 - Cognee Cloud (SaaS) - managed vector + graph storage, no self-hosted backends (10a-agent-memory)
 - Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation) (10b-agent-memory-quality)
 - Cognee Cloud (SaaS) - REST API integration, no local storage (10b-agent-memory-quality)
+- Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow (4d-storage-plugin)
+- Iceberg tables via PyIceberg (S3/GCS/Azure via StoragePlugin FileIO) (4d-storage-plugin)
 
 ## Cognee Cloud API Quirks (CRITICAL)
 
@@ -746,5 +748,6 @@ result = await sdk.memify(dataset_name="my_dataset")
 See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_client.py`.
 
 ## Recent Changes
+- 4d-storage-plugin: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow
 - 10b-agent-memory-quality: Added Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation)
 - 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)

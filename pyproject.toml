@@ -26,6 +26,8 @@ dependencies = [
     "jsonschema>=4.0",  # For JSON Schema validation in tests
     # Include floe-core for development
     "floe-core",
+    # Include floe-iceberg for development
+    "floe-iceberg",
     # Include plugins for development
     "floe-catalog-polaris",
     # Telemetry backend plugins (for entry point discovery in tests)
@@ -44,6 +46,7 @@ dependencies = [
 
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
+floe-iceberg = { path = "packages/floe-iceberg", editable = true }
 floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true }
 floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
@@ -53,6 +56,7 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    "packages/floe-iceberg/src",
     "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",
     ".",  # Enable import of 'testing' module from project root
@@ -134,6 +138,7 @@ show_missing = true
 [tool.importlinter]
 root_packages = [
     "floe_core",
+    "floe_iceberg",
     "floe_catalog_polaris",
     "floe_compute_duckdb",
 ]

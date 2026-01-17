@@ -1,0 +1,13 @@
+{
+  "max_commit_retries": 3,
+  "retry_base_delay_seconds": 1.0,
+  "default_retention_days": 7,
+  "min_snapshots_to_keep": 10,
+  "default_commit_strategy": "fast_append",
+  "default_table_properties": {
+    "write.format.default": "parquet",
+    "write.target-file-size-bytes": "134217728",
+    "write.parquet.row-group-size-bytes": "134217728"
+  },
+  "catalog_connection_config": null
+}
