@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# Session Recovery Script for Claude Code Integration
+#
+# This script integrates agent-memory session recovery with bd prime.
+# It attempts to recover prior session context from the knowledge graph
+# based on the current working directory or specified work area.
+#
+# Usage:
+#   ./scripts/session-recover [--work-area AREA] [--quiet]
+#
+# Environment:
+#   COGNEE_API_KEY - Required for Cognee Cloud access
+#   OPENAI_API_KEY - Required for embeddings
+#
+# Example:
+#   ./scripts/session-recover --work-area "plugin-system"
+#   ./scripts/session-recover  # Auto-detects from current directory
+#
+# Exit codes:
+#   0 - Success (context found or no prior context)
+#   1 - Error (missing dependencies or API failure)
+#
+# Implementation: T050 (FLO-635)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENT_MEMORY_DIR="$REPO_ROOT/devtools/agent-memory"
+
+# Parse arguments
+WORK_AREA=""
+QUIET=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --work-area|-w)
+            WORK_AREA="$2"
+            shift 2
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--work-area AREA] [--quiet]"
+            echo ""
+            echo "Options:"
+            echo "  --work-area, -w  Topic/area to recover context for"
+            echo "  --quiet, -q      Suppress non-essential output"
+            echo "  --help, -h       Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Check if agent-memory is available
+if [[ ! -d "$AGENT_MEMORY_DIR" ]]; then
+    [[ "$QUIET" != true ]] && echo "agent-memory not found at $AGENT_MEMORY_DIR" >&2
+    exit 0  # Non-intrusive exit - don't fail if agent-memory not available
+fi
+
+# Check for required environment variables
+if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
+    [[ "$QUIET" != true ]] && echo "Session recovery skipped: COGNEE_API_KEY or OPENAI_API_KEY not set"
+    exit 0  # Non-intrusive exit
+fi
+
+# Auto-detect work area from current directory if not specified
+if [[ -z "$WORK_AREA" ]]; then
+    # Use the current branch name or directory name as work area hint
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+        if [[ -n "$BRANCH" && "$BRANCH" != "main" && "$BRANCH" != "master" ]]; then
+            # Extract feature name from branch (e.g., "10a-agent-memory" from "10a-agent-memory")
+            WORK_AREA="$BRANCH"
+        fi
+    fi
+
+    # Fall back to current directory name
+    if [[ -z "$WORK_AREA" ]]; then
+        WORK_AREA="$(basename "$PWD")"
+    fi
+fi
+
+[[ "$QUIET" != true ]] && echo "Recovering session context for: $WORK_AREA"
+
+# Run session-recover command
+cd "$AGENT_MEMORY_DIR"
+if uv run agent-memory session-recover --work-area "$WORK_AREA" 2>/dev/null; then
+    :  # Success, continue to epic check
+else
+    # Non-intrusive - don't fail if recovery doesn't find anything
+    [[ "$QUIET" != true ]] && echo "No prior session context available for '$WORK_AREA'"
+fi
+
+# Check for epic auto-mode state file
+EPIC_AUTO_MODE="$REPO_ROOT/.agent/epic-auto-mode"
+if [[ -f "$EPIC_AUTO_MODE" ]]; then
+    # Check if JSON format (enhanced) or legacy text
+    if head -1 "$EPIC_AUTO_MODE" | grep -q "^{"; then
+        # Enhanced JSON format - extract details
+        EPIC_NAME=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('epic_name', 'unknown'))" 2>/dev/null || echo "unknown")
+        FEATURE_DIR=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('feature_dir', ''))" 2>/dev/null || echo "")
+        LAST_TASK=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('last_task', 'N/A'))" 2>/dev/null || echo "N/A")
+        COMPLETED=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('completed_before_compact', 0))" 2>/dev/null || echo "0")
+        TOTAL=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('total_tasks', '?'))" 2>/dev/null || echo "?")
+        COMPACTIONS=$(python3 -c "import json; print(json.load(open('$EPIC_AUTO_MODE')).get('compaction_count', 0))" 2>/dev/null || echo "0")
+
+        cat << EOF
+
+================================================================================
+EPIC AUTO-MODE ACTIVE - AUTOMATIC RECOVERY REQUIRED
+================================================================================
+
+Epic: $EPIC_NAME
+Feature Dir: $FEATURE_DIR
+Progress: $COMPLETED / $TOTAL tasks completed
+Last Task: $LAST_TASK
+Compactions: $COMPACTIONS
+
+ACTION REQUIRED: Read .agent/epic-auto-mode and continue implementing.
+DO NOT ask user for confirmation - auto-mode means continue automatically.
+
+State file: $EPIC_AUTO_MODE
+================================================================================
+EOF
+    else
+        # Legacy text format
+        cat << 'EOF'
+
+================================================================================
+EPIC AUTO-MODE DETECTED
+================================================================================
+
+You were implementing tasks in auto-mode before context compaction.
+
+To continue automatic implementation:
+  /speckit.implement-epic
+
+To implement tasks one at a time:
+  /speckit.implement
+
+================================================================================
+EOF
+    fi
+fi
+
+exit 0

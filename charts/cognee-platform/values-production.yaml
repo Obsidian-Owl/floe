@@ -1,0 +1,185 @@
+# Cognee Platform - Production Values
+# Use: helm install cognee ./charts/cognee-platform -f values-production.yaml
+
+global:
+  namespace: cognee-production
+
+  # Use managed databases in production
+  externalDatabase:
+    postgresql:
+      enabled: true
+      host: cognee-db.xxxxxxxxxxxx.us-west-2.rds.amazonaws.com
+      port: 5432
+      database: cognee
+      existingSecret: cognee-postgresql-credentials
+      secretKeys:
+        username: username
+        password: password
+
+    redis:
+      enabled: true
+      host: cognee-redis.xxxxxxxxxxxx.cache.amazonaws.com
+      port: 6379
+      existingSecret: cognee-redis-credentials
+      secretKeys:
+        password: password
+
+# Cognee API - Production configuration
+cognee-api:
+  enabled: true
+
+  # High availability
+  replicaCount: 3
+
+  image:
+    repository: cognee/cognee
+    # Pin to specific version in production
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  # Production ingress with TLS
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    hosts:
+      - host: cognee.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: cognee-tls
+        hosts:
+          - cognee.example.com
+
+  # Production resources
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # Network Policy
+  networkPolicy:
+    enabled: true
+
+  # Pod anti-affinity for spread across nodes
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: cognee-api
+            topologyKey: kubernetes.io/hostname
+
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /api/v1/health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+# Neo4j - Production configuration (3-node cluster)
+neo4j:
+  enabled: true
+
+  neo4j:
+    name: cognee-neo4j
+    edition: enterprise  # Required for clustering
+    acceptLicenseAgreement: "yes"
+
+    # Cluster mode
+    minimumClusterSize: 3
+
+    resources:
+      cpu: "2"
+      memory: "8Gi"
+
+    volumes:
+      data:
+        mode: defaultStorageClass
+        defaultStorageClass:
+          requests:
+            storage: 100Gi
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+# Redis - Disable in-cluster when using managed
+redis:
+  enabled: false
+
+# External Secrets - Production configuration
+externalSecrets:
+  enabled: true
+  provider: aws
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+  # Secrets to sync from AWS Secrets Manager
+  secrets:
+    - name: cognee-llm-credentials
+      remoteRef:
+        key: production/cognee/openai
+        property: api-key
+
+    - name: cognee-postgresql-credentials
+      remoteRef:
+        key: production/cognee/postgresql
+
+    - name: cognee-redis-credentials
+      remoteRef:
+        key: production/cognee/redis
+
+    - name: cognee-neo4j-credentials
+      remoteRef:
+        key: production/cognee/neo4j

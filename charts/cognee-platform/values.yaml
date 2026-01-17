@@ -1,0 +1,156 @@
+# Cognee Platform - Default Values
+# Override these in values-production.yaml for production deployments
+
+global:
+  # Namespace for all resources
+  namespace: cognee
+
+  # Image pull secrets (if using private registry)
+  imagePullSecrets: []
+
+  # Storage class for persistent volumes
+  storageClass: ""
+
+  # External database configuration (when using managed services)
+  externalDatabase:
+    # PostgreSQL with pgvector for embeddings
+    postgresql:
+      enabled: false
+      host: ""
+      port: 5432
+      database: cognee
+      # Secret reference for credentials
+      existingSecret: ""
+      secretKeys:
+        username: username
+        password: password
+
+    # Redis for caching
+    redis:
+      enabled: false
+      host: ""
+      port: 6379
+      existingSecret: ""
+      secretKeys:
+        password: password
+
+# Cognee API configuration
+cognee-api:
+  enabled: true
+
+  replicaCount: 1
+
+  image:
+    repository: cognee/cognee
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: cognee.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  # LLM provider configuration
+  llm:
+    provider: openai
+    model: gpt-4o-mini
+    # API key from secret
+    existingSecret: cognee-llm-credentials
+    secretKey: api-key
+
+  # Embedding provider configuration
+  embedding:
+    provider: openai
+    model: text-embedding-3-small
+    # Uses same secret as LLM
+
+  # Database configuration
+  database:
+    # In-cluster PostgreSQL (when external not configured)
+    postgresql:
+      enabled: true
+      host: ""  # Auto-detected from service
+      port: 5432
+      database: cognee
+
+# Neo4j configuration (graph database)
+neo4j:
+  enabled: true
+
+  # Standalone mode for development
+  neo4j:
+    name: cognee-neo4j
+    edition: community
+    acceptLicenseAgreement: "yes"
+
+    resources:
+      cpu: "500m"
+      memory: "2Gi"
+
+    # Persistent volume
+    volumes:
+      data:
+        mode: defaultStorageClass
+        defaultStorageClass:
+          requests:
+            storage: 10Gi
+
+  # Neo4j password from secret
+  neo4j:
+    password: ""
+    passwordFromSecret: cognee-neo4j-credentials
+    passwordFromSecretLookup: true
+
+# Redis configuration (caching)
+redis:
+  enabled: true
+
+  architecture: standalone
+
+  auth:
+    enabled: true
+    existingSecret: cognee-redis-credentials
+    existingSecretPasswordKey: password
+
+  master:
+    resources:
+      limits:
+        cpu: 250m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+    persistence:
+      enabled: true
+      size: 1Gi
+
+# External Secrets configuration
+externalSecrets:
+  enabled: false
+  # Backend provider: aws, vault, gcp, azure
+  provider: aws
+  # Refresh interval
+  refreshInterval: 1h
+  # Secret store reference
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore

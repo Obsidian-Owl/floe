@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Memory Save Script for Claude Code Integration
+#
+# Simple wrapper for agent-memory session-save to persist decisions.
+# Designed for use in SpecKit commands and development workflows.
+#
+# Usage:
+#   ./scripts/memory-save --decisions "Chose X because Y"
+#   ./scripts/memory-save --decisions "Decision 1; Decision 2" --issues "FLO-123,FLO-124"
+#
+# Environment:
+#   COGNEE_API_KEY - Required for Cognee Cloud access
+#   OPENAI_API_KEY - Required for embeddings
+#
+# Exit codes:
+#   0 - Success (saved or gracefully skipped)
+#   1 - Error (missing required arguments)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENT_MEMORY_DIR="$REPO_ROOT/devtools/agent-memory"
+
+# Default values
+DECISIONS=""
+ISSUES=""
+QUIET=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --decisions|-d)
+            DECISIONS="$2"
+            shift 2
+            ;;
+        --issues|-i)
+            ISSUES="$2"
+            shift 2
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 --decisions \"text\" [--issues \"IDs\"] [--quiet]"
+            echo ""
+            echo "Save decisions to agent-memory for future session recovery."
+            echo ""
+            echo "Options:"
+            echo "  --decisions, -d   Decisions to save (required)"
+            echo "  --issues, -i      Related Linear issue IDs (optional)"
+            echo "  --quiet, -q       Suppress non-essential output"
+            echo "  --help, -h        Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0 --decisions \"Chose Pydantic v2 for validation\""
+            echo "  $0 -d \"Used polling instead of sleep\" -i \"FLO-123\""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Validate decisions
+if [[ -z "$DECISIONS" ]]; then
+    echo "Error: --decisions is required" >&2
+    echo "Usage: $0 --decisions \"text\" [--issues \"IDs\"]" >&2
+    exit 1
+fi
+
+# Check if agent-memory is available
+if [[ ! -d "$AGENT_MEMORY_DIR" ]]; then
+    [[ "$QUIET" != true ]] && echo "agent-memory not available - decisions logged locally only" >&2
+    exit 0  # Non-intrusive exit
+fi
+
+# Check for required environment variables
+if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
+    [[ "$QUIET" != true ]] && echo "Memory save skipped: COGNEE_API_KEY or OPENAI_API_KEY not set" >&2
+    exit 0  # Non-intrusive exit
+fi
+
+# Run save - use direct invocation without eval to prevent command injection
+cd "$AGENT_MEMORY_DIR"
+if [[ -n "$ISSUES" ]]; then
+    uv run agent-memory session-save --decisions "$DECISIONS" --issues "$ISSUES" 2>/dev/null || {
+        [[ "$QUIET" != true ]] && echo "Failed to save to agent-memory - continuing without" >&2
+        exit 0
+    }
+else
+    uv run agent-memory session-save --decisions "$DECISIONS" 2>/dev/null || {
+        [[ "$QUIET" != true ]] && echo "Failed to save to agent-memory - continuing without" >&2
+        exit 0
+    }
+fi
+
+[[ "$QUIET" != true ]] && echo "Decisions saved to agent-memory"

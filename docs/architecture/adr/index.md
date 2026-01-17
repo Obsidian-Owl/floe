@@ -58,6 +58,7 @@ ADR numbers are **immutable** once assigned. Gaps in numbering occur when:
 | [0043](0043-dbt-runtime-abstraction.md) | dbt Compilation Environment Abstraction | Accepted |
 | [0044](0044-unified-data-quality-plugin.md) | Unified Data Quality Plugin Architecture | Accepted |
 | [0045](0045-compilation-caching-strategy.md) | Compilation Caching Strategy | Accepted |
+| [0046](0046-agent-memory-architecture.md) | Agent Memory Architecture (Cognee) | Proposed |
 
 ## Categories
 
@@ -115,6 +116,10 @@ ADR numbers are **immutable** once assigned. Gaps in numbering occur when:
 
 ### Deferred
 - [0014](0014-flink-streaming-deferred.md) - Streaming workloads (V2.0)
+
+### Contributor Tooling
+- [0042](0042-linear-beads-traceability.md) - **Linear + Beads for requirements traceability**
+- [0046](0046-agent-memory-architecture.md) - **Cognee integration for AI agent persistent memory**
 
 ## Related Documentation
 

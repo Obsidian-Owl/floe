@@ -1,0 +1,12 @@
+# Cognee local configuration and state
+# These files contain API keys and runtime state - DO NOT commit
+
+# Configuration with credentials
+config.yaml
+
+# Runtime state
+state.json
+checksums.json
+
+# Logs
+*.log

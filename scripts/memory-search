@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Memory Search Script for Claude Code Integration
+#
+# Simple wrapper for agent-memory search to query the knowledge graph.
+# Designed for use in SpecKit commands and development workflows.
+#
+# Usage:
+#   ./scripts/memory-search "query terms"
+#   ./scripts/memory-search "plugin architecture" --top-k 10
+#
+# Environment:
+#   COGNEE_API_KEY - Required for Cognee Cloud access
+#   OPENAI_API_KEY - Required for embeddings
+#
+# Exit codes:
+#   0 - Success (results found or no results)
+#   1 - Error (missing dependencies or API failure)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENT_MEMORY_DIR="$REPO_ROOT/devtools/agent-memory"
+
+# Default values
+TOP_K=5
+QUIET=false
+
+# Parse arguments
+QUERY=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --top-k|-k)
+            TOP_K="$2"
+            shift 2
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 \"query\" [--top-k N] [--quiet]"
+            echo ""
+            echo "Query the agent-memory knowledge graph."
+            echo ""
+            echo "Options:"
+            echo "  --top-k, -k N   Return top N results (default: 5)"
+            echo "  --quiet, -q     Suppress non-essential output"
+            echo "  --help, -h      Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0 \"plugin architecture decisions\""
+            echo "  $0 \"dbt integration patterns\" --top-k 10"
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            QUERY="$1"
+            shift
+            ;;
+    esac
+done
+
+# Validate query
+if [[ -z "$QUERY" ]]; then
+    echo "Error: No query provided" >&2
+    echo "Usage: $0 \"query\" [--top-k N]" >&2
+    exit 1
+fi
+
+# Check if agent-memory is available
+if [[ ! -d "$AGENT_MEMORY_DIR" ]]; then
+    [[ "$QUIET" != true ]] && echo "agent-memory not available" >&2
+    exit 0  # Non-intrusive exit
+fi
+
+# Check for required environment variables
+if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
+    [[ "$QUIET" != true ]] && echo "Memory search skipped: COGNEE_API_KEY or OPENAI_API_KEY not set" >&2
+    exit 0  # Non-intrusive exit
+fi
+
+# Run search
+cd "$AGENT_MEMORY_DIR"
+uv run agent-memory search "$QUERY" --top-k "$TOP_K" 2>/dev/null || {
+    [[ "$QUIET" != true ]] && echo "No results found for: $QUERY" >&2
+    exit 0
+}

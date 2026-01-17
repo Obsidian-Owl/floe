@@ -1,0 +1,160 @@
+# Security Review Workflow
+# Runs Claude Code security review on PRs only (not pushes - already reviewed in PR)
+# See: https://github.com/anthropics/claude-code-security-review
+#
+# Security: All actions pinned to full SHA hashes
+# To update: gh api repos/OWNER/REPO/git/refs/tags/VERSION --jq '.object.sha'
+
+name: Security Review
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.sql'
+      - '**.yaml'
+      - '**.yml'
+      - '**.sh'
+      # Exclude documentation-only changes (negation patterns)
+      - '!docs/**'
+      - '!*.md'
+      - '!.claude/**/*.md'
+
+# Cancel in-progress runs for the same PR
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  security-review:
+    name: Claude Code Security Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write  # Required for OIDC authentication
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code Security Review
+        uses: anthropics/claude-code-action@de8e0b9c42c6cb58e904c857f164aa072244c1ac  # beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          direct_prompt: |
+            Perform a security review of the changed files. Focus on:
+
+            1. **Injection Vulnerabilities**
+               - SQL injection
+               - Command injection
+               - XSS (cross-site scripting)
+
+            2. **Authentication/Authorization**
+               - Missing auth checks
+               - Privilege escalation
+               - Insecure session handling
+
+            3. **Data Exposure**
+               - Hardcoded secrets or API keys
+               - PII logging
+               - Sensitive data in error messages
+
+            4. **Cryptographic Issues**
+               - Weak algorithms (MD5, SHA1)
+               - Hardcoded keys/salts
+               - Insecure random number generation
+
+            5. **Input Validation**
+               - Missing validation
+               - Type confusion
+               - Path traversal
+
+            6. **Dangerous Constructs**
+               - Dynamic code patterns
+               - shell=True in subprocess
+               - pickle.loads on untrusted data
+
+            Report findings with severity (CRITICAL/HIGH/MEDIUM/LOW) and specific file:line locations.
+            Provide remediation guidance for each finding.
+          allowed_tools: |
+            Read
+            Grep
+            Glob
+
+  dependency-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+        with:
+          version: "latest"
+
+      - name: Audit dependencies
+        run: |
+          # Create venv and install project dependencies first
+          uv sync --all-extras --dev
+          # Run security audits (allow soft failures for warnings)
+          uv run pip-audit --strict || true
+          uv run safety check --full-report || true
+
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          fetch-depth: 0
+
+      # Using TruffleHog instead of Gitleaks (free for open source)
+      - name: Run TruffleHog secrets scan
+        uses: trufflesecurity/trufflehog@b924c0bfbe821e54144a6172e4d4c0eb996c4cb5  # main
+        with:
+          extra_args: --only-verified
+
+  bandit-scan:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit
+        run: |
+          bandit -r packages/ plugins/ -f json -o bandit-report.json || true
+          bandit -r packages/ plugins/ -f txt || true
+
+      - name: Upload Bandit Report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          if-no-files-found: ignore

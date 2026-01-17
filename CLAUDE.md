@@ -6,6 +6,91 @@
 
 ---
 
+## Epic Auto-Mode Recovery (CRITICAL - Read After Every Compaction)
+
+**THIS SECTION IS CRITICAL**: After context compaction, skill instructions are lost but this file survives. Check for active workflows immediately.
+
+### Check for Active Epic Auto-Mode
+
+```bash
+# Check if epic auto-mode was active before compaction
+if [ -f ".agent/epic-auto-mode" ]; then
+    cat .agent/epic-auto-mode  # Contains epic context
+fi
+```
+
+**If `.agent/epic-auto-mode` exists, YOU MUST:**
+
+1. **Read the state file** to understand current context:
+   ```bash
+   cat .agent/epic-auto-mode
+   ```
+
+2. **Continue implementing automatically** - do NOT wait for user prompt
+
+3. **Follow the epic auto-mode workflow**:
+   - Sync from Linear to get current task status
+   - Find next ready task (status: backlog/unstarted)
+   - Implement the task (TDD, SOLID, atomic commits)
+   - Update Linear status to Done
+   - Create Linear comment with completion summary
+   - Commit changes
+   - **Loop to next task immediately** (no confirmation)
+
+4. **Only stop for**:
+   - Design questions requiring user validation → Use `AskUserQuestion` tool
+   - All tasks completed → Output "EPIC COMPLETE" banner, remove state file
+   - Task blocked by dependency → Output "EPIC BLOCKED" banner, keep state file
+
+### State File Format
+
+The `.agent/epic-auto-mode` file contains JSON with recovery context:
+```json
+{
+  "mode": "epic-auto",
+  "feature_dir": "specs/epic-name",
+  "epic_name": "epic-name",
+  "started_at": "2026-01-17T10:30:00Z",
+  "last_task": "T005",
+  "last_linear_id": "FLO-123",
+  "total_tasks": 15,
+  "completed_before_compact": 4
+}
+```
+
+### Recovery Procedure
+
+After compaction with active epic-auto-mode:
+
+1. Read `.agent/epic-auto-mode` for context
+2. Read `{feature_dir}/.linear-mapping.json` for task mappings
+3. Query Linear for current status of all tasks
+4. Find next task with status `backlog` or `unstarted`
+5. **Resume implementation immediately** - you are in auto-mode
+
+**DO NOT** ask the user "should I continue?" - the existence of the state file IS the user's instruction to continue.
+
+### Cancellation
+
+**To cancel epic auto-mode**, the user can:
+1. **Remove the state file manually**: `rm .agent/epic-auto-mode`
+2. **Send a cancel message**: Type "cancel" or "stop" during implementation
+3. **Use Ctrl+C**: Interrupt Claude Code execution
+
+If cancelled mid-epic, Claude should acknowledge and NOT resume unless explicitly asked.
+
+### Completion Cleanup
+
+**CRITICAL**: When epic completes successfully, remove the state file **IMMEDIATELY BEFORE** any other output:
+
+```bash
+rm -f .agent/epic-auto-mode  # FIRST - prevents confusion on compaction
+```
+
+Then output the completion banner. This order prevents edge cases where compaction occurs between banner and cleanup.
+
+---
+
 ## Vision
 
 **floe** is an open platform (Apache 2.0) for building internal data platforms.
@@ -111,11 +196,12 @@ bd linear sync --pull
 # 3. Auto-implement next ready task
 /speckit.implement  # Claims task, updates Linear, commits
 
-# 4. Review test quality before PR
-/speckit.test-review
+# 4. Pre-PR validation
+/speckit.test-review        # Test quality
+/speckit.integration-check  # Contract stability, merge readiness
 
-# 5. Create PR (if tests pass)
-# Commit and push handled by /speckit.implement
+# 5. Create PR
+/speckit.pr  # Links Linear issues, generates summary
 ```
 
 **Complete Workflow**: See `docs/guides/linear-workflow.md`
@@ -125,19 +211,21 @@ bd linear sync --pull
 ```bash
 # 1. Planning (Epic → Tasks → Linear issues)
 /speckit.specify    # Create spec.md
+/speckit.clarify    # Ask clarifying questions
 /speckit.plan       # Generate plan.md
 /speckit.tasks      # Break down to tasks
 /speckit.taskstolinear  # Create Linear issues with Epic labels
 
 # 2. Implementation (Linear-coordinated)
-/speckit.implement  # Auto-selects ready task, syncs Linear
+/speckit.implement       # One task at a time (with confirmation)
+/speckit.implement-epic  # ALL tasks (auto-continues, no confirmation)
 
-# 3. Test Quality Review
-/speckit.test-review  # Pre-PR validation
+# 3. Pre-PR Review
+/speckit.test-review        # Test quality validation
+/speckit.integration-check  # Contract and merge readiness check
 
 # 4. PR Creation
-# Code committed by /speckit.implement
-# Tests validated by /speckit.test-review
+/speckit.pr  # Creates PR with Linear links, quality summary
 ```
 
 ---
@@ -504,6 +592,49 @@ floe/
 
 ---
 
+## Memory Workflow
+
+The **agent-memory** system provides persistent context across sessions via a Cognee Cloud knowledge graph.
+
+### Quick Reference
+
+```bash
+# Search for prior decisions/context
+./scripts/memory-search "plugin architecture"
+
+# Save decisions for future sessions
+./scripts/memory-save --decisions "Chose Pydantic v2 for validation" --issues "FLO-123"
+
+# Add content to knowledge graph
+./scripts/memory-add "Important: Use camelCase for Cognee API fields"
+./scripts/memory-add --file docs/architecture/new-pattern.md
+```
+
+### When to Use
+
+| Action | Command | When |
+|--------|---------|------|
+| **Search** | `./scripts/memory-search` | Before making architecture decisions |
+| **Save** | `./scripts/memory-save` | After making significant decisions |
+| **Add** | `./scripts/memory-add` | When creating reusable knowledge |
+
+### Automatic Integration
+
+- **Session Start**: Hook automatically queries for prior context (see startup logs)
+- **SpecKit Skills**: `/speckit.plan` and `/speckit.specify` search memory before decisions
+- **Epic Recovery**: SessionStart hook detects `.agent/epic-auto-mode` after compaction
+
+### If Agent-Memory Unavailable
+
+All memory operations are **non-blocking**. If `COGNEE_API_KEY` or `OPENAI_API_KEY` are not set:
+- Scripts exit gracefully (exit code 0)
+- Workflow continues without memory integration
+- Decisions are still captured in plan artifacts and Linear comments
+
+**See**: `devtools/agent-memory/` for full documentation
+
+---
+
 ## Getting Help
 
 ```bash
@@ -549,6 +680,71 @@ Linear app                      # Team progress view
 - N/A (plugin system is stateless; dbt profiles.yml is file-based output) (001-compute-plugin)
 - Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2, PyYAML, structlog, argparse (stdlib) (2b-compilation-pipeline)
 - File-based (JSON/YAML artifacts in `target/` directory) (2b-compilation-pipeline)
+- Python 3.10+ (Cognee requirement, matches floe standard) (10a-agent-memory)
+- Cognee Cloud (SaaS) - managed vector + graph storage, no self-hosted backends (10a-agent-memory)
+- Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation) (10b-agent-memory-quality)
+- Cognee Cloud (SaaS) - REST API integration, no local storage (10b-agent-memory-quality)
+
+## Cognee Cloud API Quirks (CRITICAL)
+
+**IMPORTANT**: The Cognee Cloud REST API uses **camelCase** field names, NOT snake_case.
+
+### Field Name Requirements
+
+| Endpoint | Wrong (snake_case) | Correct (camelCase) |
+|----------|-------------------|---------------------|
+| `/api/add` | `data`, `dataset_name` | `textData`, `datasetName` |
+| `/api/search` | `search_type`, `top_k` | `searchType`, `topK` |
+| `/api/cognify` | `datasets` | `datasets` (already correct) |
+
+**Bug History**: Using `"data"` instead of `"textData"` causes the API to use its default value
+`["Warning: long-term memory may contain dad jokes!"]` for ALL content. This bug was discovered
+2026-01-16 after all synced content was replaced with this default.
+
+### Response Format Variations
+
+The Cognee API returns different formats - implementation must handle all:
+```python
+# Format 1: Direct list
+[{"content": "...", "score": 0.9}, ...]
+
+# Format 2: Dict with results
+{"results": [{"content": "...", "score": 0.9}, ...]}
+
+# Format 3: Dict with data
+{"data": [{"content": "...", "score": 0.9}, ...]}
+
+# Format 4: Nested search_result
+[{"search_result": ["text1", "text2"], "dataset_id": "..."}, ...]
+```
+
+### Contract Tests Required
+
+All Cognee API integrations MUST have contract tests that validate field names. See:
+- `devtools/agent-memory/tests/contract/test_cognee_api_contract.py`
+- Epic 10B for validation requirements
+
+### Memify: SDK-Only (FR-006, FR-007)
+
+The `memify` command uses the **Cognee Cloud SDK** (`cogwit`), NOT the REST API.
+
+**Why SDK instead of REST:**
+- Memify is NOT available via the Cognee Cloud REST API
+- The SDK handles incremental graph optimization server-side
+- Error responses from SDK differ from REST API errors
+
+**SDK Integration Pattern:**
+```python
+from cognee.modules.cognee_cloud import cogwit, CogwitConfig
+
+sdk_config = CogwitConfig(api_key=api_key)
+sdk = cogwit(sdk_config)
+result = await sdk.memify(dataset_name="my_dataset")
+```
+
+**Error Handling:** SDK errors require separate handling from REST API errors.
+See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_client.py`.
 
 ## Recent Changes
+- 10b-agent-memory-quality: Added Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation)
 - 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)

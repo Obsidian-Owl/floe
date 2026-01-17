@@ -1,0 +1,16 @@
+apiVersion: v2
+name: cognee-api
+description: Cognee API server for agent memory and knowledge graph
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - cognee
+  - api
+  - agent-memory
+  - knowledge-graph
+
+maintainers:
+  - name: floe-platform
+    email: platform@floe.dev

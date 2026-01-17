@@ -1,0 +1,9 @@
+# Aikido Security Scanner Configuration
+# See: https://help.aikido.dev/code-scanning/scanning-practices/ignore-via-code-with-aikido-files
+
+exclude:
+  paths:
+    # detect-secrets baseline file contains SHA256 hashes of detected patterns,
+    # not actual secrets. These hashes look like API keys to secret scanners
+    # but are intentionally committed to track known patterns.
+    - .secrets.baseline
