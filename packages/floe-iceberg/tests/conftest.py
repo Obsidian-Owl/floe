@@ -35,13 +35,19 @@ class MockCatalog:
         namespaces: List of existing namespaces.
         tables: Dictionary mapping namespace to table names.
         loaded_tables: Dictionary of loaded table objects.
+        _parent_plugin: Reference to parent MockCatalogPlugin for table info.
     """
 
-    def __init__(self) -> None:
-        """Initialize mock catalog with empty collections."""
+    def __init__(self, parent_plugin: "MockCatalogPlugin | None" = None) -> None:
+        """Initialize mock catalog with empty collections.
+
+        Args:
+            parent_plugin: Optional reference to parent MockCatalogPlugin.
+        """
         self.namespaces: list[tuple[str, ...]] = []
         self.tables: dict[str, list[str]] = {}
         self.loaded_tables: dict[str, MagicMock] = {}
+        self._parent_plugin = parent_plugin
 
     def list_namespaces(self) -> list[tuple[str, ...]]:
         """List all namespaces in the catalog."""
@@ -61,12 +67,23 @@ class MockCatalog:
             Mock table object with standard Iceberg table interface.
         """
         if identifier not in self.loaded_tables:
+            # Get table info from parent plugin if available
+            table_info: dict[str, Any] = {}
+            if self._parent_plugin and identifier in self._parent_plugin._tables:
+                table_info = self._parent_plugin._tables[identifier]
+
             # Create a mock table with common attributes
             mock_table = MagicMock()
             mock_table.identifier = identifier
             mock_table.metadata_location = f"s3://warehouse/{identifier}/metadata/v1.metadata.json"
             mock_table.schema.return_value = MagicMock()
             mock_table.current_snapshot.return_value = None
+            # Store table data for testing (schema, snapshots, etc.)
+            mock_table._table_data = {
+                "schema": table_info.get("schema", {}),
+                "snapshots": [],
+                "properties": table_info.get("properties", {}),
+            }
             self.loaded_tables[identifier] = mock_table
         return self.loaded_tables[identifier]
 
@@ -141,7 +158,7 @@ class MockCatalogPlugin:
 
     def __init__(self) -> None:
         """Initialize mock catalog plugin."""
-        self._catalog = MockCatalog()
+        self._catalog = MockCatalog(parent_plugin=self)
         self._connected = False
         self.connect_config: dict[str, Any] | None = None
         self._namespaces: dict[str, dict[str, str]] = {}

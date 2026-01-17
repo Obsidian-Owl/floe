@@ -46,7 +46,7 @@ Example:
 from __future__ import annotations
 
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # =============================================================================
 # Module Constants (SonarQube S1192 Compliance)
@@ -899,6 +899,76 @@ class SnapshotInfo(BaseModel):
 
 
 # =============================================================================
+# Write Configuration Models
+# =============================================================================
+
+
+class WriteConfig(BaseModel):
+    """Configuration for write operations.
+
+    Defines how data should be written to Iceberg tables, including
+    write mode, commit strategy, and optional filters.
+
+    Attributes:
+        mode: Write mode (APPEND, OVERWRITE, UPSERT).
+        commit_strategy: How to commit changes (FAST_APPEND, MERGE_COMMIT).
+        overwrite_filter: Optional filter expression for OVERWRITE mode.
+        join_columns: Columns to use for UPSERT merge (required for UPSERT).
+        snapshot_properties: Custom properties to add to snapshot summary.
+
+    Example:
+        >>> # Simple append
+        >>> config = WriteConfig()
+        >>> config.mode
+        <WriteMode.APPEND: 'append'>
+
+        >>> # Upsert with join columns
+        >>> config = WriteConfig(
+        ...     mode=WriteMode.UPSERT,
+        ...     join_columns=["id", "date"],
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mode: WriteMode = Field(
+        default=WriteMode.APPEND,
+        description="Write mode (APPEND, OVERWRITE, UPSERT)",
+    )
+    commit_strategy: CommitStrategy = Field(
+        default=CommitStrategy.FAST_APPEND,
+        description="Commit strategy (FAST_APPEND, MERGE_COMMIT)",
+    )
+    overwrite_filter: str | None = Field(
+        default=None,
+        description="Filter expression for OVERWRITE mode (e.g., 'date = 2024-01-01')",
+    )
+    join_columns: list[str] | None = Field(
+        default=None,
+        description="Columns for UPSERT merge (required when mode=UPSERT)",
+    )
+    snapshot_properties: dict[str, str] = Field(
+        default_factory=dict,
+        description="Custom properties to add to snapshot summary",
+    )
+
+    @model_validator(mode="after")
+    def validate_upsert_requires_join_columns(self) -> "WriteConfig":
+        """Validate that join_columns is provided when mode is UPSERT.
+
+        Returns:
+            Self if validation passes.
+
+        Raises:
+            ValueError: If mode is UPSERT but join_columns is not provided.
+        """
+        if self.mode == WriteMode.UPSERT and not self.join_columns:
+            msg = "join_columns is required when mode is UPSERT"
+            raise ValueError(msg)
+        return self
+
+
+# =============================================================================
 # Manager Configuration Models
 # =============================================================================
 
@@ -1055,6 +1125,8 @@ __all__ = [
     "SchemaEvolution",
     # Snapshot models
     "SnapshotInfo",
+    # Write configuration
+    "WriteConfig",
     # Configuration models
     "IcebergTableManagerConfig",
     "IcebergIOManagerConfig",

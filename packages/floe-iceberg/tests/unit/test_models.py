@@ -23,6 +23,7 @@ from floe_iceberg.models import (
     SchemaEvolution,
     SchemaField,
     SnapshotInfo,
+    WriteConfig,
     WriteMode,
 )
 
@@ -1436,3 +1437,134 @@ class TestSnapshotInfo:
                 snapshot_id=123,
                 # Missing timestamp_ms and operation
             )
+
+
+# =============================================================================
+# WriteConfig Tests
+# =============================================================================
+
+
+class TestWriteConfig:
+    """Tests for WriteConfig model."""
+
+    @pytest.mark.requirement("FR-005")
+    def test_default_values(self) -> None:
+        """Test WriteConfig default values are APPEND and FAST_APPEND."""
+        config = WriteConfig()
+        assert config.mode == WriteMode.APPEND
+        assert config.commit_strategy == CommitStrategy.FAST_APPEND
+        assert config.overwrite_filter is None
+        assert config.join_columns is None
+        assert config.snapshot_properties == {}
+
+    @pytest.mark.requirement("FR-026")
+    def test_append_mode(self) -> None:
+        """Test APPEND mode is valid without additional fields."""
+        config = WriteConfig(mode=WriteMode.APPEND)
+        assert config.mode == WriteMode.APPEND
+
+    @pytest.mark.requirement("FR-026")
+    def test_overwrite_mode(self) -> None:
+        """Test OVERWRITE mode is valid."""
+        config = WriteConfig(mode=WriteMode.OVERWRITE)
+        assert config.mode == WriteMode.OVERWRITE
+
+    @pytest.mark.requirement("FR-026")
+    def test_overwrite_with_filter(self) -> None:
+        """Test OVERWRITE mode with overwrite_filter."""
+        config = WriteConfig(
+            mode=WriteMode.OVERWRITE,
+            overwrite_filter="date = '2024-01-01'",
+        )
+        assert config.mode == WriteMode.OVERWRITE
+        assert config.overwrite_filter == "date = '2024-01-01'"
+
+    @pytest.mark.requirement("FR-027")
+    def test_upsert_requires_join_columns(self) -> None:
+        """Test UPSERT mode requires join_columns."""
+        with pytest.raises(ValueError, match="join_columns is required when mode is UPSERT"):
+            WriteConfig(mode=WriteMode.UPSERT)
+
+    @pytest.mark.requirement("FR-027")
+    def test_upsert_with_join_columns(self) -> None:
+        """Test UPSERT mode with join_columns is valid."""
+        config = WriteConfig(
+            mode=WriteMode.UPSERT,
+            join_columns=["id", "date"],
+        )
+        assert config.mode == WriteMode.UPSERT
+        assert config.join_columns == ["id", "date"]
+
+    @pytest.mark.requirement("FR-027")
+    def test_upsert_empty_join_columns_fails(self) -> None:
+        """Test UPSERT mode with empty join_columns fails."""
+        with pytest.raises(ValueError, match="join_columns is required when mode is UPSERT"):
+            WriteConfig(mode=WriteMode.UPSERT, join_columns=[])
+
+    @pytest.mark.requirement("FR-005")
+    def test_commit_strategy_merge_commit(self) -> None:
+        """Test MERGE_COMMIT strategy."""
+        config = WriteConfig(commit_strategy=CommitStrategy.MERGE_COMMIT)
+        assert config.commit_strategy == CommitStrategy.MERGE_COMMIT
+
+    @pytest.mark.requirement("FR-005")
+    def test_snapshot_properties(self) -> None:
+        """Test snapshot_properties are accepted."""
+        props = {"source": "pipeline_v1", "author": "data_team"}
+        config = WriteConfig(snapshot_properties=props)
+        assert config.snapshot_properties == props
+
+    @pytest.mark.requirement("FR-003")
+    def test_frozen(self) -> None:
+        """Test WriteConfig is immutable."""
+        config = WriteConfig()
+        with pytest.raises(Exception):
+            config.mode = WriteMode.OVERWRITE  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-003")
+    def test_extra_forbid(self) -> None:
+        """Test WriteConfig rejects extra fields."""
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            WriteConfig(unknown="value")  # type: ignore[call-arg]
+
+    @pytest.mark.requirement("FR-005")
+    def test_all_write_modes(self) -> None:
+        """Test all WriteMode values are valid."""
+        # APPEND - no additional requirements
+        config_append = WriteConfig(mode=WriteMode.APPEND)
+        assert config_append.mode == WriteMode.APPEND
+
+        # OVERWRITE - no additional requirements
+        config_overwrite = WriteConfig(mode=WriteMode.OVERWRITE)
+        assert config_overwrite.mode == WriteMode.OVERWRITE
+
+        # UPSERT - requires join_columns
+        config_upsert = WriteConfig(mode=WriteMode.UPSERT, join_columns=["id"])
+        assert config_upsert.mode == WriteMode.UPSERT
+
+    @pytest.mark.requirement("FR-005")
+    def test_all_commit_strategies(self) -> None:
+        """Test all CommitStrategy values are valid."""
+        for strategy in CommitStrategy:
+            config = WriteConfig(commit_strategy=strategy)
+            assert config.commit_strategy == strategy
+
+    @pytest.mark.requirement("FR-026")
+    def test_overwrite_filter_without_overwrite_mode(self) -> None:
+        """Test overwrite_filter is accepted with any mode (validation at runtime)."""
+        # Note: overwrite_filter can be set with any mode - validation happens at runtime
+        config = WriteConfig(
+            mode=WriteMode.APPEND,
+            overwrite_filter="date = '2024-01-01'",
+        )
+        assert config.overwrite_filter == "date = '2024-01-01'"
+
+    @pytest.mark.requirement("FR-027")
+    def test_join_columns_with_non_upsert_mode(self) -> None:
+        """Test join_columns is accepted with non-UPSERT modes."""
+        # join_columns can be set with any mode - only required for UPSERT
+        config = WriteConfig(
+            mode=WriteMode.APPEND,
+            join_columns=["id"],
+        )
+        assert config.join_columns == ["id"]
