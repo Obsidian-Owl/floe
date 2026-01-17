@@ -59,10 +59,6 @@ __version__ = "0.1.0"
 # Schemas submodule (imported for explicit re-export)
 from floe_core import schemas as schemas  # noqa: PLC0414
 
-# Key schema exports (convenience imports from schemas submodule)
-from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-from floe_core.schemas.floe_spec import FloeSpec
-
 # Telemetry submodule (explicit re-export)
 from floe_core import telemetry as telemetry  # noqa: PLC0414
 
@@ -169,6 +165,10 @@ from floe_core.plugins import (
     StoragePlugin,
     TelemetryBackendPlugin,
 )
+
+# Key schema exports (convenience imports from schemas submodule)
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_core.schemas.floe_spec import FloeSpec
 
 # Telemetry public API (convenience imports)
 from floe_core.telemetry import (

@@ -20,7 +20,19 @@ See Also:
 
 from __future__ import annotations
 
+import time
 from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import structlog
+
+from floe_core.telemetry.tracing import create_span
+
+if TYPE_CHECKING:
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+logger = structlog.get_logger(__name__)
 
 
 class CompilationStage(str, Enum):
@@ -107,24 +119,10 @@ class CompilationStage(str, Enum):
         return descriptions[self]
 
 
-import time
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-import structlog
-
-from floe_core.telemetry.tracing import create_span
-
-if TYPE_CHECKING:
-    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-
-logger = structlog.get_logger(__name__)
-
-
 def compile_pipeline(
     spec_path: Path,
     manifest_path: Path,
-) -> "CompiledArtifacts":
+) -> CompiledArtifacts:
     """Execute the 6-stage compilation pipeline.
 
     Transforms FloeSpec + PlatformManifest into CompiledArtifacts through:

@@ -16,9 +16,37 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+
+
+@pytest.fixture(autouse=True)
+def patch_version_compat() -> Any:
+    """Patch version compatibility to allow DuckDB plugin (1.0) with platform (0.1)."""
+    with patch("floe_core.plugin_registry.is_compatible", return_value=True):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def mock_compute_plugin() -> Any:
+    """Mock get_compute_plugin to return a plugin with no config schema (like DuckDB).
+
+    This allows unit tests to run without the actual DuckDB plugin installed.
+    """
+    mock_plugin = MagicMock()
+    mock_plugin.get_config_schema.return_value = None
+    mock_plugin.generate_dbt_profile.return_value = {
+        "type": "duckdb",
+        "path": ":memory:",
+    }
+
+    with patch(
+        "floe_core.compilation.dbt_profiles.get_compute_plugin",
+        return_value=mock_plugin,
+    ):
+        yield
 
 
 def create_floe_spec(num_models: int) -> dict[str, Any]:

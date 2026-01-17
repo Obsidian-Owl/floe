@@ -24,6 +24,9 @@ import structlog
 if TYPE_CHECKING:
     from typing import NoReturn
 
+    from floe_core.compilation.errors import CompilationError
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
 logger = structlog.get_logger(__name__)
 
 
@@ -101,7 +104,8 @@ def create_parser() -> argparse.ArgumentParser:
         "-f",
         choices=["json", "yaml"],
         default=None,
-        help="Output format: json (default) or yaml. If not specified, detected from output file extension.",
+        help="Output format: json (default) or yaml. "
+        "If not specified, detected from output file extension.",
     )
 
     return parser
@@ -119,14 +123,16 @@ def run_compile(args: argparse.Namespace) -> int:
         Exit code: 0=success, 1=validation error, 2=compilation error.
 
     Example:
-        >>> args = create_parser().parse_args(["--spec", "floe.yaml", "--manifest", "manifest.yaml"])
+        >>> args = create_parser().parse_args(
+        ...     ["--spec", "floe.yaml", "--manifest", "manifest.yaml"]
+        ... )
         >>> exit_code = run_compile(args)
         >>> exit_code
         0
     """
     # Late import to avoid circular dependencies
     from floe_core.compilation.errors import CompilationException
-    from floe_core.compilation.stages import CompilationStage, compile_pipeline
+    from floe_core.compilation.stages import compile_pipeline
 
     log = logger.bind(
         spec_path=str(args.spec),
@@ -213,7 +219,7 @@ def _detect_format_from_extension(path: Path) -> str | None:
 
 
 def _write_artifacts(
-    artifacts: "CompiledArtifacts",
+    artifacts: CompiledArtifacts,
     output_path: Path,
     output_format: str | None,
     quiet: bool,
@@ -233,9 +239,6 @@ def _write_artifacts(
     Returns:
         Path to written file.
     """
-    # Late import to avoid circular dependencies
-    from floe_core.schemas.compiled_artifacts import CompiledArtifacts  # noqa: F401
-
     # Detect if output_path is a file (has extension) or directory
     detected_format = _detect_format_from_extension(output_path)
 
@@ -274,7 +277,7 @@ def _print_success(message: str, quiet: bool) -> None:
         print(message)
 
 
-def _print_error(error: "CompilationError", quiet: bool) -> None:
+def _print_error(error: CompilationError, quiet: bool) -> None:
     """Print error message to stderr.
 
     Formats the error with stage, code, message, and suggestion.
@@ -283,9 +286,6 @@ def _print_error(error: "CompilationError", quiet: bool) -> None:
         error: CompilationError to print.
         quiet: Whether to suppress verbose output.
     """
-    # Late import
-    from floe_core.compilation.errors import CompilationError  # noqa: F401
-
     # Always print errors (even in quiet mode)
     print(f"\nError [{error.stage.value}] {error.code}: {error.message}", file=sys.stderr)
 

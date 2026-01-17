@@ -200,7 +200,6 @@ class TestFullCompilationWithDuckDB:
     def test_profiles_contain_env_var_placeholders(self) -> None:
         """Test that profiles use env_var placeholders for credentials."""
         from floe_core.compilation.dbt_profiles import (
-            format_env_var_placeholder,
             generate_dbt_profiles,
         )
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins

@@ -76,7 +76,9 @@ class TestResolvePlugins:
     """Tests for resolve_plugins function."""
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_resolve_plugins_returns_resolved_plugins(self, simple_manifest: PlatformManifest) -> None:
+    def test_resolve_plugins_returns_type(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that resolve_plugins returns ResolvedPlugins."""
         from floe_core.compilation.resolver import resolve_plugins
         from floe_core.schemas.compiled_artifacts import ResolvedPlugins
@@ -195,7 +197,9 @@ class TestResolveTransformCompute:
         """Test that per-model compute override is respected."""
         from floe_core.compilation.resolver import resolve_transform_compute
 
-        transforms = resolve_transform_compute(floe_spec_with_compute_override, manifest_with_defaults)
+        transforms = resolve_transform_compute(
+            floe_spec_with_compute_override, manifest_with_defaults
+        )
 
         # Find models by name
         stg_customers = next(m for m in transforms.models if m.name == "stg_customers")
@@ -223,14 +227,24 @@ class TestValidateComputeCredentials:
     @pytest.mark.requirement("2B-FR-006")
     def test_duckdb_no_credentials_required(self, simple_manifest: PlatformManifest) -> None:
         """Test that DuckDB (self-hosted) requires no credentials - validation passes."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
 
         from floe_core.compilation.resolver import (
             resolve_plugins,
             validate_compute_credentials,
         )
 
-        with patch("floe_core.plugin_registry.is_compatible", return_value=True):
+        # Mock DuckDB plugin - returns None for config schema (no required credentials)
+        mock_duckdb_plugin = MagicMock()
+        mock_duckdb_plugin.get_config_schema.return_value = None
+
+        with (
+            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch(
+                "floe_core.compilation.resolver.get_compute_plugin",
+                return_value=mock_duckdb_plugin,
+            ),
+        ):
             plugins = resolve_plugins(simple_manifest)
             # Should not raise - DuckDB requires no credentials
             validate_compute_credentials(plugins)

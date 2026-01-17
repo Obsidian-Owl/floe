@@ -17,8 +17,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -30,9 +28,12 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+from pydantic import ValidationError
 
 # Path to contract JSON Schema
-CONTRACTS_DIR = Path(__file__).parent.parent.parent / "specs" / "2b-compilation-pipeline" / "contracts"
+CONTRACTS_DIR = (
+    Path(__file__).parent.parent.parent / "specs" / "2b-compilation-pipeline" / "contracts"
+)
 CONTRACT_SCHEMA_PATH = CONTRACTS_DIR / "compiled-artifacts.json"
 
 
@@ -302,7 +303,9 @@ class TestCompiledArtifactsSchemaContract:
             assert artifacts.mode == mode
 
     @pytest.mark.requirement("2B-FR-004")
-    def test_plugins_structure_contract(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_plugins_structure_contract(
+        self, minimal_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Contract: plugins contains compute and orchestrator (required).
 
         When present, plugins MUST have compute and orchestrator.
@@ -315,7 +318,9 @@ class TestCompiledArtifactsSchemaContract:
         assert minimal_compiled_artifacts.plugins.orchestrator.type == "dagster"
 
     @pytest.mark.requirement("2B-FR-004")
-    def test_transforms_structure_contract(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_transforms_structure_contract(
+        self, minimal_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Contract: transforms contains models list and default_compute.
 
         When present, transforms MUST have at least one model
@@ -331,7 +336,9 @@ class TestCompiledArtifactsSchemaContract:
             assert model.compute is not None
 
     @pytest.mark.requirement("2B-FR-004")
-    def test_dbt_profiles_structure_contract(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_dbt_profiles_structure_contract(
+        self, minimal_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Contract: dbt_profiles is a dictionary.
 
         When present, dbt_profiles is used directly by dbt.

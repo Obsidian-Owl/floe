@@ -13,11 +13,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from pydantic import ValidationError
 
 if TYPE_CHECKING:
-    from floe_core.schemas.floe_spec import FloeSpec
-    from floe_core.schemas.manifest import PlatformManifest
+    pass
 
 
 @pytest.fixture

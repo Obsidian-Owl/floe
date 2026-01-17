@@ -26,6 +26,30 @@ def patch_version_compat() -> Any:
         yield
 
 
+@pytest.fixture(autouse=True)
+def mock_compute_plugin() -> Any:
+    """Mock get_compute_plugin to return a plugin with no config schema (like DuckDB).
+
+    This allows unit tests to run without the actual DuckDB plugin installed.
+    The mock plugin returns None for get_config_schema(), simulating DuckDB's
+    behavior of requiring no credentials.
+    """
+    from unittest.mock import MagicMock
+
+    mock_plugin = MagicMock()
+    mock_plugin.get_config_schema.return_value = None  # DuckDB has no required config
+    mock_plugin.generate_dbt_profile.return_value = {
+        "type": "duckdb",
+        "path": ":memory:",
+    }
+
+    with patch(
+        "floe_core.compilation.dbt_profiles.get_compute_plugin",
+        return_value=mock_plugin,
+    ):
+        yield
+
+
 class TestCompilationStage:
     """Tests for CompilationStage enum."""
 
@@ -608,7 +632,7 @@ plugins:
             # Check that total duration is captured as attribute
             assert "compile.total_duration_ms" in dict(pipeline_span.attributes)
             duration = pipeline_span.attributes["compile.total_duration_ms"]
-            assert isinstance(duration, (int, float))
+            assert isinstance(duration, int | float)
             assert duration > 0
 
         finally:

@@ -598,7 +598,7 @@ class CompiledArtifacts(BaseModel):
         )
 
     @classmethod
-    def from_json_file(cls, path: Path) -> "CompiledArtifacts":
+    def from_json_file(cls, path: Path) -> CompiledArtifacts:
         """Load CompiledArtifacts from a JSON file.
 
         Uses Pydantic's model_validate for strict validation.
@@ -628,7 +628,7 @@ class CompiledArtifacts(BaseModel):
         return cls.model_validate(data)
 
     @classmethod
-    def from_yaml_file(cls, path: Path) -> "CompiledArtifacts":
+    def from_yaml_file(cls, path: Path) -> CompiledArtifacts:
         """Load CompiledArtifacts from a YAML file.
 
         Uses PyYAML for parsing and Pydantic's model_validate for validation.

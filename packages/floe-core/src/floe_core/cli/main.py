@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from typing import NoReturn
+
+    # Type alias for subparsers - avoids quoting in function signature
+    SubParsersAction = argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -54,7 +57,7 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def _add_compile_subparser(
-    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+    subparsers: SubParsersAction,
 ) -> None:
     """Add the compile subcommand to subparsers.
 
@@ -81,7 +84,7 @@ def _add_compile_subparser(
             continue
 
         # Recreate the argument
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "dest": action.dest,
             "help": action.help,
         }

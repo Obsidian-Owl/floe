@@ -214,7 +214,7 @@ def resolve_transform_compute(
     )
 
 
-def get_compute_plugin(plugin_type: str) -> "PluginMetadata":
+def get_compute_plugin(plugin_type: str) -> PluginMetadata:
     """Load a compute plugin by type name.
 
     Args:

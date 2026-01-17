@@ -53,6 +53,7 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",
     ".",  # Enable import of 'testing' module from project root
 ]

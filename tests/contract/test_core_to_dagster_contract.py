@@ -40,8 +40,8 @@ class TestDagsterCanImportCompiledArtifacts:
     def test_can_import_all_required_types(self) -> None:
         """Test all types needed for dagster integration can be imported."""
         from floe_core.schemas.compiled_artifacts import (
-            CompiledArtifacts,
             CompilationMetadata,
+            CompiledArtifacts,
             ObservabilityConfig,
             PluginRef,
             ProductIdentity,
@@ -245,8 +245,8 @@ class TestDagsterCanUseDbtProfiles:
     def test_dbt_profiles_structure(self) -> None:
         """Test dbt_profiles has expected structure for profiles.yml generation."""
         from floe_core.schemas.compiled_artifacts import (
-            CompiledArtifacts,
             CompilationMetadata,
+            CompiledArtifacts,
             ObservabilityConfig,
             PluginRef,
             ProductIdentity,
@@ -412,8 +412,8 @@ class TestCompiledArtifactsRoundtrip:
     def test_json_roundtrip(self, tmp_path: Path) -> None:
         """Test CompiledArtifacts JSON roundtrip preserves all data."""
         from floe_core.schemas.compiled_artifacts import (
-            CompiledArtifacts,
             CompilationMetadata,
+            CompiledArtifacts,
             ObservabilityConfig,
             PluginRef,
             ProductIdentity,

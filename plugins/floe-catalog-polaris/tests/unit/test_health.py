@@ -217,7 +217,7 @@ class TestHealthCheckResponseTime:
 
         assert "response_time_ms" in result.details
         # Use pytest.approx or isinstance check to handle float comparison
-        assert isinstance(result.details["response_time_ms"], (int, float))
+        assert isinstance(result.details["response_time_ms"], int | float)
 
     @pytest.mark.requirement("FR-028")
     def test_health_check_response_time_captured_on_failure(
