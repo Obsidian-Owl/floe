@@ -17,15 +17,16 @@ repos:
   # ==========================================================
 
   # Ruff: Fast Python linter and formatter
+  # Auto-fixes are applied. If files are modified, re-stage and commit again.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
     hooks:
-      # Linting (fast)
+      # Linting with auto-fix (fixes are applied automatically)
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args: [--fix]
         types_or: [python, pyi]
 
-      # Formatting (fast)
+      # Formatting (auto-formats files)
       - id: ruff-format
         types_or: [python, pyi]
 
