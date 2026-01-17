@@ -69,7 +69,8 @@ main() {
     fi
 
     # Warnings don't block commits (errors would exit 1)
-    exit 0
+    return 0
 }
 
 main "$@"
+exit 0
