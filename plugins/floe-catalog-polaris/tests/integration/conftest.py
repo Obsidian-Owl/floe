@@ -26,6 +26,8 @@ from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 import pytest
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
 from pydantic import SecretStr
 from pyiceberg.catalog import Catalog
 from pyiceberg.schema import Schema
@@ -37,6 +39,34 @@ from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
 if TYPE_CHECKING:
     pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_otel_tracer_provider() -> Generator[None, None, None]:
+    """Initialize OpenTelemetry TracerProvider to avoid recursion errors.
+
+    The ProxyTracerProvider (default when no provider is configured) can cause
+    infinite recursion when trace.get_tracer() is called in certain scenarios.
+    This fixture ensures a real TracerProvider is set up for integration tests.
+
+    This is a session-scoped autouse fixture that runs before any tests.
+
+    Yields:
+        None after provider is configured.
+    """
+    # Check if a real provider is already set
+    current_provider = trace.get_tracer_provider()
+    provider_type = type(current_provider).__name__
+
+    # ProxyTracerProvider causes recursion - replace with real provider
+    if "Proxy" in provider_type:
+        # Reset the global state and set a real TracerProvider
+        trace._TRACER_PROVIDER_SET_ONCE._done = False
+        trace._TRACER_PROVIDER = TracerProvider()
+
+    yield
+
+    # No cleanup needed - leave the real provider in place
 
 
 def pytest_configure(config: pytest.Config) -> None:
