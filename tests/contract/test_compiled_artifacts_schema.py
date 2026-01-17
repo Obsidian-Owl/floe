@@ -475,3 +475,115 @@ class TestPluginRefContract:
         """Contract: PluginRef version must be semver."""
         with pytest.raises(ValidationError):
             PluginRef(type="duckdb", version="0.9")  # Not semver
+
+
+class TestFileSerializationMethods:
+    """Contract tests for file-based serialization methods.
+
+    Tests T056, T057, T058 - file methods on CompiledArtifacts.
+    """
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_to_json_file_writes_valid_json(
+        self, minimal_compiled_artifacts: CompiledArtifacts, tmp_path: Path
+    ) -> None:
+        """T056: to_json_file writes valid JSON."""
+        output_path = tmp_path / "artifacts.json"
+
+        minimal_compiled_artifacts.to_json_file(output_path)
+
+        assert output_path.exists()
+        data = json.loads(output_path.read_text())
+        assert data["version"] == "0.2.0"
+        assert "metadata" in data
+        assert "plugins" in data
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_to_json_file_creates_parent_dirs(
+        self, minimal_compiled_artifacts: CompiledArtifacts, tmp_path: Path
+    ) -> None:
+        """T056: to_json_file creates parent directories."""
+        output_path = tmp_path / "deeply" / "nested" / "dir" / "artifacts.json"
+
+        minimal_compiled_artifacts.to_json_file(output_path)
+
+        assert output_path.exists()
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_from_json_file_loads_artifacts(
+        self, minimal_compiled_artifacts: CompiledArtifacts, tmp_path: Path
+    ) -> None:
+        """T057: from_json_file loads CompiledArtifacts."""
+        output_path = tmp_path / "artifacts.json"
+        minimal_compiled_artifacts.to_json_file(output_path)
+
+        loaded = CompiledArtifacts.from_json_file(output_path)
+
+        assert loaded.version == minimal_compiled_artifacts.version
+        assert loaded.metadata.product_name == minimal_compiled_artifacts.metadata.product_name
+        assert loaded.mode == minimal_compiled_artifacts.mode
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_from_json_file_raises_on_missing_file(self, tmp_path: Path) -> None:
+        """T057: from_json_file raises FileNotFoundError."""
+        missing_path = tmp_path / "nonexistent.json"
+
+        with pytest.raises(FileNotFoundError):
+            CompiledArtifacts.from_json_file(missing_path)
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_from_json_file_raises_on_invalid_json(self, tmp_path: Path) -> None:
+        """T057: from_json_file raises ValidationError on invalid JSON."""
+        invalid_path = tmp_path / "invalid.json"
+        invalid_path.write_text('{"version": "invalid"}')  # Missing required fields
+
+        with pytest.raises(ValidationError):
+            CompiledArtifacts.from_json_file(invalid_path)
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_file_round_trip_preserves_data(
+        self, minimal_compiled_artifacts: CompiledArtifacts, tmp_path: Path
+    ) -> None:
+        """T053: File round-trip preserves all data."""
+        output_path = tmp_path / "roundtrip.json"
+
+        # Write
+        minimal_compiled_artifacts.to_json_file(output_path)
+
+        # Read
+        loaded = CompiledArtifacts.from_json_file(output_path)
+
+        # Verify all fields preserved
+        assert loaded.version == minimal_compiled_artifacts.version
+        assert loaded.mode == minimal_compiled_artifacts.mode
+        assert loaded.metadata.product_name == minimal_compiled_artifacts.metadata.product_name
+        assert loaded.metadata.source_hash == minimal_compiled_artifacts.metadata.source_hash
+        assert loaded.identity.product_id == minimal_compiled_artifacts.identity.product_id
+        assert loaded.plugins is not None
+        assert loaded.plugins.compute.type == "duckdb"
+        assert loaded.transforms is not None
+        assert len(loaded.transforms.models) == 1
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_export_json_schema_includes_metadata(self) -> None:
+        """T058: export_json_schema includes $schema and $id."""
+        schema = CompiledArtifacts.export_json_schema()
+
+        assert "$schema" in schema
+        assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+        assert "$id" in schema
+        assert "floe.dev" in schema["$id"]
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_export_json_schema_has_properties(self) -> None:
+        """T058: export_json_schema has all expected properties."""
+        schema = CompiledArtifacts.export_json_schema()
+
+        assert "properties" in schema
+        props = schema["properties"]
+        assert "version" in props
+        assert "metadata" in props
+        assert "identity" in props
+        assert "observability" in props
+        assert "plugins" in props
+        assert "transforms" in props

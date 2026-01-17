@@ -18,7 +18,9 @@ See Also:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -545,6 +547,82 @@ class CompiledArtifacts(BaseModel):
         default=None,
         description="Resolved governance settings (v0.2.0+, optional)",
     )
+
+    def to_json_file(self, path: Path) -> None:
+        """Write CompiledArtifacts to a JSON file.
+
+        Uses Pydantic's model_dump with mode='json' and by_alias=True
+        for proper JSON serialization of datetime and other types.
+
+        Args:
+            path: Path to write the JSON file.
+
+        Example:
+            >>> artifacts = CompiledArtifacts(...)
+            >>> artifacts.to_json_file(Path("target/compiled_artifacts.json"))
+
+        See Also:
+            - from_json_file: Load artifacts from JSON
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(self.model_dump(mode="json", by_alias=True), indent=2)
+        )
+
+    @classmethod
+    def from_json_file(cls, path: Path) -> "CompiledArtifacts":
+        """Load CompiledArtifacts from a JSON file.
+
+        Uses Pydantic's model_validate for strict validation.
+
+        Args:
+            path: Path to the JSON file.
+
+        Returns:
+            CompiledArtifacts instance.
+
+        Raises:
+            FileNotFoundError: If file does not exist.
+            pydantic.ValidationError: If JSON is invalid.
+
+        Example:
+            >>> artifacts = CompiledArtifacts.from_json_file(
+            ...     Path("target/compiled_artifacts.json")
+            ... )
+            >>> artifacts.version
+            '0.2.0'
+
+        See Also:
+            - to_json_file: Write artifacts to JSON
+        """
+        data = json.loads(path.read_text())
+        return cls.model_validate(data)
+
+    @classmethod
+    def export_json_schema(cls) -> dict[str, Any]:
+        """Export JSON Schema for IDE autocomplete and external validation.
+
+        Returns the Pydantic-generated JSON Schema with $id and $schema
+        metadata for standards compliance.
+
+        Returns:
+            JSON Schema dictionary.
+
+        Example:
+            >>> schema = CompiledArtifacts.export_json_schema()
+            >>> schema["$schema"]
+            'https://json-schema.org/draft/2020-12/schema'
+            >>> "properties" in schema
+            True
+
+        See Also:
+            - model_json_schema: Underlying Pydantic method
+        """
+        schema = cls.model_json_schema()
+        # Add standard JSON Schema metadata
+        schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+        schema["$id"] = "https://floe.dev/schemas/compiled-artifacts.json"
+        return schema
 
 
 __all__ = [
