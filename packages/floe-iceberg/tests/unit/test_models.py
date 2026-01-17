@@ -18,7 +18,10 @@ from floe_iceberg.models import (
     IcebergTableManagerConfig,
     OperationType,
     PartitionTransform,
+    SchemaChange,
     SchemaChangeType,
+    SchemaEvolution,
+    SchemaField,
     WriteMode,
 )
 
@@ -987,3 +990,311 @@ class TestTableConfig:
                 ),
                 unknown="value",  # type: ignore[call-arg]
             )
+
+
+# =============================================================================
+# SchemaChange Tests
+# =============================================================================
+
+
+class TestSchemaChange:
+    """Tests for SchemaChange model."""
+
+    @pytest.mark.requirement("FR-017")
+    def test_add_column_change(self) -> None:
+        """Test SchemaChange for ADD_COLUMN operation."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.ADD_COLUMN,
+            field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+        )
+        assert change.change_type == SchemaChangeType.ADD_COLUMN
+        assert change.field is not None
+        assert change.field.name == "email"
+
+    @pytest.mark.requirement("FR-017")
+    def test_add_column_with_parent_path(self) -> None:
+        """Test ADD_COLUMN with nested parent path."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.ADD_COLUMN,
+            field=SchemaField(field_id=10, name="street", field_type=FieldType.STRING),
+            parent_path=("address",),
+        )
+        assert change.parent_path == ("address",)
+
+    @pytest.mark.requirement("FR-018")
+    def test_rename_column_change(self) -> None:
+        """Test SchemaChange for RENAME_COLUMN operation."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.RENAME_COLUMN,
+            source_column="old_name",
+            new_name="new_name",
+        )
+        assert change.change_type == SchemaChangeType.RENAME_COLUMN
+        assert change.source_column == "old_name"
+        assert change.new_name == "new_name"
+
+    @pytest.mark.requirement("FR-019")
+    def test_widen_type_change(self) -> None:
+        """Test SchemaChange for WIDEN_TYPE operation."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.WIDEN_TYPE,
+            source_column="amount",
+            target_type=FieldType.DOUBLE,
+        )
+        assert change.change_type == SchemaChangeType.WIDEN_TYPE
+        assert change.source_column == "amount"
+        assert change.target_type == FieldType.DOUBLE
+
+    @pytest.mark.requirement("FR-020")
+    def test_make_optional_change(self) -> None:
+        """Test SchemaChange for MAKE_OPTIONAL operation."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.MAKE_OPTIONAL,
+            source_column="required_field",
+        )
+        assert change.change_type == SchemaChangeType.MAKE_OPTIONAL
+        assert change.source_column == "required_field"
+
+    @pytest.mark.requirement("FR-020")
+    def test_delete_column_change(self) -> None:
+        """Test SchemaChange for DELETE_COLUMN operation (incompatible)."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.DELETE_COLUMN,
+            source_column="deprecated_field",
+        )
+        assert change.change_type == SchemaChangeType.DELETE_COLUMN
+        assert change.source_column == "deprecated_field"
+
+    @pytest.mark.requirement("FR-021")
+    def test_update_doc_change(self) -> None:
+        """Test SchemaChange for UPDATE_DOC operation."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.UPDATE_DOC,
+            source_column="customer_id",
+            new_doc="Unique customer identifier from CRM system",
+        )
+        assert change.change_type == SchemaChangeType.UPDATE_DOC
+        assert change.source_column == "customer_id"
+        assert change.new_doc == "Unique customer identifier from CRM system"
+
+    @pytest.mark.requirement("FR-017")
+    def test_change_type_required(self) -> None:
+        """Test change_type is required."""
+        with pytest.raises(ValueError, match="Field required"):
+            SchemaChange()  # type: ignore[call-arg]
+
+    @pytest.mark.requirement("FR-017")
+    def test_default_values_are_none(self) -> None:
+        """Test all optional fields default to None."""
+        change = SchemaChange(change_type=SchemaChangeType.MAKE_OPTIONAL)
+        assert change.field is None
+        assert change.parent_path is None
+        assert change.source_column is None
+        assert change.new_name is None
+        assert change.target_type is None
+        assert change.target_column is None
+        assert change.new_doc is None
+
+    @pytest.mark.requirement("FR-017")
+    def test_frozen(self) -> None:
+        """Test SchemaChange is immutable."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.ADD_COLUMN,
+            field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+        )
+        with pytest.raises(Exception):
+            change.change_type = SchemaChangeType.DELETE_COLUMN  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-017")
+    def test_extra_forbid(self) -> None:
+        """Test SchemaChange rejects extra fields."""
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            SchemaChange(
+                change_type=SchemaChangeType.ADD_COLUMN,
+                unknown="value",  # type: ignore[call-arg]
+            )
+
+    @pytest.mark.requirement("FR-017")
+    def test_change_with_target_column(self) -> None:
+        """Test SchemaChange with target_column for column operations."""
+        change = SchemaChange(
+            change_type=SchemaChangeType.RENAME_COLUMN,
+            source_column="old_name",
+            target_column="target_table.column",
+            new_name="new_name",
+        )
+        assert change.target_column == "target_table.column"
+
+
+# =============================================================================
+# SchemaEvolution Tests
+# =============================================================================
+
+
+class TestSchemaEvolution:
+    """Tests for SchemaEvolution model."""
+
+    @pytest.mark.requirement("FR-017")
+    def test_single_change(self) -> None:
+        """Test SchemaEvolution with single change."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+                )
+            ]
+        )
+        assert len(evolution.changes) == 1
+        assert evolution.allow_incompatible_changes is False
+
+    @pytest.mark.requirement("FR-017")
+    def test_multiple_changes(self) -> None:
+        """Test SchemaEvolution with multiple changes."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.RENAME_COLUMN,
+                    source_column="old_name",
+                    new_name="new_name",
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.WIDEN_TYPE,
+                    source_column="amount",
+                    target_type=FieldType.DOUBLE,
+                ),
+            ]
+        )
+        assert len(evolution.changes) == 3
+        assert evolution.changes[0].change_type == SchemaChangeType.ADD_COLUMN
+        assert evolution.changes[1].change_type == SchemaChangeType.RENAME_COLUMN
+        assert evolution.changes[2].change_type == SchemaChangeType.WIDEN_TYPE
+
+    @pytest.mark.requirement("FR-020")
+    def test_allow_incompatible_changes_false_default(self) -> None:
+        """Test allow_incompatible_changes defaults to False."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+                )
+            ]
+        )
+        assert evolution.allow_incompatible_changes is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_allow_incompatible_changes_true(self) -> None:
+        """Test SchemaEvolution with allow_incompatible_changes=True."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.DELETE_COLUMN,
+                    source_column="deprecated_field",
+                )
+            ],
+            allow_incompatible_changes=True,
+        )
+        assert evolution.allow_incompatible_changes is True
+
+    @pytest.mark.requirement("FR-020")
+    def test_incompatible_change_with_flag(self) -> None:
+        """Test DELETE_COLUMN is valid when allow_incompatible_changes=True."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(field_id=10, name="new_field", field_type=FieldType.STRING),
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.DELETE_COLUMN,
+                    source_column="old_field",
+                ),
+            ],
+            allow_incompatible_changes=True,
+        )
+        assert len(evolution.changes) == 2
+        assert evolution.changes[1].change_type == SchemaChangeType.DELETE_COLUMN
+
+    @pytest.mark.requirement("FR-017")
+    def test_changes_required(self) -> None:
+        """Test changes list is required."""
+        with pytest.raises(ValueError, match="Field required"):
+            SchemaEvolution()  # type: ignore[call-arg]
+
+    @pytest.mark.requirement("FR-017")
+    def test_changes_min_length(self) -> None:
+        """Test changes list must have at least one change."""
+        with pytest.raises(ValueError, match="List should have at least 1 item"):
+            SchemaEvolution(changes=[])
+
+    @pytest.mark.requirement("FR-017")
+    def test_frozen(self) -> None:
+        """Test SchemaEvolution is immutable."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+                )
+            ]
+        )
+        with pytest.raises(Exception):
+            evolution.allow_incompatible_changes = True  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-017")
+    def test_extra_forbid(self) -> None:
+        """Test SchemaEvolution rejects extra fields."""
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            SchemaEvolution(
+                changes=[
+                    SchemaChange(
+                        change_type=SchemaChangeType.ADD_COLUMN,
+                        field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+                    )
+                ],
+                unknown="value",  # type: ignore[call-arg]
+            )
+
+    @pytest.mark.requirement("FR-021")
+    def test_mixed_compatible_changes(self) -> None:
+        """Test evolution with all compatible change types."""
+        evolution = SchemaEvolution(
+            changes=[
+                SchemaChange(
+                    change_type=SchemaChangeType.ADD_COLUMN,
+                    field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.RENAME_COLUMN,
+                    source_column="old_name",
+                    new_name="new_name",
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.WIDEN_TYPE,
+                    source_column="int_field",
+                    target_type=FieldType.LONG,
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.MAKE_OPTIONAL,
+                    source_column="required_field",
+                ),
+                SchemaChange(
+                    change_type=SchemaChangeType.UPDATE_DOC,
+                    source_column="customer_id",
+                    new_doc="Updated documentation",
+                ),
+            ],
+            allow_incompatible_changes=False,
+        )
+        assert len(evolution.changes) == 5
+        change_types = [c.change_type for c in evolution.changes]
+        assert SchemaChangeType.ADD_COLUMN in change_types
+        assert SchemaChangeType.RENAME_COLUMN in change_types
+        assert SchemaChangeType.WIDEN_TYPE in change_types
+        assert SchemaChangeType.MAKE_OPTIONAL in change_types
+        assert SchemaChangeType.UPDATE_DOC in change_types

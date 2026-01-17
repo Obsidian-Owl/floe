@@ -666,6 +666,131 @@ class TableConfig(BaseModel):
 
 
 # =============================================================================
+# Schema Evolution Models
+# =============================================================================
+
+
+class SchemaChange(BaseModel):
+    """A single schema change operation.
+
+    Represents one schema modification to apply to an Iceberg table.
+    Use SchemaEvolution to apply multiple changes atomically.
+
+    Attributes:
+        change_type: Type of schema change operation.
+        field: New field definition (required for ADD_COLUMN).
+        parent_path: Parent field path for nested fields (optional).
+        source_column: Source column for RENAME/WIDEN/DELETE operations.
+        new_name: New name for RENAME_COLUMN operation.
+        target_type: Target type for WIDEN_TYPE operation.
+        target_column: Target column for column operations.
+        new_doc: New documentation for UPDATE_DOC operation.
+
+    Example:
+        >>> # Add a new column
+        >>> change = SchemaChange(
+        ...     change_type=SchemaChangeType.ADD_COLUMN,
+        ...     field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+        ... )
+
+        >>> # Rename a column
+        >>> change = SchemaChange(
+        ...     change_type=SchemaChangeType.RENAME_COLUMN,
+        ...     source_column="old_name",
+        ...     new_name="new_name",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    change_type: SchemaChangeType = Field(
+        ...,
+        description="Type of schema change operation",
+    )
+
+    # For ADD_COLUMN
+    field: SchemaField | None = Field(
+        default=None,
+        description="New field definition (for ADD_COLUMN)",
+    )
+    parent_path: tuple[str, ...] | None = Field(
+        default=None,
+        description="Parent field path for nested fields",
+    )
+
+    # For RENAME_COLUMN, WIDEN_TYPE, MAKE_OPTIONAL, DELETE_COLUMN
+    source_column: str | None = Field(
+        default=None,
+        description="Source column name for rename/widen/delete operations",
+    )
+
+    # For RENAME_COLUMN
+    new_name: str | None = Field(
+        default=None,
+        description="New column name (for RENAME_COLUMN)",
+    )
+
+    # For WIDEN_TYPE
+    target_type: FieldType | None = Field(
+        default=None,
+        description="Target type (for WIDEN_TYPE)",
+    )
+
+    # For operations on specific columns
+    target_column: str | None = Field(
+        default=None,
+        description="Target column name",
+    )
+
+    # For UPDATE_DOC
+    new_doc: str | None = Field(
+        default=None,
+        description="New documentation (for UPDATE_DOC)",
+    )
+
+
+class SchemaEvolution(BaseModel):
+    """Batch of schema changes to apply atomically.
+
+    Groups multiple SchemaChange operations that will be applied
+    as a single atomic operation to an Iceberg table.
+
+    Attributes:
+        changes: List of schema changes to apply (at least one required).
+        allow_incompatible_changes: Allow breaking changes like DELETE_COLUMN.
+            Default False (fail-safe).
+
+    Example:
+        >>> evolution = SchemaEvolution(
+        ...     changes=[
+        ...         SchemaChange(
+        ...             change_type=SchemaChangeType.ADD_COLUMN,
+        ...             field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+        ...         ),
+        ...         SchemaChange(
+        ...             change_type=SchemaChangeType.RENAME_COLUMN,
+        ...             source_column="old_name",
+        ...             new_name="new_name",
+        ...         ),
+        ...     ],
+        ...     allow_incompatible_changes=False,
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    changes: list[SchemaChange] = Field(
+        ...,
+        min_length=1,
+        description="List of schema changes to apply",
+    )
+    allow_incompatible_changes: bool = Field(
+        default=False,
+        description="Allow breaking changes (DELETE_COLUMN, etc.)",
+    )
+
+
+# =============================================================================
 # Manager Configuration Models
 # =============================================================================
 
@@ -817,6 +942,9 @@ __all__ = [
     "PartitionField",
     "PartitionSpec",
     "TableConfig",
+    # Schema evolution models
+    "SchemaChange",
+    "SchemaEvolution",
     # Configuration models
     "IcebergTableManagerConfig",
     "IcebergIOManagerConfig",
