@@ -46,7 +46,7 @@ Example:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -56,6 +56,8 @@ if TYPE_CHECKING:
     import pyiceberg.table
     import pyiceberg.transforms
     import pyiceberg.types
+    from pyiceberg.table import Snapshot
+    from pyiceberg.transforms import Transform
 
 # =============================================================================
 # Module Constants (SonarQube S1192 Compliance)
@@ -434,7 +436,7 @@ class TableSchema(BaseModel):
         if type_class is None:
             msg = f"Unknown field type: {field.field_type}"
             raise ValueError(msg)
-        return type_class()
+        return cast("pyiceberg.types.IcebergType", type_class())
 
 
 class PartitionField(BaseModel):
@@ -557,7 +559,7 @@ class PartitionSpec(BaseModel):
 
     def _get_transform(
         self, field: PartitionField
-    ) -> pyiceberg.transforms.Transform:
+    ) -> Transform[Any, Any]:
         """Get PyIceberg transform for field.
 
         Args:
@@ -593,7 +595,7 @@ class PartitionSpec(BaseModel):
         if transform_class is None:
             msg = f"Unknown partition transform: {field.transform}"
             raise ValueError(msg)
-        return transform_class()
+        return cast("Transform[Any, Any]", transform_class())
 
 
 class TableConfig(BaseModel):
@@ -917,7 +919,7 @@ class SnapshotInfo(BaseModel):
         return int(self.summary.get("added-records-count", "0"))
 
     @classmethod
-    def from_pyiceberg_snapshot(cls, snapshot: pyiceberg.table.Snapshot) -> SnapshotInfo:
+    def from_pyiceberg_snapshot(cls, snapshot: Snapshot) -> SnapshotInfo:
         """Create SnapshotInfo from a PyIceberg Snapshot.
 
         Args:

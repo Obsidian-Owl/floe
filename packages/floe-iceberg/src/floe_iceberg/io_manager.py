@@ -65,7 +65,7 @@ try:
 
     _DAGSTER_AVAILABLE = True
 except ImportError:
-    _DagsterConfigurableIOManager = object  # type: ignore[misc, assignment]
+    _DagsterConfigurableIOManager = object
     _DAGSTER_AVAILABLE = False
 
 

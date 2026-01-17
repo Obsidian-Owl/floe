@@ -27,7 +27,7 @@ Attributes:
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, overload
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode, Tracer
@@ -81,6 +81,26 @@ def get_tracer() -> Tracer:
 # =============================================================================
 # Traced Decorator
 # =============================================================================
+
+
+@overload
+def traced(
+    func: Callable[P, R],
+    *,
+    operation_name: str | None = ...,
+    attributes: dict[str, Any] | None = ...,
+    attributes_fn: Callable[..., dict[str, Any]] | None = ...,
+) -> Callable[P, R]: ...
+
+
+@overload
+def traced(
+    func: None = ...,
+    *,
+    operation_name: str | None = ...,
+    attributes: dict[str, Any] | None = ...,
+    attributes_fn: Callable[..., dict[str, Any]] | None = ...,
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def traced(

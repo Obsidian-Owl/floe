@@ -400,13 +400,19 @@ class IcebergTableManager:
         namespace = parts[0]
         table_name = parts[1]
 
-        # Check if namespace exists
-        if namespace not in self._catalog_plugin._namespaces:
+        # Check if namespace exists (mock-specific attribute for unit testing)
+        namespaces: list[str] | None = getattr(
+            self._catalog_plugin, "_namespaces", None
+        )
+        if namespaces is not None and namespace not in namespaces:
             return False
 
-        # Check if table exists in catalog
-        full_identifier = f"{namespace}.{table_name}"
-        return full_identifier in self._catalog_plugin._tables
+        # Check if table exists in catalog (mock-specific attribute for unit testing)
+        tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
+        if tables is not None:
+            full_identifier = f"{namespace}.{table_name}"
+            return full_identifier in tables
+        return True  # Assume exists in production (real catalog will verify)
 
     # =========================================================================
     # Private Helper Methods
@@ -421,7 +427,11 @@ class IcebergTableManager:
         Raises:
             NoSuchNamespaceError: If namespace doesn't exist.
         """
-        if namespace not in self._catalog_plugin._namespaces:
+        # Mock-specific attribute access for unit testing
+        namespaces: list[str] | None = getattr(
+            self._catalog_plugin, "_namespaces", None
+        )
+        if namespaces is not None and namespace not in namespaces:
             msg = f"Namespace '{namespace}' does not exist"
             raise NoSuchNamespaceError(msg)
 
@@ -720,14 +730,18 @@ class IcebergTableManager:
         Returns:
             True if column exists.
         """
-        # In mock, check via catalog plugin's table schema
+        # In mock, check via catalog plugin's table schema (mock-specific)
         table_id = getattr(table, "identifier", None)
         if table_id is not None:
-            table_data = self._catalog_plugin._tables.get(table_id)
-            if table_data is not None:
-                schema = table_data.get("schema", {})
-                fields = schema.get("fields", [])
-                return any(f.get("name") == column_name for f in fields)
+            tables: dict[str, Any] | None = getattr(
+                self._catalog_plugin, "_tables", None
+            )
+            if tables is not None:
+                table_data = tables.get(table_id)
+                if table_data is not None:
+                    schema = table_data.get("schema", {})
+                    fields = schema.get("fields", [])
+                    return any(f.get("name") == column_name for f in fields)
         return True  # Assume exists in production (PyIceberg will validate)
 
     def _get_column_type(self, table: Table, column_name: str) -> FieldType | None:
@@ -742,16 +756,20 @@ class IcebergTableManager:
         """
         table_id = getattr(table, "identifier", None)
         if table_id is not None:
-            table_data = self._catalog_plugin._tables.get(table_id)
-            if table_data is not None:
-                schema = table_data.get("schema", {})
-                fields = schema.get("fields", [])
-                for f in fields:
-                    if f.get("name") == column_name:
-                        try:
-                            return FieldType(f.get("type"))
-                        except ValueError:
-                            return None
+            tables: dict[str, Any] | None = getattr(
+                self._catalog_plugin, "_tables", None
+            )
+            if tables is not None:
+                table_data = tables.get(table_id)
+                if table_data is not None:
+                    schema = table_data.get("schema", {})
+                    fields = schema.get("fields", [])
+                    for f in fields:
+                        if f.get("name") == column_name:
+                            try:
+                                return FieldType(f.get("type"))
+                            except ValueError:
+                                return None
         return None
 
     def _is_valid_type_widening(
@@ -786,12 +804,18 @@ class IcebergTableManager:
             change_type=change.change_type.value,
         )
 
-        # In mock mode, update the catalog plugin's table schema
+        # In mock mode, update the catalog plugin's table schema (mock-specific)
         table_id = getattr(table, "identifier", None)
         if table_id is None:
             return
 
-        table_data = self._catalog_plugin._tables.get(table_id)
+        tables: dict[str, Any] | None = getattr(
+            self._catalog_plugin, "_tables", None
+        )
+        if tables is None:
+            return
+
+        table_data = tables.get(table_id)
         if table_data is None:
             return
 
@@ -966,7 +990,7 @@ class IcebergTableManager:
         snapshots_data = table_data.get("snapshots", [])
 
         # Convert to SnapshotInfo objects
-        snapshots: list[SnapshotInfo] = []
+        mock_snapshots: list[SnapshotInfo] = []
         for snap_data in snapshots_data:
             # Map operation string to OperationType
             op_str = snap_data.get("operation", "append")
@@ -985,25 +1009,25 @@ class IcebergTableManager:
                 summary=snap_data.get("summary", {}),
                 parent_id=snap_data.get("parent_id"),
             )
-            snapshots.append(snapshot)
+            mock_snapshots.append(snapshot)
 
         # Sort by timestamp (newest first)
-        snapshots.sort(key=lambda s: s.timestamp_ms, reverse=True)
+        mock_snapshots.sort(key=lambda s: s.timestamp_ms, reverse=True)
 
         # Add span attributes
         from opentelemetry import trace
 
         span = trace.get_current_span()
         span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
-        span.set_attribute("snapshots.count", len(snapshots))
+        span.set_attribute("snapshots.count", len(mock_snapshots))
 
         self._log.info(
             "snapshots_listed",
             table_identifier=getattr(table, "identifier", None),
-            snapshot_count=len(snapshots),
+            snapshot_count=len(mock_snapshots),
         )
 
-        return snapshots
+        return mock_snapshots
 
     @traced(operation_name="iceberg.rollback")
     def rollback_to_snapshot(self, table: Table, snapshot_id: int) -> Table:
