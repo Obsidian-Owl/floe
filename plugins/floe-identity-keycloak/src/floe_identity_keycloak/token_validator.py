@@ -4,6 +4,11 @@ This module provides JWT token validation using PyJWT with JWKS support.
 
 Implements:
     - FR-034: JWT validation via PyJWT
+
+Security:
+    - Signature verification is ALWAYS required (fail-closed)
+    - Algorithm validation prevents algorithm confusion attacks
+    - kid header required to prevent key ambiguity attacks
 """
 
 from __future__ import annotations
@@ -14,6 +19,10 @@ from typing import Any
 import httpx
 import jwt
 from jwt.algorithms import RSAAlgorithm
+
+# SECURITY: Allowed signing algorithms (whitelist approach)
+# Only RS256 is allowed to prevent algorithm confusion attacks
+_ALLOWED_ALGORITHMS: frozenset[str] = frozenset({"RS256"})
 
 
 @dataclass
@@ -112,6 +121,12 @@ class TokenValidator:
     def validate(self, token: str | None) -> TokenValidationResult:
         """Validate a JWT token.
 
+        SECURITY: This method implements fail-closed validation:
+        - Signature verification is ALWAYS required
+        - kid header is REQUIRED to prevent key ambiguity
+        - Algorithm is validated against a whitelist
+        - JWKS must be available for signature verification
+
         Args:
             token: JWT token string to validate.
 
@@ -126,62 +141,80 @@ class TokenValidator:
             )
 
         try:
-            # Get the key ID from token header
+            # Get the key ID and algorithm from token header
             try:
                 header = jwt.get_unverified_header(token)
                 kid = header.get("kid")
+                alg = header.get("alg")
             except jwt.exceptions.DecodeError as e:
                 return TokenValidationResult(
                     valid=False,
                     error=f"Malformed token: {e}",
                 )
 
+            # SECURITY: Require kid header to prevent key ambiguity attacks
+            # Without kid, we cannot reliably identify which key to use
+            if not kid:
+                return TokenValidationResult(
+                    valid=False,
+                    error="Token missing required 'kid' header",
+                )
+
+            # SECURITY: Validate algorithm before decoding to prevent
+            # algorithm confusion attacks (e.g., "none" or "HS256")
+            if alg not in _ALLOWED_ALGORITHMS:
+                return TokenValidationResult(
+                    valid=False,
+                    error=f"Algorithm '{alg}' not allowed. Allowed: {sorted(_ALLOWED_ALGORITHMS)}",
+                )
+
             # Fetch JWKS if not already loaded
             if self._jwks is None and self._jwks_url:
-                self._fetch_jwks()
-
-            # Get the signing key
-            key: Any = None
-            verify_signature = False
-
-            if kid and self._jwks:
-                key = self._get_key_by_kid(kid)
-                if key is None:
+                try:
+                    self._fetch_jwks()
+                except Exception as e:
                     return TokenValidationResult(
                         valid=False,
-                        error=f"Key with ID '{kid}' not found in JWKS",
+                        error=f"Failed to fetch JWKS: {e}",
                     )
-                verify_signature = True
 
-            # Decode and validate the token
+            # SECURITY: Require JWKS to be available for signature verification
+            # Never skip signature verification - fail closed
+            if not self._jwks:
+                return TokenValidationResult(
+                    valid=False,
+                    error="JWKS not available for signature verification",
+                )
+
+            # Get the signing key by kid
+            key = self._get_key_by_kid(kid)
+            if key is None:
+                return TokenValidationResult(
+                    valid=False,
+                    error=f"Key with ID '{kid}' not found in JWKS",
+                )
+
+            # Decode and validate the token with signature verification ALWAYS ON
+            # SECURITY: verify_signature is ALWAYS True - never disable
             options = {
-                "verify_signature": verify_signature,
+                "verify_signature": True,
                 "verify_exp": True,
                 "verify_iat": True,
                 "verify_aud": True,
                 "verify_iss": True,
+                "require": ["exp", "iat", "iss", "aud", "sub"],
             }
-
-            # Use empty string as key when not verifying signature (testing)
-            decode_key: Any = key if key is not None else ""
 
             claims = jwt.decode(
                 token,
-                key=decode_key,
-                algorithms=["RS256"],
+                key=key,
+                algorithms=list(_ALLOWED_ALGORITHMS),
                 audience=self._audience,
                 issuer=self._issuer,
                 options=options,
             )
 
-            # Validate required claims
-            if "sub" not in claims:
-                return TokenValidationResult(
-                    valid=False,
-                    error="Missing required claim: sub",
-                )
-
-            # Extract user info
+            # Extract user info (sub claim already validated by 'require' option)
             user_info = self._extract_user_info(claims)
 
             return TokenValidationResult(
@@ -208,6 +241,11 @@ class TokenValidator:
             return TokenValidationResult(
                 valid=False,
                 error="Invalid token audience",
+            )
+        except jwt.exceptions.MissingRequiredClaimError as e:
+            return TokenValidationResult(
+                valid=False,
+                error=f"Missing required claim: {e}",
             )
         except jwt.exceptions.DecodeError as e:
             return TokenValidationResult(

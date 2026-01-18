@@ -5,11 +5,17 @@ This module provides Pydantic configuration models for the Keycloak Identity plu
 Implements:
     - FR-030: KeycloakIdentityPlugin configuration
     - CR-003: Configuration schema via Pydantic
+
+Security:
+    - HTTPS required for all non-localhost URLs
+    - Proper hostname parsing prevents bypass attacks
 """
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Annotated
+from urllib.parse import urlparse
 
 from pydantic import (
     BaseModel,
@@ -19,6 +25,40 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+# SECURITY: Known localhost hostnames (exact match only)
+_LOCALHOST_HOSTNAMES: frozenset[str] = frozenset({
+    "localhost",
+    "localhost.localdomain",
+})
+
+
+def _is_localhost(hostname: str) -> bool:
+    """Check if hostname represents localhost.
+
+    SECURITY: Uses exact hostname matching and proper IP address parsing
+    to prevent bypass attacks like 'localhost.attacker.com'.
+
+    Args:
+        hostname: The hostname to check.
+
+    Returns:
+        True if the hostname is localhost or a loopback IP address.
+    """
+    # Check known localhost hostnames (case-insensitive, exact match)
+    if hostname.lower() in _LOCALHOST_HOSTNAMES:
+        return True
+
+    # Check if it's a loopback IP address
+    try:
+        addr = ipaddress.ip_address(hostname)
+        # Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            return addr.ipv4_mapped.is_loopback
+        return addr.is_loopback
+    except ValueError:
+        # Not a valid IP address - must match hostname exactly
+        return False
 
 
 class KeycloakIdentityConfig(BaseModel):
@@ -95,6 +135,10 @@ class KeycloakIdentityConfig(BaseModel):
     def validate_server_url(cls, v: str) -> str:
         """Validate server URL format and protocol.
 
+        SECURITY: Uses proper URL parsing to prevent bypass attacks.
+        Substring matching (e.g., 'localhost in v') is vulnerable to
+        attacks like 'http://localhost.attacker.com'.
+
         Args:
             v: The server URL to validate.
 
@@ -109,10 +153,17 @@ class KeycloakIdentityConfig(BaseModel):
 
         # Check for HTTPS requirement (allow HTTP only for localhost)
         if v.startswith("http://"):
-            # Allow HTTP for localhost development
-            if "localhost" in v or "127.0.0.1" in v:
+            # SECURITY: Parse URL to extract actual hostname
+            # Never use substring matching - vulnerable to bypass
+            parsed = urlparse(v)
+            hostname = parsed.hostname or ""
+
+            # Check if it's actually localhost (proper validation)
+            if _is_localhost(hostname):
                 return v
+
             raise ValueError(
+                f"HTTP not allowed for '{hostname}'. "
                 "server_url must use HTTPS for non-localhost URLs. "
                 "HTTP is only allowed for localhost development."
             )

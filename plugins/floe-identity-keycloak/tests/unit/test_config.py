@@ -464,3 +464,137 @@ class TestKeycloakIdentityConfigEndpoints:
 
         expected = "https://keycloak.example.com/realms/floe/protocol/openid-connect/userinfo"
         assert config.userinfo_url == expected
+
+
+class TestKeycloakIdentityConfigURLSecurity:
+    """Security tests for URL validation bypass prevention.
+
+    These tests verify that the URL validation properly parses hostnames
+    and prevents bypass attacks using substring matching.
+    """
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_localhost_attacker_domain_rejected(self) -> None:
+        """SECURITY: localhost.attacker.com must be rejected.
+
+        This tests the fix for the URL validation bypass vulnerability where
+        substring matching like 'localhost in url' allows URLs containing
+        'localhost' anywhere (e.g., http://localhost.attacker.com).
+        """
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            KeycloakIdentityConfig(
+                server_url="http://localhost.attacker.com",
+                realm="floe",
+                client_id="floe-client",
+                client_secret=SecretStr("secret"),
+            )
+
+        errors = exc_info.value.errors()
+        assert any("https" in str(e).lower() or "http" in str(e).lower() for e in errors)
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_127_attacker_domain_rejected(self) -> None:
+        """SECURITY: 127.0.0.1.attacker.com must be rejected.
+
+        Variation of the bypass using IP-like subdomain.
+        """
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            KeycloakIdentityConfig(
+                server_url="http://127.0.0.1.attacker.com",
+                realm="floe",
+                client_id="floe-client",
+                client_secret=SecretStr("secret"),
+            )
+
+        errors = exc_info.value.errors()
+        assert len(errors) > 0
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_valid_localhost_accepted(self) -> None:
+        """Test that actual localhost is still accepted for development."""
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        config = KeycloakIdentityConfig(
+            server_url="http://localhost:8080",
+            realm="floe",
+            client_id="floe-client",
+            client_secret=SecretStr("secret"),
+        )
+
+        assert config.server_url == "http://localhost:8080"
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_valid_127_0_0_1_accepted(self) -> None:
+        """Test that 127.0.0.1 is accepted for development."""
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        config = KeycloakIdentityConfig(
+            server_url="http://127.0.0.1:8080",
+            realm="floe",
+            client_id="floe-client",
+            client_secret=SecretStr("secret"),
+        )
+
+        assert config.server_url == "http://127.0.0.1:8080"
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_valid_ipv6_loopback_accepted(self) -> None:
+        """Test that IPv6 loopback [::1] is accepted for development."""
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        config = KeycloakIdentityConfig(
+            server_url="http://[::1]:8080",
+            realm="floe",
+            client_id="floe-client",
+            client_secret=SecretStr("secret"),
+        )
+
+        assert config.server_url == "http://[::1]:8080"
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_localhost_localdomain_accepted(self) -> None:
+        """Test that localhost.localdomain is accepted."""
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        config = KeycloakIdentityConfig(
+            server_url="http://localhost.localdomain:8080",
+            realm="floe",
+            client_id="floe-client",
+            client_secret=SecretStr("secret"),
+        )
+
+        assert config.server_url == "http://localhost.localdomain:8080"
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_other_loopback_ip_accepted(self) -> None:
+        """Test that other loopback IPs (127.0.0.2, etc.) are accepted."""
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        config = KeycloakIdentityConfig(
+            server_url="http://127.0.0.2:8080",
+            realm="floe",
+            client_id="floe-client",
+            client_secret=SecretStr("secret"),
+        )
+
+        assert config.server_url == "http://127.0.0.2:8080"
+
+    @pytest.mark.requirement("7A-FR-030")
+    def test_non_localhost_http_rejected(self) -> None:
+        """Test that non-localhost HTTP URLs are rejected."""
+        from floe_identity_keycloak.config import KeycloakIdentityConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            KeycloakIdentityConfig(
+                server_url="http://keycloak.internal.company.com",
+                realm="floe",
+                client_id="floe-client",
+                client_secret=SecretStr("secret"),
+            )
+
+        errors = exc_info.value.errors()
+        assert any("https" in str(e).lower() for e in errors)
