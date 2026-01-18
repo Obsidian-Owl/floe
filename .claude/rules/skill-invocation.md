@@ -11,7 +11,7 @@ When working on specific components, you SHOULD invoke the appropriate skill to 
 **Trigger files**: Any `**/models.py`, `**/schemas.py`, `**/config.py`
 **Invoke when**: Creating or modifying Pydantic models, data validation, API contracts
 
-### dagster-skill  
+### dagster-skill
 **Trigger words**: asset, job, schedule, sensor, resource, IOManager, materialize
 **Trigger files**: Any `plugins/floe-orchestrator-dagster/**`, `**/assets.py`, `**/resources.py`
 **Invoke when**: Working with Dagster orchestration, assets, or scheduling

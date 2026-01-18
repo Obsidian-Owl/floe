@@ -84,9 +84,9 @@ async def test_delete_test_datasets_removes_test_prefixed(
 
     # Should have deleted at least our test datasets
     # (might be more from other tests)
-    assert deleted >= len(test_names), (
-        f"Expected to delete at least {len(test_names)}, got {deleted}"
-    )
+    assert deleted >= len(
+        test_names
+    ), f"Expected to delete at least {len(test_names)}, got {deleted}"
 
     # Verify our test datasets are gone
     datasets_after = await cognee_client.list_datasets()

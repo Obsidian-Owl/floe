@@ -78,7 +78,7 @@ def metrics_pipeline():
         orders = pl.read_parquet(orders_path)
         customers = pl.read_parquet(customers_path)
         return calculate_customer_metrics(orders, customers)
-    
+
     compute_metrics("s3://data/orders", "s3://data/customers")
 ```
 
@@ -130,7 +130,7 @@ from core.resources import CatalogClient
 class DagsterCatalogResource(ConfigurableResource, CatalogClient):
     uri: str
     warehouse: str
-    
+
     def load_table(self, name: str):
         from pyiceberg.catalog import load_catalog
         catalog = load_catalog("rest", uri=self.uri, warehouse=self.warehouse)
@@ -146,7 +146,7 @@ from core.resources import CatalogClient
 
 class CatalogHook(BaseHook, CatalogClient):
     conn_name_attr = "catalog_conn_id"
-    
+
     def load_table(self, name: str):
         conn = self.get_connection(self.catalog_conn_id)
         from pyiceberg.catalog import load_catalog
@@ -203,9 +203,9 @@ from core.transforms import calculate_customer_metrics
 def test_customer_metrics():
     orders = pl.DataFrame({"customer_id": [1], "amount": [100]})
     customers = pl.DataFrame({"customer_id": [1], "name": ["Alice"]})
-    
+
     result = calculate_customer_metrics(orders, customers)
-    
+
     assert result["total_spend"][0] == 100
 ```
 

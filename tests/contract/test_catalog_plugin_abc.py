@@ -215,9 +215,9 @@ class TestCatalogPluginABCDefinition:
 
         method = CatalogPlugin.health_check
         # health_check is NOT abstract - it has a default implementation
-        assert not getattr(method, "__isabstractmethod__", False), (
-            "health_check() should have default implementation, not be abstract"
-        )
+        assert not getattr(
+            method, "__isabstractmethod__", False
+        ), "health_check() should have default implementation, not be abstract"
 
         sig = inspect.signature(CatalogPlugin.health_check)
         params = list(sig.parameters.keys())

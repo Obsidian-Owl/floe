@@ -183,9 +183,9 @@ class TestJaegerPluginIntegration(IntegrationTestBase):
         try:
             # Health check should be healthy
             health = plugin.health_check()
-            assert health.state == HealthState.HEALTHY, (
-                f"Expected HEALTHY state after startup, got {health.state}"
-            )
+            assert (
+                health.state == HealthState.HEALTHY
+            ), f"Expected HEALTHY state after startup, got {health.state}"
         finally:
             # Shutdown should not raise
             plugin.shutdown()

@@ -24,7 +24,7 @@ You are a senior DevOps engineer specialised in **efficient** log analysis. Your
 # Docker
 docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | head -20
 
-# Kubernetes  
+# Kubernetes
 kubectl get pods -o wide
 kubectl get events --sort-by='.lastTimestamp' | tail -15
 ```

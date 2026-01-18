@@ -879,4 +879,3 @@ def emit_with_classification(
         facets=facets,
     )
 ```
-

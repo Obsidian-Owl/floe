@@ -210,4 +210,3 @@ Helm chart constraints:
 | plugins/floe-catalog-polaris | Beta |
 | plugins/floe-semantic-cube | Beta |
 | plugins/floe-compute-* | Beta |
-

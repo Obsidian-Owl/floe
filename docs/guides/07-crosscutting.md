@@ -781,4 +781,3 @@ log.info("starting_compilation", spec_path="floe.yaml")
 # Output: {"event": "starting_compilation", "spec_path": "floe.yaml",
 #          "level": "info", "timestamp": "2024-...", "trace_id": "abc..."}
 ```
-

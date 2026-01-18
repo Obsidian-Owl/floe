@@ -187,4 +187,3 @@ def process(artifacts: CompiledArtifacts) -> None:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 0.1.0 | 2026-01 | Floe Team | Initial runtime documentation |
-

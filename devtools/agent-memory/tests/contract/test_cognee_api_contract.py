@@ -183,9 +183,9 @@ class TestSearchContract:
 
         # Assert - wrong field name is NOT used
         json_data = payload_capture.last_json_data
-        assert "search_type" not in json_data, (
-            "search MUST NOT use 'search_type' (snake_case). Use 'searchType' (camelCase) instead."
-        )
+        assert (
+            "search_type" not in json_data
+        ), "search MUST NOT use 'search_type' (snake_case). Use 'searchType' (camelCase) instead."
 
     @pytest.mark.requirement("FR-004")
     async def test_search_uses_topK_field(
@@ -224,9 +224,9 @@ class TestSearchContract:
 
         # Assert - wrong field name is NOT used
         json_data = payload_capture.last_json_data
-        assert "top_k" not in json_data, (
-            "search MUST NOT use 'top_k' (snake_case). Use 'topK' (camelCase) instead."
-        )
+        assert (
+            "top_k" not in json_data
+        ), "search MUST NOT use 'top_k' (snake_case). Use 'topK' (camelCase) instead."
 
 
 class TestCognifyContract:
@@ -253,9 +253,9 @@ class TestCognifyContract:
 
         # Assert - correct field name is used
         json_data = payload_capture.last_json_data
-        assert "datasets" in json_data, (
-            "cognify MUST use 'datasets' field when dataset is specified."
-        )
+        assert (
+            "datasets" in json_data
+        ), "cognify MUST use 'datasets' field when dataset is specified."
         assert json_data["datasets"] == ["test_dataset"]
 
     @pytest.mark.requirement("FR-005")
