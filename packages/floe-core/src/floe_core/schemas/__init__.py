@@ -40,6 +40,13 @@ See Also:
 
 from __future__ import annotations
 
+# Audit models (T078)
+from floe_core.schemas.audit import (
+    AuditEvent,
+    AuditOperation,
+    AuditResult,
+)
+
 # CompiledArtifacts models (T076)
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
@@ -96,11 +103,14 @@ from floe_core.schemas.plugins import (
     validate_plugin_selection,
 )
 
-# Secret models (T005, T008)
+# Secret models (T005, T008, T039, T040)
 from floe_core.schemas.secrets import (
     SECRET_NAME_PATTERN,
+    SECRET_VALUE_PATTERNS,
     SecretReference,
     SecretSource,
+    resolve_secret_references,
+    validate_no_secrets_in_artifacts,
 )
 
 # Validation models (T031, T032, T036)
@@ -114,6 +124,10 @@ from floe_core.schemas.validation import (
 )
 
 __all__: list[str] = [
+    # Audit (Phase 7, Epic 7A)
+    "AuditEvent",
+    "AuditOperation",
+    "AuditResult",
     # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",
@@ -132,10 +146,13 @@ __all__: list[str] = [
     "ManifestMetadata",
     "NAME_PATTERN",
     "SEMVER_PATTERN",
-    # Secrets (Phase 2)
+    # Secrets (Phase 2, 7A)
     "SecretSource",
     "SecretReference",
     "SECRET_NAME_PATTERN",
+    "SECRET_VALUE_PATTERNS",
+    "resolve_secret_references",
+    "validate_no_secrets_in_artifacts",
     # Plugins (Phase 3, Phase 5)
     "PluginSelection",
     "PluginsConfig",

@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
-    from dagster import DagsterInstance  # type: ignore[import-not-found]
+    from dagster import DagsterInstance
 
 
 class DagsterConfig(BaseModel):

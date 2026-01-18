@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 if TYPE_CHECKING:
-    from minio import Minio  # type: ignore[import-not-found]
+    from minio import Minio
 
 
 class MinIOConfig(BaseModel):
@@ -159,7 +159,7 @@ def delete_bucket_contents(
     Returns:
         Number of objects deleted.
     """
-    from minio.deleteobjects import DeleteObject  # type: ignore[import-not-found]
+    from minio.deleteobjects import DeleteObject
 
     objects = client.list_objects(bucket_name, recursive=True)
     delete_objects = [DeleteObject(obj.object_name) for obj in objects]

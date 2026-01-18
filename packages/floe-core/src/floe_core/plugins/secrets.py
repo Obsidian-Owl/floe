@@ -136,3 +136,49 @@ class SecretsPlugin(PluginMetadata):
             ['api/stripe/key', 'api/sendgrid/key']
         """
         ...
+
+    def generate_pod_env_spec(self, secret_name: str) -> dict[str, Any]:
+        """Generate K8s pod spec fragment for secret injection.
+
+        Returns a partial pod spec that can be merged into a pod template
+        to inject secrets as environment variables. This is primarily useful
+        for K8s-native secrets plugins.
+
+        Args:
+            secret_name: K8s Secret name to mount.
+
+        Returns:
+            Pod spec fragment with envFrom configuration.
+
+        Example:
+            >>> spec = plugin.generate_pod_env_spec("db-creds")
+            >>> spec
+            {'envFrom': [{'secretRef': {'name': 'db-creds'}}]}
+        """
+        return {"envFrom": [{"secretRef": {"name": secret_name}}]}
+
+    def get_multi_key_secret(self, name: str) -> dict[str, str]:
+        """Retrieve all key-value pairs from a multi-key secret.
+
+        This is an optional method for backends that natively support
+        multi-key secrets (e.g., K8s Secrets with multiple data keys).
+
+        The default implementation raises NotImplementedError. Plugins
+        that support multi-key retrieval should override this method.
+
+        Args:
+            name: Secret name.
+
+        Returns:
+            Dictionary of key-value pairs from the secret.
+
+        Raises:
+            NotImplementedError: If backend doesn't support multi-key secrets.
+            PermissionError: If lacking permission to read the secret.
+            ConnectionError: If unable to connect to secrets backend.
+
+        Example:
+            >>> plugin.get_multi_key_secret("db-creds")
+            {'username': 'admin', 'password': 'secret123'}
+        """
+        raise NotImplementedError("Multi-key secrets not supported")

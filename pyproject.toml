@@ -35,6 +35,10 @@ dependencies = [
     "floe-telemetry-jaeger",
     # Include floe-compute-duckdb for development
     "floe-compute-duckdb",
+    # Include identity and secrets plugins for development
+    "floe-identity-keycloak",
+    "floe-secrets-infisical",
+    "floe-secrets-k8s",
 ]
 
 [tool.uv]
@@ -51,6 +55,9 @@ floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true 
 floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
 floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
+floe-identity-keycloak = { path = "plugins/floe-identity-keycloak", editable = true }
+floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = true }
+floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -59,6 +66,9 @@ pythonpath = [
     "packages/floe-iceberg/src",
     "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",
+    "plugins/floe-identity-keycloak/src",
+    "plugins/floe-secrets-infisical/src",
+    "plugins/floe-secrets-k8s/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]
@@ -87,6 +97,10 @@ exclude = [
     "^packages/.*/tests/",
     "^tests/",
 ]
+
+# Optional runtime dependencies - these are only available when the specific plugin is installed
+# Using disable_error_code since ignore_missing_imports doesn't suppress import-not-found
+disable_error_code = ["import-not-found"]
 
 [tool.ruff]
 target-version = "py310"

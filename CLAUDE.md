@@ -686,6 +686,8 @@ Linear app                      # Team progress view
 - Cognee Cloud (SaaS) - REST API integration, no local storage (10b-agent-memory-quality)
 - Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow (4d-storage-plugin)
 - Iceberg tables via PyIceberg (S3/GCS/Azure via StoragePlugin FileIO) (4d-storage-plugin)
+- Python 3.11 (7a-identity-secrets)
+- N/A (plugins access external secrets/identity backends) (7a-identity-secrets)
 
 ## Cognee Cloud API Quirks (CRITICAL)
 
@@ -748,6 +750,6 @@ result = await sdk.memify(dataset_name="my_dataset")
 See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_client.py`.
 
 ## Recent Changes
+- 7a-identity-secrets: Added Python 3.11
 - 4d-storage-plugin: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow
 - 10b-agent-memory-quality: Added Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation)
-- 001-plugin-registry: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + Pydantic v2 (config validation), structlog (logging)

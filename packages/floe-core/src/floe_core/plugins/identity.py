@@ -77,6 +77,40 @@ class TokenValidationResult:
     expires_at: str = ""
 
 
+@dataclass
+class OIDCConfig:
+    """OIDC provider endpoint configuration.
+
+    Contains all endpoints required for OIDC integration with identity providers
+    like Keycloak, Auth0, Okta, or Azure AD.
+
+    Attributes:
+        issuer_url: The issuer URL (iss claim in tokens).
+        discovery_url: The .well-known/openid-configuration endpoint.
+        jwks_uri: JSON Web Key Set endpoint for token validation.
+        authorization_endpoint: OAuth2 authorization endpoint.
+        token_endpoint: OAuth2 token endpoint.
+        userinfo_endpoint: OIDC userinfo endpoint.
+
+    Example:
+        >>> config = OIDCConfig(
+        ...     issuer_url="https://keycloak.example.com/realms/floe",
+        ...     discovery_url="https://keycloak.example.com/realms/floe/.well-known/openid-configuration",
+        ...     jwks_uri="https://keycloak.example.com/realms/floe/protocol/openid-connect/certs",
+        ...     authorization_endpoint="https://keycloak.example.com/realms/floe/protocol/openid-connect/auth",
+        ...     token_endpoint="https://keycloak.example.com/realms/floe/protocol/openid-connect/token",
+        ...     userinfo_endpoint="https://keycloak.example.com/realms/floe/protocol/openid-connect/userinfo",
+        ... )
+    """
+
+    issuer_url: str
+    discovery_url: str
+    jwks_uri: str
+    authorization_endpoint: str
+    token_endpoint: str
+    userinfo_endpoint: str
+
+
 class IdentityPlugin(PluginMetadata):
     """Abstract base class for authentication provider plugins.
 
@@ -186,3 +220,27 @@ class IdentityPlugin(PluginMetadata):
             ...     print(f"Invalid: {result.error}")
         """
         ...
+
+    def get_oidc_config(self, realm: str | None = None) -> OIDCConfig:
+        """Get OIDC configuration for service integration.
+
+        Returns the OIDC discovery endpoints for the identity provider.
+        This is an optional method - plugins that don't support OIDC
+        should raise NotImplementedError.
+
+        Args:
+            realm: Optional realm/tenant identifier for multi-tenant providers.
+
+        Returns:
+            OIDCConfig with all OIDC endpoints.
+
+        Raises:
+            NotImplementedError: If plugin doesn't support OIDC discovery.
+            ConnectionError: If unable to fetch OIDC configuration.
+
+        Example:
+            >>> config = plugin.get_oidc_config(realm="floe")
+            >>> config.jwks_uri
+            'https://keycloak.example.com/realms/floe/protocol/openid-connect/certs'
+        """
+        raise NotImplementedError("OIDC not supported by this plugin")

@@ -29,11 +29,12 @@ class TestSecretSourceEnum:
         assert SecretSource.KUBERNETES.value == "kubernetes"
         assert SecretSource.VAULT.value == "vault"
         assert SecretSource.EXTERNAL_SECRETS.value == "external-secrets"
+        assert SecretSource.INFISICAL.value == "infisical"
 
     @pytest.mark.requirement("001-FR-010")
     def test_secret_source_count(self) -> None:
-        """Test that exactly 4 secret sources are defined."""
-        assert len(SecretSource) == 4
+        """Test that exactly 5 secret sources are defined."""
+        assert len(SecretSource) == 5
 
     @pytest.mark.requirement("001-FR-010")
     def test_secret_source_string_enum(self) -> None:
