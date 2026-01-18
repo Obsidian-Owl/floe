@@ -6,6 +6,7 @@ Tests the Pydantic models and enumerations defined in floe_iceberg.models.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import pytest
 from pydantic import ValidationError as PydanticValidationError
@@ -19,12 +20,15 @@ from floe_iceberg.models import (
     FieldType,
     IcebergTableManagerConfig,
     OperationType,
+    PartitionField,
+    PartitionSpec,
     PartitionTransform,
     SchemaChange,
     SchemaChangeType,
     SchemaEvolution,
     SchemaField,
     SnapshotInfo,
+    TableSchema,
     WriteConfig,
     WriteMode,
 )
@@ -1773,3 +1777,251 @@ class TestCompactionStrategy:
         """Test DEFAULT_TARGET_FILE_SIZE_BYTES constant is 128MB."""
         assert DEFAULT_TARGET_FILE_SIZE_BYTES == 134217728  # 128MB
         assert DEFAULT_TARGET_FILE_SIZE_BYTES == 128 * 1024 * 1024
+
+
+# =============================================================================
+# TableSchema PyIceberg Conversion Tests
+# =============================================================================
+
+
+class TestTableSchemaToPyIceberg:
+    """Tests for TableSchema.to_pyiceberg_schema() method."""
+
+    @pytest.mark.requirement("FR-012")
+    def test_to_pyiceberg_schema_basic_types(self) -> None:
+        """Test conversion of basic field types to PyIceberg schema."""
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import LongType, StringType
+
+        schema = TableSchema(
+            fields=[
+                SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
+                SchemaField(field_id=2, name="name", field_type=FieldType.STRING, required=False),
+            ]
+        )
+
+        py_schema = schema.to_pyiceberg_schema()
+
+        assert isinstance(py_schema, Schema)
+        assert len(py_schema.fields) == 2
+        assert py_schema.find_field(1).name == "id"
+        assert isinstance(py_schema.find_field(1).field_type, LongType)
+        assert py_schema.find_field(2).name == "name"
+        assert isinstance(py_schema.find_field(2).field_type, StringType)
+
+    @pytest.mark.requirement("FR-012")
+    def test_to_pyiceberg_schema_all_primitive_types(self) -> None:
+        """Test conversion of all primitive field types."""
+        from pyiceberg import types
+
+        # Test each primitive type
+        type_test_cases = [
+            (FieldType.BOOLEAN, types.BooleanType),
+            (FieldType.INT, types.IntegerType),
+            (FieldType.LONG, types.LongType),
+            (FieldType.FLOAT, types.FloatType),
+            (FieldType.DOUBLE, types.DoubleType),
+            (FieldType.DATE, types.DateType),
+            (FieldType.TIME, types.TimeType),
+            (FieldType.TIMESTAMP, types.TimestampType),
+            (FieldType.TIMESTAMPTZ, types.TimestamptzType),
+            (FieldType.STRING, types.StringType),
+            (FieldType.UUID, types.UUIDType),
+            (FieldType.BINARY, types.BinaryType),
+        ]
+
+        for i, (field_type, expected_py_type) in enumerate(type_test_cases):
+            schema = TableSchema(
+                fields=[
+                    SchemaField(field_id=i + 1, name=f"field_{i}", field_type=field_type),
+                ]
+            )
+            py_schema = schema.to_pyiceberg_schema()
+            assert isinstance(py_schema.find_field(i + 1).field_type, expected_py_type)
+
+    @pytest.mark.requirement("FR-012")
+    def test_to_pyiceberg_schema_decimal_type(self) -> None:
+        """Test conversion of DECIMAL field type with precision and scale."""
+        from pyiceberg.types import DecimalType
+
+        schema = TableSchema(
+            fields=[
+                SchemaField(
+                    field_id=1,
+                    name="price",
+                    field_type=FieldType.DECIMAL,
+                    precision=10,
+                    scale=2,
+                ),
+            ]
+        )
+
+        py_schema = schema.to_pyiceberg_schema()
+        decimal_field = py_schema.find_field(1)
+        assert isinstance(decimal_field.field_type, DecimalType)
+        assert decimal_field.field_type.precision == 10
+        assert decimal_field.field_type.scale == 2
+
+    @pytest.mark.requirement("FR-012")
+    def test_to_pyiceberg_schema_fixed_type(self) -> None:
+        """Test conversion of FIXED field type."""
+        from pyiceberg.types import FixedType
+
+        schema = TableSchema(
+            fields=[
+                SchemaField(
+                    field_id=1,
+                    name="hash",
+                    field_type=FieldType.FIXED,
+                    precision=32,  # Use precision as length
+                ),
+            ]
+        )
+
+        py_schema = schema.to_pyiceberg_schema()
+        fixed_field = py_schema.find_field(1)
+        assert isinstance(fixed_field.field_type, FixedType)
+        # PyIceberg stores length in .root for FixedType
+        assert fixed_field.field_type.root == 32
+
+    @pytest.mark.requirement("FR-012")
+    def test_to_pyiceberg_schema_preserves_doc(self) -> None:
+        """Test that field documentation is preserved."""
+        schema = TableSchema(
+            fields=[
+                SchemaField(
+                    field_id=1,
+                    name="id",
+                    field_type=FieldType.LONG,
+                    doc="Primary identifier",
+                ),
+            ]
+        )
+
+        py_schema = schema.to_pyiceberg_schema()
+        assert py_schema.find_field(1).doc == "Primary identifier"
+
+
+# =============================================================================
+# PartitionSpec PyIceberg Conversion Tests
+# =============================================================================
+
+
+class TestPartitionSpecToPyIceberg:
+    """Tests for PartitionSpec.to_pyiceberg_spec() method."""
+
+    @staticmethod
+    def _create_test_schema() -> Any:
+        """Create a simple schema for partition spec tests.
+
+        Returns:
+            A pyiceberg.schema.Schema instance for testing.
+        """
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import LongType, NestedField, StringType, TimestampType
+
+        return Schema(
+            NestedField(field_id=1, name="id", field_type=LongType(), required=True),
+            NestedField(field_id=2, name="region", field_type=StringType(), required=True),
+            NestedField(field_id=3, name="event_time", field_type=TimestampType(), required=True),
+        )
+
+    @pytest.mark.requirement("FR-014")
+    def test_to_pyiceberg_spec_identity(self) -> None:
+        """Test conversion of IDENTITY partition transform."""
+        from pyiceberg.partitioning import PartitionSpec as PyPartitionSpec
+        from pyiceberg.transforms import IdentityTransform
+
+        schema = self._create_test_schema()
+        spec = PartitionSpec(
+            fields=[
+                PartitionField(
+                    source_field_id=2,
+                    partition_field_id=1000,
+                    name="region",
+                    transform=PartitionTransform.IDENTITY,
+                ),
+            ]
+        )
+
+        py_spec = spec.to_pyiceberg_spec(schema)
+
+        assert isinstance(py_spec, PyPartitionSpec)
+        assert len(py_spec.fields) == 1
+        assert isinstance(py_spec.fields[0].transform, IdentityTransform)
+
+    @pytest.mark.requirement("FR-014")
+    def test_to_pyiceberg_spec_time_transforms(self) -> None:
+        """Test conversion of time-based partition transforms."""
+        from pyiceberg.transforms import (
+            DayTransform,
+            HourTransform,
+            MonthTransform,
+            YearTransform,
+        )
+
+        schema = self._create_test_schema()
+        transform_cases = [
+            (PartitionTransform.YEAR, YearTransform),
+            (PartitionTransform.MONTH, MonthTransform),
+            (PartitionTransform.DAY, DayTransform),
+            (PartitionTransform.HOUR, HourTransform),
+        ]
+
+        for i, (transform, expected_class) in enumerate(transform_cases):
+            spec = PartitionSpec(
+                fields=[
+                    PartitionField(
+                        source_field_id=3,
+                        partition_field_id=1000 + i,
+                        name=f"time_part_{i}",
+                        transform=transform,
+                    ),
+                ]
+            )
+            py_spec = spec.to_pyiceberg_spec(schema)
+            assert isinstance(py_spec.fields[0].transform, expected_class)
+
+    @pytest.mark.requirement("FR-014")
+    def test_to_pyiceberg_spec_bucket(self) -> None:
+        """Test conversion of BUCKET partition transform."""
+        from pyiceberg.transforms import BucketTransform
+
+        schema = self._create_test_schema()
+        spec = PartitionSpec(
+            fields=[
+                PartitionField(
+                    source_field_id=1,
+                    partition_field_id=1000,
+                    name="id_bucket",
+                    transform=PartitionTransform.BUCKET,
+                    num_buckets=32,
+                ),
+            ]
+        )
+
+        py_spec = spec.to_pyiceberg_spec(schema)
+        assert isinstance(py_spec.fields[0].transform, BucketTransform)
+        assert py_spec.fields[0].transform.num_buckets == 32
+
+    @pytest.mark.requirement("FR-014")
+    def test_to_pyiceberg_spec_truncate(self) -> None:
+        """Test conversion of TRUNCATE partition transform."""
+        from pyiceberg.transforms import TruncateTransform
+
+        schema = self._create_test_schema()
+        spec = PartitionSpec(
+            fields=[
+                PartitionField(
+                    source_field_id=2,
+                    partition_field_id=1000,
+                    name="region_trunc",
+                    transform=PartitionTransform.TRUNCATE,
+                    width=5,
+                ),
+            ]
+        )
+
+        py_spec = spec.to_pyiceberg_spec(schema)
+        assert isinstance(py_spec.fields[0].transform, TruncateTransform)
+        assert py_spec.fields[0].transform.width == 5
