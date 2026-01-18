@@ -36,7 +36,7 @@ def infisical_credentials_available() -> bool:
 
 
 @pytest.fixture
-def infisical_config() -> "InfisicalSecretsConfig":
+def infisical_config() -> InfisicalSecretsConfig:
     """Create a minimal InfisicalSecretsConfig for unit tests.
 
     This fixture creates a config with test credentials suitable for
@@ -57,7 +57,7 @@ def infisical_config() -> "InfisicalSecretsConfig":
 
 
 @pytest.fixture
-def infisical_config_from_env() -> "InfisicalSecretsConfig":
+def infisical_config_from_env() -> InfisicalSecretsConfig:
     """Create InfisicalSecretsConfig from environment variables.
 
     This fixture creates a config from real environment variables,
@@ -67,10 +67,10 @@ def infisical_config_from_env() -> "InfisicalSecretsConfig":
         InfisicalSecretsConfig with credentials from environment.
 
     Raises:
-        pytest.skip: If credentials are not available.
+        pytest.fail: If credentials are not available.
     """
     if not infisical_credentials_available():
-        pytest.skip(
+        pytest.fail(
             f"Infisical credentials not available. "
             f"Set {ENV_CLIENT_ID}, {ENV_CLIENT_SECRET}, {ENV_PROJECT_ID}"
         )

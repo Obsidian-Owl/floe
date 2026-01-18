@@ -46,7 +46,7 @@ def unique_test_path() -> str:
 
 
 @pytest.fixture
-def live_infisical_config(unique_test_path: str) -> "InfisicalSecretsConfig":
+def live_infisical_config(unique_test_path: str) -> InfisicalSecretsConfig:
     """Create InfisicalSecretsConfig from environment for live testing.
 
     This fixture creates a config using real credentials from environment
@@ -59,10 +59,10 @@ def live_infisical_config(unique_test_path: str) -> "InfisicalSecretsConfig":
         InfisicalSecretsConfig with real credentials.
 
     Raises:
-        pytest.skip: If credentials are not available.
+        pytest.fail: If credentials are not available.
     """
     if not _infisical_credentials_available():
-        pytest.skip(
+        pytest.fail(
             f"Infisical credentials not available. "
             f"Set {ENV_CLIENT_ID}, {ENV_CLIENT_SECRET}, {ENV_PROJECT_ID}"
         )
@@ -81,8 +81,8 @@ def live_infisical_config(unique_test_path: str) -> "InfisicalSecretsConfig":
 
 @pytest.fixture
 def live_infisical_plugin(
-    live_infisical_config: "InfisicalSecretsConfig",
-) -> Generator["InfisicalSecretsPlugin", None, None]:
+    live_infisical_config: InfisicalSecretsConfig,
+) -> Generator[InfisicalSecretsPlugin, None, None]:
     """Create InfisicalSecretsPlugin with real Infisical connection.
 
     This fixture creates a fully functional plugin connected to a real

@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import SecretStr
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
@@ -40,15 +39,6 @@ def _infisical_credentials_available() -> bool:
     )
 
 
-# Mark all tests in this module as requiring Infisical
-pytestmark = [
-    pytest.mark.skipif(
-        not _infisical_credentials_available(),
-        reason="Infisical credentials not available (set INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, INFISICAL_PROJECT_ID)",
-    ),
-]
-
-
 class TestInfisicalSecretsOperations(IntegrationTestBase):
     """Integration tests for Infisical Secrets operations.
 
@@ -60,8 +50,18 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
     required_services: list[tuple[str, int]] = []
 
     @pytest.fixture
-    def infisical_config(self) -> "InfisicalSecretsConfig":
-        """Create config from environment variables."""
+    def infisical_config(self) -> InfisicalSecretsConfig:
+        """Create config from environment variables.
+
+        Raises:
+            pytest.fail: If credentials are not available.
+        """
+        if not _infisical_credentials_available():
+            pytest.fail(
+                "Infisical credentials not available. "
+                "Set INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, INFISICAL_PROJECT_ID"
+            )
+
         from floe_secrets_infisical.config import InfisicalSecretsConfig
 
         return InfisicalSecretsConfig(
@@ -75,8 +75,8 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
 
     @pytest.fixture
     def plugin(
-        self, infisical_config: "InfisicalSecretsConfig"
-    ) -> Generator["InfisicalSecretsPlugin", None, None]:
+        self, infisical_config: InfisicalSecretsConfig
+    ) -> Generator[InfisicalSecretsPlugin, None, None]:
         """Create and initialize plugin for tests."""
         from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
 
@@ -97,7 +97,7 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
 
     @pytest.mark.requirement("7A-FR-020")
     def test_authenticate_with_universal_auth(
-        self, infisical_config: "InfisicalSecretsConfig"
+        self, infisical_config: InfisicalSecretsConfig
     ) -> None:
         """Test successful authentication with Universal Auth credentials."""
         from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
@@ -115,9 +115,7 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
             plugin.shutdown()
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_get_secret_returns_value(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_get_secret_returns_value(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test get_secret retrieves an existing secret value."""
         secret_key = f"test-secret-{uuid.uuid4().hex[:8]}"
         secret_value = f"value-{uuid.uuid4().hex}"
@@ -131,18 +129,14 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
         assert result == secret_value
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_get_secret_returns_none_for_nonexistent(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_get_secret_returns_none_for_nonexistent(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test get_secret returns None for non-existent secret."""
         result = plugin.get_secret(f"nonexistent-{uuid.uuid4().hex}")
 
         assert result is None
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_set_secret_creates_new(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_set_secret_creates_new(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test set_secret creates a new secret."""
         secret_key = f"new-secret-{uuid.uuid4().hex[:8]}"
         secret_value = f"new-value-{uuid.uuid4().hex}"
@@ -155,9 +149,7 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
         assert result == secret_value
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_set_secret_updates_existing(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_set_secret_updates_existing(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test set_secret updates an existing secret."""
         secret_key = f"update-secret-{uuid.uuid4().hex[:8]}"
         original_value = "original-value"
@@ -174,9 +166,7 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
         assert result == updated_value
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_list_secrets_returns_all(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_list_secrets_returns_all(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test list_secrets returns all secrets at path."""
         # Create multiple secrets
         secret_keys = [
@@ -196,9 +186,7 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
             assert key in result
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_list_secrets_filters_by_prefix(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_list_secrets_filters_by_prefix(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test list_secrets filters by prefix."""
         # Create secrets with different prefixes
         db_keys = [f"db-{uuid.uuid4().hex[:8]}" for _ in range(2)]
@@ -215,9 +203,7 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
         assert not any(k.startswith("api-") for k in result)
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_health_check_returns_healthy(
-        self, plugin: "InfisicalSecretsPlugin"
-    ) -> None:
+    def test_health_check_returns_healthy(self, plugin: InfisicalSecretsPlugin) -> None:
         """Test health_check returns healthy when connected."""
         status = plugin.health_check()
 
@@ -254,10 +240,18 @@ class TestInfisicalSecretsPathOrganization(IntegrationTestBase):
         return f"/floe-test-{uuid.uuid4().hex[:8]}"
 
     @pytest.fixture
-    def plugin_with_path(
-        self, base_path: str
-    ) -> Generator["InfisicalSecretsPlugin", None, None]:
-        """Create plugin with specific secret_path."""
+    def plugin_with_path(self, base_path: str) -> Generator[InfisicalSecretsPlugin, None, None]:
+        """Create plugin with specific secret_path.
+
+        Raises:
+            pytest.fail: If credentials are not available.
+        """
+        if not _infisical_credentials_available():
+            pytest.fail(
+                "Infisical credentials not available. "
+                "Set INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, INFISICAL_PROJECT_ID"
+            )
+
         from floe_secrets_infisical.config import InfisicalSecretsConfig
         from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
 
@@ -277,7 +271,7 @@ class TestInfisicalSecretsPathOrganization(IntegrationTestBase):
 
     @pytest.mark.requirement("7A-FR-024")
     def test_secrets_isolated_by_path(
-        self, plugin_with_path: "InfisicalSecretsPlugin", base_path: str
+        self, plugin_with_path: InfisicalSecretsPlugin, base_path: str
     ) -> None:
         """Test secrets at different paths are isolated."""
         from floe_secrets_infisical.config import InfisicalSecretsConfig
@@ -316,6 +310,12 @@ class TestInfisicalSecretsEnvironmentIsolation(IntegrationTestBase):
     @pytest.mark.requirement("7A-FR-020")
     def test_different_environments_isolated(self) -> None:
         """Test secrets in different environments are isolated."""
+        if not _infisical_credentials_available():
+            pytest.fail(
+                "Infisical credentials not available. "
+                "Set INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET, INFISICAL_PROJECT_ID"
+            )
+
         from floe_secrets_infisical.config import InfisicalSecretsConfig
         from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
 

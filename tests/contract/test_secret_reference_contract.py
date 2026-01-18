@@ -12,6 +12,8 @@ Requirements: 7A-FR-010 (Secret Reference Handling)
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from floe_core.schemas.secrets import SecretReference, SecretSource
 from pydantic import ValidationError
@@ -215,6 +217,50 @@ class TestSecretReferenceSourceBehavior:
             assert ref.to_env_var_syntax() == expected
 
 
+class TestSecretReferenceJsonSerialization:
+    """Contract tests for JSON serialization/deserialization stability."""
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_json_roundtrip_is_lossless(self) -> None:
+        """Contract: JSON serialization/deserialization is lossless.
+
+        SecretReferences must survive roundtrip through JSON without data loss.
+        This is critical for CompiledArtifacts serialization.
+        """
+        original = SecretReference(
+            source=SecretSource.VAULT,
+            name="db-creds",
+            key="password",
+        )
+
+        json_str = original.model_dump_json()
+        restored = SecretReference.model_validate_json(json_str)
+
+        assert restored == original
+        assert restored.source == original.source
+        assert restored.name == original.name
+        assert restored.key == original.key
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_json_roundtrip_all_sources(self) -> None:
+        """Contract: All source types survive JSON roundtrip."""
+        for source in SecretSource:
+            original = SecretReference(source=source, name="test-secret")
+            json_str = original.model_dump_json()
+            restored = SecretReference.model_validate_json(json_str)
+            assert restored == original
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_json_roundtrip_minimal(self) -> None:
+        """Contract: Minimal SecretReference survives JSON roundtrip."""
+        original = SecretReference(name="minimal")
+        json_str = original.model_dump_json()
+        restored = SecretReference.model_validate_json(json_str)
+
+        assert restored == original
+        assert restored.source == SecretSource.KUBERNETES  # Default preserved
+
+
 class TestSecretReferenceJsonSchema:
     """Contract tests for JSON Schema export stability."""
 
@@ -251,3 +297,68 @@ class TestSecretReferenceJsonSchema:
             assert has_pattern, "Name property missing pattern constraint"
         else:
             assert "pattern" in name_schema, "Name property missing pattern constraint"
+
+
+class TestSecretReferenceGoldenArtifacts:
+    """Contract tests for backwards compatibility with golden artifact fixtures.
+
+    These tests ensure that previously-serialized SecretReference instances
+    can still be deserialized correctly, guaranteeing backwards compatibility.
+    """
+
+    FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_v1_minimal_fixture_loads(self) -> None:
+        """Contract: v1 minimal fixture (name only) still loads correctly."""
+        fixture_path = self.FIXTURES_DIR / "v1_secret_reference_minimal.json"
+        json_data = fixture_path.read_text()
+
+        ref = SecretReference.model_validate_json(json_data)
+
+        assert ref.name == "simple-secret"
+        assert ref.source == SecretSource.KUBERNETES  # Default
+        assert ref.key is None
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_v1_kubernetes_fixture_loads(self) -> None:
+        """Contract: v1 kubernetes fixture with key still loads correctly."""
+        fixture_path = self.FIXTURES_DIR / "v1_secret_reference_kubernetes.json"
+        json_data = fixture_path.read_text()
+
+        ref = SecretReference.model_validate_json(json_data)
+
+        assert ref.name == "db-creds"
+        assert ref.source == SecretSource.KUBERNETES
+        assert ref.key == "password"
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_v1_vault_fixture_loads(self) -> None:
+        """Contract: v1 vault fixture (no key) still loads correctly."""
+        fixture_path = self.FIXTURES_DIR / "v1_secret_reference_vault.json"
+        json_data = fixture_path.read_text()
+
+        ref = SecretReference.model_validate_json(json_data)
+
+        assert ref.name == "api-key"
+        assert ref.source == SecretSource.VAULT
+        assert ref.key is None
+
+    @pytest.mark.requirement("7A-FR-010")
+    def test_all_v1_fixtures_produce_valid_env_var_syntax(self) -> None:
+        """Contract: All v1 fixtures produce valid env_var syntax."""
+        fixture_files = [
+            "v1_secret_reference_minimal.json",
+            "v1_secret_reference_kubernetes.json",
+            "v1_secret_reference_vault.json",
+        ]
+
+        for filename in fixture_files:
+            fixture_path = self.FIXTURES_DIR / filename
+            json_data = fixture_path.read_text()
+            ref = SecretReference.model_validate_json(json_data)
+
+            # Should produce valid dbt env_var syntax
+            env_var = ref.to_env_var_syntax()
+            assert env_var.startswith("{{ env_var('FLOE_SECRET_")
+            assert env_var.endswith("') }}")

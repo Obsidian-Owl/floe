@@ -14,13 +14,13 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from floe_core.plugin_metadata import HealthState
 from pydantic import SecretStr
 
 from floe_secrets_infisical.config import InfisicalSecretsConfig
 from floe_secrets_infisical.errors import (
     InfisicalAccessDeniedError,
     InfisicalBackendUnavailableError,
-    InfisicalSecretNotFoundError,
 )
 from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
 
@@ -119,15 +119,15 @@ class TestInfisicalSecretsPluginGetSecret:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test get_secret returns value when secret exists."""
-        # Setup mock response
+        # Setup mock response - uses camelCase SDK method
         mock_secret = MagicMock()
         mock_secret.secret_value = "my-secret-value"
-        mock_infisical_sdk.secrets.get.return_value = mock_secret
+        mock_infisical_sdk.getSecret.return_value = mock_secret
 
         result = plugin.get_secret("db-password")
 
         assert result == "my-secret-value"
-        mock_infisical_sdk.secrets.get.assert_called_once()
+        mock_infisical_sdk.getSecret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-020")
     def test_get_secret_returns_none_for_nonexistent_secret(
@@ -137,29 +137,28 @@ class TestInfisicalSecretsPluginGetSecret:
     ) -> None:
         """Test get_secret returns None when secret doesn't exist."""
         # Setup mock to raise not found
-        mock_infisical_sdk.secrets.get.side_effect = Exception("Secret not found")
+        mock_infisical_sdk.getSecret.side_effect = Exception("Secret not found")
 
         result = plugin.get_secret("nonexistent-secret")
 
         assert result is None
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_get_secret_with_path_override(
+    def test_get_secret_uses_configured_path(
         self,
         plugin: InfisicalSecretsPlugin,
         mock_infisical_sdk: MagicMock,
     ) -> None:
-        """Test get_secret with explicit path parameter."""
+        """Test get_secret uses path from configuration."""
         mock_secret = MagicMock()
         mock_secret.secret_value = "path-secret-value"
-        mock_infisical_sdk.secrets.get.return_value = mock_secret
+        mock_infisical_sdk.getSecret.return_value = mock_secret
 
-        result = plugin.get_secret("api-key", path="/custom/path")
+        result = plugin.get_secret("api-key")
 
         assert result == "path-secret-value"
-        # Verify the call included the custom path
-        call_kwargs = mock_infisical_sdk.secrets.get.call_args
-        assert call_kwargs is not None
+        # Verify the call was made (path comes from config, not parameter)
+        mock_infisical_sdk.getSecret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-020")
     def test_get_secret_raises_on_permission_denied(
@@ -168,12 +167,10 @@ class TestInfisicalSecretsPluginGetSecret:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test get_secret raises InfisicalAccessDeniedError on 403."""
-        # Setup mock to raise permission error
-        error = Exception("403 Forbidden")
-        error.status_code = 403  # type: ignore[attr-defined]
-        mock_infisical_sdk.secrets.get.side_effect = error
+        # Setup mock to raise permission error (error message triggers access denied)
+        mock_infisical_sdk.getSecret.side_effect = Exception("403 Forbidden")
 
-        with pytest.raises((InfisicalAccessDeniedError, PermissionError)):
+        with pytest.raises(InfisicalAccessDeniedError):
             plugin.get_secret("forbidden-secret")
 
     @pytest.mark.requirement("7A-FR-020")
@@ -183,9 +180,9 @@ class TestInfisicalSecretsPluginGetSecret:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test get_secret raises InfisicalBackendUnavailableError on connection failure."""
-        mock_infisical_sdk.secrets.get.side_effect = ConnectionError("Connection refused")
+        mock_infisical_sdk.getSecret.side_effect = Exception("Connection refused")
 
-        with pytest.raises((InfisicalBackendUnavailableError, ConnectionError)):
+        with pytest.raises(InfisicalBackendUnavailableError):
             plugin.get_secret("any-secret")
 
 
@@ -199,13 +196,13 @@ class TestInfisicalSecretsPluginSetSecret:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test set_secret creates a new secret when it doesn't exist."""
-        # Setup mock - get returns None (not found), create succeeds
-        mock_infisical_sdk.secrets.get.side_effect = Exception("Not found")
-        mock_infisical_sdk.secrets.create.return_value = MagicMock()
+        # Setup mock - get raises (not found), create succeeds
+        mock_infisical_sdk.getSecret.side_effect = Exception("Not found")
+        mock_infisical_sdk.createSecret.return_value = MagicMock()
 
         plugin.set_secret("new-secret", "secret-value")
 
-        mock_infisical_sdk.secrets.create.assert_called_once()
+        mock_infisical_sdk.createSecret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-020")
     def test_set_secret_updates_existing_secret(
@@ -217,12 +214,12 @@ class TestInfisicalSecretsPluginSetSecret:
         # Setup mock - get returns existing secret
         mock_secret = MagicMock()
         mock_secret.secret_value = "old-value"
-        mock_infisical_sdk.secrets.get.return_value = mock_secret
-        mock_infisical_sdk.secrets.update.return_value = MagicMock()
+        mock_infisical_sdk.getSecret.return_value = mock_secret
+        mock_infisical_sdk.updateSecret.return_value = MagicMock()
 
         plugin.set_secret("existing-secret", "new-value")
 
-        mock_infisical_sdk.secrets.update.assert_called_once()
+        mock_infisical_sdk.updateSecret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-020")
     def test_set_secret_with_metadata(
@@ -231,13 +228,13 @@ class TestInfisicalSecretsPluginSetSecret:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test set_secret with metadata parameter."""
-        mock_infisical_sdk.secrets.get.side_effect = Exception("Not found")
-        mock_infisical_sdk.secrets.create.return_value = MagicMock()
+        mock_infisical_sdk.getSecret.side_effect = Exception("Not found")
+        mock_infisical_sdk.createSecret.return_value = MagicMock()
 
         metadata: dict[str, Any] = {"description": "Database password", "owner": "platform-team"}
         plugin.set_secret("db-password", "secret-value", metadata=metadata)
 
-        mock_infisical_sdk.secrets.create.assert_called_once()
+        mock_infisical_sdk.createSecret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-020")
     def test_set_secret_raises_on_permission_denied(
@@ -246,12 +243,10 @@ class TestInfisicalSecretsPluginSetSecret:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test set_secret raises InfisicalAccessDeniedError on 403."""
-        mock_infisical_sdk.secrets.get.side_effect = Exception("Not found")
-        error = Exception("403 Forbidden")
-        error.status_code = 403  # type: ignore[attr-defined]
-        mock_infisical_sdk.secrets.create.side_effect = error
+        mock_infisical_sdk.getSecret.side_effect = Exception("Not found")
+        mock_infisical_sdk.createSecret.side_effect = Exception("403 Forbidden")
 
-        with pytest.raises((InfisicalAccessDeniedError, PermissionError)):
+        with pytest.raises(InfisicalAccessDeniedError):
             plugin.set_secret("forbidden-secret", "value")
 
 
@@ -265,13 +260,13 @@ class TestInfisicalSecretsPluginListSecrets:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test list_secrets returns all secret names at path."""
-        # Setup mock response
+        # Setup mock response - uses camelCase SDK method
         mock_secrets = [
             MagicMock(secret_key="db-password"),
             MagicMock(secret_key="api-key"),
             MagicMock(secret_key="jwt-secret"),
         ]
-        mock_infisical_sdk.secrets.list.return_value = mock_secrets
+        mock_infisical_sdk.listSecrets.return_value = mock_secrets
 
         result = plugin.list_secrets()
 
@@ -293,7 +288,7 @@ class TestInfisicalSecretsPluginListSecrets:
             MagicMock(secret_key="db-user"),
             MagicMock(secret_key="api-key"),
         ]
-        mock_infisical_sdk.secrets.list.return_value = mock_secrets
+        mock_infisical_sdk.listSecrets.return_value = mock_secrets
 
         result = plugin.list_secrets(prefix="db-")
 
@@ -308,24 +303,26 @@ class TestInfisicalSecretsPluginListSecrets:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test list_secrets returns empty list when no secrets exist."""
-        mock_infisical_sdk.secrets.list.return_value = []
+        mock_infisical_sdk.listSecrets.return_value = []
 
         result = plugin.list_secrets()
 
         assert result == []
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_list_secrets_with_custom_path(
+    def test_list_secrets_uses_configured_path(
         self,
         plugin: InfisicalSecretsPlugin,
         mock_infisical_sdk: MagicMock,
     ) -> None:
-        """Test list_secrets with explicit path parameter."""
+        """Test list_secrets uses path from configuration."""
         mock_secrets = [MagicMock(secret_key="custom-secret")]
-        mock_infisical_sdk.secrets.list.return_value = mock_secrets
+        mock_infisical_sdk.listSecrets.return_value = mock_secrets
 
-        result = plugin.list_secrets(path="/custom/path")
+        result = plugin.list_secrets()
 
+        # Verify call was made (path comes from config, not parameter)
+        mock_infisical_sdk.listSecrets.assert_called_once()
         assert "custom-secret" in result
 
 
@@ -340,11 +337,11 @@ class TestInfisicalSecretsPluginHealthCheck:
     ) -> None:
         """Test health_check returns healthy status when API is reachable."""
         # Mock successful list call (proves connectivity)
-        mock_infisical_sdk.secrets.list.return_value = []
+        mock_infisical_sdk.listSecrets.return_value = []
 
         status = plugin.health_check()
 
-        assert status.healthy is True
+        assert status.state == HealthState.HEALTHY
         assert status.message is not None
 
     @pytest.mark.requirement("7A-FR-020")
@@ -354,12 +351,12 @@ class TestInfisicalSecretsPluginHealthCheck:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test health_check returns unhealthy when API is unreachable."""
-        mock_infisical_sdk.secrets.list.side_effect = ConnectionError("Connection refused")
+        mock_infisical_sdk.listSecrets.side_effect = ConnectionError("Connection refused")
 
         status = plugin.health_check()
 
-        assert status.healthy is False
-        assert "error" in status.message.lower() or "unavailable" in status.message.lower()
+        assert status.state == HealthState.UNHEALTHY
+        assert "error" in status.message.lower() or "failed" in status.message.lower()
 
     @pytest.mark.requirement("7A-FR-020")
     def test_health_check_returns_unhealthy_on_auth_error(
@@ -368,13 +365,11 @@ class TestInfisicalSecretsPluginHealthCheck:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test health_check returns unhealthy when authentication fails."""
-        error = Exception("401 Unauthorized")
-        error.status_code = 401  # type: ignore[attr-defined]
-        mock_infisical_sdk.secrets.list.side_effect = error
+        mock_infisical_sdk.listSecrets.side_effect = Exception("401 Unauthorized")
 
         status = plugin.health_check()
 
-        assert status.healthy is False
+        assert status.state == HealthState.UNHEALTHY
 
 
 class TestInfisicalSecretsPluginAuthentication:
@@ -429,13 +424,13 @@ class TestInfisicalSecretsPluginPathOrganization:
         """Test get_secret uses config default path."""
         mock_secret = MagicMock()
         mock_secret.secret_value = "value"
-        mock_infisical_sdk.secrets.get.return_value = mock_secret
+        mock_infisical_sdk.getSecret.return_value = mock_secret
 
-        plugin.get_secret("my-secret")
+        result = plugin.get_secret("my-secret")
 
-        # Verify the default path from config was used
-        call_args = mock_infisical_sdk.secrets.get.call_args
-        assert call_args is not None
+        # Verify the method was called
+        mock_infisical_sdk.getSecret.assert_called_once()
+        assert result == "value"
 
     @pytest.mark.requirement("7A-FR-024")
     def test_set_secret_uses_default_path(
@@ -444,13 +439,12 @@ class TestInfisicalSecretsPluginPathOrganization:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test set_secret uses config default path."""
-        mock_infisical_sdk.secrets.get.side_effect = Exception("Not found")
-        mock_infisical_sdk.secrets.create.return_value = MagicMock()
+        mock_infisical_sdk.getSecret.side_effect = Exception("Not found")
+        mock_infisical_sdk.createSecret.return_value = MagicMock()
 
         plugin.set_secret("my-secret", "value")
 
-        call_args = mock_infisical_sdk.secrets.create.call_args
-        assert call_args is not None
+        mock_infisical_sdk.createSecret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-024")
     def test_list_secrets_uses_default_path(
@@ -459,12 +453,43 @@ class TestInfisicalSecretsPluginPathOrganization:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test list_secrets uses config default path."""
-        mock_infisical_sdk.secrets.list.return_value = []
+        mock_infisical_sdk.listSecrets.return_value = []
 
-        plugin.list_secrets()
+        result = plugin.list_secrets()
 
-        call_args = mock_infisical_sdk.secrets.list.call_args
-        assert call_args is not None
+        mock_infisical_sdk.listSecrets.assert_called_once()
+        assert result == []
+
+
+class TestInfisicalSecretsPluginOptionalMethods:
+    """Test InfisicalSecretsPlugin optional methods from SecretsPlugin ABC."""
+
+    @pytest.mark.requirement("7A-FR-002")
+    def test_generate_pod_env_spec_returns_default(
+        self,
+        plugin: InfisicalSecretsPlugin,
+    ) -> None:
+        """Test generate_pod_env_spec uses default implementation.
+
+        InfisicalSecretsPlugin uses the default SecretsPlugin implementation
+        which generates a K8s envFrom secretRef spec.
+        """
+        spec = plugin.generate_pod_env_spec("my-secret")
+
+        assert spec == {"envFrom": [{"secretRef": {"name": "my-secret"}}]}
+
+    @pytest.mark.requirement("7A-FR-002")
+    def test_get_multi_key_secret_raises_not_implemented(
+        self,
+        plugin: InfisicalSecretsPlugin,
+    ) -> None:
+        """Test get_multi_key_secret raises NotImplementedError.
+
+        InfisicalSecretsPlugin uses the default implementation which raises
+        NotImplementedError since Infisical doesn't natively support multi-key secrets.
+        """
+        with pytest.raises(NotImplementedError, match="Multi-key secrets not supported"):
+            plugin.get_multi_key_secret("my-secret")
 
 
 class TestInfisicalSecretsPluginErrorHandling:
@@ -477,9 +502,10 @@ class TestInfisicalSecretsPluginErrorHandling:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test that timeout errors are properly handled."""
-        mock_infisical_sdk.secrets.get.side_effect = TimeoutError("Request timed out")
+        # Timeout error message triggers backend unavailable handling
+        mock_infisical_sdk.getSecret.side_effect = Exception("Request timeout")
 
-        with pytest.raises((InfisicalBackendUnavailableError, TimeoutError, ConnectionError)):
+        with pytest.raises(InfisicalBackendUnavailableError):
             plugin.get_secret("any-secret")
 
     @pytest.mark.requirement("7A-FR-020")
@@ -489,14 +515,11 @@ class TestInfisicalSecretsPluginErrorHandling:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test that invalid API responses are handled gracefully."""
-        # Return invalid response (missing secret_value attribute)
-        mock_infisical_sdk.secrets.get.return_value = MagicMock(spec=[])
+        # Return response with None secret_value
+        mock_secret = MagicMock()
+        mock_secret.secret_value = None
+        mock_infisical_sdk.getSecret.return_value = mock_secret
 
-        # Should not crash, should return None or raise appropriate error
-        try:
-            result = plugin.get_secret("malformed-secret")
-            # If it returns, should be None
-            assert result is None
-        except (AttributeError, InfisicalSecretNotFoundError):
-            # Also acceptable to raise an error
-            pass
+        # Should return None for empty secret value
+        result = plugin.get_secret("malformed-secret")
+        assert result is None

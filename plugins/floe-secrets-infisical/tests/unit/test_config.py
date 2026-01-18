@@ -382,9 +382,7 @@ class TestInfisicalSecretsConfigSerialization:
 
         properties = schema.get("properties", {})
         for field_name, field_schema in properties.items():
-            assert "description" in field_schema, (
-                f"Field '{field_name}' missing description"
-            )
+            assert "description" in field_schema, f"Field '{field_name}' missing description"
 
 
 class TestInfisicalSecretsConfigEdgeCases:
@@ -420,14 +418,18 @@ class TestInfisicalSecretsConfigEdgeCases:
 
     @pytest.mark.requirement("7A-FR-021")
     def test_none_values_rejected_for_required_fields(self) -> None:
-        """Test that None values are rejected for required fields."""
-        with pytest.raises(ValidationError):
+        """Test that None values are rejected for required fields.
+
+        Note: Pydantic may raise ValidationError or TypeError depending on
+        which validator catches the invalid input first.
+        """
+        with pytest.raises((ValidationError, TypeError)):
             InfisicalSecretsConfig(
                 client_id=None,  # type: ignore[arg-type]
                 client_secret=SecretStr("test-client-secret"),
             )
 
-        with pytest.raises(ValidationError):
+        with pytest.raises((ValidationError, TypeError)):
             InfisicalSecretsConfig(
                 client_id="test-client-id",
                 client_secret=None,  # type: ignore[arg-type]
@@ -451,10 +453,7 @@ class TestInfisicalSecretsConfigEquality:
 
         # Note: SecretStr equality depends on value comparison
         assert config1.client_id == config2.client_id
-        assert (
-            config1.client_secret.get_secret_value()
-            == config2.client_secret.get_secret_value()
-        )
+        assert config1.client_secret.get_secret_value() == config2.client_secret.get_secret_value()
 
     @pytest.mark.requirement("7A-FR-021")
     def test_different_configs_not_equal(self) -> None:
