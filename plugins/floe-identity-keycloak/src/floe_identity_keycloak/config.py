@@ -137,9 +137,12 @@ class KeycloakIdentityConfig(BaseModel):
     def validate_server_url(cls, v: str) -> str:
         """Validate server URL format and protocol.
 
-        SECURITY: Uses proper URL parsing to prevent bypass attacks.
-        Substring matching (e.g., 'localhost in v') is vulnerable to
-        attacks like 'http://localhost.attacker.com'.
+        SECURITY NOTES:
+            - HTTP is ONLY allowed for localhost/loopback addresses (127.0.0.1, ::1)
+            - This is intentional for local development and testing environments
+            - Production deployments MUST use HTTPS URLs which are enforced by this validator
+            - Uses proper URL parsing to prevent bypass attacks (not substring matching)
+            - The localhost exception is safe because loopback traffic never leaves the host
 
         Args:
             v: The server URL to validate.
@@ -153,7 +156,9 @@ class KeycloakIdentityConfig(BaseModel):
         # Strip trailing slashes
         v = v.rstrip("/")
 
-        # Check for HTTPS requirement (allow HTTP only for localhost)
+        # SECURITY: HTTP is only allowed for localhost addresses.
+        # This is safe because loopback traffic never leaves the host.
+        # Production deployments must use HTTPS.
         if v.startswith("http://"):
             # SECURITY: Parse URL to extract actual hostname
             # Never use substring matching - vulnerable to bypass

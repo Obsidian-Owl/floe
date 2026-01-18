@@ -230,6 +230,64 @@ SECRET_VALUE_PATTERNS = frozenset(
 )
 
 
+def _check_string_for_secret_pattern(
+    value: str,
+    path: str,
+    patterns: frozenset[str],
+) -> str | None:
+    """Check if a string value matches any secret pattern.
+
+    Args:
+        value: String value to check.
+        path: JSON path to the value (for error messages).
+        patterns: Set of patterns to check against.
+
+    Returns:
+        Warning message if pattern matched, None otherwise.
+    """
+    # Skip env_var() references - these are expected
+    if "env_var(" in value:
+        return None
+
+    for pattern in patterns:
+        if value.startswith(pattern):
+            return (
+                f"Potential secret at '{path}': "
+                f"value starts with suspicious pattern '{pattern}...'"
+            )
+    return None
+
+
+def _collect_secret_warnings(
+    value: Any,
+    path: str,
+    patterns: frozenset[str],
+    warnings_list: list[str],
+) -> None:
+    """Recursively collect warnings for secret-like values.
+
+    Args:
+        value: Value to check (can be str, dict, list, or other).
+        path: JSON path to the value.
+        patterns: Set of patterns to check against.
+        warnings_list: List to append warnings to (mutated in place).
+    """
+    if isinstance(value, str):
+        warning = _check_string_for_secret_pattern(value, path, patterns)
+        if warning:
+            warnings_list.append(warning)
+        return
+
+    if isinstance(value, dict):
+        for k, v in value.items():
+            _collect_secret_warnings(v, f"{path}.{k}", patterns, warnings_list)
+        return
+
+    if isinstance(value, list):
+        for i, item in enumerate(value):
+            _collect_secret_warnings(item, f"{path}[{i}]", patterns, warnings_list)
+
+
 def validate_no_secrets_in_artifacts(
     artifacts_dict: dict[str, Any],
     *,
@@ -265,39 +323,16 @@ def validate_no_secrets_in_artifacts(
         - SC-004: Zero secrets in floe compile output
         - T040: Validation implementation
     """
+    if not check_patterns:
+        return []
+
     warnings_list: list[str] = []
     patterns = SECRET_VALUE_PATTERNS
     if additional_patterns:
         patterns = patterns | additional_patterns
 
-    def check_value(value: Any, path: str) -> None:
-        """Recursively check a value for secret patterns."""
-        if isinstance(value, str):
-            # Skip env_var() references - these are expected
-            if "env_var(" in value:
-                return
-
-            # Check for suspicious patterns
-            if check_patterns:
-                for pattern in patterns:
-                    if value.startswith(pattern):
-                        warnings_list.append(
-                            f"Potential secret at '{path}': "
-                            f"value starts with suspicious pattern '{pattern}...'"
-                        )
-                        break
-
-        elif isinstance(value, dict):
-            for k, v in value.items():
-                check_value(v, f"{path}.{k}")
-
-        elif isinstance(value, list):
-            for i, item in enumerate(value):
-                check_value(item, f"{path}[{i}]")
-
-    # Start checking from root
     for key, value in artifacts_dict.items():
-        check_value(value, key)
+        _collect_secret_warnings(value, key, patterns, warnings_list)
 
     return warnings_list
 

@@ -47,6 +47,15 @@ if TYPE_CHECKING:
 # Tracer name for Keycloak plugin
 _TRACER_NAME = "floe.identity.keycloak"
 
+# Error messages (avoid S1192 duplicate string literals)
+_NOT_STARTED_ERROR = "Plugin not started. Call startup() first."
+
+# OpenTelemetry span attribute names
+_SPAN_REALM = "keycloak.realm"
+_SPAN_CLIENT_ID = "keycloak.client_id"
+_SPAN_AUTH_SUCCESS = "keycloak.auth.success"
+_SPAN_TOKEN_VALID = "keycloak.token.valid"
+
 
 def _get_tracer() -> Tracer | None:
     """Get OpenTelemetry tracer if available.
@@ -203,7 +212,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             RuntimeError: If plugin not started.
         """
         if not self._started or not self._client:
-            raise RuntimeError("Plugin not started. Call startup() first.")
+            raise RuntimeError(_NOT_STARTED_ERROR)
 
         # Determine grant type
         if "username" in credentials and "password" in credentials:
@@ -237,21 +246,21 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             "keycloak.authenticate",
             kind=SpanKind.CLIENT,
         ) as span:
-            span.set_attribute("keycloak.realm", self._config.realm)
-            span.set_attribute("keycloak.client_id", self._config.client_id)
+            span.set_attribute(_SPAN_REALM, self._config.realm)
+            span.set_attribute(_SPAN_CLIENT_ID, self._config.client_id)
             span.set_attribute("keycloak.grant_type", grant_type)
 
             try:
                 result = self._do_authenticate(data)
                 if result is not None:
-                    span.set_attribute("keycloak.auth.success", True)
+                    span.set_attribute(_SPAN_AUTH_SUCCESS, True)
                     span.set_status(Status(StatusCode.OK))
                 else:
-                    span.set_attribute("keycloak.auth.success", False)
+                    span.set_attribute(_SPAN_AUTH_SUCCESS, False)
                     span.set_status(Status(StatusCode.ERROR, "Authentication failed"))
                 return result
             except Exception as e:
-                span.set_attribute("keycloak.auth.success", False)
+                span.set_attribute(_SPAN_AUTH_SUCCESS, False)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
                 raise
@@ -296,7 +305,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             RuntimeError: If plugin not started.
         """
         if not self._started or not self._client:
-            raise RuntimeError("Plugin not started. Call startup() first.")
+            raise RuntimeError(_NOT_STARTED_ERROR)
 
         try:
             response = self._client.get(
@@ -338,7 +347,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             RuntimeError: If plugin not started.
         """
         if not self._started or not self._token_validator:
-            raise RuntimeError("Plugin not started. Call startup() first.")
+            raise RuntimeError(_NOT_STARTED_ERROR)
 
         tracer = _get_tracer()
         if tracer is None:
@@ -350,12 +359,12 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             "keycloak.validate_token",
             kind=SpanKind.CLIENT,
         ) as span:
-            span.set_attribute("keycloak.realm", self._config.realm)
-            span.set_attribute("keycloak.client_id", self._config.client_id)
+            span.set_attribute(_SPAN_REALM, self._config.realm)
+            span.set_attribute(_SPAN_CLIENT_ID, self._config.client_id)
 
             try:
                 result = self._validate_and_convert(token, self._token_validator)
-                span.set_attribute("keycloak.token.valid", result.valid)
+                span.set_attribute(_SPAN_TOKEN_VALID, result.valid)
                 if result.valid:
                     span.set_status(Status(StatusCode.OK))
                     if result.user_info:
@@ -364,7 +373,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                     span.set_status(Status(StatusCode.ERROR, result.error or "Invalid token"))
                 return result
             except Exception as e:
-                span.set_attribute("keycloak.token.valid", False)
+                span.set_attribute(_SPAN_TOKEN_VALID, False)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
                 raise
@@ -454,7 +463,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             ...     print(f"User: {result.user_info.subject}")
         """
         if not self._started:
-            raise RuntimeError("Plugin not started. Call startup() first.")
+            raise RuntimeError(_NOT_STARTED_ERROR)
 
         # Use cached validator or create new one
         validator = self._get_or_create_realm_validator(realm)
@@ -468,13 +477,13 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             "keycloak.validate_token_for_realm",
             kind=SpanKind.CLIENT,
         ) as span:
-            span.set_attribute("keycloak.realm", realm)
-            span.set_attribute("keycloak.client_id", self._config.client_id)
+            span.set_attribute(_SPAN_REALM, realm)
+            span.set_attribute(_SPAN_CLIENT_ID, self._config.client_id)
             span.set_attribute("keycloak.multi_tenant", True)
 
             try:
                 result = self._validate_and_convert(token, validator)
-                span.set_attribute("keycloak.token.valid", result.valid)
+                span.set_attribute(_SPAN_TOKEN_VALID, result.valid)
                 if result.valid:
                     span.set_status(Status(StatusCode.OK))
                     if result.user_info:
@@ -483,7 +492,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                     span.set_status(Status(StatusCode.ERROR, result.error or "Invalid token"))
                 return result
             except Exception as e:
-                span.set_attribute("keycloak.token.valid", False)
+                span.set_attribute(_SPAN_TOKEN_VALID, False)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
                 span.record_exception(e)
                 raise
@@ -524,7 +533,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             ... )
         """
         if not self._started or not self._client:
-            raise RuntimeError("Plugin not started. Call startup() first.")
+            raise RuntimeError(_NOT_STARTED_ERROR)
 
         effective_client_id = client_id or self._config.client_id
         effective_client_secret = (
@@ -607,6 +616,24 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         self._realm_validators[realm] = validator
         return validator
 
+    def _extract_roles_from_access_dict(
+        self, access_dict: Any, roles: list[str]
+    ) -> None:
+        """Extract roles from an access dictionary (realm_access or resource dict).
+
+        Args:
+            access_dict: Dictionary containing a 'roles' key.
+            roles: List to append extracted roles to (mutated in place).
+        """
+        if not isinstance(access_dict, dict):
+            return
+        roles_list = access_dict.get("roles")
+        if not isinstance(roles_list, list):
+            return
+        for role in roles_list:
+            if isinstance(role, str):
+                roles.append(role)
+
     def _extract_roles(self, data: dict[str, Any]) -> list[str]:
         """Extract roles from userinfo or token claims.
 
@@ -619,23 +646,12 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         roles: list[str] = []
 
         # Realm roles
-        realm_access = data.get("realm_access")
-        if isinstance(realm_access, dict):
-            realm_roles = realm_access.get("roles")
-            if isinstance(realm_roles, list):
-                for role in realm_roles:
-                    if isinstance(role, str):
-                        roles.append(role)
+        self._extract_roles_from_access_dict(data.get("realm_access"), roles)
 
-        # Client roles
+        # Client roles from resource_access
         resource_access = data.get("resource_access")
         if isinstance(resource_access, dict):
             for resource in resource_access.values():
-                if isinstance(resource, dict):
-                    resource_roles = resource.get("roles")
-                    if isinstance(resource_roles, list):
-                        for role in resource_roles:
-                            if isinstance(role, str):
-                                roles.append(role)
+                self._extract_roles_from_access_dict(resource, roles)
 
         return roles

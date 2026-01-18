@@ -141,7 +141,12 @@ class TokenValidator:
             )
 
         try:
-            # Get the key ID and algorithm from token header
+            # SECURITY: get_unverified_header() is safe here.
+            # We ONLY extract `kid` and `alg` to:
+            #   1. Select the correct key from JWKS for signature verification
+            #   2. Validate algorithm against whitelist before decoding
+            # The actual signature verification happens below in jwt.decode()
+            # with verify_signature=True (enforced, never disabled).
             try:
                 header = jwt.get_unverified_header(token)
                 kid = header.get("kid")
@@ -300,6 +305,24 @@ class TokenValidator:
         # Convert JWK to PEM for PyJWT
         return RSAAlgorithm.from_jwk(jwk)
 
+    def _collect_roles_from_access_dict(
+        self, access_dict: Any, roles: list[str]
+    ) -> None:
+        """Extract roles from an access dictionary and append to list.
+
+        Args:
+            access_dict: Dictionary containing a 'roles' key.
+            roles: List to append extracted roles to (mutated in place).
+        """
+        if not isinstance(access_dict, dict):
+            return
+        roles_list = access_dict.get("roles")
+        if not isinstance(roles_list, list):
+            return
+        for role in roles_list:
+            if isinstance(role, str):
+                roles.append(role)
+
     def _extract_user_info(self, claims: dict[str, Any]) -> UserInfo:
         """Extract user information from JWT claims.
 
@@ -313,24 +336,13 @@ class TokenValidator:
         roles: list[str] = []
 
         # Realm roles
-        realm_access_raw = claims.get("realm_access")
-        if isinstance(realm_access_raw, dict):
-            realm_roles_raw = realm_access_raw.get("roles")
-            if isinstance(realm_roles_raw, list):
-                for role in realm_roles_raw:
-                    if isinstance(role, str):
-                        roles.append(role)
+        self._collect_roles_from_access_dict(claims.get("realm_access"), roles)
 
         # Client/resource roles
         resource_access_raw = claims.get("resource_access")
         if isinstance(resource_access_raw, dict):
             for resource_raw in resource_access_raw.values():
-                if isinstance(resource_raw, dict):
-                    resource_roles_raw = resource_raw.get("roles")
-                    if isinstance(resource_roles_raw, list):
-                        for role in resource_roles_raw:
-                            if isinstance(role, str):
-                                roles.append(role)
+                self._collect_roles_from_access_dict(resource_raw, roles)
 
         return UserInfo(
             user_id=claims["sub"],

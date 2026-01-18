@@ -19,14 +19,11 @@ Example:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 
 from floe_core.schemas.audit import AuditEvent, AuditOperation, AuditResult
-
-if TYPE_CHECKING:
-    pass
 
 # Try to import OpenTelemetry for trace context
 _otel_available = False

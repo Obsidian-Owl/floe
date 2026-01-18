@@ -336,16 +336,9 @@ class K8sSecretsPlugin(SecretsPlugin):
                 existing.data[secret_key] = encoded_value
 
                 # Merge labels and annotations
-                if existing.metadata.labels:
-                    existing.metadata.labels.update(labels)
-                else:
-                    existing.metadata.labels = labels
-
-                if annotations:
-                    if existing.metadata.annotations:
-                        existing.metadata.annotations.update(annotations)
-                    else:
-                        existing.metadata.annotations = annotations
+                self._merge_labels_and_annotations(
+                    existing.metadata, labels, annotations
+                )
 
                 self._api.replace_namespaced_secret(
                     name=secret_name,
@@ -627,6 +620,30 @@ class K8sSecretsPlugin(SecretsPlugin):
             parts = key.split("/", 1)
             return parts[0], parts[1]
         return key, "value"
+
+    def _merge_labels_and_annotations(
+        self,
+        existing_metadata: Any,
+        labels: dict[str, str],
+        annotations: dict[str, str],
+    ) -> None:
+        """Merge labels and annotations into existing secret metadata.
+
+        Args:
+            existing_metadata: V1ObjectMeta from existing secret.
+            labels: Labels to merge.
+            annotations: Annotations to merge.
+        """
+        if existing_metadata.labels:
+            existing_metadata.labels.update(labels)
+        else:
+            existing_metadata.labels = labels
+
+        if annotations:
+            if existing_metadata.annotations:
+                existing_metadata.annotations.update(annotations)
+            else:
+                existing_metadata.annotations = annotations
 
 
 __all__ = ["K8sSecretsPlugin"]
