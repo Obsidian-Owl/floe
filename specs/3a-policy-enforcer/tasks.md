@@ -112,7 +112,7 @@
 
 - [ ] T034 [P] [US3] Unit test for medallion pattern regex in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
 - [ ] T035 [P] [US3] Unit test for kimball pattern regex in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
-- [ ] T036 [P] [US3] Unit test for custom pattern validation in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
+- [ ] T036 [P] [US3] Unit test for custom pattern validation (including conditional: custom_patterns required when pattern=custom) in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
 - [ ] T037 [P] [US3] Unit test for ReDoS protection in custom patterns in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
 - [ ] T038 [P] [US3] Unit test for NamingValidator.validate() method in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
 - [ ] T039 [P] [US3] Unit test for remediation suggestions in `packages/floe-core/tests/unit/enforcement/test_naming_validator.py`
@@ -272,6 +272,8 @@
 - [ ] T091 Performance validation: <5s for 500 dbt models benchmark
 - [ ] T092 [P] Run quickstart.md validation - verify examples work
 - [ ] T093 Verify OTel span naming follows conventions
+- [ ] T094 [P] [US1] Unit test for bypass prevention: verify strict mode cannot be overridden by env vars, CLI flags, or floe.yaml in `packages/floe-core/tests/unit/enforcement/test_bypass_prevention.py`
+- [ ] T095 [P] [US4] Unit test for zero-column edge case: verify models with 0 columns use configured behavior (100% or N/A) in `packages/floe-core/tests/unit/enforcement/test_coverage_validator.py`
 
 ---
 
@@ -333,8 +335,8 @@ US2 (Foundational) ────────────────────�
 | 7 | US1 (Pipeline) | 6 | P1 |
 | 8 | US7 (Dry-Run) | 6 | P3 |
 | 9 | US6 (Audit) | 5 | P3 |
-| 10 | Polish | 6 | - |
-| **Total** | | **93** | |
+| 10 | Polish | 8 | - |
+| **Total** | | **95** | |
 
 ---
 

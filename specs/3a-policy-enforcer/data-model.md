@@ -135,6 +135,7 @@
 | require_column_descriptions | `bool` | False | Require column descriptions | - |
 | block_on_failure | `bool` | True | Block compile on violation | - |
 | layer_thresholds | `LayerThresholds \| None` | None | Per-layer coverage thresholds | - |
+| zero_column_coverage_behavior | `Literal["report_100_percent", "report_na"]` | "report_na" | Zero-column handling | - |
 
 **Strength Ordering** (for inheritance):
 - minimum_test_coverage: higher is stricter (numeric comparison)
@@ -181,7 +182,7 @@
 
 ### Violation (New)
 
-**Location**: `packages/floe-core/src/floe_core/enforcement/violation.py`
+**Location**: `packages/floe-core/src/floe_core/enforcement/result.py`
 **Type**: Pydantic BaseModel
 
 | Field | Type | Description | Example |

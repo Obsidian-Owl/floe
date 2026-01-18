@@ -193,7 +193,7 @@ Platform operators can test policies before enforcing them using `floe compile -
 
 - **SC-001**: Platform operators can define governance policies in manifest.yaml and have them enforced at compile time within 5 seconds for projects with up to 500 dbt models.
 
-- **SC-002**: Policy violations produce actionable error messages that enable data engineers to remediate issues without additional documentation lookup in 90% of cases.
+- **SC-002**: Policy violations produce actionable error messages with error code, expected/actual values, remediation suggestion, and documentation link.
 
 - **SC-003**: 3-tier policy inheritance correctly prevents weakening in 100% of test cases (enterprise → domain → product strengthening only).
 

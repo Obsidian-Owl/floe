@@ -226,6 +226,8 @@ tests/contract/
 
 **Tests**: Integration tests with real compilation pipeline
 
+> **Note**: `--dry-run` is a CLI flag passed to the compilation pipeline. PolicyEnforcer remains stateless - it receives a `dry_run: bool` parameter and adjusts result severity accordingly.
+
 ### Phase 7: Audit Logging (P3 - User Story 6)
 
 **Goal**: Add compliance audit logging

@@ -98,6 +98,12 @@
         "layer_thresholds": {
           "$ref": "#/$defs/LayerThresholds",
           "description": "Per-layer coverage thresholds (overrides minimum_test_coverage)"
+        },
+        "zero_column_coverage_behavior": {
+          "type": "string",
+          "enum": ["report_100_percent", "report_na"],
+          "default": "report_na",
+          "description": "How to handle models with zero columns: 100% coverage or N/A"
         }
       },
       "additionalProperties": false
