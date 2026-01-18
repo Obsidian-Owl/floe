@@ -12,6 +12,7 @@ Implements:
 from __future__ import annotations
 
 import base64
+import sys
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, Mock, patch
 
@@ -26,6 +27,23 @@ from floe_secrets_k8s.plugin import K8sSecretsPlugin
 
 if TYPE_CHECKING:
     from floe_core.plugin_metadata import HealthState
+
+
+# Create mock kubernetes modules for testing without the actual library
+@pytest.fixture
+def mock_kubernetes_modules() -> MagicMock:
+    """Mock the kubernetes module for import-time patching."""
+    mock_client = MagicMock()
+    mock_config = MagicMock()
+
+    # Set up ConfigException as a proper exception class
+    mock_config.ConfigException = type("ConfigException", (Exception,), {})
+
+    mock_kubernetes = MagicMock()
+    mock_kubernetes.client = mock_client
+    mock_kubernetes.config = mock_config
+
+    return mock_kubernetes
 
 
 class TestK8sSecretsPluginMetadata:
@@ -66,52 +84,52 @@ class TestK8sSecretsPluginLifecycle:
     """Test plugin lifecycle methods."""
 
     @pytest.mark.requirement("7A-FR-013")
-    @patch("floe_secrets_k8s.plugin.k8s_config")
-    @patch("floe_secrets_k8s.plugin.client")
     def test_startup_with_kubeconfig(
-        self, mock_client: MagicMock, mock_k8s_config: MagicMock
+        self, mock_kubernetes_modules: MagicMock
     ) -> None:
         """Test startup loads kubeconfig when path provided."""
         config = K8sSecretsConfig(kubeconfig_path="/path/to/kubeconfig")
         plugin = K8sSecretsPlugin(config)
 
-        plugin.startup()
+        # Patch sys.modules before startup imports kubernetes
+        with patch.dict(sys.modules, {"kubernetes": mock_kubernetes_modules}):
+            plugin.startup()
 
-        mock_k8s_config.load_kube_config.assert_called_once()
+        mock_kubernetes_modules.config.load_kube_config.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-013")
-    @patch("floe_secrets_k8s.plugin.k8s_config")
-    @patch("floe_secrets_k8s.plugin.client")
     def test_startup_in_cluster(
-        self, mock_client: MagicMock, mock_k8s_config: MagicMock
+        self, mock_kubernetes_modules: MagicMock
     ) -> None:
         """Test startup uses in-cluster config when no kubeconfig path."""
         plugin = K8sSecretsPlugin()
 
         # Simulate successful in-cluster config
-        mock_k8s_config.load_incluster_config.return_value = None
+        mock_kubernetes_modules.config.load_incluster_config.return_value = None
 
-        plugin.startup()
+        # Patch sys.modules before startup imports kubernetes
+        with patch.dict(sys.modules, {"kubernetes": mock_kubernetes_modules}):
+            plugin.startup()
 
-        mock_k8s_config.load_incluster_config.assert_called_once()
+        mock_kubernetes_modules.config.load_incluster_config.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-013")
-    @patch("floe_secrets_k8s.plugin.k8s_config")
-    @patch("floe_secrets_k8s.plugin.client")
     def test_startup_fallback_to_default_kubeconfig(
-        self, mock_client: MagicMock, mock_k8s_config: MagicMock
+        self, mock_kubernetes_modules: MagicMock
     ) -> None:
         """Test startup falls back to default kubeconfig when in-cluster fails."""
         plugin = K8sSecretsPlugin()
 
         # Simulate in-cluster config failure
-        mock_k8s_config.load_incluster_config.side_effect = (
-            mock_k8s_config.ConfigException("Not in cluster")
+        mock_kubernetes_modules.config.load_incluster_config.side_effect = (
+            mock_kubernetes_modules.config.ConfigException("Not in cluster")
         )
 
-        plugin.startup()
+        # Patch sys.modules before startup imports kubernetes
+        with patch.dict(sys.modules, {"kubernetes": mock_kubernetes_modules}):
+            plugin.startup()
 
-        mock_k8s_config.load_kube_config.assert_called_once()
+        mock_kubernetes_modules.config.load_kube_config.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-010")
     def test_shutdown_clears_client(self) -> None:
@@ -173,14 +191,19 @@ class TestK8sSecretsPluginGetSecret:
     """Test get_secret method."""
 
     @pytest.fixture
-    def initialized_plugin(self) -> K8sSecretsPlugin:
+    def mock_api_exception(self) -> type[Exception]:
+        """Create a reusable ApiException class for mocking."""
+        return type("ApiException", (Exception,), {"status": 404})
+
+    @pytest.fixture
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
         plugin._client.rest = Mock()
-        plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {"status": 404}
-        )
+        plugin._client.rest.ApiException = mock_api_exception
         plugin._api = Mock()
         return plugin
 
@@ -219,15 +242,14 @@ class TestK8sSecretsPluginGetSecret:
 
     @pytest.mark.requirement("CR-004")
     def test_get_secret_returns_none_for_missing(
-        self, initialized_plugin: K8sSecretsPlugin
+        self,
+        initialized_plugin: K8sSecretsPlugin,
+        mock_api_exception: type[Exception],
     ) -> None:
         """Test get_secret returns None for non-existent secret."""
-        # Create a proper ApiException
-        api_exception = type("ApiException", (Exception,), {})()
+        # Create an instance of the registered ApiException class
+        api_exception = mock_api_exception()
         api_exception.status = 404
-        initialized_plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {}
-        )
         initialized_plugin._api.read_namespaced_secret.side_effect = api_exception
 
         result = initialized_plugin.get_secret("nonexistent")
@@ -249,14 +271,13 @@ class TestK8sSecretsPluginGetSecret:
 
     @pytest.mark.requirement("7A-FR-060")
     def test_get_secret_raises_on_permission_denied(
-        self, initialized_plugin: K8sSecretsPlugin
+        self,
+        initialized_plugin: K8sSecretsPlugin,
+        mock_api_exception: type[Exception],
     ) -> None:
         """Test get_secret raises SecretAccessDeniedError on 403."""
-        api_exception = type("ApiException", (Exception,), {})()
+        api_exception = mock_api_exception()
         api_exception.status = 403
-        initialized_plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {}
-        )
         initialized_plugin._api.read_namespaced_secret.side_effect = api_exception
 
         with pytest.raises(SecretAccessDeniedError):
@@ -264,14 +285,13 @@ class TestK8sSecretsPluginGetSecret:
 
     @pytest.mark.requirement("7A-FR-061")
     def test_get_secret_raises_on_api_error(
-        self, initialized_plugin: K8sSecretsPlugin
+        self,
+        initialized_plugin: K8sSecretsPlugin,
+        mock_api_exception: type[Exception],
     ) -> None:
         """Test get_secret raises SecretBackendUnavailableError on API error."""
-        api_exception = type("ApiException", (Exception,), {})()
+        api_exception = mock_api_exception()
         api_exception.status = 500
-        initialized_plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {}
-        )
         initialized_plugin._api.read_namespaced_secret.side_effect = api_exception
 
         with pytest.raises(SecretBackendUnavailableError):
@@ -282,14 +302,19 @@ class TestK8sSecretsPluginSetSecret:
     """Test set_secret method."""
 
     @pytest.fixture
-    def initialized_plugin(self) -> K8sSecretsPlugin:
+    def mock_api_exception(self) -> type[Exception]:
+        """Create a reusable ApiException class for mocking."""
+        return type("ApiException", (Exception,), {"status": 404})
+
+    @pytest.fixture
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
         plugin._client.rest = Mock()
-        plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {"status": 404}
-        )
+        plugin._client.rest.ApiException = mock_api_exception
         plugin._client.V1Secret = Mock()
         plugin._client.V1ObjectMeta = Mock()
         plugin._api = Mock()
@@ -297,15 +322,14 @@ class TestK8sSecretsPluginSetSecret:
 
     @pytest.mark.requirement("7A-FR-010")
     def test_set_secret_creates_new(
-        self, initialized_plugin: K8sSecretsPlugin
+        self,
+        initialized_plugin: K8sSecretsPlugin,
+        mock_api_exception: type[Exception],
     ) -> None:
         """Test set_secret creates new secret when it doesn't exist."""
         # Simulate secret not found
-        api_exception = type("ApiException", (Exception,), {})()
+        api_exception = mock_api_exception()
         api_exception.status = 404
-        initialized_plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {}
-        )
         initialized_plugin._api.read_namespaced_secret.side_effect = api_exception
 
         initialized_plugin.set_secret("new-secret", "secret-value")
@@ -330,15 +354,14 @@ class TestK8sSecretsPluginSetSecret:
 
     @pytest.mark.requirement("7A-FR-010")
     def test_set_secret_with_key_format(
-        self, initialized_plugin: K8sSecretsPlugin
+        self,
+        initialized_plugin: K8sSecretsPlugin,
+        mock_api_exception: type[Exception],
     ) -> None:
         """Test set_secret with 'secret-name/key' format."""
         # Simulate secret not found
-        api_exception = type("ApiException", (Exception,), {})()
+        api_exception = mock_api_exception()
         api_exception.status = 404
-        initialized_plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {}
-        )
         initialized_plugin._api.read_namespaced_secret.side_effect = api_exception
 
         initialized_plugin.set_secret("db-creds/password", "secret123")
@@ -352,14 +375,19 @@ class TestK8sSecretsPluginListSecrets:
     """Test list_secrets method."""
 
     @pytest.fixture
-    def initialized_plugin(self) -> K8sSecretsPlugin:
+    def mock_api_exception(self) -> type[Exception]:
+        """Create a reusable ApiException class for mocking."""
+        return type("ApiException", (Exception,), {"status": 404})
+
+    @pytest.fixture
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
         plugin._client.rest = Mock()
-        plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {"status": 404}
-        )
+        plugin._client.rest.ApiException = mock_api_exception
         plugin._api = Mock()
         return plugin
 
@@ -435,14 +463,19 @@ class TestK8sSecretsPluginGetMultiKeySecret:
     """Test get_multi_key_secret method."""
 
     @pytest.fixture
-    def initialized_plugin(self) -> K8sSecretsPlugin:
+    def mock_api_exception(self) -> type[Exception]:
+        """Create a reusable ApiException class for mocking."""
+        return type("ApiException", (Exception,), {"status": 404})
+
+    @pytest.fixture
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
         plugin._client.rest = Mock()
-        plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {"status": 404}
-        )
+        plugin._client.rest.ApiException = mock_api_exception
         plugin._api = Mock()
         return plugin
 
@@ -469,14 +502,13 @@ class TestK8sSecretsPluginGetMultiKeySecret:
 
     @pytest.mark.requirement("CR-004")
     def test_get_multi_key_secret_returns_empty_for_missing(
-        self, initialized_plugin: K8sSecretsPlugin
+        self,
+        initialized_plugin: K8sSecretsPlugin,
+        mock_api_exception: type[Exception],
     ) -> None:
         """Test get_multi_key_secret returns empty dict for missing secret."""
-        api_exception = type("ApiException", (Exception,), {})()
+        api_exception = mock_api_exception()
         api_exception.status = 404
-        initialized_plugin._client.rest.ApiException = type(
-            "ApiException", (Exception,), {}
-        )
         initialized_plugin._api.read_namespaced_secret.side_effect = api_exception
 
         result = initialized_plugin.get_multi_key_secret("nonexistent")

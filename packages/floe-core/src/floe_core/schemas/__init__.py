@@ -40,6 +40,13 @@ See Also:
 
 from __future__ import annotations
 
+# Audit models (T078)
+from floe_core.schemas.audit import (
+    AuditEvent,
+    AuditOperation,
+    AuditResult,
+)
+
 # CompiledArtifacts models (T076)
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
@@ -117,6 +124,10 @@ from floe_core.schemas.validation import (
 )
 
 __all__: list[str] = [
+    # Audit (Phase 7, Epic 7A)
+    "AuditEvent",
+    "AuditOperation",
+    "AuditResult",
     # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",

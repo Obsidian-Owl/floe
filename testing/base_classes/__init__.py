@@ -52,12 +52,16 @@ from __future__ import annotations
 from testing.base_classes.adapter_test_base import AdapterTestBase
 from testing.base_classes.base_catalog_plugin_tests import BaseCatalogPluginTests
 from testing.base_classes.base_identity_plugin_tests import BaseIdentityPluginTests
-from testing.base_classes.base_secrets_plugin_tests import BaseSecretsPluginTests
+from testing.base_classes.base_secrets_plugin_tests import (
+    AuditLogCapture,
+    BaseSecretsPluginTests,
+)
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.base_classes.plugin_test_base import PluginTestBase
 
 __all__ = [
     "AdapterTestBase",
+    "AuditLogCapture",
     "BaseCatalogPluginTests",
     "BaseIdentityPluginTests",
     "BaseSecretsPluginTests",

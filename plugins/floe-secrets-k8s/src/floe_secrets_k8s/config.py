@@ -16,7 +16,6 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -70,55 +69,40 @@ class K8sSecretsConfig(BaseModel):
         },
     )
 
-    namespace: Annotated[
-        str,
-        Field(
-            default="floe-jobs",
-            min_length=1,
-            max_length=63,
-            pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
-            description="Kubernetes namespace for secrets",
-            examples=["floe-jobs", "production", "staging"],
-        ),
-    ]
+    namespace: str = Field(
+        default="floe-jobs",
+        min_length=1,
+        max_length=63,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
+        description="Kubernetes namespace for secrets",
+        examples=["floe-jobs", "production", "staging"],
+    )
 
-    kubeconfig_path: Annotated[
-        str | None,
-        Field(
-            default=None,
-            description="Path to kubeconfig file. None uses in-cluster config.",
-            examples=["~/.kube/config", "/etc/kubernetes/admin.conf"],
-        ),
-    ]
+    kubeconfig_path: str | None = Field(
+        default=None,
+        description="Path to kubeconfig file. None uses in-cluster config.",
+        examples=["~/.kube/config", "/etc/kubernetes/admin.conf"],
+    )
 
-    context: Annotated[
-        str | None,
-        Field(
-            default=None,
-            description="Kubeconfig context to use. None uses current context.",
-            examples=["minikube", "prod-cluster", "kind-floe"],
-        ),
-    ]
+    context: str | None = Field(
+        default=None,
+        description="Kubeconfig context to use. None uses current context.",
+        examples=["minikube", "prod-cluster", "kind-floe"],
+    )
 
-    labels: Annotated[
-        dict[str, str],
-        Field(
-            default_factory=lambda: {"managed-by": "floe"},
-            description="Labels to apply to created secrets",
-            examples=[{"managed-by": "floe", "environment": "dev"}],
-        ),
-    ]
+    labels: dict[str, str] = Field(
+        default_factory=lambda: {"managed-by": "floe"},
+        description="Labels to apply to created secrets",
+        examples=[{"managed-by": "floe", "environment": "dev"}],
+    )
 
-    secret_prefix: Annotated[
-        str,
-        Field(
-            default="floe-",
-            min_length=0,
-            max_length=50,
-            description="Prefix for secret names managed by this plugin",
-            examples=["floe-", "app-secrets-"],
-        ),
-    ]
+    secret_prefix: str = Field(
+        default="floe-",
+        min_length=0,
+        max_length=50,
+        description="Prefix for secret names managed by this plugin",
+        examples=["floe-", "app-secrets-"],
+    )
 
     @field_validator("kubeconfig_path")
     @classmethod

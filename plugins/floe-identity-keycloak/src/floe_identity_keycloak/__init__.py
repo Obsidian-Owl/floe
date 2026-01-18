@@ -16,14 +16,23 @@ Example:
 
 from __future__ import annotations
 
+from typing import Any
+
 __version__ = "0.1.0"
 __all__ = [
+    # Plugin and config
     "KeycloakIdentityPlugin",
     "KeycloakIdentityConfig",
+    # Exceptions
+    "KeycloakPluginError",
+    "KeycloakConfigError",
+    "KeycloakAuthError",
+    "KeycloakTokenError",
+    "KeycloakUnavailableError",
 ]
 
 # Lazy imports to avoid circular dependencies and improve startup time
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazy import of plugin components."""
     if name == "KeycloakIdentityPlugin":
         from floe_identity_keycloak.plugin import KeycloakIdentityPlugin
@@ -31,5 +40,14 @@ def __getattr__(name: str):
     if name == "KeycloakIdentityConfig":
         from floe_identity_keycloak.config import KeycloakIdentityConfig
         return KeycloakIdentityConfig
+    if name in (
+        "KeycloakPluginError",
+        "KeycloakConfigError",
+        "KeycloakAuthError",
+        "KeycloakTokenError",
+        "KeycloakUnavailableError",
+    ):
+        from floe_identity_keycloak import errors
+        return getattr(errors, name)
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

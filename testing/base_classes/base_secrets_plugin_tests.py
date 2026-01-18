@@ -34,10 +34,14 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import json
+import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from io import StringIO
+from typing import TYPE_CHECKING, Any
 
 import pytest
+import structlog
 
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
@@ -285,6 +289,234 @@ class BaseSecretsPluginTests(ABC):
             assert isinstance(schema, type)
             assert issubclass(schema, BaseModel)
 
+    # =========================================================================
+    # Audit Logging Tests (FR-060, SC-008)
+    # =========================================================================
+
+    @pytest.fixture
+    def audit_log_capture(self) -> AuditLogCapture:
+        """Capture audit log events for testing.
+
+        Returns:
+            AuditLogCapture helper for capturing and asserting on audit logs.
+        """
+        return AuditLogCapture()
+
+    @pytest.mark.requirement("FR-060")
+    def test_get_secret_emits_audit_log(
+        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+    ) -> None:
+        """Verify get_secret() emits audit log with required fields.
+
+        Audit logs must contain: timestamp, requester_id, secret_path,
+        operation, result, plugin_type, audit_event marker.
+        """
+        with audit_log_capture.capture():
+            secrets_plugin.get_secret(f"nonexistent-{test_secret_key}")
+
+        events = audit_log_capture.get_audit_events()
+        assert len(events) >= 1, "Expected at least one audit event"
+
+        event = events[-1]  # Most recent event
+        self._assert_audit_event_has_required_fields(event)
+        assert event.get("operation") == "get"
+        assert event.get("result") == "success"
+
+    @pytest.mark.requirement("FR-060")
+    def test_set_secret_emits_audit_log(
+        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+    ) -> None:
+        """Verify set_secret() emits audit log with required fields."""
+        with audit_log_capture.capture():
+            secrets_plugin.set_secret(f"audit-test-{test_secret_key}", "test-value")
+
+        events = audit_log_capture.get_audit_events()
+        assert len(events) >= 1, "Expected at least one audit event"
+
+        event = events[-1]
+        self._assert_audit_event_has_required_fields(event)
+        assert event.get("operation") == "set"
+        assert event.get("result") == "success"
+
+    @pytest.mark.requirement("FR-060")
+    def test_list_secrets_emits_audit_log(
+        self, secrets_plugin: SecretsPlugin, audit_log_capture: AuditLogCapture
+    ) -> None:
+        """Verify list_secrets() emits audit log with required fields."""
+        with audit_log_capture.capture():
+            secrets_plugin.list_secrets()
+
+        events = audit_log_capture.get_audit_events()
+        assert len(events) >= 1, "Expected at least one audit event"
+
+        event = events[-1]
+        self._assert_audit_event_has_required_fields(event)
+        assert event.get("operation") == "list"
+        assert event.get("result") == "success"
+
+    @pytest.mark.requirement("SC-008")
+    def test_audit_event_contains_timestamp(
+        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+    ) -> None:
+        """Verify audit events contain valid ISO8601 timestamp."""
+        from datetime import datetime
+
+        with audit_log_capture.capture():
+            secrets_plugin.get_secret(f"timestamp-test-{test_secret_key}")
+
+        events = audit_log_capture.get_audit_events()
+        assert len(events) >= 1
+
+        event = events[-1]
+        timestamp = event.get("timestamp")
+        assert timestamp is not None, "Audit event must contain timestamp"
+
+        # Verify timestamp is valid ISO8601
+        try:
+            datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError:
+            pytest.fail(f"Timestamp '{timestamp}' is not valid ISO8601")
+
+    @pytest.mark.requirement("FR-060")
+    def test_audit_event_contains_plugin_type(
+        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+    ) -> None:
+        """Verify audit events contain plugin_type matching plugin name."""
+        with audit_log_capture.capture():
+            secrets_plugin.get_secret(f"plugin-type-test-{test_secret_key}")
+
+        events = audit_log_capture.get_audit_events()
+        assert len(events) >= 1
+
+        event = events[-1]
+        plugin_type = event.get("plugin_type")
+        assert plugin_type is not None, "Audit event must contain plugin_type"
+        assert plugin_type == secrets_plugin.name
+
+    def _assert_audit_event_has_required_fields(self, event: dict[str, Any]) -> None:
+        """Assert that audit event contains all required fields.
+
+        Args:
+            event: The audit event dictionary to validate.
+        """
+        required_fields = ["timestamp", "requester_id", "secret_path", "operation", "result"]
+
+        for field in required_fields:
+            assert field in event, f"Audit event missing required field: {field}"
+
+        # Verify audit_event marker
+        assert event.get("audit_event") is True, "Audit event must have audit_event=true"
+
+
+class AuditLogCapture:
+    """Helper class to capture and parse audit log events.
+
+    Captures structlog output from the "floe.audit" logger and parses
+    JSON log entries for assertion.
+
+    Example:
+        >>> capture = AuditLogCapture()
+        >>> with capture.capture():
+        ...     plugin.get_secret("my-key")
+        >>> events = capture.get_audit_events()
+        >>> assert events[0]["operation"] == "get"
+    """
+
+    def __init__(self) -> None:
+        """Initialize the capture helper."""
+        self._stream = StringIO()
+        self._handler: logging.Handler | None = None
+        self._previous_processors: list[Any] | None = None
+
+    def capture(self) -> "AuditLogCapture":
+        """Context manager for capturing audit logs.
+
+        Returns:
+            Self for use in with statement.
+        """
+        return self
+
+    def __enter__(self) -> "AuditLogCapture":
+        """Start capturing audit logs."""
+        self._stream = StringIO()
+
+        # Create a custom handler for the audit logger
+        self._handler = logging.StreamHandler(self._stream)
+        self._handler.setFormatter(logging.Formatter("%(message)s"))
+
+        # Add handler to the audit logger
+        audit_logger = logging.getLogger("floe.audit")
+        audit_logger.addHandler(self._handler)
+        audit_logger.setLevel(logging.DEBUG)
+
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Stop capturing audit logs."""
+        if self._handler:
+            audit_logger = logging.getLogger("floe.audit")
+            audit_logger.removeHandler(self._handler)
+            self._handler = None
+
+    def get_audit_events(self) -> list[dict[str, Any]]:
+        """Parse captured logs and return audit events.
+
+        Returns:
+            List of audit event dictionaries.
+        """
+        events: list[dict[str, Any]] = []
+        content = self._stream.getvalue()
+
+        for line in content.strip().split("\n"):
+            if not line:
+                continue
+
+            # Try to parse as JSON
+            try:
+                event = json.loads(line)
+                if event.get("audit_event") is True:
+                    events.append(event)
+            except json.JSONDecodeError:
+                # Not JSON, try to extract from structlog format
+                if "audit_event" in line:
+                    # Basic extraction for non-JSON structlog output
+                    event = self._parse_structlog_line(line)
+                    if event:
+                        events.append(event)
+
+        return events
+
+    def _parse_structlog_line(self, line: str) -> dict[str, Any] | None:
+        """Parse a structlog line into a dict.
+
+        Handles structlog's default console format.
+
+        Args:
+            line: The log line to parse.
+
+        Returns:
+            Parsed event dict or None if parsing fails.
+        """
+        # For structlog console format like:
+        # 2026-01-18 12:34:56 [info     ] audit_event requester_id=x ...
+        try:
+            # Simple key=value extraction
+            event: dict[str, Any] = {"audit_event": True}
+            parts = line.split()
+
+            for part in parts:
+                if "=" in part:
+                    key, value = part.split("=", 1)
+                    # Try to parse value as JSON
+                    try:
+                        event[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        event[key] = value
+
+            return event if len(event) > 1 else None
+        except Exception:
+            return None
+
 
 # Module exports
-__all__ = ["BaseSecretsPluginTests"]
+__all__ = ["BaseSecretsPluginTests", "AuditLogCapture"]

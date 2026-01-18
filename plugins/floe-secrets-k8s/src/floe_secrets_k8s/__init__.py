@@ -12,6 +12,8 @@ Example:
 
 from __future__ import annotations
 
+from typing import Any
+
 __version__ = "0.1.0"
 __all__ = [
     "K8sSecretsPlugin",
@@ -19,7 +21,7 @@ __all__ = [
 ]
 
 # Lazy imports to avoid circular dependencies and improve startup time
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazy import of plugin components."""
     if name == "K8sSecretsPlugin":
         from floe_secrets_k8s.plugin import K8sSecretsPlugin
