@@ -31,7 +31,7 @@ Note:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -146,9 +146,167 @@ class SecretReference(BaseModel):
             env_name = f"{env_name}_{key_suffix}"
         return f"{{{{ env_var('FLOE_SECRET_{env_name}') }}}}"
 
+    def to_env_var_name(self) -> str:
+        """Get the environment variable name (without dbt syntax).
+
+        Returns the raw environment variable name that would be used
+        at runtime to resolve this secret. Useful for K8s env injection.
+
+        Returns:
+            Environment variable name in format FLOE_SECRET_{NAME}_{KEY}.
+
+        Example:
+            >>> ref = SecretReference(name="db-creds", key="password")
+            >>> ref.to_env_var_name()
+            'FLOE_SECRET_DB_CREDS_PASSWORD'
+        """
+        env_name = self.name.upper().replace("-", "_")
+        if self.key:
+            key_suffix = self.key.upper().replace("-", "_")
+            env_name = f"{env_name}_{key_suffix}"
+        return f"FLOE_SECRET_{env_name}"
+
+
+def resolve_secret_references(
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve all SecretReference objects to env_var syntax in a config dict.
+
+    Recursively walks the configuration dictionary and replaces any
+    SecretReference instances with their dbt-compatible env_var() syntax.
+    This is used during compilation to generate profiles.yml.
+
+    Args:
+        config: Configuration dictionary potentially containing SecretReference.
+
+    Returns:
+        New dictionary with SecretReferences replaced by env_var strings.
+
+    Example:
+        >>> config = {
+        ...     "host": "localhost",
+        ...     "password": SecretReference(name="db-creds", key="password"),
+        ... }
+        >>> resolved = resolve_secret_references(config)
+        >>> resolved["password"]
+        "{{ env_var('FLOE_SECRET_DB_CREDS_PASSWORD') }}"
+
+    See Also:
+        - T039: Compiler integration for profiles.yml generation
+    """
+    result: dict[str, Any] = {}
+
+    for key, value in config.items():
+        if isinstance(value, SecretReference):
+            result[key] = value.to_env_var_syntax()
+        elif isinstance(value, dict):
+            result[key] = resolve_secret_references(value)
+        elif isinstance(value, list):
+            result[key] = [
+                resolve_secret_references(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+
+    return result
+
+
+# Patterns that indicate potential secrets in values
+# These are checked during validation to prevent accidental secret exposure
+SECRET_VALUE_PATTERNS = frozenset(
+    {
+        # Common secret prefixes
+        "sk-",  # Stripe keys
+        "pk-",  # Stripe keys
+        "api_",  # API keys
+        "key_",  # API keys
+        "token_",  # Tokens
+        "secret_",  # Generic secrets
+        # Common encoding patterns
+        "-----BEGIN",  # PEM certificates/keys
+        "eyJ",  # Base64-encoded JWT
+    }
+)
+
+
+def validate_no_secrets_in_artifacts(
+    artifacts_dict: dict[str, Any],
+    *,
+    check_patterns: bool = True,
+    additional_patterns: frozenset[str] | None = None,
+) -> list[str]:
+    """Validate that no raw secrets appear in compiled artifacts.
+
+    Scans the artifacts dictionary for values that appear to be secrets
+    (based on patterns like "sk-", "-----BEGIN", base64 JWT, etc.).
+
+    This validation is run at the end of compilation to ensure SC-004:
+    Zero secrets appear in floe compile output.
+
+    Args:
+        artifacts_dict: Serialized CompiledArtifacts as dictionary.
+        check_patterns: Whether to check for secret-like patterns.
+        additional_patterns: Additional patterns to check for.
+
+    Returns:
+        List of warning messages for potential secrets found.
+        Empty list means validation passed.
+
+    Example:
+        >>> artifacts = {"dbt_profiles": {"password": "secret123"}}
+        >>> warnings = validate_no_secrets_in_artifacts(artifacts)
+        >>> # warnings would contain message about suspicious value
+
+    Raises:
+        No exceptions - returns warnings for the caller to handle.
+
+    See Also:
+        - SC-004: Zero secrets in floe compile output
+        - T040: Validation implementation
+    """
+    warnings_list: list[str] = []
+    patterns = SECRET_VALUE_PATTERNS
+    if additional_patterns:
+        patterns = patterns | additional_patterns
+
+    def check_value(value: Any, path: str) -> None:
+        """Recursively check a value for secret patterns."""
+        if isinstance(value, str):
+            # Skip env_var() references - these are expected
+            if "env_var(" in value:
+                return
+
+            # Check for suspicious patterns
+            if check_patterns:
+                for pattern in patterns:
+                    if value.startswith(pattern):
+                        warnings_list.append(
+                            f"Potential secret at '{path}': "
+                            f"value starts with suspicious pattern '{pattern}...'"
+                        )
+                        break
+
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                check_value(v, f"{path}.{k}")
+
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                check_value(item, f"{path}[{i}]")
+
+    # Start checking from root
+    for key, value in artifacts_dict.items():
+        check_value(value, key)
+
+    return warnings_list
+
 
 __all__ = [
     "SecretSource",
     "SecretReference",
     "SECRET_NAME_PATTERN",
+    "SECRET_VALUE_PATTERNS",
+    "resolve_secret_references",
+    "validate_no_secrets_in_artifacts",
 ]

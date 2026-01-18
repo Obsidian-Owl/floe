@@ -96,11 +96,14 @@ from floe_core.schemas.plugins import (
     validate_plugin_selection,
 )
 
-# Secret models (T005, T008)
+# Secret models (T005, T008, T039, T040)
 from floe_core.schemas.secrets import (
     SECRET_NAME_PATTERN,
+    SECRET_VALUE_PATTERNS,
     SecretReference,
     SecretSource,
+    resolve_secret_references,
+    validate_no_secrets_in_artifacts,
 )
 
 # Validation models (T031, T032, T036)
@@ -132,10 +135,13 @@ __all__: list[str] = [
     "ManifestMetadata",
     "NAME_PATTERN",
     "SEMVER_PATTERN",
-    # Secrets (Phase 2)
+    # Secrets (Phase 2, 7A)
     "SecretSource",
     "SecretReference",
     "SECRET_NAME_PATTERN",
+    "SECRET_VALUE_PATTERNS",
+    "resolve_secret_references",
+    "validate_no_secrets_in_artifacts",
     # Plugins (Phase 3, Phase 5)
     "PluginSelection",
     "PluginsConfig",
