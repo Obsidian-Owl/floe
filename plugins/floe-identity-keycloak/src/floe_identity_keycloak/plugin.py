@@ -616,9 +616,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         self._realm_validators[realm] = validator
         return validator
 
-    def _extract_roles_from_access_dict(
-        self, access_dict: Any, roles: list[str]
-    ) -> None:
+    def _extract_roles_from_access_dict(self, access_dict: Any, roles: list[str]) -> None:
         """Extract roles from an access dictionary (realm_access or resource dict).
 
         Args:

@@ -305,9 +305,7 @@ class TokenValidator:
         # Convert JWK to PEM for PyJWT
         return RSAAlgorithm.from_jwk(jwk)
 
-    def _collect_roles_from_access_dict(
-        self, access_dict: Any, roles: list[str]
-    ) -> None:
+    def _collect_roles_from_access_dict(self, access_dict: Any, roles: list[str]) -> None:
         """Extract roles from an access dictionary and append to list.
 
         Args:

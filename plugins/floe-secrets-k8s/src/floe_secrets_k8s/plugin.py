@@ -336,9 +336,7 @@ class K8sSecretsPlugin(SecretsPlugin):
                 existing.data[secret_key] = encoded_value
 
                 # Merge labels and annotations
-                self._merge_labels_and_annotations(
-                    existing.metadata, labels, annotations
-                )
+                self._merge_labels_and_annotations(existing.metadata, labels, annotations)
 
                 self._api.replace_namespaced_secret(
                     name=secret_name,
