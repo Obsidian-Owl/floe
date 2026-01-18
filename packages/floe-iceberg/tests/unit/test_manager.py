@@ -3190,6 +3190,12 @@ class TestCompactTableBinPack:
             TableSchema,
         )
 
+        # Reset the cached tracer so it picks up the new provider
+        # (the telemetry module caches _tracer on first use)
+        import floe_iceberg.telemetry as telemetry_module
+
+        telemetry_module._tracer = None
+
         # Set up in-memory span exporter for testing
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
