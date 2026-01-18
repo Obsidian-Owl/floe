@@ -109,7 +109,7 @@ class AuditLogger:
         Args:
             logger_name: Name for the structlog logger. Defaults to "floe.audit".
         """
-        self._logger = structlog.get_logger(logger_name)
+        self._logger: structlog.stdlib.BoundLogger = structlog.get_logger(logger_name)
 
     @property
     def logger(self) -> structlog.stdlib.BoundLogger:
