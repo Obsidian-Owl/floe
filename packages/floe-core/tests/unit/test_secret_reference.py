@@ -280,8 +280,8 @@ class TestSecretReferenceEdgeCases:
         ref = SecretReference(name="test", key=None)
         result = ref.to_env_var_syntax()
         assert result == "{{ env_var('FLOE_SECRET_TEST') }}"
-        # Should not have trailing underscore
-        assert "TEST_')" in result
+        # Should not have trailing underscore before closing quote
+        assert "TEST')" in result
 
     @pytest.mark.requirement("7A-FR-010")
     def test_empty_string_key_treated_as_no_key(self) -> None:

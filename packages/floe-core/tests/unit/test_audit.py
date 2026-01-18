@@ -116,7 +116,10 @@ class TestAuditEventModel:
             result=AuditResult.SUCCESS,
         )
 
-        with pytest.raises(TypeError):  # Frozen model raises TypeError on assignment
+        # Pydantic 2.12+ raises ValidationError for frozen models
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="frozen"):
             event.requester_id = "other-user"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-060")
