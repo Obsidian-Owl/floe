@@ -48,8 +48,19 @@ See Also:
 
 from __future__ import annotations
 
-# NOTE: Exports will be populated as modules are implemented in subsequent tasks:
-# - T002: errors.py (AuthenticationError, ArtifactNotFoundError, etc.)
+# Error hierarchy (T002)
+from floe_core.oci.errors import (
+    ArtifactNotFoundError,
+    AuthenticationError,
+    CacheError,
+    CircuitBreakerOpenError,
+    DigestMismatchError,
+    ImmutabilityViolationError,
+    OCIError,
+    RegistryUnavailableError,
+)
+
+# NOTE: Additional exports will be populated as modules are implemented:
 # - T007: auth.py (AuthProvider, BasicAuthProvider, TokenAuthProvider)
 # - T008-T009: resilience.py (RetryPolicy, CircuitBreaker)
 # - T010: cache.py (CacheManager, CacheEntry)
@@ -57,5 +68,14 @@ from __future__ import annotations
 # - T012: client.py (OCIClient)
 # - T016: manifest.py (ArtifactManifest builder)
 
-# Placeholder for __all__ - will be expanded as modules are implemented
-__all__: list[str] = []
+__all__: list[str] = [
+    # Error hierarchy
+    "OCIError",
+    "AuthenticationError",
+    "ArtifactNotFoundError",
+    "ImmutabilityViolationError",
+    "CircuitBreakerOpenError",
+    "RegistryUnavailableError",
+    "DigestMismatchError",
+    "CacheError",
+]
