@@ -9,7 +9,7 @@
 
 This task breakdown implements the Dagster orchestrator plugin following the 7-phase implementation plan. Tasks are organized by phase with dependencies clearly marked.
 
-**Total Tasks**: 25
+**Total Tasks**: 30
 **Estimated Complexity**: Medium (leverages existing plugin patterns from floe-compute-duckdb)
 
 ---
@@ -84,6 +84,8 @@ Implements create_definitions() and create_assets_from_transforms() using dagste
   - Tests: create_definitions with valid artifacts
   - Tests: create_definitions with empty transforms
   - Tests: create_definitions with invalid artifacts
+  - Tests: create_definitions raises ValidationError for circular dependencies (Edge Case)
+  - Tests: create_definitions raises ValidationError for duplicate transform names (Edge Case)
   - SC-002
   - Depends: T006, T009
 
@@ -253,6 +255,15 @@ Integration tests with real Dagster service and cross-package contract tests.
   - Mock TransformConfig fixtures
   - NFR-003
 
+- [ ] **T030** [P2] [Story-2] Add CodSpeed performance benchmarks for NFR-001/NFR-002
+  - File: `benchmarks/test_dagster_plugin_perf.py`
+  - Benchmark: Plugin load time <500ms (NFR-001)
+  - Benchmark: Definition generation <5s for 500 transforms (NFR-002)
+  - Uses `@pytest.mark.benchmark` decorator
+  - Runs via `uv run pytest benchmarks/ --codspeed`
+  - NFR-001, NFR-002
+  - Depends: T002, T006
+
 ---
 
 ## Dependency Graph
@@ -296,6 +307,9 @@ T001 (pyproject.toml)
 
 T028 (root conftest) - independent
 T029 (unit conftest) - independent
+
+T030 (performance benchmarks)
+  └─► Depends: T002, T006
 ```
 
 ---
@@ -305,8 +319,9 @@ T029 (unit conftest) - independent
 | Priority | Count | Description |
 |----------|-------|-------------|
 | P1 | 14 | Core plugin functionality, discovery, definitions, testing infrastructure |
-| P2 | 10 | Resource management, scheduling, lineage, integration tests |
+| P2 | 11 | Resource management, scheduling, lineage, integration tests, benchmarks |
 | P3 | 2 | Connection validation |
+| **Total** | **30** | |
 
 ---
 
@@ -315,7 +330,7 @@ T029 (unit conftest) - independent
 | Story | Tasks | Requirements Covered |
 |-------|-------|---------------------|
 | Story 1 (Platform configures Dagster) | T001-T005, T028, T029 | FR-001 to FR-004 |
-| Story 2 (Generate pipeline definitions) | T006, T009, T010, T026 | FR-005, FR-009 |
+| Story 2 (Generate pipeline definitions) | T006, T009, T010, T026, T030 | FR-005, FR-009, NFR-001, NFR-002 |
 | Story 3 (Create assets from transforms) | T007, T008, T011 | FR-006, FR-007, FR-008 |
 | Story 4 (Deploy Dagster services) | T012-T016, T027 | FR-010, FR-011, FR-012 |
 | Story 5 (Schedule pipeline execution) | T017-T020 | FR-013, FR-014, FR-015 |
@@ -336,3 +351,12 @@ T029 (unit conftest) - independent
 | SC-006: OpenLineage v1.0 compliance | T023 |
 | SC-007: Schedule timezone handling | T020 |
 | SC-008: >80% test coverage | All test tasks |
+
+## Non-Functional Requirements Traceability
+
+| Requirement | Tasks |
+|-------------|-------|
+| NFR-001: Plugin load <500ms | T030 (CodSpeed benchmark) |
+| NFR-002: Definition gen <5s for 500 transforms | T030 (CodSpeed benchmark) |
+| NFR-003: Idempotent validation methods | T029 (test fixtures) |
+| NFR-004: OpenTelemetry spans | T028 (OTEL fixtures) |
