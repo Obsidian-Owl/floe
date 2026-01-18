@@ -48,6 +48,7 @@ class SecretSource(str, Enum):
         KUBERNETES: Kubernetes Secret (default for K8s-native deployments)
         VAULT: HashiCorp Vault secret
         EXTERNAL_SECRETS: External Secrets Operator (ESO)
+        INFISICAL: Infisical secrets manager (recommended OSS per ADR-0031)
 
     Example:
         >>> ref = SecretReference(source=SecretSource.KUBERNETES, name="db-creds")
@@ -59,6 +60,7 @@ class SecretSource(str, Enum):
     KUBERNETES = "kubernetes"
     VAULT = "vault"
     EXTERNAL_SECRETS = "external-secrets"
+    INFISICAL = "infisical"
 
 
 # Pattern for valid secret names (lowercase alphanumeric with hyphens)
