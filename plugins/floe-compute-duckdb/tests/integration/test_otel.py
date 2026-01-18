@@ -27,9 +27,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 
 @pytest.fixture
-def otel_test_providers() -> (
-    Generator[tuple[InMemoryMetricReader, InMemorySpanExporter], None, None]
-):
+def otel_test_providers() -> Generator[
+    tuple[InMemoryMetricReader, InMemorySpanExporter], None, None
+]:
     """Set up OTel providers with InMemory exporters for each test.
 
     This fixture runs AFTER the autouse reset_otel_global_state fixture,

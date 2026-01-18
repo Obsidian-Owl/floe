@@ -338,6 +338,6 @@ class TestJsonSchemaIdeCompatibility:
         for def_name in expected_defs:
             if def_name in defs:
                 def_schema = defs[def_name]
-                assert (
-                    "description" in def_schema or "title" in def_schema
-                ), f"Definition {def_name} should have description or title"
+                assert "description" in def_schema or "title" in def_schema, (
+                    f"Definition {def_name} should have description or title"
+                )

@@ -105,12 +105,12 @@ class TestComputePluginABCContract:
 
         # Check type hints
         hints = get_type_hints(method)
-        assert (
-            hints.get("config") == ComputeConfig
-        ), f"config parameter type changed from ComputeConfig to {hints.get('config')}"
-        assert (
-            hints.get("return") == dict[str, Any]
-        ), f"return type changed from dict[str, Any] to {hints.get('return')}"
+        assert hints.get("config") == ComputeConfig, (
+            f"config parameter type changed from ComputeConfig to {hints.get('config')}"
+        )
+        assert hints.get("return") == dict[str, Any], (
+            f"return type changed from dict[str, Any] to {hints.get('return')}"
+        )
 
     @pytest.mark.requirement("001-FR-003")
     def test_validate_connection_signature(self) -> None:
@@ -133,12 +133,12 @@ class TestComputePluginABCContract:
 
         # Check type hints
         hints = get_type_hints(method)
-        assert (
-            hints.get("config") == ComputeConfig
-        ), f"config parameter type changed from ComputeConfig to {hints.get('config')}"
-        assert (
-            hints.get("return") == ConnectionResult
-        ), f"return type changed from ConnectionResult to {hints.get('return')}"
+        assert hints.get("config") == ComputeConfig, (
+            f"config parameter type changed from ComputeConfig to {hints.get('config')}"
+        )
+        assert hints.get("return") == ConnectionResult, (
+            f"return type changed from ConnectionResult to {hints.get('return')}"
+        )
 
     @pytest.mark.requirement("001-FR-004")
     def test_get_resource_requirements_signature(self) -> None:
@@ -161,12 +161,12 @@ class TestComputePluginABCContract:
 
         # Check type hints
         hints = get_type_hints(method)
-        assert (
-            hints.get("workload_size") is str
-        ), f"workload_size type changed from str to {hints.get('workload_size')}"
-        assert (
-            hints.get("return") == ResourceSpec
-        ), f"return type changed from ResourceSpec to {hints.get('return')}"
+        assert hints.get("workload_size") is str, (
+            f"workload_size type changed from str to {hints.get('workload_size')}"
+        )
+        assert hints.get("return") == ResourceSpec, (
+            f"return type changed from ResourceSpec to {hints.get('return')}"
+        )
 
     @pytest.mark.requirement("001-FR-004a")
     def test_is_self_hosted_property_signature(self) -> None:
@@ -189,9 +189,9 @@ class TestComputePluginABCContract:
         getter = prop.fget
         assert getter is not None, "Property must have a getter"
         hints = get_type_hints(getter)
-        assert (
-            hints.get("return") is bool
-        ), f"return type changed from bool to {hints.get('return')}"
+        assert hints.get("return") is bool, (
+            f"return type changed from bool to {hints.get('return')}"
+        )
 
     @pytest.mark.requirement("001-FR-002")
     def test_get_required_dbt_packages_signature(self) -> None:
@@ -213,9 +213,9 @@ class TestComputePluginABCContract:
 
         # Check type hints
         hints = get_type_hints(method)
-        assert (
-            hints.get("return") == list[str]
-        ), f"return type changed from list[str] to {hints.get('return')}"
+        assert hints.get("return") == list[str], (
+            f"return type changed from list[str] to {hints.get('return')}"
+        )
 
 
 class TestComputePluginOptionalMethods:
@@ -236,9 +236,9 @@ class TestComputePluginOptionalMethods:
         # Verify method exists and is not abstract
         assert hasattr(ComputePlugin, "get_catalog_attachment_sql")
         method = ComputePlugin.get_catalog_attachment_sql
-        assert not getattr(
-            method, "__isabstractmethod__", False
-        ), "get_catalog_attachment_sql should not be abstract"
+        assert not getattr(method, "__isabstractmethod__", False), (
+            "get_catalog_attachment_sql should not be abstract"
+        )
 
         # Check signature
         hints = get_type_hints(method)
@@ -258,9 +258,9 @@ class TestComputePluginOptionalMethods:
         # Verify method exists and is not abstract
         assert hasattr(ComputePlugin, "get_config_schema")
         method = ComputePlugin.get_config_schema
-        assert not getattr(
-            method, "__isabstractmethod__", False
-        ), "get_config_schema should not be abstract"
+        assert not getattr(method, "__isabstractmethod__", False), (
+            "get_config_schema should not be abstract"
+        )
 
 
 class TestComputePluginInheritance:
@@ -277,9 +277,9 @@ class TestComputePluginInheritance:
         """
         from floe_core import ComputePlugin, PluginMetadata
 
-        assert issubclass(
-            ComputePlugin, PluginMetadata
-        ), "ComputePlugin must inherit from PluginMetadata"
+        assert issubclass(ComputePlugin, PluginMetadata), (
+            "ComputePlugin must inherit from PluginMetadata"
+        )
 
     @pytest.mark.requirement("001-FR-001")
     def test_compute_plugin_inherits_lifecycle_methods(self) -> None:

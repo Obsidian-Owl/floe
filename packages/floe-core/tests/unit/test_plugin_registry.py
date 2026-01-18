@@ -165,9 +165,9 @@ class TestPluginRegistryDiscovery:
             # Verify warning was logged for duplicate
             mock_logger.warning.assert_called()
             call_args = mock_logger.warning.call_args_list
-            assert any(
-                "discover_group.duplicate" in str(call) for call in call_args
-            ), "Expected warning log for duplicate plugin"
+            assert any("discover_group.duplicate" in str(call) for call in call_args), (
+                "Expected warning log for duplicate plugin"
+            )
 
     @pytest.mark.requirement("FR-001")
     def test_discover_multiple_plugin_types(

@@ -482,9 +482,9 @@ class TestExceptionHierarchy:
         ]
 
         for exc in exceptions:
-            assert isinstance(
-                exc, IcebergError
-            ), f"{type(exc).__name__} should inherit from IcebergError"
+            assert isinstance(exc, IcebergError), (
+                f"{type(exc).__name__} should inherit from IcebergError"
+            )
 
     @pytest.mark.requirement("FR-001")
     def test_catch_all_with_iceberg_error(self) -> None:
