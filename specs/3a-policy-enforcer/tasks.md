@@ -119,7 +119,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T040 [P] [US3] Define MEDALLION_PATTERN constant in `packages/floe-core/src/floe_core/enforcement/patterns.py`
+- [ ] T040 [P] [US3] Define MEDALLION_PATTERN constant and DOCUMENTATION_URLS base in `packages/floe-core/src/floe_core/enforcement/patterns.py`
 - [ ] T041 [P] [US3] Define KIMBALL_PATTERN constant in `packages/floe-core/src/floe_core/enforcement/patterns.py`
 - [ ] T042 [US3] Implement custom pattern validation with ReDoS protection in `packages/floe-core/src/floe_core/enforcement/patterns.py` (depends on T040, T041)
 - [ ] T043 [US3] Create NamingValidator class in `packages/floe-core/src/floe_core/enforcement/validators/naming.py`

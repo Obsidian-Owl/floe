@@ -281,7 +281,7 @@ tests/contract/
 | Compilation time | <5s for 500 models | Benchmark test |
 | Coverage accuracy | 100% | Compare with dbt-coverage output |
 | Inheritance validation | 100% | Unit tests for strengthening rules |
-| Error message quality | 90% self-service | User feedback survey |
+| Error message quality | All violations include error_code, expected/actual, suggestion, doc_url | Unit test assertions |
 
 ## References
 
