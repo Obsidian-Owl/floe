@@ -128,7 +128,7 @@ from pyspark.sql import SparkSession
 class SparkResource(ConfigurableResource):
     master: str = "local[*]"
     catalog_uri: str
-    
+
     def get_session(self) -> SparkSession:
         return (
             SparkSession.builder
@@ -212,7 +212,7 @@ from dagster import Definitions, EnvVar
 
 def get_compute_resources() -> dict:
     env = os.getenv("DAGSTER_DEPLOYMENT", "local")
-    
+
     if env == "local":
         return {
             "dbt": DbtCliResource(

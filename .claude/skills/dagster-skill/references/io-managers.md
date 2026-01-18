@@ -160,22 +160,22 @@ class CustomIcebergIOManager(IOManager):
             warehouse=warehouse,
         )
         self.namespace = namespace
-    
+
     def handle_output(self, context: OutputContext, obj):
         """Write asset output to Iceberg."""
         table_name = f"{self.namespace}.{context.asset_key.path[-1]}"
-        
+
         # Create or load table
         try:
             table = self.catalog.load_table(table_name)
         except:
             table = self.catalog.create_table(table_name, schema=infer_schema(obj))
-        
+
         # Write via catalog (CRITICAL: never direct to storage)
         table.overwrite(obj)
-        
+
         context.log.info(f"Wrote {len(obj)} rows to {table_name}")
-    
+
     def load_input(self, context: InputContext):
         """Load upstream asset from Iceberg."""
         table_name = f"{self.namespace}.{context.asset_key.path[-1]}"
@@ -191,7 +191,7 @@ from dagster import IOManagerDefinition
 
 def create_io_manager() -> IOManagerDefinition:
     env = os.getenv("DAGSTER_DEPLOYMENT", "local")
-    
+
     if env == "local":
         return PyArrowIcebergIOManager(
             name="local_catalog",
@@ -273,7 +273,7 @@ from dagster import Output, MetadataValue
 @dg.asset
 def table_with_metadata(context) -> Output[pa.Table]:
     data = compute_data()
-    
+
     return Output(
         data,
         metadata={

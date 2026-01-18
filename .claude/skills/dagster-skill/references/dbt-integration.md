@@ -96,32 +96,32 @@ class FloeDbTranslator(DagsterDbtTranslator):
                 enable_source_tests_as_checks=True,
             )
         )
-    
+
     def get_asset_key(self, dbt_resource_props: dict) -> AssetKey:
         """Map dbt model to Dagster asset key."""
         return AssetKey([
             dbt_resource_props.get("schema", "public"),
             dbt_resource_props["name"],
         ])
-    
+
     def get_group_name(self, dbt_resource_props: dict) -> str | None:
         """Group assets by dbt folder."""
         fqn = dbt_resource_props.get("fqn", [])
         return fqn[1] if len(fqn) > 2 else None
-    
+
     def get_description(self, dbt_resource_props: dict) -> str | None:
         return dbt_resource_props.get("description")
-    
+
     def get_metadata(self, dbt_resource_props: dict) -> dict:
         meta = dbt_resource_props.get("meta", {})
         return {
             "classification": meta.get("classification"),
             "owner": meta.get("owner"),
         }
-    
+
     def get_tags(self, dbt_resource_props: dict) -> dict[str, str]:
         return {tag: "" for tag in dbt_resource_props.get("tags", [])}
-    
+
     def get_owners(self, dbt_resource_props: dict) -> list[str]:
         meta = dbt_resource_props.get("meta", {})
         owner = meta.get("owner")

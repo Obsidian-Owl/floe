@@ -396,4 +396,3 @@ floe provides clear plugin interfaces (ABCs) for extension:
 | Secrets | `SecretsPlugin` | Credentials management |
 
 See [04-building-blocks](04-building-blocks.md) for full interface definitions.
-

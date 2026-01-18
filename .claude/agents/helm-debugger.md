@@ -60,7 +60,7 @@ kubectl logs <pod> --tail=20 2>&1 | grep -i "error\|fail"
 kubectl logs -l app=dagster-webserver --tail=20 2>&1 | grep -i "postgres\|connection\|error"
 ```
 
-### floe-cube Chart  
+### floe-cube Chart
 ```bash
 # Common issues: Schema errors, Trino connection
 kubectl logs -l app=cube --tail=20 2>&1 | grep -i "cube\|schema\|trino\|error"

@@ -88,12 +88,10 @@ repos:
         always_run: true
 
       # Hardcoded sleep detection (matches CI check)
-      # Excludes: polling.py, test_polling_example.py, commented lines,
-      # and lines with # Sleep/# Slow/# timeout comments (intentional test fixtures)
       - id: no-hardcoded-sleep
         name: no hardcoded sleep in tests
-        entry: bash -c 'VIOLATIONS=$(grep -rI "time\.sleep(" tests/ testing/ packages/*/tests/ plugins/*/tests/ --include="*.py" 2>/dev/null | grep -v "polling\.py" | grep -v "test_polling_example\.py" | grep -v "# .*time\.sleep" | grep -Ev "^\s*#" | grep -v "\.venv/" | grep -v "#.*Sleep" | grep -v "#.*Slow" | grep -v "#.*timeout" | grep -v "#.*simulate" || true); if [ -n "$VIOLATIONS" ]; then echo "ERROR: Found hardcoded time.sleep() - use polling utilities instead" >&2; echo "$VIOLATIONS" >&2; exit 1; fi'
-        language: system
+        entry: scripts/pre-commit-no-sleep.sh
+        language: script
         stages: [pre-commit]
         pass_filenames: false
         always_run: true

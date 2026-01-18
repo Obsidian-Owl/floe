@@ -328,4 +328,3 @@ The process of checking `floe.yaml` against the schema. Performed by floe-core.
 | `floe-secrets-eso` | External Secrets Operator plugin |
 
 See [04-building-blocks](04-building-blocks.md) for the full plugin architecture.
-

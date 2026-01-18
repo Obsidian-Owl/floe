@@ -151,7 +151,7 @@ from dagster_dbt import DagsterDbtTranslator, DagsterDbtTranslatorSettings
 
 class FloeDbTranslator(DagsterDbtTranslator):
     """Translator for floe-runtime architecture."""
-    
+
     def __init__(self):
         super().__init__(
             settings=DagsterDbtTranslatorSettings(
@@ -159,18 +159,18 @@ class FloeDbTranslator(DagsterDbtTranslator):
                 enable_source_tests_as_checks=True,
             )
         )
-    
+
     def get_asset_key(self, dbt_resource_props: Mapping[str, Any]) -> AssetKey:
         """Map dbt models to Dagster asset keys with namespace."""
         schema = dbt_resource_props.get("schema", "default")
         name = dbt_resource_props["name"]
         return AssetKey([schema, name])
-    
+
     def get_group_name(self, dbt_resource_props: Mapping[str, Any]) -> Optional[str]:
         """Group by dbt folder structure."""
         fqn = dbt_resource_props.get("fqn", [])
         return fqn[1] if len(fqn) > 2 else None
-    
+
     def get_metadata(self, dbt_resource_props: Mapping[str, Any]) -> Mapping[str, Any]:
         """Extract governance metadata from dbt model meta."""
         meta = dbt_resource_props.get("meta", {})
@@ -273,9 +273,9 @@ from dagster import EnvVar
 
 def get_resources_for_env() -> dict:
     env = os.getenv("DAGSTER_DEPLOYMENT", "local")
-    
+
     base_resources = {"dbt": DbtCliResource(project_dir=dbt_project)}
-    
+
     if env == "local":
         return {**base_resources, "io_manager": local_iceberg_io()}
     elif env == "production":
@@ -310,7 +310,7 @@ def get_resources_for_env() -> dict:
 ❌ **Don't** write to Iceberg without going through catalog
 ❌ **Don't** hardcode compute logic (use dbt for SQL transforms)
 ❌ **Don't** mix Dagster partitions with dbt incremental without alignment
-❌ **Don't** use deprecated `load_assets_from_dbt_manifest()` 
+❌ **Don't** use deprecated `load_assets_from_dbt_manifest()`
 ❌ **Don't** bypass `DbtCliResource` for dbt execution
 ❌ **Don't** store credentials in code (use `EnvVar` or `secret_ref`)
 ❌ **Don't** parse SQL in Python (dbt owns SQL)

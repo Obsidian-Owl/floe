@@ -18,7 +18,7 @@ Return: Diagnosis, fix, verification command only
 
 **Command**: Use `Task(docker-log-analyser, "...")`
 
-### Helm/K8s Debugging  
+### Helm/K8s Debugging
 **Trigger**: Any request involving `kubectl logs`, pod failures, Helm deployments, or K8s troubleshooting
 
 **Action**: Spawn `helm-debugger` agent with:

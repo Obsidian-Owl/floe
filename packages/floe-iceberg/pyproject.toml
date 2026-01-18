@@ -1,0 +1,99 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "floe-iceberg"
+version = "0.1.0"
+description = "IcebergTableManager utility for PyIceberg table operations in the floe data platform"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "Obsidian Owl", email = "team@obsidianowl.dev" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    # PyIceberg 0.9.0+ required for native upsert support (FR-005)
+    "pyiceberg>=0.9.0",
+    # Pydantic v2 for configuration models (FR-045)
+    "pydantic>=2.0",
+    # Structured logging
+    "structlog>=24.0",
+    # OpenTelemetry for observability (FR-041 to FR-044)
+    "opentelemetry-api>=1.20.0",
+    # PyArrow for data handling
+    "pyarrow>=14.0",
+    # floe-core for plugin interfaces (CatalogPlugin, StoragePlugin)
+    "floe-core>=0.1.0",
+]
+
+[project.optional-dependencies]
+dagster = [
+    # Dagster for IOManager integration (FR-037 to FR-040)
+    "dagster>=1.6.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23.0",
+    "mypy>=1.8",
+    "ruff>=0.3",
+    "types-PyYAML>=6.0",
+]
+all = [
+    "floe-iceberg[dagster,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/Obsidian-Owl/floe"
+Documentation = "https://github.com/Obsidian-Owl/floe/tree/main/docs"
+Repository = "https://github.com/Obsidian-Owl/floe"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/floe_iceberg"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+    "src",
+    "../..",  # Enable import of 'testing' module from project root
+]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --import-mode=importlib"
+markers = [
+    "requirement(id): Mark test with requirement ID for traceability",
+    "integration: Marks tests requiring K8s services",
+]

@@ -701,6 +701,39 @@ warehouse = storage_plugin.get_warehouse_uri("bronze")
 - **GCS**: Enable Cloud Audit Logs
 - **Azure**: Enable Storage Analytics logging
 
+## Relationship with Table Operations (IcebergTableManager)
+
+**Important clarification**: `StoragePlugin` handles **FileIO** (object storage access), NOT Iceberg table operations.
+
+Table operations (create_table, evolve_schema, write_data, manage_snapshots) are handled by `IcebergTableManager`, an **internal utility class** in `floe-iceberg` package (Epic 4D).
+
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│   StoragePlugin     │     │   CatalogPlugin     │
+│  (FileIO: S3/GCS)   │     │  (Polaris catalog)  │
+└──────────┬──────────┘     └──────────┬──────────┘
+           │                           │
+           └───────────┬───────────────┘
+                       │
+                       ▼
+           ┌─────────────────────┐
+           │  IcebergTableManager│
+           │  (internal utility) │
+           │  - create_table()   │
+           │  - evolve_schema()  │
+           │  - write_data()     │
+           │  - manage_snapshots()│
+           └─────────────────────┘
+```
+
+**Why IcebergTableManager is NOT a plugin:**
+- Iceberg is **enforced** (ADR-0005), not pluggable
+- Table operations are Iceberg-specific, no need for abstraction
+- CatalogPlugin already returns PyIceberg Catalog for table registration
+- StoragePlugin already provides FileIO for data access
+
+See: Epic 4D (Storage Plugin) specification for full details.
+
 ## Open Questions
 
 ### Q: Can we use multiple storage backends per platform (multi-cloud)?
@@ -721,6 +754,7 @@ warehouse = storage_plugin.get_warehouse_uri("bronze")
 - [ADR-0037: Composability Principle](0037-composability-principle.md) - Plugin architecture rationale
 - [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/storage-plugin.md](../interfaces/storage-plugin.md) - StoragePlugin ABC definition
+- [Epic 4D: Storage Plugin](../../../specs/4d-storage-plugin/spec.md) - IcebergTableManager specification
 - **Industry References:**
   - [PyIceberg FileIO Documentation](https://py.iceberg.apache.org/api/#fileio)
   - [AWS S3 with Iceberg](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-iceberg-how-iceberg-works.html)
