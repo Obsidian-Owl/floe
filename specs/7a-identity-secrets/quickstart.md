@@ -118,7 +118,148 @@ if token:
 plugin.shutdown()
 ```
 
-## Configuration in manifest.yaml
+## Platform Engineer Guide: Plugin Selection
+
+This section explains how **Platform Engineers** select and configure secrets and identity plugins at the platform level. Data engineers inherit these choices and cannot override them.
+
+### Plugin Selection in manifest.yaml
+
+Platform engineers define plugin selection in `manifest.yaml` (stored in OCI registry):
+
+```yaml
+# manifest.yaml (Platform Team owns this)
+version: "1.0"
+metadata:
+  name: my-data-product
+  domain: analytics
+
+plugins:
+  # Secrets backend selection (PLUGGABLE per ADR-0031)
+  # Options: k8s (default), infisical, vault, external-secrets
+  secrets:
+    type: k8s  # or "infisical"
+    config:
+      namespace: floe-secrets
+
+  # Identity provider selection (PLUGGABLE)
+  # Options: keycloak (default), dex, okta, auth0
+  identity:
+    type: keycloak
+    config:
+      server_url: https://keycloak.example.com
+      realm: floe
+      client_id:
+        secretRef:
+          name: keycloak-credentials
+          key: client-id
+      client_secret:
+        secretRef:
+          name: keycloak-credentials
+          key: client-secret
+```
+
+### Choosing Between Secrets Backends
+
+| Backend | Best For | Pros | Cons |
+|---------|----------|------|------|
+| **K8s Secrets** (default) | Simple K8s-native deployments | Zero additional infrastructure, native K8s integration | No versioning, limited audit trail |
+| **Infisical** (recommended OSS) | Teams needing centralized secrets management | OSS, web UI, versioning, auto-reload | Additional service to manage |
+| **Vault** | Enterprise with existing HashiCorp stack | Industry standard, extensive features | Complex setup, requires license for enterprise |
+| **External Secrets** | Multi-cloud or hybrid environments | Provider-agnostic, AWS/GCP/Azure support | Operator overhead |
+
+### Choosing Between Identity Providers
+
+| Provider | Best For | Pros | Cons |
+|----------|----------|------|------|
+| **Keycloak** (default) | Self-hosted OIDC needs | OSS, full-featured, realm multi-tenancy | Requires hosting |
+| **Dex** | Lightweight federation | Simple, K8s-native, connector-based | Fewer features |
+| **Okta** | Enterprise SSO integration | Managed service, enterprise features | Commercial |
+| **Auth0** | Developer-focused teams | Easy setup, good DX | Commercial at scale |
+
+### Example: K8s-Only Stack (Simplest)
+
+```yaml
+# manifest.yaml - Minimal K8s-native configuration
+version: "1.0"
+metadata:
+  name: analytics-platform
+  domain: analytics
+
+plugins:
+  secrets:
+    type: k8s
+    config:
+      namespace: floe-secrets
+      labels:
+        managed-by: floe-platform
+  # No identity plugin - rely on K8s RBAC only
+```
+
+### Example: Full OSS Stack (Recommended)
+
+```yaml
+# manifest.yaml - Infisical + Keycloak (recommended for production)
+version: "1.0"
+metadata:
+  name: analytics-platform
+  domain: analytics
+
+plugins:
+  secrets:
+    type: infisical
+    config:
+      client_id:
+        secretRef:
+          name: infisical-credentials
+          key: client-id
+      client_secret:
+        secretRef:
+          name: infisical-credentials
+          key: client-secret
+      project_id: "proj_analytics"
+      environment: production
+      secret_path: /platform
+
+  identity:
+    type: keycloak
+    config:
+      server_url: https://keycloak.company.internal
+      realm: floe
+      client_id:
+        secretRef:
+          name: keycloak-credentials
+          key: client-id
+      client_secret:
+        secretRef:
+          name: keycloak-credentials
+          key: client-secret
+```
+
+### Data Engineer Experience
+
+**Data engineers don't configure secrets at all.** They write dbt models and pipeline definitions:
+
+```yaml
+# floe.yaml (Data Engineers write this)
+# No credentials, no secrets, no infrastructure concerns
+pipelines:
+  - name: customer_analytics
+    models: ["staging.customers", "marts.customer_360"]
+    schedule: "0 6 * * *"
+```
+
+```sql
+-- models/staging/customers.sql
+-- Data engineer just writes SQL - platform handles credentials
+SELECT * FROM {{ source('raw', 'customers') }}
+```
+
+The platform automatically:
+1. Resolves secrets from the configured backend (K8s/Infisical/Vault)
+2. Injects credentials into dbt's runtime environment
+3. Data engineers never see or configure any secrets
+
+## Configuration in manifest.yaml (Legacy Format)
 
 ```yaml
 # manifest.yaml
@@ -148,31 +289,34 @@ plugins:
           key: client-secret
 ```
 
-## Using SecretReference in floe.yaml
+## SecretReference: Platform-Level Configuration
+
+`SecretReference` is used **only in manifest.yaml** by the Platform Team to configure
+how the platform resolves credentials. Data engineers never use `SecretReference`.
 
 ```yaml
-# floe.yaml
-pipelines:
-  - name: load_snowflake
-    source:
-      type: snowflake
-      credentials:
-        account:
-          secretRef:
-            source: kubernetes
-            name: snowflake-creds
-            key: account
-        username:
-          secretRef:
-            source: kubernetes
-            name: snowflake-creds
-            key: username
-        password:
-          secretRef:
-            source: kubernetes
-            name: snowflake-creds
-            key: password
+# manifest.yaml (Platform Team ONLY)
+# Define compute connections with credential references
+compute:
+  snowflake:
+    account: xy12345.us-east-1
+    warehouse: COMPUTE_WH
+    database: ANALYTICS
+    credentials:
+      username:
+        secretRef:
+          source: kubernetes
+          name: snowflake-creds
+          key: username
+      password:
+        secretRef:
+          source: kubernetes
+          name: snowflake-creds
+          key: password
 ```
+
+At runtime, the platform resolves these references and injects them into dbt's
+environment. Data engineers simply write SQL against the configured sources.
 
 ## Plugin Discovery
 
