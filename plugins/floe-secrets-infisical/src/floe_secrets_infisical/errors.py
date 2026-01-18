@@ -113,10 +113,7 @@ class InfisicalSecretNotFoundError(InfisicalPluginError):
         self.secret_key = secret_key
         self.path = path
         self.environment = environment
-        message = (
-            f"Secret '{secret_key}' not found at path '{path}' "
-            f"in environment '{environment}'"
-        )
+        message = f"Secret '{secret_key}' not found at path '{path}' in environment '{environment}'"
         super().__init__(message)
 
 

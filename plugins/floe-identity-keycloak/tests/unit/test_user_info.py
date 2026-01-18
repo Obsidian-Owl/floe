@@ -6,8 +6,6 @@ Requirements: 7A-FR-033 (User information extraction from OIDC claims)
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 
@@ -17,7 +15,7 @@ class TestUserInfoExtraction:
     @pytest.mark.requirement("7A-FR-033")
     def test_extract_subject_from_claims(self) -> None:
         """Test extraction of subject (user_id) from claims."""
-        from floe_identity_keycloak.token_validator import TokenValidator, UserInfo
+        from floe_identity_keycloak.token_validator import TokenValidator
 
         validator = TokenValidator(
             issuer="https://keycloak.example.com/realms/floe",

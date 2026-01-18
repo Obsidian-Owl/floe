@@ -74,9 +74,7 @@ class TestSecretReferenceResolutionContract:
             syntax = ref.to_env_var_syntax()
 
             # Must match Jinja pattern
-            assert jinja_pattern.match(syntax), (
-                f"Invalid Jinja syntax for {ref.name}: {syntax}"
-            )
+            assert jinja_pattern.match(syntax), f"Invalid Jinja syntax for {ref.name}: {syntax}"
 
             # Must not contain any lowercase (env var names are UPPER_CASE)
             env_var_match = re.search(r"FLOE_SECRET_([A-Z0-9_]+)", syntax)
@@ -285,9 +283,7 @@ class TestSecretReferenceProfilesYmlIntegration:
                 "dev": {
                     "type": "duckdb",
                     "path": "md:analytics",  # MotherDuck prefix
-                    "motherduck_token": SecretReference(
-                        name="motherduck-creds", key="token"
-                    ),
+                    "motherduck_token": SecretReference(name="motherduck-creds", key="token"),
                 },
             },
         }
@@ -310,9 +306,7 @@ class TestSecretReferenceProfilesYmlIntegration:
                     "method": "service-account-json",
                     "project": "my-project",  # Non-secret
                     "dataset": "analytics",  # Non-secret
-                    "keyfile_json": SecretReference(
-                        name="bigquery-sa", key="json"
-                    ),
+                    "keyfile_json": SecretReference(name="bigquery-sa", key="json"),
                 },
             },
         }

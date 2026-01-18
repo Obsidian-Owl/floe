@@ -217,9 +217,7 @@ class TestCrossPluginDiscovery:
             plugin_class = ep.load()
 
             # Check for required metadata properties
-            assert hasattr(plugin_class, "name"), (
-                f"Plugin '{ep.name}' missing 'name' property"
-            )
+            assert hasattr(plugin_class, "name"), f"Plugin '{ep.name}' missing 'name' property"
             assert hasattr(plugin_class, "version"), (
                 f"Plugin '{ep.name}' missing 'version' property"
             )
@@ -244,9 +242,5 @@ class TestCrossPluginDiscovery:
         identity_list = list(identity_eps)
 
         # At minimum, our Epic 7A plugins should be present
-        assert len(secrets_list) >= 2, (
-            "Expected at least 2 secrets plugins (k8s, infisical)"
-        )
-        assert len(identity_list) >= 1, (
-            "Expected at least 1 identity plugin (keycloak)"
-        )
+        assert len(secrets_list) >= 2, "Expected at least 2 secrets plugins (k8s, infisical)"
+        assert len(identity_list) >= 1, "Expected at least 1 identity plugin (keycloak)"

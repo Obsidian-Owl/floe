@@ -17,6 +17,8 @@ from pydantic import SecretStr
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+
 
 # Environment variable names for test configuration
 ENV_KEYCLOAK_URL = "KEYCLOAK_URL"
@@ -47,7 +49,7 @@ def _keycloak_integration_available() -> bool:
 
 
 @pytest.fixture
-def mock_keycloak_config() -> "KeycloakIdentityConfig":
+def mock_keycloak_config() -> KeycloakIdentityConfig:
     """Create a mock KeycloakIdentityConfig for unit tests.
 
     This fixture provides a configuration that does NOT connect to a real
@@ -68,8 +70,8 @@ def mock_keycloak_config() -> "KeycloakIdentityConfig":
 
 @pytest.fixture
 def mock_keycloak_plugin(
-    mock_keycloak_config: "KeycloakIdentityConfig",
-) -> "Generator[KeycloakIdentityPlugin, None, None]":
+    mock_keycloak_config: KeycloakIdentityConfig,
+) -> Generator[KeycloakIdentityPlugin, None, None]:
     """Create a mock KeycloakIdentityPlugin for unit tests.
 
     This fixture provides a plugin instance with startup() called but
@@ -93,7 +95,7 @@ def mock_keycloak_plugin(
 
 
 @pytest.fixture
-def live_keycloak_config() -> "KeycloakIdentityConfig":
+def live_keycloak_config() -> KeycloakIdentityConfig:
     """Create KeycloakIdentityConfig from environment for live testing.
 
     This fixture requires real Keycloak credentials in environment variables.
@@ -123,8 +125,8 @@ def live_keycloak_config() -> "KeycloakIdentityConfig":
 
 @pytest.fixture
 def live_keycloak_plugin(
-    live_keycloak_config: "KeycloakIdentityConfig",
-) -> "Generator[KeycloakIdentityPlugin, None, None]":
+    live_keycloak_config: KeycloakIdentityConfig,
+) -> Generator[KeycloakIdentityPlugin, None, None]:
     """Create KeycloakIdentityPlugin with real Keycloak connection.
 
     This fixture requires real Keycloak credentials in environment variables.

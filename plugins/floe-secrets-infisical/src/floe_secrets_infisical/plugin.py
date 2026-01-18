@@ -289,6 +289,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
         try:
             from infisical_client import GetSecretOptions
+
             options = GetSecretOptions(
                 secret_name=key,
                 project_id=self._config.project_id or "",
@@ -385,9 +386,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             if span:
                 span.end()
 
-    def set_secret(
-        self, key: str, value: str, metadata: dict[str, Any] | None = None
-    ) -> None:
+    def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Store a secret value.
 
         Creates the secret if it doesn't exist, or updates it if it does.
@@ -498,9 +497,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             if span:
                 span.end()
 
-    def _create_secret(
-        self, key: str, value: str, metadata: dict[str, Any] | None = None
-    ) -> None:
+    def _create_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Create a new secret in Infisical.
 
         Args:
@@ -509,6 +506,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             metadata: Optional metadata.
         """
         from infisical_client import CreateSecretOptions
+
         comment = ""
         if metadata:
             comment = ", ".join(f"{k}={v}" for k, v in metadata.items())
@@ -524,9 +522,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
         self._client.createSecret(options)
 
-    def _update_secret(
-        self, key: str, value: str, metadata: dict[str, Any] | None = None
-    ) -> None:
+    def _update_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Update an existing secret in Infisical.
 
         Args:
@@ -535,6 +531,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             metadata: Optional metadata.
         """
         from infisical_client import UpdateSecretOptions
+
         comment = ""
         if metadata:
             comment = ", ".join(f"{k}={v}" for k, v in metadata.items())
@@ -573,6 +570,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
         try:
             from infisical_client import DeleteSecretOptions
+
             options = DeleteSecretOptions(
                 secret_name=key,
                 project_id=self._config.project_id or "",
@@ -746,6 +744,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             List of secret key names.
         """
         from infisical_client import ListSecretsOptions
+
         options = ListSecretsOptions(
             project_id=self._config.project_id or "",
             environment=self._config.environment,

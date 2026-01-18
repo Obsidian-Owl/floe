@@ -30,14 +30,17 @@ __all__ = [
     "InfisicalValidationError",
 ]
 
+
 # Lazy imports to avoid circular dependencies and improve startup time
 def __getattr__(name: str) -> Any:
     """Lazy import of plugin components."""
     if name == "InfisicalSecretsPlugin":
         from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
+
         return InfisicalSecretsPlugin
     if name == "InfisicalSecretsConfig":
         from floe_secrets_infisical.config import InfisicalSecretsConfig
+
         return InfisicalSecretsConfig
     if name in (
         "InfisicalPluginError",
@@ -48,6 +51,7 @@ def __getattr__(name: str) -> Any:
         "InfisicalValidationError",
     ):
         from floe_secrets_infisical import errors
+
         return getattr(errors, name)
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

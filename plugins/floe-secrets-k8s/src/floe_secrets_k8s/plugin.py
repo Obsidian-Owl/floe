@@ -291,9 +291,7 @@ class K8sSecretsPlugin(SecretsPlugin):
             )
             raise SecretBackendUnavailableError(reason=str(e)) from e
 
-    def set_secret(
-        self, key: str, value: str, metadata: dict[str, Any] | None = None
-    ) -> None:
+    def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Store a secret value.
 
         Creates the secret if it doesn't exist, or updates it if it does.
@@ -443,9 +441,7 @@ class K8sSecretsPlugin(SecretsPlugin):
 
         try:
             # List secrets with our managed-by label
-            label_selector = ",".join(
-                f"{k}={v}" for k, v in self.config.labels.items()
-            )
+            label_selector = ",".join(f"{k}={v}" for k, v in self.config.labels.items())
 
             secrets = self._api.list_namespaced_secret(
                 namespace=self.config.namespace,

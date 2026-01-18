@@ -40,7 +40,7 @@ def _keycloak_credentials_available() -> bool:
 
 
 @pytest.fixture
-def keycloak_config() -> "KeycloakIdentityConfig":
+def keycloak_config() -> KeycloakIdentityConfig:
     """Create KeycloakIdentityConfig from environment for live testing.
 
     Returns:
@@ -67,8 +67,8 @@ def keycloak_config() -> "KeycloakIdentityConfig":
 
 @pytest.fixture
 def keycloak_plugin(
-    keycloak_config: "KeycloakIdentityConfig",
-) -> "KeycloakIdentityPlugin":
+    keycloak_config: KeycloakIdentityConfig,
+) -> KeycloakIdentityPlugin:
     """Create KeycloakIdentityPlugin with real Keycloak connection.
 
     Args:
@@ -116,7 +116,7 @@ class TestKeycloakAuthentication:
     @pytest.mark.integration
     def test_authenticate_with_password_grant(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
         test_user_credentials: dict[str, str],
     ) -> None:
         """Test authentication with username/password (password grant)."""
@@ -130,7 +130,7 @@ class TestKeycloakAuthentication:
     @pytest.mark.integration
     def test_authenticate_with_client_credentials(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test authentication with client credentials grant."""
         token = keycloak_plugin.authenticate({})
@@ -143,13 +143,15 @@ class TestKeycloakAuthentication:
     @pytest.mark.integration
     def test_authenticate_invalid_password_returns_none(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test that invalid password returns None."""
-        token = keycloak_plugin.authenticate({
-            "username": "invalid-user",
-            "password": "invalid-password",
-        })
+        token = keycloak_plugin.authenticate(
+            {
+                "username": "invalid-user",
+                "password": "invalid-password",
+            }
+        )
 
         assert token is None
 
@@ -161,7 +163,7 @@ class TestKeycloakTokenValidation:
     @pytest.mark.integration
     def test_validate_valid_token(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test validation of a valid token."""
         # Get a token first
@@ -179,7 +181,7 @@ class TestKeycloakTokenValidation:
     @pytest.mark.integration
     def test_validate_invalid_token(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test validation of an invalid token."""
         result = keycloak_plugin.validate_token("invalid.token.here")
@@ -191,7 +193,7 @@ class TestKeycloakTokenValidation:
     @pytest.mark.integration
     def test_validate_token_extracts_user_info(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
         test_user_credentials: dict[str, str],
     ) -> None:
         """Test that token validation extracts user information."""
@@ -214,7 +216,7 @@ class TestKeycloakUserInfo:
     @pytest.mark.integration
     def test_get_user_info_with_valid_token(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
         test_user_credentials: dict[str, str],
     ) -> None:
         """Test retrieving user info with valid token."""
@@ -232,7 +234,7 @@ class TestKeycloakUserInfo:
     @pytest.mark.integration
     def test_get_user_info_with_invalid_token_returns_none(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test that invalid token returns None for user info."""
         user_info = keycloak_plugin.get_user_info("invalid.token")
@@ -247,7 +249,7 @@ class TestKeycloakOIDCConfig:
     @pytest.mark.integration
     def test_get_oidc_config(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test getting OIDC configuration."""
         config = keycloak_plugin.get_oidc_config()
@@ -264,7 +266,7 @@ class TestKeycloakOIDCConfig:
     @pytest.mark.integration
     def test_get_oidc_config_with_different_realm(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test getting OIDC configuration for a different realm."""
         config = keycloak_plugin.get_oidc_config(realm="master")
@@ -281,7 +283,7 @@ class TestKeycloakHealthCheck:
     @pytest.mark.integration
     def test_health_check_returns_true(
         self,
-        keycloak_plugin: "KeycloakIdentityPlugin",
+        keycloak_plugin: KeycloakIdentityPlugin,
     ) -> None:
         """Test that health check returns True when connected."""
         is_healthy = keycloak_plugin.health_check()
@@ -292,7 +294,7 @@ class TestKeycloakHealthCheck:
     @pytest.mark.integration
     def test_health_check_before_startup_returns_false(
         self,
-        keycloak_config: "KeycloakIdentityConfig",
+        keycloak_config: KeycloakIdentityConfig,
     ) -> None:
         """Test that health check returns False before startup."""
         from floe_identity_keycloak import KeycloakIdentityPlugin

@@ -6,14 +6,13 @@ Requirements: 7A-FR-030 (KeycloakPlugin as default OIDC identity provider)
 
 from __future__ import annotations
 
-import sys
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
-    from floe_core.plugins.identity import IdentityPlugin
+    pass
 
 
 class TestKeycloakPluginDiscovery:

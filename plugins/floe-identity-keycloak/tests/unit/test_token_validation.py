@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    pass
 
 
 # Test RSA key pair for JWT signing (test purposes only)
@@ -76,7 +76,14 @@ def mock_jwks_response() -> dict[str, Any]:
                 "use": "sig",
                 "kid": TEST_KEY_ID,
                 "alg": "RS256",
-                "n": "0Z3VS5JJcds3xfn_ygWyF8PbnGy0AHB7MQ_23aaAvPKaXsquIG0Bg3P-YIeG6aXMiP1qGDdSVJB4qTzE9L5Lc6lYH0NJW0lf04KF1KxKhdP9cHPjIrGhHaXNgNbHCpd_G_xGHMxwTMdA6tJdz0Q5Dh6RM0jgYJNaV7j4RVsJdMABuU3TUq0GGQe4HBOfyLdEy4D1AJiAoXrBdRlf9HEtk2A7m8fFkb3JJYqx7qf0S0s6IVVz1Ns2CkLDY4qVvzL2ZJumNOPzPvfYCjCuN6qKkPsLLwA7sJThIkzFLz7k5tKxMqk8O7c1_6J4YWnJKjA7WEkF0vqKSZh6MHZ7JQv9dw",
+                "n": (
+                    "0Z3VS5JJcds3xfn_ygWyF8PbnGy0AHB7MQ_23aaAvPKaXsquIG0Bg3P-"
+                    "YIeG6aXMiP1qGDdSVJB4qTzE9L5Lc6lYH0NJW0lf04KF1KxKhdP9cHPjIrGh"
+                    "HaXNgNbHCpd_G_xGHMxwTMdA6tJdz0Q5Dh6RM0jgYJNaV7j4RVsJdMABuU3"
+                    "TUq0GGQe4HBOfyLdEy4D1AJiAoXrBdRlf9HEtk2A7m8fFkb3JJYqx7qf0S0s"
+                    "6IVVz1Ns2CkLDY4qVvzL2ZJumNOPzPvfYCjCuN6qKkPsLLwA7sJThIkzFLz"
+                    "7k5tKxMqk8O7c1_6J4YWnJKjA7WEkF0vqKSZh6MHZ7JQv9dw"
+                ),
                 "e": "AQAB",
             }
         ]
@@ -239,9 +246,9 @@ class TestTokenValidationExpired:
         mock_jwks_response: dict[str, Any],
     ) -> None:
         """Test that an expired token returns valid=False with error."""
-        from floe_identity_keycloak.token_validator import TokenValidator
-
         import jwt as real_jwt
+
+        from floe_identity_keycloak.token_validator import TokenValidator
 
         with patch("floe_identity_keycloak.token_validator.jwt") as mock_jwt:
             # Use real exception classes for proper exception handling
@@ -280,9 +287,9 @@ class TestTokenValidationInvalid:
         mock_jwks_response: dict[str, Any],
     ) -> None:
         """Test that invalid signature returns valid=False."""
-        from floe_identity_keycloak.token_validator import TokenValidator
-
         import jwt as real_jwt
+
+        from floe_identity_keycloak.token_validator import TokenValidator
 
         with patch("floe_identity_keycloak.token_validator.jwt") as mock_jwt:
             # Use real exception classes for proper exception handling
@@ -316,26 +323,16 @@ class TestTokenValidationInvalid:
         mock_jwks_response: dict[str, Any],
     ) -> None:
         """Test that missing required claims returns valid=False."""
-        from floe_identity_keycloak.token_validator import TokenValidator
-
-        # Token missing 'sub' claim
-        incomplete_claims = {
-            "iss": "https://keycloak.example.com/realms/floe",
-            "aud": "floe-client",
-            "exp": int(time.time()) + 3600,
-            # Missing 'sub' - required
-        }
-
         import jwt as real_jwt
+
+        from floe_identity_keycloak.token_validator import TokenValidator
 
         with patch("floe_identity_keycloak.token_validator.jwt") as mock_jwt:
             # Use real exception classes for proper exception handling
             mock_jwt.exceptions = real_jwt.exceptions
 
             # Simulate MissingRequiredClaimError when 'sub' is required
-            mock_jwt.decode.side_effect = real_jwt.exceptions.MissingRequiredClaimError(
-                "sub"
-            )
+            mock_jwt.decode.side_effect = real_jwt.exceptions.MissingRequiredClaimError("sub")
             mock_jwt.get_unverified_header.return_value = {
                 "kid": TEST_KEY_ID,
                 "alg": "RS256",
@@ -361,17 +358,15 @@ class TestTokenValidationInvalid:
         mock_jwks_response: dict[str, Any],
     ) -> None:
         """Test that wrong issuer returns valid=False."""
-        from floe_identity_keycloak.token_validator import TokenValidator
-
         import jwt as real_jwt
+
+        from floe_identity_keycloak.token_validator import TokenValidator
 
         with patch("floe_identity_keycloak.token_validator.jwt") as mock_jwt:
             # Use real exception classes for proper exception handling
             mock_jwt.exceptions = real_jwt.exceptions
 
-            mock_jwt.decode.side_effect = real_jwt.exceptions.InvalidIssuerError(
-                "Invalid issuer"
-            )
+            mock_jwt.decode.side_effect = real_jwt.exceptions.InvalidIssuerError("Invalid issuer")
             mock_jwt.get_unverified_header.return_value = {
                 "kid": TEST_KEY_ID,
                 "alg": "RS256",
@@ -397,9 +392,9 @@ class TestTokenValidationInvalid:
         mock_jwks_response: dict[str, Any],
     ) -> None:
         """Test that wrong audience returns valid=False."""
-        from floe_identity_keycloak.token_validator import TokenValidator
-
         import jwt as real_jwt
+
+        from floe_identity_keycloak.token_validator import TokenValidator
 
         with patch("floe_identity_keycloak.token_validator.jwt") as mock_jwt:
             # Use real exception classes for proper exception handling

@@ -27,10 +27,12 @@ from pydantic import (
 )
 
 # SECURITY: Known localhost hostnames (exact match only)
-_LOCALHOST_HOSTNAMES: frozenset[str] = frozenset({
-    "localhost",
-    "localhost.localdomain",
-})
+_LOCALHOST_HOSTNAMES: frozenset[str] = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+    }
+)
 
 
 def _is_localhost(hostname: str) -> bool:
@@ -212,9 +214,7 @@ class KeycloakIdentityConfig(BaseModel):
         Returns:
             URL to the .well-known/openid-configuration endpoint.
         """
-        return (
-            f"{self.server_url}/realms/{self.realm}/.well-known/openid-configuration"
-        )
+        return f"{self.server_url}/realms/{self.realm}/.well-known/openid-configuration"
 
     @property
     def token_url(self) -> str:
@@ -241,9 +241,7 @@ class KeycloakIdentityConfig(BaseModel):
         Returns:
             URL to the userinfo endpoint.
         """
-        return (
-            f"{self.server_url}/realms/{self.realm}/protocol/openid-connect/userinfo"
-        )
+        return f"{self.server_url}/realms/{self.realm}/protocol/openid-connect/userinfo"
 
     @property
     def authorization_url(self) -> str:
@@ -270,7 +268,4 @@ class KeycloakIdentityConfig(BaseModel):
         Returns:
             URL to the token introspection endpoint.
         """
-        return (
-            f"{self.server_url}/realms/{self.realm}/protocol/openid-connect/token/"
-            "introspect"
-        )
+        return f"{self.server_url}/realms/{self.realm}/protocol/openid-connect/token/introspect"

@@ -20,14 +20,17 @@ __all__ = [
     "K8sSecretsConfig",
 ]
 
+
 # Lazy imports to avoid circular dependencies and improve startup time
 def __getattr__(name: str) -> Any:
     """Lazy import of plugin components."""
     if name == "K8sSecretsPlugin":
         from floe_secrets_k8s.plugin import K8sSecretsPlugin
+
         return K8sSecretsPlugin
     if name == "K8sSecretsConfig":
         from floe_secrets_k8s.config import K8sSecretsConfig
+
         return K8sSecretsConfig
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

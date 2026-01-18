@@ -63,9 +63,7 @@ class TestAuthenticateTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             # Mock HTTP response
             with patch.object(plugin._client, "post") as mock_post:
@@ -104,9 +102,7 @@ class TestAuthenticateTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             with patch.object(plugin._client, "post") as mock_post:
                 mock_response = MagicMock()
@@ -154,9 +150,7 @@ class TestValidateTokenTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             # Mock token validator
             mock_validator_result = MagicMock()
@@ -205,9 +199,7 @@ class TestValidateTokenForRealmTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             # Mock realm validator
             mock_validator = MagicMock()

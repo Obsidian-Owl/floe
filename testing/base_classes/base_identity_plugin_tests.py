@@ -149,9 +149,7 @@ class BaseIdentityPluginTests(ABC):
         assert callable(identity_plugin.validate_token)
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_authenticate_returns_token_or_none(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_authenticate_returns_token_or_none(self, identity_plugin: IdentityPlugin) -> None:
         """Verify authenticate() returns str or None for invalid creds.
 
         Per contract: Return None for failed authentication, not raise exception.
@@ -161,9 +159,7 @@ class BaseIdentityPluginTests(ABC):
         assert result is None
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_validate_token_returns_result(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_validate_token_returns_result(self, identity_plugin: IdentityPlugin) -> None:
         """Verify validate_token() always returns TokenValidationResult.
 
         Even for invalid tokens, should return result with valid=False.
@@ -177,9 +173,7 @@ class BaseIdentityPluginTests(ABC):
         assert hasattr(result, "error")
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_invalid_token_returns_invalid_result(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_invalid_token_returns_invalid_result(self, identity_plugin: IdentityPlugin) -> None:
         """Verify invalid tokens return valid=False in result."""
         result = identity_plugin.validate_token("definitely-not-a-valid-token")
         assert result.valid is False
@@ -187,9 +181,7 @@ class BaseIdentityPluginTests(ABC):
         assert result.error != ""
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_get_user_info_returns_userinfo_or_none(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_get_user_info_returns_userinfo_or_none(self, identity_plugin: IdentityPlugin) -> None:
         """Verify get_user_info() returns UserInfo or None.
 
         For invalid tokens, should return None.

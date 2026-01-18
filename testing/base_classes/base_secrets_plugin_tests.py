@@ -41,7 +41,6 @@ from io import StringIO
 from typing import TYPE_CHECKING, Any
 
 import pytest
-import structlog
 
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
@@ -304,7 +303,10 @@ class BaseSecretsPluginTests(ABC):
 
     @pytest.mark.requirement("FR-060")
     def test_get_secret_emits_audit_log(
-        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+        self,
+        secrets_plugin: SecretsPlugin,
+        test_secret_key: str,
+        audit_log_capture: AuditLogCapture,
     ) -> None:
         """Verify get_secret() emits audit log with required fields.
 
@@ -324,7 +326,10 @@ class BaseSecretsPluginTests(ABC):
 
     @pytest.mark.requirement("FR-060")
     def test_set_secret_emits_audit_log(
-        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+        self,
+        secrets_plugin: SecretsPlugin,
+        test_secret_key: str,
+        audit_log_capture: AuditLogCapture,
     ) -> None:
         """Verify set_secret() emits audit log with required fields."""
         with audit_log_capture.capture():
@@ -356,7 +361,10 @@ class BaseSecretsPluginTests(ABC):
 
     @pytest.mark.requirement("SC-008")
     def test_audit_event_contains_timestamp(
-        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+        self,
+        secrets_plugin: SecretsPlugin,
+        test_secret_key: str,
+        audit_log_capture: AuditLogCapture,
     ) -> None:
         """Verify audit events contain valid ISO8601 timestamp."""
         from datetime import datetime
@@ -379,7 +387,10 @@ class BaseSecretsPluginTests(ABC):
 
     @pytest.mark.requirement("FR-060")
     def test_audit_event_contains_plugin_type(
-        self, secrets_plugin: SecretsPlugin, test_secret_key: str, audit_log_capture: AuditLogCapture
+        self,
+        secrets_plugin: SecretsPlugin,
+        test_secret_key: str,
+        audit_log_capture: AuditLogCapture,
     ) -> None:
         """Verify audit events contain plugin_type matching plugin name."""
         with audit_log_capture.capture():
@@ -428,7 +439,7 @@ class AuditLogCapture:
         self._handler: logging.Handler | None = None
         self._previous_processors: list[Any] | None = None
 
-    def capture(self) -> "AuditLogCapture":
+    def capture(self) -> AuditLogCapture:
         """Context manager for capturing audit logs.
 
         Returns:
@@ -436,7 +447,7 @@ class AuditLogCapture:
         """
         return self
 
-    def __enter__(self) -> "AuditLogCapture":
+    def __enter__(self) -> AuditLogCapture:
         """Start capturing audit logs."""
         self._stream = StringIO()
 

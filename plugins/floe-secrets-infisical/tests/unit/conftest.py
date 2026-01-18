@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import SecretStr
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -50,9 +49,7 @@ def mock_infisical_sdk() -> Generator[dict[str, Any], None, None]:
             "infisical_client": MagicMock(),
         },
     ):
-        with patch(
-            "floe_secrets_infisical.plugin.InfisicalClient"
-        ) as mock_client_class:
+        with patch("floe_secrets_infisical.plugin.InfisicalClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
 
@@ -64,9 +61,9 @@ def mock_infisical_sdk() -> Generator[dict[str, Any], None, None]:
 
 @pytest.fixture
 def infisical_plugin_with_mock(
-    infisical_config: "InfisicalSecretsConfig",
+    infisical_config: InfisicalSecretsConfig,
     mock_infisical_client: MagicMock,
-) -> "InfisicalSecretsPlugin":
+) -> InfisicalSecretsPlugin:
     """Create InfisicalSecretsPlugin with a mocked client.
 
     This fixture creates a plugin instance suitable for unit testing

@@ -17,10 +17,9 @@ from __future__ import annotations
 import base64
 import subprocess
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
@@ -67,9 +66,7 @@ class TestK8sSecretsOperations(IntegrationTestBase):
             check=False,
         )
 
-    def _create_k8s_secret(
-        self, name: str, namespace: str, data: dict[str, str]
-    ) -> None:
+    def _create_k8s_secret(self, name: str, namespace: str, data: dict[str, str]) -> None:
         """Create a K8s Secret using kubectl."""
         # Encode data as base64
         literal_args = []
@@ -77,8 +74,7 @@ class TestK8sSecretsOperations(IntegrationTestBase):
             literal_args.extend(["--from-literal", f"{key}={value}"])
 
         subprocess.run(
-            ["kubectl", "create", "secret", "generic", name, "-n", namespace]
-            + literal_args,
+            ["kubectl", "create", "secret", "generic", name, "-n", namespace] + literal_args,
             capture_output=True,
             check=True,
         )
@@ -300,9 +296,7 @@ class TestK8sSecretsOperations(IntegrationTestBase):
                 capture_output=True,
             )
 
-        config = K8sSecretsConfig(
-            namespace=test_namespace, labels={"managed-by": label_value}
-        )
+        config = K8sSecretsConfig(namespace=test_namespace, labels={"managed-by": label_value})
         plugin = K8sSecretsPlugin(config)
         plugin.startup()
 
@@ -350,9 +344,7 @@ class TestK8sSecretsOperations(IntegrationTestBase):
                 capture_output=True,
             )
 
-        config = K8sSecretsConfig(
-            namespace=test_namespace, labels={"managed-by": label_value}
-        )
+        config = K8sSecretsConfig(namespace=test_namespace, labels={"managed-by": label_value})
         plugin = K8sSecretsPlugin(config)
         plugin.startup()
 
@@ -406,6 +398,7 @@ class TestK8sSecretsOperations(IntegrationTestBase):
             pytest.fail("kubectl not available - start Kind cluster with: make kind-up")
 
         from floe_core.plugin_metadata import HealthState
+
         from floe_secrets_k8s.config import K8sSecretsConfig
         from floe_secrets_k8s.plugin import K8sSecretsPlugin
 

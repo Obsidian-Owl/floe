@@ -31,14 +31,17 @@ __all__ = [
     "KeycloakUnavailableError",
 ]
 
+
 # Lazy imports to avoid circular dependencies and improve startup time
 def __getattr__(name: str) -> Any:
     """Lazy import of plugin components."""
     if name == "KeycloakIdentityPlugin":
         from floe_identity_keycloak.plugin import KeycloakIdentityPlugin
+
         return KeycloakIdentityPlugin
     if name == "KeycloakIdentityConfig":
         from floe_identity_keycloak.config import KeycloakIdentityConfig
+
         return KeycloakIdentityConfig
     if name in (
         "KeycloakPluginError",
@@ -48,6 +51,7 @@ def __getattr__(name: str) -> Any:
         "KeycloakUnavailableError",
     ):
         from floe_identity_keycloak import errors
+
         return getattr(errors, name)
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

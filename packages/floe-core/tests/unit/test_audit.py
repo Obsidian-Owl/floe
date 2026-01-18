@@ -7,7 +7,6 @@ Requirements: FR-060 (Audit logging for secret access operations)
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 import pytest
 
@@ -117,7 +116,7 @@ class TestAuditEventModel:
             result=AuditResult.SUCCESS,
         )
 
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError on assignment
             event.requester_id = "other-user"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-060")

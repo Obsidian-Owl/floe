@@ -10,8 +10,9 @@ Requirements: 7A-FR-010 (Secret Reference Handling)
 from __future__ import annotations
 
 import pytest
-from floe_core.schemas.secrets import SecretReference, SecretSource
 from pydantic import ValidationError
+
+from floe_core.schemas.secrets import SecretReference, SecretSource
 
 
 class TestSecretReferenceModel:

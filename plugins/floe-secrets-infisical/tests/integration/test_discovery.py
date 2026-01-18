@@ -94,10 +94,10 @@ class TestInfisicalSecretsPluginDiscovery:
         assert hasattr(plugin_class, "shutdown")
 
         # All should be callable (methods)
-        assert callable(getattr(plugin_class, "get_secret"))
-        assert callable(getattr(plugin_class, "set_secret"))
-        assert callable(getattr(plugin_class, "list_secrets"))
-        assert callable(getattr(plugin_class, "health_check"))
+        assert callable(plugin_class.get_secret)
+        assert callable(plugin_class.set_secret)
+        assert callable(plugin_class.list_secrets)
+        assert callable(plugin_class.health_check)
 
     @pytest.mark.requirement("7A-FR-021")
     def test_plugin_supports_universal_auth(self) -> None:

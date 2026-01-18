@@ -86,9 +86,7 @@ def audit_secret_access(
             requester_id = _get_attr_safe(self, "requester_id") or "system"
 
             # Extract secret path from arguments
-            secret_path = _extract_secret_path(
-                func, args, kwargs, secret_path_arg
-            )
+            secret_path = _extract_secret_path(func, args, kwargs, secret_path_arg)
 
             logger = get_audit_logger()
 
