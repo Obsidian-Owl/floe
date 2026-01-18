@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/governance.schema.json",
+  "title": "GovernanceConfig",
+  "description": "Platform governance settings for policy enforcement",
+  "type": "object",
+  "properties": {
+    "pii_encryption": {
+      "type": ["string", "null"],
+      "enum": ["required", "optional", null],
+      "description": "PII encryption policy (required > optional)"
+    },
+    "audit_logging": {
+      "type": ["string", "null"],
+      "enum": ["enabled", "disabled", null],
+      "description": "Audit logging policy (enabled > disabled)"
+    },
+    "policy_enforcement_level": {
+      "type": ["string", "null"],
+      "enum": ["off", "warn", "strict", null],
+      "description": "Global enforcement level (strict > warn > off)"
+    },
+    "data_retention_days": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Data retention period in days (higher is stricter)"
+    },
+    "naming": {
+      "$ref": "#/$defs/NamingConfig",
+      "description": "Naming convention configuration"
+    },
+    "quality_gates": {
+      "$ref": "#/$defs/QualityGatesConfig",
+      "description": "Quality gate thresholds"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NamingConfig": {
+      "type": "object",
+      "properties": {
+        "enforcement": {
+          "type": "string",
+          "enum": ["off", "warn", "strict"],
+          "default": "warn",
+          "description": "Enforcement level for naming conventions"
+        },
+        "pattern": {
+          "type": "string",
+          "enum": ["medallion", "kimball", "custom"],
+          "default": "medallion",
+          "description": "Naming pattern type"
+        },
+        "custom_patterns": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "format": "regex"
+          },
+          "description": "User-defined regex patterns (required if pattern=custom)"
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "pattern": { "const": "custom" }
+        }
+      },
+      "then": {
+        "required": ["custom_patterns"]
+      }
+    },
+    "QualityGatesConfig": {
+      "type": "object",
+      "properties": {
+        "minimum_test_coverage": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 80,
+          "description": "Minimum test coverage percentage (column-level)"
+        },
+        "require_descriptions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Require model descriptions"
+        },
+        "require_column_descriptions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Require column descriptions"
+        },
+        "block_on_failure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Block compilation on quality gate failure"
+        },
+        "layer_thresholds": {
+          "$ref": "#/$defs/LayerThresholds",
+          "description": "Per-layer coverage thresholds (overrides minimum_test_coverage)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LayerThresholds": {
+      "type": "object",
+      "properties": {
+        "bronze": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50,
+          "description": "Bronze layer coverage threshold"
+        },
+        "silver": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 80,
+          "description": "Silver layer coverage threshold"
+        },
+        "gold": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 100,
+          "description": "Gold layer coverage threshold"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "policy_enforcement_level": "strict",
+      "naming": {
+        "enforcement": "strict",
+        "pattern": "medallion"
+      },
+      "quality_gates": {
+        "minimum_test_coverage": 80,
+        "require_descriptions": true,
+        "layer_thresholds": {
+          "bronze": 50,
+          "silver": 80,
+          "gold": 100
+        }
+      }
+    }
+  ]
+}

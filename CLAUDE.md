@@ -688,6 +688,8 @@ Linear app                      # Team progress view
 - Iceberg tables via PyIceberg (S3/GCS/Azure via StoragePlugin FileIO) (4d-storage-plugin)
 - Python 3.11 (7a-identity-secrets)
 - N/A (plugins access external secrets/identity backends) (7a-identity-secrets)
+- Python 3.10+ (matches floe-core requirements) + Pydantic v2 (schemas), structlog (logging), opentelemetry-api (tracing) (3a-policy-enforcer)
+- N/A (PolicyEnforcer is stateless; reads dbt manifest.json) (3a-policy-enforcer)
 
 ## Cognee Cloud API Quirks (CRITICAL)
 
@@ -750,6 +752,6 @@ result = await sdk.memify(dataset_name="my_dataset")
 See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_client.py`.
 
 ## Recent Changes
+- 3a-policy-enforcer: Added Python 3.10+ (matches floe-core requirements) + Pydantic v2 (schemas), structlog (logging), opentelemetry-api (tracing)
 - 7a-identity-secrets: Added Python 3.11
 - 4d-storage-plugin: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow
-- 10b-agent-memory-quality: Added Python 3.10+ (required for floe-core compatibility) + httpx (HTTP client), pytest (testing), structlog (logging), pydantic (validation)
