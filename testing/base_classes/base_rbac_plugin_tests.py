@@ -169,9 +169,7 @@ class BaseRBACPluginTests(ABC):
         assert manifest["kind"] == "ServiceAccount"
 
     @pytest.mark.requirement("FR-013")
-    def test_generate_service_account_has_managed_by_label(
-        self, rbac_plugin: RBACPlugin
-    ) -> None:
+    def test_generate_service_account_has_managed_by_label(self, rbac_plugin: RBACPlugin) -> None:
         """Verify generated ServiceAccount has floe managed-by label."""
         from floe_core.schemas.rbac import ServiceAccountConfig
 
@@ -304,9 +302,7 @@ class BaseRBACPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-022")
-    def test_generate_role_binding_has_correct_api_version(
-        self, rbac_plugin: RBACPlugin
-    ) -> None:
+    def test_generate_role_binding_has_correct_api_version(self, rbac_plugin: RBACPlugin) -> None:
         """Verify generated RoleBinding has correct apiVersion."""
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
@@ -362,9 +358,7 @@ class BaseRBACPluginTests(ABC):
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
         manifest = rbac_plugin.generate_role_binding(config)
@@ -378,9 +372,7 @@ class BaseRBACPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-030")
-    def test_generate_namespace_has_correct_api_version(
-        self, rbac_plugin: RBACPlugin
-    ) -> None:
+    def test_generate_namespace_has_correct_api_version(self, rbac_plugin: RBACPlugin) -> None:
         """Verify generated Namespace has correct apiVersion."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -464,9 +456,7 @@ class BaseRBACPluginTests(ABC):
         from floe_core.schemas.rbac import NamespaceConfig
 
         # Platform namespace (layer 3) should default to baseline
-        config = NamespaceConfig(
-            name="floe-platform", layer="3", pss_enforce="baseline"
-        )
+        config = NamespaceConfig(name="floe-platform", layer="3", pss_enforce="baseline")
         manifest = rbac_plugin.generate_namespace(config)
 
         labels = manifest["metadata"]["labels"]
@@ -489,9 +479,7 @@ class BaseRBACPluginTests(ABC):
         assert contexts["pod"]["runAsNonRoot"] is True
 
     @pytest.mark.requirement("FR-044")
-    def test_generate_pod_security_context_has_run_as_user(
-        self, rbac_plugin: RBACPlugin
-    ) -> None:
+    def test_generate_pod_security_context_has_run_as_user(self, rbac_plugin: RBACPlugin) -> None:
         """Verify pod security context includes runAsUser."""
         from floe_core.schemas.rbac import PodSecurityConfig
 

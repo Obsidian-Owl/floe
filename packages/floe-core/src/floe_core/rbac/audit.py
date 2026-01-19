@@ -201,10 +201,7 @@ class RBACGenerationAuditEvent(BaseModel):
             "namespaces": self.namespaces,
             "output_dir": self.output_dir,
             "total_resources": (
-                self.service_accounts
-                + self.roles
-                + self.role_bindings
-                + self.namespaces
+                self.service_accounts + self.roles + self.role_bindings + self.namespaces
             ),
         }
 

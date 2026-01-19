@@ -585,9 +585,9 @@ def _print_audit_report(report: RBACAuditReport) -> None:
     Args:
         report: Audit report to print.
     """
-    click.echo(f"\n{'='*60}")
+    click.echo(f"\n{'=' * 60}")
     click.echo("RBAC Audit Report")
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
     click.echo(f"Generated: {report.generated_at.isoformat()}")
     click.echo(f"Cluster: {report.cluster_name}")
 
@@ -604,9 +604,9 @@ def _print_audit_report(report: RBACAuditReport) -> None:
     click.echo(f"  Floe-managed: {report.floe_managed_count}")
 
     if report.findings:
-        click.echo(f"\n{'='*60}")
+        click.echo(f"\n{'=' * 60}")
         click.echo(f"Findings ({len(report.findings)}):")
-        click.echo(f"{'='*60}")
+        click.echo(f"{'=' * 60}")
 
         by_severity = report.findings_by_severity()
         from floe_cli.commands.rbac import AuditSeverity
@@ -626,9 +626,7 @@ def _print_audit_report(report: RBACAuditReport) -> None:
                     AuditSeverity.INFO: "blue",
                 }.get(severity, "white")
 
-                click.echo(
-                    click.style(f"\n[{severity.value.upper()}]", fg=color, bold=True)
-                )
+                click.echo(click.style(f"\n[{severity.value.upper()}]", fg=color, bold=True))
                 for finding in findings:
                     ns = finding.resource_namespace
                     ns_str = f" ({ns})" if ns else ""
@@ -713,12 +711,14 @@ def diff_command(
             ns_list = list(namespaces)
         else:
             # Extract namespaces from manifests
-            ns_list = list({
-                r.get("metadata", {}).get("namespace", "default")
-                for resources in expected_resources.values()
-                for r in resources
-                if r.get("metadata", {}).get("namespace")
-            })
+            ns_list = list(
+                {
+                    r.get("metadata", {}).get("namespace", "default")
+                    for resources in expected_resources.values()
+                    for r in resources
+                    if r.get("metadata", {}).get("namespace")
+                }
+            )
             if not ns_list:
                 ns_list = ["default"]
 
@@ -782,9 +782,7 @@ def _load_cluster_resources(namespaces: list[str]) -> dict[str, list[dict[str, A
         # Get namespaces
         try:
             ns_obj = v1.read_namespace(ns)
-            resources["Namespace"].append(
-                client.ApiClient().sanitize_for_serialization(ns_obj)
-            )
+            resources["Namespace"].append(client.ApiClient().sanitize_for_serialization(ns_obj))
         except Exception:
             pass
 
@@ -808,9 +806,7 @@ def _load_cluster_resources(namespaces: list[str]) -> dict[str, list[dict[str, A
                 label_selector="app.kubernetes.io/managed-by=floe",
             )
             for role in role_list.items:
-                resources["Role"].append(
-                    client.ApiClient().sanitize_for_serialization(role)
-                )
+                resources["Role"].append(client.ApiClient().sanitize_for_serialization(role))
         except Exception:
             pass
 
@@ -838,9 +834,9 @@ def _print_diff_result(result: RBACDiffResult) -> None:
     """
     from floe_cli.commands.rbac import DiffChangeType
 
-    click.echo(f"\n{'='*60}")
+    click.echo(f"\n{'=' * 60}")
     click.echo("RBAC Diff")
-    click.echo(f"{'='*60}")
+    click.echo(f"{'=' * 60}")
     click.echo(f"Expected: {result.expected_source}")
     click.echo(f"Actual: {result.actual_source}")
 

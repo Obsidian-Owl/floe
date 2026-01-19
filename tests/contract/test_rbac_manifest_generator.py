@@ -135,8 +135,7 @@ class TestRBACManifestGeneratorOutputContract:
         for kind, config in configs:
             manifest = config.to_k8s_manifest()
             assert required_fields.issubset(set(manifest.keys())), (
-                f"{kind} manifest missing required fields: "
-                f"{required_fields - set(manifest.keys())}"
+                f"{kind} manifest missing required fields: {required_fields - set(manifest.keys())}"
             )
             assert manifest["kind"] == kind
 
@@ -249,9 +248,7 @@ class TestRBACManifestAggregationContract:
         # Should produce minimal rules (ideally one rule with all resourceNames)
         # The exact structure depends on implementation, but there should be
         # fewer rules than secret references
-        total_resource_names = sum(
-            len(rule.resource_names or []) for rule in rules
-        )
+        total_resource_names = sum(len(rule.resource_names or []) for rule in rules)
         assert total_resource_names == 3  # All secrets accounted for
 
 

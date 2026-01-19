@@ -43,18 +43,14 @@ class TestPodSecurityStandardsCompliance:
         )
 
     @pytest.mark.requirement("FR-040")
-    def test_default_config_runs_as_non_root(
-        self, default_config: PodSecurityConfig
-    ) -> None:
+    def test_default_config_runs_as_non_root(self, default_config: PodSecurityConfig) -> None:
         """Test default config has runAsNonRoot: true (FR-040)."""
         pod_context = default_config.to_pod_security_context()
 
         assert pod_context["runAsNonRoot"] is True
 
     @pytest.mark.requirement("FR-040")
-    def test_pod_context_has_run_as_user(
-        self, default_config: PodSecurityConfig
-    ) -> None:
+    def test_pod_context_has_run_as_user(self, default_config: PodSecurityConfig) -> None:
         """Test pod context includes runAsUser."""
         pod_context = default_config.to_pod_security_context()
 
@@ -115,9 +111,7 @@ class TestPodSecurityStandardsCompliance:
         assert pod_context["fsGroup"] == 2000
 
     @pytest.mark.requirement("FR-044")
-    def test_default_uid_gid_is_1000(
-        self, default_config: PodSecurityConfig
-    ) -> None:
+    def test_default_uid_gid_is_1000(self, default_config: PodSecurityConfig) -> None:
         """Test default UID/GID is 1000 (FR-044)."""
         pod_context = default_config.to_pod_security_context()
 
@@ -223,9 +217,7 @@ class TestPodSecurityStandardsValidation:
         pod_context = config.to_pod_security_context()
         container_context = config.to_container_security_context()
 
-        is_compliant, violations = self._is_pss_restricted_compliant(
-            pod_context, container_context
-        )
+        is_compliant, violations = self._is_pss_restricted_compliant(pod_context, container_context)
 
         assert is_compliant is True, f"Violations: {violations}"
         assert violations == []
@@ -243,9 +235,7 @@ class TestPodSecurityStandardsValidation:
         pod_context = config.to_pod_security_context()
         container_context = config.to_container_security_context()
 
-        is_compliant, violations = self._is_pss_restricted_compliant(
-            pod_context, container_context
-        )
+        is_compliant, violations = self._is_pss_restricted_compliant(pod_context, container_context)
 
         assert is_compliant is False
         assert len(violations) == 3  # runAsNonRoot, allowPrivilegeEscalation, seccomp
@@ -266,9 +256,7 @@ class TestPodSecurityContextIntegration:
     @pytest.mark.requirement("FR-042")
     @pytest.mark.requirement("FR-043")
     @pytest.mark.requirement("FR-044")
-    def test_plugin_generates_compliant_security_context(
-        self, plugin: Any
-    ) -> None:
+    def test_plugin_generates_compliant_security_context(self, plugin: Any) -> None:
         """Test K8sRBACPlugin generates PSS compliant security context."""
         config = PodSecurityConfig()
 
@@ -294,9 +282,7 @@ class TestPodSecurityContextIntegration:
         assert pod_context["runAsGroup"] == 1000
 
     @pytest.mark.requirement("FR-043")
-    def test_plugin_generates_volumes_for_writable_dirs(
-        self, plugin: Any
-    ) -> None:
+    def test_plugin_generates_volumes_for_writable_dirs(self, plugin: Any) -> None:
         """Test K8sRBACPlugin generates volumes for writable directories (FR-043)."""
         config = PodSecurityConfig()
 

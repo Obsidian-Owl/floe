@@ -824,14 +824,16 @@ class RBACDiffResult(BaseModel):
 
 
 # Metadata fields to ignore when comparing resources
-_IGNORED_METADATA_FIELDS = frozenset({
-    "uid",
-    "resourceVersion",
-    "creationTimestamp",
-    "generation",
-    "managedFields",
-    "selfLink",
-})
+_IGNORED_METADATA_FIELDS = frozenset(
+    {
+        "uid",
+        "resourceVersion",
+        "creationTimestamp",
+        "generation",
+        "managedFields",
+        "selfLink",
+    }
+)
 
 
 def _normalize_resource(resource: dict[str, Any]) -> dict[str, Any]:
@@ -899,8 +901,7 @@ def _compare_values(
     elif isinstance(expected, list):
         if len(expected) != len(actual):
             differences.append(
-                f"{path}: list length mismatch (expected {len(expected)}, "
-                f"got {len(actual)})"
+                f"{path}: list length mismatch (expected {len(expected)}, got {len(actual)})"
             )
         else:
             for i, (exp_item, act_item) in enumerate(zip(expected, actual, strict=True)):

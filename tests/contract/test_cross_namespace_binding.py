@@ -27,9 +27,7 @@ class TestCrossNamespaceRoleBindingContract:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
 
@@ -70,9 +68,7 @@ class TestCrossNamespaceRoleBindingContract:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
 
@@ -88,9 +84,7 @@ class TestCrossNamespaceRoleBindingContract:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
 
@@ -137,9 +131,7 @@ class TestCrossNamespaceAccessPattern:
         binding_config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
 
@@ -204,9 +196,7 @@ class TestCrossNamespaceAccessControl:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
             allowed_subject_namespaces=["floe-platform", "floe-jobs"],
         )
@@ -217,9 +207,7 @@ class TestCrossNamespaceAccessControl:
             RoleBindingConfig(
                 name="floe-rogue-binding",
                 namespace="floe-jobs",
-                subjects=[
-                    RoleBindingSubject(name="floe-sales-sa", namespace="floe-sales-domain")
-                ],
+                subjects=[RoleBindingSubject(name="floe-sales-sa", namespace="floe-sales-domain")],
                 role_name="floe-job-creator-role",
                 allowed_subject_namespaces=["floe-platform", "floe-jobs"],
             )
@@ -251,9 +239,7 @@ class TestCrossNamespaceAccessControl:
         binding_config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
             allowed_subject_namespaces=["floe-platform"],  # Only platform allowed
         )
@@ -278,9 +264,7 @@ class TestCrossNamespaceYAMLCompatibility:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
 
@@ -301,9 +285,7 @@ class TestCrossNamespaceYAMLCompatibility:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[
-                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
-            ],
+            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
             role_name="floe-job-creator-role",
         )
 

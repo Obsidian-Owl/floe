@@ -29,9 +29,7 @@ class TestNamespaceIsolation:
         return K8sRBACPlugin()
 
     @pytest.mark.requirement("FR-030")
-    def test_jobs_namespace_created_with_pss(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_jobs_namespace_created_with_pss(self, plugin: K8sRBACPluginType) -> None:
         """Test jobs namespace has PSS labels for isolation."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -128,9 +126,7 @@ class TestPodSecurityContextIsolation:
         assert contexts["pod"]["runAsNonRoot"] is True
 
     @pytest.mark.requirement("FR-041")
-    def test_container_context_no_privilege_escalation(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_container_context_no_privilege_escalation(self, plugin: K8sRBACPluginType) -> None:
         """Test container context prevents privilege escalation."""
         from floe_core.schemas.rbac import PodSecurityConfig
 
@@ -140,9 +136,7 @@ class TestPodSecurityContextIsolation:
         assert contexts["container"]["allowPrivilegeEscalation"] is False
 
     @pytest.mark.requirement("FR-041")
-    def test_container_context_drops_all_capabilities(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_container_context_drops_all_capabilities(self, plugin: K8sRBACPluginType) -> None:
         """Test container context drops all Linux capabilities."""
         from floe_core.schemas.rbac import PodSecurityConfig
 
@@ -162,9 +156,7 @@ class TestPodSecurityContextIsolation:
         assert contexts["pod"]["seccompProfile"]["type"] == "RuntimeDefault"
 
     @pytest.mark.requirement("FR-043")
-    def test_container_context_read_only_filesystem(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_container_context_read_only_filesystem(self, plugin: K8sRBACPluginType) -> None:
         """Test container context uses read-only root filesystem."""
         from floe_core.schemas.rbac import PodSecurityConfig
 
@@ -247,9 +239,7 @@ class TestMultipleNamespaceIsolation:
         return K8sRBACPlugin()
 
     @pytest.mark.requirement("FR-030")
-    def test_multiple_namespaces_different_pss_levels(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_multiple_namespaces_different_pss_levels(self, plugin: K8sRBACPluginType) -> None:
         """Test multiple namespaces can have different PSS levels."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -277,9 +267,7 @@ class TestMultipleNamespaceIsolation:
         assert platform_labels["pod-security.kubernetes.io/enforce"] == "baseline"
 
     @pytest.mark.requirement("FR-032")
-    def test_jobs_namespace_isolation_complete(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_jobs_namespace_isolation_complete(self, plugin: K8sRBACPluginType) -> None:
         """Test jobs namespace has complete isolation configuration."""
         from floe_core.schemas.rbac import NamespaceConfig, PodSecurityConfig
 

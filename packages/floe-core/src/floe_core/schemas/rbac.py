@@ -665,8 +665,10 @@ class PodSecurityConfig(BaseModel):
             if mount.size_limit:
                 empty_dir["sizeLimit"] = mount.size_limit
 
-            volumes.append({
-                "name": mount.name,
-                "emptyDir": empty_dir,
-            })
+            volumes.append(
+                {
+                    "name": mount.name,
+                    "emptyDir": empty_dir,
+                }
+            )
         return volumes

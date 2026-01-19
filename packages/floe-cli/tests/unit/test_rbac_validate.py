@@ -321,9 +321,7 @@ class TestValidateManifestAgainstConfig:
             {"metadata": {"name": "role1", "namespace": "default"}},
         ]
 
-        issues = validate_manifest_against_config(
-            manifest_resources, expected_resources, "Role"
-        )
+        issues = validate_manifest_against_config(manifest_resources, expected_resources, "Role")
 
         assert len(issues) == 1
         assert issues[0].issue_type == ValidationIssueType.EXTRA_ROLE

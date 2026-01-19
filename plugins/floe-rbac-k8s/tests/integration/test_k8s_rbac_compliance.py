@@ -75,9 +75,7 @@ class TestK8sRBACPluginSpecific:
         assert all(part.isdigit() for part in parts[:2]), "Major and minor should be numeric"
 
     @pytest.mark.requirement("FR-010")
-    def test_service_account_manifest_is_valid_k8s(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_service_account_manifest_is_valid_k8s(self, plugin: K8sRBACPluginType) -> None:
         """Verify ServiceAccount manifest has all required K8s fields."""
         from floe_core.schemas.rbac import ServiceAccountConfig
 
@@ -118,9 +116,7 @@ class TestK8sRBACPluginSpecific:
         assert "verbs" in manifest["rules"][0]
 
     @pytest.mark.requirement("FR-022")
-    def test_role_binding_manifest_is_valid_k8s(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_role_binding_manifest_is_valid_k8s(self, plugin: K8sRBACPluginType) -> None:
         """Verify RoleBinding manifest has all required K8s fields."""
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
@@ -162,9 +158,7 @@ class TestK8sRBACPluginSpecific:
         assert "labels" in manifest["metadata"]
 
     @pytest.mark.requirement("FR-040")
-    def test_pod_security_context_returns_both_contexts(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_pod_security_context_returns_both_contexts(self, plugin: K8sRBACPluginType) -> None:
         """Verify generate_pod_security_context returns pod and container contexts."""
         from floe_core.schemas.rbac import PodSecurityConfig
 
@@ -177,9 +171,7 @@ class TestK8sRBACPluginSpecific:
         assert isinstance(contexts["container"], dict)
 
     @pytest.mark.requirement("FR-011")
-    def test_service_account_automount_default_false(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_service_account_automount_default_false(self, plugin: K8sRBACPluginType) -> None:
         """Verify ServiceAccount automountServiceAccountToken defaults to False."""
         from floe_core.schemas.rbac import ServiceAccountConfig
 
@@ -190,9 +182,7 @@ class TestK8sRBACPluginSpecific:
         assert manifest["automountServiceAccountToken"] is False
 
     @pytest.mark.requirement("FR-013")
-    def test_all_manifests_have_managed_by_label(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_all_manifests_have_managed_by_label(self, plugin: K8sRBACPluginType) -> None:
         """Verify all generated manifests have the managed-by label."""
         from floe_core.schemas.rbac import (
             NamespaceConfig,
@@ -231,9 +221,7 @@ class TestK8sRBACPluginSpecific:
         assert rb_manifest["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "floe"
 
         # Namespace
-        ns_manifest = plugin.generate_namespace(
-            NamespaceConfig(name="floe-test-ns", layer="4")
-        )
+        ns_manifest = plugin.generate_namespace(NamespaceConfig(name="floe-test-ns", layer="4"))
         assert ns_manifest["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "floe"
 
 
@@ -248,9 +236,7 @@ class TestK8sRBACPluginYAMLCompatibility:
         return K8sRBACPlugin()
 
     @pytest.mark.requirement("FR-012")
-    def test_service_account_manifest_yaml_compatible(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_service_account_manifest_yaml_compatible(self, plugin: K8sRBACPluginType) -> None:
         """Verify ServiceAccount manifest can be serialized to YAML."""
         import yaml
         from floe_core.schemas.rbac import ServiceAccountConfig
@@ -281,9 +267,7 @@ class TestK8sRBACPluginYAMLCompatibility:
         assert "kind: Role" in yaml_str
 
     @pytest.mark.requirement("FR-022")
-    def test_role_binding_manifest_yaml_compatible(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_role_binding_manifest_yaml_compatible(self, plugin: K8sRBACPluginType) -> None:
         """Verify RoleBinding manifest can be serialized to YAML."""
         import yaml
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
@@ -301,9 +285,7 @@ class TestK8sRBACPluginYAMLCompatibility:
         assert "kind: RoleBinding" in yaml_str
 
     @pytest.mark.requirement("FR-030")
-    def test_namespace_manifest_yaml_compatible(
-        self, plugin: K8sRBACPluginType
-    ) -> None:
+    def test_namespace_manifest_yaml_compatible(self, plugin: K8sRBACPluginType) -> None:
         """Verify Namespace manifest can be serialized to YAML."""
         import yaml
         from floe_core.schemas.rbac import NamespaceConfig

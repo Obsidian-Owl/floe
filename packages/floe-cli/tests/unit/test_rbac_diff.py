@@ -410,9 +410,7 @@ class TestComputeResourceDiff:
             "apiVersion": "rbac.authorization.k8s.io/v1",
             "kind": "Role",
             "metadata": {"name": "my-role", "namespace": "default"},
-            "rules": [
-                {"apiGroups": [""], "resources": ["secrets"], "verbs": ["get", "list"]}
-            ],
+            "rules": [{"apiGroups": [""], "resources": ["secrets"], "verbs": ["get", "list"]}],
         }
 
         diff = compute_resource_diff(expected, actual, "Role")
