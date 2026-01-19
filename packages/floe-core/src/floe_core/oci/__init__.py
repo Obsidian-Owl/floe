@@ -108,6 +108,14 @@ from floe_core.oci.resilience import (
     with_resilience,
 )
 
+# Configuration schemas (from floe_core.schemas.oci)
+from floe_core.schemas.oci import (
+    ArtifactManifest,
+    ArtifactTag,
+    CacheConfig,
+    RegistryConfig,
+)
+
 __all__: list[str] = [
     # Error hierarchy
     "OCIError",
@@ -150,4 +158,9 @@ __all__: list[str] = [
     "calculate_digest",
     "create_empty_config",
     "serialize_layer",
+    # Configuration schemas
+    "RegistryConfig",
+    "CacheConfig",
+    "ArtifactManifest",
+    "ArtifactTag",
 ]
