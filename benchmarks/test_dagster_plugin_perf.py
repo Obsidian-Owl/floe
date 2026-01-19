@@ -127,6 +127,7 @@ def _create_transform_configs(num_transforms: int) -> list[Any]:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_plugin_import_time() -> None:
     """Benchmark plugin import overhead.
 
@@ -145,6 +146,7 @@ def test_plugin_import_time() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_plugin_instantiation() -> None:
     """Benchmark plugin instantiation overhead.
 
@@ -157,6 +159,7 @@ def test_plugin_instantiation() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_plugin_instantiation_repeated() -> None:
     """Benchmark repeated plugin instantiation.
 
@@ -175,6 +178,7 @@ def test_plugin_instantiation_repeated() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_create_definitions_small() -> None:
     """Benchmark create_definitions with small pipeline (10 transforms).
 
@@ -188,6 +192,7 @@ def test_create_definitions_small() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_create_definitions_medium() -> None:
     """Benchmark create_definitions with medium pipeline (100 transforms).
 
@@ -201,6 +206,7 @@ def test_create_definitions_medium() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_create_definitions_large() -> None:
     """Benchmark create_definitions with large pipeline (500 transforms).
 
@@ -214,6 +220,7 @@ def test_create_definitions_large() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_create_assets_from_transforms_small() -> None:
     """Benchmark create_assets_from_transforms with 10 transforms."""
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
@@ -224,6 +231,7 @@ def test_create_assets_from_transforms_small() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_create_assets_from_transforms_medium() -> None:
     """Benchmark create_assets_from_transforms with 100 transforms."""
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
@@ -234,6 +242,7 @@ def test_create_assets_from_transforms_medium() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_create_assets_from_transforms_large() -> None:
     """Benchmark create_assets_from_transforms with 500 transforms.
 
@@ -252,6 +261,7 @@ def test_create_assets_from_transforms_large() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
 def test_artifacts_validation_overhead() -> None:
     """Benchmark CompiledArtifacts validation overhead.
 
@@ -265,6 +275,7 @@ def test_artifacts_validation_overhead() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_get_helm_values_overhead() -> None:
     """Benchmark get_helm_values method overhead.
 
@@ -277,6 +288,7 @@ def test_get_helm_values_overhead() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_get_resource_requirements_overhead() -> None:
     """Benchmark get_resource_requirements method overhead.
 
@@ -289,6 +301,7 @@ def test_get_resource_requirements_overhead() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_schedule_job_overhead() -> None:
     """Benchmark schedule_job method overhead.
 
@@ -301,6 +314,7 @@ def test_schedule_job_overhead() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.requirement("NFR-001")
 def test_emit_lineage_event_noop() -> None:
     """Benchmark emit_lineage_event when no backend configured.
 

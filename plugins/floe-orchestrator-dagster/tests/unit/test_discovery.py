@@ -1,11 +1,13 @@
-"""Integration tests for Dagster orchestrator plugin discovery via entry points.
+"""Unit tests for Dagster orchestrator plugin discovery via entry points.
 
 Tests for:
 - FR-002: Plugin is discoverable via floe.orchestrators entry point
+- FR-003: Plugin has complete metadata
 - FR-004: Plugin correctly implements OrchestratorPlugin ABC
 
 These tests verify that the Dagster orchestrator plugin is correctly registered
-via entry points and can be discovered at runtime.
+via entry points and can be discovered at runtime. They do NOT require external
+services (K8s, Dagster).
 """
 
 from __future__ import annotations
@@ -14,9 +16,12 @@ import pytest
 
 
 class TestDagsterOrchestratorPluginDiscovery:
-    """Integration tests for Dagster orchestrator plugin discovery."""
+    """Unit tests for Dagster orchestrator plugin discovery.
 
-    @pytest.mark.integration
+    These tests use importlib.metadata entry_points which is pure Python
+    and does not require any external services.
+    """
+
     @pytest.mark.requirement("004-FR-002")
     def test_dagster_plugin_discovered_via_entry_points(self) -> None:
         """Test DagsterOrchestratorPlugin is discoverable via entry points.
@@ -45,7 +50,6 @@ class TestDagsterOrchestratorPluginDiscovery:
         plugin = plugin_class()
         assert plugin.name == "dagster"
 
-    @pytest.mark.integration
     @pytest.mark.requirement("004-FR-004")
     def test_dagster_plugin_is_orchestrator_plugin(self) -> None:
         """Test DagsterOrchestratorPlugin implements OrchestratorPlugin ABC.
@@ -68,7 +72,6 @@ class TestDagsterOrchestratorPluginDiscovery:
         assert isinstance(plugin, OrchestratorPlugin)
         assert plugin.name == "dagster"
 
-    @pytest.mark.integration
     @pytest.mark.requirement("004-FR-003")
     def test_dagster_plugin_metadata_complete(self) -> None:
         """Test Dagster plugin has complete metadata.
@@ -89,7 +92,6 @@ class TestDagsterOrchestratorPluginDiscovery:
         assert plugin.floe_api_version == "1.0"
         assert "dagster" in plugin.description.lower()
 
-    @pytest.mark.integration
     @pytest.mark.requirement("004-FR-002")
     def test_entry_point_module_path(self) -> None:
         """Test entry point correctly references plugin module.
@@ -106,7 +108,6 @@ class TestDagsterOrchestratorPluginDiscovery:
         assert "floe_orchestrator_dagster" in dagster_ep.value
         assert "DagsterOrchestratorPlugin" in dagster_ep.value
 
-    @pytest.mark.integration
     @pytest.mark.requirement("004-FR-002")
     def test_plugin_instantiation_without_dependencies(self) -> None:
         """Test plugin can be instantiated without external services.

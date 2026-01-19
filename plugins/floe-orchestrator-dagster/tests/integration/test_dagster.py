@@ -7,8 +7,9 @@ Requirements Covered:
 - SC-002: Plugin consumes CompiledArtifacts correctly
 - SC-004: Connection validation works with real Dagster service
 
-Note: Tests in this file require K8s infrastructure. Run with:
-    make test-integration
+Note:
+- Tests in this file require K8s infrastructure. Run with: make test-integration
+- ABC compliance tests are in tests/unit/test_plugin.py (no K8s required)
 """
 
 from __future__ import annotations
@@ -109,7 +110,7 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
                     "resource_attributes": {
                         "service_name": "integration-test-pipeline",
                         "service_version": "1.0.0",
-                        "deployment_environment": "integration",
+                        "deployment_environment": "dev",
                         "floe_namespace": "default",
                         "floe_product_name": "integration-test-pipeline",
                         "floe_product_version": "1.0.0",
@@ -198,63 +199,3 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
 
         assert fct_orders is not None, "fct_orders asset not found"
         assert AssetKey(["stg_customers"]) in fct_orders.dependency_keys
-
-
-class TestDagsterPluginABCComplianceIntegration(IntegrationTestBase):
-    """Integration tests for OrchestratorPlugin ABC compliance.
-
-    Validates SC-001: Plugin passes all 7 abstract method compliance tests.
-    """
-
-    required_services: ClassVar[list[tuple[str, int]]] = []
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("SC-001")
-    def test_plugin_inherits_from_orchestrator_plugin(self) -> None:
-        """Test plugin inherits from OrchestratorPlugin ABC."""
-        from floe_core.plugins.orchestrator import OrchestratorPlugin
-
-        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
-
-        plugin = DagsterOrchestratorPlugin()
-        assert isinstance(plugin, OrchestratorPlugin)
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("SC-001")
-    def test_plugin_implements_all_abstract_methods(self) -> None:
-        """Test plugin implements all required abstract methods."""
-        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
-
-        plugin = DagsterOrchestratorPlugin()
-
-        # All 7 ABC methods must exist and be callable
-        abstract_methods = [
-            "create_definitions",
-            "create_assets_from_transforms",
-            "get_helm_values",
-            "validate_connection",
-            "get_resource_requirements",
-            "emit_lineage_event",
-            "schedule_job",
-        ]
-
-        for method_name in abstract_methods:
-            assert hasattr(plugin, method_name), f"Missing method: {method_name}"
-            method = getattr(plugin, method_name)
-            assert callable(method), f"Method not callable: {method_name}"
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("SC-001")
-    def test_plugin_metadata_properties(self) -> None:
-        """Test plugin declares required metadata properties."""
-        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
-
-        plugin = DagsterOrchestratorPlugin()
-
-        # Required metadata properties
-        assert plugin.name == "dagster"
-        assert plugin.version is not None
-        assert len(plugin.version.split(".")) == 3  # semver
-        assert plugin.floe_api_version is not None
-        assert plugin.description is not None
-        assert len(plugin.description) > 0

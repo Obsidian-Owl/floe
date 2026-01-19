@@ -3,8 +3,16 @@
 These tests verify the Dagster orchestrator plugin implementation without
 requiring external services.
 
-Note: @pytest.mark.requirement markers are only used for integration tests.
-Unit tests validate implementation correctness; integration tests validate requirements.
+Requirements Covered:
+- FR-002: Implement all abstract methods from OrchestratorPlugin ABC
+- FR-003: Plugin declares name, version, floe_api_version
+- FR-004: Plugin inherits from OrchestratorPlugin and PluginMetadata
+- FR-005: Generate valid Dagster Definitions from CompiledArtifacts
+- FR-006: Create Dagster software-defined assets from TransformConfig
+- FR-007: Preserve dbt model dependency graph as Dagster asset dependencies
+- FR-008: Include transform metadata in asset metadata
+- FR-009: Validate CompiledArtifacts schema before generating definitions
+- SC-001: Plugin passes all 7 abstract method compliance tests
 """
 
 from __future__ import annotations
@@ -28,10 +36,12 @@ class TestDagsterOrchestratorPluginMetadata:
     - FR-004: Plugin inherits from OrchestratorPlugin and PluginMetadata
     """
 
+    @pytest.mark.requirement("FR-003")
     def test_plugin_name(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin name is 'dagster'."""
         assert dagster_plugin.name == "dagster"
 
+    @pytest.mark.requirement("FR-003")
     def test_plugin_version(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin version follows semver format."""
         version = dagster_plugin.version
@@ -39,11 +49,13 @@ class TestDagsterOrchestratorPluginMetadata:
         assert len(parts) == 3
         assert all(part.isdigit() for part in parts)
 
+    @pytest.mark.requirement("FR-003")
     def test_floe_api_version(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test floe API version is specified."""
         api_version = dagster_plugin.floe_api_version
         assert api_version == "1.0"
 
+    @pytest.mark.requirement("FR-003")
     def test_plugin_description(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -59,12 +71,14 @@ class TestDagsterOrchestratorPluginABCCompliance:
     defined in OrchestratorPlugin ABC.
     """
 
+    @pytest.mark.requirement("SC-001")
     def test_inherits_from_orchestrator_plugin(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
         """Test plugin inherits from OrchestratorPlugin ABC."""
         assert isinstance(dagster_plugin, OrchestratorPlugin)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_create_definitions_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -72,6 +86,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert hasattr(dagster_plugin, "create_definitions")
         assert callable(dagster_plugin.create_definitions)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_create_assets_from_transforms_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -79,6 +94,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert hasattr(dagster_plugin, "create_assets_from_transforms")
         assert callable(dagster_plugin.create_assets_from_transforms)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_get_helm_values_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -86,6 +102,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert hasattr(dagster_plugin, "get_helm_values")
         assert callable(dagster_plugin.get_helm_values)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_validate_connection_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -93,6 +110,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert hasattr(dagster_plugin, "validate_connection")
         assert callable(dagster_plugin.validate_connection)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_get_resource_requirements_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -100,6 +118,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert hasattr(dagster_plugin, "get_resource_requirements")
         assert callable(dagster_plugin.get_resource_requirements)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_emit_lineage_event_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -107,6 +126,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert hasattr(dagster_plugin, "emit_lineage_event")
         assert callable(dagster_plugin.emit_lineage_event)
 
+    @pytest.mark.requirement("SC-001")
     def test_has_schedule_job_method(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -118,6 +138,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
 class TestDagsterOrchestratorPluginInstantiation:
     """Test plugin instantiation and basic operations."""
 
+    @pytest.mark.requirement("FR-002")
     def test_plugin_can_be_instantiated(self) -> None:
         """Test plugin can be instantiated without arguments."""
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
@@ -125,12 +146,14 @@ class TestDagsterOrchestratorPluginInstantiation:
         plugin = DagsterOrchestratorPlugin()
         assert plugin is not None
 
+    @pytest.mark.requirement("FR-002")
     def test_plugin_can_be_imported_from_package(self) -> None:
         """Test plugin is exported from package __init__.py."""
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         assert DagsterOrchestratorPlugin is not None
 
+    @pytest.mark.requirement("FR-003")
     def test_version_exported_from_package(self) -> None:
         """Test __version__ is exported from package."""
         from floe_orchestrator_dagster import __version__
@@ -148,6 +171,7 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
     before generating definitions.
     """
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_valid_artifacts(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -160,6 +184,7 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
 
         assert isinstance(result, Definitions)
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_multiple_models(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -183,6 +208,7 @@ class TestDagsterOrchestratorPluginValidation:
     before generating definitions.
     """
 
+    @pytest.mark.requirement("FR-009")
     def test_create_definitions_rejects_empty_artifacts(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -190,6 +216,7 @@ class TestDagsterOrchestratorPluginValidation:
         with pytest.raises(ValueError, match="CompiledArtifacts validation failed"):
             dagster_plugin.create_definitions({})
 
+    @pytest.mark.requirement("FR-009")
     def test_create_definitions_rejects_missing_metadata(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -201,6 +228,7 @@ class TestDagsterOrchestratorPluginValidation:
         with pytest.raises(ValueError, match="metadata"):
             dagster_plugin.create_definitions(valid_compiled_artifacts)
 
+    @pytest.mark.requirement("FR-009")
     def test_create_definitions_rejects_missing_identity(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -212,6 +240,7 @@ class TestDagsterOrchestratorPluginValidation:
         with pytest.raises(ValueError, match="identity"):
             dagster_plugin.create_definitions(valid_compiled_artifacts)
 
+    @pytest.mark.requirement("FR-009")
     def test_validation_error_includes_actionable_message(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -231,6 +260,7 @@ class TestDagsterOrchestratorPluginCreateAssets:
     Dagster asset dependencies.
     """
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_empty_list(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -239,6 +269,7 @@ class TestDagsterOrchestratorPluginCreateAssets:
         assert isinstance(assets, list)
         assert len(assets) == 0
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_single_transform(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -248,6 +279,7 @@ class TestDagsterOrchestratorPluginCreateAssets:
         assets = dagster_plugin.create_assets_from_transforms([sample_transform_config])
         assert len(assets) == 1
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_multiple_transforms(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -257,6 +289,7 @@ class TestDagsterOrchestratorPluginCreateAssets:
         assets = dagster_plugin.create_assets_from_transforms(sample_transform_configs)
         assert len(assets) == 3  # raw_customers, stg_customers, dim_customers
 
+    @pytest.mark.requirement("FR-007")
     def test_create_assets_preserves_dependencies(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -272,6 +305,7 @@ class TestDagsterOrchestratorPluginCreateAssets:
         dim_asset = next(a for a in assets if a.key.path[-1] == "dim_customers")
         assert AssetKey(["stg_customers"]) in dim_asset.dependency_keys
 
+    @pytest.mark.requirement("FR-008")
     def test_create_assets_includes_transform_metadata(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -298,12 +332,12 @@ class TestDagsterOrchestratorPluginCreateAssets:
 
 
 class TestDagsterOrchestratorPluginSkeletonMethods:
-    """Test skeleton methods raise NotImplementedError.
+    """Test implemented plugin methods.
 
-    These tests verify that placeholder methods correctly raise
-    NotImplementedError until they are implemented in later tasks.
+    These tests verify the plugin methods work correctly.
     """
 
+    @pytest.mark.requirement("FR-010")
     def test_get_helm_values_returns_dict(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -314,6 +348,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         assert "dagster-daemon" in result
         assert "dagster-user-code" in result
 
+    @pytest.mark.requirement("FR-011")
     def test_validate_connection_returns_validation_result(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -330,6 +365,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         assert result.success is False
         assert len(result.errors) > 0
 
+    @pytest.mark.requirement("FR-012")
     def test_get_resource_requirements_small(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -341,6 +377,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         assert result.cpu_request == "100m"
         assert result.memory_limit == "512Mi"
 
+    @pytest.mark.requirement("FR-012")
     def test_get_resource_requirements_invalid_size(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -348,6 +385,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         with pytest.raises(ValueError, match="Invalid workload_size"):
             dagster_plugin.get_resource_requirements("invalid")
 
+    @pytest.mark.requirement("FR-013")
     def test_emit_lineage_event_no_backend_is_noop(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -362,6 +400,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
             [Dataset(namespace="floe", name="output")],
         )
 
+    @pytest.mark.requirement("FR-014")
     def test_schedule_job_creates_schedule(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
