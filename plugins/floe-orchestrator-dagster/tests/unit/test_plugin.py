@@ -339,12 +339,19 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         with pytest.raises(ValueError, match="Invalid workload_size"):
             dagster_plugin.get_resource_requirements("invalid")
 
-    def test_emit_lineage_event_not_implemented(
+    def test_emit_lineage_event_no_backend_is_noop(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Test emit_lineage_event raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T021"):
-            dagster_plugin.emit_lineage_event("START", "job", [], [])
+        """Test emit_lineage_event is no-op when no backend configured."""
+        from floe_core.plugins.orchestrator import Dataset
+
+        # Should not raise - graceful no-op
+        dagster_plugin.emit_lineage_event(
+            "START",
+            "test_job",
+            [Dataset(namespace="floe", name="input")],
+            [Dataset(namespace="floe", name="output")],
+        )
 
     def test_schedule_job_creates_schedule(
         self, dagster_plugin: DagsterOrchestratorPlugin
