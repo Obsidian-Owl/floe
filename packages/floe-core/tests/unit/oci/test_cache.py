@@ -1017,3 +1017,313 @@ class TestCacheClearAndCleanup:
         # Entry should be removed from cache
         check_entry = cache_manager.get("oci://harbor.example.com/floe", "v1.0.0")
         assert check_entry is None
+
+
+class TestCacheDisabledPaths:
+    """Tests for disabled cache scenarios (T067 coverage)."""
+
+    @pytest.fixture
+    def disabled_config(self, tmp_path: Path) -> CacheConfig:
+        """Create disabled CacheConfig."""
+        return CacheConfig(
+            enabled=False,
+            path=tmp_path / "disabled_cache",
+        )
+
+    @pytest.fixture
+    def disabled_manager(self, disabled_config: CacheConfig) -> CacheManager:
+        """Create disabled CacheManager."""
+        return CacheManager(disabled_config)
+
+    @pytest.mark.requirement("8A-FR-013")
+    def test_get_by_digest_returns_none_when_disabled(
+        self,
+        disabled_manager: CacheManager,
+    ) -> None:
+        """Test get_by_digest returns None when cache is disabled.
+
+        Verifies:
+        - Disabled cache returns None for get_by_digest
+        - No error raised
+        """
+        entry = disabled_manager.get_by_digest("sha256:abc123")
+        assert entry is None
+
+    @pytest.mark.requirement("8A-FR-013")
+    def test_put_raises_when_disabled(
+        self,
+        disabled_manager: CacheManager,
+    ) -> None:
+        """Test put raises CacheError when cache is disabled.
+
+        Verifies:
+        - Disabled cache raises CacheError on put
+        """
+        from floe_core.oci.errors import CacheError
+
+        content = b'{"version": "0.2.0"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+        with pytest.raises(CacheError, match="Caching is disabled"):
+            disabled_manager.put(
+                digest=digest,
+                tag="v1.0.0",
+                registry="oci://harbor.example.com/floe",
+                content=content,
+            )
+
+    @pytest.mark.requirement("8A-FR-013")
+    def test_remove_returns_false_when_disabled(
+        self,
+        disabled_manager: CacheManager,
+    ) -> None:
+        """Test remove returns False when cache is disabled.
+
+        Verifies:
+        - Disabled cache returns False on remove
+        - No error raised
+        """
+        result = disabled_manager.remove("sha256:abc123")
+        assert result is False
+
+    @pytest.mark.requirement("8A-FR-015")
+    def test_get_entries_by_tag_returns_empty_when_disabled(
+        self,
+        disabled_manager: CacheManager,
+    ) -> None:
+        """Test get_entries_by_tag returns empty list when disabled.
+
+        Verifies:
+        - Disabled cache returns empty list
+        - No error raised
+        """
+        entries = disabled_manager.get_entries_by_tag("v1.0.0")
+        assert entries == []
+
+
+class TestCacheRemoveNotFound:
+    """Tests for remove when entry doesn't exist."""
+
+    @pytest.fixture
+    def cache_config(self, tmp_path: Path) -> CacheConfig:
+        """Create CacheConfig with temp directory."""
+        return CacheConfig(
+            enabled=True,
+            path=tmp_path / "cache",
+            max_size_gb=1,
+            ttl_hours=24,
+        )
+
+    @pytest.fixture
+    def cache_manager(self, cache_config: CacheConfig) -> CacheManager:
+        """Create CacheManager with temp directory."""
+        return CacheManager(cache_config)
+
+    @pytest.mark.requirement("8A-FR-013")
+    def test_remove_returns_false_for_nonexistent(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test remove returns False when entry doesn't exist.
+
+        Verifies:
+        - Removing non-existent entry returns False
+        - No error raised
+        """
+        result = cache_manager.remove("sha256:nonexistent123456789")
+        assert result is False
+
+
+class TestCacheIndexCorrupted:
+    """Tests for corrupted cache index recovery."""
+
+    @pytest.mark.requirement("8A-FR-015")
+    def test_corrupted_index_recovered(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test corrupted index is recovered to empty state.
+
+        Verifies:
+        - Corrupted index.json is recovered
+        - Cache continues to function
+        """
+        # Create cache directory manually
+        cache_path = tmp_path / "cache"
+        cache_path.mkdir(parents=True)
+        (cache_path / "sha256").mkdir()
+        (cache_path / "tags").mkdir()
+
+        # Write corrupted index file
+        index_path = cache_path / "index.json"
+        index_path.write_text("{ invalid json content")
+
+        # Create cache manager - should recover from corrupted index
+        config = CacheConfig(enabled=True, path=cache_path)
+        manager = CacheManager(config)
+
+        # Should function normally with empty index
+        stats = manager.stats()
+        assert stats["entry_count"] == 0
+
+        # Should be able to add entries
+        content = b'{"version": "0.2.0"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+        entry = manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+        assert entry is not None
+
+
+class TestCacheStats:
+    """Tests for cache stats method."""
+
+    @pytest.fixture
+    def cache_config(self, tmp_path: Path) -> CacheConfig:
+        """Create CacheConfig with temp directory."""
+        return CacheConfig(
+            enabled=True,
+            path=tmp_path / "cache",
+            max_size_gb=1,
+            ttl_hours=24,
+        )
+
+    @pytest.fixture
+    def cache_manager(self, cache_config: CacheConfig) -> CacheManager:
+        """Create CacheManager with temp directory."""
+        return CacheManager(cache_config)
+
+    @pytest.mark.requirement("8A-FR-015")
+    def test_stats_reports_correct_counts(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test stats reports correct entry counts.
+
+        Verifies:
+        - Immutable count is correct
+        - Mutable count is correct
+        - Total count is correct
+        """
+        # Add immutable entry (semver)
+        immutable_content = b'{"type": "immutable"}'
+        immutable_digest = f"sha256:{hashlib.sha256(immutable_content).hexdigest()}"
+        cache_manager.put(
+            digest=immutable_digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=immutable_content,
+        )
+
+        # Add mutable entry (non-semver)
+        mutable_content = b'{"type": "mutable"}'
+        mutable_digest = f"sha256:{hashlib.sha256(mutable_content).hexdigest()}"
+        cache_manager.put(
+            digest=mutable_digest,
+            tag="latest-dev",
+            registry="oci://harbor.example.com/floe",
+            content=mutable_content,
+        )
+
+        # Check stats
+        stats = cache_manager.stats()
+
+        assert stats["entry_count"] == 2
+        assert stats["immutable_count"] == 1
+        assert stats["mutable_count"] == 1
+        assert stats["enabled"] is True
+        assert stats["max_size_gb"] == 1
+        assert stats["ttl_hours"] == 24
+
+    @pytest.mark.requirement("8A-FR-015")
+    def test_stats_reports_total_size(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test stats reports correct total size.
+
+        Verifies:
+        - Total size is sum of all entry sizes
+        """
+        content1 = b'{"version": "1.0.0"}'
+        digest1 = f"sha256:{hashlib.sha256(content1).hexdigest()}"
+        cache_manager.put(
+            digest=digest1,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content1,
+        )
+
+        content2 = b'{"version": "2.0.0", "extra": "data"}'
+        digest2 = f"sha256:{hashlib.sha256(content2).hexdigest()}"
+        cache_manager.put(
+            digest=digest2,
+            tag="v2.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content2,
+        )
+
+        stats = cache_manager.stats()
+
+        expected_size = len(content1) + len(content2)
+        assert stats["total_size_bytes"] == expected_size
+
+
+class TestCachePutWithManifest:
+    """Tests for put with manifest data."""
+
+    @pytest.fixture
+    def cache_config(self, tmp_path: Path) -> CacheConfig:
+        """Create CacheConfig with temp directory."""
+        return CacheConfig(
+            enabled=True,
+            path=tmp_path / "cache",
+            max_size_gb=1,
+            ttl_hours=24,
+        )
+
+    @pytest.fixture
+    def cache_manager(self, cache_config: CacheConfig) -> CacheManager:
+        """Create CacheManager with temp directory."""
+        return CacheManager(cache_config)
+
+    @pytest.mark.requirement("8A-FR-013")
+    def test_put_stores_manifest(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test put stores manifest alongside content.
+
+        Verifies:
+        - Manifest is stored in manifest.json
+        - Both content and manifest are accessible
+        """
+        import json
+
+        content = b'{"version": "0.2.0"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+        manifest = {
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        }
+
+        entry = cache_manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+            manifest=manifest,
+        )
+
+        # Check content is stored
+        assert entry.path.exists()
+        assert entry.path.read_bytes() == content
+
+        # Check manifest is stored
+        manifest_path = entry.path.parent / "manifest.json"
+        assert manifest_path.exists()
+        stored_manifest = json.loads(manifest_path.read_text())
+        assert stored_manifest == manifest

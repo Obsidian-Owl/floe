@@ -1542,3 +1542,990 @@ oci:
 
         captured = capsys.readouterr()
         assert "Cache not configured" in captured.out
+
+
+class TestHelperFunctions:
+    """Tests for helper functions in artifact module."""
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_format_size_bytes(self) -> None:
+        """Test _format_size with bytes."""
+        from floe_core.cli.artifact import _format_size
+
+        assert _format_size(0) == "0 B"
+        assert _format_size(500) == "500 B"
+        assert _format_size(1023) == "1023 B"
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_format_size_kilobytes(self) -> None:
+        """Test _format_size with kilobytes."""
+        from floe_core.cli.artifact import _format_size
+
+        assert _format_size(1024) == "1.0 KB"
+        assert _format_size(1536) == "1.5 KB"
+        assert _format_size(1024 * 100) == "100.0 KB"
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_format_size_megabytes(self) -> None:
+        """Test _format_size with megabytes."""
+        from floe_core.cli.artifact import _format_size
+
+        assert _format_size(1024 * 1024) == "1.0 MB"
+        assert _format_size(1024 * 1024 * 5) == "5.0 MB"
+        assert _format_size(int(1024 * 1024 * 2.5)) == "2.5 MB"
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_format_size_gigabytes(self) -> None:
+        """Test _format_size with gigabytes."""
+        from floe_core.cli.artifact import _format_size
+
+        assert _format_size(1024 * 1024 * 1024) == "1.0 GB"
+        assert _format_size(1024 * 1024 * 1024 * 2) == "2.0 GB"
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_format_date(self) -> None:
+        """Test _format_date function."""
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import _format_date
+
+        dt = datetime(2026, 1, 19, 10, 30, 0, tzinfo=timezone.utc)
+        assert _format_date(dt) == "2026-01-19"
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_truncate_digest_short(self) -> None:
+        """Test _truncate_digest with short digest."""
+        from floe_core.cli.artifact import _truncate_digest
+
+        assert _truncate_digest("sha256:abc", 15) == "sha256:abc"
+        assert _truncate_digest("short", 10) == "short"
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_truncate_digest_long(self) -> None:
+        """Test _truncate_digest with long digest."""
+        from floe_core.cli.artifact import _truncate_digest
+
+        long_digest = "sha256:abc123def456789012345678901234567890"
+        # 15 chars: s,h,a,2,5,6,:,a,b,c,1,2,3,d,e = "sha256:abc123de"
+        assert _truncate_digest(long_digest, 15) == "sha256:abc123de..."
+        # 20 chars: s,h,a,2,5,6,:,a,b,c,1,2,3,d,e,f,4,5,6,7 = "sha256:abc123def4567"
+        assert _truncate_digest(long_digest, 20) == "sha256:abc123def4567..."
+
+
+class TestCircuitBreakerErrors:
+    """Tests for CircuitBreakerOpenError handling in CLI commands."""
+
+    @pytest.mark.requirement("8A-FR-026")
+    def test_push_circuit_breaker_error_returns_five(self, tmp_path: Path) -> None:
+        """Test circuit breaker error returns exit code 5."""
+        from floe_core.cli.artifact import run_push
+        from floe_core.oci.errors import CircuitBreakerOpenError
+
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts_path.write_text('{"version": "0.2.0"}')
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            source=artifacts_path,
+            tag="v1.0.0",
+            manifest=manifest_path,
+            verbose=False,
+            quiet=True,
+        )
+
+        mock_artifacts = MagicMock()
+
+        with (
+            patch(
+                "floe_core.schemas.compiled_artifacts.CompiledArtifacts.from_json_file"
+            ) as mock_from_json,
+            patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest,
+        ):
+            mock_from_json.return_value = mock_artifacts
+            mock_client = MagicMock()
+            mock_client.push.side_effect = CircuitBreakerOpenError(
+                "harbor.example.com", 60
+            )
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_push(args)
+
+        assert exit_code == 5
+
+    @pytest.mark.requirement("8A-FR-027")
+    def test_pull_circuit_breaker_error_returns_five(self, tmp_path: Path) -> None:
+        """Test circuit breaker error returns exit code 5."""
+        from floe_core.cli.artifact import run_pull
+        from floe_core.oci.errors import CircuitBreakerOpenError
+
+        output_dir = tmp_path / "artifacts"
+        output_dir.mkdir()
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            output=output_dir,
+            manifest=manifest_path,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.pull.side_effect = CircuitBreakerOpenError(
+                "harbor.example.com", 60
+            )
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_pull(args)
+
+        assert exit_code == 5
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_inspect_circuit_breaker_error_returns_five(self, tmp_path: Path) -> None:
+        """Test circuit breaker error returns exit code 5."""
+        from floe_core.cli.artifact import run_inspect
+        from floe_core.oci.errors import CircuitBreakerOpenError
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.inspect.side_effect = CircuitBreakerOpenError(
+                "harbor.example.com", 60
+            )
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_inspect(args)
+
+        assert exit_code == 5
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_circuit_breaker_error_returns_five(self, tmp_path: Path) -> None:
+        """Test circuit breaker error returns exit code 5."""
+        from floe_core.cli.artifact import run_list
+        from floe_core.oci.errors import CircuitBreakerOpenError
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.side_effect = CircuitBreakerOpenError(
+                "harbor.example.com", 60
+            )
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 5
+
+
+class TestUnexpectedExceptions:
+    """Tests for unexpected exception handling in CLI commands."""
+
+    @pytest.mark.requirement("8A-FR-026")
+    def test_push_unexpected_exception_returns_one(self, tmp_path: Path) -> None:
+        """Test unexpected exception returns exit code 1."""
+        from floe_core.cli.artifact import run_push
+
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts_path.write_text('{"version": "0.2.0"}')
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            source=artifacts_path,
+            tag="v1.0.0",
+            manifest=manifest_path,
+            verbose=False,
+            quiet=True,
+        )
+
+        with (
+            patch(
+                "floe_core.schemas.compiled_artifacts.CompiledArtifacts.from_json_file"
+            ) as mock_from_json,
+        ):
+            mock_from_json.side_effect = RuntimeError("Unexpected error")
+
+            exit_code = run_push(args)
+
+        assert exit_code == 1
+
+    @pytest.mark.requirement("8A-FR-027")
+    def test_pull_unexpected_exception_returns_one(self, tmp_path: Path) -> None:
+        """Test unexpected exception returns exit code 1."""
+        from floe_core.cli.artifact import run_pull
+
+        output_dir = tmp_path / "artifacts"
+        output_dir.mkdir()
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            output=output_dir,
+            manifest=manifest_path,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_from_manifest.side_effect = RuntimeError("Unexpected error")
+
+            exit_code = run_pull(args)
+
+        assert exit_code == 1
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_inspect_unexpected_exception_returns_one(self, tmp_path: Path) -> None:
+        """Test unexpected exception returns exit code 1."""
+        from floe_core.cli.artifact import run_inspect
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_from_manifest.side_effect = RuntimeError("Unexpected error")
+
+            exit_code = run_inspect(args)
+
+        assert exit_code == 1
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_unexpected_exception_returns_one(self, tmp_path: Path) -> None:
+        """Test unexpected exception returns exit code 1."""
+        from floe_core.cli.artifact import run_list
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_from_manifest.side_effect = RuntimeError("Unexpected error")
+
+            exit_code = run_list(args)
+
+        assert exit_code == 1
+
+
+class TestVerboseMode:
+    """Tests for verbose mode output in CLI commands."""
+
+    @pytest.mark.requirement("8A-FR-026")
+    def test_push_verbose_mode(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test push command verbose mode outputs additional info."""
+        from floe_core.cli.artifact import run_push
+
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts_path.write_text('{"version": "0.2.0"}')
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            source=artifacts_path,
+            tag="v1.0.0",
+            manifest=manifest_path,
+            verbose=True,
+            quiet=False,
+        )
+
+        mock_artifacts = MagicMock()
+        mock_artifacts.metadata.product_name = "test-product"
+        mock_artifacts.metadata.product_version = "1.0.0"
+
+        with (
+            patch(
+                "floe_core.schemas.compiled_artifacts.CompiledArtifacts.from_json_file"
+            ) as mock_from_json,
+            patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest,
+        ):
+            mock_from_json.return_value = mock_artifacts
+            mock_client = MagicMock()
+            mock_client.push.return_value = "sha256:abc123"
+            mock_client.registry_uri = "oci://harbor.example.com/floe"
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_push(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Pushed artifact with digest: sha256:abc123" in captured.out
+
+    @pytest.mark.requirement("8A-FR-027")
+    def test_pull_verbose_mode(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test pull command verbose mode outputs additional info."""
+        from floe_core.cli.artifact import run_pull
+
+        output_dir = tmp_path / "artifacts"
+        output_dir.mkdir()
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            output=output_dir,
+            manifest=manifest_path,
+            verbose=True,
+            quiet=False,
+        )
+
+        mock_artifacts = MagicMock()
+        mock_artifacts.to_json_file = MagicMock()
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.pull.return_value = mock_artifacts
+            mock_client.registry_uri = "oci://harbor.example.com/floe"
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_pull(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Pulled artifact to:" in captured.out
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_inspect_verbose_mode_shows_layers(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test inspect command verbose mode shows layer details."""
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import run_inspect
+        from floe_core.schemas.oci import ArtifactLayer, ArtifactManifest, SignatureStatus
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            manifest=manifest_path,
+            json_output=False,
+            verbose=True,
+            quiet=False,
+        )
+
+        mock_manifest = ArtifactManifest(
+            digest="sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+            artifact_type="application/vnd.floe.compiled-artifacts.v1+json",
+            size=12345,
+            created_at=datetime.now(timezone.utc),
+            annotations={},
+            layers=[
+                ArtifactLayer(
+                    digest="sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                    media_type="application/vnd.floe.compiled-artifacts.v1+json",
+                    size=5000,
+                    annotations={},
+                ),
+                ArtifactLayer(
+                    digest="sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    media_type="application/vnd.floe.compiled-artifacts.v1+json",
+                    size=7345,
+                    annotations={},
+                ),
+            ],
+            signature_status=SignatureStatus.UNSIGNED,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.inspect.return_value = mock_manifest
+            mock_client.registry_uri = "oci://harbor.example.com/floe"
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_inspect(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        # Verbose mode should show layers
+        assert "Layers (2):" in captured.out
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_status_verbose_mode(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test cache status command verbose mode shows additional info."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_status
+
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            verbose=True,
+            quiet=False,
+            json=False,
+        )
+
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_status(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        # Verbose mode shows TTL and max size
+        assert "TTL Hours:" in captured.out
+        assert "Max Size GB:" in captured.out
+
+
+class TestCacheClearAborted:
+    """Tests for cache clear confirmation abort."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_aborted_by_user(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test cache clear aborts when user declines confirmation."""
+        import argparse
+        import hashlib
+
+        from floe_core.cli.artifact import run_cache_clear
+        from floe_core.oci.cache import CacheManager
+        from floe_core.schemas.oci import CacheConfig
+
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        # Pre-populate the cache
+        config = CacheConfig(path=cache_path, max_size_gb=10, ttl_hours=24)
+        manager = CacheManager(config)
+        content = b'{"version": "0.2.0"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+        manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag=None,
+            yes=False,  # Will prompt for confirmation
+            verbose=False,
+            quiet=False,
+        )
+
+        # Mock input to decline
+        with (
+            patch("floe_core.cli.artifact.logger"),
+            patch("builtins.input", return_value="n"),
+        ):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Aborted" in captured.out
+
+        # Cache should still have the entry
+        stats = manager.stats()
+        assert stats["entry_count"] == 1
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_by_tag_aborted(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test cache clear by tag aborts when user declines."""
+        import argparse
+        import hashlib
+
+        from floe_core.cli.artifact import run_cache_clear
+        from floe_core.oci.cache import CacheManager
+        from floe_core.schemas.oci import CacheConfig
+
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        # Pre-populate the cache
+        config = CacheConfig(path=cache_path, max_size_gb=10, ttl_hours=24)
+        manager = CacheManager(config)
+        content = b'{"version": "0.2.0"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+        manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag="v1.0.0",
+            yes=False,
+            verbose=False,
+            quiet=False,
+        )
+
+        # Mock input to decline
+        with (
+            patch("floe_core.cli.artifact.logger"),
+            patch("builtins.input", return_value="no"),
+        ):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Aborted" in captured.out
+
+
+class TestCacheStatusError:
+    """Tests for cache status error handling."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_status_error_returns_one(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test cache status returns 1 on unexpected error."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_status
+
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        with (
+            patch("floe_core.cli.artifact.logger"),
+            patch(
+                "floe_core.oci.cache.CacheManager",
+                side_effect=RuntimeError("Failed to init"),
+            ),
+        ):
+            exit_code = run_cache_status(args)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "Error:" in captured.err
+
+
+class TestCacheClearError:
+    """Tests for cache clear error handling."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_error_returns_one(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test cache clear returns 1 on unexpected error."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_clear
+
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag=None,
+            yes=True,
+            verbose=False,
+            quiet=False,
+        )
+
+        with (
+            patch("floe_core.cli.artifact.logger"),
+            patch(
+                "floe_core.oci.cache.CacheManager",
+                side_effect=RuntimeError("Failed to init"),
+            ),
+        ):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "Error:" in captured.err
+
+
+class TestCacheClearTagNotFound:
+    """Tests for cache clear when tag not found."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_tag_not_found(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test cache clear returns success when tag not found."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_clear
+
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag="nonexistent",
+            yes=True,
+            verbose=False,
+            quiet=False,
+        )
+
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "No cached artifacts found with tag" in captured.out
+
+
+class TestInspectHumanReadableOutput:
+    """Tests for inspect command human-readable output variations."""
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_inspect_product_name_only(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test inspect shows product name when version is missing."""
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import run_inspect
+        from floe_core.schemas.oci import ArtifactLayer, ArtifactManifest, SignatureStatus
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=False,
+        )
+
+        mock_manifest = ArtifactManifest(
+            digest="sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+            artifact_type="application/vnd.floe.compiled-artifacts.v1+json",
+            size=12345,
+            created_at=datetime.now(timezone.utc),
+            annotations={
+                "io.floe.product.name": "test-product",
+                # No version annotation
+            },
+            layers=[
+                ArtifactLayer(
+                    digest="sha256:def456789012345678901234567890123456789012345678901234567890abcd",
+                    media_type="application/vnd.floe.compiled-artifacts.v1+json",
+                    size=12345,
+                    annotations={},
+                )
+            ],
+            signature_status=SignatureStatus.UNSIGNED,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.inspect.return_value = mock_manifest
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_inspect(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Product:       test-product" in captured.out
+
+    @pytest.mark.requirement("8A-FR-028")
+    def test_inspect_no_product_info(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test inspect shows N/A when no product info."""
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import run_inspect
+        from floe_core.schemas.oci import ArtifactLayer, ArtifactManifest, SignatureStatus
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            tag="v1.0.0",
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=False,
+        )
+
+        mock_manifest = ArtifactManifest(
+            digest="sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+            artifact_type="application/vnd.floe.compiled-artifacts.v1+json",
+            size=12345,
+            created_at=datetime.now(timezone.utc),
+            annotations={},  # No product annotations
+            layers=[
+                ArtifactLayer(
+                    digest="sha256:def456789012345678901234567890123456789012345678901234567890abcd",
+                    media_type="application/vnd.floe.compiled-artifacts.v1+json",
+                    size=12345,
+                    annotations={},
+                )
+            ],
+            signature_status=SignatureStatus.UNSIGNED,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.inspect.return_value = mock_manifest
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_inspect(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Product:       N/A" in captured.out
+
+
+class TestListTableOutput:
+    """Tests for list command table output edge cases."""
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_truncates_long_tag_names(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test list command truncates long tag names in table."""
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import run_list
+        from floe_core.schemas.oci import ArtifactTag
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=False,
+        )
+
+        mock_tags = [
+            ArtifactTag(
+                name="very-long-tag-name-that-exceeds-15-chars",
+                digest="sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+                created_at=datetime(2026, 1, 19, 10, 0, 0, tzinfo=timezone.utc),
+                size=12345,
+            ),
+        ]
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_tags
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        # Should truncate to 12 chars + "..."
+        assert "very-long-ta..." in captured.out

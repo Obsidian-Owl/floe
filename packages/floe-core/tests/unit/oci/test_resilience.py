@@ -605,3 +605,392 @@ class TestCustomRetryableExceptions:
         assert policy.should_retry(ConnectionError("x")) is True
         assert policy.should_retry(ValueError("x")) is False
         assert policy.should_retry(TypeError("x")) is False
+
+
+class TestRetryAttemptWait:
+    """Tests for RetryAttempt.wait() method."""
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_wait_calls_sleep_with_correct_delay(self) -> None:
+        """Test wait() calls time.sleep with calculated delay."""
+        config = RetryConfig(
+            initial_delay_ms=1000,
+            backoff_multiplier=2.0,
+            jitter=False,
+        )
+        policy = RetryPolicy(config)
+
+        attempt = next(iter(policy.attempts()))
+
+        with patch("floe_core.oci.resilience.time.sleep") as mock_sleep:
+            attempt.wait()
+
+        # Attempt 0 delay: 1000ms = 1s
+        mock_sleep.assert_called_once_with(pytest.approx(1.0))
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_wait_does_not_sleep_on_last_attempt(self) -> None:
+        """Test wait() does not sleep on last attempt."""
+        config = RetryConfig(max_attempts=2, jitter=False)
+        policy = RetryPolicy(config)
+
+        attempts_list = list(policy.attempts())
+        last_attempt = attempts_list[-1]
+
+        with patch("floe_core.oci.resilience.time.sleep") as mock_sleep:
+            last_attempt.wait()
+
+        # Should not sleep on last attempt
+        mock_sleep.assert_not_called()
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_wait_logs_debug_message(self) -> None:
+        """Test wait() logs debug message."""
+        config = RetryConfig(max_attempts=3, jitter=False)
+        policy = RetryPolicy(config)
+
+        attempt = next(iter(policy.attempts()))
+
+        with (
+            patch("floe_core.oci.resilience.time.sleep"),
+            patch("floe_core.oci.resilience.logger") as mock_logger,
+        ):
+            attempt.wait()
+
+        mock_logger.debug.assert_called_once()
+        call_args = mock_logger.debug.call_args
+        assert call_args[0][0] == "retry_wait"
+
+
+class TestRetryAttemptIteratorMethods:
+    """Tests for RetryAttemptIterator dunder methods."""
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_iter_returns_self(self) -> None:
+        """Test __iter__ returns self."""
+        config = RetryConfig(max_attempts=3)
+        policy = RetryPolicy(config)
+
+        iterator = policy.attempts()
+        assert iter(iterator) is iterator
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_next_raises_stop_iteration_after_exhausted(self) -> None:
+        """Test __next__ raises StopIteration when exhausted."""
+        config = RetryConfig(max_attempts=2)
+        policy = RetryPolicy(config)
+
+        iterator = policy.attempts()
+        next(iterator)  # Attempt 0
+        next(iterator)  # Attempt 1
+
+        with pytest.raises(StopIteration):
+            next(iterator)
+
+
+class TestCircuitBreakerRecoveryTime:
+    """Tests for CircuitBreaker.recovery_time property."""
+
+    @pytest.mark.requirement("8A-FR-020")
+    def test_recovery_time_returns_none_when_closed(self) -> None:
+        """Test recovery_time returns None when circuit is closed."""
+        circuit = CircuitBreaker("test-registry")
+
+        assert circuit.state == CircuitState.CLOSED
+        assert circuit.recovery_time is None
+
+    @pytest.mark.requirement("8A-FR-020")
+    def test_recovery_time_returns_timestamp_when_open(self) -> None:
+        """Test recovery_time returns expected timestamp when open."""
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout_ms=5000,  # 5s
+        )
+        circuit = CircuitBreaker("test-registry", config)
+
+        # Open the circuit
+        circuit.record_failure()
+        assert circuit.is_open
+
+        # recovery_time should be ~5s from now
+        recovery_time = circuit.recovery_time
+        assert recovery_time is not None
+
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        # Recovery time should be between now and now + 6s (with some buffer)
+        assert now <= recovery_time <= now + timedelta(seconds=6)
+
+
+class TestCircuitBreakerWithMetrics:
+    """Tests for CircuitBreaker with metrics emission."""
+
+    @pytest.mark.requirement("8A-FR-019")
+    def test_circuit_emits_state_metric_on_init(self) -> None:
+        """Test circuit emits state metric on initialization."""
+        from unittest.mock import MagicMock
+
+        mock_metrics = MagicMock()
+        circuit = CircuitBreaker("test-registry", metrics=mock_metrics)
+
+        # Should have called set_circuit_breaker_state on init
+        mock_metrics.set_circuit_breaker_state.assert_called_once()
+        call_kwargs = mock_metrics.set_circuit_breaker_state.call_args[1]
+        assert call_kwargs["registry"] == "test-registry"
+        assert call_kwargs["failure_count"] == 0
+        assert circuit.is_closed
+
+    @pytest.mark.requirement("8A-FR-019")
+    def test_circuit_emits_metric_on_open(self) -> None:
+        """Test circuit emits state metric when opening."""
+        from unittest.mock import MagicMock
+
+        mock_metrics = MagicMock()
+        config = CircuitBreakerConfig(failure_threshold=1)
+        circuit = CircuitBreaker("test-registry", config, metrics=mock_metrics)
+
+        # Reset call count from init
+        mock_metrics.reset_mock()
+
+        # Open circuit
+        circuit.record_failure()
+
+        # Should emit state metric
+        mock_metrics.set_circuit_breaker_state.assert_called_once()
+        call_kwargs = mock_metrics.set_circuit_breaker_state.call_args[1]
+        assert call_kwargs["failure_count"] == 1
+
+    @pytest.mark.requirement("8A-FR-021")
+    def test_circuit_emits_metric_on_close(self) -> None:
+        """Test circuit emits state metric when closing from half-open."""
+        from unittest.mock import MagicMock
+
+        mock_metrics = MagicMock()
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout_ms=1000,
+        )
+        circuit = CircuitBreaker("test-registry", config, metrics=mock_metrics)
+
+        # Open circuit
+        circuit.record_failure()
+        assert circuit.is_open
+
+        # Mock time passage to trigger half-open
+        with patch("floe_core.oci.resilience.datetime") as mock_datetime:
+            from datetime import datetime, timedelta, timezone
+
+            now = datetime.now(timezone.utc)
+            mock_datetime.now.return_value = now + timedelta(seconds=2)
+
+            # Trigger half-open
+            circuit.allow_request()
+
+            # Reset call count
+            mock_metrics.reset_mock()
+
+            # Record success (should close and emit metric)
+            circuit.record_success()
+
+        assert circuit.is_closed
+        mock_metrics.set_circuit_breaker_state.assert_called()
+
+    @pytest.mark.requirement("8A-FR-021")
+    def test_circuit_emits_metric_on_reopen(self) -> None:
+        """Test circuit emits state metric when reopening from half-open."""
+        from unittest.mock import MagicMock
+
+        mock_metrics = MagicMock()
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout_ms=1000,
+        )
+        circuit = CircuitBreaker("test-registry", config, metrics=mock_metrics)
+
+        # Open circuit
+        circuit.record_failure()
+
+        # Mock time passage to trigger half-open
+        with patch("floe_core.oci.resilience.datetime") as mock_datetime:
+            from datetime import datetime, timedelta, timezone
+
+            now = datetime.now(timezone.utc)
+            mock_datetime.now.return_value = now + timedelta(seconds=2)
+
+            # Trigger half-open
+            circuit.allow_request()
+
+            # Reset call count
+            mock_metrics.reset_mock()
+
+            # Record failure (should reopen and emit metric)
+            circuit.record_failure()
+
+        assert circuit.is_open
+        mock_metrics.set_circuit_breaker_state.assert_called()
+
+    @pytest.mark.requirement("8A-FR-019")
+    def test_circuit_emits_metric_on_reset(self) -> None:
+        """Test circuit emits state metric on reset."""
+        from unittest.mock import MagicMock
+
+        mock_metrics = MagicMock()
+        config = CircuitBreakerConfig(failure_threshold=1)
+        circuit = CircuitBreaker("test-registry", config, metrics=mock_metrics)
+
+        # Open circuit
+        circuit.record_failure()
+        assert circuit.is_open
+
+        # Reset call count
+        mock_metrics.reset_mock()
+
+        # Reset circuit
+        circuit.reset()
+
+        # Should emit state metric
+        mock_metrics.set_circuit_breaker_state.assert_called_once()
+        assert circuit.is_closed
+
+    @pytest.mark.requirement("8A-FR-020")
+    def test_circuit_emits_metric_on_half_open_transition(self) -> None:
+        """Test circuit emits state metric when transitioning to half-open."""
+        from unittest.mock import MagicMock
+
+        mock_metrics = MagicMock()
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout_ms=1000,
+        )
+        circuit = CircuitBreaker("test-registry", config, metrics=mock_metrics)
+
+        # Open circuit
+        circuit.record_failure()
+
+        # Reset call count
+        mock_metrics.reset_mock()
+
+        # Mock time passage to trigger half-open
+        with patch("floe_core.oci.resilience.datetime") as mock_datetime:
+            from datetime import datetime, timedelta, timezone
+
+            now = datetime.now(timezone.utc)
+            mock_datetime.now.return_value = now + timedelta(seconds=2)
+
+            # Trigger state check (should transition to half-open)
+            state = circuit.state
+
+        assert state == CircuitState.HALF_OPEN
+        mock_metrics.set_circuit_breaker_state.assert_called()
+
+
+class TestCircuitBreakerHalfOpenLimiting:
+    """Tests for half-open request limiting."""
+
+    @pytest.mark.requirement("8A-FR-020")
+    def test_half_open_logs_probe_requests(self) -> None:
+        """Test half-open state logs probe request details."""
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout_ms=1000,
+            half_open_requests=2,
+        )
+        circuit = CircuitBreaker("test-registry", config)
+
+        # Open circuit
+        circuit.record_failure()
+
+        # Mock time passage to trigger half-open
+        with patch("floe_core.oci.resilience.datetime") as mock_datetime:
+            from datetime import datetime, timedelta, timezone
+
+            now = datetime.now(timezone.utc)
+            mock_datetime.now.return_value = now + timedelta(seconds=2)
+
+            with patch("floe_core.oci.resilience.logger") as mock_logger:
+                # First probe
+                circuit.allow_request()
+
+            mock_logger.debug.assert_called()
+            call_args = mock_logger.debug.call_args
+            assert call_args[0][0] == "circuit_half_open_probe"
+
+
+class TestRetryExhaustedLogging:
+    """Tests for retry exhausted logging."""
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_retry_exhausted_logs_warning(self) -> None:
+        """Test that retry exhausted logs a warning message."""
+        config = RetryConfig(max_attempts=2, jitter=False)
+        policy = RetryPolicy(config)
+
+        def always_fails() -> None:
+            raise RegistryUnavailableError("registry", "Always fails")
+
+        with (
+            patch("floe_core.oci.resilience.time.sleep"),
+            patch("floe_core.oci.resilience.logger") as mock_logger,
+            pytest.raises(RegistryUnavailableError),
+        ):
+            policy.wrap(always_fails)()
+
+        # Check that warning was logged
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args
+        assert call_args[0][0] == "retry_exhausted"
+
+
+class TestCircuitBreakerProtectContextManager:
+    """Tests for protect context manager edge cases."""
+
+    @pytest.mark.requirement("8A-FR-019")
+    def test_protect_includes_recovery_time_in_error(self) -> None:
+        """Test protect includes recovery_time in CircuitBreakerOpenError."""
+        config = CircuitBreakerConfig(
+            failure_threshold=1,
+            recovery_timeout_ms=5000,
+        )
+        circuit = CircuitBreaker("test-registry", config)
+
+        # Open the circuit
+        circuit.record_failure()
+
+        # Try to use protect (should raise with recovery info)
+        with pytest.raises(CircuitBreakerOpenError) as exc_info:
+            with circuit.protect():
+                pass
+
+        error = exc_info.value
+        assert "test-registry" in str(error)
+
+
+class TestCircuitBreakerDisabled:
+    """Tests for disabled circuit breaker behavior."""
+
+    @pytest.mark.requirement("8A-FR-019")
+    def test_disabled_record_success_does_nothing(self) -> None:
+        """Test record_success is a no-op when disabled."""
+        config = CircuitBreakerConfig(enabled=False, failure_threshold=1)
+        circuit = CircuitBreaker("test-registry", config)
+
+        # Record some activity
+        circuit.record_failure()
+        circuit.record_success()
+
+        # Should still allow requests
+        assert circuit.allow_request() is True
+
+    @pytest.mark.requirement("8A-FR-019")
+    def test_disabled_record_failure_does_nothing(self) -> None:
+        """Test record_failure is a no-op when disabled."""
+        config = CircuitBreakerConfig(enabled=False, failure_threshold=1)
+        circuit = CircuitBreaker("test-registry", config)
+
+        # Record many failures
+        for _ in range(10):
+            circuit.record_failure()
+
+        # Should still allow requests (not open)
+        assert circuit.allow_request() is True
