@@ -838,3 +838,182 @@ class TestLRUEviction:
 
         # last_accessed should be updated to a more recent time
         assert entry.last_accessed > old_access_time
+
+
+class TestCacheClearAndCleanup:
+    """Tests for clear() and cleanup_expired() methods (T067 coverage).
+
+    FR-015: System MUST maintain cache integrity.
+    FR-016: System MUST remove expired entries.
+    """
+
+    @pytest.fixture
+    def cache_config(self, tmp_path: Path) -> CacheConfig:
+        """Create CacheConfig with temp directory."""
+        return CacheConfig(
+            enabled=True,
+            path=tmp_path / "cache",
+            max_size_gb=1,
+            ttl_hours=1,  # 1 hour TTL
+        )
+
+    @pytest.fixture
+    def cache_manager(self, cache_config: CacheConfig) -> CacheManager:
+        """Create CacheManager with temp directory."""
+        return CacheManager(cache_config)
+
+    @pytest.mark.requirement("8A-FR-015")
+    def test_clear_removes_all_entries(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test that clear() removes all cached artifacts.
+
+        Verifies:
+        - All entries are removed after clear()
+        - Cache stats show zero entries
+        """
+        # Add multiple entries
+        for i in range(3):
+            content = f'{{"version": "{i}"}}'.encode()
+            digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+            cache_manager.put(
+                digest=digest,
+                tag=f"v{i}.0.0",
+                registry="oci://harbor.example.com/floe",
+                content=content,
+            )
+
+        # Verify entries exist
+        stats = cache_manager.stats()
+        assert stats["entry_count"] == 3
+
+        # Clear cache
+        cache_manager.clear()
+
+        # Verify all entries removed
+        stats = cache_manager.stats()
+        assert stats["entry_count"] == 0
+
+        # Verify individual entries are gone
+        for i in range(3):
+            entry = cache_manager.get("oci://harbor.example.com/floe", f"v{i}.0.0")
+            assert entry is None
+
+    @pytest.mark.requirement("8A-FR-015")
+    def test_clear_on_disabled_cache(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test that clear() does nothing when cache is disabled.
+
+        Verifies:
+        - No error raised when clearing disabled cache
+        """
+        config = CacheConfig(enabled=False, path=tmp_path / "disabled_cache")
+        manager = CacheManager(config)
+
+        # Should not raise
+        manager.clear()
+
+    @pytest.mark.requirement("8A-FR-016")
+    def test_cleanup_expired_removes_expired_entries(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test that cleanup_expired() removes expired entries.
+
+        Verifies:
+        - Expired entries are removed
+        - Non-expired entries remain
+        - Returns count of removed entries
+        """
+        # Add mutable tag (has TTL)
+        mutable_content = b'{"type": "mutable"}'
+        mutable_digest = f"sha256:{hashlib.sha256(mutable_content).hexdigest()}"
+        cache_manager.put(
+            digest=mutable_digest,
+            tag="latest-dev",
+            registry="oci://harbor.example.com/floe",
+            content=mutable_content,
+        )
+
+        # Add immutable tag (no TTL)
+        immutable_content = b'{"type": "immutable"}'
+        immutable_digest = f"sha256:{hashlib.sha256(immutable_content).hexdigest()}"
+        cache_manager.put(
+            digest=immutable_digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=immutable_content,
+        )
+
+        # Verify both exist
+        assert cache_manager.stats()["entry_count"] == 2
+
+        # Simulate time passing (TTL expired)
+        with patch("floe_core.schemas.oci._utc_now") as mock_now:
+            future_time = datetime.now(timezone.utc) + timedelta(hours=2)
+            mock_now.return_value = future_time
+
+            # Cleanup expired
+            removed = cache_manager.cleanup_expired()
+
+            assert removed == 1  # Only mutable entry expired
+
+        # Verify immutable entry remains (need to restore time)
+        entry = cache_manager.get_by_digest(immutable_digest)
+        assert entry is not None
+
+    @pytest.mark.requirement("8A-FR-016")
+    def test_cleanup_expired_on_disabled_cache(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test that cleanup_expired() returns 0 when cache is disabled.
+
+        Verifies:
+        - Returns 0 for disabled cache
+        - No error raised
+        """
+        config = CacheConfig(enabled=False, path=tmp_path / "disabled_cache")
+        manager = CacheManager(config)
+
+        removed = manager.cleanup_expired()
+        assert removed == 0
+
+    @pytest.mark.requirement("8A-FR-021")
+    def test_get_with_content_handles_read_error(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test that get_with_content() handles file read errors.
+
+        Verifies:
+        - OSError during read is caught
+        - Corrupted entry is removed from cache
+        - DigestMismatchError is raised
+        """
+        from floe_core.oci.errors import DigestMismatchError
+
+        content = b'{"version": "0.2.0", "test": "read_error"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+        # Store content
+        entry = cache_manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+
+        # Delete the blob file to cause OSError
+        entry.path.unlink()
+
+        # Retrieve with verification - should handle OSError
+        with pytest.raises(DigestMismatchError, match="read_error"):
+            cache_manager.get_with_content("oci://harbor.example.com/floe", "v1.0.0")
+
+        # Entry should be removed from cache
+        check_entry = cache_manager.get("oci://harbor.example.com/floe", "v1.0.0")
+        assert check_entry is None
