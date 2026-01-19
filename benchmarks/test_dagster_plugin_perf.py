@@ -321,7 +321,6 @@ def test_emit_lineage_event_noop() -> None:
     Measures no-op path overhead.
     """
     from floe_core.plugins.orchestrator import Dataset
-
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
     plugin = DagsterOrchestratorPlugin()

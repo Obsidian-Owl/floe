@@ -567,7 +567,6 @@ class TestDagsterPluginConsumesCompiledArtifacts:
     ) -> None:
         """Test DagsterOrchestratorPlugin.create_definitions() works with CompiledArtifacts."""
         from dagster import Definitions
-
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         plugin = DagsterOrchestratorPlugin()
@@ -594,7 +593,6 @@ class TestDagsterPluginConsumesCompiledArtifacts:
     ) -> None:
         """Test DagsterOrchestratorPlugin preserves model dependencies."""
         from dagster import AssetKey
-
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         plugin = DagsterOrchestratorPlugin()

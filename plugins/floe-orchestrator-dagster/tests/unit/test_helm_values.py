@@ -8,9 +8,7 @@ Note: @pytest.mark.requirement markers are used for traceability to spec.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-import pytest
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin

@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 import pytest
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 
@@ -160,7 +159,6 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
         self, valid_compiled_artifacts: dict[str, Any]
     ) -> None:
         """Test created assets have valid AssetKeys."""
-        from dagster import AssetKey
 
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 

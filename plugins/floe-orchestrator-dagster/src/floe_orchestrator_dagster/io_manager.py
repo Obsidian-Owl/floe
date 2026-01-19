@@ -49,7 +49,6 @@ from pyiceberg.expressions import literal as iceberg_literal
 
 if TYPE_CHECKING:
     from floe_iceberg import IcebergTableManager
-    from floe_iceberg.models import WriteMode
 
 # =============================================================================
 # Configuration Models

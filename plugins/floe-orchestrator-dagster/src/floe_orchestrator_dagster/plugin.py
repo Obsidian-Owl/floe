@@ -23,8 +23,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError as PydanticValidationError
-
 from floe_core.plugins.orchestrator import (
     Dataset,
     OrchestratorPlugin,
@@ -33,6 +31,7 @@ from floe_core.plugins.orchestrator import (
     ValidationResult,
 )
 from floe_core.schemas import CompiledArtifacts
+from pydantic import ValidationError as PydanticValidationError
 
 if TYPE_CHECKING:
     pass

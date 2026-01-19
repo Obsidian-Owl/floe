@@ -11,8 +11,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from floe_core.plugins.orchestrator import ValidationResult
 
 if TYPE_CHECKING:

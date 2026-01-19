@@ -464,7 +464,6 @@ class TestDagsterPluginImplementsABC:
     def test_dagster_plugin_inherits_from_orchestrator_plugin(self) -> None:
         """Verify DagsterOrchestratorPlugin inherits from OrchestratorPlugin."""
         from floe_core.plugins.orchestrator import OrchestratorPlugin
-
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         assert issubclass(DagsterOrchestratorPlugin, OrchestratorPlugin)
