@@ -1316,7 +1316,7 @@ class TestOCIClientInspect:
             "layers": [
                 {
                     "mediaType": "application/vnd.floe.compiled-artifacts.v1+json",
-                    "digest": "sha256:abc123def456789012345678901234567890123456789012345678901234",
+                    "digest": "sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
                     "size": 12345,
                     "annotations": {
                         "org.opencontainers.image.created": "2026-01-19T12:00:00Z",

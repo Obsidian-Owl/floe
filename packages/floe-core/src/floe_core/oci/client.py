@@ -735,8 +735,143 @@ class OCIClient:
             >>> print(f"Digest: {manifest.digest}")
             >>> print(f"Size: {manifest.size} bytes")
         """
-        # Placeholder - implementation in T028
-        raise NotImplementedError("inspect() not yet implemented - see T028")
+        import hashlib
+        import json
+        import time
+        from datetime import datetime, timezone
+
+        from floe_core.oci.metrics import OCIMetrics
+        from floe_core.schemas.oci import ArtifactLayer, SignatureStatus
+
+        log = logger.bind(
+            registry=self._registry_host,
+            tag=tag,
+        )
+
+        log.info("inspect_started")
+
+        # Start timing for duration metric
+        start_time = time.monotonic()
+
+        # Span attributes for OTel tracing
+        span_attributes: dict[str, Any] = {
+            "oci.registry": self._registry_host,
+            "oci.tag": tag,
+            "oci.operation": "inspect",
+        }
+
+        # Wrap entire operation in a trace span
+        with self.metrics.create_span(OCIMetrics.SPAN_INSPECT, span_attributes) as span:
+            try:
+                # Create ORAS client for registry operations
+                oras_client = self._create_oras_client()
+
+                # Build target reference (registry/namespace/repo:tag)
+                target_ref = self._build_target_ref(tag)
+
+                # Get manifest only (no blob download)
+                try:
+                    manifest_data = oras_client.get_manifest(target=target_ref)
+                except Exception as e:
+                    error_str = str(e).lower()
+                    # Detect "manifest unknown" or 404 errors
+                    if "manifest unknown" in error_str or "not found" in error_str:
+                        raise ArtifactNotFoundError(
+                            tag=tag,
+                            registry=self._config.uri,
+                        ) from e
+                    raise
+
+                # Calculate manifest digest (sha256 of canonical JSON)
+                manifest_json = json.dumps(manifest_data, separators=(",", ":"), sort_keys=True)
+                manifest_digest = f"sha256:{hashlib.sha256(manifest_json.encode()).hexdigest()}"
+
+                # Parse layers from manifest
+                layers_data = manifest_data.get("layers", [])
+                layers: list[ArtifactLayer] = []
+                total_size = 0
+
+                for layer_data in layers_data:
+                    layer = ArtifactLayer(
+                        digest=layer_data.get("digest", ""),
+                        media_type=layer_data.get("mediaType", ""),
+                        size=layer_data.get("size", 0),
+                        annotations=layer_data.get("annotations", {}),
+                    )
+                    layers.append(layer)
+                    total_size += layer.size
+
+                # Extract artifact type (OCI v1.1) or fall back to config mediaType
+                artifact_type = manifest_data.get("artifactType", "")
+                if not artifact_type:
+                    config_data = manifest_data.get("config", {})
+                    artifact_type = config_data.get("mediaType", "application/octet-stream")
+
+                # Extract annotations
+                annotations = manifest_data.get("annotations", {})
+
+                # Parse created timestamp from annotations
+                created_str = annotations.get(
+                    "org.opencontainers.image.created",
+                    datetime.now(timezone.utc).isoformat(),
+                )
+                try:
+                    # Handle ISO format with or without Z suffix
+                    if created_str.endswith("Z"):
+                        created_str = created_str[:-1] + "+00:00"
+                    created_at = datetime.fromisoformat(created_str)
+                except ValueError:
+                    created_at = datetime.now(timezone.utc)
+
+                # Build ArtifactManifest
+                manifest = ArtifactManifest(
+                    digest=manifest_digest,
+                    artifact_type=artifact_type,
+                    size=total_size,
+                    created_at=created_at,
+                    annotations=annotations,
+                    layers=layers,
+                    signature_status=SignatureStatus.UNSIGNED,  # Placeholder for Epic 8B
+                )
+
+                # Add attributes to span
+                span.set_attribute("oci.artifact.digest", manifest_digest)
+                span.set_attribute("oci.artifact.size_bytes", total_size)
+                span.set_attribute("oci.artifact.layer_count", len(layers))
+
+                # Record duration metric
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("inspect", self._registry_host, duration)
+
+                # Record success metrics
+                self.metrics.record_operation("inspect", self._registry_host, success=True)
+
+                log.info(
+                    "inspect_completed",
+                    digest=manifest_digest,
+                    size=total_size,
+                    layer_count=len(layers),
+                    duration_ms=int(duration * 1000),
+                )
+
+                return manifest
+
+            except ArtifactNotFoundError:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("inspect", self._registry_host, duration)
+                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                raise
+            except AuthenticationError:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("inspect", self._registry_host, duration)
+                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                raise
+            except Exception as e:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("inspect", self._registry_host, duration)
+                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                log.error("inspect_failed", error=str(e))
+                raise OCIError(f"Inspect failed: {e}") from e
 
     def list(
         self,
