@@ -43,12 +43,15 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 import structlog
 
 from floe_core.oci.errors import CircuitBreakerOpenError, RegistryUnavailableError
 from floe_core.schemas.oci import CircuitBreakerConfig, RetryConfig
+
+if TYPE_CHECKING:
+    from floe_core.oci.metrics import OCIMetrics
 
 logger = structlog.get_logger(__name__)
 
@@ -327,21 +330,28 @@ class CircuitBreaker:
         self,
         registry_uri: str,
         config: CircuitBreakerConfig | None = None,
+        *,
+        metrics: OCIMetrics | None = None,
     ) -> None:
         """Initialize CircuitBreaker.
 
         Args:
             registry_uri: Registry URI for identification.
             config: Circuit breaker configuration. Uses defaults if None.
+            metrics: Optional OCIMetrics instance for emitting metrics.
         """
         self._registry_uri = registry_uri
         self._config = config or CircuitBreakerConfig()
+        self._metrics = metrics
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._success_count = 0
         self._last_failure_time: datetime | None = None
         self._half_open_requests = 0
         self._lock = threading.Lock()
+
+        # Emit initial state metric
+        self._emit_state_metric()
 
     @property
     def state(self) -> CircuitState:
@@ -377,6 +387,29 @@ class CircuitBreaker:
                 return None
             recovery_ms = self._config.recovery_timeout_ms
             return self._last_failure_time + timedelta(milliseconds=recovery_ms)
+
+    def _emit_state_metric(self) -> None:
+        """Emit circuit breaker state metric.
+
+        Converts CircuitState to CircuitBreakerStateValue and emits via OCIMetrics.
+        """
+        if self._metrics is None:
+            return
+
+        from floe_core.oci.metrics import CircuitBreakerStateValue
+
+        state_value_map = {
+            CircuitState.CLOSED: CircuitBreakerStateValue.CLOSED,
+            CircuitState.OPEN: CircuitBreakerStateValue.OPEN,
+            CircuitState.HALF_OPEN: CircuitBreakerStateValue.HALF_OPEN,
+        }
+
+        state_value = state_value_map[self._state]
+        self._metrics.set_circuit_breaker_state(
+            registry=self._registry_uri,
+            state=state_value,
+            failure_count=self._failure_count,
+        )
 
     def allow_request(self) -> bool:
         """Check if a request should be allowed.
@@ -419,6 +452,7 @@ class CircuitBreaker:
             return
 
         with self._lock:
+            state_changed = False
             if self._state == CircuitState.HALF_OPEN:
                 # Probe succeeded, close circuit
                 logger.info(
@@ -427,9 +461,13 @@ class CircuitBreaker:
                     previous_failures=self._failure_count,
                 )
                 self._state = CircuitState.CLOSED
+                state_changed = True
 
             self._failure_count = 0
             self._success_count += 1
+
+            if state_changed:
+                self._emit_state_metric()
 
     def record_failure(self) -> None:
         """Record a failed request.
@@ -442,6 +480,7 @@ class CircuitBreaker:
         with self._lock:
             self._failure_count += 1
             self._last_failure_time = datetime.now(timezone.utc)
+            state_changed = False
 
             if self._state == CircuitState.HALF_OPEN:
                 # Probe failed, reopen circuit
@@ -452,6 +491,7 @@ class CircuitBreaker:
                 )
                 self._state = CircuitState.OPEN
                 self._half_open_requests = 0
+                state_changed = True
 
             elif (
                 self._state == CircuitState.CLOSED
@@ -465,6 +505,10 @@ class CircuitBreaker:
                     recovery_timeout_ms=self._config.recovery_timeout_ms,
                 )
                 self._state = CircuitState.OPEN
+                state_changed = True
+
+            if state_changed:
+                self._emit_state_metric()
 
     def _update_state(self) -> None:
         """Update state based on time elapsed.
@@ -478,9 +522,7 @@ class CircuitBreaker:
         if self._last_failure_time is None:
             return
 
-        elapsed_ms = (
-            datetime.now(timezone.utc) - self._last_failure_time
-        ).total_seconds() * 1000
+        elapsed_ms = (datetime.now(timezone.utc) - self._last_failure_time).total_seconds() * 1000
 
         if elapsed_ms >= self._config.recovery_timeout_ms:
             logger.info(
@@ -490,6 +532,7 @@ class CircuitBreaker:
             )
             self._state = CircuitState.HALF_OPEN
             self._half_open_requests = 0
+            self._emit_state_metric()
 
     @contextmanager
     def protect(self) -> Any:
@@ -538,6 +581,7 @@ class CircuitBreaker:
                 "circuit_reset",
                 registry=self._registry_uri,
             )
+            self._emit_state_metric()
 
 
 def with_resilience(

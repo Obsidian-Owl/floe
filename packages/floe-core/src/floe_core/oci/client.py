@@ -205,6 +205,7 @@ class OCIClient:
             self._circuit_breaker = CircuitBreaker(
                 registry_uri=self._config.uri,
                 config=self._config.resilience.circuit_breaker,
+                metrics=self.metrics,
             )
         return self._circuit_breaker
 

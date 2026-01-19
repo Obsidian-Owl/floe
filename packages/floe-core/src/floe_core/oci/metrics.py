@@ -118,6 +118,7 @@ class OCIMetrics:
     OPERATION_DURATION_SECONDS = "floe_oci_operation_duration_seconds"
     ARTIFACT_SIZE_BYTES = "floe_oci_artifact_size_bytes"
     CIRCUIT_BREAKER_STATE = "floe_oci_circuit_breaker_state"
+    CIRCUIT_BREAKER_FAILURES = "floe_oci_circuit_breaker_failures"
     CACHE_SIZE_BYTES = "floe_oci_cache_size_bytes"
     CACHE_ENTRIES_COUNT = "floe_oci_cache_entries_count"
 
@@ -152,6 +153,7 @@ class OCIMetrics:
         self._duration_histogram: Histogram | None = None
         self._size_histogram: Histogram | None = None
         self._circuit_breaker_gauge: Gauge | None = None
+        self._circuit_breaker_failures_gauge: Gauge | None = None
         self._cache_size_gauge: Gauge | None = None
         self._cache_entries_gauge: Gauge | None = None
 
@@ -209,6 +211,17 @@ class OCIMetrics:
                 description="Circuit breaker state (0=closed, 1=open, 2=half_open)",
             )
         return self._circuit_breaker_gauge
+
+    @property
+    def circuit_breaker_failures_gauge(self) -> Gauge:
+        """Get or create the circuit breaker failures gauge."""
+        if self._circuit_breaker_failures_gauge is None:
+            self._circuit_breaker_failures_gauge = self._meter.create_gauge(
+                self.CIRCUIT_BREAKER_FAILURES,
+                unit="1",
+                description="Current failure count for circuit breaker",
+            )
+        return self._circuit_breaker_failures_gauge
 
     @property
     def cache_size_gauge(self) -> Gauge:
@@ -332,17 +345,30 @@ class OCIMetrics:
         self,
         registry: str,
         state: CircuitBreakerStateValue,
+        *,
+        failure_count: int | None = None,
     ) -> None:
         """Set the circuit breaker state for a registry.
 
         Args:
             registry: Registry hostname or URI.
             state: Circuit breaker state value.
+            failure_count: Optional failure count to record.
         """
         attributes: dict[str, Any] = {
             "registry": self._normalize_registry(registry),
         }
         self.circuit_breaker_gauge.set(int(state), attributes=attributes)
+
+        if failure_count is not None:
+            self.circuit_breaker_failures_gauge.set(failure_count, attributes=attributes)
+
+        logger.debug(
+            "circuit_breaker_state_metric_recorded",
+            registry=registry,
+            state=state.name,
+            failure_count=failure_count,
+        )
 
     def set_cache_stats(
         self,
