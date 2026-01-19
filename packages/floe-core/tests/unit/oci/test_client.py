@@ -41,6 +41,14 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
+# Test Constants
+# =============================================================================
+
+# Valid SHA256 digest for test layers (64 hex characters)
+TEST_LAYER_DIGEST = "sha256:abc123def456789012345678901234567890123456789012345678901234abcd"
+
+
+# =============================================================================
 # Fixtures
 # =============================================================================
 
@@ -621,19 +629,152 @@ class TestOCIClientPull:
 
 
 class TestOCIClientList:
-    """Tests for OCIClient.list() operation."""
+    """Tests for OCIClient.list() operation.
+
+    Task: T036
+    Requirements: FR-004
+    """
 
     @pytest.mark.requirement("8A-FR-004")
-    def test_list_artifacts_placeholder(
+    def test_list_artifacts(
         self,
         oci_client: OCIClient,
     ) -> None:
-        """Test that list() exists and is not yet implemented.
+        """Test list() returns all artifacts in namespace.
 
         FR-004: System MUST support listing artifacts with filtering.
+
+        Verifies:
+        - list() returns list of ArtifactTag objects
+        - Each ArtifactTag has name, digest, created_at fields
         """
-        with pytest.raises(NotImplementedError, match="list.*not yet implemented"):
-            oci_client.list()
+        from datetime import datetime
+
+        from floe_core.schemas.oci import ArtifactTag
+
+        # Mock the ORAS client to return tag list
+        mock_tags_response = {
+            "tags": ["v1.0.0", "v1.1.0", "latest-dev"],
+        }
+
+        with patch.object(oci_client, "_create_oras_client") as mock_create:
+            mock_oras = MagicMock()
+            mock_oras.get_tags.return_value = mock_tags_response
+
+            # Mock get_manifest for each tag to get digest and created_at
+            def mock_get_manifest(_target: str) -> dict[str, Any]:
+                # Return mock manifest data
+                return {
+                    "schemaVersion": 2,
+                    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                    "config": {
+                        "mediaType": "application/vnd.oci.empty.v1+json",
+                        "digest": "sha256:abc123",
+                        "size": 0,
+                    },
+                    "layers": [
+                        {
+                            "mediaType": "application/vnd.floe.compiled-artifacts.v1+json",
+                            "digest": "sha256:layer123",
+                            "size": 1000,
+                        }
+                    ],
+                    "annotations": {
+                        "org.opencontainers.image.created": "2026-01-19T10:00:00Z",
+                    },
+                }
+
+            mock_oras.get_manifest.side_effect = mock_get_manifest
+            mock_create.return_value = mock_oras
+
+            # Call list()
+            result = oci_client.list()
+
+        # Verify result is a list
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+        # Verify each item is an ArtifactTag
+        for tag in result:
+            assert isinstance(tag, ArtifactTag)
+            assert tag.name in ["v1.0.0", "v1.1.0", "latest-dev"]
+            assert tag.digest.startswith("sha256:")
+            assert isinstance(tag.created_at, datetime)
+
+    @pytest.mark.requirement("8A-FR-004")
+    def test_list_with_filter(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test list() with filter_pattern filters results.
+
+        FR-004: System MUST support filtering by tag pattern.
+
+        Verifies:
+        - filter_pattern="v1.*" returns only v1.x tags
+        - Pattern matching uses glob-style wildcards
+        """
+        mock_tags_response = {
+            "tags": ["v1.0.0", "v1.1.0", "v2.0.0", "latest-dev"],
+        }
+
+        with patch.object(oci_client, "_create_oras_client") as mock_create:
+            mock_oras = MagicMock()
+            mock_oras.get_tags.return_value = mock_tags_response
+
+            def mock_get_manifest(_target: str) -> dict[str, Any]:
+                return {
+                    "schemaVersion": 2,
+                    "layers": [
+                        {
+                            "mediaType": "application/vnd.floe.compiled-artifacts.v1+json",
+                            "digest": "sha256:layer123",
+                            "size": 1000,
+                        }
+                    ],
+                    "annotations": {
+                        "org.opencontainers.image.created": "2026-01-19T10:00:00Z",
+                    },
+                }
+
+            mock_oras.get_manifest.side_effect = mock_get_manifest
+            mock_create.return_value = mock_oras
+
+            # Call list() with filter
+            result = oci_client.list(filter_pattern="v1.*")
+
+        # Should only return v1.x tags
+        assert len(result) == 2
+        tag_names = [tag.name for tag in result]
+        assert "v1.0.0" in tag_names
+        assert "v1.1.0" in tag_names
+        assert "v2.0.0" not in tag_names
+        assert "latest-dev" not in tag_names
+
+    @pytest.mark.requirement("8A-FR-004")
+    def test_list_empty_namespace(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test list() returns empty list when no artifacts exist.
+
+        Verifies:
+        - Empty namespace returns empty list, not None
+        - No error raised for empty results
+        """
+        mock_tags_response: dict[str, list[str]] = {
+            "tags": [],
+        }
+
+        with patch.object(oci_client, "_create_oras_client") as mock_create:
+            mock_oras = MagicMock()
+            mock_oras.get_tags.return_value = mock_tags_response
+            mock_create.return_value = mock_oras
+
+            result = oci_client.list()
+
+        assert isinstance(result, list)
+        assert len(result) == 0
 
 
 class TestOCIClientCapabilities:
@@ -1316,7 +1457,7 @@ class TestOCIClientInspect:
             "layers": [
                 {
                     "mediaType": "application/vnd.floe.compiled-artifacts.v1+json",
-                    "digest": "sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+                    "digest": TEST_LAYER_DIGEST,
                     "size": 12345,
                     "annotations": {
                         "org.opencontainers.image.created": "2026-01-19T12:00:00Z",
