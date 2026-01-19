@@ -497,3 +497,194 @@ class TestCompiledArtifactsRoundtrip:
         assert loaded.transforms.models[0].name == original.transforms.models[0].name
 
         assert loaded.dbt_profiles == original.dbt_profiles
+
+
+class TestDagsterPluginConsumesCompiledArtifacts:
+    """Verify DagsterOrchestratorPlugin can consume CompiledArtifacts.
+
+    These tests validate the actual integration between floe-core
+    CompiledArtifacts and the floe-orchestrator-dagster plugin.
+
+    Requirements Covered:
+    - SC-002: Plugin consumes CompiledArtifacts from floe-core
+    - SC-003: Schema version compatibility
+    """
+
+    @pytest.fixture
+    def valid_compiled_artifacts_dict(self) -> dict[str, Any]:
+        """Create a valid CompiledArtifacts dict for testing."""
+        return {
+            "version": "0.2.0",
+            "metadata": {
+                "compiled_at": datetime.now().isoformat(),
+                "floe_version": "0.2.0",
+                "source_hash": "sha256:abc123def456",
+                "product_name": "contract-test-pipeline",
+                "product_version": "1.0.0",
+            },
+            "identity": {
+                "product_id": "default.contract_test_pipeline",
+                "domain": "default",
+                "repository": "github.com/test/contract-test-pipeline",
+            },
+            "mode": "simple",
+            "observability": {
+                "telemetry": {
+                    "enabled": True,
+                    "resource_attributes": {
+                        "service_name": "contract-test-pipeline",
+                        "service_version": "1.0.0",
+                        "deployment_environment": "dev",
+                        "floe_namespace": "default",
+                        "floe_product_name": "contract-test-pipeline",
+                        "floe_product_version": "1.0.0",
+                        "floe_mode": "dev",
+                    },
+                },
+                "lineage": True,
+                "lineage_namespace": "contract-test-pipeline",
+            },
+            "plugins": {
+                "compute": {"type": "duckdb", "version": "0.9.0"},
+                "orchestrator": {"type": "dagster", "version": "1.5.0"},
+            },
+            "transforms": {
+                "models": [
+                    {"name": "stg_customers", "compute": "duckdb"},
+                    {
+                        "name": "fct_orders",
+                        "compute": "duckdb",
+                        "depends_on": ["stg_customers"],
+                    },
+                ],
+                "default_compute": "duckdb",
+            },
+        }
+
+    @pytest.mark.requirement("SC-002")
+    def test_dagster_plugin_can_create_definitions_from_artifacts(
+        self, valid_compiled_artifacts_dict: dict[str, Any]
+    ) -> None:
+        """Test DagsterOrchestratorPlugin.create_definitions() works with CompiledArtifacts."""
+        from dagster import Definitions
+
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+        result = plugin.create_definitions(valid_compiled_artifacts_dict)
+
+        assert isinstance(result, Definitions)
+
+    @pytest.mark.requirement("SC-002")
+    def test_dagster_plugin_creates_assets_from_transforms(
+        self, valid_compiled_artifacts_dict: dict[str, Any]
+    ) -> None:
+        """Test DagsterOrchestratorPlugin creates assets from transforms."""
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+        result = plugin.create_definitions(valid_compiled_artifacts_dict)
+
+        # Verify assets were created for the models
+        assert result.assets is not None
+
+    @pytest.mark.requirement("SC-002")
+    def test_dagster_plugin_preserves_dependency_graph(
+        self, valid_compiled_artifacts_dict: dict[str, Any]
+    ) -> None:
+        """Test DagsterOrchestratorPlugin preserves model dependencies."""
+        from dagster import AssetKey
+
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+        result = plugin.create_definitions(valid_compiled_artifacts_dict)
+
+        # Get assets list
+        assets_list = list(result.assets)
+
+        # Find fct_orders asset and verify it depends on stg_customers
+        fct_orders = None
+        for asset in assets_list:
+            if asset.key.path[-1] == "fct_orders":
+                fct_orders = asset
+                break
+
+        assert fct_orders is not None
+        assert AssetKey(["stg_customers"]) in fct_orders.dependency_keys
+
+    @pytest.mark.requirement("SC-003")
+    def test_dagster_plugin_validates_schema_version(self) -> None:
+        """Test DagsterOrchestratorPlugin validates CompiledArtifacts schema."""
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+
+        # Missing required fields should raise validation error
+        with pytest.raises(ValueError, match="CompiledArtifacts validation failed"):
+            plugin.create_definitions({})
+
+    @pytest.mark.requirement("SC-003")
+    def test_dagster_plugin_rejects_invalid_artifacts(self) -> None:
+        """Test DagsterOrchestratorPlugin rejects artifacts missing required fields."""
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+
+        # Missing identity should fail validation
+        invalid_artifacts = {
+            "version": "0.2.0",
+            "metadata": {
+                "compiled_at": datetime.now().isoformat(),
+                "floe_version": "0.2.0",
+                "source_hash": "sha256:abc123",
+                "product_name": "test",
+                "product_version": "1.0.0",
+            },
+            # Missing identity field
+        }
+
+        with pytest.raises(ValueError, match="identity"):
+            plugin.create_definitions(invalid_artifacts)
+
+    @pytest.mark.requirement("SC-003")
+    def test_dagster_plugin_provides_actionable_error_on_invalid_schema(self) -> None:
+        """Test validation errors include actionable guidance."""
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+
+        with pytest.raises(
+            ValueError, match="Ensure you are passing output from 'floe compile'"
+        ):
+            plugin.create_definitions({})
+
+
+class TestCompiledArtifactsVersionCompatibility:
+    """Verify CompiledArtifacts schema version compatibility.
+
+    These tests validate that the DagsterOrchestratorPlugin correctly
+    handles different versions of CompiledArtifacts schema.
+    """
+
+    @pytest.mark.requirement("SC-003")
+    def test_current_schema_version_is_compatible(self) -> None:
+        """Test current CompiledArtifacts version is compatible with plugin."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Get current schema version
+        # The schema enforces version via the model
+        assert hasattr(CompiledArtifacts, "model_fields")
+        assert "version" in CompiledArtifacts.model_fields
+
+    @pytest.mark.requirement("SC-003")
+    def test_plugin_declares_api_version(self) -> None:
+        """Test DagsterOrchestratorPlugin declares floe API version."""
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+        plugin = DagsterOrchestratorPlugin()
+
+        # Plugin should declare its API version
+        assert hasattr(plugin, "floe_api_version")
+        assert plugin.floe_api_version is not None
+        assert len(plugin.floe_api_version) > 0
