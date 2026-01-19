@@ -17,7 +17,6 @@ See Also:
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,51 +42,70 @@ class TestQuickstartExamples(IntegrationTestBase):
     Requirements: SC-001 (Documentation accuracy)
     """
 
-    required_services = [("registry", 5000)]
+    required_services = [("oci-registry", 5000)]
     namespace = "floe-test"
 
-    def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
-        """Create a valid CompiledArtifacts JSON file matching quickstart example.
+    def _create_test_artifacts(self, unique_id: str) -> Any:
+        """Create a valid CompiledArtifacts instance for testing.
 
         Args:
-            tmp_path: Temporary directory path.
             unique_id: Unique identifier for test isolation.
 
         Returns:
-            Path to the created JSON file at target/compiled_artifacts.json.
+            A valid CompiledArtifacts instance.
         """
-        # Create target directory as shown in quickstart
-        target_dir = tmp_path / "target"
-        target_dir.mkdir(parents=True, exist_ok=True)
+        from floe_core.schemas.compiled_artifacts import (
+            CompilationMetadata,
+            CompiledArtifacts,
+            ObservabilityConfig,
+            PluginRef,
+            ProductIdentity,
+            ResolvedModel,
+            ResolvedPlugins,
+            ResolvedTransforms,
+        )
+        from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
-        data: dict[str, Any] = {
-            "version": "0.2.0",
-            "metadata": {
-                "compiled_at": datetime.now(timezone.utc).isoformat(),
-                "floe_version": "0.2.0",
-                "source_hash": f"sha256:{unique_id}abc123",
-                "product_name": "my-data-product",  # Match quickstart example
-                "product_version": "1.0.0",
-            },
-            "identity": {
-                "product_id": f"quickstart.product_{unique_id}",
-                "domain": "quickstart",
-                "repository": "https://github.com/test/repo",
-            },
-            "mode": {
-                "environment": "dev",
-                "target": "local",
-            },
-            "telemetry": {
-                "service_name": "floe-quickstart",
-            },
-            "governance": {
-                "owner": "quickstart-team",
-            },
-            "plugins": {},
-            "transforms": [],
-            "inheritance_chain": [],
-            "dbt_profiles": {
+        return CompiledArtifacts(
+            version="0.2.0",
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(timezone.utc),
+                floe_version="0.2.0",
+                source_hash=f"sha256:{unique_id}abc123def456",
+                product_name="my-data-product",  # Match quickstart example
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id=f"quickstart.product_{unique_id}",
+                domain="quickstart",
+                repository="https://github.com/test/repo",
+            ),
+            mode="simple",
+            inheritance_chain=[],
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    enabled=True,
+                    resource_attributes=ResourceAttributes(
+                        service_name="floe-quickstart",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="quickstart",
+                        floe_product_name="my-data-product",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage_namespace="quickstart-namespace",
+            ),
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.9.0"),
+                orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            ),
+            transforms=ResolvedTransforms(
+                models=[ResolvedModel(name=f"stg_model_{unique_id}", compute="duckdb")],
+                default_compute="duckdb",
+            ),
+            dbt_profiles={
                 "floe": {
                     "target": "dev",
                     "outputs": {
@@ -98,10 +116,21 @@ class TestQuickstartExamples(IntegrationTestBase):
                     },
                 }
             },
-        }
+        )
 
-        artifacts_path = target_dir / "compiled_artifacts.json"
-        artifacts_path.write_text(json.dumps(data, indent=2))
+    def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
+        """Create a valid CompiledArtifacts JSON file for testing.
+
+        Args:
+            tmp_path: Temporary directory path.
+            unique_id: Unique identifier for test isolation.
+
+        Returns:
+            Path to the created JSON file.
+        """
+        artifacts = self._create_test_artifacts(unique_id)
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts.to_json_file(artifacts_path)
         return artifacts_path
 
     @pytest.mark.requirement("8A-SC-001")
@@ -408,6 +437,7 @@ class TestQuickstartExamples(IntegrationTestBase):
                 "registry": {
                     "uri": f"oci://{oci_registry_host}/floe-test",
                     "auth": {"type": "anonymous"},
+                    "tls_verify": False,  # Local registry uses HTTP
                     "cache": {
                         "enabled": True,
                         "path": str(cache_dir),
@@ -482,6 +512,7 @@ class TestQuickstartExamples(IntegrationTestBase):
                 "registry": {
                     "uri": f"oci://{oci_registry_host}/floe-test",
                     "auth": {"type": "anonymous"},
+                    "tls_verify": False,  # Local registry uses HTTP
                     "cache": {
                         "enabled": True,
                         "path": str(cache_dir),
