@@ -75,8 +75,9 @@ _PLACEHOLDER_PHRASES_PATTERN: re.Pattern[str] = re.compile(
 )
 
 # Pattern for descriptions that are just "N/A", "NA", "None", "-", or similar
+# Note: N/?A matches both "NA" and "N/A" (the ? makes / optional)
 _NA_ONLY_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*(N/?A|NA|None|-|\.{2,})\s*$",
+    r"^\s*(N/?A|None|-|\.{2,})\s*$",
     re.IGNORECASE,
 )
 
