@@ -620,22 +620,6 @@ class TestOCIClientPull:
                 oci_client.pull(tag="v1.0.0")
 
 
-class TestOCIClientInspect:
-    """Tests for OCIClient.inspect() operation."""
-
-    @pytest.mark.requirement("8A-FR-003")
-    def test_inspect_artifact_placeholder(
-        self,
-        oci_client: OCIClient,
-    ) -> None:
-        """Test that inspect() exists and is not yet implemented.
-
-        FR-003: System MUST support artifact inspection.
-        """
-        with pytest.raises(NotImplementedError, match="inspect.*not yet implemented"):
-            oci_client.inspect(tag="v1.0.0")
-
-
 class TestOCIClientList:
     """Tests for OCIClient.list() operation."""
 
@@ -1300,3 +1284,175 @@ class TestOCIClientPullOTelInstrumentation:
 
         # Verify cache miss was recorded
         assert "miss" in cache_ops_recorded
+
+
+# =============================================================================
+# Inspect Operation Tests (T031)
+# =============================================================================
+
+
+class TestOCIClientInspect:
+    """Tests for OCIClient.inspect() operation.
+
+    Tests metadata retrieval without downloading blob content.
+    TDD: Write tests first, implementation comes in T032.
+
+    Task: T031
+    Requirements: FR-003
+    """
+
+    @pytest.fixture
+    def mock_manifest_response(self) -> dict[str, Any]:
+        """Create a mock OCI manifest response."""
+        return {
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "artifactType": "application/vnd.floe.compiled-artifacts.v1+json",
+            "config": {
+                "mediaType": "application/vnd.oci.empty.v1+json",
+                "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "size": 2,
+            },
+            "layers": [
+                {
+                    "mediaType": "application/vnd.floe.compiled-artifacts.v1+json",
+                    "digest": "sha256:abc123def456789012345678901234567890123456789012345678901234",
+                    "size": 12345,
+                    "annotations": {
+                        "org.opencontainers.image.created": "2026-01-19T12:00:00Z",
+                        "io.floe.product.name": "test-product",
+                        "io.floe.product.version": "1.0.0",
+                    },
+                }
+            ],
+            "annotations": {
+                "org.opencontainers.image.created": "2026-01-19T12:00:00Z",
+                "io.floe.product.name": "test-product",
+                "io.floe.product.version": "1.0.0",
+            },
+        }
+
+    @pytest.mark.requirement("8A-FR-003")
+    def test_inspect_returns_artifact_manifest(
+        self,
+        oci_client: OCIClient,
+        mock_manifest_response: dict[str, Any],
+    ) -> None:
+        """Test inspect returns ArtifactManifest without downloading content.
+
+        Verifies:
+        - inspect() returns ArtifactManifest
+        - Manifest contains correct digest, type, and size
+        - No blob content is downloaded (only manifest)
+        """
+        from floe_core.schemas.oci import ArtifactManifest
+
+        # Mock ORAS client to return manifest without pull
+        mock_oras = MagicMock()
+        # Mock get_manifest method that returns manifest dict
+        mock_oras.get_manifest.return_value = mock_manifest_response
+
+        with patch.object(oci_client, "_create_oras_client", return_value=mock_oras):
+            manifest = oci_client.inspect(tag="v1.0.0")
+
+        # Verify return type
+        assert isinstance(manifest, ArtifactManifest)
+
+        # Verify manifest properties
+        assert manifest.artifact_type == "application/vnd.floe.compiled-artifacts.v1+json"
+        assert len(manifest.layers) == 1
+        assert manifest.layers[0].size == 12345
+
+        # Verify ORAS was called with manifest request, not pull
+        mock_oras.get_manifest.assert_called_once()
+        # Should NOT call pull (which downloads blobs)
+        mock_oras.pull.assert_not_called()
+
+    @pytest.mark.requirement("8A-FR-003")
+    def test_inspect_not_found_raises_error(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test inspect raises ArtifactNotFoundError for non-existent tags.
+
+        Verifies:
+        - ArtifactNotFoundError raised for missing tag
+        - Error contains tag and registry info
+        """
+        # Mock ORAS client to raise 404-equivalent error
+        mock_oras = MagicMock()
+        mock_oras.get_manifest.side_effect = Exception("MANIFEST_UNKNOWN: manifest unknown")
+
+        with patch.object(oci_client, "_create_oras_client", return_value=mock_oras):
+            with pytest.raises(ArtifactNotFoundError) as exc_info:
+                oci_client.inspect(tag="nonexistent-tag")
+
+        # Verify error contains context
+        assert "nonexistent-tag" in str(exc_info.value)
+
+    @pytest.mark.requirement("8A-FR-003")
+    def test_inspect_returns_manifest_with_annotations(
+        self,
+        oci_client: OCIClient,
+        mock_manifest_response: dict[str, Any],
+    ) -> None:
+        """Test inspect returns manifest with annotations.
+
+        Verifies:
+        - Product name and version annotations extracted
+        - Created timestamp included
+        """
+        mock_oras = MagicMock()
+        mock_oras.get_manifest.return_value = mock_manifest_response
+
+        with patch.object(oci_client, "_create_oras_client", return_value=mock_oras):
+            manifest = oci_client.inspect(tag="v1.0.0")
+
+        # Verify annotations are accessible
+        assert manifest.annotations is not None
+        assert manifest.annotations.get("io.floe.product.name") == "test-product"
+        assert manifest.annotations.get("io.floe.product.version") == "1.0.0"
+
+    @pytest.mark.requirement("8A-FR-003")
+    def test_inspect_uses_otel_tracing(
+        self,
+        oci_client: OCIClient,
+        mock_manifest_response: dict[str, Any],
+    ) -> None:
+        """Test inspect creates OTel span for observability.
+
+        Verifies:
+        - Span created with operation name
+        - Span includes tag attribute
+        """
+        from contextlib import contextmanager
+
+        mock_oras = MagicMock()
+        mock_oras.get_manifest.return_value = mock_manifest_response
+
+        span_created = False
+        span_attributes: dict[str, Any] = {}
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            nonlocal span_created, span_attributes
+            span_created = True
+            if attributes:
+                span_attributes.update(attributes)
+            mock_span = MagicMock()
+
+            def set_attr(k: str, v: Any) -> None:
+                span_attributes[k] = v
+
+            mock_span.set_attribute = set_attr
+            mock_span.set_status = MagicMock()
+            yield mock_span
+
+        with (
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras),
+            patch.object(oci_client.metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.inspect(tag="v1.0.0")
+
+        assert span_created, "Expected OTel span to be created"
+        assert span_attributes.get("oci.tag") == "v1.0.0"
