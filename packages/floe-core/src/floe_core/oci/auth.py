@@ -662,8 +662,8 @@ class GCPWIAuthProvider(AuthProvider):
             return self._credentials
 
         try:
-            import google.auth
-            from google.auth.transport.requests import Request
+            import google.auth  # type: ignore[import-untyped]
+            from google.auth.transport.requests import Request  # type: ignore[import-untyped]
         except ImportError as e:
             raise AuthenticationError(
                 self._registry_uri,
@@ -674,7 +674,7 @@ class GCPWIAuthProvider(AuthProvider):
             credentials, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            credentials.refresh(Request())  # type: ignore[no-untyped-call]
+            credentials.refresh(Request())
 
             expires_at = None
             if hasattr(credentials, "expiry") and credentials.expiry:
