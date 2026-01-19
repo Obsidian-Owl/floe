@@ -198,13 +198,17 @@ deploy_services() {
     # Apply Jaeger (for OpenTelemetry integration tests)
     log_info "Deploying Jaeger..."
     kubectl apply -f "${SCRIPT_DIR}/services/jaeger.yaml"
+
+    # Apply OCI Registry (for OCI client integration tests - Epic 8A)
+    log_info "Deploying OCI Registry..."
+    kubectl apply -f "${SCRIPT_DIR}/services/registry.yaml"
 }
 
 # Wait for all services to be ready
 wait_for_services() {
     log_info "Waiting for all services to be ready..."
 
-    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger")
+    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger" "registry")
 
     for service in "${services[@]}"; do
         log_info "Waiting for ${service}..."
@@ -257,6 +261,7 @@ print_info() {
     echo "  MinIO API:   http://localhost:9000"
     echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
     echo "  Jaeger:      http://localhost:16686"
+    echo "  OCI Registry: http://localhost:30500/v2/"
     echo "  Grafana:     http://localhost:3001 (admin/admin)"
     echo "  Prometheus:  http://localhost:9090"
     echo ""
