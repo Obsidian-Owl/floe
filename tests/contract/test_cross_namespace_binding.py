@@ -192,6 +192,82 @@ class TestCrossNamespaceSchemaStability:
             RoleBindingSubject(name="floe-test")  # type: ignore[call-arg]
 
 
+class TestCrossNamespaceAccessControl:
+    """Contract tests for cross-namespace access control validation."""
+
+    @pytest.mark.requirement("FR-023")
+    def test_allowed_namespaces_enforces_policy(self) -> None:
+        """Verify allowed_subject_namespaces enforces cross-namespace policy."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+
+        # Valid: Dagster in floe-platform accessing floe-jobs
+        config = RoleBindingConfig(
+            name="floe-dagster-binding",
+            namespace="floe-jobs",
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
+            role_name="floe-job-creator-role",
+            allowed_subject_namespaces=["floe-platform", "floe-jobs"],
+        )
+        assert config.subjects[0].namespace == "floe-platform"
+
+        # Invalid: Attempting to allow floe-sales-domain (not in allowed list)
+        with pytest.raises(ValidationError, match="not in allowed namespaces"):
+            RoleBindingConfig(
+                name="floe-rogue-binding",
+                namespace="floe-jobs",
+                subjects=[
+                    RoleBindingSubject(name="floe-sales-sa", namespace="floe-sales-domain")
+                ],
+                role_name="floe-job-creator-role",
+                allowed_subject_namespaces=["floe-platform", "floe-jobs"],
+            )
+
+    @pytest.mark.requirement("FR-023")
+    def test_dagster_pattern_with_allowed_namespaces(self) -> None:
+        """Verify Dagster cross-namespace access pattern with explicit validation."""
+        from floe_core.schemas.rbac import (
+            RoleBindingConfig,
+            RoleBindingSubject,
+            RoleConfig,
+            RoleRule,
+        )
+
+        # Role in floe-jobs that allows job creation
+        role_config = RoleConfig(
+            name="floe-job-creator-role",
+            namespace="floe-jobs",
+            rules=[
+                RoleRule(
+                    api_groups=["batch"],
+                    resources=["jobs"],
+                    verbs=["get", "list", "create", "delete"],
+                ),
+            ],
+        )
+
+        # RoleBinding with explicit namespace allowlist
+        binding_config = RoleBindingConfig(
+            name="floe-dagster-binding",
+            namespace="floe-jobs",
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
+            role_name="floe-job-creator-role",
+            allowed_subject_namespaces=["floe-platform"],  # Only platform allowed
+        )
+
+        role_manifest = role_config.to_k8s_manifest()
+        binding_manifest = binding_config.to_k8s_manifest()
+
+        # Verify manifests are generated correctly
+        assert role_manifest["metadata"]["namespace"] == "floe-jobs"
+        assert binding_manifest["subjects"][0]["namespace"] == "floe-platform"
+
+
 class TestCrossNamespaceYAMLCompatibility:
     """Contract tests for YAML serialization of cross-namespace bindings."""
 

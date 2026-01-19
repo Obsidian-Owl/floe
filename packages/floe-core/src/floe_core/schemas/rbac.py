@@ -21,9 +21,9 @@ Contract: See specs/7b-k8s-rbac/data-model.md
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # =============================================================================
@@ -272,6 +272,9 @@ class RoleBindingConfig(BaseModel):
         subjects: List of ServiceAccount subjects to bind.
         role_name: Name of the Role to bind to.
         labels: Kubernetes labels to apply to the RoleBinding.
+        allowed_subject_namespaces: Optional list of allowed namespaces for cross-namespace
+            subjects. If set, subjects from other namespaces will be rejected. If None,
+            subjects from any namespace are allowed (for backwards compatibility).
 
     Example:
         >>> config = RoleBindingConfig(
@@ -279,6 +282,15 @@ class RoleBindingConfig(BaseModel):
         ...     namespace="floe-jobs",
         ...     subjects=[RoleBindingSubject(name="floe-job-runner", namespace="floe-jobs")],
         ...     role_name="floe-job-runner-role"
+        ... )
+
+    Example with cross-namespace validation:
+        >>> config = RoleBindingConfig(
+        ...     name="floe-dagster-binding",
+        ...     namespace="floe-jobs",
+        ...     subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+        ...     role_name="floe-job-creator-role",
+        ...     allowed_subject_namespaces=["floe-platform", "floe-jobs"]
         ... )
     """
 
@@ -307,6 +319,37 @@ class RoleBindingConfig(BaseModel):
         default_factory=lambda: {"app.kubernetes.io/managed-by": "floe"},
         description="Kubernetes labels",
     )
+    allowed_subject_namespaces: list[str] | None = Field(
+        default=None,
+        description="Allowed namespaces for cross-namespace subjects. If None, all namespaces allowed.",
+    )
+
+    @model_validator(mode="after")
+    def validate_subject_namespaces(self) -> Self:
+        """Validate that cross-namespace subjects are from allowed namespaces.
+
+        When allowed_subject_namespaces is set, subjects must be from one of
+        those namespaces. This ensures cross-namespace access is only granted
+        to explicitly allowed namespaces per FR-023 and US3.
+
+        Returns:
+            The validated model.
+
+        Raises:
+            ValueError: If a subject's namespace is not in the allowed list.
+        """
+        if self.allowed_subject_namespaces is None:
+            return self
+
+        allowed = set(self.allowed_subject_namespaces)
+        for subject in self.subjects:
+            if subject.namespace not in allowed:
+                msg = (
+                    f"Subject '{subject.name}' is from namespace '{subject.namespace}' "
+                    f"which is not in allowed namespaces: {sorted(allowed)}"
+                )
+                raise ValueError(msg)
+        return self
 
     def to_k8s_manifest(self) -> dict[str, Any]:
         """Convert to K8s RoleBinding manifest dict.

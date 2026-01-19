@@ -216,6 +216,101 @@ class TestCrossNamespaceRoleRefBehavior:
         assert manifest["roleRef"]["apiGroup"] == "rbac.authorization.k8s.io"
 
 
+class TestCrossNamespaceAllowedNamespaces:
+    """Unit tests for allowed_subject_namespaces validation."""
+
+    @pytest.mark.requirement("FR-023")
+    def test_allowed_namespaces_accepts_valid(self) -> None:
+        """Test subjects from allowed namespaces are accepted."""
+        from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+
+        config = RoleBindingConfig(
+            name="floe-dagster-binding",
+            namespace="floe-jobs",
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
+            role_name="floe-test-role",
+            allowed_subject_namespaces=["floe-platform", "floe-jobs"],
+        )
+
+        assert config.subjects[0].namespace == "floe-platform"
+
+    @pytest.mark.requirement("FR-023")
+    def test_allowed_namespaces_rejects_invalid(self) -> None:
+        """Test subjects from disallowed namespaces are rejected."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+
+        with pytest.raises(ValidationError, match="not in allowed namespaces"):
+            RoleBindingConfig(
+                name="floe-dagster-binding",
+                namespace="floe-jobs",
+                subjects=[
+                    RoleBindingSubject(name="floe-dagster", namespace="floe-sales-domain")
+                ],
+                role_name="floe-test-role",
+                allowed_subject_namespaces=["floe-platform", "floe-jobs"],
+            )
+
+    @pytest.mark.requirement("FR-023")
+    def test_allowed_namespaces_none_permits_all(self) -> None:
+        """Test None allowed_subject_namespaces permits all namespaces."""
+        from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+
+        # Should not raise - no restrictions when allowed_subject_namespaces is None
+        config = RoleBindingConfig(
+            name="floe-dagster-binding",
+            namespace="floe-jobs",
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-any-namespace")
+            ],
+            role_name="floe-test-role",
+            allowed_subject_namespaces=None,
+        )
+
+        assert config.subjects[0].namespace == "floe-any-namespace"
+
+    @pytest.mark.requirement("FR-023")
+    def test_allowed_namespaces_multiple_subjects(self) -> None:
+        """Test validation works with multiple subjects."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+
+        # One valid, one invalid subject
+        with pytest.raises(ValidationError, match="floe-bad-namespace"):
+            RoleBindingConfig(
+                name="floe-multi-binding",
+                namespace="floe-jobs",
+                subjects=[
+                    RoleBindingSubject(name="floe-dagster", namespace="floe-platform"),
+                    RoleBindingSubject(name="floe-rogue", namespace="floe-bad-namespace"),
+                ],
+                role_name="floe-test-role",
+                allowed_subject_namespaces=["floe-platform", "floe-jobs"],
+            )
+
+    @pytest.mark.requirement("FR-023")
+    def test_allowed_namespaces_empty_list_rejects_all(self) -> None:
+        """Test empty allowed list rejects all cross-namespace subjects."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+
+        with pytest.raises(ValidationError, match="not in allowed namespaces"):
+            RoleBindingConfig(
+                name="floe-dagster-binding",
+                namespace="floe-jobs",
+                subjects=[
+                    RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+                ],
+                role_name="floe-test-role",
+                allowed_subject_namespaces=[],  # Empty = reject all
+            )
+
+
 class TestCrossNamespaceYAMLOutput:
     """Unit tests for YAML output of cross-namespace bindings."""
 
