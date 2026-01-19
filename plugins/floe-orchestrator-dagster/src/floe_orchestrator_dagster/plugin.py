@@ -220,10 +220,95 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             >>> len(assets)
             2
         """
-        # Placeholder - will be implemented in T007
-        raise NotImplementedError(
-            "create_assets_from_transforms will be implemented in T007"
+        from dagster import AssetKey, AssetsDefinition
+
+        assets: list[AssetsDefinition] = []
+
+        for transform in transforms:
+            # Convert depends_on names to AssetKeys
+            deps = [AssetKey(dep) for dep in transform.depends_on]
+
+            # Build metadata for the asset
+            metadata = self._build_asset_metadata(transform)
+
+            # Create the asset using @asset decorator factory
+            asset_def = self._create_asset_for_transform(
+                transform=transform,
+                deps=deps,
+                metadata=metadata,
+            )
+            assets.append(asset_def)
+
+        logger.info(
+            "Created assets from transforms",
+            extra={"asset_count": len(assets)},
         )
+
+        return assets
+
+    def _build_asset_metadata(self, transform: TransformConfig) -> dict[str, Any]:
+        """Build metadata dict for a transform asset.
+
+        Args:
+            transform: The TransformConfig to extract metadata from.
+
+        Returns:
+            Dictionary of metadata for the Dagster asset.
+        """
+        metadata: dict[str, Any] = {}
+
+        if transform.compute:
+            metadata["compute"] = transform.compute
+        if transform.schema_name:
+            metadata["schema"] = transform.schema_name
+        if transform.materialization:
+            metadata["materialization"] = transform.materialization
+        if transform.tags:
+            metadata["tags"] = transform.tags
+        if transform.path:
+            metadata["path"] = transform.path
+
+        return metadata
+
+    def _create_asset_for_transform(
+        self,
+        transform: TransformConfig,
+        deps: list[Any],
+        metadata: dict[str, Any],
+    ) -> Any:
+        """Create a Dagster asset definition for a single transform.
+
+        Uses the @asset decorator to create a software-defined asset that
+        represents the dbt model. The asset is a placeholder that can be
+        materialized by the dbt resource.
+
+        Args:
+            transform: TransformConfig with model details.
+            deps: List of AssetKey dependencies.
+            metadata: Metadata dictionary for the asset.
+
+        Returns:
+            AssetsDefinition for the transform.
+        """
+        from dagster import asset
+
+        # Create asset with proper dependencies and metadata
+        # Note: We avoid type annotations in the inner function due to
+        # Dagster's type hint resolution with `from __future__ import annotations`
+        @asset(
+            name=transform.name,
+            deps=deps if deps else None,
+            metadata=metadata if metadata else None,
+            description=f"dbt model: {transform.name}",
+        )
+        def _asset_fn():
+            """Placeholder asset for dbt model.
+
+            Actual materialization happens via dbt resource integration.
+            """
+            return None
+
+        return _asset_fn
 
     def get_helm_values(self) -> dict[str, Any]:
         """Return Helm chart values for deploying Dagster services.

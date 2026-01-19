@@ -179,19 +179,63 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
         assert isinstance(result, Definitions)
 
 
+class TestDagsterOrchestratorPluginCreateAssets:
+    """Test create_assets_from_transforms method.
+
+    Validates FR-006: System MUST create Dagster software-defined assets
+    from TransformConfig list.
+    Validates FR-007: System MUST preserve dbt model dependency graph as
+    Dagster asset dependencies.
+    """
+
+    def test_create_assets_empty_list(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Test create_assets_from_transforms returns empty list for empty input."""
+        assets = dagster_plugin.create_assets_from_transforms([])
+        assert isinstance(assets, list)
+        assert len(assets) == 0
+
+    def test_create_assets_single_transform(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        sample_transform_config: Any,
+    ) -> None:
+        """Test create_assets_from_transforms creates asset for single transform."""
+        assets = dagster_plugin.create_assets_from_transforms([sample_transform_config])
+        assert len(assets) == 1
+
+    def test_create_assets_multiple_transforms(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        sample_transform_configs: list[Any],
+    ) -> None:
+        """Test create_assets_from_transforms creates assets for multiple transforms."""
+        assets = dagster_plugin.create_assets_from_transforms(sample_transform_configs)
+        assert len(assets) == 3  # raw_customers, stg_customers, dim_customers
+
+    def test_create_assets_preserves_dependencies(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        sample_transform_configs: list[Any],
+    ) -> None:
+        """Test create_assets_from_transforms preserves dependency graph."""
+        from dagster import AssetKey
+
+        assets = dagster_plugin.create_assets_from_transforms(sample_transform_configs)
+
+        # Find dim_customers asset and check its dependencies
+        # dim_customers depends on stg_customers
+        dim_asset = next(a for a in assets if a.key.path[-1] == "dim_customers")
+        assert AssetKey(["stg_customers"]) in dim_asset.dependency_keys
+
+
 class TestDagsterOrchestratorPluginSkeletonMethods:
     """Test skeleton methods raise NotImplementedError.
 
     These tests verify that placeholder methods correctly raise
     NotImplementedError until they are implemented in later tasks.
     """
-
-    def test_create_assets_from_transforms_not_implemented(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
-        """Test create_assets_from_transforms raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T007"):
-            dagster_plugin.create_assets_from_transforms([])
 
     def test_get_helm_values_not_implemented(
         self, dagster_plugin: DagsterOrchestratorPlugin
