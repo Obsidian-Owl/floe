@@ -139,22 +139,26 @@ class TestLoadManifestsFromDir:
 
         # Create test YAML files
         (tmp_path / "serviceaccounts.yaml").write_text(
-            yaml.dump_all([
-                {
-                    "apiVersion": "v1",
-                    "kind": "ServiceAccount",
-                    "metadata": {"name": "test-sa"},
-                },
-            ])
+            yaml.dump_all(
+                [
+                    {
+                        "apiVersion": "v1",
+                        "kind": "ServiceAccount",
+                        "metadata": {"name": "test-sa"},
+                    },
+                ]
+            )
         )
         (tmp_path / "roles.yaml").write_text(
-            yaml.dump_all([
-                {
-                    "apiVersion": "rbac.authorization.k8s.io/v1",
-                    "kind": "Role",
-                    "metadata": {"name": "test-role"},
-                },
-            ])
+            yaml.dump_all(
+                [
+                    {
+                        "apiVersion": "rbac.authorization.k8s.io/v1",
+                        "kind": "Role",
+                        "metadata": {"name": "test-role"},
+                    },
+                ]
+            )
         )
 
         resources = _load_manifests_from_dir(tmp_path)
@@ -170,18 +174,20 @@ class TestLoadManifestsFromDir:
         """Test _load_manifests_from_dir handles multi-document YAML."""
         from floe_cli.main import _load_manifests_from_dir
 
-        content = yaml.dump_all([
-            {
-                "apiVersion": "v1",
-                "kind": "ServiceAccount",
-                "metadata": {"name": "sa-1"},
-            },
-            {
-                "apiVersion": "v1",
-                "kind": "ServiceAccount",
-                "metadata": {"name": "sa-2"},
-            },
-        ])
+        content = yaml.dump_all(
+            [
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "sa-1"},
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "sa-2"},
+                },
+            ]
+        )
         (tmp_path / "serviceaccounts.yaml").write_text(content)
 
         resources = _load_manifests_from_dir(tmp_path)
@@ -319,9 +325,7 @@ class TestPrintValidationResult:
         assert "Roles: 3" in captured.out
 
     @pytest.mark.requirement("FR-061")
-    def test_print_invalid_result_with_issues(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_print_invalid_result_with_issues(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Test printing invalid result shows issues."""
         from floe_cli.commands.rbac import (
             RBACValidationResult,
