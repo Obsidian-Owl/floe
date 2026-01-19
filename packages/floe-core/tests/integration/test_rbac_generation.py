@@ -74,7 +74,7 @@ class TestRBACManifestGenerationWorkflow:
         """Create sample Role configurations."""
         return [
             RoleConfig(
-                name="floe-secret-reader",
+                name="floe-secret-reader-role",
                 namespace="floe-jobs",
                 rules=[
                     RoleRule(
@@ -86,7 +86,7 @@ class TestRBACManifestGenerationWorkflow:
                 ],
             ),
             RoleConfig(
-                name="floe-job-manager",
+                name="floe-job-manager-role",
                 namespace="floe-jobs",
                 rules=[
                     RoleRule(
@@ -107,7 +107,7 @@ class TestRBACManifestGenerationWorkflow:
         """Create sample RoleBinding configurations."""
         return [
             RoleBindingConfig(
-                name="floe-job-runner-secrets",
+                name="floe-job-runner-secrets-binding",
                 namespace="floe-jobs",
                 subjects=[
                     RoleBindingSubject(
@@ -115,10 +115,10 @@ class TestRBACManifestGenerationWorkflow:
                         namespace="floe-jobs",
                     ),
                 ],
-                role_name="floe-secret-reader",
+                role_name="floe-secret-reader-role",
             ),
             RoleBindingConfig(
-                name="floe-job-runner-jobs",
+                name="floe-job-runner-jobs-binding",
                 namespace="floe-jobs",
                 subjects=[
                     RoleBindingSubject(
@@ -126,7 +126,7 @@ class TestRBACManifestGenerationWorkflow:
                         namespace="floe-jobs",
                     ),
                 ],
-                role_name="floe-job-manager",
+                role_name="floe-job-manager-role",
             ),
         ]
 
