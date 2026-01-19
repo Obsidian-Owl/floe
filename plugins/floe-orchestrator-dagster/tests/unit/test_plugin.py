@@ -139,19 +139,52 @@ class TestDagsterOrchestratorPluginInstantiation:
         assert isinstance(__version__, str)
 
 
+class TestDagsterOrchestratorPluginCreateDefinitions:
+    """Test create_definitions method.
+
+    Validates FR-005: System MUST generate valid Dagster Definitions
+    object from CompiledArtifacts.
+    """
+
+    def test_create_definitions_empty_artifacts(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Test create_definitions returns empty Definitions for empty artifacts."""
+        from dagster import Definitions
+
+        result = dagster_plugin.create_definitions({})
+
+        assert isinstance(result, Definitions)
+
+    def test_create_definitions_no_transforms(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Test create_definitions handles missing transforms."""
+        from dagster import Definitions
+
+        artifacts = {"version": "0.2.0", "metadata": {}}
+        result = dagster_plugin.create_definitions(artifacts)
+
+        assert isinstance(result, Definitions)
+
+    def test_create_definitions_empty_models(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Test create_definitions handles empty models list."""
+        from dagster import Definitions
+
+        artifacts = {"transforms": {"models": [], "default_compute": "duckdb"}}
+        result = dagster_plugin.create_definitions(artifacts)
+
+        assert isinstance(result, Definitions)
+
+
 class TestDagsterOrchestratorPluginSkeletonMethods:
     """Test skeleton methods raise NotImplementedError.
 
     These tests verify that placeholder methods correctly raise
     NotImplementedError until they are implemented in later tasks.
     """
-
-    def test_create_definitions_not_implemented(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
-        """Test create_definitions raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T006"):
-            dagster_plugin.create_definitions({})
 
     def test_create_assets_from_transforms_not_implemented(
         self, dagster_plugin: DagsterOrchestratorPlugin

@@ -127,6 +127,10 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         Creates a Dagster Definitions object containing assets, jobs, resources,
         and schedules based on the compiled data product configuration.
 
+        The method extracts transforms from the artifacts, converts them to
+        TransformConfig objects, and creates Dagster assets preserving the
+        dependency graph.
+
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
                 profiles, transforms, and other configuration.
@@ -135,14 +139,63 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             Dagster Definitions object ready for deployment.
 
         Raises:
-            ValidationError: If artifacts fail schema validation.
+            ValueError: If artifacts structure is invalid or missing required fields.
 
         Example:
             >>> definitions = plugin.create_definitions(compiled_artifacts)
             >>> # Returns Dagster Definitions with assets from dbt models
         """
-        # Placeholder - will be implemented in T006
-        raise NotImplementedError("create_definitions will be implemented in T006")
+        from dagster import Definitions
+
+        # Extract transforms from artifacts
+        transforms_data = artifacts.get("transforms")
+        if transforms_data is None:
+            logger.warning("No transforms found in artifacts, returning empty Definitions")
+            return Definitions(assets=[])
+
+        # Get models list from transforms
+        models = transforms_data.get("models", [])
+        if not models:
+            logger.warning("No models found in transforms, returning empty Definitions")
+            return Definitions(assets=[])
+
+        # Convert ResolvedModel dicts to TransformConfig objects
+        transform_configs = self._models_to_transform_configs(models)
+
+        # Create assets from transforms
+        assets = self.create_assets_from_transforms(transform_configs)
+
+        logger.info(
+            "Created Dagster Definitions",
+            extra={"asset_count": len(assets), "model_count": len(models)},
+        )
+
+        return Definitions(assets=assets)
+
+    def _models_to_transform_configs(
+        self, models: list[dict[str, Any]]
+    ) -> list[TransformConfig]:
+        """Convert ResolvedModel dicts to TransformConfig objects.
+
+        Maps the CompiledArtifacts ResolvedModel structure to the
+        TransformConfig dataclass used by create_assets_from_transforms().
+
+        Args:
+            models: List of ResolvedModel dictionaries from CompiledArtifacts.
+
+        Returns:
+            List of TransformConfig objects.
+        """
+        configs = []
+        for model in models:
+            config = TransformConfig(
+                name=model["name"],
+                compute=model.get("compute"),
+                tags=model.get("tags") or [],
+                depends_on=model.get("depends_on") or [],
+            )
+            configs.append(config)
+        return configs
 
     def create_assets_from_transforms(
         self, transforms: list[TransformConfig]
