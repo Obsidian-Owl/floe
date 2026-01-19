@@ -162,3 +162,79 @@ def temp_cache_dir(tmp_path: Path) -> Path:
     cache_dir = tmp_path / "oci_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+@pytest.fixture
+def sample_compiled_artifacts() -> Any:
+    """Create a valid CompiledArtifacts for testing.
+
+    Returns:
+        A valid CompiledArtifacts instance for push/pull testing.
+
+    Note:
+        This fixture creates all required nested objects for a valid
+        CompiledArtifacts. The return type is Any to avoid import
+        issues in TYPE_CHECKING blocks.
+    """
+    from floe_core.schemas.compiled_artifacts import (
+        CompilationMetadata,
+        CompiledArtifacts,
+        ObservabilityConfig,
+        PluginRef,
+        ProductIdentity,
+        ResolvedModel,
+        ResolvedPlugins,
+        ResolvedTransforms,
+    )
+    from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+    return CompiledArtifacts(
+        version="0.2.0",
+        metadata=CompilationMetadata(
+            compiled_at=datetime.now(timezone.utc),
+            floe_version="0.2.0",
+            source_hash="sha256:abc123def456",
+            product_name="test-product",
+            product_version="1.0.0",
+        ),
+        identity=ProductIdentity(
+            product_id="default.test_product",
+            domain="default",
+            repository="github.com/acme/test",
+        ),
+        mode="simple",
+        observability=ObservabilityConfig(
+            telemetry=TelemetryConfig(
+                enabled=True,
+                resource_attributes=ResourceAttributes(
+                    service_name="test",
+                    service_version="1.0.0",
+                    deployment_environment="dev",
+                    floe_namespace="test",
+                    floe_product_name="test",
+                    floe_product_version="1.0.0",
+                    floe_mode="dev",
+                ),
+            ),
+            lineage_namespace="test-namespace",
+        ),
+        plugins=ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+        ),
+        transforms=ResolvedTransforms(
+            models=[ResolvedModel(name="stg_customers", compute="duckdb")],
+            default_compute="duckdb",
+        ),
+        dbt_profiles={
+            "default": {
+                "target": "dev",
+                "outputs": {
+                    "dev": {
+                        "type": "duckdb",
+                        "path": "/tmp/test.duckdb",
+                    }
+                },
+            }
+        },
+    )
