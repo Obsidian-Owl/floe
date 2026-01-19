@@ -3,7 +3,7 @@ name = "floe-cli"
 version = "0.1.0"
 description = "CLI for the floe data platform"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Obsidian Owl", email = "dev@obsidianowl.com" }
@@ -44,15 +44,16 @@ packages = ["src/floe_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "requirement: mark test as validating a specific requirement (FR-XXX)",
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

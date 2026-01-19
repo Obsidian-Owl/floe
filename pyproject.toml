@@ -66,6 +66,7 @@ floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    "packages/floe-cli/src",
     "packages/floe-iceberg/src",
     "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",
@@ -126,7 +127,10 @@ ignore = [
 
 [tool.bandit]
 exclude_dirs = ["tests", "packages/floe-core/tests"]
-skips = ["B101"]  # Allow assert statements (used in tests)
+skips = [
+    "B101",  # Allow assert statements (used in tests)
+    "B108",  # Allow /tmp as K8s container mount path (not temp file usage)
+]
 
 [tool.uv-secure.vulnerability_criteria]
 # GHSA-5j53-63w8-8625: OAuth/CSRF vulnerability in fastapi-users 14.0.2
