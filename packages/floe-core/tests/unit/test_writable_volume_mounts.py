@@ -161,6 +161,33 @@ class TestWritableVolumeMountValidation:
         with pytest.raises(ValidationError):
             WritableVolumeMount(name="tmp", mount_path="/tmp", medium="Invalid")
 
+    @pytest.mark.requirement("FR-043")
+    def test_writable_volume_mount_path_traversal_blocked(self) -> None:
+        """Test mount path rejects path traversal attempts (security hotspot fix)."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.rbac import WritableVolumeMount
+
+        # Path traversal attempts should be blocked
+        with pytest.raises(ValidationError, match="path traversal not allowed"):
+            WritableVolumeMount(name="exploit", mount_path="/../etc/passwd")
+
+        with pytest.raises(ValidationError, match="path traversal not allowed"):
+            WritableVolumeMount(name="exploit", mount_path="/tmp/../etc/passwd")
+
+        with pytest.raises(ValidationError, match="path traversal not allowed"):
+            WritableVolumeMount(name="exploit", mount_path="/var/cache/..")
+
+    @pytest.mark.requirement("FR-043")
+    def test_writable_volume_mount_valid_nested_paths(self) -> None:
+        """Test mount path allows valid nested paths without traversal."""
+        from floe_core.schemas.rbac import WritableVolumeMount
+
+        # Valid nested paths should work
+        WritableVolumeMount(name="nested", mount_path="/var/app/cache")
+        WritableVolumeMount(name="deep", mount_path="/opt/myapp/data/temp")
+        WritableVolumeMount(name="dot-dir", mount_path="/var/.hidden")
+
 
 class TestWritableVolumeMountsInContainerContext:
     """Unit tests for volume mounts in container security context."""

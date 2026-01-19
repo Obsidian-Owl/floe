@@ -506,6 +506,29 @@ class WritableVolumeMount(BaseModel):
         description="Storage medium - '' (default disk) or 'Memory' (tmpfs)",
     )
 
+    @field_validator("mount_path")
+    @classmethod
+    def validate_safe_mount_path(cls, v: str) -> str:
+        """Validate mount path is safe for emptyDir volume.
+
+        Security: Blocks path traversal attempts while allowing legitimate
+        container paths. K8s emptyDir volumes provide OS-level isolation,
+        but path traversal in manifests could cause unexpected behavior.
+
+        Args:
+            v: The mount path to validate.
+
+        Returns:
+            The validated mount path.
+
+        Raises:
+            ValueError: If the path contains path traversal sequences.
+        """
+        if ".." in v:
+            msg = "Mount path cannot contain '..' (path traversal not allowed)"
+            raise ValueError(msg)
+        return v
+
 
 def _default_writable_mounts() -> list[WritableVolumeMount]:
     """Create default writable volume mounts for common application needs.
