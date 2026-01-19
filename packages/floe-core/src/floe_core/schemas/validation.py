@@ -5,6 +5,8 @@ during configuration inheritance.
 
 Implements:
     - FR-017: Security Policy Immutability
+
+Task: T015-T017 (Epic 3A extension)
 """
 
 from __future__ import annotations
@@ -12,6 +14,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from floe_core.schemas.governance import (
+        LayerThresholds,
+        NamingConfig,
+        QualityGatesConfig,
+    )
     from floe_core.schemas.manifest import GovernanceConfig
 
 
@@ -87,6 +94,14 @@ POLICY_LEVEL_STRENGTH: dict[str, int] = {
     "strict": 3,
 }
 """Policy enforcement level strength ordering: strict (3) > warn (2) > off (1)."""
+
+# T015: Naming enforcement strength constants (Epic 3A)
+NAMING_ENFORCEMENT_STRENGTH: dict[str, int] = {
+    "off": 1,
+    "warn": 2,
+    "strict": 3,
+}
+"""Naming enforcement level strength ordering: strict (3) > warn (2) > off (1)."""
 
 
 def validate_security_policy_not_weakened(
@@ -167,6 +182,126 @@ def validate_security_policy_not_weakened(
                 ),
             )
 
+    # T016: Check naming configuration (Epic 3A)
+    if parent.naming is not None and child.naming is not None:
+        _validate_naming_config_not_weakened(parent.naming, child.naming)
+
+    # T017: Check quality_gates configuration (Epic 3A)
+    if parent.quality_gates is not None and child.quality_gates is not None:
+        _validate_quality_gates_not_weakened(parent.quality_gates, child.quality_gates)
+
+
+def _validate_naming_config_not_weakened(
+    parent: NamingConfig,
+    child: NamingConfig,
+) -> None:
+    """Validate that child does not weaken parent naming configuration.
+
+    Args:
+        parent: Parent's naming configuration
+        child: Child's naming configuration
+
+    Raises:
+        SecurityPolicyViolationError: If child attempts to weaken naming config
+    """
+    # Check naming.enforcement
+    parent_strength = NAMING_ENFORCEMENT_STRENGTH.get(parent.enforcement, 0)
+    child_strength = NAMING_ENFORCEMENT_STRENGTH.get(child.enforcement, 0)
+    if child_strength < parent_strength:
+        raise SecurityPolicyViolationError(
+            field="naming.enforcement",
+            parent_value=parent.enforcement,
+            child_value=child.enforcement,
+        )
+
+
+def _validate_quality_gates_not_weakened(
+    parent: QualityGatesConfig,
+    child: QualityGatesConfig,
+) -> None:
+    """Validate that child does not weaken parent quality gates configuration.
+
+    Args:
+        parent: Parent's quality gates configuration
+        child: Child's quality gates configuration
+
+    Raises:
+        SecurityPolicyViolationError: If child attempts to weaken quality gates
+    """
+    # Check minimum_test_coverage (higher is stricter)
+    if child.minimum_test_coverage < parent.minimum_test_coverage:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.minimum_test_coverage",
+            parent_value=parent.minimum_test_coverage,
+            child_value=child.minimum_test_coverage,
+        )
+
+    # Check require_descriptions (True > False)
+    if parent.require_descriptions and not child.require_descriptions:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.require_descriptions",
+            parent_value=parent.require_descriptions,
+            child_value=child.require_descriptions,
+        )
+
+    # Check require_column_descriptions (True > False)
+    if parent.require_column_descriptions and not child.require_column_descriptions:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.require_column_descriptions",
+            parent_value=parent.require_column_descriptions,
+            child_value=child.require_column_descriptions,
+        )
+
+    # Check block_on_failure (True > False - cannot relax)
+    if parent.block_on_failure and not child.block_on_failure:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.block_on_failure",
+            parent_value=parent.block_on_failure,
+            child_value=child.block_on_failure,
+        )
+
+    # Check layer_thresholds (each layer threshold must not decrease)
+    if parent.layer_thresholds is not None and child.layer_thresholds is not None:
+        _validate_layer_thresholds_not_weakened(parent.layer_thresholds, child.layer_thresholds)
+
+
+def _validate_layer_thresholds_not_weakened(
+    parent: LayerThresholds,
+    child: LayerThresholds,
+) -> None:
+    """Validate that child does not weaken parent layer thresholds.
+
+    Args:
+        parent: Parent's layer thresholds
+        child: Child's layer thresholds
+
+    Raises:
+        SecurityPolicyViolationError: If child attempts to weaken any threshold
+    """
+    # Check bronze threshold
+    if child.bronze < parent.bronze:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.layer_thresholds.bronze",
+            parent_value=parent.bronze,
+            child_value=child.bronze,
+        )
+
+    # Check silver threshold
+    if child.silver < parent.silver:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.layer_thresholds.silver",
+            parent_value=parent.silver,
+            child_value=child.silver,
+        )
+
+    # Check gold threshold
+    if child.gold < parent.gold:
+        raise SecurityPolicyViolationError(
+            field="quality_gates.layer_thresholds.gold",
+            parent_value=parent.gold,
+            child_value=child.gold,
+        )
+
 
 __all__ = [
     "SecurityPolicyViolationError",
@@ -174,5 +309,6 @@ __all__ = [
     "PII_ENCRYPTION_STRENGTH",
     "AUDIT_LOGGING_STRENGTH",
     "POLICY_LEVEL_STRENGTH",
+    "NAMING_ENFORCEMENT_STRENGTH",
     "validate_security_policy_not_weakened",
 ]

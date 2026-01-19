@@ -21,16 +21,19 @@ See Also:
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
 from floe_core.telemetry.tracing import create_span
 
 if TYPE_CHECKING:
+    from floe_core.enforcement.result import EnforcementResult
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_core.schemas.manifest import GovernanceConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -122,6 +125,8 @@ class CompilationStage(str, Enum):
 def compile_pipeline(
     spec_path: Path,
     manifest_path: Path,
+    *,
+    dry_run: bool = False,
 ) -> CompiledArtifacts:
     """Execute the 6-stage compilation pipeline.
 
@@ -135,9 +140,13 @@ def compile_pipeline(
 
     Each stage is wrapped in an OpenTelemetry span for observability (FR-013).
 
+    Task: T080
+    Requirements: FR-002 (Pipeline integration), US7 (Dry-run mode)
+
     Args:
         spec_path: Path to floe.yaml file.
         manifest_path: Path to manifest.yaml file.
+        dry_run: If True, violations are reported but don't block compilation.
 
     Returns:
         CompiledArtifacts ready for serialization.
@@ -233,14 +242,25 @@ def compile_pipeline(
         stage_start = time.perf_counter()
         with create_span(
             "compile.enforce",
-            attributes={"compile.stage": CompilationStage.ENFORCE.value},
+            attributes={
+                "compile.stage": CompilationStage.ENFORCE.value,
+                "enforcement.dry_run": dry_run,
+            },
         ):
-            log.info("compilation_stage_start", stage=CompilationStage.ENFORCE.value)
-            # Placeholder for governance enforcement (future epic)
+            log.info(
+                "compilation_stage_start",
+                stage=CompilationStage.ENFORCE.value,
+                dry_run=dry_run,
+            )
+            # Placeholder: Full enforcement requires dbt manifest.json which is
+            # generated later by dbt compile. The run_enforce_stage() function
+            # is used directly after dbt compilation for policy enforcement.
+            # See: packages/floe-core/tests/integration/enforcement/ for usage
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
                 "compilation_stage_complete",
                 stage=CompilationStage.ENFORCE.value,
+                dry_run=dry_run,
                 duration_ms=round(duration_ms, 2),
             )
 
@@ -307,4 +327,162 @@ def compile_pipeline(
         return artifacts
 
 
-__all__ = ["CompilationStage", "compile_pipeline"]
+def run_enforce_stage(
+    governance_config: GovernanceConfig | None,
+    dbt_manifest: dict[str, Any],
+    *,
+    dry_run: bool = False,
+) -> EnforcementResult:
+    """Run the ENFORCE stage of the compilation pipeline.
+
+    Executes policy enforcement against a dbt manifest using the configured
+    governance rules. This stage validates naming conventions, test coverage,
+    and documentation requirements.
+
+    Task: T074, T075, T076
+    Requirements: FR-002 (Pipeline integration), US1 (Compile-time enforcement)
+
+    Args:
+        governance_config: The governance configuration from manifest.yaml.
+            If None or policy_enforcement_level is 'off', enforcement is skipped.
+        dbt_manifest: The compiled dbt manifest.json as a dictionary.
+        dry_run: If True, violations are reported but don't block compilation.
+
+    Returns:
+        EnforcementResult containing pass/fail status and all violations.
+
+    Raises:
+        PolicyEnforcementError: If enforcement_level is 'strict' and there
+            are error-severity violations (unless dry_run=True).
+
+    Example:
+        >>> config = GovernanceConfig(policy_enforcement_level="warn")
+        >>> result = run_enforce_stage(config, manifest, dry_run=False)
+        >>> result.passed
+        True
+    """
+    # Local imports to avoid circular dependency
+    from floe_core.enforcement import PolicyEnforcer
+    from floe_core.enforcement.errors import PolicyEnforcementError
+
+    log = logger.bind(
+        component="run_enforce_stage",
+        dry_run=dry_run,
+    )
+
+    start_time = time.perf_counter()
+
+    # Skip enforcement if no governance config
+    if governance_config is None:
+        log.info("enforcement_skipped", reason="no_governance_config")
+        return _create_skipped_result(enforcement_level="off")
+
+    # Get enforcement level
+    enforcement_level = governance_config.policy_enforcement_level or "warn"
+
+    # Skip enforcement if level is 'off'
+    if enforcement_level == "off":
+        log.info("enforcement_skipped", reason="enforcement_level_off")
+        return _create_skipped_result(enforcement_level="off")
+
+    log = log.bind(enforcement_level=enforcement_level)
+
+    # Run policy enforcement with OTel span
+    with create_span(
+        "compile.enforce",
+        attributes={
+            "compile.stage": CompilationStage.ENFORCE.value,
+            "enforcement.level": enforcement_level,
+            "enforcement.dry_run": dry_run,
+        },
+    ) as enforce_span:
+        log.info(
+            "enforcement_started",
+            model_count=len(dbt_manifest.get("nodes", {})),
+        )
+
+        # Create PolicyEnforcer and run enforcement
+        enforcer = PolicyEnforcer(governance_config=governance_config)
+        result = enforcer.enforce(dbt_manifest, dry_run=dry_run)
+
+        # Calculate duration
+        duration_ms = (time.perf_counter() - start_time) * 1000
+
+        # Set OTel span attributes (T076)
+        enforce_span.set_attribute("enforcement.passed", result.passed)
+        enforce_span.set_attribute("enforcement.violation_count", len(result.violations))
+        enforce_span.set_attribute("enforcement.error_count", result.error_count)
+        enforce_span.set_attribute("enforcement.warning_count", result.warning_count)
+        enforce_span.set_attribute("enforcement.duration_ms", round(duration_ms, 2))
+
+        # Log enforcement result
+        if result.violations:
+            for violation in result.violations:
+                log.warning(
+                    "policy_violation",
+                    error_code=violation.error_code,
+                    policy_type=violation.policy_type,
+                    model_name=violation.model_name,
+                    message=violation.message,
+                    severity=violation.severity,
+                )
+
+        log.info(
+            "enforcement_completed",
+            passed=result.passed,
+            violation_count=len(result.violations),
+            error_count=result.error_count,
+            warning_count=result.warning_count,
+            duration_ms=round(duration_ms, 2),
+        )
+
+        # Handle strict mode blocking (T075)
+        # In strict mode, raise if there are error-severity violations
+        # UNLESS dry_run is True (dry-run never raises)
+        if enforcement_level == "strict" and not dry_run and result.error_count > 0:
+            log.error(
+                "enforcement_failed",
+                reason="strict_mode_violations",
+                error_count=result.error_count,
+            )
+            raise PolicyEnforcementError(violations=result.violations)
+
+        # In warn mode, violations are logged but don't block
+        # The result.passed is adjusted by PolicyEnforcer based on dry_run
+        return result
+
+
+def _create_skipped_result(
+    enforcement_level: Literal["off", "warn", "strict"],
+) -> EnforcementResult:
+    """Create an EnforcementResult for skipped enforcement.
+
+    Args:
+        enforcement_level: The enforcement level (typically 'off').
+
+    Returns:
+        EnforcementResult that passes with no violations.
+    """
+    from floe_core.enforcement.result import (
+        EnforcementResult,
+        EnforcementSummary,
+    )
+
+    return EnforcementResult(
+        passed=True,
+        violations=[],
+        summary=EnforcementSummary(
+            total_models=0,
+            models_validated=0,
+            naming_violations=0,
+            coverage_violations=0,
+            documentation_violations=0,
+            duration_ms=0.0,
+        ),
+        enforcement_level=enforcement_level,
+        manifest_version="unknown",
+        timestamp=datetime.now(timezone.utc),
+    )
+
+
+__all__ = ["CompilationStage", "compile_pipeline", "run_enforce_stage"]

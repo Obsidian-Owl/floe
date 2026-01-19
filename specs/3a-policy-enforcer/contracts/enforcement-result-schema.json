@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/enforcement-result.schema.json",
+  "title": "EnforcementResult",
+  "description": "Result of policy enforcement validation",
+  "type": "object",
+  "required": ["passed", "violations", "summary", "enforcement_level", "manifest_version", "timestamp"],
+  "properties": {
+    "passed": {
+      "type": "boolean",
+      "description": "True if no blocking violations exist"
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Violation"
+      },
+      "description": "List of all violations found"
+    },
+    "summary": {
+      "$ref": "#/$defs/EnforcementSummary",
+      "description": "Statistics summary"
+    },
+    "enforcement_level": {
+      "type": "string",
+      "enum": ["off", "warn", "strict"],
+      "description": "Effective enforcement level used"
+    },
+    "manifest_version": {
+      "type": "string",
+      "description": "Version of manifest validated"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of validation"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Violation": {
+      "type": "object",
+      "required": ["error_code", "severity", "policy_type", "model_name", "message", "expected", "actual", "suggestion", "documentation_url"],
+      "properties": {
+        "error_code": {
+          "type": "string",
+          "pattern": "^FLOE-E[0-9]{3}$",
+          "description": "Error code in FLOE-EXXX format"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"],
+          "description": "Violation severity"
+        },
+        "policy_type": {
+          "type": "string",
+          "enum": ["naming", "coverage", "documentation", "inheritance"],
+          "description": "Policy category"
+        },
+        "model_name": {
+          "type": "string",
+          "description": "Name of the dbt model"
+        },
+        "column_name": {
+          "type": ["string", "null"],
+          "description": "Column name if applicable"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "expected": {
+          "type": "string",
+          "description": "Expected value or pattern"
+        },
+        "actual": {
+          "type": "string",
+          "description": "Actual value found"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Remediation suggestion"
+        },
+        "documentation_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Link to documentation"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnforcementSummary": {
+      "type": "object",
+      "required": ["total_models", "models_validated", "naming_violations", "coverage_violations", "documentation_violations", "duration_ms"],
+      "properties": {
+        "total_models": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total models in manifest"
+        },
+        "models_validated": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Models validated"
+        },
+        "naming_violations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of naming violations"
+        },
+        "coverage_violations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of coverage violations"
+        },
+        "documentation_violations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of documentation violations"
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Validation duration in milliseconds"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "passed": false,
+      "violations": [
+        {
+          "error_code": "FLOE-E201",
+          "severity": "error",
+          "policy_type": "naming",
+          "model_name": "stg_payments",
+          "column_name": null,
+          "message": "Model name 'stg_payments' violates medallion naming convention",
+          "expected": "^(bronze|silver|gold)_[a-z][a-z0-9_]*$",
+          "actual": "stg_payments",
+          "suggestion": "Rename to bronze_payments, silver_payments, or gold_payments based on data layer",
+          "documentation_url": "https://floe.dev/docs/naming#medallion"
+        }
+      ],
+      "summary": {
+        "total_models": 10,
+        "models_validated": 10,
+        "naming_violations": 1,
+        "coverage_violations": 0,
+        "documentation_violations": 0,
+        "duration_ms": 45.2
+      },
+      "enforcement_level": "strict",
+      "manifest_version": "1.0.0",
+      "timestamp": "2026-01-19T09:45:00Z"
+    }
+  ]
+}
