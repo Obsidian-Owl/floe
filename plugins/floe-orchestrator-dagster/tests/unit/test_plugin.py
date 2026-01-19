@@ -304,12 +304,15 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
     NotImplementedError until they are implemented in later tasks.
     """
 
-    def test_get_helm_values_not_implemented(
+    def test_get_helm_values_returns_dict(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Test get_helm_values raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T012"):
-            dagster_plugin.get_helm_values()
+        """Test get_helm_values returns a dictionary."""
+        result = dagster_plugin.get_helm_values()
+        assert isinstance(result, dict)
+        assert "dagster-webserver" in result
+        assert "dagster-daemon" in result
+        assert "dagster-user-code" in result
 
     def test_validate_connection_not_implemented(
         self, dagster_plugin: DagsterOrchestratorPlugin

@@ -361,16 +361,52 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         including resource requests/limits and service configuration
         for webserver, daemon, and user-code components.
 
+        The returned structure follows the helm-values-schema.md contract
+        and includes default resource allocations for development workloads.
+
         Returns:
-            Dictionary matching the floe-dagster Helm chart schema.
+            Dictionary matching the floe-dagster Helm chart schema with
+            dagster-webserver, dagster-daemon, dagster-user-code, and
+            postgresql configuration.
 
         Example:
             >>> values = plugin.get_helm_values()
             >>> values["dagster-webserver"]["enabled"]
             True
+            >>> values["dagster-daemon"]["replicaCount"]
+            1
         """
-        # Placeholder - will be implemented in T012
-        raise NotImplementedError("get_helm_values will be implemented in T012")
+        # Default resource allocations (small/development preset)
+        small_resources = {
+            "requests": {"cpu": "100m", "memory": "256Mi"},
+            "limits": {"cpu": "500m", "memory": "512Mi"},
+        }
+
+        user_code_resources = {
+            "requests": {"cpu": "250m", "memory": "512Mi"},
+            "limits": {"cpu": "1000m", "memory": "1Gi"},
+        }
+
+        return {
+            "dagster-webserver": {
+                "enabled": True,
+                "replicaCount": 1,
+                "resources": small_resources.copy(),
+            },
+            "dagster-daemon": {
+                "enabled": True,
+                "replicaCount": 1,
+                "resources": small_resources.copy(),
+            },
+            "dagster-user-code": {
+                "enabled": True,
+                "replicaCount": 1,
+                "resources": user_code_resources.copy(),
+            },
+            "postgresql": {
+                "enabled": True,
+            },
+        }
 
     def validate_connection(self) -> ValidationResult:
         """Test connectivity to Dagster service.
