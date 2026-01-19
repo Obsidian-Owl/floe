@@ -110,28 +110,6 @@ from floe_core.schemas.plugins import (
     validate_plugin_selection,
 )
 
-# Secret models (T005, T008, T039, T040)
-from floe_core.schemas.secrets import (
-    SECRET_NAME_PATTERN,
-    SECRET_VALUE_PATTERNS,
-    SecretReference,
-    SecretSource,
-    resolve_secret_references,
-    validate_no_secrets_in_artifacts,
-)
-
-# Validation models (T031, T032, T036, T015-T017 Epic 3A)
-from floe_core.schemas.validation import (
-    AUDIT_LOGGING_STRENGTH,
-    NAMING_ENFORCEMENT_STRENGTH,
-    PII_ENCRYPTION_STRENGTH,
-    POLICY_LEVEL_STRENGTH,
-    InheritanceError,
-    SecurityPolicyViolationError,
-    validate_security_policy_not_weakened,
-)
-
-
 # RBAC resource schemas (Epic 7B)
 from floe_core.schemas.rbac import (
     NamespaceConfig,
@@ -161,9 +139,10 @@ from floe_core.schemas.security import (
     SecurityConfig,
 )
 
-# Validation models (T031, T032, T036)
+# Validation models (T031, T032, T036, T015-T017 Epic 3A)
 from floe_core.schemas.validation import (
     AUDIT_LOGGING_STRENGTH,
+    NAMING_ENFORCEMENT_STRENGTH,
     PII_ENCRYPTION_STRENGTH,
     POLICY_LEVEL_STRENGTH,
     InheritanceError,
