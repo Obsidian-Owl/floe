@@ -581,7 +581,7 @@ class TestQuickstartExamples(IntegrationTestBase):
             manifest = client.inspect(tag="v1.0.0")
 
             # List
-            tags = client.list(filter="v1.*")
+            tags = client.list(filter_pattern="v1.*")
 
         Verifies:
         - All programmatic examples work as documented

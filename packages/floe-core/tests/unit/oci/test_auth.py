@@ -206,8 +206,7 @@ class TestTokenAuthProvider:
 
         # Verify credentials
         assert isinstance(creds, Credentials)
-        assert creds.username == TokenAuthProvider.TOKEN_USERNAME
-        assert creds.username == "__token__"
+        assert creds.username == TokenAuthProvider.TOKEN_USERNAME  # "__token__"
         assert creds.password == TEST_TOKEN_VALUE
         assert creds.expires_at is None  # Static tokens don't expire
 
@@ -600,7 +599,7 @@ class TestIRSAAuthProvider:
             provider.get_credentials()
             assert mock_client.get_authorization_token.call_count == 1
 
-            # Since credentials expire within buffer (30 min), refresh should be needed
+            # Since credentials expire within buffer (5 min expiry), refresh should be needed
             refreshed = provider.refresh_if_needed()
             assert refreshed is True
             assert mock_client.get_authorization_token.call_count == 2
@@ -650,9 +649,9 @@ class TestAzureMIAuthProvider:
             assert creds.password == TEST_AZURE_TOKEN
             assert creds.expires_at is not None
 
-            # Verify azure-identity was called correctly
+            # Verify azure-identity was called with ACR-specific scope
             mock_credential.get_token.assert_called_once_with(
-                "https://management.azure.com/.default"
+                "https://containerregistry.azure.net/.default"
             )
 
     @pytest.mark.requirement("8A-FR-007")
@@ -745,7 +744,7 @@ class TestAzureMIAuthProvider:
             provider.get_credentials()
             assert mock_credential.get_token.call_count == 1
 
-            # Since credentials expire within buffer (10 min), refresh should be needed
+            # Since credentials expire within buffer (5 min expiry), refresh should be needed
             refreshed = provider.refresh_if_needed()
             assert refreshed is True
             assert mock_credential.get_token.call_count == 2
@@ -936,7 +935,7 @@ class TestGCPWIAuthProvider:
             provider.get_credentials()
             assert mock_google_auth.default.call_count == 1
 
-            # Since credentials expire within buffer (10 min), refresh should be needed
+            # Since credentials expire within buffer (5 min expiry), refresh should be needed
             refreshed = provider.refresh_if_needed()
             assert refreshed is True
             assert mock_google_auth.default.call_count == 2

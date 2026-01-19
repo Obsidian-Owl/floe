@@ -599,7 +599,9 @@ class TestOCIClientPull:
 
         assert isinstance(result, CompiledArtifacts)
         # Exact assertion: 1 failure + 1 success = 2 total calls
-        assert call_count == 2, f"Expected exactly 2 attempts (1 fail + 1 success), got {call_count}"
+        assert call_count == 2, (
+            f"Expected exactly 2 attempts (1 fail + 1 success), got {call_count}"
+        )
 
     @pytest.mark.requirement("8A-FR-002")
     def test_pull_validates_artifact_schema(

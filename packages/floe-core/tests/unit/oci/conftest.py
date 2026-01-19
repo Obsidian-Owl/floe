@@ -82,8 +82,7 @@ def patch_oras_client(mock_oras_client: MagicMock) -> Generator[MagicMock, None,
             # OrasClient is now mocked globally
             ...
     """
-    with patch("oras.client.OrasClient", return_value=mock_oras_client) as mock_class:
-        mock_class.return_value = mock_oras_client
+    with patch("oras.client.OrasClient", return_value=mock_oras_client):
         yield mock_oras_client
 
 

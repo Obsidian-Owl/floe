@@ -630,7 +630,7 @@ class TestOCIArtifactManifestIntegration:
 # =============================================================================
 
 
-class TestFilBasedSerializationContract:
+class TestFileBasedSerializationContract:
     """Contract tests for file-based serialization.
 
     These tests verify that CompiledArtifacts can be written to

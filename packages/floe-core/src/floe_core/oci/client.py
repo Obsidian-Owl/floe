@@ -37,7 +37,7 @@ Example:
     >>> print(f"Size: {manifest.size} bytes")
     >>>
     >>> # List available tags
-    >>> tags = client.list(filter="v1.*")
+    >>> tags = client.list(filter_pattern="v1.*")
     >>> for tag in tags:
     ...     print(f"{tag.name}: {tag.digest}")
 
@@ -571,7 +571,8 @@ class OCIClient:
 
         Args:
             tag: Tag to pull (e.g., "v1.0.0", "latest-dev").
-            verify_digest: Whether to verify digest after download.
+            verify_digest: Whether to verify digest after download (reserved for
+                future use; currently always verifies via manifest comparison).
 
         Returns:
             Deserialized CompiledArtifacts.
@@ -1171,9 +1172,6 @@ class OCIClient:
             >>> print(f"OCI v1.1: {caps['oci_v1_1']}")
             >>> print(f"Immutability: {caps['immutability_enforcement']}")
         """
-        # Import here to avoid circular dependency and allow lazy loading
-        from floe_core.oci.errors import AuthenticationError
-
         capabilities: dict[str, Any] = {
             "reachable": False,
             "authenticated": False,
@@ -1289,9 +1287,6 @@ class OCIClient:
             return True
         except ArtifactNotFoundError:
             return False
-        except NotImplementedError:
-            # For skeleton - will work when inspect is implemented
-            raise
 
     def _extract_registry_host(self, uri: str) -> str:
         """Extract registry hostname from OCI URI.

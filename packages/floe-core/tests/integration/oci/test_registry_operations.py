@@ -27,7 +27,7 @@ import pytest
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
-    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    pass  # TYPE_CHECKING block preserved for future type-only imports
 
 
 def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "test") -> Any:

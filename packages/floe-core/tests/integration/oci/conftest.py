@@ -11,7 +11,7 @@ Key Fixtures:
 - oci_client: OCIClient instance configured for test registry
 - test_artifact_tag: Unique tag for test isolation
 
-For Harbor registry setup, see: testing/k8s/harbor/
+For Harbor registry setup, see: testing/k8s/services/
 
 Note: These tests FAIL if registry infrastructure is unavailable.
 Per Constitution V, tests MUST NOT use pytest.skip().

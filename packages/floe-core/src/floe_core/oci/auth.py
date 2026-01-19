@@ -572,7 +572,8 @@ class AzureMIAuthProvider(AuthProvider):
         try:
             credential = DefaultAzureCredential()
             # ACR scope for token exchange
-            token = credential.get_token("https://management.azure.com/.default")
+            # ACR-specific scope for container registry access
+            token = credential.get_token("https://containerregistry.azure.net/.default")
 
             expires_at = datetime.fromtimestamp(token.expires_on, tz=timezone.utc)
 

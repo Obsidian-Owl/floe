@@ -4,6 +4,7 @@ This module provides the main entry point that dispatches to subcommands.
 
 Commands:
     floe compile: Compile FloeSpec + Manifest into CompiledArtifacts
+    floe artifact: Manage OCI registry artifacts (push, pull, inspect, list)
 
 Example:
     $ floe compile --spec floe.yaml --manifest manifest.yaml
