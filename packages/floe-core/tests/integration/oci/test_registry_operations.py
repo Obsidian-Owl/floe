@@ -602,3 +602,154 @@ class TestInspectFromRegistry(IntegrationTestBase):
             client.inspect(tag="nonexistent-tag-12345")
 
         assert "nonexistent-tag-12345" in str(exc_info.value)
+
+
+class TestListFromRegistry(IntegrationTestBase):
+    """Integration tests for list operation from OCI registry.
+
+    Tests listing artifacts from the registry:2 service in Kind cluster.
+    Verifies list returns pushed artifacts and filtering works.
+
+    Task: T040
+    Requirements: FR-004, SC-009
+    """
+
+    required_services = [("registry", 5000)]
+    namespace = "floe-test"
+
+    def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
+        """Create a valid CompiledArtifacts JSON file for testing.
+
+        Args:
+            tmp_path: Temporary directory path.
+            unique_id: Unique identifier for test isolation.
+
+        Returns:
+            Path to the created JSON file.
+        """
+        import json
+
+        data: dict[str, Any] = {
+            "version": "0.2.0",
+            "metadata": {
+                "compiled_at": datetime.now(timezone.utc).isoformat(),
+                "floe_version": "0.2.0",
+                "source_hash": f"sha256:{unique_id}abc123",
+                "product_name": f"test-product-{unique_id}",
+                "product_version": "1.0.0",
+            },
+            "identity": {
+                "product_id": f"test.product_{unique_id}",
+                "domain": "test",
+                "repository": "https://github.com/test/repo",
+            },
+            "mode": {
+                "environment": "dev",
+                "target": "local",
+            },
+            "telemetry": {
+                "service_name": "floe-test",
+            },
+            "governance": {
+                "owner": "test-team",
+            },
+            "plugins": {},
+            "transforms": [],
+            "inheritance_chain": [],
+            "dbt_profiles": {
+                "floe": {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": "/tmp/test.duckdb",
+                        }
+                    },
+                }
+            },
+        }
+
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts_path.write_text(json.dumps(data, indent=2))
+        return artifacts_path
+
+    @pytest.mark.requirement("8A-FR-004")
+    def test_list_returns_artifacts(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        test_manifest_path: Path,
+    ) -> None:
+        """Test list returns pushed artifacts from registry.
+
+        Verifies:
+        - Push an artifact first
+        - List returns at least the pushed artifact
+        - ArtifactTag objects have required fields
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+        from floe_core.schemas.oci import ArtifactTag
+
+        # Create test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        original_artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        client = OCIClient.from_manifest(test_manifest_path)
+
+        # Push artifact first to ensure at least one exists
+        client.push(original_artifacts, tag=test_artifact_tag)
+
+        # List artifacts
+        tags = client.list()
+
+        # Verify list returns ArtifactTag objects
+        assert isinstance(tags, list)
+        # At least one tag should be present (the one we just pushed)
+        assert len(tags) >= 1
+
+        # Verify ArtifactTag structure
+        for tag in tags:
+            assert isinstance(tag, ArtifactTag)
+            assert tag.name  # Name should not be empty
+            assert tag.digest.startswith("sha256:")
+            assert tag.created_at is not None
+
+    @pytest.mark.requirement("8A-FR-004")
+    def test_list_with_filter(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        test_manifest_path: Path,
+    ) -> None:
+        """Test list with filter_pattern filters results.
+
+        Verifies:
+        - Push artifacts with different tag patterns
+        - Filter returns only matching tags
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Create test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        original_artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        client = OCIClient.from_manifest(test_manifest_path)
+
+        # Push two versions with predictable names
+        tag_v1 = f"v1-{unique_id}"
+        tag_v2 = f"v2-{unique_id}"
+
+        client.push(original_artifacts, tag=tag_v1)
+        client.push(original_artifacts, tag=tag_v2)
+
+        # List with filter for v1-* only
+        tags = client.list(filter_pattern=f"v1-{unique_id}")
+
+        # Should get only v1 tag (exact match since we're filtering specific)
+        tag_names = [tag.name for tag in tags]
+        assert tag_v1 in tag_names
+        assert tag_v2 not in tag_names
