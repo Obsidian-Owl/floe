@@ -1,0 +1,528 @@
+"""Unit tests for OCIClient push and pull operations.
+
+This module tests the OCIClient class for:
+- Push operations (T013, T017-T019)
+- Pull operations (T022, T024-T027)
+- Immutability enforcement (FR-010, FR-011)
+- Error handling
+
+All tests use mocked ORAS SDK - no network calls.
+
+Task: T013, T022
+Requirements: FR-001, FR-002, FR-010, FR-011
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from floe_core.oci.client import MUTABLE_TAG_PATTERNS, OCIClient, SEMVER_PATTERN
+from floe_core.oci.errors import ImmutabilityViolationError
+from floe_core.schemas.compiled_artifacts import (
+    CompilationMetadata,
+    CompiledArtifacts,
+    ObservabilityConfig,
+    PluginRef,
+    ProductIdentity,
+    ResolvedModel,
+    ResolvedPlugins,
+    ResolvedTransforms,
+)
+from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryConfig
+from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def sample_telemetry_config() -> TelemetryConfig:
+    """Create a sample TelemetryConfig for testing."""
+    return TelemetryConfig(
+        enabled=True,
+        resource_attributes=ResourceAttributes(
+            service_name="test-pipeline",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="test",
+            floe_product_name="test-product",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        ),
+    )
+
+
+@pytest.fixture
+def sample_observability_config(sample_telemetry_config: TelemetryConfig) -> ObservabilityConfig:
+    """Create a sample ObservabilityConfig for testing."""
+    return ObservabilityConfig(
+        telemetry=sample_telemetry_config,
+        lineage=True,
+        lineage_namespace="test-namespace",
+    )
+
+
+@pytest.fixture
+def sample_compilation_metadata() -> CompilationMetadata:
+    """Create a sample CompilationMetadata for testing."""
+    return CompilationMetadata(
+        compiled_at=datetime.now(timezone.utc),
+        floe_version="0.2.0",
+        source_hash="sha256:abc123",
+        product_name="test-product",
+        product_version="1.0.0",
+    )
+
+
+@pytest.fixture
+def sample_product_identity() -> ProductIdentity:
+    """Create a sample ProductIdentity for testing."""
+    return ProductIdentity(
+        product_id="default.test_product",
+        domain="default",
+        repository="github.com/acme/test",
+    )
+
+
+@pytest.fixture
+def sample_resolved_plugins() -> ResolvedPlugins:
+    """Create sample ResolvedPlugins for testing."""
+    return ResolvedPlugins(
+        compute=PluginRef(type="duckdb", version="0.9.0"),
+        orchestrator=PluginRef(type="dagster", version="1.5.0"),
+    )
+
+
+@pytest.fixture
+def sample_resolved_transforms() -> ResolvedTransforms:
+    """Create sample ResolvedTransforms for testing."""
+    return ResolvedTransforms(
+        models=[
+            ResolvedModel(name="stg_customers", compute="duckdb"),
+            ResolvedModel(name="fct_orders", compute="duckdb"),
+        ],
+        default_compute="duckdb",
+    )
+
+
+@pytest.fixture
+def sample_compiled_artifacts(
+    sample_compilation_metadata: CompilationMetadata,
+    sample_product_identity: ProductIdentity,
+    sample_observability_config: ObservabilityConfig,
+    sample_resolved_plugins: ResolvedPlugins,
+    sample_resolved_transforms: ResolvedTransforms,
+) -> CompiledArtifacts:
+    """Create a valid CompiledArtifacts for testing push operations."""
+    return CompiledArtifacts(
+        version="0.2.0",
+        metadata=sample_compilation_metadata,
+        identity=sample_product_identity,
+        mode="simple",
+        observability=sample_observability_config,
+        plugins=sample_resolved_plugins,
+        transforms=sample_resolved_transforms,
+        dbt_profiles={
+            "default": {
+                "target": "dev",
+                "outputs": {
+                    "dev": {
+                        "type": "duckdb",
+                        "path": "/tmp/test.duckdb",
+                    }
+                },
+            }
+        },
+    )
+
+
+@pytest.fixture
+def sample_registry_config() -> RegistryConfig:
+    """Create a sample RegistryConfig with AWS IRSA auth (no secrets required)."""
+    return RegistryConfig(
+        uri="oci://harbor.example.com/floe-platform",
+        auth=RegistryAuth(type=AuthType.AWS_IRSA),
+        tls_verify=True,
+        cache=CacheConfig(enabled=False),  # Disable cache for unit tests
+    )
+
+
+@pytest.fixture
+def mock_auth_provider() -> MagicMock:
+    """Create a mock AuthProvider for testing."""
+    from floe_core.oci.auth import Credentials
+
+    provider = MagicMock()
+    provider.get_credentials.return_value = Credentials(
+        username="test-user",
+        password="test-password",
+        expires_at=datetime.now(timezone.utc),
+    )
+    provider.refresh_if_needed.return_value = False
+    return provider
+
+
+@pytest.fixture
+def oci_client(
+    sample_registry_config: RegistryConfig,
+    mock_auth_provider: MagicMock,
+) -> OCIClient:
+    """Create an OCIClient with mocked dependencies for testing."""
+    return OCIClient(
+        registry_config=sample_registry_config,
+        auth_provider=mock_auth_provider,
+    )
+
+
+# =============================================================================
+# Test Classes
+# =============================================================================
+
+
+class TestOCIClientTagClassification:
+    """Tests for tag immutability classification."""
+
+    @pytest.mark.requirement("8A-FR-010")
+    def test_semver_tags_are_immutable(self, oci_client: OCIClient) -> None:
+        """Test that semver tags are classified as immutable.
+
+        FR-010: System MUST reject pushes to existing semver tags.
+        """
+        # Standard semver tags
+        assert oci_client.is_tag_immutable("v1.0.0") is True
+        assert oci_client.is_tag_immutable("v0.1.0") is True
+        assert oci_client.is_tag_immutable("v2.10.5") is True
+
+        # Semver without v prefix
+        assert oci_client.is_tag_immutable("1.0.0") is True
+        assert oci_client.is_tag_immutable("0.1.0") is True
+
+        # Semver with pre-release
+        assert oci_client.is_tag_immutable("v1.0.0-alpha") is True
+        assert oci_client.is_tag_immutable("v1.0.0-beta.1") is True
+        assert oci_client.is_tag_immutable("1.0.0-rc.2") is True
+
+        # Semver with build metadata
+        assert oci_client.is_tag_immutable("v1.0.0+build123") is True
+        assert oci_client.is_tag_immutable("1.0.0+20260119") is True
+
+    @pytest.mark.requirement("8A-FR-011")
+    def test_mutable_tags_are_not_immutable(self, oci_client: OCIClient) -> None:
+        """Test that mutable pattern tags are classified as mutable.
+
+        FR-011: System MUST allow pushes to mutable tags.
+        """
+        # latest-* pattern
+        assert oci_client.is_tag_immutable("latest") is False
+        assert oci_client.is_tag_immutable("latest-dev") is False
+        assert oci_client.is_tag_immutable("latest-staging") is False
+
+        # dev-* pattern
+        assert oci_client.is_tag_immutable("dev") is False
+        assert oci_client.is_tag_immutable("dev-feature-branch") is False
+
+        # snapshot-* pattern
+        assert oci_client.is_tag_immutable("snapshot") is False
+        assert oci_client.is_tag_immutable("snapshot-20260119") is False
+        assert oci_client.is_tag_immutable("snapshot-abc123") is False
+
+    @pytest.mark.requirement("8A-FR-010")
+    def test_unknown_tags_default_to_immutable(self, oci_client: OCIClient) -> None:
+        """Test that unknown tag patterns default to immutable (safe default)."""
+        # Random strings should be treated as immutable by default
+        assert oci_client.is_tag_immutable("release-candidate") is True
+        assert oci_client.is_tag_immutable("production") is True
+        assert oci_client.is_tag_immutable("main") is True
+
+
+class TestSemverPatternRegex:
+    """Tests for the SEMVER_PATTERN regex."""
+
+    @pytest.mark.requirement("8A-FR-010")
+    def test_semver_pattern_matches_valid_versions(self) -> None:
+        """Test SEMVER_PATTERN matches valid semantic versions."""
+        valid_versions = [
+            "1.0.0",
+            "v1.0.0",
+            "0.1.0",
+            "v0.1.0",
+            "10.20.30",
+            "v10.20.30",
+            "1.0.0-alpha",
+            "v1.0.0-beta.1",
+            "1.0.0-rc.2",
+            "1.0.0+build123",
+            "v1.0.0-alpha+build",
+        ]
+        for version in valid_versions:
+            assert SEMVER_PATTERN.match(version) is not None, f"Should match: {version}"
+
+    @pytest.mark.requirement("8A-FR-011")
+    def test_semver_pattern_rejects_invalid_versions(self) -> None:
+        """Test SEMVER_PATTERN rejects non-semver strings."""
+        invalid_versions = [
+            "latest",
+            "dev",
+            "main",
+            "1.0",
+            "v1",
+            "1.0.0.0",
+            "v1.0.0.0",
+            "release-1.0",
+            "",
+        ]
+        for version in invalid_versions:
+            assert SEMVER_PATTERN.match(version) is None, f"Should not match: {version}"
+
+
+class TestMutableTagPatterns:
+    """Tests for MUTABLE_TAG_PATTERNS list."""
+
+    @pytest.mark.requirement("8A-FR-011")
+    def test_mutable_patterns_match_expected_tags(self) -> None:
+        """Test MUTABLE_TAG_PATTERNS match expected mutable tags."""
+        mutable_tags = [
+            ("latest", True),
+            ("latest-dev", True),
+            ("latest-staging", True),
+            ("dev", True),
+            ("dev-feature", True),
+            ("snapshot", True),
+            ("snapshot-123", True),
+            ("v1.0.0", False),  # Semver should NOT match mutable patterns
+            ("production", False),  # Random string should NOT match
+        ]
+
+        for tag, should_match in mutable_tags:
+            matched = any(p.match(tag) for p in MUTABLE_TAG_PATTERNS)
+            assert matched == should_match, f"Tag '{tag}' match={matched}, expected={should_match}"
+
+
+class TestOCIClientPush:
+    """Tests for OCIClient.push() operation."""
+
+    @pytest.mark.requirement("8A-FR-001")
+    def test_push_artifact_success_placeholder(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that push() exists and is not yet implemented.
+
+        This test verifies the skeleton is in place. Will be updated
+        when T017 implements the actual push operation.
+
+        FR-001: System MUST push CompiledArtifacts to OCI registries.
+        """
+        with pytest.raises(NotImplementedError, match="push.*not yet implemented"):
+            oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+    @pytest.mark.requirement("8A-FR-010")
+    def test_push_immutability_check_raises_error(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that immutability check raises error for existing semver tags.
+
+        FR-010: System MUST reject pushes to existing semver tags.
+
+        Note: This tests the _check_immutability_before_push helper.
+        The full push operation will use this check.
+        """
+        # Mock tag_exists to return True (tag already exists)
+        with patch.object(oci_client, "tag_exists", return_value=True):
+            with pytest.raises(ImmutabilityViolationError) as exc_info:
+                oci_client._check_immutability_before_push("v1.0.0")
+
+            # Verify error contains useful information
+            assert "v1.0.0" in str(exc_info.value)
+            assert "immutable" in str(exc_info.value).lower()
+
+    @pytest.mark.requirement("8A-FR-010")
+    def test_push_immutability_check_allows_new_tags(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that immutability check allows pushing to non-existent tags.
+
+        Even semver tags can be pushed if they don't exist yet.
+        """
+        # Mock tag_exists to return False (tag doesn't exist)
+        with patch.object(oci_client, "tag_exists", return_value=False):
+            # Should not raise - new tag can be pushed
+            oci_client._check_immutability_before_push("v1.0.0")
+
+    @pytest.mark.requirement("8A-FR-011")
+    def test_push_immutability_check_allows_mutable_tags(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that immutability check allows mutable tags even if they exist.
+
+        FR-011: System MUST allow pushes to mutable tags.
+        """
+        # Mock tag_exists to return True (tag already exists)
+        with patch.object(oci_client, "tag_exists", return_value=True):
+            # Should not raise for mutable tags
+            oci_client._check_immutability_before_push("latest-dev")
+            oci_client._check_immutability_before_push("dev")
+            oci_client._check_immutability_before_push("snapshot-123")
+
+
+class TestOCIClientPull:
+    """Tests for OCIClient.pull() operation."""
+
+    @pytest.mark.requirement("8A-FR-002")
+    def test_pull_artifact_success_placeholder(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that pull() exists and is not yet implemented.
+
+        This test verifies the skeleton is in place. Will be updated
+        when T024 implements the actual pull operation.
+
+        FR-002: System MUST pull OCI artifacts and deserialize to CompiledArtifacts.
+        """
+        with pytest.raises(NotImplementedError, match="pull.*not yet implemented"):
+            oci_client.pull(tag="v1.0.0")
+
+
+class TestOCIClientInspect:
+    """Tests for OCIClient.inspect() operation."""
+
+    @pytest.mark.requirement("8A-FR-003")
+    def test_inspect_artifact_placeholder(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that inspect() exists and is not yet implemented.
+
+        FR-003: System MUST support artifact inspection.
+        """
+        with pytest.raises(NotImplementedError, match="inspect.*not yet implemented"):
+            oci_client.inspect(tag="v1.0.0")
+
+
+class TestOCIClientList:
+    """Tests for OCIClient.list() operation."""
+
+    @pytest.mark.requirement("8A-FR-004")
+    def test_list_artifacts_placeholder(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that list() exists and is not yet implemented.
+
+        FR-004: System MUST support listing artifacts with filtering.
+        """
+        with pytest.raises(NotImplementedError, match="list.*not yet implemented"):
+            oci_client.list()
+
+
+class TestOCIClientCapabilities:
+    """Tests for OCIClient.check_registry_capabilities() operation."""
+
+    @pytest.mark.requirement("8A-FR-012")
+    def test_check_capabilities_returns_expected_fields(
+        self,
+        oci_client: OCIClient,
+        mock_auth_provider: MagicMock,
+    ) -> None:
+        """Test that check_registry_capabilities returns expected fields.
+
+        FR-012: System MUST validate registry supports immutability.
+        """
+        capabilities = oci_client.check_registry_capabilities()
+
+        # Verify all expected fields are present
+        assert "reachable" in capabilities
+        assert "authenticated" in capabilities
+        assert "oci_v1_1" in capabilities
+        assert "artifact_type_filtering" in capabilities
+        assert "immutability_enforcement" in capabilities
+        assert "registry" in capabilities
+        assert "auth_type" in capabilities
+
+        # Verify immutability is client-side enforced
+        assert capabilities["immutability_enforcement"] == "client-side"
+
+        # Verify auth provider was called
+        mock_auth_provider.get_credentials.assert_called_once()
+
+    @pytest.mark.requirement("8A-FR-012")
+    def test_check_capabilities_returns_registry_info(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that capabilities includes registry information."""
+        capabilities = oci_client.check_registry_capabilities()
+
+        assert capabilities["registry"] == "harbor.example.com"
+        assert capabilities["auth_type"] == "aws-irsa"
+
+
+class TestOCIClientFromManifest:
+    """Tests for OCIClient.from_manifest() factory method."""
+
+    @pytest.mark.requirement("8A-FR-022")
+    def test_from_manifest_creates_client(self, tmp_path: Path) -> None:
+        """Test that from_manifest creates client from manifest.yaml.
+
+        FR-022: System MUST read registry config from manifest.yaml.
+        """
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_content = """
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe-platform"
+    auth:
+      type: aws-irsa
+    tls_verify: true
+    cache:
+      enabled: false
+"""
+        manifest_path.write_text(manifest_content)
+
+        client = OCIClient.from_manifest(manifest_path)
+
+        assert client.registry_uri == "oci://harbor.example.com/floe-platform"
+        assert client.config.auth.type == AuthType.AWS_IRSA
+        assert client.config.tls_verify is True
+
+    @pytest.mark.requirement("8A-FR-022")
+    def test_from_manifest_raises_on_missing_file(self, tmp_path: Path) -> None:
+        """Test that from_manifest raises error for missing file."""
+        from floe_core.oci.errors import OCIError
+
+        manifest_path = tmp_path / "nonexistent.yaml"
+
+        with pytest.raises(OCIError, match="Manifest file not found"):
+            OCIClient.from_manifest(manifest_path)
+
+    @pytest.mark.requirement("8A-FR-022")
+    def test_from_manifest_raises_on_missing_registry_section(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that from_manifest raises error when registry section missing."""
+        from floe_core.oci.errors import OCIError
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_content = """
+metadata:
+  name: test
+"""
+        manifest_path.write_text(manifest_content)
+
+        with pytest.raises(OCIError, match="Missing 'artifacts.registry'"):
+            OCIClient.from_manifest(manifest_path)
