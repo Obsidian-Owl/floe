@@ -756,5 +756,6 @@ See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_cl
 ## Recent Changes
 - 3a-policy-enforcer: Added Python 3.10+ (matches floe-core requirements) + Pydantic v2 (schemas), structlog (logging), opentelemetry-api (tracing)
 - 7b-k8s-rbac: Added Python 3.11 + kubernetes>=27.0.0, pydantic>=2.0.0, pyyaml>=6.0, structlog
+- 4b-orchestrator-plugin: Added Python 3.10+ + Dagster 1.5+, PyIceberg >=0.5.0, structlog, opentelemetry-api
 - 7a-identity-secrets: Added Python 3.11
 - 4d-storage-plugin: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow

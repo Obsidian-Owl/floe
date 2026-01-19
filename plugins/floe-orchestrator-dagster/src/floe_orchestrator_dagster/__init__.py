@@ -26,8 +26,35 @@ Entry Point:
 
 from __future__ import annotations
 
+from floe_orchestrator_dagster.io_manager import (
+    ICEBERG_NAMESPACE_KEY,
+    ICEBERG_PARTITION_COLUMN_KEY,
+    ICEBERG_PARTITION_FILTER_KEY,
+    ICEBERG_SNAPSHOT_PROPS_KEY,
+    ICEBERG_TABLE_KEY,
+    ICEBERG_UPSERT_KEYS_KEY,
+    ICEBERG_WRITE_MODE_KEY,
+    IcebergIOManager,
+    IcebergIOManagerConfig,
+    create_iceberg_io_manager,
+)
 from floe_orchestrator_dagster.plugin import DagsterOrchestratorPlugin
 
-__all__ = ["DagsterOrchestratorPlugin"]
+__all__ = [
+    # Plugin
+    "DagsterOrchestratorPlugin",
+    # IOManager
+    "IcebergIOManager",
+    "IcebergIOManagerConfig",
+    "create_iceberg_io_manager",
+    # Metadata keys
+    "ICEBERG_TABLE_KEY",
+    "ICEBERG_NAMESPACE_KEY",
+    "ICEBERG_WRITE_MODE_KEY",
+    "ICEBERG_PARTITION_FILTER_KEY",
+    "ICEBERG_UPSERT_KEYS_KEY",
+    "ICEBERG_PARTITION_COLUMN_KEY",
+    "ICEBERG_SNAPSHOT_PROPS_KEY",
+]
 
 __version__ = "0.1.0"

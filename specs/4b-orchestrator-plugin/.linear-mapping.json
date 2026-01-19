@@ -1,0 +1,236 @@
+{
+  "epic": "4b-orchestrator-plugin",
+  "project_id": "df292737-f9df-4acb-bf34-2652c4f40880",
+  "label": "epic-4b",
+  "created_at": "2026-01-19T00:00:00Z",
+  "tasks": {
+    "T001": {
+      "linear_id": "FLO-1022",
+      "title": "Create plugin package structure with pyproject.toml",
+      "priority": "P1",
+      "phase": 1,
+      "dependencies": []
+    },
+    "T002": {
+      "linear_id": "FLO-1023",
+      "title": "Implement DagsterOrchestratorPlugin class skeleton",
+      "priority": "P1",
+      "phase": 1,
+      "dependencies": []
+    },
+    "T003": {
+      "linear_id": "FLO-1025",
+      "title": "Create package __init__.py with public exports",
+      "priority": "P1",
+      "phase": 1,
+      "dependencies": []
+    },
+    "T004": {
+      "linear_id": "FLO-1027",
+      "title": "Add unit tests for plugin metadata",
+      "priority": "P1",
+      "phase": 1,
+      "dependencies": []
+    },
+    "T005": {
+      "linear_id": "FLO-1029",
+      "title": "Add integration test for entry point discovery",
+      "priority": "P1",
+      "phase": 1,
+      "dependencies": ["T001", "T002", "T003"]
+    },
+    "T006": {
+      "linear_id": "FLO-1039",
+      "title": "Implement create_definitions() method",
+      "priority": "P1",
+      "phase": 2,
+      "dependencies": []
+    },
+    "T007": {
+      "linear_id": "FLO-1040",
+      "title": "Implement create_assets_from_transforms() method",
+      "priority": "P1",
+      "phase": 2,
+      "dependencies": []
+    },
+    "T008": {
+      "linear_id": "FLO-1042",
+      "title": "Add transform metadata to asset metadata",
+      "priority": "P1",
+      "phase": 2,
+      "dependencies": ["T007"]
+    },
+    "T009": {
+      "linear_id": "FLO-1044",
+      "title": "Add CompiledArtifacts validation",
+      "priority": "P1",
+      "phase": 2,
+      "dependencies": ["T006"]
+    },
+    "T010": {
+      "linear_id": "FLO-1045",
+      "title": "Add unit tests for definition generation",
+      "priority": "P1",
+      "phase": 2,
+      "dependencies": ["T006", "T009"]
+    },
+    "T011": {
+      "linear_id": "FLO-1047",
+      "title": "Add unit tests for asset creation",
+      "priority": "P1",
+      "phase": 2,
+      "dependencies": ["T007", "T008"]
+    },
+    "T012": {
+      "linear_id": "FLO-1049",
+      "title": "Implement get_helm_values() method",
+      "priority": "P2",
+      "phase": 3,
+      "dependencies": []
+    },
+    "T013": {
+      "linear_id": "FLO-1052",
+      "title": "Implement get_resource_requirements() method",
+      "priority": "P2",
+      "phase": 3,
+      "dependencies": []
+    },
+    "T014": {
+      "linear_id": "FLO-1054",
+      "title": "Add resource preset definitions",
+      "priority": "P2",
+      "phase": 3,
+      "dependencies": ["T013"]
+    },
+    "T015": {
+      "linear_id": "FLO-1056",
+      "title": "Add unit tests for Helm values",
+      "priority": "P2",
+      "phase": 3,
+      "dependencies": ["T012"]
+    },
+    "T016": {
+      "linear_id": "FLO-1061",
+      "title": "Add unit tests for resource requirements",
+      "priority": "P2",
+      "phase": 3,
+      "dependencies": ["T013", "T014"]
+    },
+    "T017": {
+      "linear_id": "FLO-1062",
+      "title": "Implement schedule_job() method",
+      "priority": "P2",
+      "phase": 4,
+      "dependencies": []
+    },
+    "T018": {
+      "linear_id": "FLO-1063",
+      "title": "Add cron expression validation",
+      "priority": "P2",
+      "phase": 4,
+      "dependencies": ["T017"]
+    },
+    "T019": {
+      "linear_id": "FLO-1064",
+      "title": "Add timezone validation",
+      "priority": "P2",
+      "phase": 4,
+      "dependencies": ["T017"]
+    },
+    "T020": {
+      "linear_id": "FLO-1065",
+      "title": "Add unit tests for scheduling",
+      "priority": "P2",
+      "phase": 4,
+      "dependencies": ["T017", "T018", "T019"]
+    },
+    "T021": {
+      "linear_id": "FLO-1066",
+      "title": "Implement emit_lineage_event() method",
+      "priority": "P2",
+      "phase": 5,
+      "dependencies": []
+    },
+    "T022": {
+      "linear_id": "FLO-1067",
+      "title": "Add graceful no-op for unconfigured lineage backend",
+      "priority": "P2",
+      "phase": 5,
+      "dependencies": ["T021"]
+    },
+    "T023": {
+      "linear_id": "FLO-1068",
+      "title": "Add unit tests for lineage events",
+      "priority": "P2",
+      "phase": 5,
+      "dependencies": ["T021", "T022"]
+    },
+    "T024": {
+      "linear_id": "FLO-1069",
+      "title": "Implement validate_connection() method",
+      "priority": "P3",
+      "phase": 6,
+      "dependencies": []
+    },
+    "T025": {
+      "linear_id": "FLO-1071",
+      "title": "Add unit tests for connection validation",
+      "priority": "P3",
+      "phase": 6,
+      "dependencies": ["T024"]
+    },
+    "T026": {
+      "linear_id": "FLO-1083",
+      "title": "Add contract test for CompiledArtifacts consumption",
+      "priority": "P1",
+      "phase": 7,
+      "dependencies": ["T006", "T007"]
+    },
+    "T027": {
+      "linear_id": "FLO-1085",
+      "title": "Add integration test for Dagster service",
+      "priority": "P2",
+      "phase": 7,
+      "dependencies": ["T006", "T024"]
+    },
+    "T028": {
+      "linear_id": "FLO-1087",
+      "title": "Add root conftest.py for integration fixtures",
+      "priority": "P1",
+      "phase": 7,
+      "dependencies": []
+    },
+    "T029": {
+      "linear_id": "FLO-1089",
+      "title": "Add unit conftest.py with mock fixtures",
+      "priority": "P1",
+      "phase": 7,
+      "dependencies": []
+    },
+    "T030": {
+      "linear_id": "FLO-1091",
+      "title": "Add CodSpeed performance benchmarks for NFR-001/NFR-002",
+      "priority": "P2",
+      "phase": 7,
+      "dependencies": ["T002", "T006"]
+    }
+  },
+  "summary": {
+    "total_tasks": 30,
+    "by_priority": {
+      "P1": 14,
+      "P2": 14,
+      "P3": 2
+    },
+    "by_phase": {
+      "1": 5,
+      "2": 6,
+      "3": 5,
+      "4": 4,
+      "5": 3,
+      "6": 2,
+      "7": 5
+    },
+    "dependencies_created": 17
+  }
+}
