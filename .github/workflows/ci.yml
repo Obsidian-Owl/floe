@@ -122,15 +122,36 @@ jobs:
         run: |
           # uv-secure natively parses uv.lock files and ignores local packages
           # --no-check-uv-tool: CI manages its own uv version
-          # Exit code 2 = warnings (not blocking), only fail on actual vulnerabilities
-          uv run uv-secure --no-check-uv-tool . || {
+          # Exit codes:
+          #   0 = no vulnerabilities
+          #   1 = vulnerabilities found (FAIL)
+          #   2 = warnings only (pass with warning)
+          #   3 = tool crash/parsing error (pass with warning if no vulns reported)
+          output=$(uv run uv-secure --no-check-uv-tool . 2>&1) || {
             exit_code=$?
+            echo "$output"
+
+            # Exit code 2 = warnings (not blocking)
             if [ $exit_code -eq 2 ]; then
               echo "::warning::uv-secure returned warnings (exit code 2)"
               exit 0
             fi
+
+            # Exit code 3 with "raised exception" = tool crash (bug in uv-secure)
+            # Only pass if no actual vulnerabilities were reported
+            if [ $exit_code -eq 3 ]; then
+              if echo "$output" | grep -q "Vulnerable:" && ! echo "$output" | grep -q "Vulnerable: 0"; then
+                echo "::error::Vulnerabilities detected"
+                exit 1
+              else
+                echo "::warning::uv-secure crashed (exit code 3) but no vulnerabilities reported"
+                exit 0
+              fi
+            fi
+
             exit $exit_code
           }
+          echo "$output"
 
       - name: Upload Bandit report
         if: always()

@@ -41,6 +41,8 @@ dependencies = [
     "floe-secrets-k8s",
     # RBAC plugin for Kubernetes RBAC manifest generation
     "floe-rbac-k8s",
+    # Include orchestrator plugins for development
+    "floe-orchestrator-dagster",
 ]
 
 [tool.uv]
@@ -61,6 +63,7 @@ floe-identity-keycloak = { path = "plugins/floe-identity-keycloak", editable = t
 floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = true }
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
 floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
+floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -74,6 +77,7 @@ pythonpath = [
     "plugins/floe-secrets-infisical/src",
     "plugins/floe-secrets-k8s/src",
     "plugins/floe-rbac-k8s/src",
+    "plugins/floe-orchestrator-dagster/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]

@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-memory"
+name = "floe-orchestrator-dagster"
 version = "0.1.0"
-description = "Cognee-based persistent memory for AI coding agents contributing to floe"
+description = "Dagster orchestrator plugin for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -16,7 +16,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
-    "Private :: Do Not Upload",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -24,20 +23,13 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "cognee>=0.5.0",
-    "cogwit-sdk>=0.1.0",  # Cognee Cloud SDK for memify support
-    # cognee-mcp is deployed as a Docker container, not a Python dependency
-    # See: docker run -p 8000:8000 cognee/cognee-mcp:main
-    "aiohttp>=3.13.3",  # Override transitive dep - fixes 8 CVEs (GHSA-6mq8, etc.)
-    "httpx>=0.27.0",
-    "structlog>=24.0",
-    "pydantic>=2.0",
-    "pydantic-settings>=2.0",
-    "typer>=0.9.0",
-    "pyyaml>=6.0",
-    "typing-extensions>=4.0",
-    # Note: fastapi-users 14.0.2 has GHSA-5j53-63w8-8625 (Moderate, OAuth/CSRF)
-    # Ignored via .uv-secure.toml - not exploitable (internal tool, no OAuth/SSO)
+    "floe-core>=0.1.0",
+    "dagster>=1.10.0,<2.0.0",
+    "dagster-dbt>=0.26.0",
+    "openlineage-python>=1.0.0",
+    "httpx>=0.24.0",
+    "croniter>=1.0.0",
+    "pytz>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -47,11 +39,10 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "mypy>=1.8",
     "ruff>=0.3",
-    "types-PyYAML>=6.0",
 ]
 
-[project.scripts]
-agent-memory = "agent_memory.cli:app"
+[project.entry-points."floe.orchestrators"]
+dagster = "floe_orchestrator_dagster:DagsterOrchestratorPlugin"
 
 [project.urls]
 Homepage = "https://github.com/Obsidian-Owl/floe"
@@ -59,7 +50,7 @@ Documentation = "https://github.com/Obsidian-Owl/floe/tree/main/docs"
 Repository = "https://github.com/Obsidian-Owl/floe"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agent_memory"]
+packages = ["src/floe_orchestrator_dagster"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -89,7 +80,7 @@ pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
-asyncio_mode = "auto"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
+    "integration: Mark test as integration test requiring real services",
 ]
