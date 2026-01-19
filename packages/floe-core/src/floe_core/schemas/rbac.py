@@ -535,8 +535,20 @@ def _default_writable_mounts() -> list[WritableVolumeMount]:
 
     Returns:
         List of default writable volume mounts including /tmp.
+
+    Security Note:
+        The /tmp mount path here is for a Kubernetes emptyDir volume, NOT the host's
+        /tmp directory. This is the standard secure pattern for PSS-restricted pods
+        that use readOnlyRootFilesystem: true. The emptyDir volume is:
+        - Ephemeral: deleted when the pod terminates
+        - Pod-scoped: isolated from other pods and the host
+        - Size-limited: can be constrained via sizeLimit field
+        This pattern is recommended by Kubernetes security best practices.
+        See: https://kubernetes.io/docs/concepts/security/pod-security-standards/
     """
     return [
+        # NOSONAR: This is a K8s emptyDir volume mount path, not host filesystem access.
+        # The emptyDir provides pod-isolated writable storage for PSS-restricted pods.
         WritableVolumeMount(name="tmp", mount_path="/tmp"),
     ]
 

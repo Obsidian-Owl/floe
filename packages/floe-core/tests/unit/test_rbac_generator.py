@@ -391,3 +391,203 @@ class TestGenerationResult:
 
         assert "Warnings" not in output
         assert "Errors" not in output
+
+
+class TestAggregatePermissions:
+    """Unit tests for aggregate_permissions function."""
+
+    @pytest.mark.requirement("FR-052")
+    def test_aggregate_permissions_empty_list(self) -> None:
+        """Test aggregate_permissions returns empty list for empty input."""
+        from floe_core.rbac.generator import aggregate_permissions
+
+        rules = aggregate_permissions([])
+
+        assert rules == []
+
+    @pytest.mark.requirement("FR-052")
+    def test_aggregate_permissions_single_secret(self) -> None:
+        """Test aggregate_permissions with single secret reference."""
+        from floe_core.rbac.generator import aggregate_permissions
+
+        rules = aggregate_permissions(["snowflake-creds"])
+
+        assert len(rules) == 1
+        assert rules[0].verbs == ["get"]
+        assert rules[0].resources == ["secrets"]
+        assert rules[0].resource_names == ["snowflake-creds"]
+
+    @pytest.mark.requirement("FR-052")
+    def test_aggregate_permissions_multiple_secrets(self) -> None:
+        """Test aggregate_permissions combines multiple secrets into one rule."""
+        from floe_core.rbac.generator import aggregate_permissions
+
+        rules = aggregate_permissions(["secret-a", "secret-b", "secret-c"])
+
+        assert len(rules) == 1
+        assert rules[0].resource_names == ["secret-a", "secret-b", "secret-c"]
+
+    @pytest.mark.requirement("FR-052")
+    def test_aggregate_permissions_deduplicates(self) -> None:
+        """Test aggregate_permissions removes duplicate secret references."""
+        from floe_core.rbac.generator import aggregate_permissions
+
+        rules = aggregate_permissions(["secret-a", "secret-b", "secret-a", "secret-b"])
+
+        assert len(rules) == 1
+        assert rules[0].resource_names == ["secret-a", "secret-b"]
+
+    @pytest.mark.requirement("FR-052")
+    def test_aggregate_permissions_strips_whitespace(self) -> None:
+        """Test aggregate_permissions strips whitespace from secret names."""
+        from floe_core.rbac.generator import aggregate_permissions
+
+        rules = aggregate_permissions(["  secret-a  ", "secret-b\t"])
+
+        assert len(rules) == 1
+        assert rules[0].resource_names == ["secret-a", "secret-b"]
+
+
+class TestValidateSecretReferences:
+    """Unit tests for validate_secret_references function."""
+
+    @pytest.mark.requirement("FR-073")
+    def test_validate_secret_references_empty(self) -> None:
+        """Test validate_secret_references with empty references."""
+        from floe_core.rbac.generator import validate_secret_references
+
+        is_valid, errors = validate_secret_references([], {"secret-a"})
+
+        assert is_valid is True
+        assert errors == []
+
+    @pytest.mark.requirement("FR-073")
+    def test_validate_secret_references_all_permitted(self) -> None:
+        """Test validate_secret_references with all secrets permitted."""
+        from floe_core.rbac.generator import validate_secret_references
+
+        is_valid, errors = validate_secret_references(
+            ["secret-a", "secret-b"],
+            {"secret-a", "secret-b", "secret-c"},
+        )
+
+        assert is_valid is True
+        assert errors == []
+
+    @pytest.mark.requirement("FR-073")
+    def test_validate_secret_references_missing(self) -> None:
+        """Test validate_secret_references detects missing permissions."""
+        from floe_core.rbac.generator import validate_secret_references
+
+        is_valid, errors = validate_secret_references(
+            ["secret-a", "secret-b"],
+            {"secret-a"},
+        )
+
+        assert is_valid is False
+        assert len(errors) == 1
+        assert "secret-b" in errors[0]
+
+    @pytest.mark.requirement("FR-073")
+    def test_validate_secret_references_multiple_missing(self) -> None:
+        """Test validate_secret_references reports all missing secrets."""
+        from floe_core.rbac.generator import validate_secret_references
+
+        is_valid, errors = validate_secret_references(
+            ["secret-a", "secret-b", "secret-c"],
+            {"secret-a"},
+        )
+
+        assert is_valid is False
+        assert len(errors) == 2  # secret-b and secret-c missing
+
+    @pytest.mark.requirement("FR-073")
+    def test_validate_secret_references_strips_whitespace(self) -> None:
+        """Test validate_secret_references strips whitespace from names."""
+        from floe_core.rbac.generator import validate_secret_references
+
+        is_valid, errors = validate_secret_references(
+            ["  secret-a  ", "secret-b"],
+            {"secret-a", "secret-b"},
+        )
+
+        assert is_valid is True
+        assert errors == []
+
+
+class TestWriteManifests:
+    """Unit tests for write_manifests function."""
+
+    @pytest.mark.requirement("FR-053")
+    def test_write_manifests_creates_directory(self, tmp_path: Path) -> None:
+        """Test write_manifests creates output directory."""
+        from floe_core.rbac.generator import write_manifests
+
+        output_dir = tmp_path / "rbac" / "nested"
+        manifests: dict[str, list[dict[str, Any]]] = {
+            "serviceaccounts.yaml": [{"apiVersion": "v1", "kind": "ServiceAccount"}],
+        }
+
+        paths = write_manifests(manifests, output_dir)
+
+        assert output_dir.exists()
+        assert len(paths) == 1
+
+    @pytest.mark.requirement("FR-053")
+    def test_write_manifests_writes_yaml(self, tmp_path: Path) -> None:
+        """Test write_manifests writes valid YAML content."""
+        import yaml
+
+        from floe_core.rbac.generator import write_manifests
+
+        manifests: dict[str, list[dict[str, Any]]] = {
+            "roles.yaml": [
+                {
+                    "apiVersion": "rbac.authorization.k8s.io/v1",
+                    "kind": "Role",
+                    "metadata": {"name": "test-role"},
+                },
+            ],
+        }
+
+        write_manifests(manifests, tmp_path)
+
+        content = (tmp_path / "roles.yaml").read_text()
+        docs = list(yaml.safe_load_all(content))
+        assert len(docs) == 1
+        assert docs[0]["kind"] == "Role"
+
+    @pytest.mark.requirement("FR-053")
+    def test_write_manifests_empty_list(self, tmp_path: Path) -> None:
+        """Test write_manifests creates empty file for empty list."""
+        from floe_core.rbac.generator import write_manifests
+
+        manifests: dict[str, list[dict[str, Any]]] = {
+            "serviceaccounts.yaml": [],
+        }
+
+        paths = write_manifests(manifests, tmp_path)
+
+        assert (tmp_path / "serviceaccounts.yaml").exists()
+        assert (tmp_path / "serviceaccounts.yaml").read_text() == ""
+        assert len(paths) == 1
+
+    @pytest.mark.requirement("FR-053")
+    def test_write_manifests_multiple_documents(self, tmp_path: Path) -> None:
+        """Test write_manifests handles multiple documents per file."""
+        import yaml
+
+        from floe_core.rbac.generator import write_manifests
+
+        manifests: dict[str, list[dict[str, Any]]] = {
+            "serviceaccounts.yaml": [
+                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "sa-1"}},
+                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "sa-2"}},
+            ],
+        }
+
+        write_manifests(manifests, tmp_path)
+
+        content = (tmp_path / "serviceaccounts.yaml").read_text()
+        docs = list(yaml.safe_load_all(content))
+        assert len(docs) == 2

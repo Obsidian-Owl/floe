@@ -356,3 +356,19 @@ class TestPluginModuleExports:
         import floe_rbac_k8s
 
         assert "K8sRBACPlugin" in floe_rbac_k8s.__all__
+
+    @pytest.mark.requirement("FR-002")
+    def test_invalid_attribute_raises_error(self) -> None:
+        """Test accessing invalid attribute raises AttributeError."""
+        import floe_rbac_k8s
+
+        with pytest.raises(AttributeError, match="has no attribute"):
+            _ = floe_rbac_k8s.NonExistentAttribute  # type: ignore[attr-defined]
+
+    @pytest.mark.requirement("FR-002")
+    def test_module_version(self) -> None:
+        """Test module has version attribute."""
+        import floe_rbac_k8s
+
+        assert hasattr(floe_rbac_k8s, "__version__")
+        assert floe_rbac_k8s.__version__ == "0.1.0"
