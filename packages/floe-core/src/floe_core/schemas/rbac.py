@@ -21,10 +21,10 @@ Contract: See specs/7b-k8s-rbac/data-model.md
 
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
+from typing_extensions import Self
 
 # =============================================================================
 # T006: ServiceAccountConfig
@@ -321,7 +321,7 @@ class RoleBindingConfig(BaseModel):
     )
     allowed_subject_namespaces: list[str] | None = Field(
         default=None,
-        description="Allowed namespaces for cross-namespace subjects. If None, all namespaces allowed.",
+        description="Allowed namespaces for cross-namespace subjects (None=all).",
     )
 
     @model_validator(mode="after")
@@ -584,7 +584,7 @@ class PodSecurityConfig(BaseModel):
     )
     writable_volume_mounts: list[WritableVolumeMount] = Field(
         default_factory=_default_writable_mounts,
-        description="Configurable volume mounts for writable directories with readOnlyRootFilesystem (FR-043)",
+        description="Writable volume mounts for readOnlyRootFilesystem (FR-043).",
     )
 
     def to_pod_security_context(self) -> dict[str, Any]:

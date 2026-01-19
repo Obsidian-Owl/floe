@@ -28,7 +28,6 @@ from floe_cli.commands.rbac import (
     RBACValidationResult,
     ValidationStatus,
     compute_rbac_diff,
-    validate_manifest_against_config,
 )
 
 logger = structlog.get_logger(__name__)
@@ -258,10 +257,7 @@ def validate_command(
                 issues.extend(resource_issues)
 
         # Determine status
-        if issues:
-            status = ValidationStatus.INVALID
-        else:
-            status = ValidationStatus.VALID
+        status = ValidationStatus.INVALID if issues else ValidationStatus.VALID
 
         result = RBACValidationResult(
             status=status,
@@ -378,7 +374,7 @@ def _print_validation_result(result: RBACValidationResult) -> None:
     else:
         click.echo(click.style("\n✗ Validation FAILED", fg="red", bold=True))
 
-    click.echo(f"\nResources validated:")
+    click.echo("\nResources validated:")
     click.echo(f"  Service Accounts: {result.service_accounts_validated}")
     click.echo(f"  Roles: {result.roles_validated}")
     click.echo(f"  Role Bindings: {result.role_bindings_validated}")
@@ -601,7 +597,7 @@ def _print_audit_report(report: RBACAuditReport) -> None:
         pss_str = f" (PSS: {ns.pss_enforce})" if ns.pss_enforce else ""
         click.echo(f"  - {ns.name}{managed_str}{pss_str}")
 
-    click.echo(f"\nResources:")
+    click.echo("\nResources:")
     click.echo(f"  Service Accounts: {report.total_service_accounts}")
     click.echo(f"  Roles: {report.total_roles}")
     click.echo(f"  Role Bindings: {report.total_role_bindings}")
@@ -634,7 +630,8 @@ def _print_audit_report(report: RBACAuditReport) -> None:
                     click.style(f"\n[{severity.value.upper()}]", fg=color, bold=True)
                 )
                 for finding in findings:
-                    ns_str = f" ({finding.resource_namespace})" if finding.resource_namespace else ""
+                    ns = finding.resource_namespace
+                    ns_str = f" ({ns})" if ns else ""
                     click.echo(f"  {finding.resource_kind}/{finding.resource_name}{ns_str}")
                     click.echo(f"    {finding.message}")
                     if finding.recommendation:
@@ -695,7 +692,7 @@ def diff_command(
     """
     try:
         # Import kubernetes at runtime
-        from kubernetes import client, config
+        from kubernetes import config
 
         # Load kubeconfig
         if kubeconfig:
@@ -851,7 +848,7 @@ def _print_diff_result(result: RBACDiffResult) -> None:
         click.echo(click.style("\n✓ No differences found", fg="green", bold=True))
         return
 
-    click.echo(f"\nChanges:")
+    click.echo("\nChanges:")
     click.echo(f"  Added (need to apply): {result.added_count}")
     click.echo(f"  Removed (in cluster, not in manifests): {result.removed_count}")
     click.echo(f"  Modified: {result.modified_count}")

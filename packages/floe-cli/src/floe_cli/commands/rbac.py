@@ -19,12 +19,11 @@ Example:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # =============================================================================
 # T056: RBAC Audit Report Models
@@ -205,7 +204,7 @@ class RBACAuditReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     generated_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
+        default_factory=lambda: datetime.now(tz=UTC),
         description="Report generation timestamp",
     )
     cluster_name: str = Field(
@@ -629,7 +628,11 @@ def validate_manifest_against_config(
                 resource_name=name or "unknown",
                 resource_namespace=namespace,
                 message=f"{resource_kind} '{name}' expected but not found in manifests",
-                expected=f"{resource_kind}/{namespace}/{name}" if namespace else f"{resource_kind}/{name}",
+                expected=(
+                    f"{resource_kind}/{namespace}/{name}"
+                    if namespace
+                    else f"{resource_kind}/{name}"
+                ),
                 actual=None,
             )
         )
@@ -651,7 +654,11 @@ def validate_manifest_against_config(
                 resource_namespace=namespace,
                 message=f"{resource_kind} '{name}' found in manifests but not expected",
                 expected=None,
-                actual=f"{resource_kind}/{namespace}/{name}" if namespace else f"{resource_kind}/{name}",
+                actual=(
+                    f"{resource_kind}/{namespace}/{name}"
+                    if namespace
+                    else f"{resource_kind}/{name}"
+                ),
             )
         )
 
@@ -750,7 +757,7 @@ class RBACDiffResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     generated_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
+        default_factory=lambda: datetime.now(tz=UTC),
         description="Diff computation timestamp",
     )
     expected_source: str = Field(
@@ -896,7 +903,7 @@ def _compare_values(
                 f"got {len(actual)})"
             )
         else:
-            for i, (exp_item, act_item) in enumerate(zip(expected, actual)):
+            for i, (exp_item, act_item) in enumerate(zip(expected, actual, strict=True)):
                 differences.extend(_compare_values(exp_item, act_item, f"{path}[{i}]"))
     elif expected != actual:
         differences.append(f"{path}: expected {expected!r}, got {actual!r}")
