@@ -364,10 +364,6 @@ def run_enforce_stage(
     # Local imports to avoid circular dependency
     from floe_core.enforcement import PolicyEnforcer
     from floe_core.enforcement.errors import PolicyEnforcementError
-    from floe_core.enforcement.result import (
-        EnforcementResult,
-        EnforcementSummary,
-    )
 
     log = logger.bind(
         component="run_enforce_stage",

@@ -13,13 +13,10 @@ Requirements: FR-002 (Pipeline integration), US1 (Compile-time enforcement)
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-if TYPE_CHECKING:
-    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 
 class TestEnforceStageIntegration:
@@ -592,11 +589,8 @@ class TestEnforceStageOTelIntegration:
         - enforcement.warning_count: int
         - enforcement.level: str
         """
-        from unittest.mock import MagicMock
-
         from floe_core.compilation.stages import run_enforce_stage
         from floe_core.schemas.manifest import GovernanceConfig
-        from floe_core.telemetry.tracing import create_span
 
         governance_config = GovernanceConfig(
             policy_enforcement_level="warn",

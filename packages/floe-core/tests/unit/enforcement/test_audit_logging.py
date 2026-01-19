@@ -11,7 +11,6 @@ Requirements: FR-010 (Audit logging), US6 (Audit logging)
 
 from __future__ import annotations
 
-import re
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -67,7 +66,7 @@ class TestAuditLogFields:
             mock_logger.bind.return_value = mock_log
 
             enforcer = PolicyEnforcer(governance_config=governance_config)
-            result = enforcer.enforce(dbt_manifest)
+            enforcer.enforce(dbt_manifest)  # Result not needed, testing logs
 
             # Verify enforcement_started log
             start_calls = [
@@ -212,7 +211,7 @@ class TestAuditLogFields:
             mock_logger.bind.return_value = mock_log
 
             enforcer = PolicyEnforcer(governance_config=governance_config)
-            result = enforcer.enforce(dbt_manifest)
+            enforcer.enforce(dbt_manifest)  # Result not needed, testing logs
 
             # Verify duration is logged
             complete_calls = [
@@ -308,10 +307,10 @@ class TestOTelSpanEvents:
             mock_create_span.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = run_enforce_stage(
+            run_enforce_stage(
                 governance_config=governance_config,
                 dbt_manifest=dbt_manifest,
-            )
+            )  # Result not needed, testing span
 
             # Verify span was created
             mock_create_span.assert_called()
@@ -357,10 +356,10 @@ class TestOTelSpanEvents:
             mock_create_span.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = run_enforce_stage(
+            run_enforce_stage(
                 governance_config=governance_config,
                 dbt_manifest=dbt_manifest,
-            )
+            )  # Result not needed, testing span
 
             set_attribute_calls = {
                 call[0][0]: call[0][1]
@@ -407,10 +406,10 @@ class TestOTelSpanEvents:
             mock_create_span.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = MagicMock(return_value=False)
 
-            result = run_enforce_stage(
+            run_enforce_stage(
                 governance_config=governance_config,
                 dbt_manifest=dbt_manifest,
-            )
+            )  # Result not needed, testing span
 
             # Check the create_span call included enforcement.level
             call_kwargs = mock_create_span.call_args_list[0]
