@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from floe_core.enforcement.result import Violation
+    pass
 
 
 class TestMedallionPattern:

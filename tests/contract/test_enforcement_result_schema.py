@@ -121,9 +121,8 @@ class TestEnforcementResultSchemaContract:
 
         Results should not be modified after creation for audit integrity.
         """
-        from pydantic import ValidationError
-
         from floe_core.enforcement.result import EnforcementResult, EnforcementSummary
+        from pydantic import ValidationError
 
         result = EnforcementResult(
             passed=True,
@@ -207,9 +206,8 @@ class TestViolationSchemaContract:
     @pytest.mark.requirement("3A-US1-FR002")
     def test_violation_immutable(self) -> None:
         """Contract: Violation MUST be immutable (frozen=True)."""
-        from pydantic import ValidationError
-
         from floe_core.enforcement.result import Violation
+        from pydantic import ValidationError
 
         violation = Violation(
             error_code="FLOE-E201",
@@ -439,9 +437,8 @@ class TestEnforcementResultSchemaEvolution:
         This ensures strict schema compliance and prevents accidental
         field additions that could break downstream consumers.
         """
-        from pydantic import ValidationError
-
         from floe_core.enforcement.result import EnforcementResult, EnforcementSummary
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError, match="extra_field"):
             EnforcementResult(

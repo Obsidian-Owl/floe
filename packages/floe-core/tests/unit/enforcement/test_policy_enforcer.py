@@ -11,15 +11,11 @@ Requirements: FR-001 (Compile-Time Enforcement), US1 (Compile-time Enforcement)
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock
 
 import pytest
 
 if TYPE_CHECKING:
-    from floe_core.enforcement.policy_enforcer import PolicyEnforcer
-    from floe_core.enforcement.result import EnforcementResult
-    from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
-    from floe_core.schemas.manifest import GovernanceConfig
+    pass
 
 
 def create_minimal_dbt_manifest() -> dict[str, Any]:

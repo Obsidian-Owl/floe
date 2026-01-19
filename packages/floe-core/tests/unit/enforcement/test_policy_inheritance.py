@@ -25,7 +25,6 @@ class TestNamingConfigInheritance:
     def test_naming_enforcement_can_strengthen(self) -> None:
         """Test that naming.enforcement can be strengthened (off→warn, warn→strict)."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -39,7 +38,6 @@ class TestNamingConfigInheritance:
     def test_naming_enforcement_cannot_weaken(self) -> None:
         """Test that naming.enforcement cannot be weakened (strict→warn→off)."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -57,7 +55,6 @@ class TestNamingConfigInheritance:
     def test_naming_enforcement_can_stay_same(self) -> None:
         """Test that naming.enforcement can stay the same level."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -71,7 +68,6 @@ class TestNamingConfigInheritance:
     def test_naming_enforcement_off_to_warn_allowed(self) -> None:
         """Test off→warn strengthening is allowed."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -84,7 +80,6 @@ class TestNamingConfigInheritance:
     def test_naming_enforcement_off_to_strict_allowed(self) -> None:
         """Test off→strict strengthening is allowed."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -97,7 +92,6 @@ class TestNamingConfigInheritance:
     def test_naming_none_parent_allows_any_child(self) -> None:
         """Test that None parent naming allows any child naming."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -114,7 +108,6 @@ class TestNamingConfigInheritance:
         not "weaken to nothing".
         """
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -139,7 +132,6 @@ class TestQualityGatesInheritance:
     def test_coverage_can_be_increased(self) -> None:
         """Test that minimum_test_coverage can be increased."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -156,7 +148,6 @@ class TestQualityGatesInheritance:
     def test_coverage_cannot_be_decreased(self) -> None:
         """Test that minimum_test_coverage cannot be decreased."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -178,7 +169,6 @@ class TestQualityGatesInheritance:
     def test_require_descriptions_can_enable(self) -> None:
         """Test that require_descriptions can be enabled (False→True)."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -195,7 +185,6 @@ class TestQualityGatesInheritance:
     def test_require_descriptions_cannot_disable(self) -> None:
         """Test that require_descriptions cannot be disabled (True→False)."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -215,7 +204,6 @@ class TestQualityGatesInheritance:
     def test_require_column_descriptions_can_enable(self) -> None:
         """Test that require_column_descriptions can be enabled."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -232,7 +220,6 @@ class TestQualityGatesInheritance:
     def test_require_column_descriptions_cannot_disable(self) -> None:
         """Test that require_column_descriptions cannot be disabled."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -252,7 +239,6 @@ class TestQualityGatesInheritance:
     def test_block_on_failure_cannot_relax(self) -> None:
         """Test that block_on_failure cannot be relaxed (True→False)."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -272,7 +258,6 @@ class TestQualityGatesInheritance:
     def test_quality_gates_none_parent_allows_any_child(self) -> None:
         """Test that None parent quality_gates allows any child."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -287,7 +272,6 @@ class TestQualityGatesInheritance:
     def test_quality_gates_none_child_when_parent_set(self) -> None:
         """Test that None child quality_gates when parent is set is allowed."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -310,7 +294,6 @@ class TestLayerThresholdsInheritance:
     def test_layer_thresholds_can_be_increased(self) -> None:
         """Test that layer thresholds can be increased."""
         from floe_core.schemas.governance import LayerThresholds, QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -331,7 +314,6 @@ class TestLayerThresholdsInheritance:
     def test_layer_threshold_bronze_cannot_decrease(self) -> None:
         """Test that bronze threshold cannot be decreased."""
         from floe_core.schemas.governance import LayerThresholds, QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -355,7 +337,6 @@ class TestLayerThresholdsInheritance:
     def test_layer_threshold_silver_cannot_decrease(self) -> None:
         """Test that silver threshold cannot be decreased."""
         from floe_core.schemas.governance import LayerThresholds, QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -379,7 +360,6 @@ class TestLayerThresholdsInheritance:
     def test_layer_threshold_gold_cannot_decrease(self) -> None:
         """Test that gold threshold cannot be decreased."""
         from floe_core.schemas.governance import LayerThresholds, QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -411,7 +391,6 @@ class TestCombinedInheritance:
             NamingConfig,
             QualityGatesConfig,
         )
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
@@ -444,7 +423,6 @@ class TestCombinedInheritance:
     def test_mixed_inheritance_one_weakened(self) -> None:
         """Test that even one weakened field raises error."""
         from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
