@@ -414,8 +414,7 @@ class DocumentationValidator:
             model_name=model_name,
             column_name=column_name,
             message=(
-                f"Column '{column_name}' in model '{model_name}' "
-                "has a placeholder description."
+                f"Column '{column_name}' in model '{model_name}' has a placeholder description."
             ),
             expected="Complete column description",
             actual=f"Placeholder description: '{description}'",

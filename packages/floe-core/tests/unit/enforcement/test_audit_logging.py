@@ -70,8 +70,7 @@ class TestAuditLogFields:
 
             # Verify enforcement_started log
             start_calls = [
-                call for call in mock_log.info.call_args_list
-                if call[0][0] == "enforcement_started"
+                call for call in mock_log.info.call_args_list if call[0][0] == "enforcement_started"
             ]
             assert len(start_calls) >= 1
             start_kwargs = start_calls[0][1]
@@ -80,7 +79,8 @@ class TestAuditLogFields:
 
             # Verify enforcement_completed log
             complete_calls = [
-                call for call in mock_log.info.call_args_list
+                call
+                for call in mock_log.info.call_args_list
                 if call[0][0] == "enforcement_completed"
             ]
             assert len(complete_calls) >= 1
@@ -126,8 +126,7 @@ class TestAuditLogFields:
 
             # And logs should reference it
             start_calls = [
-                call for call in mock_log.info.call_args_list
-                if call[0][0] == "enforcement_started"
+                call for call in mock_log.info.call_args_list if call[0][0] == "enforcement_started"
             ]
             assert len(start_calls) >= 1
             assert start_calls[0][1]["manifest_version"] == "1.9.5"
@@ -215,7 +214,8 @@ class TestAuditLogFields:
 
             # Verify duration is logged
             complete_calls = [
-                call for call in mock_log.info.call_args_list
+                call
+                for call in mock_log.info.call_args_list
                 if call[0][0] == "enforcement_completed"
             ]
             assert len(complete_calls) >= 1
@@ -317,8 +317,7 @@ class TestOTelSpanEvents:
 
             # Verify span attributes were set
             set_attribute_calls = {
-                call[0][0]: call[0][1]
-                for call in mock_span.set_attribute.call_args_list
+                call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list
             }
 
             assert "enforcement.passed" in set_attribute_calls
@@ -362,8 +361,7 @@ class TestOTelSpanEvents:
             )  # Result not needed, testing span
 
             set_attribute_calls = {
-                call[0][0]: call[0][1]
-                for call in mock_span.set_attribute.call_args_list
+                call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list
             }
 
             assert "enforcement.duration_ms" in set_attribute_calls

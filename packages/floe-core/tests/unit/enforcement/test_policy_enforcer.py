@@ -175,9 +175,11 @@ class TestPolicyEnforcerEnforce:
         enforcer = PolicyEnforcer(governance_config=config)
 
         # Model name doesn't follow medallion pattern
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -198,9 +200,11 @@ class TestPolicyEnforcerEnforce:
         enforcer = PolicyEnforcer(governance_config=config)
 
         # Model name doesn't follow medallion pattern, but enforcement is off
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -220,9 +224,11 @@ class TestPolicyEnforcerEnforce:
         enforcer = PolicyEnforcer(governance_config=config)
 
         # Model name doesn't follow medallion pattern
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -244,9 +250,11 @@ class TestPolicyEnforcerEnforce:
         enforcer = PolicyEnforcer(governance_config=config)
 
         # Model name doesn't follow medallion pattern
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -263,10 +271,12 @@ class TestPolicyEnforcerEnforce:
 
         config = GovernanceConfig()
         enforcer = PolicyEnforcer(governance_config=config)
-        manifest = create_dbt_manifest_with_models([
-            {"name": "bronze_customers", "columns": [{"name": "id"}]},
-            {"name": "silver_orders", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "bronze_customers", "columns": [{"name": "id"}]},
+                {"name": "silver_orders", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -319,9 +329,11 @@ class TestPolicyEnforcerEnforce:
         enforcer = PolicyEnforcer(governance_config=config)
 
         # Model name doesn't follow medallion pattern
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest, dry_run=True)
 
@@ -355,9 +367,11 @@ class TestPolicyEnforcerMultipleValidators:
         # - Name doesn't follow medallion
         # - No tests (coverage violation)
         # - No description (documentation violation)
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -379,11 +393,13 @@ class TestPolicyEnforcerMultipleValidators:
         enforcer = PolicyEnforcer(governance_config=config)
 
         # Multiple models with naming violations
-        manifest = create_dbt_manifest_with_models([
-            {"name": "stg_customers", "columns": [{"name": "id"}]},
-            {"name": "stg_orders", "columns": [{"name": "id"}]},
-            {"name": "bronze_products", "columns": [{"name": "id"}]},  # Valid
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "stg_customers", "columns": [{"name": "id"}]},
+                {"name": "stg_orders", "columns": [{"name": "id"}]},
+                {"name": "bronze_products", "columns": [{"name": "id"}]},  # Valid
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 
@@ -422,9 +438,11 @@ class TestPolicyEnforcerEdgeCases:
         config = GovernanceConfig()
         enforcer = PolicyEnforcer(governance_config=config)
 
-        manifest = create_dbt_manifest_with_models([
-            {"name": "any_name_works", "columns": [{"name": "id"}]},
-        ])
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "any_name_works", "columns": [{"name": "id"}]},
+            ]
+        )
 
         result = enforcer.enforce(manifest)
 

@@ -639,9 +639,7 @@ class TestExpandedPlaceholderPatterns:
         config = QualityGatesConfig(require_descriptions=True)
         validator = DocumentationValidator(config)
 
-        model = _create_model_node(
-            name="bronze_orders", description="needs description"
-        )
+        model = _create_model_node(name="bronze_orders", description="needs description")
 
         violations = validator.validate(models=[model])
 
@@ -680,9 +678,7 @@ class TestExpandedPlaceholderPatterns:
         config = QualityGatesConfig(require_descriptions=True)
         validator = DocumentationValidator(config)
 
-        model = _create_model_node(
-            name="bronze_orders", description="Documentation coming soon"
-        )
+        model = _create_model_node(name="bronze_orders", description="Documentation coming soon")
 
         violations = validator.validate(models=[model])
 
@@ -734,9 +730,7 @@ class TestConfigurableDocumentationUrl:
         assert url == "https://docs.example.com"
 
     @pytest.mark.requirement("3A-US5-FR005")
-    def test_strips_trailing_slash_from_docs_url(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_strips_trailing_slash_from_docs_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Documentation URL MUST strip trailing slash."""
         from floe_core.enforcement.patterns import _get_docs_base_url
 

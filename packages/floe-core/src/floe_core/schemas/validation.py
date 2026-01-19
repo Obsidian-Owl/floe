@@ -262,9 +262,7 @@ def _validate_quality_gates_not_weakened(
 
     # Check layer_thresholds (each layer threshold must not decrease)
     if parent.layer_thresholds is not None and child.layer_thresholds is not None:
-        _validate_layer_thresholds_not_weakened(
-            parent.layer_thresholds, child.layer_thresholds
-        )
+        _validate_layer_thresholds_not_weakened(parent.layer_thresholds, child.layer_thresholds)
 
 
 def _validate_layer_thresholds_not_weakened(

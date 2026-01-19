@@ -110,14 +110,10 @@ def sample_dbt_manifest() -> dict[str, Any]:
         "selectors": {},
         "disabled": {},
         "parent_map": {
-            "model.test_project.silver_customers": [
-                "model.test_project.bronze_customers"
-            ],
+            "model.test_project.silver_customers": ["model.test_project.bronze_customers"],
         },
         "child_map": {
-            "model.test_project.bronze_customers": [
-                "model.test_project.silver_customers"
-            ],
+            "model.test_project.bronze_customers": ["model.test_project.silver_customers"],
         },
     }
 

@@ -323,8 +323,7 @@ class CoverageValidator:
             message=message,
             expected=f"{threshold}% column-level test coverage",
             actual=(
-                f"{coverage:.1f}% "
-                f"({len(columns) - len(uncovered)}/{len(columns)} columns tested)"
+                f"{coverage:.1f}% ({len(columns) - len(uncovered)}/{len(columns)} columns tested)"
             ),
             suggestion=suggestion,
             documentation_url=COVERAGE_DOC_URL,

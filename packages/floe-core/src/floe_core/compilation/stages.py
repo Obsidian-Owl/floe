@@ -439,11 +439,7 @@ def run_enforce_stage(
         # Handle strict mode blocking (T075)
         # In strict mode, raise if there are error-severity violations
         # UNLESS dry_run is True (dry-run never raises)
-        if (
-            enforcement_level == "strict"
-            and not dry_run
-            and result.error_count > 0
-        ):
+        if enforcement_level == "strict" and not dry_run and result.error_count > 0:
             log.error(
                 "enforcement_failed",
                 reason="strict_mode_violations",
