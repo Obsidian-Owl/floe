@@ -72,8 +72,17 @@ from floe_core.oci.errors import (
     RegistryUnavailableError,
 )
 
+# Resilience patterns (T008, T009)
+from floe_core.oci.resilience import (
+    CircuitBreaker,
+    CircuitState,
+    RetryAttempt,
+    RetryAttemptIterator,
+    RetryPolicy,
+    with_resilience,
+)
+
 # NOTE: Additional exports will be populated as modules are implemented:
-# - T008-T009: resilience.py (RetryPolicy, CircuitBreaker)
 # - T010: cache.py (CacheManager, CacheEntry)
 # - T011: metrics.py (OpenTelemetry metrics)
 # - T012: client.py (OCIClient)
@@ -98,4 +107,11 @@ __all__: list[str] = [
     "AzureMIAuthProvider",
     "GCPWIAuthProvider",
     "create_auth_provider",
+    # Resilience (T008, T009)
+    "RetryPolicy",
+    "RetryAttempt",
+    "RetryAttemptIterator",
+    "CircuitBreaker",
+    "CircuitState",
+    "with_resilience",
 ]
