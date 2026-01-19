@@ -953,6 +953,173 @@ def run_cache_status(args: argparse.Namespace) -> int:
         return EXIT_GENERAL_ERROR
 
 
+def create_cache_clear_parser() -> argparse.ArgumentParser:
+    """Create argument parser for artifact cache clear command.
+
+    Returns:
+        Configured ArgumentParser for the cache clear command.
+
+    Example:
+        >>> parser = create_cache_clear_parser()
+        >>> args = parser.parse_args([])
+        >>> args.yes
+        False
+    """
+    parser = argparse.ArgumentParser(
+        prog="floe artifact cache clear",
+        description="Clear cached OCI artifacts",
+        epilog="Clears all cached artifacts or specific tags.",
+    )
+
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path("manifest.yaml"),
+        help="Path to manifest.yaml with cache config (default: manifest.yaml)",
+        metavar="PATH",
+    )
+
+    parser.add_argument(
+        "--tag",
+        "-t",
+        type=str,
+        default=None,
+        help="Clear only artifacts with this tag (default: clear all)",
+        metavar="TAG",
+    )
+
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip confirmation prompt",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose output",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress all output except errors",
+    )
+
+    return parser
+
+
+def run_cache_clear(args: argparse.Namespace) -> int:
+    """Run the cache clear command.
+
+    Clears all cached artifacts or only those matching a specific tag.
+    Prompts for confirmation unless --yes flag is provided.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+
+    Example:
+        >>> args = create_cache_clear_parser().parse_args(["--yes"])
+        >>> exit_code = run_cache_clear(args)
+    """
+    from floe_core.oci.cache import CacheManager
+    from floe_core.schemas.oci import CacheConfig
+
+    log = logger.bind(command="cache_clear", tag=args.tag)
+    log.debug("cache_clear_start")
+
+    try:
+        # Load manifest if exists
+        cache_config: CacheConfig | None = None
+        if args.manifest.exists():
+            import yaml
+
+            manifest_data = yaml.safe_load(args.manifest.read_text())
+            if manifest_data and "oci" in manifest_data:
+                oci_config = manifest_data["oci"]
+                if "cache" in oci_config:
+                    cache_config = CacheConfig(**oci_config["cache"])
+
+        # Handle case where cache is not configured
+        if cache_config is None:
+            log.info("cache_not_configured")
+            if not args.quiet:
+                print("Cache not configured")
+            return EXIT_SUCCESS
+
+        # Create cache manager with config
+        manager = CacheManager(cache_config)
+        stats = manager.stats()
+
+        if args.tag:
+            # Clear specific tag
+            matching_entries = manager.get_entries_by_tag(args.tag)
+
+            if not matching_entries:
+                if not args.quiet:
+                    print(f"No cached artifacts found with tag '{args.tag}'")
+                return EXIT_SUCCESS
+
+            # Confirm before clearing
+            if not args.yes and not args.quiet:
+                count = len(matching_entries)
+                response = input(
+                    f"Clear {count} cached artifact(s) with tag '{args.tag}'? [y/N] "
+                )
+                if response.lower() not in ("y", "yes"):
+                    print("Aborted")
+                    return EXIT_SUCCESS
+
+            # Clear matching entries
+            cleared = 0
+            for entry in matching_entries:
+                if manager.remove(entry.digest):
+                    cleared += 1
+
+            log.info("cache_cleared_tag", tag=args.tag, cleared=cleared)
+            if not args.quiet:
+                print(f"Cleared {cleared} cached artifact(s) with tag '{args.tag}'")
+
+        else:
+            # Clear all
+            entry_count = stats.get("entry_count", 0)
+
+            if entry_count == 0:
+                if not args.quiet:
+                    print("Cache is empty")
+                return EXIT_SUCCESS
+
+            # Confirm before clearing
+            if not args.yes and not args.quiet:
+                total_size = _format_size(stats.get("total_size_bytes", 0))
+                response = input(
+                    f"Clear {entry_count} cached artifact(s) ({total_size})? [y/N] "
+                )
+                if response.lower() not in ("y", "yes"):
+                    print("Aborted")
+                    return EXIT_SUCCESS
+
+            manager.clear()
+
+            log.info("cache_cleared_all", entry_count=entry_count)
+            if not args.quiet:
+                print(f"Cleared {entry_count} cached artifact(s)")
+
+        return EXIT_SUCCESS
+
+    except Exception as e:
+        if not args.quiet:
+            print(f"Error: Failed to clear cache - {e}", file=sys.stderr)
+        log.exception("cache_clear_error", error=str(e))
+        return EXIT_GENERAL_ERROR
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     """Main entry point for floe artifact push command.
 

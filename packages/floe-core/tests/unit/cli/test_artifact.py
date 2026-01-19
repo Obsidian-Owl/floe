@@ -1300,3 +1300,247 @@ oci:
 
         captured = capsys.readouterr()
         assert captured.out == ""  # No output in quiet mode
+
+
+class TestCacheClearParser:
+    """Tests for artifact cache clear CLI argument parser."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_parser_default_values(self) -> None:
+        """Test that parser has correct default values."""
+        from floe_core.cli.artifact import create_cache_clear_parser
+
+        parser = create_cache_clear_parser()
+        args = parser.parse_args([])
+
+        assert args.manifest == Path("manifest.yaml")
+        assert args.tag is None
+        assert args.yes is False
+        assert args.verbose is False
+        assert args.quiet is False
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_parser_accepts_all_args(self) -> None:
+        """Test that parser accepts all expected arguments."""
+        from floe_core.cli.artifact import create_cache_clear_parser
+
+        parser = create_cache_clear_parser()
+        args = parser.parse_args(
+            [
+                "--manifest",
+                "custom_manifest.yaml",
+                "--tag",
+                "v1.0.0",
+                "--yes",
+                "--verbose",
+            ]
+        )
+
+        assert args.manifest == Path("custom_manifest.yaml")
+        assert args.tag == "v1.0.0"
+        assert args.yes is True
+        assert args.verbose is True
+
+
+class TestCacheClearCommand:
+    """Tests for artifact cache clear command execution."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_all_returns_success(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache clear all returns success."""
+        import argparse
+        import hashlib
+
+        from floe_core.cli.artifact import run_cache_clear
+        from floe_core.oci.cache import CacheManager
+        from floe_core.schemas.oci import CacheConfig
+
+        # Create a manifest with cache config
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        # Pre-populate the cache with an entry
+        config = CacheConfig(path=cache_path, max_size_gb=10, ttl_hours=24)
+        manager = CacheManager(config)
+        content = b'{"version": "0.2.0", "test": "clear"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+        manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag=None,
+            yes=True,  # Skip confirmation
+            verbose=False,
+            quiet=False,
+        )
+
+        # Mock the logger to prevent stdout pollution
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        assert "Cleared" in captured.out
+        assert "1 cached artifact(s)" in captured.out
+
+        # Verify cache is empty
+        new_stats = manager.stats()
+        assert new_stats["entry_count"] == 0
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_by_tag(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache clear with --tag only clears matching entries."""
+        import argparse
+        import hashlib
+
+        from floe_core.cli.artifact import run_cache_clear
+        from floe_core.oci.cache import CacheManager
+        from floe_core.schemas.oci import CacheConfig
+
+        # Create a manifest with cache config
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        # Pre-populate the cache with two entries
+        config = CacheConfig(path=cache_path, max_size_gb=10, ttl_hours=24)
+        manager = CacheManager(config)
+
+        content1 = b'{"version": "1.0.0"}'
+        digest1 = f"sha256:{hashlib.sha256(content1).hexdigest()}"
+        manager.put(
+            digest=digest1,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content1,
+        )
+
+        content2 = b'{"version": "2.0.0"}'
+        digest2 = f"sha256:{hashlib.sha256(content2).hexdigest()}"
+        manager.put(
+            digest=digest2,
+            tag="v2.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content2,
+        )
+
+        # Verify both entries exist
+        assert manager.stats()["entry_count"] == 2
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag="v1.0.0",  # Only clear v1.0.0
+            yes=True,
+            verbose=False,
+            quiet=False,
+        )
+
+        # Mock the logger to prevent stdout pollution
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        assert "v1.0.0" in captured.out
+
+        # Verify only v2.0.0 remains
+        new_stats = manager.stats()
+        assert new_stats["entry_count"] == 1
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_empty_cache(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache clear on empty cache returns success."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_clear
+
+        # Create a manifest with cache config
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            tag=None,
+            yes=True,
+            verbose=False,
+            quiet=False,
+        )
+
+        # Mock the logger to prevent stdout pollution
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        assert "Cache is empty" in captured.out
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_clear_not_configured(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache clear returns success when cache is not configured."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_clear
+
+        args = argparse.Namespace(
+            manifest=tmp_path / "nonexistent.yaml",
+            tag=None,
+            yes=True,
+            verbose=False,
+            quiet=False,
+        )
+
+        # Mock the logger to prevent stdout pollution
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_clear(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        assert "Cache not configured" in captured.out

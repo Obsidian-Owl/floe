@@ -532,6 +532,22 @@ class CacheManager:
                 "last_updated": index.last_updated.isoformat(),
             }
 
+    def get_entries_by_tag(self, tag: str) -> list[CacheEntry]:
+        """Get all cache entries matching a specific tag.
+
+        Args:
+            tag: Tag to filter by.
+
+        Returns:
+            List of CacheEntry objects with matching tag.
+        """
+        if not self.enabled:
+            return []
+
+        with self._lock():
+            index = self._load_index()
+            return [e for e in index.entries.values() if e.tag == tag]
+
     def _maybe_evict(self, index: CacheIndex) -> None:
         """Evict entries if cache exceeds max size.
 
