@@ -430,10 +430,13 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """Return K8s resource requirements for Dagster workloads.
 
         Provides CPU and memory requests/limits based on workload size
-        for Dagster service pods.
+        for Dagster service pods. Uses predefined presets for consistency.
 
         Args:
             workload_size: One of "small", "medium", "large".
+                - small: Development workloads (100m-500m CPU, 256Mi-512Mi memory)
+                - medium: Staging workloads (250m-1000m CPU, 512Mi-1Gi memory)
+                - large: Production workloads (500m-2000m CPU, 1Gi-2Gi memory)
 
         Returns:
             ResourceSpec with K8s-compatible resource specifications.
@@ -446,10 +449,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             >>> spec.memory_limit
             '1Gi'
         """
-        # Placeholder - will be implemented in T013/T014
-        raise NotImplementedError(
-            "get_resource_requirements will be implemented in T013"
-        )
+        if workload_size not in _RESOURCE_PRESETS:
+            valid_sizes = ", ".join(sorted(_RESOURCE_PRESETS.keys()))
+            raise ValueError(
+                f"Invalid workload_size '{workload_size}'. "
+                f"Must be one of: {valid_sizes}"
+            )
+
+        return _RESOURCE_PRESETS[workload_size]
 
     def emit_lineage_event(
         self,

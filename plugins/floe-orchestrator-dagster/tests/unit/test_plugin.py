@@ -321,12 +321,23 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         with pytest.raises(NotImplementedError, match="T024"):
             dagster_plugin.validate_connection()
 
-    def test_get_resource_requirements_not_implemented(
+    def test_get_resource_requirements_small(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Test get_resource_requirements raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T013"):
-            dagster_plugin.get_resource_requirements("small")
+        """Test get_resource_requirements returns ResourceSpec for small."""
+        from floe_core.plugins.orchestrator import ResourceSpec
+
+        result = dagster_plugin.get_resource_requirements("small")
+        assert isinstance(result, ResourceSpec)
+        assert result.cpu_request == "100m"
+        assert result.memory_limit == "512Mi"
+
+    def test_get_resource_requirements_invalid_size(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Test get_resource_requirements raises ValueError for invalid size."""
+        with pytest.raises(ValueError, match="Invalid workload_size"):
+            dagster_plugin.get_resource_requirements("invalid")
 
     def test_emit_lineage_event_not_implemented(
         self, dagster_plugin: DagsterOrchestratorPlugin
