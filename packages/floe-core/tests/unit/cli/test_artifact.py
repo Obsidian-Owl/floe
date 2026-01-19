@@ -867,3 +867,283 @@ artifacts:
         assert output_data["size"] == mock_manifest.size
         assert output_data["product_name"] == "test-product"
         assert output_data["signature_status"] == "unsigned"
+
+
+class TestArtifactListParser:
+    """Tests for artifact list CLI argument parser.
+
+    Task: T039
+    Requirements: FR-029
+    """
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_parser_accepts_filter(self) -> None:
+        """Test that --filter is optional."""
+        from floe_core.cli.artifact import create_list_parser
+
+        parser = create_list_parser()
+        args = parser.parse_args(["--filter", "v1.*"])
+
+        assert args.filter == "v1.*"
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_parser_accepts_all_args(self) -> None:
+        """Test that parser accepts all expected arguments."""
+        from floe_core.cli.artifact import create_list_parser
+
+        parser = create_list_parser()
+        args = parser.parse_args(
+            [
+                "--filter",
+                "v1.*",
+                "--manifest",
+                "manifest.yaml",
+                "--json",
+                "--verbose",
+                "--quiet",
+            ]
+        )
+
+        assert args.filter == "v1.*"
+        assert args.manifest == Path("manifest.yaml")
+        assert args.json_output is True
+        assert args.verbose is True
+        assert args.quiet is True
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_parser_default_values(self) -> None:
+        """Test that defaults are set correctly."""
+        from floe_core.cli.artifact import create_list_parser
+
+        parser = create_list_parser()
+        args = parser.parse_args([])
+
+        assert args.filter is None
+        assert args.manifest == Path("manifest.yaml")
+        assert args.json_output is False
+        assert args.verbose is False
+        assert args.quiet is False
+
+
+class TestArtifactListCommand:
+    """Tests for artifact list command execution.
+
+    Task: T039
+    Requirements: FR-029
+    """
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_success_returns_zero(self, tmp_path: Path) -> None:
+        """Test successful list returns exit code 0."""
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import run_list
+        from floe_core.schemas.oci import ArtifactTag
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        # Create mock tags
+        mock_tags = [
+            ArtifactTag(
+                name="v1.0.0",
+                digest="sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+                created_at=datetime(2026, 1, 19, 10, 0, 0, tzinfo=timezone.utc),
+                size=12345,
+            ),
+            ArtifactTag(
+                name="v1.1.0",
+                digest="sha256:def456789012345678901234567890123456789012345678901234567890abcd",
+                created_at=datetime(2026, 1, 18, 10, 0, 0, tzinfo=timezone.utc),
+                size=11000,
+            ),
+        ]
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_tags
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 0
+        mock_client.list.assert_called_once_with(filter_pattern=None)
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_with_filter(self, tmp_path: Path) -> None:
+        """Test list with filter pattern."""
+        from floe_core.cli.artifact import run_list
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter="v1.*",
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.return_value = []
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 0
+        mock_client.list.assert_called_once_with(filter_pattern="v1.*")
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_authentication_error_returns_two(self, tmp_path: Path) -> None:
+        """Test authentication error returns exit code 2."""
+        from floe_core.cli.artifact import run_list
+        from floe_core.oci.errors import AuthenticationError
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.side_effect = AuthenticationError(
+                "harbor.example.com", "Invalid credentials"
+            )
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 2
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_general_error_returns_one(self, tmp_path: Path) -> None:
+        """Test general error returns exit code 1."""
+        from floe_core.cli.artifact import run_list
+        from floe_core.oci.errors import OCIError
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=False,
+            verbose=False,
+            quiet=True,
+        )
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.side_effect = OCIError("Network failure")
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 1
+
+    @pytest.mark.requirement("8A-FR-029")
+    def test_list_json_output(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test list --json outputs valid JSON array."""
+        import json
+        from datetime import datetime, timezone
+
+        from floe_core.cli.artifact import run_list
+        from floe_core.schemas.oci import ArtifactTag
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+artifacts:
+  registry:
+    uri: "oci://harbor.example.com/floe"
+    auth:
+      type: aws-irsa
+""")
+
+        import argparse
+
+        args = argparse.Namespace(
+            filter=None,
+            manifest=manifest_path,
+            json_output=True,
+            verbose=False,
+            quiet=True,
+        )
+
+        mock_tags = [
+            ArtifactTag(
+                name="v1.0.0",
+                digest="sha256:abc123def456789012345678901234567890123456789012345678901234abcd",
+                created_at=datetime(2026, 1, 19, 10, 0, 0, tzinfo=timezone.utc),
+                size=12345,
+            ),
+        ]
+
+        with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
+            mock_client = MagicMock()
+            mock_client.list.return_value = mock_tags
+            mock_from_manifest.return_value = mock_client
+
+            exit_code = run_list(args)
+
+        assert exit_code == 0
+
+        # Verify JSON output is valid
+        captured = capsys.readouterr()
+        output_data = json.loads(captured.out)
+
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
+        assert output_data[0]["name"] == "v1.0.0"
+        expected_digest = "sha256:abc123def456789012345678901234567890123456789012345678901234abcd"
+        assert output_data[0]["digest"] == expected_digest
+        assert output_data[0]["size"] == 12345

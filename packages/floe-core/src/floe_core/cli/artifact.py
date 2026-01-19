@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from typing import NoReturn
 
 logger = structlog.get_logger(__name__)
@@ -603,6 +604,208 @@ def run_inspect(args: argparse.Namespace) -> int:
         if not args.quiet:
             print(f"Error: Unexpected error - {e}", file=sys.stderr)
         log.exception("inspect_unexpected_error", error=str(e))
+        return EXIT_GENERAL_ERROR
+
+
+def create_list_parser() -> argparse.ArgumentParser:
+    """Create argument parser for artifact list command.
+
+    Returns:
+        Configured ArgumentParser for the list command.
+
+    Example:
+        >>> parser = create_list_parser()
+        >>> args = parser.parse_args(["--filter", "v1.*"])
+        >>> args.filter
+        'v1.*'
+    """
+    parser = argparse.ArgumentParser(
+        prog="floe artifact list",
+        description="List available artifacts in OCI registry",
+        epilog="Exit codes: 0=success, 1=error, 2=auth error",
+    )
+
+    parser.add_argument(
+        "--filter",
+        type=str,
+        default=None,
+        help="Glob pattern to filter tags (e.g., v1.*, latest-*)",
+        metavar="PATTERN",
+    )
+
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path("manifest.yaml"),
+        help="Path to manifest.yaml with registry config (default: manifest.yaml)",
+        metavar="PATH",
+    )
+
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output as JSON instead of table format",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose output",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress non-error output (only show result)",
+    )
+
+    return parser
+
+
+def _format_date(dt: datetime) -> str:
+    """Format datetime to date string.
+
+    Args:
+        dt: Datetime to format.
+
+    Returns:
+        Formatted date string like "2026-01-19".
+    """
+    return dt.strftime("%Y-%m-%d")
+
+
+def _truncate_digest(digest: str, length: int = 15) -> str:
+    """Truncate digest for display.
+
+    Args:
+        digest: Full digest string.
+        length: Maximum length (default 15).
+
+    Returns:
+        Truncated digest with "..." suffix.
+    """
+    if len(digest) <= length:
+        return digest
+    return digest[:length] + "..."
+
+
+def run_list(args: argparse.Namespace) -> int:
+    """Execute the artifact list command.
+
+    Lists available artifacts in the OCI registry configured in manifest.yaml.
+
+    Args:
+        args: Parsed command-line arguments with:
+            - filter: Optional glob pattern to filter tags
+            - manifest: Path to manifest.yaml
+            - json_output: Output as JSON
+            - verbose: Enable verbose output
+            - quiet: Suppress non-error output
+
+    Returns:
+        Exit code: 0=success, 1=error, 2=auth error.
+
+    Example:
+        >>> args = create_list_parser().parse_args(["--filter", "v1.*"])
+        >>> exit_code = run_list(args)
+    """
+    import json
+
+    # Late imports to avoid circular dependencies
+    from floe_core.oci.client import OCIClient
+    from floe_core.oci.errors import (
+        AuthenticationError,
+        CircuitBreakerOpenError,
+        OCIError,
+    )
+
+    log = logger.bind(
+        filter_pattern=args.filter,
+        manifest_path=str(args.manifest),
+    )
+
+    if not args.quiet:
+        log.info("list_started")
+
+    try:
+        # Create OCI client from manifest
+        client = OCIClient.from_manifest(args.manifest)
+
+        if args.verbose and not args.quiet:
+            log.info(
+                "client_initialized",
+                registry=client.registry_uri,
+            )
+
+        # List artifacts
+        tags = client.list(filter_pattern=args.filter)
+
+        # Format output
+        if args.json_output:
+            # JSON output mode
+            output_data = [
+                {
+                    "name": tag.name,
+                    "digest": tag.digest,
+                    "size": tag.size,
+                    "size_human": _format_size(tag.size),
+                    "created_at": tag.created_at.isoformat(),
+                }
+                for tag in tags
+            ]
+            print(json.dumps(output_data, indent=2))
+        else:
+            # Table output mode
+            if not tags:
+                print("No artifacts found")
+            else:
+                # Print header
+                print(f"{'TAG':<15} {'DIGEST':<20} {'SIZE':<10} {'CREATED':<12}")
+                print("-" * 60)
+
+                # Print rows
+                for tag in tags:
+                    tag_name = tag.name[:15] if len(tag.name) <= 15 else tag.name[:12] + "..."
+                    digest_short = _truncate_digest(tag.digest, 20)
+                    size_human = _format_size(tag.size)
+                    created_date = _format_date(tag.created_at)
+
+                    print(f"{tag_name:<15} {digest_short:<20} {size_human:<10} {created_date:<12}")
+
+        if not args.quiet:
+            log.info(
+                "list_completed",
+                tag_count=len(tags),
+            )
+
+        return EXIT_SUCCESS
+
+    except AuthenticationError as e:
+        if not args.quiet:
+            print(f"Error: Authentication failed - {e}", file=sys.stderr)
+        log.error("list_auth_failed", error=str(e))
+        return EXIT_AUTH_ERROR
+
+    except CircuitBreakerOpenError as e:
+        if not args.quiet:
+            print(f"Error: Registry unavailable - {e}", file=sys.stderr)
+            print("Hint: Wait for circuit breaker to reset and retry", file=sys.stderr)
+        log.error("list_circuit_breaker_open", error=str(e))
+        return EXIT_CIRCUIT_BREAKER_ERROR
+
+    except OCIError as e:
+        if not args.quiet:
+            print(f"Error: List failed - {e}", file=sys.stderr)
+        log.error("list_failed", error=str(e))
+        return EXIT_GENERAL_ERROR
+
+    except Exception as e:
+        if not args.quiet:
+            print(f"Error: Unexpected error - {e}", file=sys.stderr)
+        log.exception("list_unexpected_error", error=str(e))
         return EXIT_GENERAL_ERROR
 
 
