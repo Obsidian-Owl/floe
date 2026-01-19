@@ -1,0 +1,536 @@
+"""OCI Client for floe CompiledArtifacts distribution.
+
+This module provides the main OCIClient class for pushing, pulling, inspecting,
+and listing floe CompiledArtifacts to/from OCI registries.
+
+The client uses the ORAS Python SDK for registry operations, integrates with
+SecretsPlugin (Epic 7A) for authentication, and includes resilience patterns
+(retry, circuit breaker), local caching, and OpenTelemetry observability.
+
+Key Features:
+    - Push CompiledArtifacts to OCI registries
+    - Pull and deserialize artifacts back to CompiledArtifacts
+    - Inspect artifact metadata without downloading content
+    - List artifacts with tag filtering
+    - Immutability enforcement for semver tags
+    - Local caching with TTL and LRU eviction
+    - Retry with exponential backoff
+    - Circuit breaker for registry availability
+    - OpenTelemetry metrics and tracing
+
+Example:
+    >>> from floe_core.oci import OCIClient
+    >>> from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    >>>
+    >>> # Create client from manifest config
+    >>> client = OCIClient.from_manifest("manifest.yaml")
+    >>>
+    >>> # Push artifact
+    >>> artifacts = CompiledArtifacts.from_json_file("target/compiled_artifacts.json")
+    >>> digest = client.push(artifacts, tag="v1.0.0")
+    >>>
+    >>> # Pull artifact
+    >>> artifacts = client.pull(tag="v1.0.0")
+    >>>
+    >>> # Inspect metadata
+    >>> manifest = client.inspect(tag="v1.0.0")
+    >>> print(f"Size: {manifest.size} bytes")
+    >>>
+    >>> # List available tags
+    >>> tags = client.list(filter="v1.*")
+    >>> for tag in tags:
+    ...     print(f"{tag.name}: {tag.digest}")
+
+See Also:
+    - specs/08a-oci-client/spec.md: Feature specification
+    - specs/08a-oci-client/research.md: Technology research
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import structlog
+import yaml
+
+from floe_core.oci.auth import AuthProvider, create_auth_provider
+from floe_core.oci.cache import CacheManager
+from floe_core.oci.errors import (
+    ArtifactNotFoundError,
+    ImmutabilityViolationError,
+    OCIError,
+)
+from floe_core.oci.metrics import OCIMetrics, get_oci_metrics
+from floe_core.oci.resilience import CircuitBreaker, RetryPolicy
+from floe_core.schemas.oci import (
+    ArtifactManifest,
+    ArtifactTag,
+    RegistryConfig,
+)
+
+if TYPE_CHECKING:
+    from floe_core.plugins.secrets import SecretsPlugin
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+logger = structlog.get_logger(__name__)
+
+
+# Semver pattern for immutability enforcement
+SEMVER_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$")
+"""Pattern matching semantic versioning tags (e.g., v1.0.0, 1.2.3-alpha)."""
+
+# Mutable tag patterns that are allowed to be overwritten
+MUTABLE_TAG_PATTERNS = [
+    re.compile(r"^latest(-.*)?$"),  # latest, latest-dev, latest-staging
+    re.compile(r"^dev(-.*)?$"),  # dev, dev-branch
+    re.compile(r"^snapshot(-.*)?$"),  # snapshot, snapshot-123
+]
+"""Patterns for mutable tags that can be overwritten."""
+
+
+class OCIClient:
+    """OCI client for floe CompiledArtifacts distribution.
+
+    Provides push, pull, inspect, and list operations for OCI-compliant
+    registries. Integrates with SecretsPlugin for authentication, includes
+    resilience patterns, and supports local caching.
+
+    The client is designed to be created via the factory methods:
+    - `from_registry_config()`: Create from RegistryConfig schema
+    - `from_manifest()`: Create from manifest.yaml file path
+
+    Attributes:
+        registry_uri: The OCI registry URI (e.g., oci://harbor.example.com/namespace)
+        config: The RegistryConfig containing all settings
+
+    Example:
+        >>> client = OCIClient.from_manifest("manifest.yaml")
+        >>> artifacts = client.pull(tag="v1.0.0")
+    """
+
+    def __init__(
+        self,
+        registry_config: RegistryConfig,
+        *,
+        auth_provider: AuthProvider | None = None,
+        cache_manager: CacheManager | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        retry_policy: RetryPolicy | None = None,
+        metrics: OCIMetrics | None = None,
+        secrets_plugin: SecretsPlugin | None = None,
+    ) -> None:
+        """Initialize OCIClient with dependency injection.
+
+        Args:
+            registry_config: Registry configuration from manifest.yaml.
+            auth_provider: Optional pre-configured auth provider.
+                If None, created from registry_config.auth and secrets_plugin.
+            cache_manager: Optional pre-configured cache manager.
+                If None, created from registry_config.cache.
+            circuit_breaker: Optional pre-configured circuit breaker.
+                If None, created from registry_config.resilience.circuit_breaker.
+            retry_policy: Optional pre-configured retry policy.
+                If None, created from registry_config.resilience.retry.
+            metrics: Optional pre-configured metrics collector.
+                If None, uses module-level singleton.
+            secrets_plugin: Optional SecretsPlugin for credential resolution.
+                Required if auth_provider is None and auth type is basic/token.
+        """
+        self._config = registry_config
+        self._secrets_plugin = secrets_plugin
+
+        # Dependency injection with lazy defaults
+        self._auth_provider = auth_provider
+        self._cache_manager = cache_manager
+        self._circuit_breaker = circuit_breaker
+        self._retry_policy = retry_policy
+        self._metrics = metrics
+
+        # Parse registry URI for hostname extraction
+        self._registry_host = self._extract_registry_host(registry_config.uri)
+
+        logger.info(
+            "oci_client_initialized",
+            registry=self._registry_host,
+            auth_type=registry_config.auth.type.value,
+            cache_enabled=registry_config.cache.enabled,
+        )
+
+    @property
+    def registry_uri(self) -> str:
+        """Return the registry URI."""
+        return self._config.uri
+
+    @property
+    def config(self) -> RegistryConfig:
+        """Return the registry configuration."""
+        return self._config
+
+    @property
+    def auth_provider(self) -> AuthProvider:
+        """Get or create the authentication provider."""
+        if self._auth_provider is None:
+            self._auth_provider = create_auth_provider(
+                registry_uri=self._config.uri,
+                auth_config=self._config.auth,
+                secrets_plugin=self._secrets_plugin,
+            )
+        return self._auth_provider
+
+    @property
+    def cache_manager(self) -> CacheManager | None:
+        """Get or create the cache manager."""
+        if self._cache_manager is None and self._config.cache.enabled:
+            self._cache_manager = CacheManager(config=self._config.cache)
+        return self._cache_manager
+
+    @property
+    def circuit_breaker(self) -> CircuitBreaker | None:
+        """Get or create the circuit breaker."""
+        if self._circuit_breaker is None and self._config.resilience.circuit_breaker.enabled:
+            self._circuit_breaker = CircuitBreaker(
+                registry_uri=self._config.uri,
+                config=self._config.resilience.circuit_breaker,
+            )
+        return self._circuit_breaker
+
+    @property
+    def retry_policy(self) -> RetryPolicy:
+        """Get or create the retry policy."""
+        if self._retry_policy is None:
+            self._retry_policy = RetryPolicy(
+                config=self._config.resilience.retry,
+            )
+        return self._retry_policy
+
+    @property
+    def metrics(self) -> OCIMetrics:
+        """Get the metrics collector."""
+        if self._metrics is None:
+            self._metrics = get_oci_metrics()
+        return self._metrics
+
+    @classmethod
+    def from_registry_config(
+        cls,
+        config: RegistryConfig,
+        *,
+        secrets_plugin: SecretsPlugin | None = None,
+    ) -> OCIClient:
+        """Create OCIClient from RegistryConfig.
+
+        Args:
+            config: Registry configuration schema.
+            secrets_plugin: Optional SecretsPlugin for credential resolution.
+
+        Returns:
+            Configured OCIClient instance.
+
+        Example:
+            >>> config = RegistryConfig(
+            ...     uri="oci://harbor.example.com/floe",
+            ...     auth=RegistryAuth(type=AuthType.AWS_IRSA),
+            ... )
+            >>> client = OCIClient.from_registry_config(config)
+        """
+        return cls(config, secrets_plugin=secrets_plugin)
+
+    @classmethod
+    def from_manifest(
+        cls,
+        manifest_path: str | Path,
+        *,
+        secrets_plugin: SecretsPlugin | None = None,
+    ) -> OCIClient:
+        """Create OCIClient from manifest.yaml file.
+
+        Reads the `artifacts.registry` section from the manifest file and
+        creates a configured client.
+
+        Args:
+            manifest_path: Path to manifest.yaml file.
+            secrets_plugin: Optional SecretsPlugin for credential resolution.
+
+        Returns:
+            Configured OCIClient instance.
+
+        Raises:
+            OCIError: If manifest file cannot be read or registry config is missing.
+
+        Example:
+            >>> client = OCIClient.from_manifest("manifest.yaml")
+        """
+        path = Path(manifest_path)
+        if not path.exists():
+            raise OCIError(f"Manifest file not found: {path}")
+
+        try:
+            with path.open() as f:
+                manifest_data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise OCIError(f"Failed to parse manifest YAML: {e}") from e
+
+        if manifest_data is None:
+            raise OCIError(f"Empty manifest file: {path}")
+
+        # Extract artifacts.registry section
+        artifacts_config = manifest_data.get("artifacts", {})
+        registry_config_data = artifacts_config.get("registry")
+
+        if registry_config_data is None:
+            raise OCIError(
+                f"Missing 'artifacts.registry' section in manifest: {path}"
+            )
+
+        # Validate and create RegistryConfig
+        try:
+            config = RegistryConfig.model_validate(registry_config_data)
+        except Exception as e:
+            raise OCIError(f"Invalid registry configuration: {e}") from e
+
+        return cls.from_registry_config(config, secrets_plugin=secrets_plugin)
+
+    def push(
+        self,
+        artifacts: CompiledArtifacts,
+        tag: str,
+        *,
+        annotations: dict[str, str] | None = None,
+    ) -> str:
+        """Push CompiledArtifacts to the registry.
+
+        Serializes the artifacts to JSON and uploads to the registry with
+        the specified tag. Enforces immutability for semver tags.
+
+        Args:
+            artifacts: CompiledArtifacts to push.
+            tag: Tag for the artifact (e.g., "v1.0.0", "latest-dev").
+            annotations: Optional additional annotations to include.
+
+        Returns:
+            The artifact digest (sha256:...).
+
+        Raises:
+            ImmutabilityViolationError: If pushing to an existing semver tag.
+            AuthenticationError: If authentication fails.
+            RegistryUnavailableError: If registry is unavailable after retries.
+
+        Example:
+            >>> artifacts = CompiledArtifacts.from_json_file("compiled.json")
+            >>> digest = client.push(artifacts, tag="v1.0.0")
+            >>> print(f"Pushed with digest: {digest}")
+        """
+        # Placeholder - implementation in T017
+        raise NotImplementedError("push() not yet implemented - see T017")
+
+    def pull(
+        self,
+        tag: str,
+        *,
+        verify_digest: bool = True,
+    ) -> CompiledArtifacts:
+        """Pull CompiledArtifacts from the registry.
+
+        Downloads the artifact and deserializes to CompiledArtifacts.
+        Uses local cache for immutable tags.
+
+        Args:
+            tag: Tag to pull (e.g., "v1.0.0", "latest-dev").
+            verify_digest: Whether to verify digest after download.
+
+        Returns:
+            Deserialized CompiledArtifacts.
+
+        Raises:
+            ArtifactNotFoundError: If tag does not exist.
+            AuthenticationError: If authentication fails.
+            RegistryUnavailableError: If registry is unavailable after retries.
+
+        Example:
+            >>> artifacts = client.pull(tag="v1.0.0")
+            >>> print(f"Product: {artifacts.product_identity.name}")
+        """
+        # Placeholder - implementation in T024
+        raise NotImplementedError("pull() not yet implemented - see T024")
+
+    def inspect(self, tag: str) -> ArtifactManifest:
+        """Inspect artifact metadata without downloading content.
+
+        Retrieves the manifest for the specified tag including digest,
+        size, creation time, layers, and signature status.
+
+        Args:
+            tag: Tag to inspect (e.g., "v1.0.0").
+
+        Returns:
+            ArtifactManifest with metadata.
+
+        Raises:
+            ArtifactNotFoundError: If tag does not exist.
+            AuthenticationError: If authentication fails.
+
+        Example:
+            >>> manifest = client.inspect(tag="v1.0.0")
+            >>> print(f"Digest: {manifest.digest}")
+            >>> print(f"Size: {manifest.size} bytes")
+        """
+        # Placeholder - implementation in T028
+        raise NotImplementedError("inspect() not yet implemented - see T028")
+
+    def list(
+        self,
+        *,
+        filter_pattern: str | None = None,
+    ) -> list[ArtifactTag]:
+        """List artifacts and tags in the registry.
+
+        Returns a list of available tags with their digests and metadata.
+        Optionally filters by pattern (glob-style).
+
+        Args:
+            filter_pattern: Optional glob pattern to filter tags (e.g., "v1.*").
+
+        Returns:
+            List of ArtifactTag objects.
+
+        Raises:
+            AuthenticationError: If authentication fails.
+            RegistryUnavailableError: If registry is unavailable.
+
+        Example:
+            >>> tags = client.list(filter_pattern="v1.*")
+            >>> for tag in tags:
+            ...     print(f"{tag.name}: {tag.digest}")
+        """
+        # Placeholder - implementation in T033
+        raise NotImplementedError("list() not yet implemented - see T033")
+
+    def check_registry_capabilities(self) -> dict[str, Any]:
+        """Check registry capabilities and configuration.
+
+        Validates the registry is reachable and checks for:
+        - OCI v1.1 artifact support
+        - Immutability support (if available)
+        - Available API endpoints
+
+        Returns:
+            Dictionary with capability information.
+
+        Raises:
+            RegistryUnavailableError: If registry is unreachable.
+            AuthenticationError: If authentication fails.
+
+        Example:
+            >>> caps = client.check_registry_capabilities()
+            >>> print(f"OCI v1.1: {caps['oci_v1_1']}")
+        """
+        # Placeholder - implementation in T012.1
+        raise NotImplementedError(
+            "check_registry_capabilities() not yet implemented - see T012.1"
+        )
+
+    def is_tag_immutable(self, tag: str) -> bool:
+        """Check if a tag is considered immutable.
+
+        Semver tags (v1.0.0, 1.2.3-alpha) are immutable and cannot be
+        overwritten once pushed.
+
+        Mutable patterns (latest-*, dev-*, snapshot-*) can be overwritten.
+
+        Args:
+            tag: Tag to check.
+
+        Returns:
+            True if tag is immutable (semver), False otherwise.
+
+        Example:
+            >>> client.is_tag_immutable("v1.0.0")
+            True
+            >>> client.is_tag_immutable("latest-dev")
+            False
+        """
+        # Check if it matches semver pattern
+        if SEMVER_PATTERN.match(tag):
+            return True
+
+        # Check if it matches any mutable pattern
+        for pattern in MUTABLE_TAG_PATTERNS:
+            if pattern.match(tag):
+                return False
+
+        # Default: treat as immutable (safe default)
+        return True
+
+    def tag_exists(self, tag: str) -> bool:
+        """Check if a tag exists in the registry.
+
+        Args:
+            tag: Tag to check.
+
+        Returns:
+            True if tag exists, False otherwise.
+
+        Raises:
+            AuthenticationError: If authentication fails.
+            RegistryUnavailableError: If registry is unavailable.
+        """
+        try:
+            self.inspect(tag)
+            return True
+        except ArtifactNotFoundError:
+            return False
+        except NotImplementedError:
+            # For skeleton - will work when inspect is implemented
+            raise
+
+    def _extract_registry_host(self, uri: str) -> str:
+        """Extract registry hostname from OCI URI.
+
+        Args:
+            uri: OCI URI (e.g., oci://harbor.example.com/namespace/repo).
+
+        Returns:
+            Registry hostname (e.g., harbor.example.com).
+        """
+        # Remove oci:// prefix
+        if uri.startswith("oci://"):
+            uri = uri[6:]
+
+        # Extract hostname (first path component)
+        if "/" in uri:
+            return uri.split("/")[0]
+        return uri
+
+    def _check_immutability_before_push(self, tag: str) -> None:
+        """Check if push would violate immutability.
+
+        Args:
+            tag: Tag to push to.
+
+        Raises:
+            ImmutabilityViolationError: If tag is immutable and exists.
+        """
+        if self.is_tag_immutable(tag):
+            if self.tag_exists(tag):
+                raise ImmutabilityViolationError(
+                    tag=tag,
+                    registry=self._registry_host,
+                )
+
+    def close(self) -> None:
+        """Close the client and release resources.
+
+        Should be called when done with the client to release
+        any held resources (cache file handles, etc.).
+        """
+        # Currently no resources need explicit cleanup
+        logger.debug("oci_client_closed", registry=self._registry_host)
+
+
+__all__ = [
+    "MUTABLE_TAG_PATTERNS",
+    "OCIClient",
+    "SEMVER_PATTERN",
+]

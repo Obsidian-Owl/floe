@@ -63,6 +63,13 @@ from floe_core.oci.auth import (
 # Cache manager (T010)
 from floe_core.oci.cache import CacheManager
 
+# Client (T012)
+from floe_core.oci.client import (
+    MUTABLE_TAG_PATTERNS,
+    SEMVER_PATTERN,
+    OCIClient,
+)
+
 # Error hierarchy (T002)
 from floe_core.oci.errors import (
     ArtifactNotFoundError,
@@ -94,7 +101,6 @@ from floe_core.oci.resilience import (
 )
 
 # NOTE: Additional exports will be populated as modules are implemented:
-# - T012: client.py (OCIClient)
 # - T016: manifest.py (ArtifactManifest builder)
 
 __all__: list[str] = [
@@ -130,4 +136,8 @@ __all__: list[str] = [
     "CircuitBreakerStateValue",
     "get_oci_metrics",
     "set_oci_metrics",
+    # Client (T012)
+    "OCIClient",
+    "SEMVER_PATTERN",
+    "MUTABLE_TAG_PATTERNS",
 ]
