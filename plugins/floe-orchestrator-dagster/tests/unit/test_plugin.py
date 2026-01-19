@@ -229,6 +229,30 @@ class TestDagsterOrchestratorPluginCreateAssets:
         dim_asset = next(a for a in assets if a.key.path[-1] == "dim_customers")
         assert AssetKey(["stg_customers"]) in dim_asset.dependency_keys
 
+    def test_create_assets_includes_transform_metadata(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        sample_transform_config: Any,
+    ) -> None:
+        """Test asset includes transform metadata.
+
+        Validates FR-008: System MUST include transform metadata (tags,
+        compute target, schema) in asset metadata.
+        """
+        assets = dagster_plugin.create_assets_from_transforms([sample_transform_config])
+        assert len(assets) == 1
+
+        asset = assets[0]
+        # Access metadata from the asset's spec
+        metadata = asset.specs_by_key[asset.key].metadata
+
+        # Verify all transform metadata is present
+        assert metadata["compute"] == "duckdb"
+        assert metadata["schema"] == "staging"
+        assert metadata["materialization"] == "view"
+        assert metadata["tags"] == ["daily", "core"]
+        assert metadata["path"] == "models/staging/stg_customers.sql"
+
 
 class TestDagsterOrchestratorPluginSkeletonMethods:
     """Test skeleton methods raise NotImplementedError.
