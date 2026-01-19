@@ -127,34 +127,49 @@ class TestPodSecurityStandardsCompliance:
         assert pod_context["fsGroup"] == 1000
 
 
-class TestPodSecurityStandardsRejection:
-    """Tests for detecting non-compliant security configurations."""
+class TestPodSecurityNonCompliantOutput:
+    """Tests validating output values when non-compliant settings are requested.
+
+    Note:
+        These tests verify that PodSecurityConfig correctly produces the requested
+        (non-compliant) values in its output. They do NOT test actual K8s PSS
+        admission rejection - that requires E2E tests with a real cluster.
+
+        The tests ensure the config model correctly reflects user settings, even
+        when those settings would violate PSS restricted level.
+    """
 
     @pytest.mark.requirement("FR-040")
-    def test_detect_run_as_root_violation(self) -> None:
-        """Test detection of runAsNonRoot: false violation."""
+    def test_config_produces_run_as_non_root_false_when_disabled(self) -> None:
+        """Test config produces runAsNonRoot: false when run_as_non_root=False.
+
+        Note: This output would fail PSS restricted admission in a real cluster.
+        """
         config = PodSecurityConfig(run_as_non_root=False)
         pod_context = config.to_pod_security_context()
 
-        # This would fail PSS restricted admission
         assert pod_context["runAsNonRoot"] is False
 
     @pytest.mark.requirement("FR-041")
-    def test_detect_privilege_escalation_violation(self) -> None:
-        """Test detection of allowPrivilegeEscalation: true violation."""
+    def test_config_produces_privilege_escalation_true_when_enabled(self) -> None:
+        """Test config produces allowPrivilegeEscalation: true when enabled.
+
+        Note: This output would fail PSS restricted admission in a real cluster.
+        """
         config = PodSecurityConfig(allow_privilege_escalation=True)
         container_context = config.to_container_security_context()
 
-        # This would fail PSS restricted admission
         assert container_context["allowPrivilegeEscalation"] is True
 
     @pytest.mark.requirement("FR-042")
-    def test_detect_unconfined_seccomp_violation(self) -> None:
-        """Test detection of Unconfined seccomp profile violation."""
+    def test_config_produces_unconfined_seccomp_when_specified(self) -> None:
+        """Test config produces Unconfined seccomp profile when specified.
+
+        Note: This output would fail PSS restricted admission in a real cluster.
+        """
         config = PodSecurityConfig(seccomp_profile_type="Unconfined")
         pod_context = config.to_pod_security_context()
 
-        # This would fail PSS restricted admission
         assert pod_context["seccompProfile"]["type"] == "Unconfined"
 
 

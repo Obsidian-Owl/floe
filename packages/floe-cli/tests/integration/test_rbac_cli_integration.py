@@ -159,8 +159,8 @@ class TestRBACValidateCommand:
                 ["rbac", "validate", "--config", str(config_path), "--manifest-dir", str(rbac_dir)],
             )
 
-            assert result.exit_code == 0
-            assert "PASSED" in result.output or "validated" in result.output.lower()
+            assert result.exit_code == 0, f"Validation failed with exit code {result.exit_code}: {result.output}"
+            assert "PASSED" in result.output, f"Expected 'PASSED' in output, got: {result.output}"
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-061")
@@ -338,9 +338,16 @@ class TestRBACGenerateWorkflow:
                 ["rbac", "generate", "--config", str(config_path), "--dry-run"],
             )
 
-            # Dry run should not fail even without floe-core/floe-rbac-k8s installed
-            # It should show what would be generated
-            assert "DRY RUN" in result.output or result.exit_code != 0
+            # Dry run should succeed and indicate dry-run mode in output
+            # If it fails, the error message should explain why
+            if result.exit_code == 0:
+                assert "DRY RUN" in result.output, f"Expected 'DRY RUN' in output, got: {result.output}"
+            else:
+                # Acceptable failure reasons (e.g., missing dependencies)
+                assert any(
+                    reason in result.output.lower()
+                    for reason in ["not installed", "missing", "error", "failed"]
+                ), f"Unexpected failure without clear error: {result.output}"
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-060")
@@ -490,5 +497,5 @@ class TestFullWorkflow:
                 ["rbac", "validate", "--config", str(config_path), "--manifest-dir", str(rbac_dir)],
             )
 
-            assert result.exit_code == 0
-            assert "validated" in result.output.lower() or "pass" in result.output.lower()
+            assert result.exit_code == 0, f"Validation failed with exit code {result.exit_code}: {result.output}"
+            assert "PASSED" in result.output, f"Expected 'PASSED' in output, got: {result.output}"
