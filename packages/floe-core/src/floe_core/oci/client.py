@@ -528,8 +528,186 @@ class OCIClient:
             >>> artifacts = client.pull(tag="v1.0.0")
             >>> print(f"Product: {artifacts.product_identity.name}")
         """
-        # Placeholder - implementation in T024
-        raise NotImplementedError("pull() not yet implemented - see T024")
+        import time
+
+        from floe_core.oci.metrics import OCIMetrics
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        log = logger.bind(
+            registry=self._registry_host,
+            tag=tag,
+        )
+
+        log.info("pull_started")
+
+        # Start timing for duration metric
+        start_time = time.monotonic()
+
+        # Span attributes for OTel tracing
+        span_attributes: dict[str, Any] = {
+            "oci.registry": self._registry_host,
+            "oci.tag": tag,
+            "oci.operation": "pull",
+        }
+
+        # Wrap entire operation in a trace span
+        with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
+            try:
+                # Check cache first for immutable tags
+                if self.cache_manager is not None and self.is_tag_immutable(tag):
+                    cache_entry = self.cache_manager.get(self._config.uri, tag)
+                    if cache_entry is not None:
+                        log.info(
+                            "pull_cache_hit",
+                            digest=cache_entry.digest,
+                        )
+                        span.set_attribute("oci.cache_hit", True)
+                        content = cache_entry.path.read_bytes()
+                        artifacts = CompiledArtifacts.model_validate_json(content)
+
+                        # Record metrics
+                        duration = time.monotonic() - start_time
+                        self.metrics.record_duration("pull", self._registry_host, duration)
+                        self.metrics.record_operation("pull", self._registry_host, success=True)
+
+                        return artifacts
+
+                span.set_attribute("oci.cache_hit", False)
+
+                # Use retry policy for network operations
+                def _pull_with_oras() -> tuple[bytes, str]:
+                    """Inner function to pull via ORAS with retry."""
+                    oras_client = self._create_oras_client()
+                    target_ref = self._build_target_ref(tag)
+
+                    # Pull to temp directory
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        try:
+                            # ORAS pull returns list of file paths
+                            pulled_files = oras_client.pull(
+                                target=target_ref,
+                                outdir=tmpdir,
+                            )
+
+                            # Find the compiled_artifacts.json file
+                            # ORAS may return full paths or just the file
+                            artifacts_path: Path | None = None
+                            tmpdir_path = Path(tmpdir)
+
+                            for pulled_file in pulled_files:
+                                file_path = Path(pulled_file)
+                                if file_path.name == "compiled_artifacts.json":
+                                    artifacts_path = file_path
+                                    break
+                                # Also check relative to tmpdir
+                                relative_path = tmpdir_path / file_path.name
+                                is_target = relative_path.name == "compiled_artifacts.json"
+                                if relative_path.exists() and is_target:
+                                    artifacts_path = relative_path
+                                    break
+
+                            # Fallback: check tmpdir for the file
+                            if artifacts_path is None:
+                                potential_path = tmpdir_path / "compiled_artifacts.json"
+                                if potential_path.exists():
+                                    artifacts_path = potential_path
+
+                            if artifacts_path is None or not artifacts_path.exists():
+                                raise OCIError(
+                                    f"Artifact pulled but compiled_artifacts.json not found. "
+                                    f"Files: {pulled_files}"
+                                )
+
+                            content = artifacts_path.read_bytes()
+
+                            # Compute digest for cache
+                            import hashlib
+
+                            digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+                            return content, digest
+
+                        except Exception as e:
+                            error_str = str(e).lower()
+                            # Detect "manifest unknown" or 404 errors
+                            if "manifest unknown" in error_str or "not found" in error_str:
+                                raise ArtifactNotFoundError(
+                                    tag=tag,
+                                    registry=self._config.uri,
+                                ) from e
+                            raise
+
+                # Apply retry policy
+                try:
+                    content, digest = self.retry_policy.wrap(_pull_with_oras)()
+                except ArtifactNotFoundError:
+                    # Don't retry 404 errors
+                    raise
+                except ConnectionError as e:
+                    raise RegistryUnavailableError(
+                        self._registry_host,
+                        f"Connection failed after retries: {e}",
+                    ) from e
+
+                # Deserialize to CompiledArtifacts
+                try:
+                    artifacts = CompiledArtifacts.model_validate_json(content)
+                except Exception as e:
+                    raise OCIError(f"Failed to deserialize artifact: {e}") from e
+
+                # Add product info to span after deserialization
+                span.set_attribute("oci.product.name", artifacts.metadata.product_name)
+                span.set_attribute("oci.product.version", artifacts.metadata.product_version)
+                span.set_attribute("oci.artifact.digest", digest)
+
+                # Store in cache for immutable tags
+                if self.cache_manager is not None and self.is_tag_immutable(tag):
+                    self.cache_manager.put(
+                        digest=digest,
+                        tag=tag,
+                        registry=self._config.uri,
+                        content=content,
+                    )
+                    log.debug("pull_cached", digest=digest)
+
+                # Record duration metric
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("pull", self._registry_host, duration)
+
+                # Record success metrics
+                self.metrics.record_operation("pull", self._registry_host, success=True)
+                self.metrics.record_artifact_size("pull", len(content))
+
+                log.info(
+                    "pull_completed",
+                    digest=digest,
+                    size=len(content),
+                    duration_ms=int(duration * 1000),
+                )
+
+                return artifacts
+
+            except ArtifactNotFoundError:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("pull", self._registry_host, duration)
+                self.metrics.record_operation("pull", self._registry_host, success=False)
+                raise
+            except AuthenticationError:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("pull", self._registry_host, duration)
+                self.metrics.record_operation("pull", self._registry_host, success=False)
+                raise
+            except RegistryUnavailableError:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("pull", self._registry_host, duration)
+                self.metrics.record_operation("pull", self._registry_host, success=False)
+                raise
+            except Exception as e:
+                duration = time.monotonic() - start_time
+                self.metrics.record_duration("pull", self._registry_host, duration)
+                self.metrics.record_operation("pull", self._registry_host, success=False)
+                log.error("pull_failed", error=str(e))
+                raise OCIError(f"Pull failed: {e}") from e
 
     def inspect(self, tag: str) -> ArtifactManifest:
         """Inspect artifact metadata without downloading content.
