@@ -408,12 +408,21 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             },
         }
 
-    def validate_connection(self) -> ValidationResult:
+    def validate_connection(
+        self,
+        dagster_url: str | None = None,
+        timeout: float = 10.0,
+    ) -> ValidationResult:
         """Test connectivity to Dagster service.
 
         Performs an HTTP health check to the Dagster GraphQL API
         to verify the orchestration service is reachable.
-        Completes within 10 seconds.
+        Completes within the specified timeout (default 10 seconds).
+
+        Args:
+            dagster_url: Optional URL to Dagster webserver. If not provided,
+                uses DAGSTER_URL environment variable or default localhost.
+            timeout: Maximum seconds to wait for connection (default 10.0).
 
         Returns:
             ValidationResult with success status and actionable error messages.
@@ -423,8 +432,84 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             >>> if result.success:
             ...     print("Connected to Dagster")
         """
-        # Placeholder - will be implemented in T024
-        raise NotImplementedError("validate_connection will be implemented in T024")
+        import os
+
+        import httpx
+
+        # Determine Dagster URL
+        url = dagster_url or os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        graphql_endpoint = f"{url.rstrip('/')}/graphql"
+
+        try:
+            # Send a simple GraphQL query to check connectivity
+            query = {"query": "{ __typename }"}
+
+            with httpx.Client(timeout=timeout) as client:
+                response = client.post(graphql_endpoint, json=query)
+
+            if response.status_code == 200:
+                logger.info(
+                    "Dagster connection validated",
+                    extra={"url": graphql_endpoint},
+                )
+                return ValidationResult(
+                    success=True,
+                    message="Successfully connected to Dagster service",
+                )
+
+            # Non-200 response
+            logger.warning(
+                "Dagster connection failed",
+                extra={
+                    "url": graphql_endpoint,
+                    "status_code": response.status_code,
+                },
+            )
+            return ValidationResult(
+                success=False,
+                message=f"Dagster service returned status {response.status_code}",
+                errors=[
+                    f"HTTP {response.status_code} from {graphql_endpoint}. "
+                    "Ensure Dagster webserver is running and accessible."
+                ],
+            )
+
+        except httpx.TimeoutException:
+            logger.warning(
+                "Dagster connection timed out",
+                extra={"url": graphql_endpoint, "timeout": timeout},
+            )
+            return ValidationResult(
+                success=False,
+                message=f"Connection to Dagster timed out after {timeout}s",
+                errors=[
+                    f"Timeout connecting to {graphql_endpoint}. "
+                    "Check network connectivity and ensure Dagster is running."
+                ],
+            )
+        except httpx.ConnectError as e:
+            logger.warning(
+                "Dagster connection failed",
+                extra={"url": graphql_endpoint, "error": str(e)},
+            )
+            return ValidationResult(
+                success=False,
+                message="Failed to connect to Dagster service",
+                errors=[
+                    f"Connection error: {e}. "
+                    f"Ensure Dagster webserver is running at {url}."
+                ],
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected error validating Dagster connection",
+                extra={"url": graphql_endpoint, "error": str(e)},
+            )
+            return ValidationResult(
+                success=False,
+                message="Unexpected error connecting to Dagster",
+                errors=[str(e)],
+            )
 
     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
         """Return K8s resource requirements for Dagster workloads.

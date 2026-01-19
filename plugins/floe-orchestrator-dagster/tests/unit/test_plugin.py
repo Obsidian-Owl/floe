@@ -314,12 +314,21 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         assert "dagster-daemon" in result
         assert "dagster-user-code" in result
 
-    def test_validate_connection_not_implemented(
+    def test_validate_connection_returns_validation_result(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Test validate_connection raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T024"):
-            dagster_plugin.validate_connection()
+        """Test validate_connection returns ValidationResult."""
+        from floe_core.plugins.orchestrator import ValidationResult
+
+        # With no Dagster running, should return failure
+        result = dagster_plugin.validate_connection(
+            dagster_url="http://localhost:9999",  # Non-existent
+            timeout=1.0,
+        )
+
+        assert isinstance(result, ValidationResult)
+        assert result.success is False
+        assert len(result.errors) > 0
 
     def test_get_resource_requirements_small(
         self, dagster_plugin: DagsterOrchestratorPlugin
