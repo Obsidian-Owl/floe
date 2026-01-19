@@ -142,7 +142,8 @@ class TestValidateManifest:
         from floe_core.rbac.generator import VALID_RBAC_KINDS, validate_manifest
 
         for kind in VALID_RBAC_KINDS:
-            api_version = "v1" if kind in ("ServiceAccount", "Namespace") else "rbac.authorization.k8s.io/v1"
+            core_kinds = ("ServiceAccount", "Namespace")
+            api_version = "v1" if kind in core_kinds else "rbac.authorization.k8s.io/v1"
             manifest: dict[str, Any] = {
                 "apiVersion": api_version,
                 "kind": kind,
