@@ -979,3 +979,324 @@ class TestOCIClientPushOTelInstrumentation:
         # Verify span status was set to ERROR
         assert len(status_set) == 1
         assert status_set[0].status_code == StatusCode.ERROR
+
+
+class TestOCIClientPullOTelInstrumentation:
+    """Tests for OpenTelemetry instrumentation in pull operations.
+
+    Task: T028
+    Requirements: FR-031, FR-032, FR-034
+    """
+
+    @pytest.mark.requirement("8A-FR-031")
+    def test_pull_creates_span_with_correct_name(
+        self,
+        tmp_path: Path,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test pull() creates a span named 'floe.oci.pull'.
+
+        FR-031: System MUST emit OpenTelemetry spans for all operations.
+        """
+        import json
+
+        from floe_core.oci.metrics import OCIMetrics
+
+        # Setup artifacts
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        )
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        (pull_dir / "compiled_artifacts.json").write_text(artifacts_json)
+
+        mock_oras = MagicMock()
+        mock_oras.pull.return_value = [str(pull_dir / "compiled_artifacts.json")]
+
+        # Track span creation
+        span_created: list[dict[str, Any]] = []
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            span_created.append({"name": name, "attributes": attributes or {}})
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        original_metrics = oci_client.metrics
+
+        with (
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.pull(tag="v1.0.0")
+
+        # Verify span was created with correct name
+        assert len(span_created) == 1
+        assert span_created[0]["name"] == OCIMetrics.SPAN_PULL
+
+    @pytest.mark.requirement("8A-FR-031")
+    def test_pull_span_includes_required_attributes(
+        self,
+        tmp_path: Path,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test pull span includes registry, tag, and operation attributes.
+
+        FR-031: Spans MUST include registry, tag, and operation type.
+        """
+        import json
+
+        # Setup artifacts
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        )
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        (pull_dir / "compiled_artifacts.json").write_text(artifacts_json)
+
+        mock_oras = MagicMock()
+        mock_oras.pull.return_value = [str(pull_dir / "compiled_artifacts.json")]
+
+        # Track span attributes
+        span_attributes: dict[str, Any] = {}
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            span_attributes.update(attributes or {})
+            mock_span = MagicMock()
+            mock_span.set_attribute = lambda k, v: span_attributes.update({k: v})
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        original_metrics = oci_client.metrics
+
+        with (
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.pull(tag="v1.0.0")
+
+        # Verify required attributes
+        assert "oci.registry" in span_attributes
+        assert span_attributes["oci.registry"] == "harbor.example.com"
+        assert "oci.tag" in span_attributes
+        assert span_attributes["oci.tag"] == "v1.0.0"
+        assert "oci.operation" in span_attributes
+        assert span_attributes["oci.operation"] == "pull"
+
+    @pytest.mark.requirement("8A-FR-034")
+    def test_pull_records_duration_metric(
+        self,
+        tmp_path: Path,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test pull() records operation duration in histogram.
+
+        FR-034: System MUST emit operation duration metrics.
+        """
+        import json
+
+        # Setup artifacts
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        )
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        (pull_dir / "compiled_artifacts.json").write_text(artifacts_json)
+
+        mock_oras = MagicMock()
+        mock_oras.pull.return_value = [str(pull_dir / "compiled_artifacts.json")]
+
+        # Track duration recording
+        duration_recorded: list[tuple[str, str, float]] = []
+
+        def mock_record_duration(
+            operation: str, registry: str, duration: float, **kwargs: Any
+        ) -> None:
+            duration_recorded.append((operation, registry, duration))
+
+        original_metrics = oci_client.metrics
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        with (
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras),
+            patch.object(original_metrics, "record_duration", side_effect=mock_record_duration),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.pull(tag="v1.0.0")
+
+        # Verify duration was recorded for pull operation
+        assert len(duration_recorded) == 1
+        operation, registry, duration = duration_recorded[0]
+        assert operation == "pull"
+        assert "harbor" in registry
+        assert duration >= 0  # Duration should be non-negative
+
+    @pytest.mark.requirement("8A-FR-032")
+    def test_pull_records_cache_hit_metric(
+        self,
+        tmp_path: Path,
+        sample_compiled_artifacts: CompiledArtifacts,
+        mock_auth_provider: MagicMock,
+    ) -> None:
+        """Test pull() records cache hit metric when artifact is cached.
+
+        FR-032: System MUST emit cache operation metrics (hit/miss).
+        """
+        import hashlib
+        import json
+
+        from floe_core.oci.cache import CacheManager
+
+        # Create cache with artifact
+        cache_config = CacheConfig(enabled=True, path=tmp_path / "cache")
+        cache_manager = CacheManager(cache_config)
+
+        # Store artifact in cache
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        ).encode()
+        digest = f"sha256:{hashlib.sha256(artifacts_json).hexdigest()}"
+        cache_manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe/artifacts",
+            content=artifacts_json,
+        )
+
+        # Create client with cache
+        registry_config = RegistryConfig(
+            uri="oci://harbor.example.com/floe/artifacts",
+            auth=RegistryAuth(type=AuthType.AWS_IRSA),
+            cache=CacheConfig(enabled=True, path=tmp_path / "cache"),
+        )
+        client = OCIClient(
+            registry_config,
+            auth_provider=mock_auth_provider,
+            cache_manager=cache_manager,
+        )
+
+        # Track cache operation recording
+        cache_ops_recorded: list[str] = []
+
+        def mock_record_cache_operation(operation: str, **_kwargs: Any) -> None:
+            cache_ops_recorded.append(operation)
+
+        original_metrics = client.metrics
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(_name: str, _attributes: dict[str, Any] | None = None) -> Any:
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        with (
+            patch.object(
+                original_metrics,
+                "record_cache_operation",
+                side_effect=mock_record_cache_operation,
+            ),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            client.pull(tag="v1.0.0")
+
+        # Verify cache hit was recorded
+        assert "hit" in cache_ops_recorded
+
+    @pytest.mark.requirement("8A-FR-032")
+    def test_pull_records_cache_miss_metric(
+        self,
+        tmp_path: Path,
+        sample_compiled_artifacts: CompiledArtifacts,
+        mock_auth_provider: MagicMock,
+    ) -> None:
+        """Test pull() records cache miss metric when artifact is not cached.
+
+        FR-032: System MUST emit cache operation metrics (hit/miss).
+        """
+        import json
+
+        from floe_core.oci.cache import CacheManager
+
+        # Setup artifacts for ORAS pull
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        )
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        (pull_dir / "compiled_artifacts.json").write_text(artifacts_json)
+
+        mock_oras = MagicMock()
+        mock_oras.pull.return_value = [str(pull_dir / "compiled_artifacts.json")]
+
+        # Create cache (empty - will be a miss)
+        cache_config = CacheConfig(enabled=True, path=tmp_path / "cache")
+        cache_manager = CacheManager(cache_config)
+
+        # Create client with cache enabled
+        registry_config = RegistryConfig(
+            uri="oci://harbor.example.com/floe/artifacts",
+            auth=RegistryAuth(type=AuthType.AWS_IRSA),
+            cache=CacheConfig(enabled=True, path=tmp_path / "cache"),
+        )
+        client = OCIClient(
+            registry_config,
+            auth_provider=mock_auth_provider,
+            cache_manager=cache_manager,
+        )
+
+        # Track cache operation recording
+        cache_ops_recorded: list[str] = []
+
+        def mock_record_cache_operation(operation: str, **_kwargs: Any) -> None:
+            cache_ops_recorded.append(operation)
+
+        original_metrics = client.metrics
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(_name: str, _attributes: dict[str, Any] | None = None) -> Any:
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        with (
+            patch.object(client, "_create_oras_client", return_value=mock_oras),
+            patch.object(
+                original_metrics,
+                "record_cache_operation",
+                side_effect=mock_record_cache_operation,
+            ),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            client.pull(tag="v1.0.0")
+
+        # Verify cache miss was recorded
+        assert "miss" in cache_ops_recorded

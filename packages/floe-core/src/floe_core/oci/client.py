@@ -562,6 +562,7 @@ class OCIClient:
                             digest=cache_entry.digest,
                         )
                         span.set_attribute("oci.cache_hit", True)
+                        self.metrics.record_cache_operation("hit")
                         content = cache_entry.path.read_bytes()
                         artifacts = CompiledArtifacts.model_validate_json(content)
 
@@ -571,8 +572,12 @@ class OCIClient:
                         self.metrics.record_operation("pull", self._registry_host, success=True)
 
                         return artifacts
-
-                span.set_attribute("oci.cache_hit", False)
+                    else:
+                        # Cache miss - only record if cache was checked
+                        span.set_attribute("oci.cache_hit", False)
+                        self.metrics.record_cache_operation("miss")
+                else:
+                    span.set_attribute("oci.cache_hit", False)
 
                 # Use retry policy for network operations
                 def _pull_with_oras() -> tuple[bytes, str]:
