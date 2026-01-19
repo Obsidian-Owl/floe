@@ -90,3 +90,8 @@ addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
 ]
+
+[dependency-groups]
+dev = [
+    "oras>=0.2.38",
+]
