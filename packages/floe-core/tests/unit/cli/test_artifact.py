@@ -1653,9 +1653,7 @@ artifacts:
         ):
             mock_from_json.return_value = mock_artifacts
             mock_client = MagicMock()
-            mock_client.push.side_effect = CircuitBreakerOpenError(
-                "harbor.example.com", 60
-            )
+            mock_client.push.side_effect = CircuitBreakerOpenError("harbor.example.com", 60)
             mock_from_manifest.return_value = mock_client
 
             exit_code = run_push(args)
@@ -1692,9 +1690,7 @@ artifacts:
 
         with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
             mock_client = MagicMock()
-            mock_client.pull.side_effect = CircuitBreakerOpenError(
-                "harbor.example.com", 60
-            )
+            mock_client.pull.side_effect = CircuitBreakerOpenError("harbor.example.com", 60)
             mock_from_manifest.return_value = mock_client
 
             exit_code = run_pull(args)
@@ -1728,9 +1724,7 @@ artifacts:
 
         with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
             mock_client = MagicMock()
-            mock_client.inspect.side_effect = CircuitBreakerOpenError(
-                "harbor.example.com", 60
-            )
+            mock_client.inspect.side_effect = CircuitBreakerOpenError("harbor.example.com", 60)
             mock_from_manifest.return_value = mock_client
 
             exit_code = run_inspect(args)
@@ -1764,9 +1758,7 @@ artifacts:
 
         with patch("floe_core.oci.client.OCIClient.from_manifest") as mock_from_manifest:
             mock_client = MagicMock()
-            mock_client.list.side_effect = CircuitBreakerOpenError(
-                "harbor.example.com", 60
-            )
+            mock_client.list.side_effect = CircuitBreakerOpenError("harbor.example.com", 60)
             mock_from_manifest.return_value = mock_client
 
             exit_code = run_list(args)
@@ -1916,9 +1908,7 @@ class TestVerboseMode:
     """Tests for verbose mode output in CLI commands."""
 
     @pytest.mark.requirement("8A-FR-026")
-    def test_push_verbose_mode(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_push_verbose_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Test push command verbose mode outputs additional info."""
         from floe_core.cli.artifact import run_push
 
@@ -1967,9 +1957,7 @@ artifacts:
         assert "Pushed artifact with digest: sha256:abc123" in captured.out
 
     @pytest.mark.requirement("8A-FR-027")
-    def test_pull_verbose_mode(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_pull_verbose_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Test pull command verbose mode outputs additional info."""
         from floe_core.cli.artifact import run_pull
 
