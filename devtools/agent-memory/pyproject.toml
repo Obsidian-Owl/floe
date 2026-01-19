@@ -28,6 +28,7 @@ dependencies = [
     "cogwit-sdk>=0.1.0",  # Cognee Cloud SDK for memify support
     # cognee-mcp is deployed as a Docker container, not a Python dependency
     # See: docker run -p 8000:8000 cognee/cognee-mcp:main
+    "aiohttp>=3.13.3",  # Override transitive dep - fixes 8 CVEs (GHSA-6mq8, etc.)
     "httpx>=0.27.0",
     "structlog>=24.0",
     "pydantic>=2.0",
