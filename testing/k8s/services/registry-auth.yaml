@@ -1,0 +1,131 @@
+# OCI Registry with basic authentication for integration testing
+# Deploys Docker distribution registry (registry:2) with htpasswd authentication.
+# Used for OCI client basic auth integration tests (Epic 8A - T060).
+#
+# NOTE: Named 'oci-registry-auth' (not 'registry-auth') to avoid conflict with
+# Kubernetes auto-generated REGISTRY_* environment variables.
+#
+# Test credentials:
+#   Username: testuser
+#   Password: testpass123
+#
+# For production registries (Harbor, ECR, ACR, GAR), see deployment guides in docs/.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-registry-auth-htpasswd
+  namespace: floe-test
+type: Opaque
+stringData:
+  # Generated with: htpasswd -nbB testuser testpass123
+  # Username: testuser, Password: testpass123
+  htpasswd: "testuser:$2y$05$dnzkO/YfW.qVPhAQkST4KuezgwGgsxPXUy3AYzYtnPSJ7pGumHZne"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-registry-auth-credentials
+  namespace: floe-test
+type: Opaque
+stringData:
+  # Credentials for test consumption (used by test fixtures)
+  username: testuser
+  password: testpass123
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oci-registry-auth-config
+  namespace: floe-test
+data:
+  config.yml: |
+    version: 0.1
+    log:
+      level: info
+    storage:
+      delete:
+        enabled: true
+      filesystem:
+        rootdirectory: /var/lib/registry
+    http:
+      addr: :5000
+      headers:
+        X-Content-Type-Options: [nosniff]
+    auth:
+      htpasswd:
+        realm: "Registry Realm"
+        path: /auth/htpasswd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oci-registry-auth
+  namespace: floe-test
+  labels:
+    app: oci-registry-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oci-registry-auth
+  template:
+    metadata:
+      labels:
+        app: oci-registry-auth
+    spec:
+      containers:
+        - name: oci-registry-auth
+          image: registry:2
+          ports:
+            - containerPort: 5000
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/docker/registry
+              readOnly: true
+            - name: htpasswd
+              mountPath: /auth
+              readOnly: true
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+          # Use TCP probes since HTTP probes fail without auth credentials
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: oci-registry-auth-config
+        - name: htpasswd
+          secret:
+            secretName: oci-registry-auth-htpasswd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oci-registry-auth
+  namespace: floe-test
+  labels:
+    app: oci-registry-auth
+spec:
+  type: NodePort
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30501
+      name: http
+  selector:
+    app: oci-registry-auth
