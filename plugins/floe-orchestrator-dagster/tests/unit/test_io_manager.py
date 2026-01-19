@@ -196,7 +196,8 @@ class TestIcebergIOManagerInit:
 
         invalid_manager = Mock(spec=[])  # No methods
 
-        with pytest.raises(TypeError, match="load_table"):
+        # Security: Error message is generic to avoid exposing internal details
+        with pytest.raises(TypeError, match="missing required interface methods"):
             IcebergIOManager(
                 table_manager=invalid_manager,
                 config=io_manager_config,
@@ -212,7 +213,8 @@ class TestIcebergIOManagerInit:
 
         partial_manager = Mock(spec=["load_table", "table_exists"])  # Missing write_data
 
-        with pytest.raises(TypeError, match="write_data"):
+        # Security: Error message is generic to avoid exposing internal details
+        with pytest.raises(TypeError, match="missing required interface methods"):
             IcebergIOManager(
                 table_manager=partial_manager,
                 config=io_manager_config,
