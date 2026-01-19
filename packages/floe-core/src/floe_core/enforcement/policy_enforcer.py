@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
@@ -341,11 +341,11 @@ class PolicyEnforcer:
             duration_ms=duration_ms,
         )
 
-    def _get_effective_enforcement_level(self) -> str:
+    def _get_effective_enforcement_level(self) -> Literal["off", "warn", "strict"]:
         """Get the effective enforcement level.
 
         Returns:
-            The enforcement level as a string.
+            The enforcement level ('off', 'warn', or 'strict').
         """
         level = self.governance_config.policy_enforcement_level
         if level is None:

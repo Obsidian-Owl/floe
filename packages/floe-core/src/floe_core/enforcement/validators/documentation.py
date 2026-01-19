@@ -176,6 +176,8 @@ class DocumentationValidator:
             ]
 
         # Check for placeholder description
+        # At this point description is not None (passed _is_missing_or_empty check)
+        assert description is not None
         if self._is_placeholder(description):
             self._log.info(
                 "documentation_violation",

@@ -48,11 +48,7 @@ class PolicyEnforcementError(Exception):
                 message is generated from the violations.
         """
         self.violations = violations
-
-        if message is not None:
-            self._custom_message = message
-        else:
-            self._custom_message = None
+        self._custom_message: str | None = message
 
         # Generate the exception message
         super().__init__(self._format_message())

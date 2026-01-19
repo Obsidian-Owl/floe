@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
@@ -460,7 +460,9 @@ def run_enforce_stage(
         return result
 
 
-def _create_skipped_result(enforcement_level: str) -> EnforcementResult:
+def _create_skipped_result(
+    enforcement_level: Literal["off", "warn", "strict"],
+) -> EnforcementResult:
     """Create an EnforcementResult for skipped enforcement.
 
     Args:
