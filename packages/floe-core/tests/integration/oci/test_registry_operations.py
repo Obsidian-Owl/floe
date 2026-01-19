@@ -424,9 +424,12 @@ class TestPullFromRegistry(IntegrationTestBase):
         # First pull - should fetch from registry
         pulled_first = client.pull(tag=test_artifact_tag)
 
-        # Verify cache directory has content
+        # Verify cache directory has expected structure (not just any files)
         cache_files = list(cache_dir.rglob("*"))
         assert len(cache_files) > 0, "Expected cache files after first pull"
+        # Verify cache index exists - this is the structural contract
+        cache_index = cache_dir / "index.json"
+        assert cache_index.exists(), "Expected cache index.json file"
 
         # Second pull - should use cache
         pulled_second = client.pull(tag=test_artifact_tag)

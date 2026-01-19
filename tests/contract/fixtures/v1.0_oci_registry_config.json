@@ -1,0 +1,36 @@
+{
+  "_comment": "Golden fixture for OCI RegistryConfig v1.0 backward compatibility testing",
+  "_version": "1.0.0",
+  "_created_at": "2026-01-19T00:00:00Z",
+  "uri": "oci://harbor.example.com/floe-platform",
+  "auth": {
+    "type": "basic",
+    "credentials_ref": {
+      "source": "kubernetes",
+      "name": "registry-credentials",
+      "key": "password"
+    }
+  },
+  "tls_verify": true,
+  "cache": {
+    "enabled": true,
+    "path": "/var/cache/floe/oci",
+    "max_size_gb": 10,
+    "ttl_hours": 24
+  },
+  "resilience": {
+    "retry": {
+      "max_attempts": 3,
+      "initial_delay_ms": 1000,
+      "backoff_multiplier": 2.0,
+      "max_delay_ms": 30000,
+      "jitter": true
+    },
+    "circuit_breaker": {
+      "enabled": true,
+      "failure_threshold": 5,
+      "recovery_timeout_ms": 60000,
+      "half_open_requests": 1
+    }
+  }
+}

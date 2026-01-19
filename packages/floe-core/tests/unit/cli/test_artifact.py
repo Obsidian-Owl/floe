@@ -416,7 +416,9 @@ artifacts:
 
         assert exit_code == 0
         mock_client.pull.assert_called_once_with(tag="v1.0.0")
-        mock_artifacts.to_json_file.assert_called_once()
+        # Verify the output path is correct (not just that it was called)
+        expected_path = output_dir / "compiled_artifacts.json"
+        mock_artifacts.to_json_file.assert_called_once_with(expected_path)
 
     @pytest.mark.requirement("8A-FR-027")
     def test_pull_not_found_returns_three(self, tmp_path: Path) -> None:

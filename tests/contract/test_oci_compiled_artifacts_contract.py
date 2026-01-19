@@ -387,15 +387,25 @@ class TestCompiledArtifactsRoundTripContract:
     def test_round_trip_preserves_plugins(
         self, minimal_compiled_artifacts: CompiledArtifacts
     ) -> None:
-        """Contract: Round-trip preserves plugins section."""
+        """Contract: Round-trip preserves plugins section including versions."""
         json_str = minimal_compiled_artifacts.model_dump_json()
         restored = CompiledArtifacts.model_validate(json.loads(json_str))
 
         assert restored.plugins is not None
         assert minimal_compiled_artifacts.plugins is not None
+        # Verify type
         assert restored.plugins.compute.type == minimal_compiled_artifacts.plugins.compute.type
         orch_type = minimal_compiled_artifacts.plugins.orchestrator.type
         assert restored.plugins.orchestrator.type == orch_type
+        # Verify version is also preserved (contract completeness)
+        assert (
+            restored.plugins.compute.version
+            == minimal_compiled_artifacts.plugins.compute.version
+        )
+        assert (
+            restored.plugins.orchestrator.version
+            == minimal_compiled_artifacts.plugins.orchestrator.version
+        )
 
     @pytest.mark.requirement("8A-FR-005")
     def test_round_trip_preserves_transforms(
@@ -679,3 +689,123 @@ class TestFilBasedSerializationContract:
         memory_digest = "sha256:" + hashlib.sha256(formatted_json.encode()).hexdigest()
 
         assert file_digest == memory_digest
+
+
+# =============================================================================
+# OCI Schema Golden Fixture Tests
+# =============================================================================
+
+
+class TestOCISchemaGoldenFixtures:
+    """Contract tests for OCI schema backward compatibility.
+
+    These tests verify that the current OCI schemas can parse v1.0 golden
+    fixtures, ensuring backward compatibility as schemas evolve.
+
+    Golden fixtures location: tests/contract/fixtures/v1.0_oci_*.json
+
+    Task: Test Quality Improvement
+    Requirements: Contract stability
+    """
+
+    @pytest.fixture
+    def fixtures_dir(self) -> Path:
+        """Return path to contract fixtures directory."""
+        return Path(__file__).parent / "fixtures"
+
+    @pytest.mark.requirement("8A-FR-001")
+    def test_v1_registry_config_parses(self, fixtures_dir: Path) -> None:
+        """Contract: Current RegistryConfig can parse v1.0 golden fixture.
+
+        Ensures backward compatibility - v1.0 configs must continue to work
+        as the schema evolves.
+        """
+        from floe_core.schemas.oci import RegistryConfig
+
+        fixture_path = fixtures_dir / "v1.0_oci_registry_config.json"
+        assert fixture_path.exists(), f"Golden fixture not found: {fixture_path}"
+
+        # Load and parse (excluding _comment, _version, _created_at metadata)
+        raw_data = json.loads(fixture_path.read_text())
+        config_data = {k: v for k, v in raw_data.items() if not k.startswith("_")}
+
+        # Parse with current schema - should not raise
+        config = RegistryConfig.model_validate(config_data)
+
+        # Verify key fields preserved
+        assert config.uri == "oci://harbor.example.com/floe-platform"
+        assert config.auth.type.value == "basic"
+        assert config.tls_verify is True
+        assert config.cache.enabled is True
+        assert config.resilience.retry.max_attempts == 3
+
+    @pytest.mark.requirement("8A-FR-001")
+    def test_v1_artifact_manifest_parses(self, fixtures_dir: Path) -> None:
+        """Contract: Current ArtifactManifest can parse v1.0 golden fixture.
+
+        Ensures backward compatibility - v1.0 manifests must continue to work
+        as the schema evolves.
+        """
+        from floe_core.schemas.oci import ArtifactManifest
+
+        fixture_path = fixtures_dir / "v1.0_oci_artifact_manifest.json"
+        assert fixture_path.exists(), f"Golden fixture not found: {fixture_path}"
+
+        # Load and parse (excluding _comment, _version, _created_at metadata)
+        raw_data = json.loads(fixture_path.read_text())
+        manifest_data = {k: v for k, v in raw_data.items() if not k.startswith("_")}
+
+        # Parse with current schema - should not raise
+        manifest = ArtifactManifest.model_validate(manifest_data)
+
+        # Verify key fields preserved
+        assert manifest.digest.startswith("sha256:")
+        assert manifest.artifact_type == "application/vnd.floe.compiled-artifacts.v1+json"
+        assert manifest.size == 12345
+        assert len(manifest.layers) == 1
+        assert manifest.layers[0].media_type == manifest.artifact_type
+        assert manifest.signature_status.value == "unsigned"
+        assert manifest.promotion_status.value == "not_promoted"
+
+    @pytest.mark.requirement("8A-FR-001")
+    def test_v1_registry_config_roundtrip(self, fixtures_dir: Path) -> None:
+        """Contract: RegistryConfig round-trip preserves all fields."""
+        from floe_core.schemas.oci import RegistryConfig
+
+        fixture_path = fixtures_dir / "v1.0_oci_registry_config.json"
+        raw_data = json.loads(fixture_path.read_text())
+        config_data = {k: v for k, v in raw_data.items() if not k.startswith("_")}
+
+        # Parse -> serialize -> parse
+        config = RegistryConfig.model_validate(config_data)
+        json_str = config.model_dump_json()
+        restored = RegistryConfig.model_validate(json.loads(json_str))
+
+        # Verify round-trip preserves all fields
+        assert restored.uri == config.uri
+        assert restored.auth.type == config.auth.type
+        assert restored.tls_verify == config.tls_verify
+        assert restored.cache.max_size_gb == config.cache.max_size_gb
+        assert restored.resilience.retry.max_attempts == config.resilience.retry.max_attempts
+
+    @pytest.mark.requirement("8A-FR-001")
+    def test_v1_artifact_manifest_roundtrip(self, fixtures_dir: Path) -> None:
+        """Contract: ArtifactManifest round-trip preserves all fields."""
+        from floe_core.schemas.oci import ArtifactManifest
+
+        fixture_path = fixtures_dir / "v1.0_oci_artifact_manifest.json"
+        raw_data = json.loads(fixture_path.read_text())
+        manifest_data = {k: v for k, v in raw_data.items() if not k.startswith("_")}
+
+        # Parse -> serialize -> parse
+        manifest = ArtifactManifest.model_validate(manifest_data)
+        json_str = manifest.model_dump_json()
+        restored = ArtifactManifest.model_validate(json.loads(json_str))
+
+        # Verify round-trip preserves all fields
+        assert restored.digest == manifest.digest
+        assert restored.artifact_type == manifest.artifact_type
+        assert restored.size == manifest.size
+        assert restored.annotations == manifest.annotations
+        assert len(restored.layers) == len(manifest.layers)
+        assert restored.layers[0].digest == manifest.layers[0].digest

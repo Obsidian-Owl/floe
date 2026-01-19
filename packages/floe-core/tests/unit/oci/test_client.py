@@ -47,6 +47,9 @@ if TYPE_CHECKING:
 # Valid SHA256 digest for test layers (64 hex characters)
 TEST_LAYER_DIGEST = "sha256:abc123def456789012345678901234567890123456789012345678901234abcd"
 
+# Mock tag list for list operation tests (avoids duplication in multiple tests)
+MOCK_LIST_TAGS = ["v1.0.0", "v1.1.0", "latest-dev"]
+
 
 # =============================================================================
 # Fixtures
@@ -595,7 +598,8 @@ class TestOCIClientPull:
             result = oci_client.pull(tag="v1.0.0")
 
         assert isinstance(result, CompiledArtifacts)
-        assert call_count >= 2, "Pull should have been retried"
+        # Exact assertion: 1 failure + 1 success = 2 total calls
+        assert call_count == 2, f"Expected exactly 2 attempts (1 fail + 1 success), got {call_count}"
 
     @pytest.mark.requirement("8A-FR-002")
     def test_pull_validates_artifact_schema(
@@ -653,17 +657,17 @@ class TestOCIClientList:
         from floe_core.schemas.oci import ArtifactTag
 
         # Mock the ORAS client to return tag list
-        mock_tags_response = {
-            "tags": ["v1.0.0", "v1.1.0", "latest-dev"],
-        }
+        # Note: ORAS get_tags() returns list directly, not {"tags": [...]}
+        mock_tags_list = MOCK_LIST_TAGS
 
         with patch.object(oci_client, "_create_oras_client") as mock_create:
             mock_oras = MagicMock()
-            mock_oras.get_tags.return_value = mock_tags_response
+            mock_oras.get_tags.return_value = mock_tags_list
 
             # Mock get_manifest for each tag to get digest and created_at
-            def mock_get_manifest(*, target: str) -> dict[str, Any]:
-                # Return mock manifest data
+            # Note: ORAS uses container= parameter, not target=
+            def mock_get_manifest(container: str | None = None, **_kwargs: Any) -> dict[str, Any]:
+                # Return mock manifest data (accepts **kwargs for ORAS client flexibility)
                 return {
                     "schemaVersion": 2,
                     "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -697,7 +701,7 @@ class TestOCIClientList:
         # Verify each item is an ArtifactTag
         for tag in result:
             assert isinstance(tag, ArtifactTag)
-            assert tag.name in ["v1.0.0", "v1.1.0", "latest-dev"]
+            assert tag.name in MOCK_LIST_TAGS
             assert tag.digest.startswith("sha256:")
             assert isinstance(tag.created_at, datetime)
 
@@ -714,15 +718,15 @@ class TestOCIClientList:
         - filter_pattern="v1.*" returns only v1.x tags
         - Pattern matching uses glob-style wildcards
         """
-        mock_tags_response = {
-            "tags": ["v1.0.0", "v1.1.0", "v2.0.0", "latest-dev"],
-        }
+        # Note: ORAS get_tags() returns list directly, not {"tags": [...]}
+        mock_tags_list = ["v1.0.0", "v1.1.0", "v2.0.0", "latest-dev"]
 
         with patch.object(oci_client, "_create_oras_client") as mock_create:
             mock_oras = MagicMock()
-            mock_oras.get_tags.return_value = mock_tags_response
+            mock_oras.get_tags.return_value = mock_tags_list
 
-            def mock_get_manifest(*, target: str) -> dict[str, Any]:
+            # Note: ORAS uses container= parameter, not target=
+            def mock_get_manifest(container: str | None = None, **_kwargs: Any) -> dict[str, Any]:
                 return {
                     "schemaVersion": 2,
                     "layers": [

@@ -191,7 +191,12 @@ class TestRetryPolicyJitter:
 
     @pytest.mark.requirement("8A-FR-018")
     def test_jitter_adds_variance_to_delays(self) -> None:
-        """Test jitter adds ±25% variance to delays."""
+        """Test jitter adds ±25% variance to delays.
+
+        Note: This test uses statistical sampling (100 iterations).
+        The probability of all 100 samples landing exactly on the bounds
+        is astronomically low (effectively zero), making this test reliable.
+        """
         config = RetryConfig(
             initial_delay_ms=1000,
             backoff_multiplier=2.0,
