@@ -131,6 +131,25 @@ from floe_core.schemas.validation import (
     validate_security_policy_not_weakened,
 )
 
+# RBAC resource schemas (Epic 7B)
+from floe_core.schemas.rbac import (
+    NamespaceConfig,
+    PodSecurityConfig,
+    RoleBindingConfig,
+    RoleBindingSubject,
+    RoleConfig,
+    RoleRule,
+    ServiceAccountConfig,
+    WritableVolumeMount,
+)
+
+# Security configuration schemas (Epic 7B)
+from floe_core.schemas.security import (
+    PodSecurityLevelConfig,
+    RBACConfig,
+    SecurityConfig,
+)
+
 __all__: list[str] = [
     # Audit (Phase 7, Epic 7A)
     "AuditEvent",
@@ -193,4 +212,17 @@ __all__: list[str] = [
     "ManifestRef",
     "ObservabilityConfig",
     "ProductIdentity",
+    # RBAC resource schemas (Epic 7B)
+    "ServiceAccountConfig",
+    "RoleRule",
+    "RoleConfig",
+    "RoleBindingSubject",
+    "RoleBindingConfig",
+    "NamespaceConfig",
+    "WritableVolumeMount",
+    "PodSecurityConfig",
+    # Security configuration schemas (Epic 7B)
+    "RBACConfig",
+    "PodSecurityLevelConfig",
+    "SecurityConfig",
 ]
