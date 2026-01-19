@@ -197,12 +197,16 @@ class K8sRBACPlugin:
 
         Produces both pod-level and container-level securityContext dictionaries
         that comply with Pod Security Standards at the 'restricted' level.
+        Also includes volumes and volumeMounts for writable directories when
+        using readOnlyRootFilesystem: true (FR-043).
 
         Args:
             config: Pod security configuration.
 
         Returns:
-            Dictionary with 'pod' and 'container' securityContext fragments.
+            Dictionary with 'pod' and 'container' securityContext fragments,
+            plus 'volumes' (for pod spec) and 'volumeMounts' (for container spec)
+            for writable directories.
 
         Example:
             >>> from floe_core.schemas.rbac import PodSecurityConfig
@@ -213,8 +217,12 @@ class K8sRBACPlugin:
             True
             >>> contexts["container"]["allowPrivilegeEscalation"]
             False
+            >>> len(contexts["volumes"]) > 0  # Default includes /tmp
+            True
         """
         return {
             "pod": config.to_pod_security_context(),
             "container": config.to_container_security_context(),
+            "volumes": config.to_volumes(),
+            "volumeMounts": config.to_volume_mounts(),
         }

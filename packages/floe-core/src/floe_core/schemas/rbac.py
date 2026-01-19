@@ -458,6 +458,67 @@ class NamespaceConfig(BaseModel):
 
 
 # =============================================================================
+# T055: WritableVolumeMount
+# =============================================================================
+
+
+class WritableVolumeMount(BaseModel):
+    """Configuration for a writable volume mount with readOnlyRootFilesystem.
+
+    When using readOnlyRootFilesystem: true (required for PSS restricted level),
+    applications may still need writable directories. This model defines emptyDir
+    volumes to be mounted at specific paths to provide writable storage.
+
+    Attributes:
+        name: Volume name (must follow K8s naming conventions: lowercase, alphanumeric, hyphens).
+        mount_path: Absolute path where the volume will be mounted.
+        size_limit: Optional size limit for the emptyDir volume (e.g., "100Mi", "1Gi").
+        medium: Storage medium - "" (default disk) or "Memory" (tmpfs).
+
+    Example:
+        >>> mount = WritableVolumeMount(
+        ...     name="tmp",
+        ...     mount_path="/tmp",
+        ...     size_limit="100Mi"
+        ... )
+        >>> mount.medium
+        ''
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(
+        ...,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
+        description="Volume name following K8s naming conventions",
+    )
+    mount_path: str = Field(
+        ...,
+        pattern=r"^/.*$",
+        description="Absolute path where the volume will be mounted",
+    )
+    size_limit: str | None = Field(
+        default=None,
+        description="Optional size limit for the emptyDir volume (e.g., '100Mi', '1Gi')",
+    )
+    medium: Literal["", "Memory"] = Field(
+        default="",
+        description="Storage medium - '' (default disk) or 'Memory' (tmpfs)",
+    )
+
+
+def _default_writable_mounts() -> list[WritableVolumeMount]:
+    """Create default writable volume mounts for common application needs.
+
+    Returns:
+        List of default writable volume mounts including /tmp.
+    """
+    return [
+        WritableVolumeMount(name="tmp", mount_path="/tmp"),
+    ]
+
+
+# =============================================================================
 # T010: PodSecurityConfig
 # =============================================================================
 
@@ -476,11 +537,15 @@ class PodSecurityConfig(BaseModel):
         read_only_root_filesystem: Whether to use read-only root filesystem.
         allow_privilege_escalation: Whether privilege escalation is allowed.
         seccomp_profile_type: Seccomp profile type.
+        writable_volume_mounts: Configurable volume mounts for writable directories
+            when using readOnlyRootFilesystem (FR-043).
 
     Example:
         >>> config = PodSecurityConfig()
         >>> context = config.to_pod_security_context()
         >>> context["runAsNonRoot"]
+        True
+        >>> len(config.to_volume_mounts()) > 0  # Default includes /tmp
         True
     """
 
@@ -517,6 +582,10 @@ class PodSecurityConfig(BaseModel):
         default="RuntimeDefault",
         description="Seccomp profile type",
     )
+    writable_volume_mounts: list[WritableVolumeMount] = Field(
+        default_factory=_default_writable_mounts,
+        description="Configurable volume mounts for writable directories with readOnlyRootFilesystem (FR-043)",
+    )
 
     def to_pod_security_context(self) -> dict[str, Any]:
         """Generate pod-level securityContext.
@@ -547,3 +616,57 @@ class PodSecurityConfig(BaseModel):
                 "drop": ["ALL"],
             },
         }
+
+    def to_volume_mounts(self) -> list[dict[str, Any]]:
+        """Generate volume mounts for container spec.
+
+        Creates volumeMount entries for writable directories when using
+        readOnlyRootFilesystem: true (FR-043).
+
+        Returns:
+            List of volumeMount dictionaries for container spec.
+
+        Example:
+            >>> config = PodSecurityConfig()
+            >>> mounts = config.to_volume_mounts()
+            >>> mounts[0]["mountPath"]
+            '/tmp'
+        """
+        return [
+            {
+                "name": mount.name,
+                "mountPath": mount.mount_path,
+            }
+            for mount in self.writable_volume_mounts
+        ]
+
+    def to_volumes(self) -> list[dict[str, Any]]:
+        """Generate emptyDir volumes for pod spec.
+
+        Creates volume entries with emptyDir for writable directories
+        when using readOnlyRootFilesystem: true (FR-043).
+
+        Returns:
+            List of volume dictionaries for pod spec.
+
+        Example:
+            >>> config = PodSecurityConfig()
+            >>> volumes = config.to_volumes()
+            >>> "emptyDir" in volumes[0]
+            True
+        """
+        volumes: list[dict[str, Any]] = []
+        for mount in self.writable_volume_mounts:
+            empty_dir: dict[str, Any] = {}
+
+            if mount.medium:
+                empty_dir["medium"] = mount.medium
+
+            if mount.size_limit:
+                empty_dir["sizeLimit"] = mount.size_limit
+
+            volumes.append({
+                "name": mount.name,
+                "emptyDir": empty_dir,
+            })
+        return volumes

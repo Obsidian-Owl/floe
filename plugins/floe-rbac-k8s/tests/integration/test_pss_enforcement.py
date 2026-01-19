@@ -256,8 +256,9 @@ class TestPodSecurityContextIntegration:
         """Test K8sRBACPlugin generates PSS compliant security context."""
         config = PodSecurityConfig()
 
-        pod_context = plugin.generate_pod_security_context(config)
-        container_context = plugin.generate_container_security_context(config)
+        result = plugin.generate_pod_security_context(config)
+        pod_context = result["pod"]
+        container_context = result["container"]
 
         # Verify FR-040: runAsNonRoot
         assert pod_context["runAsNonRoot"] is True
@@ -276,6 +277,33 @@ class TestPodSecurityContextIntegration:
         assert pod_context["runAsUser"] == 1000
         assert pod_context["runAsGroup"] == 1000
 
+    @pytest.mark.requirement("FR-043")
+    def test_plugin_generates_volumes_for_writable_dirs(
+        self, plugin: Any
+    ) -> None:
+        """Test K8sRBACPlugin generates volumes for writable directories (FR-043)."""
+        config = PodSecurityConfig()
+
+        result = plugin.generate_pod_security_context(config)
+
+        # Verify volumes and volumeMounts are included
+        assert "volumes" in result
+        assert "volumeMounts" in result
+
+        # Default should include /tmp
+        volumes = result["volumes"]
+        volume_mounts = result["volumeMounts"]
+
+        assert len(volumes) > 0
+        assert len(volume_mounts) > 0
+
+        # Check /tmp is included
+        mount_paths = {m["mountPath"] for m in volume_mounts}
+        assert "/tmp" in mount_paths
+
+        # Check volume structure
+        assert "emptyDir" in volumes[0]
+
     @pytest.mark.requirement("FR-044")
     def test_plugin_accepts_custom_uid_gid(self, plugin: Any) -> None:
         """Test K8sRBACPlugin accepts custom UID/GID."""
@@ -285,7 +313,8 @@ class TestPodSecurityContextIntegration:
             fs_group=65534,
         )
 
-        pod_context = plugin.generate_pod_security_context(config)
+        result = plugin.generate_pod_security_context(config)
+        pod_context = result["pod"]
 
         assert pod_context["runAsUser"] == 65534
         assert pod_context["runAsGroup"] == 65534
