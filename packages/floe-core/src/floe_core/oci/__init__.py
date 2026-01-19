@@ -48,6 +48,18 @@ See Also:
 
 from __future__ import annotations
 
+# Authentication providers (T007)
+from floe_core.oci.auth import (
+    AuthProvider,
+    AzureMIAuthProvider,
+    BasicAuthProvider,
+    Credentials,
+    GCPWIAuthProvider,
+    IRSAAuthProvider,
+    TokenAuthProvider,
+    create_auth_provider,
+)
+
 # Error hierarchy (T002)
 from floe_core.oci.errors import (
     ArtifactNotFoundError,
@@ -61,7 +73,6 @@ from floe_core.oci.errors import (
 )
 
 # NOTE: Additional exports will be populated as modules are implemented:
-# - T007: auth.py (AuthProvider, BasicAuthProvider, TokenAuthProvider)
 # - T008-T009: resilience.py (RetryPolicy, CircuitBreaker)
 # - T010: cache.py (CacheManager, CacheEntry)
 # - T011: metrics.py (OpenTelemetry metrics)
@@ -78,4 +89,13 @@ __all__: list[str] = [
     "RegistryUnavailableError",
     "DigestMismatchError",
     "CacheError",
+    # Authentication (T007)
+    "AuthProvider",
+    "Credentials",
+    "BasicAuthProvider",
+    "TokenAuthProvider",
+    "IRSAAuthProvider",
+    "AzureMIAuthProvider",
+    "GCPWIAuthProvider",
+    "create_auth_provider",
 ]
