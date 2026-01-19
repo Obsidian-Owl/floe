@@ -221,3 +221,219 @@ class TestPushToRegistry(IntegrationTestBase):
 
         # Digests may differ if manifest metadata differs, but both should be valid
         # The important thing is both pushes succeed and return valid digests
+
+
+class TestPullFromRegistry(IntegrationTestBase):
+    """Integration tests for pull operation from OCI registry.
+
+    Tests pulling real CompiledArtifacts from the registry:2 service in Kind cluster.
+    Verifies artifact content matches what was pushed and caching works correctly.
+
+    Task: T030
+    Requirements: FR-002, SC-009
+    """
+
+    required_services = [("registry", 5000)]
+    namespace = "floe-test"
+
+    def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
+        """Create a valid CompiledArtifacts JSON file for testing.
+
+        Args:
+            tmp_path: Temporary directory path.
+            unique_id: Unique identifier for test isolation.
+
+        Returns:
+            Path to the created JSON file.
+        """
+        import json
+
+        data: dict[str, Any] = {
+            "version": "0.2.0",
+            "metadata": {
+                "compiled_at": datetime.now(timezone.utc).isoformat(),
+                "floe_version": "0.2.0",
+                "source_hash": f"sha256:{unique_id}abc123",
+                "product_name": f"test-product-{unique_id}",
+                "product_version": "1.0.0",
+            },
+            "identity": {
+                "product_id": f"test.product_{unique_id}",
+                "domain": "test",
+                "repository": "https://github.com/test/repo",
+            },
+            "mode": {
+                "environment": "dev",
+                "target": "local",
+            },
+            "telemetry": {
+                "service_name": "floe-test",
+            },
+            "governance": {
+                "owner": "test-team",
+            },
+            "plugins": {},
+            "transforms": [],
+            "inheritance_chain": [],
+            "dbt_profiles": {
+                "floe": {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": "/tmp/test.duckdb",
+                        }
+                    },
+                }
+            },
+        }
+
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts_path.write_text(json.dumps(data, indent=2))
+        return artifacts_path
+
+    @pytest.mark.requirement("8A-FR-002")
+    def test_pull_from_registry(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        test_manifest_path: Path,
+    ) -> None:
+        """Test pull CompiledArtifacts from OCI registry succeeds.
+
+        Verifies:
+        - Push an artifact first
+        - Pull completes without error
+        - Returned CompiledArtifacts matches original content
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Create test artifacts with unique ID for isolation
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+
+        # Load original CompiledArtifacts
+        original_artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        # Create client from manifest (no cache for this test)
+        client = OCIClient.from_manifest(test_manifest_path)
+
+        # Push first to ensure artifact exists
+        digest = client.push(original_artifacts, tag=test_artifact_tag)
+        assert digest.startswith("sha256:")
+
+        # Pull the artifact back
+        pulled_artifacts = client.pull(tag=test_artifact_tag)
+
+        # Verify content matches
+        assert pulled_artifacts.version == original_artifacts.version
+        assert (
+            pulled_artifacts.metadata.product_name
+            == original_artifacts.metadata.product_name
+        )
+        assert (
+            pulled_artifacts.metadata.product_version
+            == original_artifacts.metadata.product_version
+        )
+        assert pulled_artifacts.dbt_profiles == original_artifacts.dbt_profiles
+
+    @pytest.mark.requirement("8A-FR-002")
+    def test_pull_validates_schema(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        test_manifest_path: Path,
+    ) -> None:
+        """Test pulled artifact is validated against CompiledArtifacts schema.
+
+        Verifies:
+        - Pulled content is validated by Pydantic
+        - Returns a valid CompiledArtifacts instance
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Create and push test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        original_artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        client = OCIClient.from_manifest(test_manifest_path)
+        client.push(original_artifacts, tag=test_artifact_tag)
+
+        # Pull should return validated CompiledArtifacts
+        pulled = client.pull(tag=test_artifact_tag)
+
+        # Verify it's a proper CompiledArtifacts instance
+        assert isinstance(pulled, CompiledArtifacts)
+        assert pulled.version == "0.2.0"
+        assert pulled.metadata is not None
+
+    @pytest.mark.requirement("8A-SC-009")
+    def test_pull_cached_returns_same_content(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        oci_registry_host: str,
+    ) -> None:
+        """Test pulling same artifact twice returns same content (cache hit).
+
+        Verifies:
+        - First pull fetches from registry
+        - Second pull uses cache (verified by content equality)
+        - Cache hit returns valid CompiledArtifacts
+        """
+        import yaml
+
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Create manifest with cache enabled
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        manifest_data = {
+            "artifacts": {
+                "registry": {
+                    "uri": f"oci://{oci_registry_host}/floe-test",
+                    "auth": {"type": "anonymous"},
+                    "cache": {
+                        "enabled": True,
+                        "path": str(cache_dir),
+                        "max_size_gb": 1,
+                        "ttl_hours": 24,
+                    },
+                },
+            }
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.safe_dump(manifest_data))
+
+        # Create and push test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        original_artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        client = OCIClient.from_manifest(manifest_path)
+        client.push(original_artifacts, tag=test_artifact_tag)
+
+        # First pull - should fetch from registry
+        pulled_first = client.pull(tag=test_artifact_tag)
+
+        # Verify cache directory has content
+        cache_files = list(cache_dir.rglob("*"))
+        assert len(cache_files) > 0, "Expected cache files after first pull"
+
+        # Second pull - should use cache
+        pulled_second = client.pull(tag=test_artifact_tag)
+
+        # Both pulls should return identical content
+        assert (
+            pulled_first.metadata.product_name == pulled_second.metadata.product_name
+        )
+        assert (
+            pulled_first.metadata.product_version
+            == pulled_second.metadata.product_version
+        )
+        assert pulled_first.dbt_profiles == pulled_second.dbt_profiles
