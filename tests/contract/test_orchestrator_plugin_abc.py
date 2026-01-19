@@ -105,9 +105,7 @@ class TestOrchestratorPluginABCDefinition:
         assert hasattr(OrchestratorPlugin, "get_helm_values")
 
         method = OrchestratorPlugin.get_helm_values
-        assert getattr(method, "__isabstractmethod__", False), (
-            "get_helm_values() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "get_helm_values() must be abstract"
 
     @pytest.mark.requirement("FR-002")
     def test_validate_connection_method_is_abstract(self) -> None:
@@ -180,9 +178,7 @@ class TestOrchestratorPluginABCDefinition:
         assert hasattr(OrchestratorPlugin, "schedule_job")
 
         method = OrchestratorPlugin.schedule_job
-        assert getattr(method, "__isabstractmethod__", False), (
-            "schedule_job() must be abstract"
-        )
+        assert getattr(method, "__isabstractmethod__", False), "schedule_job() must be abstract"
 
         sig = inspect.signature(OrchestratorPlugin.schedule_job)
         params = list(sig.parameters.keys())
@@ -348,9 +344,7 @@ class TestOrchestratorPluginInstantiationContract:
                 _ = artifacts
                 return {"mock": "definitions"}
 
-            def create_assets_from_transforms(
-                self, transforms: list[TransformConfig]
-            ) -> list[Any]:
+            def create_assets_from_transforms(self, transforms: list[TransformConfig]) -> list[Any]:
                 _ = transforms
                 return []
 

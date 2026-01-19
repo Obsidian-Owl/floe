@@ -376,9 +376,7 @@ class IcebergIOManager(ConfigurableIOManager):
             Full table identifier for the upstream table.
         """
         # Get upstream asset key
-        if hasattr(context, "upstream_output") and hasattr(
-            context.upstream_output, "asset_key"
-        ):
+        if hasattr(context, "upstream_output") and hasattr(context.upstream_output, "asset_key"):
             upstream_asset_key = context.upstream_output.asset_key
 
             # Check upstream metadata for custom table name

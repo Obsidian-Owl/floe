@@ -150,16 +150,10 @@ class TestAssetDependencies:
         assert len(asset_by_name["raw_customers"].dependency_keys) == 0
 
         # stg_customers depends on raw_customers
-        assert (
-            AssetKey(["raw_customers"])
-            in asset_by_name["stg_customers"].dependency_keys
-        )
+        assert AssetKey(["raw_customers"]) in asset_by_name["stg_customers"].dependency_keys
 
         # dim_customers depends on stg_customers
-        assert (
-            AssetKey(["stg_customers"])
-            in asset_by_name["dim_customers"].dependency_keys
-        )
+        assert AssetKey(["stg_customers"]) in asset_by_name["dim_customers"].dependency_keys
 
 
 class TestAssetMetadata:

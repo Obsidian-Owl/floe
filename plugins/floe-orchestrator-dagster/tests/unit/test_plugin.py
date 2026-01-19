@@ -55,9 +55,7 @@ class TestDagsterOrchestratorPluginMetadata:
         assert api_version == "1.0"
 
     @pytest.mark.requirement("FR-003")
-    def test_plugin_description(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_plugin_description(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin has a meaningful description."""
         assert len(dagster_plugin.description) > 0
         assert "dagster" in dagster_plugin.description.lower()
@@ -78,9 +76,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert isinstance(dagster_plugin, OrchestratorPlugin)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_create_definitions_method(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_has_create_definitions_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements create_definitions method."""
         assert hasattr(dagster_plugin, "create_definitions")
         assert callable(dagster_plugin.create_definitions)
@@ -94,9 +90,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert callable(dagster_plugin.create_assets_from_transforms)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_get_helm_values_method(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_has_get_helm_values_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements get_helm_values method."""
         assert hasattr(dagster_plugin, "get_helm_values")
         assert callable(dagster_plugin.get_helm_values)
@@ -118,17 +112,13 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert callable(dagster_plugin.get_resource_requirements)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_emit_lineage_event_method(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_has_emit_lineage_event_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements emit_lineage_event method."""
         assert hasattr(dagster_plugin, "emit_lineage_event")
         assert callable(dagster_plugin.emit_lineage_event)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_schedule_job_method(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_has_schedule_job_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements schedule_job method."""
         assert hasattr(dagster_plugin, "schedule_job")
         assert callable(dagster_plugin.schedule_job)
@@ -244,9 +234,7 @@ class TestDagsterOrchestratorPluginValidation:
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
         """Test validation error includes actionable guidance."""
-        with pytest.raises(
-            ValueError, match="Ensure you are passing output from 'floe compile'"
-        ):
+        with pytest.raises(ValueError, match="Ensure you are passing output from 'floe compile'"):
             dagster_plugin.create_definitions({})
 
 
@@ -260,9 +248,7 @@ class TestDagsterOrchestratorPluginCreateAssets:
     """
 
     @pytest.mark.requirement("FR-006")
-    def test_create_assets_empty_list(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_create_assets_empty_list(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test create_assets_from_transforms returns empty list for empty input."""
         assets = dagster_plugin.create_assets_from_transforms([])
         assert isinstance(assets, list)
@@ -337,9 +323,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
     """
 
     @pytest.mark.requirement("FR-010")
-    def test_get_helm_values_returns_dict(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_get_helm_values_returns_dict(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test get_helm_values returns a dictionary."""
         result = dagster_plugin.get_helm_values()
         assert isinstance(result, dict)
@@ -400,9 +384,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         )
 
     @pytest.mark.requirement("FR-014")
-    def test_schedule_job_creates_schedule(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_schedule_job_creates_schedule(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test schedule_job creates a ScheduleDefinition."""
         # Should not raise - schedule is created successfully
         dagster_plugin.schedule_job("daily_refresh", "0 8 * * *", "UTC")

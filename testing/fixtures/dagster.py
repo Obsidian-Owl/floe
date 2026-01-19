@@ -427,9 +427,7 @@ def wait_for_run_completion(
     while True:
         elapsed = time.monotonic() - start_time
         if elapsed >= timeout:
-            raise DagsterConnectionError(
-                f"Run {run_id} did not complete within {timeout}s timeout"
-            )
+            raise DagsterConnectionError(f"Run {run_id} did not complete within {timeout}s timeout")
 
         run = instance.get_run_by_id(run_id)
         if run is None:

@@ -23,22 +23,16 @@ class TestLineageEventValidation:
     Validates FR-016: System MUST support START/COMPLETE/FAIL event types.
     """
 
-    def test_start_event_type_valid(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_start_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test START event type is accepted."""
         # Should not raise
         dagster_plugin.emit_lineage_event("START", "job", [], [])
 
-    def test_complete_event_type_valid(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_complete_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test COMPLETE event type is accepted."""
         dagster_plugin.emit_lineage_event("COMPLETE", "job", [], [])
 
-    def test_fail_event_type_valid(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_fail_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test FAIL event type is accepted."""
         dagster_plugin.emit_lineage_event("FAIL", "job", [], [])
 
@@ -56,9 +50,7 @@ class TestLineageEventValidation:
         with pytest.raises(ValueError):
             dagster_plugin.emit_lineage_event("start", "job", [], [])
 
-    def test_error_lists_valid_event_types(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_error_lists_valid_event_types(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test error message lists valid event types."""
         with pytest.raises(ValueError) as exc_info:
             dagster_plugin.emit_lineage_event("INVALID", "job", [], [])
@@ -75,32 +67,24 @@ class TestLineageEventInputsOutputs:
     Validates FR-017: System MUST include inputs and outputs in lineage events.
     """
 
-    def test_empty_inputs_outputs(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_empty_inputs_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test lineage event with empty inputs and outputs."""
         # Should not raise
         dagster_plugin.emit_lineage_event("START", "job", [], [])
 
-    def test_single_input_dataset(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_single_input_dataset(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test lineage event with single input dataset."""
         inputs = [Dataset(namespace="floe", name="raw.customers")]
 
         dagster_plugin.emit_lineage_event("START", "job", inputs, [])
 
-    def test_single_output_dataset(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_single_output_dataset(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test lineage event with single output dataset."""
         outputs = [Dataset(namespace="floe", name="staging.stg_customers")]
 
         dagster_plugin.emit_lineage_event("COMPLETE", "job", [], outputs)
 
-    def test_multiple_inputs_outputs(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_multiple_inputs_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test lineage event with multiple inputs and outputs."""
         inputs = [
             Dataset(namespace="floe", name="raw.orders"),
@@ -134,9 +118,7 @@ class TestLineageEventNoOp:
     Validates FR-018: System MUST not raise when lineage backend unconfigured.
     """
 
-    def test_no_backend_is_noop(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_no_backend_is_noop(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test emit_lineage_event is no-op when no backend configured."""
         inputs = [Dataset(namespace="floe", name="input")]
         outputs = [Dataset(namespace="floe", name="output")]
@@ -146,9 +128,7 @@ class TestLineageEventNoOp:
         dagster_plugin.emit_lineage_event("COMPLETE", "test_job", inputs, outputs)
         dagster_plugin.emit_lineage_event("FAIL", "test_job", inputs, outputs)
 
-    def test_no_backend_no_event_stored(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_no_backend_no_event_stored(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test no lineage event is stored when no backend configured."""
         dagster_plugin.emit_lineage_event("START", "job", [], [])
 
@@ -186,9 +166,7 @@ class TestOpenLineageEventStructure:
         assert "T" in event["eventTime"]
         assert "+" in event["eventTime"] or "Z" in event["eventTime"]
 
-    def test_build_event_contains_producer(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_build_event_contains_producer(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test built event contains producer identifier."""
         event = dagster_plugin._build_openlineage_event("START", "job", [], [])
 
@@ -196,9 +174,7 @@ class TestOpenLineageEventStructure:
         assert "floe-orchestrator-dagster" in event["producer"]
         assert dagster_plugin.version in event["producer"]
 
-    def test_build_event_contains_job(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_build_event_contains_job(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test built event contains job with namespace and name."""
         event = dagster_plugin._build_openlineage_event("START", "my_job", [], [])
 
@@ -206,9 +182,7 @@ class TestOpenLineageEventStructure:
         assert event["job"]["namespace"] == "floe"
         assert event["job"]["name"] == "my_job"
 
-    def test_build_event_contains_inputs(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_build_event_contains_inputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test built event contains inputs list."""
         inputs = [
             Dataset(namespace="floe", name="raw.customers"),
@@ -224,9 +198,7 @@ class TestOpenLineageEventStructure:
         assert event["inputs"][1]["namespace"] == "external"
         assert event["inputs"][1]["name"] == "api.data"
 
-    def test_build_event_contains_outputs(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_build_event_contains_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test built event contains outputs list."""
         outputs = [
             Dataset(namespace="floe", name="staging.stg_customers"),
@@ -252,15 +224,11 @@ class TestOpenLineageEventStructure:
 class TestLineageEventEdgeCases:
     """Test edge cases for lineage event emission."""
 
-    def test_job_name_with_underscores(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_job_name_with_underscores(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test job name with underscores."""
         dagster_plugin.emit_lineage_event("START", "my_dbt_job_v2", [], [])
 
-    def test_job_name_with_dots(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_job_name_with_dots(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test job name with dots."""
         dagster_plugin.emit_lineage_event("START", "staging.customers", [], [])
 
@@ -272,17 +240,9 @@ class TestLineageEventEdgeCases:
 
         dagster_plugin.emit_lineage_event("START", "job", inputs, [])
 
-    def test_long_dataset_list(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_long_dataset_list(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test handling many datasets."""
-        inputs = [
-            Dataset(namespace="floe", name=f"source_{i}")
-            for i in range(20)
-        ]
-        outputs = [
-            Dataset(namespace="floe", name=f"output_{i}")
-            for i in range(10)
-        ]
+        inputs = [Dataset(namespace="floe", name=f"source_{i}") for i in range(20)]
+        outputs = [Dataset(namespace="floe", name=f"output_{i}") for i in range(10)]
 
         dagster_plugin.emit_lineage_event("COMPLETE", "big_job", inputs, outputs)

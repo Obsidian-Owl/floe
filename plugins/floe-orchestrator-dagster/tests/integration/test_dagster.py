@@ -155,9 +155,7 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("SC-002")
-    def test_created_assets_have_valid_keys(
-        self, valid_compiled_artifacts: dict[str, Any]
-    ) -> None:
+    def test_created_assets_have_valid_keys(self, valid_compiled_artifacts: dict[str, Any]) -> None:
         """Test created assets have valid AssetKeys."""
 
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin

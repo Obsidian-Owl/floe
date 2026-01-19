@@ -86,7 +86,7 @@ def _create_artifacts_with_transforms(num_transforms: int) -> dict[str, Any]:
         }
         # Create dependencies on previous models (chain structure)
         if i > 0:
-            model["depends_on"] = [f"model_{i-1:04d}"]
+            model["depends_on"] = [f"model_{i - 1:04d}"]
         models.append(model)
 
     artifacts = _create_minimal_artifacts()
@@ -107,7 +107,7 @@ def _create_transform_configs(num_transforms: int) -> list[Any]:
 
     transforms = []
     for i in range(num_transforms):
-        depends_on = [f"model_{i-1:04d}"] if i > 0 else []
+        depends_on = [f"model_{i - 1:04d}"] if i > 0 else []
         transform = TransformConfig(
             name=f"model_{i:04d}",
             path=f"models/staging/model_{i:04d}.sql",

@@ -151,8 +151,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             error_message = (
                 "CompiledArtifacts validation failed. "
                 "Ensure you are passing output from 'floe compile'.\n"
-                "Validation errors:\n"
-                + "\n".join(error_details)
+                "Validation errors:\n" + "\n".join(error_details)
             )
             logger.error(
                 "Artifacts validation failed",
@@ -215,9 +214,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         return Definitions(assets=assets)
 
-    def _models_to_transform_configs(
-        self, models: list[dict[str, Any]]
-    ) -> list[TransformConfig]:
+    def _models_to_transform_configs(self, models: list[dict[str, Any]]) -> list[TransformConfig]:
         """Convert ResolvedModel dicts to TransformConfig objects.
 
         Maps the CompiledArtifacts ResolvedModel structure to the
@@ -240,9 +237,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             configs.append(config)
         return configs
 
-    def create_assets_from_transforms(
-        self, transforms: list[TransformConfig]
-    ) -> list[Any]:
+    def create_assets_from_transforms(self, transforms: list[TransformConfig]) -> list[Any]:
         """Create Dagster software-defined assets from dbt transforms.
 
         Converts TransformConfig objects into Dagster assets, preserving
@@ -494,10 +489,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             return ValidationResult(
                 success=False,
                 message="Failed to connect to Dagster service",
-                errors=[
-                    f"Connection error: {e}. "
-                    f"Ensure Dagster webserver is running at {url}."
-                ],
+                errors=[f"Connection error: {e}. Ensure Dagster webserver is running at {url}."],
             )
         except Exception as e:
             logger.error(
@@ -536,8 +528,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         if workload_size not in _RESOURCE_PRESETS:
             valid_sizes = ", ".join(sorted(_RESOURCE_PRESETS.keys()))
             raise ValueError(
-                f"Invalid workload_size '{workload_size}'. "
-                f"Must be one of: {valid_sizes}"
+                f"Invalid workload_size '{workload_size}'. Must be one of: {valid_sizes}"
             )
 
         return _RESOURCE_PRESETS[workload_size]
@@ -581,14 +572,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         from datetime import datetime, timezone
 
         # Build input/output dataset structures
-        input_datasets = [
-            {"namespace": ds.namespace, "name": ds.name}
-            for ds in inputs
-        ]
-        output_datasets = [
-            {"namespace": ds.namespace, "name": ds.name}
-            for ds in outputs
-        ]
+        input_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in inputs]
+        output_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in outputs]
 
         return {
             "eventType": event_type,

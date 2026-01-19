@@ -652,9 +652,7 @@ class TestDagsterPluginConsumesCompiledArtifacts:
 
         plugin = DagsterOrchestratorPlugin()
 
-        with pytest.raises(
-            ValueError, match="Ensure you are passing output from 'floe compile'"
-        ):
+        with pytest.raises(ValueError, match="Ensure you are passing output from 'floe compile'"):
             plugin.create_definitions({})
 
 
