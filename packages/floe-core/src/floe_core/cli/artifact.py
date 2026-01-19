@@ -390,6 +390,222 @@ def run_pull(args: argparse.Namespace) -> int:
         return EXIT_GENERAL_ERROR
 
 
+def create_inspect_parser() -> argparse.ArgumentParser:
+    """Create argument parser for artifact inspect command.
+
+    Returns:
+        Configured ArgumentParser for the inspect command.
+
+    Example:
+        >>> parser = create_inspect_parser()
+        >>> args = parser.parse_args(["--tag", "v1.0.0"])
+        >>> args.tag
+        'v1.0.0'
+    """
+    parser = argparse.ArgumentParser(
+        prog="floe artifact inspect",
+        description="Inspect artifact metadata from OCI registry",
+        epilog="Exit codes: 0=success, 1=error, 2=auth error, 3=not found",
+    )
+
+    parser.add_argument(
+        "--tag",
+        type=str,
+        required=True,
+        help="Tag for the artifact to inspect (e.g., v1.0.0, latest-dev)",
+        metavar="TAG",
+    )
+
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path("manifest.yaml"),
+        help="Path to manifest.yaml with registry config (default: manifest.yaml)",
+        metavar="PATH",
+    )
+
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output as JSON instead of human-readable format",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose output",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress non-error output (only show result)",
+    )
+
+    return parser
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format size in bytes to human-readable string.
+
+    Args:
+        size_bytes: Size in bytes.
+
+    Returns:
+        Formatted string like "12.3 KB" or "1.5 MB".
+    """
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def run_inspect(args: argparse.Namespace) -> int:
+    """Execute the artifact inspect command.
+
+    Retrieves artifact metadata from the OCI registry without downloading
+    the full artifact content.
+
+    Args:
+        args: Parsed command-line arguments with:
+            - tag: Tag of the artifact to inspect
+            - manifest: Path to manifest.yaml
+            - json_output: Output as JSON
+            - verbose: Enable verbose output
+            - quiet: Suppress non-error output
+
+    Returns:
+        Exit code: 0=success, 1=error, 2=auth error, 3=not found.
+
+    Example:
+        >>> args = create_inspect_parser().parse_args(["--tag", "v1.0.0"])
+        >>> exit_code = run_inspect(args)
+    """
+    import json
+
+    # Late imports to avoid circular dependencies
+    from floe_core.oci.client import OCIClient
+    from floe_core.oci.errors import (
+        ArtifactNotFoundError,
+        AuthenticationError,
+        CircuitBreakerOpenError,
+        OCIError,
+    )
+
+    log = logger.bind(
+        tag=args.tag,
+        manifest_path=str(args.manifest),
+    )
+
+    if not args.quiet:
+        log.info("inspect_started")
+
+    try:
+        # Create OCI client from manifest
+        client = OCIClient.from_manifest(args.manifest)
+
+        if args.verbose and not args.quiet:
+            log.info(
+                "client_initialized",
+                registry=client.registry_uri,
+            )
+
+        # Inspect artifact
+        manifest = client.inspect(tag=args.tag)
+
+        # Format output
+        if args.json_output:
+            # JSON output mode
+            output_data = {
+                "digest": manifest.digest,
+                "artifact_type": manifest.artifact_type,
+                "size": manifest.size,
+                "size_human": _format_size(manifest.size),
+                "created_at": manifest.created_at.isoformat(),
+                "product_name": manifest.product_name,
+                "product_version": manifest.product_version,
+                "signature_status": manifest.signature_status.value,
+                "layers": [
+                    {
+                        "digest": layer.digest,
+                        "media_type": layer.media_type,
+                        "size": layer.size,
+                    }
+                    for layer in manifest.layers
+                ],
+                "annotations": manifest.annotations,
+            }
+            print(json.dumps(output_data, indent=2))
+        else:
+            # Human-readable output
+            product_info = "N/A"
+            if manifest.product_name:
+                if manifest.product_version:
+                    product_info = f"{manifest.product_name} v{manifest.product_version}"
+                else:
+                    product_info = manifest.product_name
+
+            print(f"Digest:        {manifest.digest}")
+            print(f"Artifact Type: {manifest.artifact_type}")
+            print(f"Size:          {_format_size(manifest.size)}")
+            print(f"Created:       {manifest.created_at.isoformat()}")
+            print(f"Product:       {product_info}")
+            print(f"Signature:     {manifest.signature_status.value}")
+
+            if args.verbose:
+                print(f"\nLayers ({len(manifest.layers)}):")
+                for layer in manifest.layers:
+                    print(f"  - {layer.digest[:19]}... ({_format_size(layer.size)})")
+
+        if not args.quiet:
+            log.info(
+                "inspect_completed",
+                digest=manifest.digest,
+                tag=args.tag,
+            )
+
+        return EXIT_SUCCESS
+
+    except ArtifactNotFoundError as e:
+        if not args.quiet:
+            print(f"Error: Artifact not found - {e}", file=sys.stderr)
+            print("Hint: Check the tag and registry configuration", file=sys.stderr)
+        log.error("inspect_not_found", error=str(e))
+        return EXIT_NOT_FOUND_ERROR
+
+    except AuthenticationError as e:
+        if not args.quiet:
+            print(f"Error: Authentication failed - {e}", file=sys.stderr)
+        log.error("inspect_auth_failed", error=str(e))
+        return EXIT_AUTH_ERROR
+
+    except CircuitBreakerOpenError as e:
+        if not args.quiet:
+            print(f"Error: Registry unavailable - {e}", file=sys.stderr)
+            print("Hint: Wait for circuit breaker to reset and retry", file=sys.stderr)
+        log.error("inspect_circuit_breaker_open", error=str(e))
+        return EXIT_CIRCUIT_BREAKER_ERROR
+
+    except OCIError as e:
+        if not args.quiet:
+            print(f"Error: Inspect failed - {e}", file=sys.stderr)
+        log.error("inspect_failed", error=str(e))
+        return EXIT_GENERAL_ERROR
+
+    except Exception as e:
+        if not args.quiet:
+            print(f"Error: Unexpected error - {e}", file=sys.stderr)
+        log.exception("inspect_unexpected_error", error=str(e))
+        return EXIT_GENERAL_ERROR
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     """Main entry point for floe artifact push command.
 
