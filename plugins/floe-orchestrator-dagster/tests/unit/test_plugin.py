@@ -346,9 +346,14 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         with pytest.raises(NotImplementedError, match="T021"):
             dagster_plugin.emit_lineage_event("START", "job", [], [])
 
-    def test_schedule_job_not_implemented(
+    def test_schedule_job_creates_schedule(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Test schedule_job raises NotImplementedError."""
-        with pytest.raises(NotImplementedError, match="T017"):
-            dagster_plugin.schedule_job("job", "0 8 * * *", "UTC")
+        """Test schedule_job creates a ScheduleDefinition."""
+        # Should not raise - schedule is created successfully
+        dagster_plugin.schedule_job("daily_refresh", "0 8 * * *", "UTC")
+
+        # Verify schedule was stored
+        assert hasattr(dagster_plugin, "_schedules")
+        assert len(dagster_plugin._schedules) == 1
+        assert dagster_plugin._schedules[0].name == "daily_refresh_schedule"

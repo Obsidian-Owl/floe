@@ -484,11 +484,70 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # Placeholder - will be implemented in T021
         raise NotImplementedError("emit_lineage_event will be implemented in T021")
 
+    def _validate_cron(self, cron: str) -> None:
+        """Validate cron expression format.
+
+        Uses croniter library to verify the cron expression is syntactically valid.
+
+        Args:
+            cron: Cron expression to validate (e.g., "0 8 * * *").
+
+        Raises:
+            ValueError: If cron expression is invalid, with format guidance.
+        """
+        from croniter import croniter
+
+        if not cron or not cron.strip():
+            raise ValueError(
+                "Invalid cron expression: empty string. "
+                "Expected format: 'minute hour day month weekday' (e.g., '0 8 * * *')"
+            )
+
+        try:
+            # croniter.is_valid returns True/False but doesn't give details
+            # Instantiating it will raise if invalid
+            croniter(cron)
+        except (ValueError, KeyError) as e:
+            raise ValueError(
+                f"Invalid cron expression: '{cron}'. "
+                f"Expected format: 'minute hour day month weekday' (e.g., '0 8 * * *'). "
+                f"Error: {e}"
+            ) from e
+
+    def _validate_timezone(self, timezone: str) -> None:
+        """Validate IANA timezone identifier.
+
+        Uses pytz library to verify the timezone is a valid IANA timezone.
+
+        Args:
+            timezone: IANA timezone identifier (e.g., "America/New_York", "UTC").
+
+        Raises:
+            ValueError: If timezone is invalid, listing common valid examples.
+        """
+        import pytz
+
+        if not timezone or not timezone.strip():
+            raise ValueError(
+                "Invalid timezone: empty string. "
+                "Expected IANA timezone (e.g., 'UTC', 'America/New_York', 'Europe/London')"
+            )
+
+        try:
+            pytz.timezone(timezone)
+        except pytz.UnknownTimeZoneError as e:
+            raise ValueError(
+                f"Invalid timezone: '{timezone}'. "
+                "Expected valid IANA timezone. "
+                "Examples: 'UTC', 'America/New_York', 'Europe/London', 'Asia/Tokyo'"
+            ) from e
+
     def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
         """Schedule a job for recurring execution.
 
         Creates a Dagster ScheduleDefinition for the specified job
-        using a cron expression in the given timezone.
+        using a cron expression in the given timezone. The schedule
+        is stored internally and can be included in Definitions.
 
         Args:
             job_name: Name of the job to schedule.
@@ -502,5 +561,31 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         Example:
             >>> plugin.schedule_job("daily_refresh", "0 8 * * *", "America/New_York")
         """
-        # Placeholder - will be implemented in T017
-        raise NotImplementedError("schedule_job will be implemented in T017")
+        from dagster import ScheduleDefinition
+
+        # Validate inputs (FR-014, FR-015)
+        self._validate_cron(cron)
+        self._validate_timezone(timezone)
+
+        # Create the ScheduleDefinition (FR-013)
+        schedule = ScheduleDefinition(
+            name=f"{job_name}_schedule",
+            job_name=job_name,
+            cron_schedule=cron,
+            execution_timezone=timezone,
+        )
+
+        # Store schedule for later retrieval
+        if not hasattr(self, "_schedules"):
+            self._schedules: list[Any] = []
+        self._schedules.append(schedule)
+
+        logger.info(
+            "Schedule created",
+            extra={
+                "job_name": job_name,
+                "cron": cron,
+                "timezone": timezone,
+                "schedule_name": schedule.name,
+            },
+        )
