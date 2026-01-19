@@ -288,8 +288,7 @@ class CoverageValidator:
         # FLOE-E210: Generic coverage violation (using default minimum_test_coverage)
         # FLOE-E211: Layer-specific coverage violation (using layer_thresholds config)
         uses_layer_specific_threshold = (
-            layer is not None
-            and self.config.layer_thresholds is not None
+            layer is not None and self.config.layer_thresholds is not None
         )
         error_code = "FLOE-E211" if uses_layer_specific_threshold else "FLOE-E210"
 
@@ -323,7 +322,10 @@ class CoverageValidator:
             column_name=None,
             message=message,
             expected=f"{threshold}% column-level test coverage",
-            actual=f"{coverage:.1f}% ({len(columns) - len(uncovered)}/{len(columns)} columns tested)",
+            actual=(
+                f"{coverage:.1f}% "
+                f"({len(columns) - len(uncovered)}/{len(columns)} columns tested)"
+            ),
             suggestion=suggestion,
             documentation_url=COVERAGE_DOC_URL,
         )

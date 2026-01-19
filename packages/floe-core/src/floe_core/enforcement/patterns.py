@@ -200,8 +200,11 @@ def _check_redos_safety(pattern: str) -> None:
         if detector.search(pattern):
             raise InvalidPatternError(
                 pattern=pattern,
-                reason="Pattern contains potentially unsafe nested quantifiers (ReDoS vulnerability). "
-                "Avoid patterns like (a+)+, (a|a)+, or nested repetitions.",
+                reason=(
+                    "Pattern contains potentially unsafe nested quantifiers "
+                    "(ReDoS vulnerability). "
+                    "Avoid patterns like (a+)+, (a|a)+, or nested repetitions."
+                ),
             )
 
     # Additional heuristic checks

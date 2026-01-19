@@ -26,7 +26,6 @@ from floe_core.enforcement.validators.documentation import DocumentationValidato
 from floe_core.enforcement.validators.naming import NamingValidator
 
 if TYPE_CHECKING:
-    from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
     from floe_core.schemas.manifest import GovernanceConfig
 
 logger = structlog.get_logger(__name__)
@@ -178,10 +177,7 @@ class PolicyEnforcer:
             List of model node dictionaries.
         """
         nodes = manifest.get("nodes", {})
-        models = [
-            node for node in nodes.values()
-            if node.get("resource_type") == "model"
-        ]
+        models = [node for node in nodes.values() if node.get("resource_type") == "model"]
         return models
 
     def _extract_tests(self, manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -194,10 +190,7 @@ class PolicyEnforcer:
             List of test node dictionaries.
         """
         nodes = manifest.get("nodes", {})
-        tests = [
-            node for node in nodes.values()
-            if node.get("resource_type") == "test"
-        ]
+        tests = [node for node in nodes.values() if node.get("resource_type") == "test"]
         return tests
 
     def _validate_naming(

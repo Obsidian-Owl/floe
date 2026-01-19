@@ -25,18 +25,8 @@ Example:
 
 from __future__ import annotations
 
-# Result models (T025-T027)
-from floe_core.enforcement.result import (
-    EnforcementResult,
-    EnforcementSummary,
-    Violation,
-)
-
 # Error types (T028)
 from floe_core.enforcement.errors import PolicyEnforcementError
-
-# Core enforcer (T029-T030)
-from floe_core.enforcement.policy_enforcer import PolicyEnforcer
 
 # Patterns module (T040-T042)
 from floe_core.enforcement.patterns import (
@@ -48,6 +38,16 @@ from floe_core.enforcement.patterns import (
     get_pattern_for_type,
     matches_custom_patterns,
     validate_custom_patterns,
+)
+
+# Core enforcer (T029-T030)
+from floe_core.enforcement.policy_enforcer import PolicyEnforcer
+
+# Result models (T025-T027)
+from floe_core.enforcement.result import (
+    EnforcementResult,
+    EnforcementSummary,
+    Violation,
 )
 
 # Validators (T043-T045, T053-T059, T065-T069)

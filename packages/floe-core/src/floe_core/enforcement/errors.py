@@ -85,7 +85,7 @@ class PolicyEnforcementError(Exception):
 
         # Add first few violations for context
         max_show = 5
-        for i, v in enumerate(self.violations[:max_show]):
+        for v in self.violations[:max_show]:
             message += f"\n  [{v.error_code}] {v.policy_type}: {v.message}"
             if v.suggestion:
                 message += f" (suggestion: {v.suggestion})"

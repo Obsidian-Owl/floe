@@ -220,7 +220,7 @@ class NamingValidator:
             return self._suggest_kimball_name(model_name)
         if self.config.pattern == "custom":
             return self._suggest_custom_name(model_name)
-        return f"Rename model to match the configured naming convention"
+        return "Rename model to match the configured naming convention"
 
     def _suggest_medallion_name(self, model_name: str) -> str:
         """Generate a suggestion for medallion naming convention.
@@ -234,10 +234,11 @@ class NamingValidator:
         # Check if we recognize the prefix
         for prefix, suggestion_prefix in _MEDALLION_SUGGESTIONS.items():
             if model_name.startswith(prefix):
-                base_name = model_name[len(prefix):]
+                base_name = model_name[len(prefix) :]
+                layer_desc = self._get_layer_description(suggestion_prefix)
                 return (
                     f"Rename to '{suggestion_prefix}{base_name}'. "
-                    f"The '{prefix}' prefix suggests this is a {self._get_layer_description(suggestion_prefix)} layer model."
+                    f"The '{prefix}' prefix suggests this is a {layer_desc} layer model."
                 )
 
         # Default suggestion: suggest bronze_ as starting point
@@ -259,10 +260,11 @@ class NamingValidator:
         # Check if we recognize the prefix
         for prefix, suggestion_prefix in _KIMBALL_SUGGESTIONS.items():
             if model_name.startswith(prefix):
-                base_name = model_name[len(prefix):]
+                base_name = model_name[len(prefix) :]
                 return (
                     f"Rename to '{suggestion_prefix}{base_name}' or 'dim_{base_name}'. "
-                    f"Choose based on model purpose: dim_ (dimension), fact_ (transactional), bridge_ (many-to-many)."
+                    "Choose based on model purpose: "
+                    "dim_ (dimension), fact_ (transactional), bridge_ (many-to-many)."
                 )
 
         # Default suggestion
