@@ -553,8 +553,8 @@ class OCIClient:
         # Wrap entire operation in a trace span
         with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
             try:
-                # Check cache first for immutable tags
-                if self.cache_manager is not None and self.is_tag_immutable(tag):
+                # Check cache first (CacheManager handles TTL validation for mutable tags)
+                if self.cache_manager is not None:
                     cache_entry = self.cache_manager.get(self._config.uri, tag)
                     if cache_entry is not None:
                         log.info(
@@ -660,15 +660,15 @@ class OCIClient:
                 span.set_attribute("oci.product.version", artifacts.metadata.product_version)
                 span.set_attribute("oci.artifact.digest", digest)
 
-                # Store in cache for immutable tags
-                if self.cache_manager is not None and self.is_tag_immutable(tag):
+                # Store in cache (CacheManager sets TTL based on tag type)
+                if self.cache_manager is not None:
                     self.cache_manager.put(
                         digest=digest,
                         tag=tag,
                         registry=self._config.uri,
                         content=content,
                     )
-                    log.debug("pull_cached", digest=digest)
+                    log.debug("pull_cached", digest=digest, tag=tag)
 
                 # Record duration metric
                 duration = time.monotonic() - start_time
