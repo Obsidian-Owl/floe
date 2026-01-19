@@ -129,6 +129,7 @@ def sample_compiled_artifacts(
         metadata=sample_compilation_metadata,
         identity=sample_product_identity,
         mode="simple",
+        inheritance_chain=[],  # Required by mypy, default_factory=list
         observability=sample_observability_config,
         plugins=sample_resolved_plugins,
         transforms=sample_resolved_transforms,
@@ -629,3 +630,234 @@ metadata:
 
         with pytest.raises(OCIError, match="Missing 'artifacts.registry'"):
             OCIClient.from_manifest(manifest_path)
+
+
+class TestOCIClientPushOTelInstrumentation:
+    """Tests for OpenTelemetry instrumentation in push operations.
+
+    Task: T019
+    Requirements: FR-031, FR-034
+    """
+
+    @pytest.mark.requirement("8A-FR-031")
+    def test_push_creates_span_with_correct_name(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push() creates a span named 'floe.oci.push'.
+
+        FR-031: System MUST emit OpenTelemetry spans for all operations.
+        """
+        from floe_core.oci.metrics import OCIMetrics
+
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        # Track span creation
+        span_created = []
+
+        # Create real metrics object and mock its create_span method
+        original_metrics = oci_client.metrics
+
+        # Mock the create_span context manager
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            span_created.append({"name": name, "attributes": attributes or {}})
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        with (
+            patch.object(oci_client, "tag_exists", return_value=False),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+        # Verify span was created with correct name
+        assert len(span_created) == 1
+        assert span_created[0]["name"] == OCIMetrics.SPAN_PUSH
+
+    @pytest.mark.requirement("8A-FR-031")
+    def test_push_span_includes_required_attributes(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push() span includes registry, tag, and product attributes.
+
+        FR-031: Spans MUST include operation-specific attributes.
+        """
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        span_attributes: dict[str, Any] = {}
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            span_attributes.update(attributes or {})
+            mock_span = MagicMock()
+
+            def capture_attribute(key: str, value: Any) -> None:
+                span_attributes[key] = value
+
+            mock_span.set_attribute = capture_attribute
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        original_metrics = oci_client.metrics
+
+        with (
+            patch.object(oci_client, "tag_exists", return_value=False),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+        # Verify required attributes
+        assert "oci.registry" in span_attributes
+        assert span_attributes["oci.registry"] == "harbor.example.com"
+        assert "oci.tag" in span_attributes
+        assert span_attributes["oci.tag"] == "v1.0.0"
+        assert "oci.product.name" in span_attributes
+        assert "oci.product.version" in span_attributes
+
+    @pytest.mark.requirement("8A-FR-034")
+    def test_push_records_duration_metric(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push() records operation duration in histogram.
+
+        FR-034: System MUST emit operation duration metrics.
+        """
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        # Track duration recording
+        duration_recorded: list[tuple[str, str, float]] = []
+
+        def mock_record_duration(
+            operation: str, registry: str, duration: float, **kwargs: Any
+        ) -> None:
+            duration_recorded.append((operation, registry, duration))
+
+        original_metrics = oci_client.metrics
+
+        # Also need to mock create_span to avoid actual OTel calls
+        from contextlib import contextmanager
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+            mock_span.set_status = MagicMock()
+            mock_span.record_exception = MagicMock()
+            yield mock_span
+
+        with (
+            patch.object(oci_client, "tag_exists", return_value=False),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+            patch.object(original_metrics, "record_duration", side_effect=mock_record_duration),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+        # Verify duration was recorded for push operation
+        assert len(duration_recorded) == 1
+        operation, registry, duration = duration_recorded[0]
+        assert operation == "push"
+        assert "harbor" in registry
+        assert duration >= 0  # Duration should be non-negative
+
+    @pytest.mark.requirement("8A-FR-034")
+    def test_push_failure_records_error_in_span(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push() records exception in span on failure.
+
+        FR-034: Spans MUST record exceptions on failure.
+
+        Note: The OCIMetrics.create_span context manager automatically calls
+        span.set_status() and span.record_exception() when an exception occurs
+        within the `with` block. This test verifies that flow works correctly.
+        """
+        from floe_core.oci.errors import RegistryUnavailableError
+
+        mock_response = MagicMock()
+        mock_response.ok = False
+        mock_response.status_code = 500
+        mock_response.text = "Internal server error"
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        exception_recorded: list[Exception] = []
+        status_set: list[Any] = []
+
+        from contextlib import contextmanager
+
+        from opentelemetry.trace import Status, StatusCode
+
+        @contextmanager
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+            mock_span = MagicMock()
+            mock_span.set_attribute = MagicMock()
+
+            def capture_status(status: Status) -> None:
+                status_set.append(status)
+
+            def capture_exception(exc: Exception) -> None:
+                exception_recorded.append(exc)
+
+            mock_span.set_status = capture_status
+            mock_span.record_exception = capture_exception
+
+            # Mimic the real create_span behavior: catch exceptions, record, re-raise
+            try:
+                yield mock_span
+            except Exception as e:
+                mock_span.set_status(Status(StatusCode.ERROR, str(e)))
+                mock_span.record_exception(e)
+                raise
+
+        original_metrics = oci_client.metrics
+
+        with (
+            patch.object(oci_client, "tag_exists", return_value=False),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+            patch.object(original_metrics, "create_span", side_effect=mock_create_span),
+        ):
+            with pytest.raises(RegistryUnavailableError):
+                oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+        # Verify exception was recorded in span
+        assert len(exception_recorded) == 1
+        assert isinstance(exception_recorded[0], RegistryUnavailableError)
+
+        # Verify span status was set to ERROR
+        assert len(status_set) == 1
+        assert status_set[0].status_code == StatusCode.ERROR
