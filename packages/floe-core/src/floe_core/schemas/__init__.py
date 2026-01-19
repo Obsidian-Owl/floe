@@ -99,6 +99,25 @@ from floe_core.schemas.metadata import (
     ManifestMetadata,
 )
 
+# OCI schemas (Epic 8A)
+from floe_core.schemas.oci import (
+    FLOE_ARTIFACT_TYPE,
+    OCI_EMPTY_CONFIG_TYPE,
+    ArtifactLayer,
+    ArtifactManifest,
+    ArtifactTag,
+    AuthType,
+    CacheConfig,
+    CacheEntry,
+    CacheIndex,
+    CircuitBreakerConfig,
+    RegistryAuth,
+    RegistryConfig,
+    ResilienceConfig,
+    RetryConfig,
+    SignatureStatus,
+)
+
 # Plugin models (T016, T017, T042-T046)
 from floe_core.schemas.plugins import (
     PLUGIN_REGISTRY,
@@ -225,4 +244,20 @@ __all__: list[str] = [
     "RBACConfig",
     "PodSecurityLevelConfig",
     "SecurityConfig",
+    # OCI schemas (Epic 8A)
+    "FLOE_ARTIFACT_TYPE",
+    "OCI_EMPTY_CONFIG_TYPE",
+    "AuthType",
+    "RegistryAuth",
+    "RetryConfig",
+    "CircuitBreakerConfig",
+    "ResilienceConfig",
+    "CacheConfig",
+    "RegistryConfig",
+    "SignatureStatus",
+    "ArtifactLayer",
+    "ArtifactManifest",
+    "ArtifactTag",
+    "CacheEntry",
+    "CacheIndex",
 ]
