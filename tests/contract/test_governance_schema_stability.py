@@ -98,7 +98,10 @@ class TestGovernanceConfigContract:
 
         contract_path = CONTRACTS_DIR / "governance-schema.json"
         if not contract_path.exists():
-            pytest.skip(f"Contract file not found: {contract_path}")
+            pytest.fail(
+                f"Contract file not found: {contract_path}\n"
+                "Contract tests require the governance-schema.json specification file."
+            )
 
         with open(contract_path) as f:
             contract_schema = json.load(f)

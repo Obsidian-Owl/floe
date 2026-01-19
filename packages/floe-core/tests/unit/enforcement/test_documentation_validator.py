@@ -718,54 +718,34 @@ class TestConfigurableDocumentationUrl:
     """Tests for configurable documentation base URL (M1 recommendation)."""
 
     @pytest.mark.requirement("3A-US5-FR005")
-    def test_uses_default_docs_url(self) -> None:
+    def test_uses_default_docs_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Documentation URL MUST default to floe.dev/docs."""
         from floe_core.enforcement.patterns import _get_docs_base_url
 
         # Without env var set, should use default
-        import os
-        original = os.environ.get("FLOE_DOCS_BASE_URL")
-        try:
-            os.environ.pop("FLOE_DOCS_BASE_URL", None)
-            url = _get_docs_base_url()
-            assert url == "https://floe.dev/docs"
-        finally:
-            if original is not None:
-                os.environ["FLOE_DOCS_BASE_URL"] = original
+        monkeypatch.delenv("FLOE_DOCS_BASE_URL", raising=False)
+        url = _get_docs_base_url()
+        assert url == "https://floe.dev/docs"
 
     @pytest.mark.requirement("3A-US5-FR005")
-    def test_uses_env_var_docs_url(self) -> None:
+    def test_uses_env_var_docs_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Documentation URL MUST be configurable via FLOE_DOCS_BASE_URL."""
         from floe_core.enforcement.patterns import _get_docs_base_url
 
-        import os
-        original = os.environ.get("FLOE_DOCS_BASE_URL")
-        try:
-            os.environ["FLOE_DOCS_BASE_URL"] = "https://docs.example.com"
-            url = _get_docs_base_url()
-            assert url == "https://docs.example.com"
-        finally:
-            if original is not None:
-                os.environ["FLOE_DOCS_BASE_URL"] = original
-            else:
-                os.environ.pop("FLOE_DOCS_BASE_URL", None)
+        monkeypatch.setenv("FLOE_DOCS_BASE_URL", "https://docs.example.com")
+        url = _get_docs_base_url()
+        assert url == "https://docs.example.com"
 
     @pytest.mark.requirement("3A-US5-FR005")
-    def test_strips_trailing_slash_from_docs_url(self) -> None:
+    def test_strips_trailing_slash_from_docs_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Documentation URL MUST strip trailing slash."""
         from floe_core.enforcement.patterns import _get_docs_base_url
 
-        import os
-        original = os.environ.get("FLOE_DOCS_BASE_URL")
-        try:
-            os.environ["FLOE_DOCS_BASE_URL"] = "https://docs.example.com/"
-            url = _get_docs_base_url()
-            assert url == "https://docs.example.com"
-        finally:
-            if original is not None:
-                os.environ["FLOE_DOCS_BASE_URL"] = original
-            else:
-                os.environ.pop("FLOE_DOCS_BASE_URL", None)
+        monkeypatch.setenv("FLOE_DOCS_BASE_URL", "https://docs.example.com/")
+        url = _get_docs_base_url()
+        assert url == "https://docs.example.com"
 
 
 class TestDocumentationValidatorWithPolicyEnforcer:

@@ -402,17 +402,6 @@ class TestWarnModeLogging:
             },
         }
 
-        # Capture structlog output
-        captured_logs: list[dict[str, Any]] = []
-
-        def capture_processor(
-            logger: Any,
-            method_name: str,
-            event_dict: dict[str, Any],
-        ) -> dict[str, Any]:
-            captured_logs.append(event_dict.copy())
-            return event_dict
-
         # Configure structlog to capture logs
         with structlog.testing.capture_logs() as logs:
             run_enforce_stage(
@@ -421,12 +410,20 @@ class TestWarnModeLogging:
                 dry_run=False,
             )
 
-        # Verify violations were logged
-        violation_logs = [
-            log for log in logs if "violation" in log.get("event", "").lower()
+        # Verify enforcement-related logs were captured
+        # Look for logs containing enforcement context (violations, policy, naming)
+        enforcement_logs = [
+            log
+            for log in logs
+            if any(
+                keyword in str(log).lower()
+                for keyword in ["enforcement", "violation", "naming", "policy"]
+            )
         ]
-        # Should have logged the violations in warn mode
-        assert len(logs) > 0
+        assert len(enforcement_logs) > 0, (
+            f"Expected enforcement-related logs in warn mode, "
+            f"got events: {[log.get('event', '') for log in logs]}"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_warn_mode_returns_all_violations_in_result(
