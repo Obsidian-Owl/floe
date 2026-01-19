@@ -60,6 +60,9 @@ from floe_core.oci.auth import (
     create_auth_provider,
 )
 
+# Cache manager (T010)
+from floe_core.oci.cache import CacheManager
+
 # Error hierarchy (T002)
 from floe_core.oci.errors import (
     ArtifactNotFoundError,
@@ -83,7 +86,6 @@ from floe_core.oci.resilience import (
 )
 
 # NOTE: Additional exports will be populated as modules are implemented:
-# - T010: cache.py (CacheManager, CacheEntry)
 # - T011: metrics.py (OpenTelemetry metrics)
 # - T012: client.py (OCIClient)
 # - T016: manifest.py (ArtifactManifest builder)
@@ -114,4 +116,6 @@ __all__: list[str] = [
     "CircuitBreaker",
     "CircuitState",
     "with_resilience",
+    # Cache (T010)
+    "CacheManager",
 ]
