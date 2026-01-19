@@ -23,6 +23,9 @@ TEST_FALLBACK_VALUE = "PLACEHOLDER_FALLBACK"
 TEST_TOKEN_VALUE = "PLACEHOLDER_GITHUB_TOKEN"
 TEST_DIRECT_TOKEN = "PLACEHOLDER_TOKEN_DIRECT"
 TEST_SUBKEY_TOKEN = "PLACEHOLDER_TOKEN_SUBKEY"
+TEST_ECR_TOKEN = "PLACEHOLDER_ECR_AUTH_TOKEN"
+TEST_AZURE_TOKEN = "PLACEHOLDER_AZURE_MI_TOKEN"
+TEST_GCP_TOKEN = "PLACEHOLDER_GCP_WI_TOKEN"
 
 
 class TestBasicAuthProvider:
@@ -421,3 +424,568 @@ class TestCreateAuthProvider:
                 type=AuthType.BASIC,
                 credentials_ref=None,  # Missing - caught by Pydantic
             )
+
+
+class TestIRSAAuthProvider:
+    """Tests for AWS IRSA AuthProvider."""
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_irsa_auth_returns_credentials(self) -> None:
+        """Test that IRSAAuthProvider returns ECR credentials via boto3."""
+        import base64
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        from floe_core.oci.auth import Credentials, IRSAAuthProvider
+        from floe_core.schemas.oci import AuthType
+
+        # Create base64 encoded token (username:password format)
+        token_str = f"AWS:{TEST_ECR_TOKEN}"
+        encoded_token = base64.b64encode(token_str.encode()).decode()
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
+
+        mock_response = {
+            "authorizationData": [
+                {
+                    "authorizationToken": encoded_token,
+                    "expiresAt": expires_at,
+                }
+            ]
+        }
+
+        # Create mock boto3 module
+        mock_boto3 = MagicMock()
+        mock_client = MagicMock()
+        mock_client.get_authorization_token.return_value = mock_response
+        mock_boto3.client.return_value = mock_client
+
+        # Inject mock boto3 into sys.modules
+        with patch.dict(sys.modules, {"boto3": mock_boto3}):
+            provider = IRSAAuthProvider(
+                registry_uri="oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe"
+            )
+
+            # Verify auth type
+            assert provider.auth_type == AuthType.AWS_IRSA
+
+            # Get credentials
+            creds = provider.get_credentials()
+
+            # Verify credentials
+            assert isinstance(creds, Credentials)
+            assert creds.username == "AWS"
+            assert creds.password == TEST_ECR_TOKEN
+            assert creds.expires_at is not None
+
+            # Verify boto3 was called correctly
+            mock_boto3.client.assert_called_once_with("ecr", region_name="us-east-1")
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_irsa_auth_missing_boto3(self) -> None:
+        """Test that IRSAAuthProvider raises error when boto3 not installed."""
+        from unittest.mock import patch
+
+        from floe_core.oci.auth import IRSAAuthProvider
+        from floe_core.oci.errors import AuthenticationError
+
+        provider = IRSAAuthProvider(
+            registry_uri="oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe"
+        )
+
+        # Mock import to fail
+        with patch.dict("sys.modules", {"boto3": None}):
+            with patch(
+                "builtins.__import__",
+                side_effect=ImportError("No module named 'boto3'"),
+            ):
+                with pytest.raises(AuthenticationError, match="boto3 required"):
+                    provider.get_credentials()
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_irsa_auth_extracts_region(self) -> None:
+        """Test that IRSAAuthProvider extracts AWS region from ECR URI."""
+        from floe_core.oci.auth import IRSAAuthProvider
+
+        # Test various ECR URI formats
+        provider1 = IRSAAuthProvider(
+            registry_uri="oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe"
+        )
+        assert provider1._extract_region() == "us-east-1"
+
+        provider2 = IRSAAuthProvider(
+            registry_uri="oci://123456789.dkr.ecr.eu-west-2.amazonaws.com/repo"
+        )
+        assert provider2._extract_region() == "eu-west-2"
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_irsa_auth_caches_credentials(self) -> None:
+        """Test that IRSAAuthProvider caches credentials."""
+        import base64
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        from floe_core.oci.auth import IRSAAuthProvider
+
+        token_str = f"AWS:{TEST_ECR_TOKEN}"
+        encoded_token = base64.b64encode(token_str.encode()).decode()
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
+
+        mock_response = {
+            "authorizationData": [
+                {
+                    "authorizationToken": encoded_token,
+                    "expiresAt": expires_at,
+                }
+            ]
+        }
+
+        # Create mock boto3 module
+        mock_boto3 = MagicMock()
+        mock_client = MagicMock()
+        mock_client.get_authorization_token.return_value = mock_response
+        mock_boto3.client.return_value = mock_client
+
+        with patch.dict(sys.modules, {"boto3": mock_boto3}):
+            provider = IRSAAuthProvider(
+                registry_uri="oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe"
+            )
+
+            creds1 = provider.get_credentials()
+            creds2 = provider.get_credentials()
+
+            # Should be same object (cached)
+            assert creds1 is creds2
+            # boto3 should only be called once
+            assert mock_client.get_authorization_token.call_count == 1
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_irsa_auth_refresh_if_needed(self) -> None:
+        """Test that IRSAAuthProvider refreshes expiring credentials."""
+        import base64
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
+        from floe_core.oci.auth import IRSAAuthProvider
+
+        token_str = f"AWS:{TEST_ECR_TOKEN}"
+        encoded_token = base64.b64encode(token_str.encode()).decode()
+
+        # Create credentials that will expire soon (within refresh buffer)
+        expires_soon = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        mock_response = {
+            "authorizationData": [
+                {
+                    "authorizationToken": encoded_token,
+                    "expiresAt": expires_soon,
+                }
+            ]
+        }
+
+        # Create mock boto3 module
+        mock_boto3 = MagicMock()
+        mock_client = MagicMock()
+        mock_client.get_authorization_token.return_value = mock_response
+        mock_boto3.client.return_value = mock_client
+
+        with patch.dict(sys.modules, {"boto3": mock_boto3}):
+            provider = IRSAAuthProvider(
+                registry_uri="oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe"
+            )
+
+            # Get initial credentials
+            provider.get_credentials()
+            assert mock_client.get_authorization_token.call_count == 1
+
+            # Since credentials expire within buffer (30 min), refresh should be needed
+            refreshed = provider.refresh_if_needed()
+            assert refreshed is True
+            assert mock_client.get_authorization_token.call_count == 2
+
+
+class TestAzureMIAuthProvider:
+    """Tests for Azure Managed Identity AuthProvider."""
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_azure_mi_auth_returns_credentials(self) -> None:
+        """Test that AzureMIAuthProvider returns ACR credentials via azure-identity."""
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.oci.auth import AzureMIAuthProvider, Credentials
+        from floe_core.schemas.oci import AuthType
+
+        expires_on = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        mock_token = MagicMock()
+        mock_token.token = TEST_AZURE_TOKEN
+        mock_token.expires_on = expires_on.timestamp()
+
+        # Create mock azure.identity module
+        mock_credential = MagicMock()
+        mock_credential.get_token.return_value = mock_token
+        mock_cred_class = MagicMock(return_value=mock_credential)
+
+        mock_azure_identity = MagicMock()
+        mock_azure_identity.DefaultAzureCredential = mock_cred_class
+
+        with patch.dict(sys.modules, {"azure.identity": mock_azure_identity}):
+            provider = AzureMIAuthProvider(
+                registry_uri="oci://myregistry.azurecr.io/floe"
+            )
+
+            # Verify auth type
+            assert provider.auth_type == AuthType.AZURE_MANAGED_IDENTITY
+
+            # Get credentials
+            creds = provider.get_credentials()
+
+            # Verify credentials
+            assert isinstance(creds, Credentials)
+            assert creds.username == "00000000-0000-0000-0000-000000000000"
+            assert creds.password == TEST_AZURE_TOKEN
+            assert creds.expires_at is not None
+
+            # Verify azure-identity was called correctly
+            mock_credential.get_token.assert_called_once_with(
+                "https://management.azure.com/.default"
+            )
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_azure_mi_auth_missing_azure_identity(self) -> None:
+        """Test that AzureMIAuthProvider raises error when azure-identity not installed."""
+        import sys
+        from unittest.mock import patch
+
+        from floe_core.oci.auth import AzureMIAuthProvider
+        from floe_core.oci.errors import AuthenticationError
+
+        provider = AzureMIAuthProvider(
+            registry_uri="oci://myregistry.azurecr.io/floe"
+        )
+
+        with patch.dict(sys.modules, {"azure": None, "azure.identity": None}):
+            with patch(
+                "builtins.__import__",
+                side_effect=ImportError("No module named 'azure.identity'"),
+            ):
+                with pytest.raises(AuthenticationError, match="azure-identity required"):
+                    provider.get_credentials()
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_azure_mi_auth_caches_credentials(self) -> None:
+        """Test that AzureMIAuthProvider caches credentials."""
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.oci.auth import AzureMIAuthProvider
+
+        expires_on = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        mock_token = MagicMock()
+        mock_token.token = TEST_AZURE_TOKEN
+        mock_token.expires_on = expires_on.timestamp()
+
+        # Create mock azure.identity module
+        mock_credential = MagicMock()
+        mock_credential.get_token.return_value = mock_token
+        mock_cred_class = MagicMock(return_value=mock_credential)
+
+        mock_azure_identity = MagicMock()
+        mock_azure_identity.DefaultAzureCredential = mock_cred_class
+
+        with patch.dict(sys.modules, {"azure.identity": mock_azure_identity}):
+            provider = AzureMIAuthProvider(
+                registry_uri="oci://myregistry.azurecr.io/floe"
+            )
+
+            creds1 = provider.get_credentials()
+            creds2 = provider.get_credentials()
+
+            # Should be same object (cached)
+            assert creds1 is creds2
+            # get_token should only be called once
+            assert mock_credential.get_token.call_count == 1
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_azure_mi_auth_refresh_if_needed(self) -> None:
+        """Test that AzureMIAuthProvider refreshes expiring credentials."""
+        import sys
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.oci.auth import AzureMIAuthProvider
+
+        # Create credentials that will expire soon (within refresh buffer)
+        expires_soon = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        mock_token = MagicMock()
+        mock_token.token = TEST_AZURE_TOKEN
+        mock_token.expires_on = expires_soon.timestamp()
+
+        # Create mock azure.identity module
+        mock_credential = MagicMock()
+        mock_credential.get_token.return_value = mock_token
+        mock_cred_class = MagicMock(return_value=mock_credential)
+
+        mock_azure_identity = MagicMock()
+        mock_azure_identity.DefaultAzureCredential = mock_cred_class
+
+        with patch.dict(sys.modules, {"azure.identity": mock_azure_identity}):
+            provider = AzureMIAuthProvider(
+                registry_uri="oci://myregistry.azurecr.io/floe"
+            )
+
+            # Get initial credentials
+            provider.get_credentials()
+            assert mock_credential.get_token.call_count == 1
+
+            # Since credentials expire within buffer (10 min), refresh should be needed
+            refreshed = provider.refresh_if_needed()
+            assert refreshed is True
+            assert mock_credential.get_token.call_count == 2
+
+
+class TestGCPWIAuthProvider:
+    """Tests for GCP Workload Identity AuthProvider."""
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_gcp_wi_auth_returns_credentials(self) -> None:
+        """Test that GCPWIAuthProvider returns GAR credentials via google-auth."""
+        import sys
+        import types
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.oci.auth import Credentials, GCPWIAuthProvider
+        from floe_core.schemas.oci import AuthType
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        mock_gcp_credentials = MagicMock()
+        mock_gcp_credentials.token = TEST_GCP_TOKEN
+        mock_gcp_credentials.expiry = expires_at
+
+        # Create mock google module hierarchy
+        mock_google = types.ModuleType("google")
+        mock_google_auth = types.ModuleType("google.auth")
+        mock_google_auth.default = MagicMock(
+            return_value=(mock_gcp_credentials, "project-id")
+        )
+
+        mock_google.auth = mock_google_auth
+
+        # Create mock transport modules
+        mock_transport = types.ModuleType("google.auth.transport")
+        mock_transport_requests = types.ModuleType("google.auth.transport.requests")
+        mock_transport_requests.Request = MagicMock()
+
+        with patch.dict(
+            sys.modules,
+            {
+                "google": mock_google,
+                "google.auth": mock_google_auth,
+                "google.auth.transport": mock_transport,
+                "google.auth.transport.requests": mock_transport_requests,
+            },
+        ):
+            provider = GCPWIAuthProvider(
+                registry_uri="oci://us-central1-docker.pkg.dev/my-project/my-repo"
+            )
+
+            # Verify auth type
+            assert provider.auth_type == AuthType.GCP_WORKLOAD_IDENTITY
+
+            # Get credentials
+            creds = provider.get_credentials()
+
+            # Verify credentials
+            assert isinstance(creds, Credentials)
+            assert creds.username == "oauth2accesstoken"
+            assert creds.password == TEST_GCP_TOKEN
+            assert creds.expires_at is not None
+
+            # Verify google-auth was called correctly
+            mock_google_auth.default.assert_called_once_with(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            mock_gcp_credentials.refresh.assert_called_once()
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_gcp_wi_auth_missing_google_auth(self) -> None:
+        """Test that GCPWIAuthProvider raises error when google-auth not installed."""
+        import sys
+        from unittest.mock import patch
+
+        from floe_core.oci.auth import GCPWIAuthProvider
+        from floe_core.oci.errors import AuthenticationError
+
+        provider = GCPWIAuthProvider(
+            registry_uri="oci://us-central1-docker.pkg.dev/my-project/my-repo"
+        )
+
+        with patch.dict(sys.modules, {"google": None, "google.auth": None}):
+            with patch(
+                "builtins.__import__",
+                side_effect=ImportError("No module named 'google.auth'"),
+            ):
+                with pytest.raises(AuthenticationError, match="google-auth required"):
+                    provider.get_credentials()
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_gcp_wi_auth_caches_credentials(self) -> None:
+        """Test that GCPWIAuthProvider caches credentials."""
+        import sys
+        import types
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.oci.auth import GCPWIAuthProvider
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        mock_gcp_credentials = MagicMock()
+        mock_gcp_credentials.token = TEST_GCP_TOKEN
+        mock_gcp_credentials.expiry = expires_at
+
+        # Create mock google module hierarchy
+        mock_google = types.ModuleType("google")
+        mock_google_auth = types.ModuleType("google.auth")
+        mock_google_auth.default = MagicMock(
+            return_value=(mock_gcp_credentials, "project-id")
+        )
+
+        mock_google.auth = mock_google_auth
+
+        # Create mock transport modules
+        mock_transport = types.ModuleType("google.auth.transport")
+        mock_transport_requests = types.ModuleType("google.auth.transport.requests")
+        mock_transport_requests.Request = MagicMock()
+
+        with patch.dict(
+            sys.modules,
+            {
+                "google": mock_google,
+                "google.auth": mock_google_auth,
+                "google.auth.transport": mock_transport,
+                "google.auth.transport.requests": mock_transport_requests,
+            },
+        ):
+            provider = GCPWIAuthProvider(
+                registry_uri="oci://us-central1-docker.pkg.dev/my-project/my-repo"
+            )
+
+            creds1 = provider.get_credentials()
+            creds2 = provider.get_credentials()
+
+            # Should be same object (cached)
+            assert creds1 is creds2
+            # google.auth.default should only be called once
+            assert mock_google_auth.default.call_count == 1
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_gcp_wi_auth_refresh_if_needed(self) -> None:
+        """Test that GCPWIAuthProvider refreshes expiring credentials."""
+        import sys
+        import types
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        from floe_core.oci.auth import GCPWIAuthProvider
+
+        # Create credentials that will expire soon (within refresh buffer)
+        expires_soon = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        mock_gcp_credentials = MagicMock()
+        mock_gcp_credentials.token = TEST_GCP_TOKEN
+        mock_gcp_credentials.expiry = expires_soon
+
+        # Create mock google module hierarchy
+        mock_google = types.ModuleType("google")
+        mock_google_auth = types.ModuleType("google.auth")
+        mock_google_auth.default = MagicMock(
+            return_value=(mock_gcp_credentials, "project-id")
+        )
+
+        mock_google.auth = mock_google_auth
+
+        # Create mock transport modules
+        mock_transport = types.ModuleType("google.auth.transport")
+        mock_transport_requests = types.ModuleType("google.auth.transport.requests")
+        mock_transport_requests.Request = MagicMock()
+
+        with patch.dict(
+            sys.modules,
+            {
+                "google": mock_google,
+                "google.auth": mock_google_auth,
+                "google.auth.transport": mock_transport,
+                "google.auth.transport.requests": mock_transport_requests,
+            },
+        ):
+            provider = GCPWIAuthProvider(
+                registry_uri="oci://us-central1-docker.pkg.dev/my-project/my-repo"
+            )
+
+            # Get initial credentials
+            provider.get_credentials()
+            assert mock_google_auth.default.call_count == 1
+
+            # Since credentials expire within buffer (10 min), refresh should be needed
+            refreshed = provider.refresh_if_needed()
+            assert refreshed is True
+            assert mock_google_auth.default.call_count == 2
+
+
+class TestCreateAuthProviderCloud:
+    """Tests for create_auth_provider factory with cloud providers."""
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_create_irsa_auth_provider(self) -> None:
+        """Test factory creates IRSAAuthProvider for AWS IRSA auth type."""
+        from floe_core.oci.auth import IRSAAuthProvider, create_auth_provider
+        from floe_core.schemas.oci import AuthType, RegistryAuth
+
+        auth_config = RegistryAuth(type=AuthType.AWS_IRSA)
+
+        provider = create_auth_provider(
+            registry_uri="oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe",
+            auth_config=auth_config,
+        )
+
+        assert isinstance(provider, IRSAAuthProvider)
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_create_azure_mi_auth_provider(self) -> None:
+        """Test factory creates AzureMIAuthProvider for Azure MI auth type."""
+        from floe_core.oci.auth import AzureMIAuthProvider, create_auth_provider
+        from floe_core.schemas.oci import AuthType, RegistryAuth
+
+        auth_config = RegistryAuth(type=AuthType.AZURE_MANAGED_IDENTITY)
+
+        provider = create_auth_provider(
+            registry_uri="oci://myregistry.azurecr.io/floe",
+            auth_config=auth_config,
+        )
+
+        assert isinstance(provider, AzureMIAuthProvider)
+
+    @pytest.mark.requirement("8A-FR-007")
+    def test_create_gcp_wi_auth_provider(self) -> None:
+        """Test factory creates GCPWIAuthProvider for GCP WI auth type."""
+        from floe_core.oci.auth import GCPWIAuthProvider, create_auth_provider
+        from floe_core.schemas.oci import AuthType, RegistryAuth
+
+        auth_config = RegistryAuth(type=AuthType.GCP_WORKLOAD_IDENTITY)
+
+        provider = create_auth_provider(
+            registry_uri="oci://us-central1-docker.pkg.dev/my-project/my-repo",
+            auth_config=auth_config,
+        )
+
+        assert isinstance(provider, GCPWIAuthProvider)
