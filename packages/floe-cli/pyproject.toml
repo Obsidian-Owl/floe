@@ -60,8 +60,10 @@ disallow_untyped_defs = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
-ignore = []
+ignore = [
+    "UP017",  # datetime.UTC alias only available in Python 3.11+
+]

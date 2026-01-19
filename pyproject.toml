@@ -120,6 +120,9 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
+ignore = [
+    "UP017",  # datetime.UTC alias only available in Python 3.11+
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "packages/floe-core/tests"]

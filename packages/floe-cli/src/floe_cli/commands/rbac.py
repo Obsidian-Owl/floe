@@ -19,7 +19,7 @@ Example:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -204,7 +204,7 @@ class RBACAuditReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     generated_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=UTC),
+        default_factory=lambda: datetime.now(tz=timezone.utc),
         description="Report generation timestamp",
     )
     cluster_name: str = Field(
@@ -757,7 +757,7 @@ class RBACDiffResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     generated_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=UTC),
+        default_factory=lambda: datetime.now(tz=timezone.utc),
         description="Diff computation timestamp",
     )
     expected_source: str = Field(

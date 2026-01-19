@@ -113,8 +113,8 @@ def generate_command(
     """
     try:
         # Import plugin at runtime to avoid hard dependency
-        from floe_core.schemas.rbac import RBACConfig
-        from floe_rbac_k8s.plugin import K8sRBACPlugin
+        from floe_core.schemas.security import RBACConfig
+        from floe_rbac_k8s.plugin import K8sRBACPlugin  # type: ignore[import-untyped]
 
         # Load configuration
         click.echo(f"Loading configuration from {config_path}...")
@@ -432,7 +432,7 @@ def audit_command(
     """
     try:
         # Import kubernetes at runtime
-        from kubernetes import client, config
+        from kubernetes import client, config  # type: ignore[import-untyped]
 
         # Load kubeconfig
         if kubeconfig:
@@ -628,8 +628,8 @@ def _print_audit_report(report: RBACAuditReport) -> None:
 
                 click.echo(click.style(f"\n[{severity.value.upper()}]", fg=color, bold=True))
                 for finding in findings:
-                    ns = finding.resource_namespace
-                    ns_str = f" ({ns})" if ns else ""
+                    ns_name = finding.resource_namespace
+                    ns_str = f" ({ns_name})" if ns_name else ""
                     click.echo(f"  {finding.resource_kind}/{finding.resource_name}{ns_str}")
                     click.echo(f"    {finding.message}")
                     if finding.recommendation:
