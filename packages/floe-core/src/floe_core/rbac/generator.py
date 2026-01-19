@@ -203,6 +203,69 @@ def aggregate_permissions(secret_refs: list[str]) -> list[RoleRule]:
     ]
 
 
+def validate_secret_references(
+    secret_references: list[str],
+    permitted_secrets: set[str],
+) -> tuple[bool, list[str]]:
+    """Validate that all secret references have RBAC permissions.
+
+    Ensures every secret reference in the configuration is covered by
+    RBAC permissions before generation proceeds. This prevents runtime
+    access failures due to missing permissions.
+
+    Args:
+        secret_references: List of secret names required by data products.
+        permitted_secrets: Set of secret names with RBAC access granted.
+
+    Returns:
+        Tuple of (is_valid, error_messages).
+
+    Contract:
+        - MUST fail if any secret_ref not in permitted_secrets (FR-073)
+        - MUST report ALL missing permissions, not just first
+        - MUST handle duplicate references (report once)
+        - MUST strip whitespace from secret names
+
+    Example:
+        >>> is_valid, errors = validate_secret_references(
+        ...     ["secret-a", "secret-b"],
+        ...     {"secret-a"}
+        ... )
+        >>> is_valid
+        False
+        >>> "secret-b" in errors[0]
+        True
+    """
+    if not secret_references:
+        return True, []
+
+    # Deduplicate and clean secret references
+    seen: set[str] = set()
+    unique_refs: list[str] = []
+    for ref in secret_references:
+        clean_ref = ref.strip() if isinstance(ref, str) else ref
+        if clean_ref not in seen:
+            seen.add(clean_ref)
+            unique_refs.append(clean_ref)
+
+    # Find missing permissions
+    missing: list[str] = []
+    for ref in unique_refs:
+        if ref not in permitted_secrets:
+            missing.append(ref)
+
+    if not missing:
+        return True, []
+
+    # Build error messages
+    errors = [
+        f"Secret '{name}' requires RBAC permission but is not in permitted secrets"
+        for name in missing
+    ]
+
+    return False, errors
+
+
 def write_manifests(
     manifests: dict[str, list[dict[str, Any]]],
     output_dir: Path,
@@ -493,3 +556,22 @@ class RBACManifestGenerator:
             Module-level write_manifests function for implementation.
         """
         return write_manifests(manifests, self.output_dir)
+
+    def validate_secret_references(
+        self,
+        secret_references: list[str],
+        permitted_secrets: set[str],
+    ) -> tuple[bool, list[str]]:
+        """Validate that all secret references have RBAC permissions.
+
+        Args:
+            secret_references: List of secret names required by data products.
+            permitted_secrets: Set of secret names with RBAC access granted.
+
+        Returns:
+            Tuple of (is_valid, error_messages).
+
+        See Also:
+            Module-level validate_secret_references function for implementation.
+        """
+        return validate_secret_references(secret_references, permitted_secrets)

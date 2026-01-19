@@ -23,6 +23,8 @@ __all__ = [
     "validate_all_manifests",
     "aggregate_permissions",
     "write_manifests",
+    # Secret reference validation (FR-073)
+    "validate_secret_references",
     # Audit logging (FR-072)
     "RBACGenerationAuditEvent",
     "RBACGenerationResult",
@@ -65,6 +67,10 @@ def __getattr__(name: str) -> Any:
         from floe_core.rbac.generator import write_manifests
 
         return write_manifests
+    if name == "validate_secret_references":
+        from floe_core.rbac.generator import validate_secret_references
+
+        return validate_secret_references
     if name == "RBACGenerationAuditEvent":
         from floe_core.rbac.audit import RBACGenerationAuditEvent
 
