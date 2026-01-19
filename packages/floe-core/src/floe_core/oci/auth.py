@@ -662,10 +662,8 @@ class GCPWIAuthProvider(AuthProvider):
             return self._credentials
 
         try:
-            import google.auth  # type: ignore[import-untyped]
-            from google.auth.transport.requests import (  # type: ignore[import-untyped]
-                Request,
-            )
+            import google.auth
+            from google.auth.transport.requests import Request
         except ImportError as e:
             raise AuthenticationError(
                 self._registry_uri,
@@ -676,7 +674,7 @@ class GCPWIAuthProvider(AuthProvider):
             credentials, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            credentials.refresh(Request())
+            credentials.refresh(Request())  # type: ignore[no-untyped-call]
 
             expires_at = None
             if hasattr(credentials, "expiry") and credentials.expiry:
@@ -684,9 +682,17 @@ class GCPWIAuthProvider(AuthProvider):
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=timezone.utc)
 
+            # credentials.token can be None before refresh, but after refresh it's a string
+            token = credentials.token
+            if token is None:
+                raise AuthenticationError(
+                    self._registry_uri,
+                    "GCP credentials token is None after refresh",
+                )
+
             self._credentials = Credentials(
                 username="oauth2accesstoken",
-                password=credentials.token,
+                password=token,
                 expires_at=expires_at,
             )
 
