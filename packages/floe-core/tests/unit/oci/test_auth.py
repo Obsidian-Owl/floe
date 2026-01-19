@@ -633,9 +633,7 @@ class TestAzureMIAuthProvider:
         mock_azure_identity.DefaultAzureCredential = mock_cred_class
 
         with patch.dict(sys.modules, {"azure.identity": mock_azure_identity}):
-            provider = AzureMIAuthProvider(
-                registry_uri="oci://myregistry.azurecr.io/floe"
-            )
+            provider = AzureMIAuthProvider(registry_uri="oci://myregistry.azurecr.io/floe")
 
             # Verify auth type
             assert provider.auth_type == AuthType.AZURE_MANAGED_IDENTITY
@@ -663,9 +661,7 @@ class TestAzureMIAuthProvider:
         from floe_core.oci.auth import AzureMIAuthProvider
         from floe_core.oci.errors import AuthenticationError
 
-        provider = AzureMIAuthProvider(
-            registry_uri="oci://myregistry.azurecr.io/floe"
-        )
+        provider = AzureMIAuthProvider(registry_uri="oci://myregistry.azurecr.io/floe")
 
         with patch.dict(sys.modules, {"azure": None, "azure.identity": None}):
             with patch(
@@ -699,9 +695,7 @@ class TestAzureMIAuthProvider:
         mock_azure_identity.DefaultAzureCredential = mock_cred_class
 
         with patch.dict(sys.modules, {"azure.identity": mock_azure_identity}):
-            provider = AzureMIAuthProvider(
-                registry_uri="oci://myregistry.azurecr.io/floe"
-            )
+            provider = AzureMIAuthProvider(registry_uri="oci://myregistry.azurecr.io/floe")
 
             creds1 = provider.get_credentials()
             creds2 = provider.get_credentials()
@@ -736,9 +730,7 @@ class TestAzureMIAuthProvider:
         mock_azure_identity.DefaultAzureCredential = mock_cred_class
 
         with patch.dict(sys.modules, {"azure.identity": mock_azure_identity}):
-            provider = AzureMIAuthProvider(
-                registry_uri="oci://myregistry.azurecr.io/floe"
-            )
+            provider = AzureMIAuthProvider(registry_uri="oci://myregistry.azurecr.io/floe")
 
             # Get initial credentials
             provider.get_credentials()
@@ -773,9 +765,7 @@ class TestGCPWIAuthProvider:
         # Create mock google module hierarchy
         mock_google = types.ModuleType("google")
         mock_google_auth = types.ModuleType("google.auth")
-        mock_google_auth.default = MagicMock(
-            return_value=(mock_gcp_credentials, "project-id")
-        )
+        mock_google_auth.default = MagicMock(return_value=(mock_gcp_credentials, "project-id"))
 
         mock_google.auth = mock_google_auth
 
@@ -855,9 +845,7 @@ class TestGCPWIAuthProvider:
         # Create mock google module hierarchy
         mock_google = types.ModuleType("google")
         mock_google_auth = types.ModuleType("google.auth")
-        mock_google_auth.default = MagicMock(
-            return_value=(mock_gcp_credentials, "project-id")
-        )
+        mock_google_auth.default = MagicMock(return_value=(mock_gcp_credentials, "project-id"))
 
         mock_google.auth = mock_google_auth
 
@@ -907,9 +895,7 @@ class TestGCPWIAuthProvider:
         # Create mock google module hierarchy
         mock_google = types.ModuleType("google")
         mock_google_auth = types.ModuleType("google.auth")
-        mock_google_auth.default = MagicMock(
-            return_value=(mock_gcp_credentials, "project-id")
-        )
+        mock_google_auth.default = MagicMock(return_value=(mock_gcp_credentials, "project-id"))
 
         mock_google.auth = mock_google_auth
 

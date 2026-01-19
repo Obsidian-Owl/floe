@@ -864,9 +864,7 @@ artifacts:
             OCIClient.from_manifest(manifest_path)
 
     @pytest.mark.requirement("8A-FR-022")
-    def test_from_manifest_raises_on_missing_registry_section(
-        self, tmp_path: Path
-    ) -> None:
+    def test_from_manifest_raises_on_missing_registry_section(self, tmp_path: Path) -> None:
         """Test that from_manifest raises error when registry section missing."""
         from floe_core.oci.errors import OCIError
 

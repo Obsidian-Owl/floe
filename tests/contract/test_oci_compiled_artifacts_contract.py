@@ -134,9 +134,7 @@ def full_compiled_artifacts() -> CompiledArtifacts:
         ),
         transforms=ResolvedTransforms(
             models=[
-                ResolvedModel(
-                    name="stg_customers", compute="snowflake", tags=["staging"]
-                ),
+                ResolvedModel(name="stg_customers", compute="snowflake", tags=["staging"]),
                 ResolvedModel(
                     name="fct_orders",
                     compute="snowflake",
@@ -275,9 +273,7 @@ class TestCompiledArtifactsDeserializationContract:
         assert restored.version == "0.2.0"
 
     @pytest.mark.requirement("8A-FR-002")
-    def test_deserialize_from_bytes(
-        self, minimal_compiled_artifacts: CompiledArtifacts
-    ) -> None:
+    def test_deserialize_from_bytes(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
         """Contract: CompiledArtifacts deserializes from bytes.
 
         OCI layers are stored as bytes, so deserialization from bytes
@@ -399,8 +395,7 @@ class TestCompiledArtifactsRoundTripContract:
         assert restored.plugins.orchestrator.type == orch_type
         # Verify version is also preserved (contract completeness)
         assert (
-            restored.plugins.compute.version
-            == minimal_compiled_artifacts.plugins.compute.version
+            restored.plugins.compute.version == minimal_compiled_artifacts.plugins.compute.version
         )
         assert (
             restored.plugins.orchestrator.version

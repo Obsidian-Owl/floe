@@ -330,13 +330,9 @@ class TestPullFromRegistry(IntegrationTestBase):
 
         # Verify content matches
         assert pulled_artifacts.version == original_artifacts.version
+        assert pulled_artifacts.metadata.product_name == original_artifacts.metadata.product_name
         assert (
-            pulled_artifacts.metadata.product_name
-            == original_artifacts.metadata.product_name
-        )
-        assert (
-            pulled_artifacts.metadata.product_version
-            == original_artifacts.metadata.product_version
+            pulled_artifacts.metadata.product_version == original_artifacts.metadata.product_version
         )
         assert pulled_artifacts.dbt_profiles == original_artifacts.dbt_profiles
 
@@ -435,13 +431,8 @@ class TestPullFromRegistry(IntegrationTestBase):
         pulled_second = client.pull(tag=test_artifact_tag)
 
         # Both pulls should return identical content
-        assert (
-            pulled_first.metadata.product_name == pulled_second.metadata.product_name
-        )
-        assert (
-            pulled_first.metadata.product_version
-            == pulled_second.metadata.product_version
-        )
+        assert pulled_first.metadata.product_name == pulled_second.metadata.product_name
+        assert pulled_first.metadata.product_version == pulled_second.metadata.product_version
         assert pulled_first.dbt_profiles == pulled_second.dbt_profiles
 
 
@@ -746,9 +737,7 @@ class TestBasicAuthRegistry(IntegrationTestBase):
         )
 
         # Create client with mock secrets plugin
-        client = OCIClient.from_registry_config(
-            registry_config, secrets_plugin=mock_secrets_plugin
-        )
+        client = OCIClient.from_registry_config(registry_config, secrets_plugin=mock_secrets_plugin)
 
         # Push should succeed with valid credentials
         tag = f"auth-{test_artifact_tag}"
@@ -803,9 +792,7 @@ class TestBasicAuthRegistry(IntegrationTestBase):
             cache=CacheConfig(enabled=True, path=cache_dir),
         )
 
-        client = OCIClient.from_registry_config(
-            registry_config, secrets_plugin=mock_secrets_plugin
-        )
+        client = OCIClient.from_registry_config(registry_config, secrets_plugin=mock_secrets_plugin)
 
         # Push first
         tag = f"auth-pull-{test_artifact_tag}"
@@ -816,10 +803,7 @@ class TestBasicAuthRegistry(IntegrationTestBase):
 
         # Verify content matches
         assert pulled_artifacts.version == original_artifacts.version
-        assert (
-            pulled_artifacts.metadata.product_name
-            == original_artifacts.metadata.product_name
-        )
+        assert pulled_artifacts.metadata.product_name == original_artifacts.metadata.product_name
 
     @pytest.mark.requirement("8A-FR-006")
     def test_basic_auth_invalid_credentials_rejected(
@@ -860,9 +844,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
 
         # Verify error indicates authentication failure
         error_msg = str(exc_info.value).lower()
-        assert any(
-            term in error_msg for term in ["auth", "401", "unauthorized"]
-        ), f"Expected auth-related error, got: {exc_info.value}"
+        assert any(term in error_msg for term in ["auth", "401", "unauthorized"]), (
+            f"Expected auth-related error, got: {exc_info.value}"
+        )
 
     @pytest.mark.requirement("8A-SC-009")
     def test_basic_auth_anonymous_access_denied(
@@ -929,9 +913,7 @@ class TestBasicAuthRegistry(IntegrationTestBase):
             tls_verify=False,
         )
 
-        client = OCIClient.from_registry_config(
-            registry_config, secrets_plugin=mock_secrets_plugin
-        )
+        client = OCIClient.from_registry_config(registry_config, secrets_plugin=mock_secrets_plugin)
 
         # Push first
         tag = f"auth-inspect-{test_artifact_tag}"
