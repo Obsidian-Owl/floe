@@ -118,7 +118,8 @@ Compilation FAILED (governance.policy_enforcement_level: strict)
 
 ```python
 from floe_core.enforcement import PolicyEnforcer
-from floe_core.schemas import GovernanceConfig
+from floe_core.schemas.manifest import GovernanceConfig
+from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
 
 # Load dbt manifest
 import json
@@ -126,15 +127,15 @@ with open("target/manifest.json") as f:
     dbt_manifest = json.load(f)
 
 # Create governance config
-governance = GovernanceConfig(
+governance_config = GovernanceConfig(
     policy_enforcement_level="strict",
     naming=NamingConfig(enforcement="strict", pattern="medallion"),
     quality_gates=QualityGatesConfig(minimum_test_coverage=80),
 )
 
 # Run enforcement
-enforcer = PolicyEnforcer()
-result = enforcer.enforce(dbt_manifest, governance)
+enforcer = PolicyEnforcer(governance_config=governance_config)
+result = enforcer.enforce(dbt_manifest)
 
 # Check result
 if result.passed:
