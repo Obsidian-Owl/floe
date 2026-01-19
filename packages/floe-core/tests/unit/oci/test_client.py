@@ -383,6 +383,54 @@ class TestOCIClientPush:
             assert manifest_annotations.get("custom.key") == "custom-value"
 
     @pytest.mark.requirement("8A-FR-010")
+    def test_push_rejects_existing_semver_tag(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push() raises ImmutabilityViolationError for existing semver tags.
+
+        FR-010: System MUST reject pushes to existing semver tags.
+
+        This tests that the full push() operation enforces immutability,
+        not just the internal helper.
+        """
+        # Mock tag_exists to return True (tag already exists)
+        with patch.object(oci_client, "tag_exists", return_value=True):
+            with pytest.raises(ImmutabilityViolationError) as exc_info:
+                oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+            # Verify error contains useful information
+            assert "v1.0.0" in str(exc_info.value)
+            assert "immutable" in str(exc_info.value).lower()
+
+    @pytest.mark.requirement("8A-FR-011")
+    def test_push_allows_mutable_tags_to_be_overwritten(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push() allows overwriting mutable tags.
+
+        FR-011: System MUST allow pushes to mutable tags (latest-*, dev-*, etc).
+        """
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        # Tag exists but is mutable
+        with (
+            patch.object(oci_client, "tag_exists", return_value=True),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+        ):
+            # Should succeed for mutable tag even though it exists
+            digest = oci_client.push(sample_compiled_artifacts, tag="latest-dev")
+            assert digest.startswith("sha256:")
+
+    @pytest.mark.requirement("8A-FR-010")
     def test_push_immutability_check_raises_error(
         self,
         oci_client: OCIClient,
