@@ -144,39 +144,82 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
 
     Validates FR-005: System MUST generate valid Dagster Definitions
     object from CompiledArtifacts.
+    Validates FR-009: System MUST validate CompiledArtifacts schema
+    before generating definitions.
     """
 
-    def test_create_definitions_empty_artifacts(
-        self, dagster_plugin: DagsterOrchestratorPlugin
+    def test_create_definitions_with_valid_artifacts(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        valid_compiled_artifacts: Any,
     ) -> None:
-        """Test create_definitions returns empty Definitions for empty artifacts."""
+        """Test create_definitions succeeds with valid CompiledArtifacts."""
         from dagster import Definitions
 
-        result = dagster_plugin.create_definitions({})
+        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
 
         assert isinstance(result, Definitions)
 
-    def test_create_definitions_no_transforms(
-        self, dagster_plugin: DagsterOrchestratorPlugin
+    def test_create_definitions_with_multiple_models(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        valid_compiled_artifacts_with_models: Any,
     ) -> None:
-        """Test create_definitions handles missing transforms."""
+        """Test create_definitions creates assets for multiple models."""
         from dagster import Definitions
 
-        artifacts = {"version": "0.2.0", "metadata": {}}
-        result = dagster_plugin.create_definitions(artifacts)
+        result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
 
         assert isinstance(result, Definitions)
+        # Verify definitions were created - check that assets are accessible
+        # The number of models in the fixture is 3
+        assert result.assets is not None
 
-    def test_create_definitions_empty_models(
+
+class TestDagsterOrchestratorPluginValidation:
+    """Test CompiledArtifacts validation (FR-009).
+
+    Validates FR-009: System MUST validate CompiledArtifacts schema
+    before generating definitions.
+    """
+
+    def test_create_definitions_rejects_empty_artifacts(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Test create_definitions handles empty models list."""
-        from dagster import Definitions
+        """Test create_definitions raises ValueError for empty artifacts."""
+        with pytest.raises(ValueError, match="CompiledArtifacts validation failed"):
+            dagster_plugin.create_definitions({})
 
-        artifacts = {"transforms": {"models": [], "default_compute": "duckdb"}}
-        result = dagster_plugin.create_definitions(artifacts)
+    def test_create_definitions_rejects_missing_metadata(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        valid_compiled_artifacts: Any,
+    ) -> None:
+        """Test create_definitions raises ValueError for missing metadata."""
+        del valid_compiled_artifacts["metadata"]
 
-        assert isinstance(result, Definitions)
+        with pytest.raises(ValueError, match="metadata"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
+
+    def test_create_definitions_rejects_missing_identity(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        valid_compiled_artifacts: Any,
+    ) -> None:
+        """Test create_definitions raises ValueError for missing identity."""
+        del valid_compiled_artifacts["identity"]
+
+        with pytest.raises(ValueError, match="identity"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
+
+    def test_validation_error_includes_actionable_message(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Test validation error includes actionable guidance."""
+        with pytest.raises(
+            ValueError, match="Ensure you are passing output from 'floe compile'"
+        ):
+            dagster_plugin.create_definitions({})
 
 
 class TestDagsterOrchestratorPluginCreateAssets:

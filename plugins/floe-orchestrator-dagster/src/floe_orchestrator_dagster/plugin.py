@@ -23,6 +23,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError as PydanticValidationError
+
 from floe_core.plugins.orchestrator import (
     Dataset,
     OrchestratorPlugin,
@@ -30,6 +32,7 @@ from floe_core.plugins.orchestrator import (
     TransformConfig,
     ValidationResult,
 )
+from floe_core.schemas import CompiledArtifacts
 
 if TYPE_CHECKING:
     pass
@@ -121,15 +124,52 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """
         return "Dagster orchestrator for floe data pipelines"
 
+    def _validate_artifacts(self, artifacts: dict[str, Any]) -> CompiledArtifacts:
+        """Validate CompiledArtifacts schema before definition generation.
+
+        Uses Pydantic validation to ensure the artifacts dict conforms to
+        the CompiledArtifacts schema from floe-core.
+
+        Args:
+            artifacts: Dictionary to validate against CompiledArtifacts schema.
+
+        Returns:
+            Validated CompiledArtifacts model instance.
+
+        Raises:
+            ValueError: If validation fails, with actionable error message.
+        """
+        try:
+            return CompiledArtifacts.model_validate(artifacts)
+        except PydanticValidationError as e:
+            # Format actionable error message
+            error_details = []
+            for error in e.errors():
+                loc = ".".join(str(x) for x in error["loc"])
+                msg = error["msg"]
+                error_details.append(f"  - {loc}: {msg}")
+
+            error_message = (
+                "CompiledArtifacts validation failed. "
+                "Ensure you are passing output from 'floe compile'.\n"
+                "Validation errors:\n"
+                + "\n".join(error_details)
+            )
+            logger.error(
+                "Artifacts validation failed",
+                extra={"error_count": len(e.errors())},
+            )
+            raise ValueError(error_message) from e
+
     def create_definitions(self, artifacts: dict[str, Any]) -> Any:
         """Generate Dagster Definitions from CompiledArtifacts.
 
         Creates a Dagster Definitions object containing assets, jobs, resources,
         and schedules based on the compiled data product configuration.
 
-        The method extracts transforms from the artifacts, converts them to
-        TransformConfig objects, and creates Dagster assets preserving the
-        dependency graph.
+        The method first validates the artifacts against the CompiledArtifacts
+        schema, then extracts transforms and creates Dagster assets preserving
+        the dependency graph.
 
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
@@ -139,7 +179,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             Dagster Definitions object ready for deployment.
 
         Raises:
-            ValueError: If artifacts structure is invalid or missing required fields.
+            ValueError: If artifacts validation fails with actionable message.
 
         Example:
             >>> definitions = plugin.create_definitions(compiled_artifacts)
@@ -147,20 +187,24 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """
         from dagster import Definitions
 
-        # Extract transforms from artifacts
-        transforms_data = artifacts.get("transforms")
-        if transforms_data is None:
+        # Validate artifacts against CompiledArtifacts schema (FR-009)
+        validated = self._validate_artifacts(artifacts)
+
+        # Extract transforms from validated artifacts
+        if validated.transforms is None:
             logger.warning("No transforms found in artifacts, returning empty Definitions")
             return Definitions(assets=[])
 
         # Get models list from transforms
-        models = transforms_data.get("models", [])
+        models = validated.transforms.models
         if not models:
             logger.warning("No models found in transforms, returning empty Definitions")
             return Definitions(assets=[])
 
-        # Convert ResolvedModel dicts to TransformConfig objects
-        transform_configs = self._models_to_transform_configs(models)
+        # Convert ResolvedModel to TransformConfig objects
+        transform_configs = self._models_to_transform_configs(
+            [model.model_dump() for model in models]
+        )
 
         # Create assets from transforms
         assets = self.create_assets_from_transforms(transform_configs)
