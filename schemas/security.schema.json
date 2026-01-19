@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "PodSecurityLevelConfig": {
+      "additionalProperties": false,
+      "description": "Pod Security Standard configuration for namespaces.\n\nDefines the PSS enforcement levels for different namespace types.\nSee: https://kubernetes.io/docs/concepts/security/pod-security-standards/\n\nAttributes:\n    jobs_level: PSS level for floe-jobs namespace (default: restricted).\n    platform_level: PSS level for floe-platform namespace (default: baseline).\n\nExample:\n    >>> config = PodSecurityLevelConfig(jobs_level=\"restricted\")\n    >>> config.platform_level\n    'baseline'",
+      "properties": {
+        "jobs_level": {
+          "default": "restricted",
+          "description": "PSS level for floe-jobs namespace",
+          "enum": [
+            "privileged",
+            "baseline",
+            "restricted"
+          ],
+          "title": "Jobs Level",
+          "type": "string"
+        },
+        "platform_level": {
+          "default": "baseline",
+          "description": "PSS level for floe-platform namespace",
+          "enum": [
+            "privileged",
+            "baseline",
+            "restricted"
+          ],
+          "title": "Platform Level",
+          "type": "string"
+        }
+      },
+      "title": "PodSecurityLevelConfig",
+      "type": "object"
+    },
+    "RBACConfig": {
+      "additionalProperties": false,
+      "description": "RBAC configuration from manifest.yaml security section.\n\nAttributes:\n    enabled: Whether RBAC manifest generation is enabled.\n    job_service_account: Service account creation mode - 'auto' generates\n        ServiceAccounts automatically, 'manual' expects pre-existing ones.\n    cluster_scope: Whether to generate ClusterRole/ClusterRoleBinding\n        resources. Defaults to False for least-privilege.\n\nExample:\n    >>> config = RBACConfig(enabled=True, job_service_account=\"auto\")\n    >>> config.enabled\n    True",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable RBAC manifest generation",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "job_service_account": {
+          "default": "auto",
+          "description": "Service account creation mode",
+          "enum": [
+            "auto",
+            "manual"
+          ],
+          "title": "Job Service Account",
+          "type": "string"
+        },
+        "cluster_scope": {
+          "default": false,
+          "description": "Enable ClusterRole/ClusterRoleBinding generation",
+          "title": "Cluster Scope",
+          "type": "boolean"
+        }
+      },
+      "title": "RBACConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Security section of manifest.yaml.\n\nThis is the top-level configuration for security settings including\nRBAC, Pod Security Standards, and namespace isolation.\n\nAttributes:\n    rbac: RBAC configuration settings.\n    pod_security: Pod Security Standard configuration.\n    namespace_isolation: Namespace isolation mode - 'strict' enforces\n        full isolation, 'permissive' allows some cross-namespace access.\n\nExample:\n    >>> config = SecurityConfig()\n    >>> config.rbac.enabled\n    True\n    >>> config.namespace_isolation\n    'strict'",
+  "properties": {
+    "rbac": {
+      "$ref": "#/$defs/RBACConfig",
+      "description": "RBAC configuration"
+    },
+    "pod_security": {
+      "$ref": "#/$defs/PodSecurityLevelConfig",
+      "description": "Pod Security Standard configuration"
+    },
+    "namespace_isolation": {
+      "default": "strict",
+      "description": "Namespace isolation mode",
+      "enum": [
+        "strict",
+        "permissive"
+      ],
+      "title": "Namespace Isolation",
+      "type": "string"
+    }
+  },
+  "title": "SecurityConfig",
+  "type": "object"
+}
