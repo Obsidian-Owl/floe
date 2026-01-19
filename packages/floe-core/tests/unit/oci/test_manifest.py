@@ -334,58 +334,142 @@ class TestArtifactManifestValidation:
             )
 
 
-class TestManifestBuilderPlaceholder:
-    """Placeholder tests for manifest builder functionality.
+class TestManifestBuilder:
+    """Tests for manifest builder functionality (T016).
 
-    These tests will fail until T016 implements the manifest builder.
-    The builder will create ArtifactManifest from CompiledArtifacts.
+    Tests the build_manifest(), serialize_layer(), and calculate_digest()
+    functions that create OCI artifact manifests from CompiledArtifacts.
     """
 
     @pytest.mark.requirement("8A-FR-040")
-    def test_build_manifest_from_compiled_artifacts_placeholder(
+    def test_build_manifest_from_compiled_artifacts(
         self, sample_compiled_artifacts: CompiledArtifacts
     ) -> None:
         """Test manifest builder creates valid manifest from artifacts.
 
-        This test verifies that the manifest builder (T016) can create
-        an ArtifactManifest from CompiledArtifacts with correct:
-        - Digest calculation
-        - Media type
-        - Layer content
-        - Annotations from artifacts metadata
-
-        NOTE: This test will fail until T016 implements build_manifest().
+        Verifies that build_manifest() creates an ArtifactManifest with:
+        - Correct artifact type (floe media type)
+        - Valid digest format
+        - Product metadata in annotations
         """
-        # TODO: Implement in T016
-        # from floe_core.oci.manifest import build_manifest
-        # manifest = build_manifest(sample_compiled_artifacts)
-        # assert manifest.artifact_type == FLOE_ARTIFACT_TYPE
-        # assert manifest.product_name == sample_compiled_artifacts.metadata.product_name
+        from floe_core.oci.manifest import build_manifest
 
-        # Placeholder assertion - will be replaced when T016 is implemented
-        with pytest.raises(NotImplementedError):
-            raise NotImplementedError("build_manifest() not yet implemented - see T016")
+        manifest = build_manifest(sample_compiled_artifacts)
+
+        assert manifest.artifact_type == FLOE_ARTIFACT_TYPE
+        assert manifest.digest.startswith("sha256:")
+        assert len(manifest.digest) == 71  # sha256: + 64 hex chars
+        assert manifest.product_name == sample_compiled_artifacts.metadata.product_name
+        assert manifest.product_version == sample_compiled_artifacts.metadata.product_version
 
     @pytest.mark.requirement("8A-FR-041")
-    def test_build_manifest_calculates_layer_digest_placeholder(
+    def test_build_manifest_calculates_layer_digest(
         self, sample_compiled_artifacts: CompiledArtifacts
     ) -> None:
         """Test manifest builder calculates correct layer digest.
 
-        This test verifies that the manifest builder (T016) correctly
-        calculates the SHA256 digest of the serialized CompiledArtifacts.
-
-        NOTE: This test will fail until T016 implements build_manifest().
+        Verifies that the SHA256 digest of the serialized CompiledArtifacts
+        matches the digest in the layer descriptor.
         """
-        # TODO: Implement in T016
-        # from floe_core.oci.manifest import build_manifest
-        # manifest = build_manifest(sample_compiled_artifacts)
-        #
-        # # Verify digest calculation
-        # serialized = sample_compiled_artifacts.model_dump_json()
-        # expected_digest = "sha256:" + hashlib.sha256(serialized.encode()).hexdigest()
-        # assert manifest.layers[0].digest == expected_digest
+        from floe_core.oci.manifest import build_manifest
 
-        # Placeholder assertion - will be replaced when T016 is implemented
-        with pytest.raises(NotImplementedError):
-            raise NotImplementedError("build_manifest() not yet implemented - see T016")
+        manifest = build_manifest(sample_compiled_artifacts)
+
+        # Verify digest calculation matches manual calculation
+        serialized = sample_compiled_artifacts.model_dump_json()
+        expected_digest = "sha256:" + hashlib.sha256(serialized.encode()).hexdigest()
+        assert manifest.layers[0].digest == expected_digest
+
+    @pytest.mark.requirement("8A-FR-040")
+    def test_serialize_layer_creates_valid_layer(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
+        """Test serialize_layer creates layer with correct metadata."""
+        from floe_core.oci.manifest import serialize_layer
+
+        content, layer = serialize_layer(sample_compiled_artifacts)
+
+        assert isinstance(content, bytes)
+        assert layer.media_type == FLOE_ARTIFACT_TYPE
+        assert layer.size == len(content)
+        assert layer.digest.startswith("sha256:")
+        assert "org.opencontainers.image.title" in layer.annotations
+
+    @pytest.mark.requirement("8A-FR-041")
+    def test_calculate_digest_produces_valid_sha256(self) -> None:
+        """Test calculate_digest produces valid SHA256 format."""
+        from floe_core.oci.manifest import calculate_digest
+
+        content = b'{"test": "data"}'
+        digest = calculate_digest(content)
+
+        assert digest.startswith("sha256:")
+        assert len(digest) == 71
+        # Verify it matches hashlib calculation
+        expected = "sha256:" + hashlib.sha256(content).hexdigest()
+        assert digest == expected
+
+    @pytest.mark.requirement("8A-FR-040")
+    def test_build_manifest_includes_annotations(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
+        """Test manifest includes required OCI annotations."""
+        from floe_core.oci.manifest import build_manifest
+
+        manifest = build_manifest(sample_compiled_artifacts)
+
+        # Check required annotations
+        assert "org.opencontainers.image.created" in manifest.annotations
+        assert "io.floe.product.name" in manifest.annotations
+        assert "io.floe.product.version" in manifest.annotations
+        assert "io.floe.artifacts.version" in manifest.annotations
+
+    @pytest.mark.requirement("8A-FR-040")
+    def test_build_manifest_with_custom_annotations(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
+        """Test manifest builder accepts custom annotations."""
+        from floe_core.oci.manifest import build_manifest
+
+        custom_annotations = {
+            "custom.annotation": "custom-value",
+            "another.annotation": "another-value",
+        }
+        manifest = build_manifest(
+            sample_compiled_artifacts,
+            annotations=custom_annotations,
+        )
+
+        assert manifest.annotations["custom.annotation"] == "custom-value"
+        assert manifest.annotations["another.annotation"] == "another-value"
+        # Standard annotations should still be present
+        assert "io.floe.product.name" in manifest.annotations
+
+    @pytest.mark.requirement("8A-FR-040")
+    def test_create_empty_config_produces_well_known_digest(self) -> None:
+        """Test empty config has well-known ORAS digest."""
+        from floe_core.oci.manifest import create_empty_config
+
+        content, digest = create_empty_config()
+
+        assert content == b"{}"
+        # This is the well-known digest for empty JSON object
+        expected = "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        assert digest == expected
+
+    @pytest.mark.requirement("8A-FR-040")
+    def test_serialize_layer_with_custom_annotations(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
+        """Test serialize_layer accepts custom layer annotations."""
+        from floe_core.oci.manifest import serialize_layer
+
+        custom_annotations = {"custom.layer": "value"}
+        _, layer = serialize_layer(
+            sample_compiled_artifacts,
+            annotations=custom_annotations,
+        )
+
+        assert layer.annotations["custom.layer"] == "value"
+        # Default annotation should still be present
+        assert "org.opencontainers.image.title" in layer.annotations

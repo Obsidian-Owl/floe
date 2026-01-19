@@ -82,6 +82,14 @@ from floe_core.oci.errors import (
     RegistryUnavailableError,
 )
 
+# Manifest builder (T016)
+from floe_core.oci.manifest import (
+    build_manifest,
+    calculate_digest,
+    create_empty_config,
+    serialize_layer,
+)
+
 # Metrics (T011)
 from floe_core.oci.metrics import (
     CircuitBreakerStateValue,
@@ -99,9 +107,6 @@ from floe_core.oci.resilience import (
     RetryPolicy,
     with_resilience,
 )
-
-# NOTE: Additional exports will be populated as modules are implemented:
-# - T016: manifest.py (ArtifactManifest builder)
 
 __all__: list[str] = [
     # Error hierarchy
@@ -140,4 +145,9 @@ __all__: list[str] = [
     "OCIClient",
     "SEMVER_PATTERN",
     "MUTABLE_TAG_PATTERNS",
+    # Manifest builder (T016)
+    "build_manifest",
+    "calculate_digest",
+    "create_empty_config",
+    "serialize_layer",
 ]
