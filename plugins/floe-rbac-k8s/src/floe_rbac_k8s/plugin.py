@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from floe_core.plugins.rbac import RBACPlugin
 from floe_core.schemas.rbac import (
     NamespaceConfig,
     PodSecurityConfig,
@@ -26,7 +27,7 @@ from floe_core.schemas.rbac import (
 )
 
 
-class K8sRBACPlugin:
+class K8sRBACPlugin(RBACPlugin):
     """Kubernetes RBAC plugin for generating RBAC manifests.
 
     This plugin implements the RBACPlugin ABC from floe-core and provides
