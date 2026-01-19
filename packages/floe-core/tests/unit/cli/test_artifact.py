@@ -1147,3 +1147,156 @@ artifacts:
         expected_digest = "sha256:abc123def456789012345678901234567890123456789012345678901234abcd"
         assert output_data[0]["digest"] == expected_digest
         assert output_data[0]["size"] == 12345
+
+
+class TestCacheStatusParser:
+    """Tests for artifact cache status CLI argument parser."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_parser_default_values(self) -> None:
+        """Test that parser has correct default values."""
+        from floe_core.cli.artifact import create_cache_status_parser
+
+        parser = create_cache_status_parser()
+        args = parser.parse_args([])
+
+        assert args.manifest == Path("manifest.yaml")
+        assert args.verbose is False
+        assert args.quiet is False
+        assert args.json is False
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_parser_accepts_all_args(self) -> None:
+        """Test that parser accepts all expected arguments."""
+        from floe_core.cli.artifact import create_cache_status_parser
+
+        parser = create_cache_status_parser()
+        args = parser.parse_args(
+            [
+                "--manifest",
+                "custom_manifest.yaml",
+                "--verbose",
+                "--json",
+            ]
+        )
+
+        assert args.manifest == Path("custom_manifest.yaml")
+        assert args.verbose is True
+        assert args.json is True
+
+
+class TestCacheStatusCommand:
+    """Tests for artifact cache status command execution."""
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_status_returns_success(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache status returns success with valid cache."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_status
+
+        # Create a mock manifest with cache config
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 10
+    ttl_hours: 24
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        exit_code = run_cache_status(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        assert "Cache Path:" in captured.out
+        assert "Total Size:" in captured.out
+        assert "Entries:" in captured.out
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_status_json_output(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache status returns valid JSON output."""
+        import argparse
+        import json as json_module
+
+        from floe_core.cli.artifact import run_cache_status
+
+        # Create a mock manifest with cache config
+        manifest_path = tmp_path / "manifest.yaml"
+        cache_path = tmp_path / "cache"
+        manifest_path.write_text(f"""
+oci:
+  cache:
+    enabled: true
+    path: "{cache_path}"
+    max_size_gb: 5
+    ttl_hours: 12
+""")
+
+        args = argparse.Namespace(
+            manifest=manifest_path,
+            verbose=False,
+            quiet=False,
+            json=True,
+        )
+
+        # Mock the logger to prevent stdout pollution
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_status(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        output = json_module.loads(captured.out)
+
+        assert "path" in output
+        assert "entry_count" in output
+        assert "total_size_bytes" in output
+        assert "max_size_gb" in output
+        assert output["max_size_gb"] == 5
+        assert output["ttl_hours"] == 12
+
+    @pytest.mark.requirement("8A-FR-030")
+    def test_cache_status_quiet_mode(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Test that cache status respects quiet mode."""
+        import argparse
+
+        from floe_core.cli.artifact import run_cache_status
+
+        args = argparse.Namespace(
+            manifest=tmp_path / "nonexistent.yaml",
+            verbose=False,
+            quiet=True,
+            json=False,
+        )
+
+        # Mock the logger to prevent stdout pollution
+        with patch("floe_core.cli.artifact.logger"):
+            exit_code = run_cache_status(args)
+
+        assert exit_code == 0
+
+        captured = capsys.readouterr()
+        assert captured.out == ""  # No output in quiet mode

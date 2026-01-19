@@ -809,6 +809,150 @@ def run_list(args: argparse.Namespace) -> int:
         return EXIT_GENERAL_ERROR
 
 
+def create_cache_status_parser() -> argparse.ArgumentParser:
+    """Create argument parser for artifact cache status command.
+
+    Returns:
+        Configured ArgumentParser for the cache status command.
+
+    Example:
+        >>> parser = create_cache_status_parser()
+        >>> args = parser.parse_args([])
+        >>> args.quiet
+        False
+    """
+    parser = argparse.ArgumentParser(
+        prog="floe artifact cache status",
+        description="Display cache status and statistics",
+        epilog="Shows cache path, size, entry count, and expired entries.",
+    )
+
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path("manifest.yaml"),
+        help="Path to manifest.yaml with cache config (default: manifest.yaml)",
+        metavar="PATH",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose output (show per-entry details)",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress output (exit code only)",
+    )
+
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format",
+    )
+
+    return parser
+
+
+def run_cache_status(args: argparse.Namespace) -> int:
+    """Run the cache status command.
+
+    Displays cache statistics including path, size, entry count, and expired entries.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+
+    Example:
+        >>> args = create_cache_status_parser().parse_args([])
+        >>> exit_code = run_cache_status(args)
+    """
+    import json
+
+    from floe_core.oci.cache import CacheManager
+    from floe_core.schemas.oci import CacheConfig
+
+    log = logger.bind(command="cache_status")
+    log.debug("cache_status_start")
+
+    try:
+        # Load manifest if exists
+        cache_config: CacheConfig | None = None
+        if args.manifest.exists():
+            import yaml
+
+            manifest_data = yaml.safe_load(args.manifest.read_text())
+            if manifest_data and "oci" in manifest_data:
+                oci_config = manifest_data["oci"]
+                if "cache" in oci_config:
+                    cache_config = CacheConfig(**oci_config["cache"])
+
+        # Handle case where cache is not configured
+        if cache_config is None:
+            log.info("cache_not_configured")
+            if not args.quiet:
+                if args.json:
+                    print(
+                        json.dumps(
+                            {
+                                "status": "not_configured",
+                                "message": "Cache not configured in manifest",
+                            },
+                            indent=2,
+                        )
+                    )
+                else:
+                    print("Cache not configured")
+            return EXIT_SUCCESS
+
+        # Create cache manager with config
+        manager = CacheManager(cache_config)
+        stats = manager.stats()
+
+        log.info(
+            "cache_status_retrieved",
+            entry_count=stats["entry_count"],
+            total_size_bytes=stats["total_size_bytes"],
+        )
+
+        if args.json:
+            # JSON output
+            if not args.quiet:
+                print(json.dumps(stats, indent=2, default=str))
+        else:
+            # Human-readable output
+            if not args.quiet:
+                max_size_bytes = stats["max_size_gb"] * 1024 * 1024 * 1024
+                print(f"Cache Path:   {stats['path']}")
+                print(
+                    f"Total Size:   {_format_size(stats['total_size_bytes'])} / "
+                    f"{_format_size(max_size_bytes)}"
+                )
+                print(f"Entries:      {stats['entry_count']}")
+                print(f"  Immutable:  {stats['immutable_count']}")
+                print(f"  Mutable:    {stats['mutable_count']}")
+                print(f"Expired:      {stats['expired_count']}")
+
+                if args.verbose:
+                    print(f"\nTTL Hours:    {stats['ttl_hours']}")
+                    print(f"Max Size GB:  {stats['max_size_gb']}")
+                    print(f"Last Updated: {stats['last_updated']}")
+
+        return EXIT_SUCCESS
+
+    except Exception as e:
+        if not args.quiet:
+            print(f"Error: Failed to get cache status - {e}", file=sys.stderr)
+        log.exception("cache_status_error", error=str(e))
+        return EXIT_GENERAL_ERROR
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     """Main entry point for floe artifact push command.
 
