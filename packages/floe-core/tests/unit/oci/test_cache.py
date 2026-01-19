@@ -524,6 +524,86 @@ class TestDigestVerification:
         computed_digest = f"sha256:{hashlib.sha256(retrieved_content).hexdigest()}"
         assert computed_digest == digest
 
+    @pytest.mark.requirement("8A-FR-021")
+    def test_get_with_content_returns_verified_content(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test that get_with_content() returns verified content.
+
+        Verifies:
+        - get_with_content returns tuple of (entry, content)
+        - Content is verified against stored digest
+        """
+        content = b'{"version": "0.2.0", "test": "verified"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+        # Store content
+        cache_manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+
+        # Retrieve with verification
+        result = cache_manager.get_with_content("oci://harbor.example.com/floe", "v1.0.0")
+
+        assert result is not None
+        entry, retrieved_content = result
+        assert entry.digest == digest
+        assert retrieved_content == content
+
+    @pytest.mark.requirement("8A-FR-021")
+    def test_get_with_content_detects_corruption(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test that get_with_content() detects corrupted content.
+
+        Verifies:
+        - Corrupted content is detected by digest mismatch
+        - Corrupted entry is removed from cache
+        - Returns None for corrupted entry
+        """
+        from floe_core.oci.errors import DigestMismatchError
+
+        content = b'{"version": "0.2.0", "test": "corruption"}'
+        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+        # Store content
+        entry = cache_manager.put(
+            digest=digest,
+            tag="v1.0.0",
+            registry="oci://harbor.example.com/floe",
+            content=content,
+        )
+
+        # Corrupt the content on disk
+        entry.path.write_bytes(b'{"corrupted": true}')
+
+        # Retrieve with verification - should detect corruption
+        with pytest.raises(DigestMismatchError):
+            cache_manager.get_with_content("oci://harbor.example.com/floe", "v1.0.0")
+
+        # Corrupted entry should be removed
+        check_entry = cache_manager.get("oci://harbor.example.com/floe", "v1.0.0")
+        assert check_entry is None
+
+    @pytest.mark.requirement("8A-FR-021")
+    def test_get_with_content_returns_none_for_cache_miss(
+        self,
+        cache_manager: CacheManager,
+    ) -> None:
+        """Test that get_with_content() returns None for cache miss.
+
+        Verifies:
+        - Cache miss returns None
+        - No error raised
+        """
+        result = cache_manager.get_with_content("oci://harbor.example.com/floe", "nonexistent")
+        assert result is None
+
 
 class TestLRUEviction:
     """Tests for LRU eviction under size pressure (T046).

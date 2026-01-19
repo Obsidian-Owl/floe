@@ -198,9 +198,7 @@ class CacheManager:
                             "cache_expired",
                             registry=registry,
                             tag=tag,
-                            expires_at=entry.expires_at.isoformat()
-                            if entry.expires_at
-                            else None,
+                            expires_at=entry.expires_at.isoformat() if entry.expires_at else None,
                         )
                         return None
 
@@ -238,6 +236,83 @@ class CacheManager:
                 entry.touch()
                 self._save_index(index)
             return entry
+
+    def get_with_content(self, registry: str, tag: str) -> tuple[CacheEntry, bytes] | None:
+        """Retrieve a cached artifact with verified content.
+
+        Gets the cache entry and reads its content, verifying the digest
+        matches the stored content. If content is corrupted, the entry
+        is removed from the cache.
+
+        Args:
+            registry: OCI registry URI.
+            tag: Artifact tag or digest.
+
+        Returns:
+            Tuple of (CacheEntry, content bytes) if found and valid,
+            None if not in cache.
+
+        Raises:
+            DigestMismatchError: If content does not match stored digest.
+
+        Example:
+            >>> result = manager.get_with_content("oci://harbor.example.com/floe", "v1.0.0")
+            >>> if result:
+            ...     entry, content = result
+            ...     process(content)
+        """
+        from floe_core.oci.errors import DigestMismatchError
+
+        entry = self.get(registry, tag)
+        if entry is None:
+            return None
+
+        # Read and verify content
+        try:
+            content = entry.path.read_bytes()
+        except OSError as e:
+            logger.warning(
+                "cache_read_failed",
+                registry=registry,
+                tag=tag,
+                digest=entry.digest,
+                error=str(e),
+            )
+            # Remove corrupted entry
+            self.remove(entry.digest)
+            raise DigestMismatchError(
+                expected=entry.digest,
+                actual="<read_error>",
+                artifact_ref=tag,
+            ) from e
+
+        # Verify digest
+        computed_digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+        if computed_digest != entry.digest:
+            logger.error(
+                "cache_corruption_detected",
+                registry=registry,
+                tag=tag,
+                expected_digest=entry.digest,
+                actual_digest=computed_digest,
+            )
+            # Remove corrupted entry
+            self.remove(entry.digest)
+            raise DigestMismatchError(
+                expected=entry.digest,
+                actual=computed_digest,
+                artifact_ref=tag,
+            )
+
+        logger.debug(
+            "cache_hit_verified",
+            registry=registry,
+            tag=tag,
+            digest=entry.digest,
+            size=len(content),
+        )
+
+        return (entry, content)
 
     def put(
         self,
@@ -493,9 +568,7 @@ class CacheManager:
             # Calculate how many more to remove
             remaining_to_free = to_free - freed
             avg_size = index.total_size / len(index.entries) if index.entries else 0
-            estimate_count = (
-                int(remaining_to_free / avg_size) + 1 if avg_size > 0 else 10
-            )
+            estimate_count = int(remaining_to_free / avg_size) + 1 if avg_size > 0 else 10
 
             lru_entries = index.get_lru_entries(estimate_count * 2)
             for entry in lru_entries:
