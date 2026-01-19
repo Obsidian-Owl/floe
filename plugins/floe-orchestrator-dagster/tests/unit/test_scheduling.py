@@ -227,17 +227,18 @@ class TestTimezoneValidation:
     def test_timezone_case_variants(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test timezone case handling.
 
-        Note: pytz is flexible with case - accepts UTC, utc, and AMERICA/NEW_YORK.
-        Only clearly invalid timezones like 'Invalid_Zone' are rejected.
+        Note: Dagster uses Python's zoneinfo module which is case-sensitive.
+        IANA timezone names require proper case (e.g., America/New_York).
+        Only UTC and utc are typically accepted as case variants.
         """
-        # UTC variants are valid
+        # UTC variants are valid (special handling in zoneinfo)
         dagster_plugin.schedule_job("job_utc", "0 8 * * *", "UTC")
         dagster_plugin.schedule_job("job_utc_lower", "0 8 * * *", "utc")
 
-        # pytz also accepts AMERICA/NEW_YORK (case-insensitive for region names)
-        dagster_plugin.schedule_job("job_caps", "0 8 * * *", "AMERICA/NEW_YORK")
+        # Proper case IANA timezones work
+        dagster_plugin.schedule_job("job_proper", "0 8 * * *", "America/New_York")
 
-        # But clearly invalid timezones are rejected
+        # Invalid timezones are rejected
         with pytest.raises(ValueError):
             dagster_plugin.schedule_job("job", "0 8 * * *", "Invalid_Zone")
 
