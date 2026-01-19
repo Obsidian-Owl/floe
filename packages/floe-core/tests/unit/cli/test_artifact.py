@@ -802,9 +802,7 @@ artifacts:
         assert exit_code == 1
 
     @pytest.mark.requirement("8A-FR-028")
-    def test_inspect_json_output(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_inspect_json_output(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Test inspect --json outputs valid JSON."""
         import json
         from datetime import datetime, timezone
@@ -1092,9 +1090,7 @@ artifacts:
         assert exit_code == 1
 
     @pytest.mark.requirement("8A-FR-029")
-    def test_list_json_output(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_list_json_output(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Test list --json outputs valid JSON array."""
         import json
         from datetime import datetime, timezone

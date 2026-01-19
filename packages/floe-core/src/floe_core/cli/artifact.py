@@ -1153,9 +1153,7 @@ def run_cache_clear(args: argparse.Namespace) -> int:
             # Confirm before clearing
             if not args.yes and not args.quiet:
                 count = len(matching_entries)
-                response = input(
-                    f"Clear {count} cached artifact(s) with tag '{args.tag}'? [y/N] "
-                )
+                response = input(f"Clear {count} cached artifact(s) with tag '{args.tag}'? [y/N] ")
                 if response.lower() not in ("y", "yes"):
                     print("Aborted")
                     return EXIT_SUCCESS
@@ -1182,9 +1180,7 @@ def run_cache_clear(args: argparse.Namespace) -> int:
             # Confirm before clearing
             if not args.yes and not args.quiet:
                 total_size = _format_size(stats.get("total_size_bytes", 0))
-                response = input(
-                    f"Clear {entry_count} cached artifact(s) ({total_size})? [y/N] "
-                )
+                response = input(f"Clear {entry_count} cached artifact(s) ({total_size})? [y/N] ")
                 if response.lower() not in ("y", "yes"):
                     print("Aborted")
                     return EXIT_SUCCESS

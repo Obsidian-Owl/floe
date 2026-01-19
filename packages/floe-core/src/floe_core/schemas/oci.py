@@ -106,12 +106,16 @@ class RegistryAuth(BaseModel):
         auth_type = data.get("type")
         if auth_type in (AuthType.BASIC, AuthType.TOKEN) and v is None:
             raise ValueError(f"credentials_ref required for auth type '{auth_type}'")
-        if auth_type in (
-            AuthType.ANONYMOUS,
-            AuthType.AWS_IRSA,
-            AuthType.AZURE_MANAGED_IDENTITY,
-            AuthType.GCP_WORKLOAD_IDENTITY,
-        ) and v is not None:
+        if (
+            auth_type
+            in (
+                AuthType.ANONYMOUS,
+                AuthType.AWS_IRSA,
+                AuthType.AZURE_MANAGED_IDENTITY,
+                AuthType.GCP_WORKLOAD_IDENTITY,
+            )
+            and v is not None
+        ):
             raise ValueError(f"credentials_ref must be None for auth type '{auth_type}'")
         return v
 

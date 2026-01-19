@@ -308,8 +308,7 @@ class DigestMismatchError(OCIError):
         self.actual = actual
         self.artifact_ref = artifact_ref
         super().__init__(
-            f"Digest mismatch for {artifact_ref}: "
-            f"expected {expected[:19]}..., got {actual[:19]}..."
+            f"Digest mismatch for {artifact_ref}: expected {expected[:19]}..., got {actual[:19]}..."
         )
 
 
@@ -331,9 +330,7 @@ class CacheError(OCIError):
         CacheError: Cache operation 'put' failed: Disk full
     """
 
-    def __init__(
-        self, operation: str, reason: str, path: str | None = None
-    ) -> None:
+    def __init__(self, operation: str, reason: str, path: str | None = None) -> None:
         """Initialize CacheError.
 
         Args:

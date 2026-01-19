@@ -599,9 +599,7 @@ class TestCustomRetryableExceptions:
     @pytest.mark.requirement("8A-FR-018")
     def test_should_retry_method(self) -> None:
         """Test should_retry correctly identifies retryable exceptions."""
-        policy = RetryPolicy(
-            retryable_exceptions=(RegistryUnavailableError, ConnectionError)
-        )
+        policy = RetryPolicy(retryable_exceptions=(RegistryUnavailableError, ConnectionError))
 
         assert policy.should_retry(RegistryUnavailableError("r", "x")) is True
         assert policy.should_retry(ConnectionError("x")) is True
