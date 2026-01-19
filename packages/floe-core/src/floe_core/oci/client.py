@@ -898,8 +898,131 @@ class OCIClient:
             >>> for tag in tags:
             ...     print(f"{tag.name}: {tag.digest}")
         """
-        # Placeholder - implementation in T033
-        raise NotImplementedError("list() not yet implemented - see T033")
+        import fnmatch
+        import hashlib
+        import json
+        import time
+        from datetime import datetime, timezone
+
+        log = logger.bind(
+            registry=self._registry_host,
+            filter_pattern=filter_pattern,
+        )
+
+        log.info("list_started")
+
+        # Start timing for duration metric
+        start_time = time.monotonic()
+
+        try:
+            # Create ORAS client for registry operations
+            oras_client = self._create_oras_client()
+
+            # Build repository reference (without tag) for listing tags
+            uri = self._config.uri
+            if uri.startswith("oci://"):
+                uri = uri[6:]
+
+            # Get list of tags from registry
+            try:
+                tags_response = oras_client.get_tags(target=uri)
+            except Exception as e:
+                error_str = str(e).lower()
+                if "unauthorized" in error_str or "authentication" in error_str:
+                    raise AuthenticationError(
+                        self._config.uri,
+                        "Authentication failed while listing tags",
+                    ) from e
+                raise OCIError(f"Failed to list tags: {e}") from e
+
+            # Extract tag names from response
+            tag_names: list[str] = tags_response.get("tags", [])
+
+            # Filter by pattern if provided
+            if filter_pattern:
+                tag_names = [
+                    name for name in tag_names
+                    if fnmatch.fnmatch(name, filter_pattern)
+                ]
+
+            # Build ArtifactTag list by getting manifest for each tag
+            result: list[ArtifactTag] = []
+
+            for tag_name in tag_names:
+                try:
+                    # Get manifest for this tag
+                    target_ref = self._build_target_ref(tag_name)
+                    manifest_data = oras_client.get_manifest(target=target_ref)
+
+                    # Calculate manifest digest
+                    manifest_json = json.dumps(
+                        manifest_data, separators=(",", ":"), sort_keys=True
+                    )
+                    digest = f"sha256:{hashlib.sha256(manifest_json.encode()).hexdigest()}"
+
+                    # Extract created timestamp from annotations
+                    annotations = manifest_data.get("annotations", {})
+                    created_str = annotations.get(
+                        "org.opencontainers.image.created",
+                        datetime.now(timezone.utc).isoformat(),
+                    )
+
+                    # Parse created timestamp
+                    try:
+                        if created_str.endswith("Z"):
+                            created_str = created_str[:-1] + "+00:00"
+                        created_at = datetime.fromisoformat(created_str)
+                    except ValueError:
+                        created_at = datetime.now(timezone.utc)
+
+                    # Calculate total size from layers
+                    layers_data = manifest_data.get("layers", [])
+                    total_size = sum(
+                        layer.get("size", 0) for layer in layers_data
+                    )
+
+                    # Create ArtifactTag
+                    artifact_tag = ArtifactTag(
+                        name=tag_name,
+                        digest=digest,
+                        created_at=created_at,
+                        size=total_size,
+                    )
+                    result.append(artifact_tag)
+
+                except Exception as e:
+                    # Log warning but continue with other tags
+                    log.warning(
+                        "list_tag_failed",
+                        tag=tag_name,
+                        error=str(e),
+                    )
+                    continue
+
+            # Record duration metric
+            duration = time.monotonic() - start_time
+            self.metrics.record_duration("list", self._registry_host, duration)
+            self.metrics.record_operation("list", self._registry_host, success=True)
+
+            log.info(
+                "list_completed",
+                tag_count=len(result),
+                duration_ms=int(duration * 1000),
+            )
+
+            return result
+
+        except AuthenticationError:
+            duration = time.monotonic() - start_time
+            self.metrics.record_duration("list", self._registry_host, duration)
+            self.metrics.record_operation("list", self._registry_host, success=False)
+            raise
+        except Exception as e:
+            duration = time.monotonic() - start_time
+            self.metrics.record_duration("list", self._registry_host, duration)
+            self.metrics.record_operation("list", self._registry_host, success=False)
+            log.error("list_failed", error=str(e))
+            raise OCIError(f"List failed: {e}") from e
 
     def promote_to_environment(
         self,

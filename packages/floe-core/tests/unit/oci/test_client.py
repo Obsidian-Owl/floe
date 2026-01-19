@@ -662,7 +662,7 @@ class TestOCIClientList:
             mock_oras.get_tags.return_value = mock_tags_response
 
             # Mock get_manifest for each tag to get digest and created_at
-            def mock_get_manifest(_target: str) -> dict[str, Any]:
+            def mock_get_manifest(*, target: str) -> dict[str, Any]:
                 # Return mock manifest data
                 return {
                     "schemaVersion": 2,
@@ -722,7 +722,7 @@ class TestOCIClientList:
             mock_oras = MagicMock()
             mock_oras.get_tags.return_value = mock_tags_response
 
-            def mock_get_manifest(_target: str) -> dict[str, Any]:
+            def mock_get_manifest(*, target: str) -> dict[str, Any]:
                 return {
                     "schemaVersion": 2,
                     "layers": [
