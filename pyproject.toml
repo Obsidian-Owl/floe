@@ -39,6 +39,8 @@ dependencies = [
     "floe-identity-keycloak",
     "floe-secrets-infisical",
     "floe-secrets-k8s",
+    # RBAC plugin for Kubernetes RBAC manifest generation
+    "floe-rbac-k8s",
 ]
 
 [tool.uv]
@@ -58,6 +60,7 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 floe-identity-keycloak = { path = "plugins/floe-identity-keycloak", editable = true }
 floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = true }
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
+floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -69,6 +72,7 @@ pythonpath = [
     "plugins/floe-identity-keycloak/src",
     "plugins/floe-secrets-infisical/src",
     "plugins/floe-secrets-k8s/src",
+    "plugins/floe-rbac-k8s/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]
