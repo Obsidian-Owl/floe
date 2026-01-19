@@ -569,6 +569,205 @@ class TestDocumentationValidatorIntegration:
         assert "FLOE-E221" in error_codes  # Column
 
 
+class TestExpandedPlaceholderPatterns:
+    """Tests for expanded placeholder pattern detection (M2 recommendation)."""
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_detects_wip_placeholder(self) -> None:
+        """DocumentationValidator MUST detect WIP placeholders."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        model = _create_model_node(name="bronze_orders", description="WIP - orders data")
+
+        violations = validator.validate(models=[model])
+
+        assert len(violations) == 1
+        assert violations[0].error_code == "FLOE-E222"
+        assert violations[0].severity == "warning"
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_detects_fill_in_later_placeholder(self) -> None:
+        """DocumentationValidator MUST detect 'fill in' placeholders."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        model = _create_model_node(
+            name="bronze_orders", description="fill in later with proper docs"
+        )
+
+        violations = validator.validate(models=[model])
+
+        assert len(violations) == 1
+        assert violations[0].error_code == "FLOE-E222"
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_detects_placeholder_text(self) -> None:
+        """DocumentationValidator MUST detect 'placeholder' text."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        model = _create_model_node(
+            name="bronze_orders", description="This is a placeholder description"
+        )
+
+        violations = validator.validate(models=[model])
+
+        assert len(violations) == 1
+        assert violations[0].error_code == "FLOE-E222"
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_detects_needs_description_placeholder(self) -> None:
+        """DocumentationValidator MUST detect 'needs description' placeholders."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        model = _create_model_node(
+            name="bronze_orders", description="needs description"
+        )
+
+        violations = validator.validate(models=[model])
+
+        assert len(violations) == 1
+        assert violations[0].error_code == "FLOE-E222"
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_detects_na_only_description(self) -> None:
+        """DocumentationValidator MUST detect N/A-only descriptions."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        # Test various N/A formats
+        na_variants = ["N/A", "NA", "n/a", "None", "-", "..."]
+
+        for na_text in na_variants:
+            model = _create_model_node(name="bronze_orders", description=na_text)
+            violations = validator.validate(models=[model])
+
+            assert len(violations) == 1, f"Should detect '{na_text}' as placeholder"
+            assert violations[0].error_code == "FLOE-E222"
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_detects_coming_soon_placeholder(self) -> None:
+        """DocumentationValidator MUST detect 'coming soon' placeholders."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        model = _create_model_node(
+            name="bronze_orders", description="Documentation coming soon"
+        )
+
+        violations = validator.validate(models=[model])
+
+        assert len(violations) == 1
+        assert violations[0].error_code == "FLOE-E222"
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_does_not_flag_valid_description_with_na_word(self) -> None:
+        """DocumentationValidator MUST NOT flag valid descriptions containing 'na'."""
+        from floe_core.enforcement.validators.documentation import (
+            DocumentationValidator,
+        )
+        from floe_core.schemas.governance import QualityGatesConfig
+
+        config = QualityGatesConfig(require_descriptions=True)
+        validator = DocumentationValidator(config)
+
+        # "na" appears in valid words like "national" or "banana"
+        model = _create_model_node(
+            name="bronze_orders",
+            description="National orders data from international customers",
+        )
+
+        violations = validator.validate(models=[model])
+
+        assert violations == []
+
+
+class TestConfigurableDocumentationUrl:
+    """Tests for configurable documentation base URL (M1 recommendation)."""
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_uses_default_docs_url(self) -> None:
+        """Documentation URL MUST default to floe.dev/docs."""
+        from floe_core.enforcement.patterns import _get_docs_base_url
+
+        # Without env var set, should use default
+        import os
+        original = os.environ.get("FLOE_DOCS_BASE_URL")
+        try:
+            os.environ.pop("FLOE_DOCS_BASE_URL", None)
+            url = _get_docs_base_url()
+            assert url == "https://floe.dev/docs"
+        finally:
+            if original is not None:
+                os.environ["FLOE_DOCS_BASE_URL"] = original
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_uses_env_var_docs_url(self) -> None:
+        """Documentation URL MUST be configurable via FLOE_DOCS_BASE_URL."""
+        from floe_core.enforcement.patterns import _get_docs_base_url
+
+        import os
+        original = os.environ.get("FLOE_DOCS_BASE_URL")
+        try:
+            os.environ["FLOE_DOCS_BASE_URL"] = "https://docs.example.com"
+            url = _get_docs_base_url()
+            assert url == "https://docs.example.com"
+        finally:
+            if original is not None:
+                os.environ["FLOE_DOCS_BASE_URL"] = original
+            else:
+                os.environ.pop("FLOE_DOCS_BASE_URL", None)
+
+    @pytest.mark.requirement("3A-US5-FR005")
+    def test_strips_trailing_slash_from_docs_url(self) -> None:
+        """Documentation URL MUST strip trailing slash."""
+        from floe_core.enforcement.patterns import _get_docs_base_url
+
+        import os
+        original = os.environ.get("FLOE_DOCS_BASE_URL")
+        try:
+            os.environ["FLOE_DOCS_BASE_URL"] = "https://docs.example.com/"
+            url = _get_docs_base_url()
+            assert url == "https://docs.example.com"
+        finally:
+            if original is not None:
+                os.environ["FLOE_DOCS_BASE_URL"] = original
+            else:
+                os.environ.pop("FLOE_DOCS_BASE_URL", None)
+
+
 class TestDocumentationValidatorWithPolicyEnforcer:
     """Integration tests with PolicyEnforcer."""
 

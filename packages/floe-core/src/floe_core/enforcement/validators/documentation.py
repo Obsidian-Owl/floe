@@ -31,9 +31,52 @@ logger = structlog.get_logger(__name__)
 DOCS_DOC_URL = f"{DOCUMENTATION_URLS.get('base', 'https://floe.dev/docs')}/documentation"
 
 # Placeholder patterns to detect (case-insensitive)
-# Matches: TBD, TODO, FIXME, XXX, HACK, or variations with colons/spaces
-_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(
-    r"\b(TBD|TODO|FIXME|XXX|HACK)\b",
+# Matches common placeholder text that indicates incomplete documentation:
+# - TBD, TODO, FIXME, XXX, HACK (developer markers)
+# - Placeholder, Fill in, Add description, Description pending
+# - N/A, NA, None (when used as entire description)
+# - WIP, Work in progress
+_PLACEHOLDER_WORDS: tuple[str, ...] = (
+    "TBD",
+    "TODO",
+    "FIXME",
+    "XXX",
+    "HACK",
+    "WIP",
+)
+
+_PLACEHOLDER_PHRASES: tuple[str, ...] = (
+    r"fill\s+in",
+    r"add\s+description",
+    r"description\s+pending",
+    r"pending\s+description",
+    r"to\s+be\s+completed",
+    r"to\s+be\s+documented",
+    r"needs?\s+description",
+    r"needs?\s+documentation",
+    r"placeholder",
+    r"work\s+in\s+progress",
+    r"coming\s+soon",
+    r"update\s+later",
+    r"fill\s+later",
+    r"describe\s+later",
+)
+
+# Compile pattern for single words (with word boundaries)
+_PLACEHOLDER_WORDS_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(" + "|".join(_PLACEHOLDER_WORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+# Compile pattern for phrases
+_PLACEHOLDER_PHRASES_PATTERN: re.Pattern[str] = re.compile(
+    r"(" + "|".join(_PLACEHOLDER_PHRASES) + r")",
+    re.IGNORECASE,
+)
+
+# Pattern for descriptions that are just "N/A", "NA", "None", "-", or similar
+_NA_ONLY_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*(N/?A|NA|None|-|\.{2,})\s*$",
     re.IGNORECASE,
 )
 
@@ -222,15 +265,33 @@ class DocumentationValidator:
     def _is_placeholder(self, description: str | None) -> bool:
         """Check if a description contains placeholder text.
 
+        Detects common placeholder patterns including:
+        - Developer markers: TBD, TODO, FIXME, XXX, HACK, WIP
+        - Placeholder phrases: "fill in", "add description", "coming soon", etc.
+        - N/A-style descriptions: "N/A", "NA", "None", "-", "..."
+
         Args:
             description: The description string.
 
         Returns:
-            True if description contains TBD, TODO, FIXME, etc.
+            True if description contains placeholder text.
         """
         if description is None:
             return False
-        return bool(_PLACEHOLDER_PATTERN.search(description))
+
+        # Check for N/A-style descriptions (entire description is just a placeholder)
+        if _NA_ONLY_PATTERN.match(description):
+            return True
+
+        # Check for placeholder words (TBD, TODO, etc.)
+        if _PLACEHOLDER_WORDS_PATTERN.search(description):
+            return True
+
+        # Check for placeholder phrases
+        if _PLACEHOLDER_PHRASES_PATTERN.search(description):
+            return True
+
+        return False
 
     def _create_model_violation(
         self,

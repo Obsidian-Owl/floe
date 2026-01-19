@@ -9,21 +9,49 @@ Requirements: FR-003 (Naming Convention Enforcement), US3 (Naming Validation)
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Final
 
 # Maximum pattern length to prevent DoS via extremely long patterns
 MAX_PATTERN_LENGTH: Final[int] = 500
 
-# Documentation URLs for naming conventions
-DOCUMENTATION_URLS: Final[dict[str, str | dict[str, str]]] = {
-    "base": "https://floe.dev/docs",
-    "naming": {
-        "medallion": "https://floe.dev/docs/naming#medallion",
-        "kimball": "https://floe.dev/docs/naming#kimball",
-        "custom": "https://floe.dev/docs/naming#custom",
-    },
-}
+# Default documentation base URL (can be overridden via FLOE_DOCS_BASE_URL env var)
+_DEFAULT_DOCS_BASE_URL: Final[str] = "https://floe.dev/docs"
+
+
+def _get_docs_base_url() -> str:
+    """Get documentation base URL from environment or use default.
+
+    Environment variable: FLOE_DOCS_BASE_URL
+    Default: https://floe.dev/docs
+
+    Returns:
+        The documentation base URL without trailing slash.
+    """
+    url = os.environ.get("FLOE_DOCS_BASE_URL", _DEFAULT_DOCS_BASE_URL)
+    return url.rstrip("/")
+
+
+def _build_documentation_urls() -> dict[str, str | dict[str, str]]:
+    """Build documentation URLs dictionary with configurable base URL.
+
+    Returns:
+        Dictionary containing base URL and naming convention URLs.
+    """
+    base = _get_docs_base_url()
+    return {
+        "base": base,
+        "naming": {
+            "medallion": f"{base}/naming#medallion",
+            "kimball": f"{base}/naming#kimball",
+            "custom": f"{base}/naming#custom",
+        },
+    }
+
+
+# Documentation URLs for naming conventions (built dynamically from env var)
+DOCUMENTATION_URLS: dict[str, str | dict[str, str]] = _build_documentation_urls()
 
 # Medallion architecture naming pattern (T040)
 # Matches: bronze_*, silver_*, gold_* with lowercase alphanumeric and underscores
