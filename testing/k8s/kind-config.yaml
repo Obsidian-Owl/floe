@@ -84,6 +84,14 @@ nodes:
       - containerPort: 30686
         hostPort: 16686
         protocol: TCP
+      # OCI Registry Anonymous (NodePort 30500 -> localhost 30500)
+      - containerPort: 30500
+        hostPort: 30500
+        protocol: TCP
+      # OCI Registry Auth (NodePort 30501 -> localhost 30501)
+      - containerPort: 30501
+        hostPort: 30501
+        protocol: TCP
 
 networking:
   # Pod network CIDR

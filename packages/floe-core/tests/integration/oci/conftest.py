@@ -121,20 +121,31 @@ def oci_registry_host() -> str:
 
 
 @pytest.fixture
-def oci_registry_config(oci_registry_host: str) -> dict[str, Any]:
+def oci_registry_config(oci_registry_host: str, tmp_path: Path) -> dict[str, Any]:
     """Create RegistryConfig dict for integration tests.
 
     Configures anonymous auth since the test registry doesn't require authentication.
+    TLS is disabled for local Kind cluster testing (HTTP registry on NodePort).
+    Cache uses temp directory to avoid permissions issues.
 
     Args:
         oci_registry_host: Registry host from fixture.
+        tmp_path: pytest tmp_path fixture.
 
     Returns:
         Dict suitable for RegistryConfig.model_validate().
     """
+    cache_path = tmp_path / "oci-cache"
+    cache_path.mkdir(exist_ok=True)
+
     return {
         "uri": f"oci://{oci_registry_host}/floe-test",
         "auth": {"type": "anonymous"},
+        "tls_verify": False,  # Local registry uses HTTP, not HTTPS
+        "cache": {
+            "enabled": True,
+            "path": str(cache_path),
+        },
     }
 
 
@@ -257,17 +268,23 @@ def mock_secrets_plugin(auth_registry_credentials: dict[str, str]) -> MockSecret
 
 
 @pytest.fixture
-def auth_registry_config(auth_registry_host: str) -> dict[str, Any]:
+def auth_registry_config(auth_registry_host: str, tmp_path: Path) -> dict[str, Any]:
     """Create RegistryConfig dict for authenticated registry tests.
 
     Configures basic auth with test credentials reference.
+    TLS is disabled for local Kind cluster testing (HTTP registry on NodePort).
+    Cache uses temp directory to avoid permissions issues.
 
     Args:
         auth_registry_host: Registry host from fixture.
+        tmp_path: pytest tmp_path fixture.
 
     Returns:
         Dict suitable for RegistryConfig.model_validate().
     """
+    cache_path = tmp_path / "oci-auth-cache"
+    cache_path.mkdir(exist_ok=True)
+
     return {
         "uri": f"oci://{auth_registry_host}/floe-auth-test",
         "auth": {
@@ -275,6 +292,11 @@ def auth_registry_config(auth_registry_host: str) -> dict[str, Any]:
             "credentials_ref": {
                 "name": "test-creds",
             },
+        },
+        "tls_verify": False,  # Local registry uses HTTP, not HTTPS
+        "cache": {
+            "enabled": True,
+            "path": str(cache_path),
         },
     }
 
@@ -298,6 +320,9 @@ def auth_manifest_path(
     """
     import yaml
 
+    cache_path = tmp_path / "oci-auth-cache"
+    cache_path.mkdir(exist_ok=True)
+
     manifest_data = {
         "artifacts": {
             "registry": {
@@ -307,6 +332,11 @@ def auth_manifest_path(
                     "credentials_ref": {
                         "name": "test-creds",
                     },
+                },
+                "tls_verify": False,  # Local registry uses HTTP, not HTTPS
+                "cache": {
+                    "enabled": True,
+                    "path": str(cache_path),
                 },
             }
         }

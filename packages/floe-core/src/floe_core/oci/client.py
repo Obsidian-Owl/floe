@@ -79,6 +79,7 @@ from floe_core.oci.resilience import CircuitBreaker, RetryPolicy
 from floe_core.schemas.oci import (
     ArtifactManifest,
     ArtifactTag,
+    AuthType,
     RegistryConfig,
 )
 
@@ -436,11 +437,13 @@ class OCIClient:
 
                         # Push artifact using ORAS
                         # ORAS handles: blob upload, manifest creation, tag assignment
+                        # disable_path_validation=True allows temp files outside cwd
                         response = oras_client.push(
                             target=target_ref,
                             config_path=str(config_file),
                             files=[str(layer_file)],
                             manifest_annotations=manifest.annotations,
+                            disable_path_validation=True,
                         )
 
                         # Verify response
@@ -508,24 +511,33 @@ class OCIClient:
         Raises:
             AuthenticationError: If authentication fails.
         """
-        # Create ORAS client with TLS settings
-        oras_client = OrasClient(insecure=not self._config.tls_verify)
+        # Determine auth backend based on auth type
+        # Basic auth needs 'basic' backend, otherwise use default 'token'
+        auth_backend = "basic" if self.auth_provider.auth_type == AuthType.BASIC else "token"
+
+        # Create ORAS client with TLS settings and auth backend
+        oras_client = OrasClient(
+            insecure=not self._config.tls_verify,
+            auth_backend=auth_backend,
+        )
 
         # Get credentials from auth provider
         credentials = self.auth_provider.get_credentials()
 
-        # Login to registry
-        try:
-            oras_client.login(
-                hostname=self._registry_host,
-                username=credentials.username,
-                password=credentials.password,
-            )
-        except Exception as e:
-            raise AuthenticationError(
-                self._registry_host,
-                f"Failed to authenticate with registry: {e}",
-            ) from e
+        # Skip login for anonymous auth (empty credentials)
+        # ORAS prompts interactively if username/password are empty
+        if credentials.username and credentials.password:
+            try:
+                oras_client.login(
+                    hostname=self._registry_host,
+                    username=credentials.username,
+                    password=credentials.password,
+                )
+            except Exception as e:
+                raise AuthenticationError(
+                    self._registry_host,
+                    f"Failed to authenticate with registry: {e}",
+                ) from e
 
         return oras_client
 
@@ -826,7 +838,7 @@ class OCIClient:
 
                     # Get manifest only (no blob download)
                     try:
-                        manifest_data = oras_client.get_manifest(target=target_ref)
+                        manifest_data = oras_client.get_manifest(container=target_ref)
                     except Exception as e:
                         error_str = str(e).lower()
                         # Detect "manifest unknown" or 404 errors
@@ -988,7 +1000,7 @@ class OCIClient:
 
                 # Get list of tags from registry
                 try:
-                    tags_response = oras_client.get_tags(target=uri)
+                    tags_response = oras_client.get_tags(container=uri)
                 except Exception as e:
                     error_str = str(e).lower()
                     if "unauthorized" in error_str or "authentication" in error_str:
@@ -998,8 +1010,8 @@ class OCIClient:
                         ) from e
                     raise OCIError(f"Failed to list tags: {e}") from e
 
-                # Extract tag names from response
-                tag_names: list[str] = tags_response.get("tags", [])
+                # get_tags returns List[str] directly
+                tag_names: list[str] = tags_response
 
                 # Filter by pattern if provided
                 if filter_pattern:
@@ -1014,7 +1026,7 @@ class OCIClient:
                     try:
                         # Get manifest for this tag
                         target_ref = self._build_target_ref(tag_name)
-                        manifest_data = oras_client.get_manifest(target=target_ref)
+                        manifest_data = oras_client.get_manifest(container=target_ref)
 
                         # Calculate manifest digest
                         manifest_json = json.dumps(

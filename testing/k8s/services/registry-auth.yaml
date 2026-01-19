@@ -2,6 +2,9 @@
 # Deploys Docker distribution registry (registry:2) with htpasswd authentication.
 # Used for OCI client basic auth integration tests (Epic 8A - T060).
 #
+# NOTE: Named 'oci-registry-auth' (not 'registry-auth') to avoid conflict with
+# Kubernetes auto-generated REGISTRY_* environment variables.
+#
 # Test credentials:
 #   Username: testuser
 #   Password: testpass123
@@ -11,18 +14,18 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: registry-auth-htpasswd
+  name: oci-registry-auth-htpasswd
   namespace: floe-test
 type: Opaque
 stringData:
-  # Generated with: htpasswd -Bbn testuser testpass123
+  # Generated with: htpasswd -nbB testuser testpass123
   # Username: testuser, Password: testpass123
-  htpasswd: "testuser:$2y$05$TJNKGsODPGPL9b7tPMj1zOoQQCcKhANxQlOiG5VZFIiFPP2TLg3a6"
+  htpasswd: "testuser:$2y$05$dnzkO/YfW.qVPhAQkST4KuezgwGgsxPXUy3AYzYtnPSJ7pGumHZne"
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: registry-auth-credentials
+  name: oci-registry-auth-credentials
   namespace: floe-test
 type: Opaque
 stringData:
@@ -33,7 +36,7 @@ stringData:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: registry-auth-config
+  name: oci-registry-auth-config
   namespace: floe-test
 data:
   config.yml: |
@@ -57,22 +60,22 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: registry-auth
+  name: oci-registry-auth
   namespace: floe-test
   labels:
-    app: registry-auth
+    app: oci-registry-auth
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: registry-auth
+      app: oci-registry-auth
   template:
     metadata:
       labels:
-        app: registry-auth
+        app: oci-registry-auth
     spec:
       containers:
-        - name: registry
+        - name: oci-registry-auth
           image: registry:2
           ports:
             - containerPort: 5000
@@ -91,33 +94,32 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+          # Use TCP probes since HTTP probes fail without auth credentials
           livenessProbe:
-            httpGet:
-              path: /v2/
+            tcpSocket:
               port: 5000
             initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
-            httpGet:
-              path: /v2/
+            tcpSocket:
               port: 5000
             initialDelaySeconds: 5
             periodSeconds: 5
       volumes:
         - name: config
           configMap:
-            name: registry-auth-config
+            name: oci-registry-auth-config
         - name: htpasswd
           secret:
-            secretName: registry-auth-htpasswd
+            secretName: oci-registry-auth-htpasswd
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: registry-auth
+  name: oci-registry-auth
   namespace: floe-test
   labels:
-    app: registry-auth
+    app: oci-registry-auth
 spec:
   type: NodePort
   ports:
@@ -126,4 +128,4 @@ spec:
       nodePort: 30501
       name: http
   selector:
-    app: registry-auth
+    app: oci-registry-auth
