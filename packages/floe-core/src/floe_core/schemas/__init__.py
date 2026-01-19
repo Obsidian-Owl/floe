@@ -57,6 +57,13 @@ from floe_core.schemas.compiled_artifacts import (
     ProductIdentity,
 )
 
+# Governance models (T011-T013, Epic 3A)
+from floe_core.schemas.governance import (
+    LayerThresholds,
+    NamingConfig,
+    QualityGatesConfig,
+)
+
 # Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
     FIELD_MERGE_STRATEGIES,
@@ -113,9 +120,10 @@ from floe_core.schemas.secrets import (
     validate_no_secrets_in_artifacts,
 )
 
-# Validation models (T031, T032, T036)
+# Validation models (T031, T032, T036, T015-T017 Epic 3A)
 from floe_core.schemas.validation import (
     AUDIT_LOGGING_STRENGTH,
+    NAMING_ENFORCEMENT_STRENGTH,
     PII_ENCRYPTION_STRENGTH,
     POLICY_LEVEL_STRENGTH,
     InheritanceError,
@@ -128,6 +136,10 @@ __all__: list[str] = [
     "AuditEvent",
     "AuditOperation",
     "AuditResult",
+    # Governance (Epic 3A)
+    "LayerThresholds",
+    "NamingConfig",
+    "QualityGatesConfig",
     # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",
@@ -135,12 +147,13 @@ __all__: list[str] = [
     "CircularInheritanceError",
     "detect_circular_inheritance",
     "merge_manifests",
-    # Validation (Phase 4)
+    # Validation (Phase 4, Epic 3A)
     "SecurityPolicyViolationError",
     "InheritanceError",
     "PII_ENCRYPTION_STRENGTH",
     "AUDIT_LOGGING_STRENGTH",
     "POLICY_LEVEL_STRENGTH",
+    "NAMING_ENFORCEMENT_STRENGTH",
     "validate_security_policy_not_weakened",
     # Metadata (Phase 2)
     "ManifestMetadata",

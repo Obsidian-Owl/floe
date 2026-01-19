@@ -60,7 +60,11 @@ class TestNamingConfig:
         from floe_core.schemas.governance import NamingConfig
 
         for pattern in ["medallion", "kimball", "custom"]:
-            config = NamingConfig(pattern=pattern)
+            if pattern == "custom":
+                # custom pattern requires custom_patterns to be provided
+                config = NamingConfig(pattern=pattern, custom_patterns=["^test_.*$"])
+            else:
+                config = NamingConfig(pattern=pattern)
             assert config.pattern == pattern
 
     @pytest.mark.requirement("3A-US2-FR013")

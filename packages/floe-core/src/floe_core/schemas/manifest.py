@@ -20,6 +20,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
 from floe_core.schemas.metadata import ManifestMetadata
 from floe_core.schemas.plugins import PluginsConfig
 
@@ -61,6 +62,8 @@ class GovernanceConfig(BaseModel):
         audit_logging: Audit logging policy (enabled > disabled)
         policy_enforcement_level: Enforcement level (strict > warn > off)
         data_retention_days: Data retention period in days
+        naming: Naming convention configuration (NEW in Epic 3A)
+        quality_gates: Quality gate thresholds (NEW in Epic 3A)
 
     Example:
         >>> governance = GovernanceConfig(
@@ -75,6 +78,9 @@ class GovernanceConfig(BaseModel):
         - audit_logging: enabled > disabled
         - policy_enforcement_level: strict > warn > off
         - data_retention_days: higher is stricter
+        - naming.enforcement: strict > warn > off
+        - quality_gates.minimum_test_coverage: higher is stricter
+        - quality_gates.require_descriptions: True > False
 
     See Also:
         - data-model.md: GovernanceConfig entity specification
@@ -116,6 +122,16 @@ class GovernanceConfig(BaseModel):
             description="Data retention period in days (higher is stricter)",
         ),
     ]
+
+    # NEW in Epic 3A: Policy Enforcer configuration
+    naming: NamingConfig | None = Field(
+        default=None,
+        description="Naming convention configuration (NEW in Epic 3A)",
+    )
+    quality_gates: QualityGatesConfig | None = Field(
+        default=None,
+        description="Quality gate thresholds (NEW in Epic 3A)",
+    )
 
 
 class PlatformManifest(BaseModel):
