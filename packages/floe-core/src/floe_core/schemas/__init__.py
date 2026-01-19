@@ -110,6 +110,18 @@ from floe_core.schemas.plugins import (
     validate_plugin_selection,
 )
 
+# RBAC resource schemas (Epic 7B)
+from floe_core.schemas.rbac import (
+    NamespaceConfig,
+    PodSecurityConfig,
+    RoleBindingConfig,
+    RoleBindingSubject,
+    RoleConfig,
+    RoleRule,
+    ServiceAccountConfig,
+    WritableVolumeMount,
+)
+
 # Secret models (T005, T008, T039, T040)
 from floe_core.schemas.secrets import (
     SECRET_NAME_PATTERN,
@@ -118,6 +130,13 @@ from floe_core.schemas.secrets import (
     SecretSource,
     resolve_secret_references,
     validate_no_secrets_in_artifacts,
+)
+
+# Security configuration schemas (Epic 7B)
+from floe_core.schemas.security import (
+    PodSecurityLevelConfig,
+    RBACConfig,
+    SecurityConfig,
 )
 
 # Validation models (T031, T032, T036, T015-T017 Epic 3A)
@@ -193,4 +212,17 @@ __all__: list[str] = [
     "ManifestRef",
     "ObservabilityConfig",
     "ProductIdentity",
+    # RBAC resource schemas (Epic 7B)
+    "ServiceAccountConfig",
+    "RoleRule",
+    "RoleConfig",
+    "RoleBindingSubject",
+    "RoleBindingConfig",
+    "NamespaceConfig",
+    "WritableVolumeMount",
+    "PodSecurityConfig",
+    # Security configuration schemas (Epic 7B)
+    "RBACConfig",
+    "PodSecurityLevelConfig",
+    "SecurityConfig",
 ]

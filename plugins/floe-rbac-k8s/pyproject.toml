@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "floe-core"
+name = "floe-rbac-k8s"
 version = "0.1.0"
-description = "Core plugin registry and interfaces for the floe data platform"
+description = "Kubernetes RBAC plugin for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -23,16 +23,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "floe-core>=0.1.0",
     "pydantic>=2.0",
+    "kubernetes>=27.0.0,<29.0.0",
     "pyyaml>=6.0",
     "structlog>=24.0",
-    # OpenTelemetry SDK and exporters (per ADR-0006, spec 001-opentelemetry)
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
-    "opentelemetry-exporter-otlp-proto-http>=1.20.0",
-    # Kubernetes client for RBAC operations (per Epic 7B)
-    "kubernetes>=27.0.0,<29.0.0",
 ]
 
 [project.optional-dependencies]
@@ -41,12 +36,10 @@ dev = [
     "pytest-cov>=4.0",
     "mypy>=1.8",
     "ruff>=0.3",
-    "jsonschema>=4.0",  # For JSON Schema validation in tests
-    "types-PyYAML>=6.0",  # Type stubs for PyYAML
 ]
 
-[project.scripts]
-floe = "floe_core.cli:main"
+[project.entry-points."floe.rbac"]
+k8s = "floe_rbac_k8s:K8sRBACPlugin"
 
 [project.urls]
 Homepage = "https://github.com/Obsidian-Owl/floe"
@@ -54,7 +47,7 @@ Documentation = "https://github.com/Obsidian-Owl/floe/tree/main/docs"
 Repository = "https://github.com/Obsidian-Owl/floe"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/floe_core"]
+packages = ["src/floe_rbac_k8s"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -86,4 +79,5 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
+    "integration: Mark test as integration test requiring real services",
 ]

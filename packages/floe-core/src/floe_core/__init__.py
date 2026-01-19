@@ -57,6 +57,8 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 # Schemas submodule (imported for explicit re-export)
+# RBAC submodule (explicit re-export)
+from floe_core import rbac as rbac  # noqa: PLC0414
 from floe_core import schemas as schemas  # noqa: PLC0414
 
 # Telemetry submodule (explicit re-export)
@@ -170,6 +172,12 @@ from floe_core.plugins import (
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_core.schemas.floe_spec import FloeSpec
 
+# Security configuration exports (Epic 7B convenience imports)
+from floe_core.schemas.security import (
+    RBACConfig,
+    SecurityConfig,
+)
+
 # Telemetry public API (convenience imports)
 from floe_core.telemetry import (
     ProviderState,
@@ -193,6 +201,10 @@ __all__: list[str] = [
     "schemas",
     "CompiledArtifacts",
     "FloeSpec",
+    # RBAC submodule and security exports (Epic 7B)
+    "rbac",
+    "RBACConfig",
+    "SecurityConfig",
     # Telemetry submodule and exports
     "telemetry",
     "TelemetryConfig",

@@ -39,6 +39,8 @@ dependencies = [
     "floe-identity-keycloak",
     "floe-secrets-infisical",
     "floe-secrets-k8s",
+    # RBAC plugin for Kubernetes RBAC manifest generation
+    "floe-rbac-k8s",
 ]
 
 [tool.uv]
@@ -58,17 +60,20 @@ floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = tru
 floe-identity-keycloak = { path = "plugins/floe-identity-keycloak", editable = true }
 floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = true }
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
+floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
+    "packages/floe-cli/src",
     "packages/floe-iceberg/src",
     "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",
     "plugins/floe-identity-keycloak/src",
     "plugins/floe-secrets-infisical/src",
     "plugins/floe-secrets-k8s/src",
+    "plugins/floe-rbac-k8s/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]
@@ -116,10 +121,16 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
+ignore = [
+    "UP017",  # datetime.UTC alias only available in Python 3.11+
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "packages/floe-core/tests"]
-skips = ["B101"]  # Allow assert statements (used in tests)
+skips = [
+    "B101",  # Allow assert statements (used in tests)
+    "B108",  # Allow /tmp as K8s container mount path (not temp file usage)
+]
 
 [tool.uv-secure.vulnerability_criteria]
 # GHSA-5j53-63w8-8625: OAuth/CSRF vulnerability in fastapi-users 14.0.2

@@ -114,8 +114,9 @@ jobs:
 
       - name: Run Bandit security scan
         run: |
-          uv run bandit -r packages/ -ll -f json -o bandit-report.json || true
-          uv run bandit -r packages/ -ll
+          # Use pyproject.toml config for bandit exclusions and skips
+          uv run bandit -c pyproject.toml -r packages/ -ll -f json -o bandit-report.json || true
+          uv run bandit -c pyproject.toml -r packages/ -ll
 
       - name: Run vulnerability audit
         run: |
