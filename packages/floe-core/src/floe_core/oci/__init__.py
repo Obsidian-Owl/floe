@@ -75,6 +75,14 @@ from floe_core.oci.errors import (
     RegistryUnavailableError,
 )
 
+# Metrics (T011)
+from floe_core.oci.metrics import (
+    CircuitBreakerStateValue,
+    OCIMetrics,
+    get_oci_metrics,
+    set_oci_metrics,
+)
+
 # Resilience patterns (T008, T009)
 from floe_core.oci.resilience import (
     CircuitBreaker,
@@ -86,7 +94,6 @@ from floe_core.oci.resilience import (
 )
 
 # NOTE: Additional exports will be populated as modules are implemented:
-# - T011: metrics.py (OpenTelemetry metrics)
 # - T012: client.py (OCIClient)
 # - T016: manifest.py (ArtifactManifest builder)
 
@@ -118,4 +125,9 @@ __all__: list[str] = [
     "with_resilience",
     # Cache (T010)
     "CacheManager",
+    # Metrics (T011)
+    "OCIMetrics",
+    "CircuitBreakerStateValue",
+    "get_oci_metrics",
+    "set_oci_metrics",
 ]
