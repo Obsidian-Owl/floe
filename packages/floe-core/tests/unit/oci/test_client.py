@@ -312,20 +312,75 @@ class TestOCIClientPush:
     """Tests for OCIClient.push() operation."""
 
     @pytest.mark.requirement("8A-FR-001")
-    def test_push_artifact_success_placeholder(
+    def test_push_artifact_success(
         self,
         oci_client: OCIClient,
         sample_compiled_artifacts: CompiledArtifacts,
     ) -> None:
-        """Test that push() exists and is not yet implemented.
-
-        This test verifies the skeleton is in place. Will be updated
-        when T017 implements the actual push operation.
+        """Test successful push of CompiledArtifacts to registry.
 
         FR-001: System MUST push CompiledArtifacts to OCI registries.
         """
-        with pytest.raises(NotImplementedError, match="push.*not yet implemented"):
-            oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+        # Mock ORAS client push response
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        # Mock tag_exists to return False (new tag)
+        with (
+            patch.object(oci_client, "tag_exists", return_value=False),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+        ):
+            digest = oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
+
+            # Verify digest is returned
+            assert digest.startswith("sha256:")
+            assert len(digest) == 71  # sha256: + 64 hex chars
+
+            # Verify ORAS push was called
+            mock_oras_client.push.assert_called_once()
+            call_kwargs = mock_oras_client.push.call_args.kwargs
+            assert "v1.0.0" in call_kwargs.get("target", "")
+
+    @pytest.mark.requirement("8A-FR-001")
+    def test_push_artifact_with_annotations(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test push includes custom annotations.
+
+        FR-001: System MUST push CompiledArtifacts with metadata annotations.
+        """
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+
+        mock_oras_client = MagicMock()
+        mock_oras_client.push.return_value = mock_response
+
+        custom_annotations = {"custom.key": "custom-value"}
+
+        with (
+            patch.object(oci_client, "tag_exists", return_value=False),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+        ):
+            digest = oci_client.push(
+                sample_compiled_artifacts,
+                tag="v1.0.0",
+                annotations=custom_annotations,
+            )
+
+            assert digest.startswith("sha256:")
+
+            # Verify annotations were passed to ORAS
+            call_kwargs = mock_oras_client.push.call_args.kwargs
+            manifest_annotations = call_kwargs.get("manifest_annotations", {})
+            assert "io.floe.product.name" in manifest_annotations
+            assert manifest_annotations.get("custom.key") == "custom-value"
 
     @pytest.mark.requirement("8A-FR-010")
     def test_push_immutability_check_raises_error(

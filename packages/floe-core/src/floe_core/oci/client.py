@@ -49,18 +49,27 @@ See Also:
 from __future__ import annotations
 
 import re
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
+from oras.client import OrasClient  # type: ignore[import-untyped]
 
 from floe_core.oci.auth import AuthProvider, create_auth_provider
 from floe_core.oci.cache import CacheManager
 from floe_core.oci.errors import (
     ArtifactNotFoundError,
+    AuthenticationError,
     ImmutabilityViolationError,
     OCIError,
+    RegistryUnavailableError,
+)
+from floe_core.oci.manifest import (
+    build_manifest,
+    create_empty_config,
+    serialize_layer,
 )
 from floe_core.oci.metrics import OCIMetrics, get_oci_metrics
 from floe_core.oci.resilience import CircuitBreaker, RetryPolicy
@@ -322,8 +331,130 @@ class OCIClient:
             >>> digest = client.push(artifacts, tag="v1.0.0")
             >>> print(f"Pushed with digest: {digest}")
         """
-        # Placeholder - implementation in T017
-        raise NotImplementedError("push() not yet implemented - see T017")
+        log = logger.bind(
+            registry=self._registry_host,
+            tag=tag,
+            product_name=artifacts.metadata.product_name,
+            product_version=artifacts.metadata.product_version,
+        )
+
+        log.info("push_started")
+
+        # Check immutability constraints before push
+        self._check_immutability_before_push(tag)
+
+        # Serialize artifacts to layer content
+        layer_content, layer_descriptor = serialize_layer(artifacts, annotations=annotations)
+
+        # Build manifest with product metadata
+        manifest = build_manifest(artifacts, layers=[layer_descriptor], annotations=annotations)
+
+        # Create ORAS client for registry operations
+        oras_client = self._create_oras_client()
+
+        # Build target reference (registry/namespace/repo:tag)
+        target_ref = self._build_target_ref(tag)
+
+        try:
+            # Push using ORAS with temp files (ORAS SDK requires file paths)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir_path = Path(tmpdir)
+
+                # Write layer content to temp file
+                layer_file = tmpdir_path / "compiled_artifacts.json"
+                layer_file.write_bytes(layer_content)
+
+                # Write empty config blob
+                config_content, config_digest = create_empty_config()
+                config_file = tmpdir_path / "config.json"
+                config_file.write_bytes(config_content)
+
+                # Push artifact using ORAS
+                # ORAS handles: blob upload, manifest creation, tag assignment
+                response = oras_client.push(
+                    target=target_ref,
+                    config_path=str(config_file),
+                    files=[str(layer_file)],
+                    manifest_annotations=manifest.annotations,
+                )
+
+                # Verify response
+                if not response.ok:
+                    raise RegistryUnavailableError(
+                        self._registry_host,
+                        f"Push failed with status {response.status_code}: {response.text}",
+                    )
+
+            # Record metrics
+            self.metrics.record_operation("push", self._registry_host, success=True)
+            self.metrics.record_artifact_size("push", manifest.size)
+
+            log.info(
+                "push_completed",
+                digest=manifest.digest,
+                size=manifest.size,
+                layer_count=len(manifest.layers),
+            )
+
+            return manifest.digest
+
+        except AuthenticationError:
+            self.metrics.record_operation("push", self._registry_host, success=False)
+            raise
+        except RegistryUnavailableError:
+            self.metrics.record_operation("push", self._registry_host, success=False)
+            raise
+        except Exception as e:
+            self.metrics.record_operation("push", self._registry_host, success=False)
+            log.error("push_failed", error=str(e))
+            raise OCIError(f"Push failed: {e}") from e
+
+    def _create_oras_client(self) -> OrasClient:
+        """Create and authenticate ORAS client.
+
+        Returns:
+            Authenticated OrasClient instance.
+
+        Raises:
+            AuthenticationError: If authentication fails.
+        """
+        # Create ORAS client with TLS settings
+        oras_client = OrasClient(insecure=not self._config.tls_verify)
+
+        # Get credentials from auth provider
+        credentials = self.auth_provider.get_credentials()
+
+        # Login to registry
+        try:
+            oras_client.login(
+                hostname=self._registry_host,
+                username=credentials.username,
+                password=credentials.password,
+            )
+        except Exception as e:
+            raise AuthenticationError(
+                self._registry_host,
+                f"Failed to authenticate with registry: {e}",
+            ) from e
+
+        return oras_client
+
+    def _build_target_ref(self, tag: str) -> str:
+        """Build OCI target reference from registry URI and tag.
+
+        Args:
+            tag: Tag for the artifact.
+
+        Returns:
+            Full OCI reference (e.g., harbor.example.com/namespace/repo:tag).
+        """
+        # Remove oci:// prefix if present
+        uri = self._config.uri
+        if uri.startswith("oci://"):
+            uri = uri[6:]
+
+        # Append tag
+        return f"{uri}:{tag}"
 
     def pull(
         self,
