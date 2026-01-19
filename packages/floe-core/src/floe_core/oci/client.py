@@ -901,6 +901,45 @@ class OCIClient:
         # Placeholder - implementation in T033
         raise NotImplementedError("list() not yet implemented - see T033")
 
+    def promote_to_environment(
+        self,
+        source_tag: str,
+        target_environment: str,
+        *,
+        target_tag: str | None = None,
+    ) -> str:
+        """Promote artifact to target environment.
+
+        Promotes an artifact from one environment to another by creating
+        a new tag or copying to a target registry. This is a placeholder
+        for Epic 8C (Artifact Promotion) integration.
+
+        Args:
+            source_tag: Tag of artifact to promote.
+            target_environment: Target environment (e.g., "staging", "production").
+            target_tag: Optional specific tag for promoted artifact.
+                       Defaults to generating a tag based on source + environment.
+
+        Returns:
+            Digest of promoted artifact.
+
+        Raises:
+            ArtifactNotFoundError: If source artifact doesn't exist.
+            PromotionError: If promotion workflow fails.
+            AuthenticationError: If authentication fails.
+
+        Example:
+            >>> digest = client.promote_to_environment(
+            ...     source_tag="v1.0.0",
+            ...     target_environment="production",
+            ... )
+            >>> print(f"Promoted to: {digest}")
+        """
+        # Placeholder - implementation in Epic 8C
+        raise NotImplementedError(
+            "promote_to_environment() not yet implemented - see Epic 8C"
+        )
+
     def check_registry_capabilities(self) -> dict[str, Any]:
         """Check registry capabilities and configuration.
 

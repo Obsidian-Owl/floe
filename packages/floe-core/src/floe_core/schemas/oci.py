@@ -324,6 +324,20 @@ class SignatureStatus(str, Enum):
     UNKNOWN = "unknown"  # Unable to verify (missing key/issuer)
 
 
+class PromotionStatus(str, Enum):
+    """Promotion workflow status for artifacts.
+
+    Prepared for Epic 8C (Artifact Promotion) integration.
+
+    Tracks whether an artifact has been promoted through environments
+    (e.g., dev -> staging -> production).
+    """
+
+    NOT_PROMOTED = "not_promoted"  # Artifact has not been promoted
+    PROMOTED = "promoted"  # Artifact has been promoted to target environment
+    PENDING = "pending"  # Promotion is in progress or awaiting approval
+
+
 class ArtifactLayer(BaseModel):
     """Individual content layer within an OCI artifact.
 
@@ -439,11 +453,20 @@ class ArtifactManifest(BaseModel):
         default=SignatureStatus.UNSIGNED,
         description="Signature verification status (Epic 8B integration)",
     )
+    promotion_status: PromotionStatus = Field(
+        default=PromotionStatus.NOT_PROMOTED,
+        description="Promotion workflow status (Epic 8C integration)",
+    )
 
     @property
     def is_signed(self) -> bool:
         """Check if artifact has a valid signature."""
         return self.signature_status == SignatureStatus.VALID
+
+    @property
+    def is_promoted(self) -> bool:
+        """Check if artifact has been promoted."""
+        return self.promotion_status == PromotionStatus.PROMOTED
 
     @property
     def product_name(self) -> str | None:
