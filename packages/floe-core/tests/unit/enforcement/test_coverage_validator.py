@@ -11,12 +11,9 @@ Requirements: FR-004 (Coverage Calculation), FR-012 (Layer Thresholds), US4 (Cov
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
-
-if TYPE_CHECKING:
-    from floe_core.enforcement.result import Violation
 
 
 def _create_model_node(

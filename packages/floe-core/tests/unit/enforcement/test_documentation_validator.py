@@ -15,12 +15,9 @@ Requirements: FR-005 (Documentation Enforcement), US5 (Documentation Validation)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
-
-if TYPE_CHECKING:
-    from floe_core.enforcement.result import Violation
 
 
 def _create_model_node(

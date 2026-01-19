@@ -235,7 +235,9 @@ class TestBypassPrevention:
 
         # Attempting to modify should raise an error
         # Pydantic v2 frozen models raise ValidationError on attribute assignment
-        with pytest.raises(Exception):  # ValidationError or AttributeError
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
             governance_config.policy_enforcement_level = "off"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-009")

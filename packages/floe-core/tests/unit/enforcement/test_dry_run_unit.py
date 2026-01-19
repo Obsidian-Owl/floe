@@ -287,4 +287,7 @@ class TestDryRunReportFormat:
         assert result.summary.documentation_violations > 0
         # All are warnings in dry-run
         assert result.error_count == 0
-        assert result.warning_count == result.summary.naming_violations + result.summary.documentation_violations
+        expected_warnings = (
+            result.summary.naming_violations + result.summary.documentation_violations
+        )
+        assert result.warning_count == expected_warnings

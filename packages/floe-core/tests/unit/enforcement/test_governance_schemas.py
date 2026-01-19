@@ -308,7 +308,6 @@ class TestGovernanceConfigExtension:
     def test_governance_config_accepts_naming(self) -> None:
         """Test GovernanceConfig accepts naming field."""
         from floe_core.schemas.governance import NamingConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
 
         config = GovernanceConfig(
@@ -322,7 +321,6 @@ class TestGovernanceConfigExtension:
     def test_governance_config_accepts_quality_gates(self) -> None:
         """Test GovernanceConfig accepts quality_gates field."""
         from floe_core.schemas.governance import QualityGatesConfig
-
         from floe_core.schemas.manifest import GovernanceConfig
 
         config = GovernanceConfig(
@@ -343,7 +341,6 @@ class TestGovernanceConfigExtension:
             NamingConfig,
             QualityGatesConfig,
         )
-
         from floe_core.schemas.manifest import GovernanceConfig
 
         config = GovernanceConfig(
