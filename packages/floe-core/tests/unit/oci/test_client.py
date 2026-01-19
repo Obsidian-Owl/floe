@@ -21,8 +21,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from floe_core.oci.client import MUTABLE_TAG_PATTERNS, OCIClient, SEMVER_PATTERN
-from floe_core.oci.errors import ImmutabilityViolationError
+from floe_core.oci.client import MUTABLE_TAG_PATTERNS, SEMVER_PATTERN, OCIClient
+from floe_core.oci.errors import ArtifactNotFoundError, ImmutabilityViolationError
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -37,7 +37,7 @@ from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryC
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    pass
 
 
 # =============================================================================
@@ -484,22 +484,156 @@ class TestOCIClientPush:
 
 
 class TestOCIClientPull:
-    """Tests for OCIClient.pull() operation."""
+    """Tests for OCIClient.pull() operation.
+
+    FR-002: System MUST pull OCI artifacts and deserialize to CompiledArtifacts.
+    FR-018: System MUST implement retry with exponential backoff.
+
+    Tests written TDD-style - will fail until T024 implements pull().
+    """
 
     @pytest.mark.requirement("8A-FR-002")
-    def test_pull_artifact_success_placeholder(
+    def test_pull_artifact_success(
         self,
-        oci_client: OCIClient,
+        tmp_path: Path,
+        sample_compiled_artifacts: CompiledArtifacts,
+        mock_oras_client: MagicMock,
+        sample_registry_config: Any,
     ) -> None:
-        """Test that pull() exists and is not yet implemented.
+        """Test successful pull of CompiledArtifacts from registry.
 
-        This test verifies the skeleton is in place. Will be updated
-        when T024 implements the actual pull operation.
-
-        FR-002: System MUST pull OCI artifacts and deserialize to CompiledArtifacts.
+        Verifies:
+        - pull() returns CompiledArtifacts instance
+        - Returned artifacts have correct product_name
+        - ORAS client pull was called with correct reference
         """
-        with pytest.raises(NotImplementedError, match="pull.*not yet implemented"):
-            oci_client.pull(tag="v1.0.0")
+        import json
+
+        from floe_core.oci.client import OCIClient
+
+        # Setup: Create temp file with serialized artifacts
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        )
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        (pull_dir / "compiled_artifacts.json").write_text(artifacts_json)
+
+        # Mock ORAS pull to return a list of files (ORAS v0.2+ returns list)
+        mock_oras_client.pull.return_value = [str(pull_dir / "compiled_artifacts.json")]
+
+        # Create client with mocked ORAS
+        with patch("floe_core.oci.client.OrasClient", return_value=mock_oras_client):
+            client = OCIClient.from_registry_config(sample_registry_config)
+            result = client.pull(tag="v1.0.0")
+
+        assert isinstance(result, CompiledArtifacts)
+        assert result.metadata.product_name == sample_compiled_artifacts.metadata.product_name
+        mock_oras_client.pull.assert_called_once()
+
+    @pytest.mark.requirement("8A-FR-002")
+    def test_pull_not_found_raises_error(
+        self,
+        mock_oras_client: MagicMock,
+        sample_registry_config: Any,
+    ) -> None:
+        """Test that pulling non-existent tag raises ArtifactNotFoundError.
+
+        Verifies:
+        - ArtifactNotFoundError raised for missing tags
+        - Error message includes tag name
+        """
+        from floe_core.oci.client import OCIClient
+
+        # Mock ORAS to raise 404-equivalent error
+        mock_oras_client.pull.side_effect = Exception("manifest unknown")
+
+        with patch("floe_core.oci.client.OrasClient", return_value=mock_oras_client):
+            client = OCIClient.from_registry_config(sample_registry_config)
+
+            with pytest.raises(ArtifactNotFoundError) as exc_info:
+                client.pull(tag="nonexistent")
+
+            assert "nonexistent" in str(exc_info.value)
+
+    @pytest.mark.requirement("8A-FR-018")
+    def test_pull_with_retry_on_transient_failure(
+        self,
+        tmp_path: Path,
+        sample_compiled_artifacts: CompiledArtifacts,
+        mock_oras_client: MagicMock,
+        sample_registry_config: Any,
+    ) -> None:
+        """Test that pull retries on transient failures.
+
+        Verifies:
+        - Pull succeeds after transient failures
+        - ORAS pull is called multiple times on retry
+        """
+        import json
+
+        from floe_core.oci.client import OCIClient
+
+        # Setup artifacts
+        artifacts_json = json.dumps(
+            sample_compiled_artifacts.model_dump(mode="json", by_alias=True)
+        )
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        artifacts_file = pull_dir / "compiled_artifacts.json"
+        artifacts_file.write_text(artifacts_json)
+
+        # Mock: First call fails, second succeeds
+        call_count = 0
+
+        def mock_pull(*args: Any, **kwargs: Any) -> list[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("Connection reset by peer")
+            return [str(artifacts_file)]
+
+        mock_oras_client.pull.side_effect = mock_pull
+
+        with patch("floe_core.oci.client.OrasClient", return_value=mock_oras_client):
+            client = OCIClient.from_registry_config(sample_registry_config)
+            result = client.pull(tag="v1.0.0")
+
+        assert isinstance(result, CompiledArtifacts)
+        assert call_count >= 2, "Pull should have been retried"
+
+    @pytest.mark.requirement("8A-FR-002")
+    def test_pull_validates_artifact_schema(
+        self,
+        tmp_path: Path,
+        mock_oras_client: MagicMock,
+        sample_registry_config: Any,
+    ) -> None:
+        """Test that pull validates artifact against CompiledArtifacts schema.
+
+        Verifies:
+        - Invalid JSON content raises error
+        - Corrupt artifacts are rejected
+        """
+        from pydantic import ValidationError
+
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.errors import OCIError
+
+        # Setup: Create invalid JSON
+        pull_dir = tmp_path / "pull"
+        pull_dir.mkdir()
+        invalid_file = pull_dir / "compiled_artifacts.json"
+        invalid_file.write_text('{"invalid": "schema"}')
+
+        mock_oras_client.pull.return_value = [str(invalid_file)]
+
+        with patch("floe_core.oci.client.OrasClient", return_value=mock_oras_client):
+            client = OCIClient.from_registry_config(sample_registry_config)
+
+            # Should raise validation error for invalid schema
+            with pytest.raises((ValidationError, OCIError)):
+                client.pull(tag="v1.0.0")
 
 
 class TestOCIClientInspect:
