@@ -10,7 +10,7 @@ Example:
     >>> generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
     >>> result = generator.generate(security_config, secret_refs)
 
-Task: T043, T044, T045, T046, T047
+Task: T043, T044, T045, T046, T047, T065
 User Story: US4 - RBAC Manifest Generation
 Requirements: FR-002, FR-050, FR-051, FR-052, FR-053
 """
@@ -22,6 +22,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+from opentelemetry import trace
+
+# OpenTelemetry tracer for RBAC manifest generation
+tracer = trace.get_tracer(__name__)
 
 from floe_core.rbac.audit import (
     RBACGenerationAuditEvent,
@@ -386,6 +390,40 @@ class RBACManifestGenerator:
             >>> result.service_accounts
             1
         """
+        with tracer.start_as_current_span(
+            "rbac_manifest_generator.generate",
+            attributes={
+                "rbac.enabled": security_config.rbac.enabled,
+                "rbac.secret_refs_count": len(secret_references),
+                "rbac.output_dir": str(self.output_dir),
+                "rbac.service_accounts_count": len(service_accounts or []),
+                "rbac.roles_count": len(roles or []),
+                "rbac.role_bindings_count": len(role_bindings or []),
+                "rbac.namespaces_count": len(namespaces or []),
+            },
+        ) as span:
+            return self._generate_impl(
+                security_config,
+                secret_references,
+                service_accounts=service_accounts,
+                roles=roles,
+                role_bindings=role_bindings,
+                namespaces=namespaces,
+                span=span,
+            )
+
+    def _generate_impl(
+        self,
+        security_config: SecurityConfig,
+        secret_references: list[str],
+        *,
+        service_accounts: list[ServiceAccountConfig] | None = None,
+        roles: list[RoleConfig] | None = None,
+        role_bindings: list[RoleBindingConfig] | None = None,
+        namespaces: list[NamespaceConfig] | None = None,
+        span: trace.Span | None = None,
+    ) -> GenerationResult:
+        """Implementation of generate with span context."""
         # Check if RBAC is enabled
         if not security_config.rbac.enabled:
             # Log disabled audit event (FR-072)
@@ -462,9 +500,18 @@ class RBACManifestGenerator:
         }
 
         # Validate all manifests before writing (FR-051)
-        is_valid, validation_errors = validate_all_manifests(all_manifests)
+        with tracer.start_as_current_span(
+            "rbac_manifest_generator.validate",
+            attributes={"rbac.manifest_count": sum(len(v) for v in all_manifests.values())},
+        ):
+            is_valid, validation_errors = validate_all_manifests(all_manifests)
         if not is_valid:
             errors.extend(validation_errors)
+
+            # Record validation failure on span
+            if span:
+                span.set_attribute("rbac.validation_errors", len(validation_errors))
+                span.set_attribute("rbac.success", False)
 
             # Log validation error audit event (FR-072)
             audit_event = RBACGenerationAuditEvent.create_validation_error(
@@ -481,9 +528,21 @@ class RBACManifestGenerator:
             )
 
         try:
-            files_generated = write_manifests(all_manifests, self.output_dir)
+            with tracer.start_as_current_span(
+                "rbac_manifest_generator.write_manifests",
+                attributes={
+                    "rbac.output_dir": str(self.output_dir),
+                    "rbac.manifest_count": sum(len(v) for v in all_manifests.values()),
+                },
+            ):
+                files_generated = write_manifests(all_manifests, self.output_dir)
         except Exception as e:
             errors.append(f"Failed to write manifests: {e}")
+
+            # Record write failure on span
+            if span:
+                span.record_exception(e)
+                span.set_attribute("rbac.success", False)
 
             # Log write error audit event (FR-072)
             audit_event = RBACGenerationAuditEvent.create_write_error(
@@ -498,6 +557,11 @@ class RBACManifestGenerator:
                 errors=errors,
                 warnings=warnings,
             )
+
+        # Record success on span
+        if span:
+            span.set_attribute("rbac.success", True)
+            span.set_attribute("rbac.files_generated", len(files_generated))
 
         # Log success audit event (FR-072)
         audit_event = RBACGenerationAuditEvent.create_success(
