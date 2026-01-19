@@ -190,12 +190,17 @@ class IcebergIOManager(ConfigurableIOManager):
 
         Raises:
             TypeError: If manager doesn't have required methods.
+
+        Security:
+            MEDIUM-01 remediation: Error message uses static text to avoid
+            exposing internal attribute names in error conditions.
         """
         required_attrs = ["load_table", "table_exists", "write_data", "create_table"]
-        for attr in required_attrs:
-            if not hasattr(table_manager, attr):
-                msg = f"table_manager must have '{attr}' method"
-                raise TypeError(msg)
+        missing_attrs = [attr for attr in required_attrs if not hasattr(table_manager, attr)]
+        if missing_attrs:
+            # Security: Use static message to avoid exposing internal details
+            msg = "table_manager is missing required interface methods"
+            raise TypeError(msg)
 
     @property
     def table_manager(self) -> IcebergTableManager:
@@ -254,7 +259,9 @@ class IcebergIOManager(ConfigurableIOManager):
             else:
                 from floe_iceberg.errors import NoSuchTableError
 
-                msg = f"Table '{identifier}' does not exist and infer_schema_from_data=False"
+                # Security: MEDIUM-01 remediation - Use static message to avoid
+                # exposing table identifiers in error conditions
+                msg = "Table does not exist and infer_schema_from_data=False"
                 raise NoSuchTableError(msg)
 
         # Load table and write data

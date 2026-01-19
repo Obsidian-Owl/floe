@@ -330,7 +330,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """
         from dagster import asset
 
-        # Create asset with proper dependencies and metadata
+        # Security: MEDIUM-02 remediation - Dynamic asset creation is safe because:
+        # 1. All inputs (transform.name, deps, metadata) are validated through
+        #    Pydantic schemas (TransformConfig) before reaching this function
+        # 2. transform.name is validated by Pydantic Field constraints
+        # 3. deps are derived from validated TransformConfig.depends_on list
+        # 4. metadata dict values come from validated TransformConfig fields
+        # No user-controlled input reaches this function without validation.
+        #
         # Note: We avoid type annotations in the inner function due to
         # Dagster's type hint resolution with `from __future__ import annotations`
         @asset(

@@ -402,6 +402,8 @@ def wait_for_run_completion(
     Polls the run status until it reaches a terminal state (SUCCESS, FAILURE,
     or CANCELED) or the timeout is exceeded.
 
+    Uses the shared wait_for_condition utility for consistent polling behavior.
+
     Args:
         instance: DagsterInstance to query.
         run_id: The run ID to monitor.
@@ -419,16 +421,13 @@ def wait_for_run_completion(
         >>> status = wait_for_run_completion(instance, run_id, timeout=30.0)
         >>> assert status == "SUCCESS"
     """
-    import time
+    from testing.fixtures.polling import PollingTimeoutError, wait_for_condition
 
     terminal_statuses = {"SUCCESS", "FAILURE", "CANCELED"}
-    start_time = time.monotonic()
+    final_status: str | None = None
 
-    while True:
-        elapsed = time.monotonic() - start_time
-        if elapsed >= timeout:
-            raise DagsterConnectionError(f"Run {run_id} did not complete within {timeout}s timeout")
-
+    def check_run_status() -> bool:
+        nonlocal final_status
         run = instance.get_run_by_id(run_id)
         if run is None:
             raise DagsterConnectionError(f"Run {run_id} not found")
@@ -436,9 +435,25 @@ def wait_for_run_completion(
         status = run.status.value if hasattr(run.status, "value") else str(run.status)
 
         if status in terminal_statuses:
-            return status
+            final_status = status
+            return True
+        return False
 
-        time.sleep(poll_interval)
+    try:
+        wait_for_condition(
+            check_run_status,
+            timeout=timeout,
+            interval=poll_interval,
+            description=f"run {run_id} to complete",
+        )
+    except PollingTimeoutError as e:
+        raise DagsterConnectionError(
+            f"Run {run_id} did not complete within {timeout}s timeout"
+        ) from e
+
+    # final_status is guaranteed to be set if wait_for_condition returned True
+    assert final_status is not None
+    return final_status
 
 
 def get_run_status(instance: DagsterInstance, run_id: str) -> str:
