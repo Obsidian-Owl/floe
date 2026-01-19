@@ -50,6 +50,9 @@ def create_parser() -> argparse.ArgumentParser:
     # Add compile subcommand
     _add_compile_subparser(subparsers)
 
+    # Add artifact subcommand group
+    _add_artifact_subparser(subparsers)
+
     return parser
 
 
@@ -104,6 +107,81 @@ def _add_compile_subparser(
             compile_parser.add_argument(*action.option_strings, **kwargs)
 
 
+def _add_artifact_subparser(
+    subparsers: Any,
+) -> None:
+    """Add the artifact subcommand group to subparsers.
+
+    Args:
+        subparsers: Subparsers action to add to.
+    """
+    # Create artifact parser with nested subcommands
+    artifact_parser = subparsers.add_parser(
+        "artifact",
+        help="Manage OCI artifacts (push, pull, inspect, list)",
+        description="Commands for managing floe CompiledArtifacts in OCI registries",
+    )
+
+    artifact_subparsers = artifact_parser.add_subparsers(
+        title="artifact commands",
+        dest="artifact_command",
+        required=True,
+    )
+
+    # Add push subcommand
+    _add_artifact_push_subparser(artifact_subparsers)
+
+
+def _add_artifact_push_subparser(
+    subparsers: Any,
+) -> None:
+    """Add the artifact push subcommand.
+
+    Args:
+        subparsers: Subparsers action to add to.
+    """
+    from floe_core.cli.artifact import create_push_parser
+
+    # Get the push parser template
+    push_template = create_push_parser()
+
+    push_parser = subparsers.add_parser(
+        "push",
+        help="Push CompiledArtifacts to OCI registry",
+        description=push_template.description,
+        epilog=push_template.epilog,
+    )
+
+    # Copy arguments from template
+    for action in push_template._actions:
+        if isinstance(action, argparse._HelpAction):
+            continue  # Skip help, it's added automatically
+        if action.dest == "help":
+            continue
+
+        kwargs: dict[str, Any] = {
+            "dest": action.dest,
+            "help": action.help,
+        }
+
+        if action.option_strings:
+            if isinstance(action, argparse._StoreTrueAction):
+                kwargs["action"] = "store_true"
+            elif isinstance(action, argparse._StoreFalseAction):
+                kwargs["action"] = "store_false"
+            else:
+                if action.type is not None:
+                    kwargs["type"] = action.type
+                if action.default is not None:
+                    kwargs["default"] = action.default
+                if action.required:
+                    kwargs["required"] = action.required
+                if action.metavar:
+                    kwargs["metavar"] = action.metavar
+
+            push_parser.add_argument(*action.option_strings, **kwargs)
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     """Main entry point for the floe CLI.
 
@@ -121,6 +199,15 @@ def main(argv: list[str] | None = None) -> NoReturn:
 
         exit_code = run_compile(args)
         sys.exit(exit_code)
+    elif args.command == "artifact":
+        if args.artifact_command == "push":
+            from floe_core.cli.artifact import run_push
+
+            exit_code = run_push(args)
+            sys.exit(exit_code)
+        else:
+            parser.print_help()
+            sys.exit(1)
     else:
         parser.print_help()
         sys.exit(1)
