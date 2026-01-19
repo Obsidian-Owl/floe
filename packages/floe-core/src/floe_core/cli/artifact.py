@@ -65,7 +65,20 @@ def create_push_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="floe artifact push",
         description="Push CompiledArtifacts to OCI registry",
-        epilog="Exit codes: 0=success, 1=error, 2=auth error, 4=immutability violation",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Push with specific tag
+  floe artifact push --source target/compiled_artifacts.json --tag v1.0.0
+
+  # Push to different registry (via custom manifest)
+  floe artifact push --source compiled.json --tag v1.0.0 --manifest staging.yaml
+
+  # Push with verbose output
+  floe artifact push --source compiled.json --tag latest-dev -v
+
+Exit codes: 0=success, 1=error, 2=auth error, 4=immutability violation
+""",
     )
 
     parser.add_argument(
@@ -239,7 +252,20 @@ def create_pull_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="floe artifact pull",
         description="Pull CompiledArtifacts from OCI registry",
-        epilog="Exit codes: 0=success, 1=error, 2=auth error, 3=not found",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Pull specific version
+  floe artifact pull --tag v1.0.0 --output ./artifacts/
+
+  # Pull latest development version
+  floe artifact pull --tag latest-dev --output ./target/
+
+  # Pull with verbose output
+  floe artifact pull --tag v1.0.0 --output ./artifacts/ -v
+
+Exit codes: 0=success, 1=error, 2=auth error, 3=not found
+""",
     )
 
     parser.add_argument(
@@ -406,7 +432,20 @@ def create_inspect_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="floe artifact inspect",
         description="Inspect artifact metadata from OCI registry",
-        epilog="Exit codes: 0=success, 1=error, 2=auth error, 3=not found",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Inspect artifact metadata
+  floe artifact inspect --tag v1.0.0
+
+  # Output as JSON for scripting
+  floe artifact inspect --tag v1.0.0 --json
+
+  # Verbose output with layer details
+  floe artifact inspect --tag v1.0.0 -v
+
+Exit codes: 0=success, 1=error, 2=auth error, 3=not found
+""",
     )
 
     parser.add_argument(
@@ -622,7 +661,23 @@ def create_list_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="floe artifact list",
         description="List available artifacts in OCI registry",
-        epilog="Exit codes: 0=success, 1=error, 2=auth error",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # List all artifacts
+  floe artifact list
+
+  # Filter by version pattern
+  floe artifact list --filter "v1.*"
+
+  # List latest versions only
+  floe artifact list --filter "latest-*"
+
+  # Output as JSON for scripting
+  floe artifact list --json
+
+Exit codes: 0=success, 1=error, 2=auth error
+""",
     )
 
     parser.add_argument(
@@ -824,7 +879,20 @@ def create_cache_status_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="floe artifact cache status",
         description="Display cache status and statistics",
-        epilog="Shows cache path, size, entry count, and expired entries.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Show cache status
+  floe artifact cache status
+
+  # Verbose output with TTL and size limits
+  floe artifact cache status -v
+
+  # Output as JSON for scripting
+  floe artifact cache status --json
+
+Exit codes: 0=success, 1=error
+""",
     )
 
     parser.add_argument(
@@ -968,7 +1036,23 @@ def create_cache_clear_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="floe artifact cache clear",
         description="Clear cached OCI artifacts",
-        epilog="Clears all cached artifacts or specific tags.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Clear all cached artifacts (with confirmation)
+  floe artifact cache clear
+
+  # Clear all without confirmation
+  floe artifact cache clear --yes
+
+  # Clear only specific tag
+  floe artifact cache clear --tag v1.0.0
+
+  # Clear all artifacts matching tag pattern
+  floe artifact cache clear --tag latest-dev -y
+
+Exit codes: 0=success, 1=error
+""",
     )
 
     parser.add_argument(
