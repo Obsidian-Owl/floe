@@ -13,12 +13,11 @@ Requirements: FR-002, FR-050, FR-051, FR-052, FR-053, FR-070
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 
 class TestFullRBACPipelineContract:
@@ -255,7 +254,7 @@ class TestSecurityConfigContractStability:
 
         config = SecurityConfig()
 
-        with pytest.raises(Exception):  # ValidationError or FrozenInstanceError
+        with pytest.raises(ValidationError):
             config.namespace_isolation = "permissive"  # type: ignore[misc]
 
 

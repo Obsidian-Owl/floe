@@ -11,6 +11,7 @@ Requirements: FR-063
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestDiffChangeType:
@@ -82,7 +83,7 @@ class TestResourceDiff:
             resource_name="test-sa",
         )
 
-        with pytest.raises(Exception):  # ValidationError or AttributeError
+        with pytest.raises(ValidationError):
             diff.resource_name = "other-sa"  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-063")

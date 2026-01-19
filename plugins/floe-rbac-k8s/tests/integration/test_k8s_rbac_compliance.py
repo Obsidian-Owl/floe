@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-
 from testing.base_classes.base_rbac_plugin_tests import BaseRBACPluginTests
 
 if TYPE_CHECKING:
@@ -254,7 +253,6 @@ class TestK8sRBACPluginYAMLCompatibility:
     ) -> None:
         """Verify ServiceAccount manifest can be serialized to YAML."""
         import yaml
-
         from floe_core.schemas.rbac import ServiceAccountConfig
 
         config = ServiceAccountConfig(name="floe-test", namespace="floe-jobs")
@@ -269,7 +267,6 @@ class TestK8sRBACPluginYAMLCompatibility:
     def test_role_manifest_yaml_compatible(self, plugin: K8sRBACPluginType) -> None:
         """Verify Role manifest can be serialized to YAML."""
         import yaml
-
         from floe_core.schemas.rbac import RoleConfig, RoleRule
 
         config = RoleConfig(
@@ -289,7 +286,6 @@ class TestK8sRBACPluginYAMLCompatibility:
     ) -> None:
         """Verify RoleBinding manifest can be serialized to YAML."""
         import yaml
-
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         config = RoleBindingConfig(
@@ -310,7 +306,6 @@ class TestK8sRBACPluginYAMLCompatibility:
     ) -> None:
         """Verify Namespace manifest can be serialized to YAML."""
         import yaml
-
         from floe_core.schemas.rbac import NamespaceConfig
 
         config = NamespaceConfig(name="floe-test-ns", layer="4")

@@ -20,7 +20,6 @@ from typing import Any
 
 import pytest
 import yaml
-
 from floe_core.schemas.rbac import (
     NamespaceConfig,
     RoleBindingConfig,
@@ -30,7 +29,6 @@ from floe_core.schemas.rbac import (
     ServiceAccountConfig,
 )
 from floe_rbac_k8s.plugin import K8sRBACPlugin
-
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "rbac"
 
@@ -102,7 +100,10 @@ class TestGoldenArtifactServiceAccount:
         generated = plugin.generate_service_account(config)
 
         # v1 contract: automountServiceAccountToken defaults to false
-        assert generated["automountServiceAccountToken"] == golden_v1["automountServiceAccountToken"]
+        assert (
+            generated["automountServiceAccountToken"]
+            == golden_v1["automountServiceAccountToken"]
+        )
         assert generated["automountServiceAccountToken"] is False
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestNamespaceConfigSchemaContract:
@@ -32,9 +33,8 @@ class TestNamespaceConfigSchemaContract:
     @pytest.mark.requirement("FR-030")
     def test_namespace_config_name_pattern(self) -> None:
         """Verify NamespaceConfig name follows floe-{purpose} pattern."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import NamespaceConfig
+        from pydantic import ValidationError
 
         # Valid names
         NamespaceConfig(name="floe-jobs", layer="4")
@@ -48,9 +48,8 @@ class TestNamespaceConfigSchemaContract:
     @pytest.mark.requirement("FR-030")
     def test_namespace_config_layer_values(self) -> None:
         """Verify NamespaceConfig layer accepts only valid values."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import NamespaceConfig
+        from pydantic import ValidationError
 
         # Valid layers
         NamespaceConfig(name="floe-platform", layer="3")
@@ -94,7 +93,7 @@ class TestNamespaceConfigSchemaContract:
 
         config = NamespaceConfig(name="floe-test", layer="4")
 
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(ValidationError):
             config.name = "floe-other"
 
 
@@ -290,7 +289,6 @@ class TestNamespaceYAMLCompatibility:
     def test_manifest_yaml_serializable(self) -> None:
         """Verify Namespace manifest can be serialized to YAML."""
         import yaml
-
         from floe_core.schemas.rbac import NamespaceConfig
 
         config = NamespaceConfig(name="floe-jobs", layer="4")
@@ -304,7 +302,6 @@ class TestNamespaceYAMLCompatibility:
     def test_manifest_yaml_roundtrip(self) -> None:
         """Verify Namespace manifest survives YAML roundtrip."""
         import yaml
-
         from floe_core.schemas.rbac import NamespaceConfig
 
         config = NamespaceConfig(

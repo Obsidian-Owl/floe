@@ -200,7 +200,6 @@ class TestNamespaceIsolationYAMLOutput:
     def test_namespace_manifest_valid_yaml(self, plugin: K8sRBACPluginType) -> None:
         """Test namespace manifest produces valid YAML."""
         import yaml
-
         from floe_core.schemas.rbac import NamespaceConfig
 
         config = NamespaceConfig(name="floe-jobs", layer="4")
@@ -218,7 +217,6 @@ class TestNamespaceIsolationYAMLOutput:
     def test_security_context_valid_yaml(self, plugin: K8sRBACPluginType) -> None:
         """Test security context produces valid YAML."""
         import yaml
-
         from floe_core.schemas.rbac import PodSecurityConfig
 
         config = PodSecurityConfig()

@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestCrossNamespaceSubjectValidation:
@@ -169,7 +170,7 @@ class TestCrossNamespaceSubjectProperties:
 
         subject = RoleBindingSubject(name="floe-test", namespace="floe-jobs")
 
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(ValidationError):
             subject.namespace = "floe-other"
 
 

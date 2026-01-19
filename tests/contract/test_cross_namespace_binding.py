@@ -183,9 +183,8 @@ class TestCrossNamespaceSchemaStability:
     @pytest.mark.requirement("FR-023")
     def test_rolebinding_config_subject_namespace_required(self) -> None:
         """Verify RoleBindingSubject requires namespace."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import RoleBindingSubject
+        from pydantic import ValidationError
 
         # Subject without namespace should fail
         with pytest.raises(ValidationError, match="namespace"):
@@ -198,9 +197,8 @@ class TestCrossNamespaceAccessControl:
     @pytest.mark.requirement("FR-023")
     def test_allowed_namespaces_enforces_policy(self) -> None:
         """Verify allowed_subject_namespaces enforces cross-namespace policy."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+        from pydantic import ValidationError
 
         # Valid: Dagster in floe-platform accessing floe-jobs
         config = RoleBindingConfig(
@@ -275,7 +273,6 @@ class TestCrossNamespaceYAMLCompatibility:
     def test_cross_namespace_binding_yaml_serializable(self) -> None:
         """Verify cross-namespace RoleBinding can be serialized to YAML."""
         import yaml
-
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         config = RoleBindingConfig(
@@ -299,7 +296,6 @@ class TestCrossNamespaceYAMLCompatibility:
     def test_cross_namespace_binding_yaml_roundtrip(self) -> None:
         """Verify cross-namespace RoleBinding survives YAML roundtrip."""
         import yaml
-
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         config = RoleBindingConfig(

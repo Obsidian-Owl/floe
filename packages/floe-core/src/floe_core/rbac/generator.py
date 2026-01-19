@@ -24,15 +24,15 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from opentelemetry import trace
 
-# OpenTelemetry tracer for RBAC manifest generation
-tracer = trace.get_tracer(__name__)
-
 from floe_core.rbac.audit import (
     RBACGenerationAuditEvent,
     log_rbac_event,
 )
 from floe_core.rbac.result import GenerationResult
 from floe_core.schemas.rbac import RoleRule
+
+# OpenTelemetry tracer for RBAC manifest generation
+tracer = trace.get_tracer(__name__)
 
 if TYPE_CHECKING:
     from floe_core.plugins.rbac import RBACPlugin
@@ -99,9 +99,9 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
 
     # Check required top-level fields
-    for field in REQUIRED_MANIFEST_FIELDS:
-        if field not in manifest:
-            errors.append(f"Missing required field: {field}")
+    for required_field in REQUIRED_MANIFEST_FIELDS:
+        if required_field not in manifest:
+            errors.append(f"Missing required field: {required_field}")
 
     # Validate kind if present
     kind = manifest.get("kind")

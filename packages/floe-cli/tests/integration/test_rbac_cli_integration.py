@@ -159,8 +159,10 @@ class TestRBACValidateCommand:
                 ["rbac", "validate", "--config", str(config_path), "--manifest-dir", str(rbac_dir)],
             )
 
-            assert result.exit_code == 0, f"Validation failed with exit code {result.exit_code}: {result.output}"
-            assert "PASSED" in result.output, f"Expected 'PASSED' in output, got: {result.output}"
+            assert result.exit_code == 0, (
+                f"Validation failed with exit code {result.exit_code}: {result.output}"
+            )
+            assert "PASSED" in result.output, f"Expected 'PASSED': {result.output}"
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-061")
@@ -264,9 +266,6 @@ class TestRBACDiffWorkflow:
         import json
 
         from floe_cli.commands.rbac import (
-            DiffChangeType,
-            RBACDiffResult,
-            ResourceDiff,
             compute_rbac_diff,
         )
 
@@ -341,7 +340,7 @@ class TestRBACGenerateWorkflow:
             # Dry run should succeed and indicate dry-run mode in output
             # If it fails, the error message should explain why
             if result.exit_code == 0:
-                assert "DRY RUN" in result.output, f"Expected 'DRY RUN' in output, got: {result.output}"
+                assert "DRY RUN" in result.output, f"Expected 'DRY RUN': {result.output}"
             else:
                 # Acceptable failure reasons (e.g., missing dependencies)
                 assert any(
@@ -497,5 +496,7 @@ class TestFullWorkflow:
                 ["rbac", "validate", "--config", str(config_path), "--manifest-dir", str(rbac_dir)],
             )
 
-            assert result.exit_code == 0, f"Validation failed with exit code {result.exit_code}: {result.output}"
-            assert "PASSED" in result.output, f"Expected 'PASSED' in output, got: {result.output}"
+            assert result.exit_code == 0, (
+                f"Validation failed with exit code {result.exit_code}: {result.output}"
+            )
+            assert "PASSED" in result.output, f"Expected 'PASSED': {result.output}"

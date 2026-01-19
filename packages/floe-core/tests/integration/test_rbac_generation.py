@@ -21,7 +21,6 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
@@ -155,8 +154,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_namespaces: list[NamespaceConfig],
     ) -> None:
         """Test complete manifest generation with real K8sRBACPlugin."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         # Create generator with real plugin
         generator = RBACManifestGenerator(
@@ -202,8 +202,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_namespaces: list[NamespaceConfig],
     ) -> None:
         """Test that all generated manifests are valid YAML."""
-        from floe_core.rbac.generator import MANIFEST_FILES, RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import MANIFEST_FILES, RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -244,8 +245,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_service_accounts: list[ServiceAccountConfig],
     ) -> None:
         """Test ServiceAccount manifests have correct K8s structure."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -282,8 +284,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_roles: list[RoleConfig],
     ) -> None:
         """Test Role manifests have correct K8s structure."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -320,8 +323,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_role_bindings: list[RoleBindingConfig],
     ) -> None:
         """Test RoleBinding manifests have correct K8s structure."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -359,8 +363,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_service_accounts: list[ServiceAccountConfig],
     ) -> None:
         """Test RBAC disabled produces no manifest files."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -389,8 +394,9 @@ class TestRBACManifestGenerationWorkflow:
         security_config: SecurityConfig,
     ) -> None:
         """Test secret references are aggregated into minimal rules."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -411,7 +417,7 @@ class TestRBACManifestGenerationWorkflow:
         assert result.success is True
 
         # Verify aggregation happened (warning should mention it)
-        aggregation_warning = any("aggregated" in w.lower() for w in result.warnings)
+        _aggregation_warning = any("aggregated" in w.lower() for w in result.warnings)
         # Note: This depends on implementation - may or may not produce warning
 
     @pytest.mark.requirement("FR-053")
@@ -423,8 +429,9 @@ class TestRBACManifestGenerationWorkflow:
         sample_roles: list[RoleConfig],
     ) -> None:
         """Test manifests can be read back and parsed."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -471,8 +478,9 @@ class TestRBACManifestGenerationAuditLogging:
         """Test successful generation logs audit event."""
         from unittest.mock import patch
 
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(
             plugin=K8sRBACPlugin(),
@@ -500,8 +508,9 @@ class TestRBACManifestGenerationAuditLogging:
         """Test disabled RBAC logs audit event."""
         from unittest.mock import patch
 
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         security_config = SecurityConfig(
             rbac=RBACConfig(enabled=False),

@@ -10,9 +10,8 @@ Requirements: FR-062
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
+from pydantic import ValidationError
 
 
 class TestAuditFinding:
@@ -82,7 +81,7 @@ class TestAuditFinding:
             message="Test message",
         )
 
-        with pytest.raises(Exception):  # ValidationError or AttributeError
+        with pytest.raises(ValidationError):
             finding.severity = AuditSeverity.CRITICAL  # type: ignore[misc]
 
 

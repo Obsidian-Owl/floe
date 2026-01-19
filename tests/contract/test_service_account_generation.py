@@ -11,12 +11,7 @@ Requirements: FR-010, FR-011, FR-012, FR-013, FR-014
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
 import pytest
-from pydantic import ValidationError
-
 from floe_core.plugins.rbac import RBACPlugin
 from floe_core.schemas.rbac import (
     RoleBindingConfig,
@@ -25,6 +20,7 @@ from floe_core.schemas.rbac import (
     RoleRule,
     ServiceAccountConfig,
 )
+from pydantic import ValidationError
 
 
 class TestServiceAccountConfigSchemaContract:

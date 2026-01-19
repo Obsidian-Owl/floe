@@ -162,8 +162,16 @@ class TestManifestWritingContent:
         output_dir = tmp_path / "rbac"
         manifests: dict[str, list[dict[str, Any]]] = {
             "serviceaccounts.yaml": [
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "floe-a", "namespace": "default"}},
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "floe-b", "namespace": "default"}},
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "floe-a", "namespace": "default"},
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "floe-b", "namespace": "default"},
+                },
             ],
             "roles.yaml": [],
             "rolebindings.yaml": [],
@@ -212,12 +220,20 @@ class TestManifestWritingEmptyLists:
         output_dir = tmp_path / "rbac"
         manifests: dict[str, list[dict[str, Any]]] = {
             "serviceaccounts.yaml": [
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "floe-test", "namespace": "default"}},
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "floe-test", "namespace": "default"},
+                },
             ],
             "roles.yaml": [],  # Empty
             "rolebindings.yaml": [],  # Empty
             "namespaces.yaml": [
-                {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "floe-jobs"}},
+                {
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {"name": "floe-jobs"},
+                },
             ],
         }
 
@@ -320,7 +336,11 @@ class TestManifestWritingFileOverwrite:
 
         manifests: dict[str, list[dict[str, Any]]] = {
             "serviceaccounts.yaml": [
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "floe-new", "namespace": "default"}},
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "floe-new", "namespace": "default"},
+                },
             ],
             "roles.yaml": [],
             "rolebindings.yaml": [],

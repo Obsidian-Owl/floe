@@ -57,13 +57,12 @@ from __future__ import annotations
 __version__ = "0.1.0"
 
 # Schemas submodule (imported for explicit re-export)
+# RBAC submodule (explicit re-export)
+from floe_core import rbac as rbac  # noqa: PLC0414
 from floe_core import schemas as schemas  # noqa: PLC0414
 
 # Telemetry submodule (explicit re-export)
 from floe_core import telemetry as telemetry  # noqa: PLC0414
-
-# RBAC submodule (explicit re-export)
-from floe_core import rbac as rbac  # noqa: PLC0414
 
 # Compilation pipeline (Epic 2B)
 from floe_core.compilation.errors import (

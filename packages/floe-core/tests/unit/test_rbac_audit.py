@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestRBACGenerationAuditEventCreation:
@@ -182,7 +182,7 @@ class TestRBACGenerationAuditEventValidation:
 
         event = RBACGenerationAuditEvent.create_success(output_dir="target/rbac")
 
-        with pytest.raises(Exception):  # ValidationError from Pydantic
+        with pytest.raises(ValidationError):
             event.service_accounts = 10  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-072")

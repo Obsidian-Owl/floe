@@ -165,8 +165,9 @@ class TestSecretReferenceValidationIntegration:
     @pytest.mark.requirement("FR-073")
     def test_generator_validate_method_exists(self) -> None:
         """Test RBACManifestGenerator has validate_secret_references method."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
 
@@ -176,8 +177,9 @@ class TestSecretReferenceValidationIntegration:
     @pytest.mark.requirement("FR-073")
     def test_generator_validate_returns_tuple(self) -> None:
         """Test generator validate method returns (bool, list) tuple."""
-        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+        from floe_core.rbac.generator import RBACManifestGenerator
 
         generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
 

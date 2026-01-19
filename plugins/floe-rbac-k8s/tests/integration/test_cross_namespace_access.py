@@ -98,9 +98,8 @@ class TestDagsterCrossNamespaceAccess:
         self, plugin: K8sRBACPluginType
     ) -> None:
         """Test cross-namespace access is denied to non-allowed namespaces."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
+        from pydantic import ValidationError
 
         # Attempt to grant access from unauthorized namespace
         with pytest.raises(ValidationError, match="not in allowed namespaces"):
@@ -253,7 +252,6 @@ class TestCrossNamespaceManifestGeneration:
     ) -> None:
         """Test all cross-namespace manifests are YAML serializable."""
         import yaml
-
         from floe_core.schemas.rbac import (
             RoleBindingConfig,
             RoleBindingSubject,
@@ -304,7 +302,6 @@ class TestCrossNamespaceManifestGeneration:
     ) -> None:
         """Test YAML roundtrip preserves cross-namespace structure."""
         import yaml
-
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         binding = RoleBindingConfig(

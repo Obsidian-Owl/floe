@@ -275,9 +275,8 @@ class BaseRBACPluginTests(ABC):
     @pytest.mark.requirement("FR-070")
     def test_role_rule_rejects_wildcard_resources(self, rbac_plugin: RBACPlugin) -> None:
         """Verify RoleRule rejects wildcard (*) in resources."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import RoleRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError, match="Wildcard permissions"):
             RoleRule(resources=["*"], verbs=["get"])
@@ -285,9 +284,8 @@ class BaseRBACPluginTests(ABC):
     @pytest.mark.requirement("FR-070")
     def test_role_rule_rejects_wildcard_verbs(self, rbac_plugin: RBACPlugin) -> None:
         """Verify RoleRule rejects wildcard (*) in verbs."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import RoleRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError, match="Wildcard permissions"):
             RoleRule(resources=["secrets"], verbs=["*"])
@@ -295,9 +293,8 @@ class BaseRBACPluginTests(ABC):
     @pytest.mark.requirement("FR-070")
     def test_role_rule_rejects_wildcard_api_groups(self, rbac_plugin: RBACPlugin) -> None:
         """Verify RoleRule rejects wildcard (*) in apiGroups."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.rbac import RoleRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError, match="Wildcard permissions"):
             RoleRule(api_groups=["*"], resources=["secrets"], verbs=["get"])

@@ -11,6 +11,7 @@ Requirements: FR-061
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestValidationIssue:
@@ -64,7 +65,7 @@ class TestValidationIssue:
             message="Test message",
         )
 
-        with pytest.raises(Exception):  # ValidationError or AttributeError
+        with pytest.raises(ValidationError):
             issue.resource_name = "other-role"  # type: ignore[misc]
 
 

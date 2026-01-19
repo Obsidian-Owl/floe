@@ -23,7 +23,7 @@ class TestRBACManifestGeneratorOutputContract:
     @pytest.mark.requirement("FR-050")
     def test_generator_produces_target_rbac_directory(self) -> None:
         """Contract: RBACManifestGenerator writes to target/rbac/ directory."""
-        from floe_core.rbac.generator import GenerationResult, RBACManifestGenerator
+        from floe_core.rbac.generator import RBACManifestGenerator
         from floe_rbac_k8s.plugin import K8sRBACPlugin
 
         # Generator should have configurable output_dir defaulting to target/rbac
@@ -41,7 +41,7 @@ class TestRBACManifestGeneratorOutputContract:
 
     @pytest.mark.requirement("FR-053")
     def test_generator_produces_separate_manifest_files(self) -> None:
-        """Contract: Generator produces serviceaccounts.yaml, roles.yaml, rolebindings.yaml, namespaces.yaml."""
+        """Contract: Generator produces separate manifest files per resource type."""
         from floe_core.rbac.generator import MANIFEST_FILES
 
         # These file names are part of the contract
@@ -266,8 +266,8 @@ class TestRBACManifestFileWritingContract:
 
         generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
 
-        # The manifests parameter structure
-        manifests: dict[str, list[dict[str, Any]]] = {
+        # The manifests parameter structure (documented for contract)
+        _manifests: dict[str, list[dict[str, Any]]] = {
             "serviceaccounts.yaml": [
                 {
                     "apiVersion": "v1",

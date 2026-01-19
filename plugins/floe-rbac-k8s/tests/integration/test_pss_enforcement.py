@@ -23,7 +23,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from floe_core.schemas.rbac import PodSecurityConfig
 
 
@@ -209,7 +208,9 @@ class TestPodSecurityStandardsValidation:
         seccomp = pod_context.get("seccompProfile", {})
         seccomp_type = seccomp.get("type", "Unconfined")
         if seccomp_type not in ("RuntimeDefault", "Localhost"):
-            violations.append(f"Pod must have seccompProfile RuntimeDefault or Localhost, got {seccomp_type}")
+            violations.append(
+                f"Pod must have seccompProfile RuntimeDefault or Localhost, got {seccomp_type}"
+            )
 
         return len(violations) == 0, violations
 
