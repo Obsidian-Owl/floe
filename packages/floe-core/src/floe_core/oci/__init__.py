@@ -50,6 +50,7 @@ from __future__ import annotations
 
 # Authentication providers (T007)
 from floe_core.oci.auth import (
+    AnonymousAuthProvider,
     AuthProvider,
     AzureMIAuthProvider,
     BasicAuthProvider,
@@ -129,6 +130,7 @@ __all__: list[str] = [
     # Authentication (T007)
     "AuthProvider",
     "Credentials",
+    "AnonymousAuthProvider",
     "BasicAuthProvider",
     "TokenAuthProvider",
     "IRSAAuthProvider",

@@ -202,13 +202,17 @@ deploy_services() {
     # Apply OCI Registry (for OCI client integration tests - Epic 8A)
     log_info "Deploying OCI Registry..."
     kubectl apply -f "${SCRIPT_DIR}/services/registry.yaml"
+
+    # Apply OCI Registry with authentication (for basic auth tests - Epic 8A T060)
+    log_info "Deploying OCI Registry with basic auth..."
+    kubectl apply -f "${SCRIPT_DIR}/services/registry-auth.yaml"
 }
 
 # Wait for all services to be ready
 wait_for_services() {
     log_info "Waiting for all services to be ready..."
 
-    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger" "registry")
+    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger" "registry" "registry-auth")
 
     for service in "${services[@]}"; do
         log_info "Waiting for ${service}..."
@@ -261,7 +265,8 @@ print_info() {
     echo "  MinIO API:   http://localhost:9000"
     echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
     echo "  Jaeger:      http://localhost:16686"
-    echo "  OCI Registry: http://localhost:30500/v2/"
+    echo "  OCI Registry (anon):  http://localhost:30500/v2/"
+    echo "  OCI Registry (auth):  http://localhost:30501/v2/ (testuser/testpass123)"
     echo "  Grafana:     http://localhost:3001 (admin/admin)"
     echo "  Prometheus:  http://localhost:9090"
     echo ""

@@ -753,3 +753,311 @@ class TestListFromRegistry(IntegrationTestBase):
         tag_names = [tag.name for tag in tags]
         assert tag_v1 in tag_names
         assert tag_v2 not in tag_names
+
+
+class TestBasicAuthRegistry(IntegrationTestBase):
+    """Integration tests for basic auth with authenticated OCI registry.
+
+    Tests push/pull operations using basic authentication against the
+    registry-auth service (registry:2 with htpasswd) in Kind cluster.
+
+    Task: T060
+    Requirements: 8A-FR-006, SC-009
+
+    Note: These tests require the registry-auth service to be deployed.
+    See testing/k8s/services/registry-auth.yaml.
+    """
+
+    required_services = [("registry-auth", 5000)]
+    namespace = "floe-test"
+
+    def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
+        """Create a valid CompiledArtifacts JSON file for testing.
+
+        Args:
+            tmp_path: Temporary directory path.
+            unique_id: Unique identifier for test isolation.
+
+        Returns:
+            Path to the created JSON file.
+        """
+        import json
+
+        data: dict[str, Any] = {
+            "version": "0.2.0",
+            "metadata": {
+                "compiled_at": datetime.now(timezone.utc).isoformat(),
+                "floe_version": "0.2.0",
+                "source_hash": f"sha256:{unique_id}abc123",
+                "product_name": f"auth-test-product-{unique_id}",
+                "product_version": "1.0.0",
+            },
+            "identity": {
+                "product_id": f"auth.test.product_{unique_id}",
+                "domain": "auth-test",
+                "repository": "https://github.com/test/repo",
+            },
+            "mode": {
+                "environment": "dev",
+                "target": "local",
+            },
+            "telemetry": {
+                "service_name": "floe-auth-test",
+            },
+            "governance": {
+                "owner": "auth-test-team",
+            },
+            "plugins": {},
+            "transforms": [],
+            "inheritance_chain": [],
+            "dbt_profiles": {
+                "floe": {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": "/tmp/auth-test.duckdb",
+                        }
+                    },
+                }
+            },
+        }
+
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts_path.write_text(json.dumps(data, indent=2))
+        return artifacts_path
+
+    @pytest.mark.requirement("8A-FR-006")
+    def test_basic_auth_push_succeeds(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        auth_registry_host: str,
+        mock_secrets_plugin: Any,
+    ) -> None:
+        """Test push with valid basic auth credentials succeeds.
+
+        Verifies:
+        - Push completes with valid username/password
+        - Returns a valid sha256 digest
+        - Artifact is stored in registry
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.secrets import SecretReference
+
+        # Create test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        # Create registry config with basic auth
+        registry_config = RegistryConfig(
+            uri=f"oci://{auth_registry_host}/floe-auth-test",
+            auth=RegistryAuth(
+                type=AuthType.BASIC,
+                credentials_ref=SecretReference(name="test-creds"),
+            ),
+            tls_verify=False,  # Test registry uses HTTP
+        )
+
+        # Create client with mock secrets plugin
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=mock_secrets_plugin
+        )
+
+        # Push should succeed with valid credentials
+        tag = f"auth-{test_artifact_tag}"
+        digest = client.push(artifacts, tag=tag)
+
+        # Verify digest format
+        assert digest.startswith("sha256:"), f"Expected sha256 digest, got: {digest}"
+        assert len(digest) == 71, f"Expected 71-char digest, got {len(digest)}"
+
+    @pytest.mark.requirement("8A-FR-006")
+    def test_basic_auth_pull_succeeds(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        auth_registry_host: str,
+        mock_secrets_plugin: Any,
+    ) -> None:
+        """Test pull with valid basic auth credentials succeeds.
+
+        Verifies:
+        - Push artifact first
+        - Pull completes with valid username/password
+        - Content matches what was pushed
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.secrets import SecretReference
+
+        # Create test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        original_artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        # Create registry config with basic auth
+        registry_config = RegistryConfig(
+            uri=f"oci://{auth_registry_host}/floe-auth-test",
+            auth=RegistryAuth(
+                type=AuthType.BASIC,
+                credentials_ref=SecretReference(name="test-creds"),
+            ),
+            tls_verify=False,
+        )
+
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=mock_secrets_plugin
+        )
+
+        # Push first
+        tag = f"auth-pull-{test_artifact_tag}"
+        client.push(original_artifacts, tag=tag)
+
+        # Pull back
+        pulled_artifacts = client.pull(tag=tag)
+
+        # Verify content matches
+        assert pulled_artifacts.version == original_artifacts.version
+        assert (
+            pulled_artifacts.metadata.product_name
+            == original_artifacts.metadata.product_name
+        )
+
+    @pytest.mark.requirement("8A-FR-006")
+    def test_basic_auth_invalid_credentials_rejected(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        auth_registry_host: str,
+        invalid_secrets_plugin: Any,
+    ) -> None:
+        """Test push with invalid credentials fails with AuthenticationError.
+
+        Verifies:
+        - Push fails with wrong username/password
+        - AuthenticationError is raised
+        - Error message indicates authentication failure
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.errors import AuthenticationError
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.secrets import SecretReference
+
+        # Create test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        # Create registry config with invalid credentials via mock
+        registry_config = RegistryConfig(
+            uri=f"oci://{auth_registry_host}/floe-auth-test",
+            auth=RegistryAuth(
+                type=AuthType.BASIC,
+                credentials_ref=SecretReference(name="test-creds"),
+            ),
+            tls_verify=False,
+        )
+
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=invalid_secrets_plugin
+        )
+
+        # Push should fail with invalid credentials
+        tag = f"auth-invalid-{test_artifact_tag}"
+        with pytest.raises(AuthenticationError) as exc_info:
+            client.push(artifacts, tag=tag)
+
+        # Verify error indicates authentication failure
+        error_msg = str(exc_info.value).lower()
+        assert any(
+            term in error_msg for term in ["auth", "401", "unauthorized", "credential"]
+        ), f"Expected auth-related error, got: {exc_info.value}"
+
+    @pytest.mark.requirement("8A-SC-009")
+    def test_basic_auth_anonymous_access_denied(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        auth_registry_host: str,
+    ) -> None:
+        """Test anonymous access to authenticated registry is denied.
+
+        Verifies:
+        - Accessing authenticated registry without credentials fails
+        - AuthenticationError or appropriate error is raised
+        """
+        import httpx
+
+        # Try to access the registry API without credentials
+        # The registry-auth service requires authentication
+        catalog_url = f"http://{auth_registry_host}/v2/_catalog"
+
+        with httpx.Client() as http_client:
+            response = http_client.get(catalog_url)
+
+        # Should get 401 Unauthorized
+        assert response.status_code == 401, (
+            f"Expected 401 Unauthorized for anonymous access, got {response.status_code}"
+        )
+
+    @pytest.mark.requirement("8A-FR-006")
+    def test_basic_auth_inspect_succeeds(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        auth_registry_host: str,
+        mock_secrets_plugin: Any,
+    ) -> None:
+        """Test inspect with valid basic auth credentials succeeds.
+
+        Verifies:
+        - Push artifact first
+        - Inspect completes with valid credentials
+        - Returns valid ArtifactManifest
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+        from floe_core.schemas.oci import (
+            ArtifactManifest,
+            AuthType,
+            RegistryAuth,
+            RegistryConfig,
+        )
+        from floe_core.schemas.secrets import SecretReference
+
+        # Create test artifacts
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts_path = self._create_test_artifacts_json(tmp_path, unique_id)
+        artifacts = CompiledArtifacts.from_json_file(artifacts_path)
+
+        # Create registry config with basic auth
+        registry_config = RegistryConfig(
+            uri=f"oci://{auth_registry_host}/floe-auth-test",
+            auth=RegistryAuth(
+                type=AuthType.BASIC,
+                credentials_ref=SecretReference(name="test-creds"),
+            ),
+            tls_verify=False,
+        )
+
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=mock_secrets_plugin
+        )
+
+        # Push first
+        tag = f"auth-inspect-{test_artifact_tag}"
+        client.push(artifacts, tag=tag)
+
+        # Inspect should succeed
+        manifest = client.inspect(tag=tag)
+
+        # Verify manifest is valid
+        assert isinstance(manifest, ArtifactManifest)
+        assert manifest.digest.startswith("sha256:")
+        assert manifest.size > 0

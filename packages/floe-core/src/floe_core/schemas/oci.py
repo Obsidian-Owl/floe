@@ -59,6 +59,7 @@ OCI_EMPTY_CONFIG_TYPE = "application/vnd.oci.empty.v1+json"
 class AuthType(str, Enum):
     """Authentication types for OCI registries."""
 
+    ANONYMOUS = "anonymous"
     BASIC = "basic"
     TOKEN = "token"
     AWS_IRSA = "aws-irsa"
@@ -106,6 +107,7 @@ class RegistryAuth(BaseModel):
         if auth_type in (AuthType.BASIC, AuthType.TOKEN) and v is None:
             raise ValueError(f"credentials_ref required for auth type '{auth_type}'")
         if auth_type in (
+            AuthType.ANONYMOUS,
             AuthType.AWS_IRSA,
             AuthType.AZURE_MANAGED_IDENTITY,
             AuthType.GCP_WORKLOAD_IDENTITY,

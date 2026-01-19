@@ -155,3 +155,188 @@ def test_manifest_path(tmp_path: Path, oci_registry_config: dict[str, Any]) -> P
     manifest_path = tmp_path / "manifest.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest_data))
     return manifest_path
+
+
+# ============================================================================
+# Authenticated Registry Fixtures (T060 - Basic Auth Testing)
+# ============================================================================
+
+
+class MockSecretsPlugin:
+    """Mock SecretsPlugin for integration testing.
+
+    Provides test credentials for basic auth tests without requiring
+    a real secrets backend.
+    """
+
+    def __init__(self, credentials: dict[str, str]) -> None:
+        """Initialize with test credentials.
+
+        Args:
+            credentials: Dict with 'username' and 'password' keys.
+        """
+        self._credentials = credentials
+
+    @property
+    def name(self) -> str:
+        """Return plugin name."""
+        return "mock-secrets"
+
+    @property
+    def version(self) -> str:
+        """Return plugin version."""
+        return "1.0.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        """Return floe API version."""
+        return "1.0"
+
+    def get_secret(self, key: str) -> str | None:
+        """Retrieve secret by key."""
+        if key.endswith("/username"):
+            return self._credentials.get("username")
+        if key.endswith("/password"):
+            return self._credentials.get("password")
+        return self._credentials.get(key)
+
+    def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
+        """Store secret (not implemented for mock)."""
+        raise NotImplementedError("Mock does not support writing secrets")
+
+    def list_secrets(self, prefix: str = "") -> list[str]:
+        """List secrets."""
+        return ["test-creds/username", "test-creds/password"]
+
+    def get_multi_key_secret(self, name: str) -> dict[str, str]:
+        """Retrieve multi-key secret."""
+        if name == "test-creds":
+            return self._credentials
+        raise KeyError(f"Secret not found: {name}")
+
+
+@pytest.fixture
+def auth_registry_host() -> str:
+    """Get the authenticated registry host for basic auth integration tests.
+
+    Returns localhost:30501 for Kind cluster (NodePort), or can be overridden
+    via FLOE_TEST_AUTH_REGISTRY_HOST environment variable.
+
+    Returns:
+        Registry host with basic auth (e.g., "localhost:30501").
+    """
+    return os.environ.get("FLOE_TEST_AUTH_REGISTRY_HOST", "localhost:30501")
+
+
+@pytest.fixture
+def auth_registry_credentials() -> dict[str, str]:
+    """Get the test credentials for the authenticated registry.
+
+    These credentials match those configured in registry-auth.yaml htpasswd.
+
+    Returns:
+        Dict with 'username' and 'password' keys.
+    """
+    return {
+        "username": os.environ.get("FLOE_TEST_AUTH_REGISTRY_USER", "testuser"),
+        "password": os.environ.get("FLOE_TEST_AUTH_REGISTRY_PASS", "testpass123"),
+    }
+
+
+@pytest.fixture
+def mock_secrets_plugin(auth_registry_credentials: dict[str, str]) -> MockSecretsPlugin:
+    """Create a MockSecretsPlugin with test credentials.
+
+    Args:
+        auth_registry_credentials: Test credentials.
+
+    Returns:
+        MockSecretsPlugin instance.
+    """
+    return MockSecretsPlugin(auth_registry_credentials)
+
+
+@pytest.fixture
+def auth_registry_config(auth_registry_host: str) -> dict[str, Any]:
+    """Create RegistryConfig dict for authenticated registry tests.
+
+    Configures basic auth with test credentials reference.
+
+    Args:
+        auth_registry_host: Registry host from fixture.
+
+    Returns:
+        Dict suitable for RegistryConfig.model_validate().
+    """
+    return {
+        "uri": f"oci://{auth_registry_host}/floe-auth-test",
+        "auth": {
+            "type": "basic",
+            "credentials_ref": {
+                "name": "test-creds",
+            },
+        },
+    }
+
+
+@pytest.fixture
+def auth_manifest_path(
+    tmp_path: Path,
+    auth_registry_host: str,
+) -> Path:
+    """Create a temporary manifest.yaml for authenticated registry tests.
+
+    Note: This creates a manifest with credentials reference.
+    The actual credential resolution happens via the MockSecretsPlugin fixture.
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+        auth_registry_host: Authenticated registry host.
+
+    Returns:
+        Path to the created manifest.yaml.
+    """
+    import yaml
+
+    manifest_data = {
+        "artifacts": {
+            "registry": {
+                "uri": f"oci://{auth_registry_host}/floe-auth-test",
+                "auth": {
+                    "type": "basic",
+                    "credentials_ref": {
+                        "name": "test-creds",
+                    },
+                },
+            }
+        }
+    }
+    manifest_path = tmp_path / "manifest-auth.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest_data))
+    return manifest_path
+
+
+@pytest.fixture
+def invalid_credentials() -> dict[str, str]:
+    """Get invalid credentials for negative testing.
+
+    Returns:
+        Dict with 'username' and 'password' keys that should fail auth.
+    """
+    return {
+        "username": "wronguser",
+        "password": "wrongpass",
+    }
+
+
+@pytest.fixture
+def invalid_secrets_plugin(invalid_credentials: dict[str, str]) -> MockSecretsPlugin:
+    """Create a MockSecretsPlugin with invalid credentials.
+
+    Args:
+        invalid_credentials: Invalid test credentials.
+
+    Returns:
+        MockSecretsPlugin instance with wrong credentials.
+    """
+    return MockSecretsPlugin(invalid_credentials)

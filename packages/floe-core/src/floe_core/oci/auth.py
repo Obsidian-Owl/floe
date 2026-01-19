@@ -126,6 +126,54 @@ class AuthProvider(ABC):
         ...
 
 
+class AnonymousAuthProvider(AuthProvider):
+    """Authentication provider for anonymous (unauthenticated) registry access.
+
+    Used for public registries or local test registries that do not require
+    authentication (e.g., local Docker registry:2 for testing).
+
+    This provider returns empty credentials that indicate no authentication
+    should be performed.
+
+    Example:
+        >>> provider = AnonymousAuthProvider(
+        ...     registry_uri="oci://localhost:5000/test"
+        ... )
+        >>> creds = provider.get_credentials()
+        >>> creds.username
+        ''
+    """
+
+    def __init__(self, registry_uri: str) -> None:
+        """Initialize AnonymousAuthProvider.
+
+        Args:
+            registry_uri: OCI registry URI for logging.
+        """
+        self._registry_uri = registry_uri
+
+    @property
+    def auth_type(self) -> AuthType:
+        """Return the authentication type."""
+        return AuthType.ANONYMOUS
+
+    def get_credentials(self) -> Credentials:
+        """Return empty credentials for anonymous access.
+
+        Returns:
+            Credentials with empty username and password.
+        """
+        logger.debug(
+            "anonymous_auth_provider",
+            registry=self._registry_uri,
+        )
+        return Credentials(username="", password="")
+
+    def refresh_if_needed(self) -> bool:
+        """Refresh not needed for anonymous auth."""
+        return False
+
+
 class BasicAuthProvider(AuthProvider):
     """Authentication provider for basic username/password auth.
 
@@ -705,6 +753,9 @@ def create_auth_provider(
         ... )
     """
     auth_type = auth_config.type
+
+    if auth_type == AuthType.ANONYMOUS:
+        return AnonymousAuthProvider(registry_uri=registry_uri)
 
     if auth_type == AuthType.BASIC:
         if secrets_plugin is None:
