@@ -26,12 +26,25 @@ See Also:
 from __future__ import annotations
 
 import sys
+from importlib.metadata import version as get_version
 from typing import TYPE_CHECKING
 
 import click
 
 if TYPE_CHECKING:
     pass
+
+
+def _get_version() -> str:
+    """Get the floe-core package version.
+
+    Returns:
+        Version string from package metadata, or 'unknown' if not installed.
+    """
+    try:
+        return get_version("floe-core")
+    except Exception:
+        return "unknown"
 
 
 @click.group(
@@ -41,6 +54,11 @@ if TYPE_CHECKING:
     context_settings={
         "help_option_names": ["-h", "--help"],
     },
+)
+@click.version_option(
+    version=_get_version(),
+    prog_name="floe",
+    message="%(prog)s %(version)s",
 )
 @click.pass_context
 def cli(ctx: click.Context) -> None:
