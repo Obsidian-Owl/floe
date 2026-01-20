@@ -309,3 +309,25 @@ class EnforcementResult(BaseModel):
             Number of violations with severity='error'.
         """
         return sum(1 for v in self.violations if v.severity == "error")
+
+    @property
+    def violations_by_model(self) -> dict[str, list[Violation]]:
+        """Return violations grouped by model name.
+
+        This is a convenience property for grouping violations by the model
+        that caused them. Useful for generating per-model reports.
+        Not serialized to JSON (computed from violations list).
+
+        Returns:
+            Dictionary mapping model names to their violations.
+
+        Example:
+            >>> result.violations_by_model["stg_customers"]
+            [Violation(model_name="stg_customers", ...)]
+        """
+        grouped: dict[str, list[Violation]] = {}
+        for violation in self.violations:
+            if violation.model_name not in grouped:
+                grouped[violation.model_name] = []
+            grouped[violation.model_name].append(violation)
+        return grouped
