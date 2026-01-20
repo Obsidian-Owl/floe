@@ -4,17 +4,21 @@ PolicyEnforcer is the main orchestrator that coordinates all policy validators
 (naming, coverage, documentation) and aggregates their results into a single
 EnforcementResult.
 
-Task: T029, T030, T031, T032, T033
+Task: T029, T030, T031, T032, T033, T038-T044
 Requirements: FR-001 (PolicyEnforcer core module), FR-002 (Pipeline integration)
+             FR-011 through FR-015 (US3 - Severity Overrides)
 """
 
 from __future__ import annotations
 
+import fnmatch
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
+
+from floe_core.schemas.governance import PolicyOverride
 
 from floe_core.enforcement.result import (
     EnforcementResult,
@@ -410,3 +414,232 @@ class PolicyEnforcer:
         if level is None:
             return "warn"  # Default to warn if not specified
         return level
+
+    # ==========================================================================
+    # US3: Policy Override Support (T038-T044)
+    # ==========================================================================
+
+    @staticmethod
+    def apply_overrides(
+        violations: list[Violation],
+        overrides: list[PolicyOverride],
+    ) -> list[Violation]:
+        """Apply policy overrides to modify or exclude violations.
+
+        Processes violations through the override rules, applying the first
+        matching override for each violation. Supports:
+        - downgrade: Convert error severity to warning (FR-012)
+        - exclude: Remove violation entirely (FR-013)
+        - expires: Ignore override after expiration date (FR-014)
+        - policy_types: Limit override to specific policy types (FR-011)
+
+        The first matching override wins (no stacking).
+
+        Args:
+            violations: List of violations to process.
+            overrides: List of policy overrides to apply.
+
+        Returns:
+            List of violations after applying overrides. May be shorter
+            than input if exclude actions removed violations.
+
+        Example:
+            >>> violations = [Violation(model_name="legacy_orders", ...)]
+            >>> overrides = [PolicyOverride(pattern="legacy_*", action="downgrade", ...)]
+            >>> result = PolicyEnforcer.apply_overrides(violations, overrides)
+            >>> result[0].severity
+            'warning'
+        """
+        if not overrides:
+            return violations
+
+        log = logger.bind(component="PolicyEnforcer.apply_overrides")
+
+        # Filter out expired overrides and log warnings
+        active_overrides = PolicyEnforcer._filter_expired_overrides(overrides, log)
+
+        if not active_overrides:
+            log.debug("all_overrides_expired", total_overrides=len(overrides))
+            return violations
+
+        result: list[Violation] = []
+        overrides_applied_count = 0
+
+        for violation in violations:
+            # Find first matching override
+            matched_override = PolicyEnforcer._find_matching_override(
+                violation, active_overrides
+            )
+
+            if matched_override is None:
+                # No match - keep violation unchanged
+                result.append(violation)
+            elif matched_override.action == "exclude":
+                # Exclude action - skip this violation entirely (FR-013)
+                log.warning(
+                    "override_exclude_applied",
+                    pattern=matched_override.pattern,
+                    model_name=violation.model_name,
+                    reason=matched_override.reason,
+                )
+                overrides_applied_count += 1
+                # Don't add to result - violation is excluded
+            else:
+                # Downgrade action - convert error to warning (FR-012)
+                downgraded = PolicyEnforcer._apply_downgrade(
+                    violation, matched_override.pattern
+                )
+                log.warning(
+                    "override_downgrade_applied",
+                    pattern=matched_override.pattern,
+                    model_name=violation.model_name,
+                    reason=matched_override.reason,
+                    original_severity=violation.severity,
+                    new_severity=downgraded.severity,
+                )
+                overrides_applied_count += 1
+                result.append(downgraded)
+
+        # Log warning if any override matched zero models (T044)
+        PolicyEnforcer._log_unused_overrides(active_overrides, violations, log)
+
+        if overrides_applied_count > 0:
+            log.info(
+                "overrides_summary",
+                overrides_applied=overrides_applied_count,
+                violations_before=len(violations),
+                violations_after=len(result),
+            )
+
+        return result
+
+    @staticmethod
+    def _filter_expired_overrides(
+        overrides: list[PolicyOverride],
+        log: structlog.BoundLogger,
+    ) -> list[PolicyOverride]:
+        """Filter out expired overrides and log warnings.
+
+        Args:
+            overrides: List of overrides to filter.
+            log: Bound logger for warnings.
+
+        Returns:
+            List of non-expired overrides.
+        """
+        today = date.today()
+        active: list[PolicyOverride] = []
+
+        for override in overrides:
+            if override.expires is not None and override.expires < today:
+                # Override has expired (FR-014)
+                log.warning(
+                    "override_expired",
+                    pattern=override.pattern,
+                    action=override.action,
+                    expired_on=override.expires.isoformat(),
+                    reason=override.reason,
+                )
+            else:
+                active.append(override)
+
+        return active
+
+    @staticmethod
+    def _find_matching_override(
+        violation: Violation,
+        overrides: list[PolicyOverride],
+    ) -> PolicyOverride | None:
+        """Find the first override matching a violation.
+
+        Matching criteria:
+        1. Pattern matches model_name using fnmatch (glob patterns) (T039)
+        2. If policy_types specified, violation policy_type must be in list (T043)
+
+        First match wins - no stacking of overrides.
+
+        Args:
+            violation: Violation to match against.
+            overrides: List of active (non-expired) overrides.
+
+        Returns:
+            First matching override, or None if no match.
+        """
+        for override in overrides:
+            # Check pattern match (T039)
+            if not fnmatch.fnmatch(violation.model_name, override.pattern):
+                continue
+
+            # Check policy_types filter if specified (T043)
+            if override.policy_types is not None:
+                if violation.policy_type not in override.policy_types:
+                    continue
+
+            # Match found
+            return override
+
+        return None
+
+    @staticmethod
+    def _apply_downgrade(
+        violation: Violation,
+        pattern: str,
+    ) -> Violation:
+        """Apply downgrade action to a violation.
+
+        Creates a new Violation with severity changed to "warning" and
+        override_applied field set to the matching pattern.
+
+        Args:
+            violation: Original violation.
+            pattern: The override pattern that matched.
+
+        Returns:
+            New Violation with downgraded severity.
+        """
+        return Violation(
+            error_code=violation.error_code,
+            severity="warning",
+            policy_type=violation.policy_type,
+            model_name=violation.model_name,
+            column_name=violation.column_name,
+            message=violation.message,
+            expected=violation.expected,
+            actual=violation.actual,
+            suggestion=violation.suggestion,
+            documentation_url=violation.documentation_url,
+            downstream_impact=violation.downstream_impact,
+            first_detected=violation.first_detected,
+            occurrences=violation.occurrences,
+            override_applied=pattern,
+        )
+
+    @staticmethod
+    def _log_unused_overrides(
+        overrides: list[PolicyOverride],
+        violations: list[Violation],
+        log: structlog.BoundLogger,
+    ) -> None:
+        """Log warning for overrides that matched zero violations.
+
+        Helps identify stale overrides that may need cleanup.
+
+        Args:
+            overrides: List of active overrides.
+            violations: Original violations list.
+            log: Bound logger for warnings.
+        """
+        model_names = {v.model_name for v in violations}
+
+        for override in overrides:
+            # Check if pattern matches any model
+            matched_any = any(
+                fnmatch.fnmatch(name, override.pattern) for name in model_names
+            )
+            if not matched_any:
+                log.warning(
+                    "override_matched_zero_models",
+                    pattern=override.pattern,
+                    action=override.action,
+                    reason=override.reason,
+                )
