@@ -14,9 +14,10 @@ Task: T011-T013
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LayerThresholds(BaseModel):
@@ -431,6 +432,111 @@ Example YAML:
 """
 
 
+# Valid policy types for override filtering
+VALID_POLICY_TYPES = frozenset({"naming", "coverage", "documentation", "semantic", "custom"})
+
+
+class PolicyOverride(BaseModel):
+    """Override for policy enforcement to support gradual migration.
+
+    PolicyOverride allows specific models or patterns to have reduced enforcement
+    (downgrade errors to warnings) or be excluded from validation entirely.
+    Supports expiration dates for time-limited exceptions.
+
+    Attributes:
+        pattern: Glob pattern matching model names (e.g., "legacy_*").
+        action: Override action - "downgrade" (error→warning) or "exclude" (skip).
+        reason: Audit trail explaining why override exists (required).
+        expires: Optional expiration date (ISO-8601). Override ignored after this date.
+        policy_types: Limit override to specific policies (default: all).
+
+    Example:
+        >>> override = PolicyOverride(
+        ...     pattern="legacy_*",
+        ...     action="downgrade",
+        ...     reason="Legacy models being migrated - tracked in JIRA-123",
+        ...     expires=date(2026, 6, 1),
+        ... )
+
+    Business Rules:
+        - reason is required for audit compliance (non-empty string)
+        - expired overrides are logged as warnings but ignored
+        - policy_types values must be valid policy categories
+
+    See Also:
+        - data-model.md: PolicyOverride entity specification
+        - spec.md: FR-011 through FR-015
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "pattern": "legacy_*",
+                    "action": "downgrade",
+                    "reason": "Legacy models being migrated",
+                    "expires": "2026-06-01",
+                },
+                {
+                    "pattern": "test_*",
+                    "action": "exclude",
+                    "reason": "Test fixtures exempt from policy",
+                },
+            ]
+        },
+    )
+
+    pattern: str = Field(
+        ...,
+        min_length=1,
+        description="Glob pattern matching model names (e.g., 'legacy_*', 'test_*')",
+    )
+    action: Literal["downgrade", "exclude"] = Field(
+        ...,
+        description="Override action: 'downgrade' (error→warning) or 'exclude' (skip validation)",
+    )
+    reason: str = Field(
+        ...,
+        min_length=1,
+        description="Audit trail explaining why this override exists",
+    )
+    expires: date | None = Field(
+        default=None,
+        description="Expiration date (ISO-8601). Override ignored after this date.",
+    )
+    policy_types: list[str] | None = Field(
+        default=None,
+        description="Limit override to specific policy types (default: all policies)",
+    )
+
+    @field_validator("policy_types")
+    @classmethod
+    def validate_policy_types(cls, v: list[str] | None) -> list[str] | None:
+        """Validate that policy_types contains only valid policy type names.
+
+        Args:
+            v: List of policy type names or None.
+
+        Returns:
+            Validated list or None.
+
+        Raises:
+            ValueError: If any policy type is not valid.
+        """
+        if v is None:
+            return v
+        invalid = set(v) - VALID_POLICY_TYPES
+        if invalid:
+            msg = (
+                f"Invalid policy_types: {sorted(invalid)}. "
+                f"Valid values are: {sorted(VALID_POLICY_TYPES)}"
+            )
+            raise ValueError(msg)
+        return v
+
+
 __all__ = [
     "LayerThresholds",
     "NamingConfig",
@@ -440,4 +546,7 @@ __all__ = [
     "RequireMetaField",
     "RequireTestsOfType",
     "CustomRule",
+    # Epic 3B: Policy override
+    "PolicyOverride",
+    "VALID_POLICY_TYPES",
 ]
