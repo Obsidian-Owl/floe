@@ -24,6 +24,7 @@ from floe_core.enforcement.result import (
 from floe_core.enforcement.validators.coverage import CoverageValidator
 from floe_core.enforcement.validators.documentation import DocumentationValidator
 from floe_core.enforcement.validators.naming import NamingValidator
+from floe_core.enforcement.validators.semantic import SemanticValidator
 
 if TYPE_CHECKING:
     from floe_core.schemas.manifest import GovernanceConfig
@@ -118,6 +119,10 @@ class PolicyEnforcer:
             if self.governance_config.quality_gates.require_descriptions:
                 doc_violations = self._validate_documentation(models)
                 violations.extend(doc_violations)
+
+        # Run semantic validation (always enabled - validates model relationships)
+        semantic_violations = self._validate_semantic(manifest)
+        violations.extend(semantic_violations)
 
         # Adjust severity for dry-run mode
         if dry_run:
@@ -258,6 +263,25 @@ class PolicyEnforcer:
         validator = DocumentationValidator(quality_gates)
         return validator.validate(models)
 
+    def _validate_semantic(
+        self,
+        manifest: dict[str, Any],
+    ) -> list[Violation]:
+        """Validate semantic relationships (refs, sources, dependencies).
+
+        Validates model references, source references, and detects
+        circular dependencies using the full manifest.
+
+        Args:
+            manifest: The full dbt manifest dictionary.
+
+        Returns:
+            List of semantic violations found (FLOE-E301, E302, E303).
+        """
+        # Delegate to SemanticValidator (T017-T020)
+        validator = SemanticValidator()
+        return validator.validate(manifest)
+
     def _downgrade_to_warnings(
         self,
         violations: list[Violation],
@@ -331,6 +355,7 @@ class PolicyEnforcer:
         naming_count = sum(1 for v in violations if v.policy_type == "naming")
         coverage_count = sum(1 for v in violations if v.policy_type == "coverage")
         doc_count = sum(1 for v in violations if v.policy_type == "documentation")
+        semantic_count = sum(1 for v in violations if v.policy_type == "semantic")
 
         return EnforcementSummary(
             total_models=len(models),
@@ -338,6 +363,7 @@ class PolicyEnforcer:
             naming_violations=naming_count,
             coverage_violations=coverage_count,
             documentation_violations=doc_count,
+            semantic_violations=semantic_count,
             duration_ms=duration_ms,
         )
 
