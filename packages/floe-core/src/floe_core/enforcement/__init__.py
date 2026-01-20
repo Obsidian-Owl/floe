@@ -50,13 +50,14 @@ from floe_core.enforcement.result import (
     Violation,
 )
 
-# Validators (T043-T045, T053-T059, T065-T069, T017-T020)
+# Validators (T043-T045, T053-T059, T065-T069, T017-T020, T027-T033)
 from floe_core.enforcement.validators import (
     CoverageValidator,
+    CustomRuleValidator,
     DocumentationValidator,
     NamingValidator,
+    SemanticValidator,
 )
-from floe_core.enforcement.validators.semantic import SemanticValidator
 
 __all__: list[str] = [
     # Result models (T025-T027)
@@ -76,9 +77,10 @@ __all__: list[str] = [
     "matches_custom_patterns",
     "get_pattern_for_type",
     "get_documentation_url",
-    # Validators (T043-T045, T053-T059, T065-T069, T017-T020)
+    # Validators (T043-T045, T053-T059, T065-T069, T017-T020, T027-T033)
     "NamingValidator",
     "CoverageValidator",
     "DocumentationValidator",
     "SemanticValidator",
+    "CustomRuleValidator",
 ]

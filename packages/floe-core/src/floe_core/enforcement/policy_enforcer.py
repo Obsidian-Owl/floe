@@ -22,6 +22,7 @@ from floe_core.enforcement.result import (
     Violation,
 )
 from floe_core.enforcement.validators.coverage import CoverageValidator
+from floe_core.enforcement.validators.custom_rules import CustomRuleValidator
 from floe_core.enforcement.validators.documentation import DocumentationValidator
 from floe_core.enforcement.validators.naming import NamingValidator
 from floe_core.enforcement.validators.semantic import SemanticValidator
@@ -123,6 +124,11 @@ class PolicyEnforcer:
         # Run semantic validation (always enabled - validates model relationships)
         semantic_violations = self._validate_semantic(manifest)
         violations.extend(semantic_violations)
+
+        # Run custom rule validation if configured (T032)
+        if self.governance_config.custom_rules:
+            custom_violations = self._validate_custom_rules(manifest)
+            violations.extend(custom_violations)
 
         # Adjust severity for dry-run mode
         if dry_run:
@@ -282,6 +288,31 @@ class PolicyEnforcer:
         validator = SemanticValidator()
         return validator.validate(manifest)
 
+    def _validate_custom_rules(
+        self,
+        manifest: dict[str, Any],
+    ) -> list[Violation]:
+        """Validate models against user-defined custom rules.
+
+        Applies custom rules from governance config:
+        - require_tags_for_prefix (FLOE-E400)
+        - require_meta_field (FLOE-E401)
+        - require_tests_of_type (FLOE-E402)
+
+        Args:
+            manifest: The full dbt manifest dictionary.
+
+        Returns:
+            List of custom rule violations found (FLOE-E4xx).
+        """
+        custom_rules = self.governance_config.custom_rules
+        if not custom_rules:
+            return []
+
+        # Delegate to CustomRuleValidator (T027-T033)
+        validator = CustomRuleValidator(custom_rules)
+        return validator.validate(manifest)
+
     def _downgrade_to_warnings(
         self,
         violations: list[Violation],
@@ -356,6 +387,7 @@ class PolicyEnforcer:
         coverage_count = sum(1 for v in violations if v.policy_type == "coverage")
         doc_count = sum(1 for v in violations if v.policy_type == "documentation")
         semantic_count = sum(1 for v in violations if v.policy_type == "semantic")
+        custom_count = sum(1 for v in violations if v.policy_type == "custom")
 
         return EnforcementSummary(
             total_models=len(models),
@@ -364,6 +396,7 @@ class PolicyEnforcer:
             coverage_violations=coverage_count,
             documentation_violations=doc_count,
             semantic_violations=semantic_count,
+            custom_rule_violations=custom_count,
             duration_ms=duration_ms,
         )
 
