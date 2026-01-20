@@ -251,8 +251,193 @@ class QualityGatesConfig(BaseModel):
     )
 
 
+# ==============================================================================
+# Epic 3B: Custom Rule Types (Discriminated Union)
+# ==============================================================================
+
+
+class RequireTagsForPrefix(BaseModel):
+    """Custom rule requiring specific tags for models matching a prefix.
+
+    Validates that models with names starting with a specific prefix have
+    all required tags defined.
+
+    Attributes:
+        type: Discriminator value, always "require_tags_for_prefix".
+        prefix: Model name prefix to match (e.g., "gold_").
+        required_tags: List of tags that must be present on matching models.
+        applies_to: Glob pattern for model selection (default: "*").
+
+    Example:
+        >>> rule = RequireTagsForPrefix(
+        ...     prefix="gold_",
+        ...     required_tags=["tested", "documented"],
+        ... )
+
+    Error Code: FLOE-E400
+
+    See Also:
+        - data-model.md: CustomRule entity specification
+        - spec.md: FR-006
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    type: Literal["require_tags_for_prefix"] = Field(
+        default="require_tags_for_prefix",
+        description="Rule type discriminator",
+    )
+    prefix: str = Field(
+        ...,
+        min_length=1,
+        description="Model name prefix to match (e.g., 'gold_')",
+    )
+    required_tags: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Tags that must be present on matching models",
+    )
+    applies_to: str = Field(
+        default="*",
+        description="Glob pattern for model selection (default: all models)",
+    )
+
+
+class RequireMetaField(BaseModel):
+    """Custom rule requiring a specific meta field on models.
+
+    Validates that models have a specific meta field defined, optionally
+    requiring the field to have a non-empty value.
+
+    Attributes:
+        type: Discriminator value, always "require_meta_field".
+        field: Name of the required meta field (e.g., "owner").
+        required: Whether field must have non-empty value (default: True).
+        applies_to: Glob pattern for model selection (default: "*").
+
+    Example:
+        >>> rule = RequireMetaField(
+        ...     field="owner",
+        ...     required=True,
+        ...     applies_to="gold_*",
+        ... )
+
+    Error Code: FLOE-E401
+
+    See Also:
+        - data-model.md: CustomRule entity specification
+        - spec.md: FR-007
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    type: Literal["require_meta_field"] = Field(
+        default="require_meta_field",
+        description="Rule type discriminator",
+    )
+    field: str = Field(
+        ...,
+        min_length=1,
+        description="Name of the required meta field (e.g., 'owner')",
+    )
+    required: bool = Field(
+        default=True,
+        description="Whether field must have non-empty value",
+    )
+    applies_to: str = Field(
+        default="*",
+        description="Glob pattern for model selection (default: all models)",
+    )
+
+
+class RequireTestsOfType(BaseModel):
+    """Custom rule requiring specific test types on model columns.
+
+    Validates that models have at least a minimum number of columns with
+    specific test types (e.g., not_null, unique).
+
+    Attributes:
+        type: Discriminator value, always "require_tests_of_type".
+        test_types: List of required test types (e.g., ["not_null", "unique"]).
+        min_columns: Minimum columns that must have these tests (default: 1).
+        applies_to: Glob pattern for model selection (default: "*").
+
+    Example:
+        >>> rule = RequireTestsOfType(
+        ...     test_types=["not_null", "unique"],
+        ...     min_columns=1,
+        ... )
+
+    Error Code: FLOE-E402
+
+    See Also:
+        - data-model.md: CustomRule entity specification
+        - spec.md: FR-008
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    type: Literal["require_tests_of_type"] = Field(
+        default="require_tests_of_type",
+        description="Rule type discriminator",
+    )
+    test_types: list[str] = Field(
+        ...,
+        min_length=1,
+        description="List of required test types (e.g., ['not_null', 'unique'])",
+    )
+    min_columns: int = Field(
+        default=1,
+        ge=1,
+        description="Minimum columns that must have these tests",
+    )
+    applies_to: str = Field(
+        default="*",
+        description="Glob pattern for model selection (default: all models)",
+    )
+
+
+# Discriminated union type for custom rules
+CustomRule = Annotated[
+    RequireTagsForPrefix | RequireMetaField | RequireTestsOfType,
+    Field(discriminator="type"),
+]
+"""Discriminated union of custom rule types.
+
+Use the 'type' field to specify which rule type to create.
+
+Supported types:
+    - require_tags_for_prefix: Require tags on models with specific prefix
+    - require_meta_field: Require a meta field on models
+    - require_tests_of_type: Require specific test types on columns
+
+Example YAML:
+    custom_rules:
+      - type: require_tags_for_prefix
+        prefix: "gold_"
+        required_tags: ["tested", "documented"]
+      - type: require_meta_field
+        field: "owner"
+        applies_to: "gold_*"
+"""
+
+
 __all__ = [
     "LayerThresholds",
     "NamingConfig",
     "QualityGatesConfig",
+    # Epic 3B: Custom rule types
+    "RequireTagsForPrefix",
+    "RequireMetaField",
+    "RequireTestsOfType",
+    "CustomRule",
 ]
