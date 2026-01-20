@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+# Generate Contract Golden Files
+# Creates baseline schema snapshots for regression testing
+#
+# Usage:
+#   ./scripts/generate-contract-golden [--force]
+#
+# This script generates golden files for:
+# - CompiledArtifacts JSON schema
+# - Plugin ABC interfaces
+# - Other cross-package contracts
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+GOLDEN_DIR="${PROJECT_ROOT}/tests/fixtures/golden"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[golden]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[golden]${NC} $1" >&2; }
+log_error() { echo -e "${RED}[golden]${NC} $1" >&2; }
+
+FORCE=false
+if [[ "${1:-}" == "--force" ]]; then
+    FORCE=true
+fi
+
+check_existing() {
+    local file="$1"
+    if [[ -f "$file" && "$FORCE" != "true" ]]; then
+        log_warn "Golden file exists: $file"
+        log_warn "Use --force to overwrite"
+        return 1
+    fi
+    return 0
+}
+
+generate_compiled_artifacts_schema() {
+    log_info "Generating CompiledArtifacts JSON schema..."
+
+    local output_file="${GOLDEN_DIR}/compiled_artifacts_v2_schema.json"
+
+    if ! check_existing "$output_file"; then
+        return 0
+    fi
+
+    # Generate schema from Pydantic model
+    python3 << 'PYTHON_SCRIPT'
+import json
+import sys
+from pathlib import Path
+
+try:
+    from floe_core.schemas import CompiledArtifacts
+except ImportError:
+    print("Warning: floe_core not installed. Creating placeholder schema.", file=sys.stderr)
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$comment": {
+            "generated_by": "scripts/generate-contract-golden",
+            "contract_version": "2.0.0",
+            "breaking_change_rules": {
+                "MAJOR": "Remove field, change type, make required",
+                "MINOR": "Add optional field, new enum value",
+                "PATCH": "Documentation only"
+            }
+        },
+        "title": "CompiledArtifacts",
+        "description": "Cross-package contract schema (placeholder - install floe_core to generate)",
+        "type": "object",
+        "properties": {
+            "version": {"type": "string", "description": "Schema version"},
+            "metadata": {"type": "object"},
+            "dbt_profiles": {"type": "object"},
+            "dagster_config": {"type": "object"}
+        },
+        "required": ["version"]
+    }
+    output_path = Path("tests/fixtures/golden/compiled_artifacts_v2_schema.json")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(schema, indent=2))
+    sys.exit(0)
+
+# Generate actual schema
+schema = CompiledArtifacts.model_json_schema()
+
+# Add metadata
+schema["$comment"] = {
+    "generated_by": "scripts/generate-contract-golden",
+    "contract_version": "2.0.0",
+    "breaking_change_rules": {
+        "MAJOR": "Remove field, change type, make required",
+        "MINOR": "Add optional field, new enum value",
+        "PATCH": "Documentation only"
+    }
+}
+
+output_path = Path("tests/fixtures/golden/compiled_artifacts_v2_schema.json")
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(schema, indent=2))
+print("Generated: tests/fixtures/golden/compiled_artifacts_v2_schema.json")
+PYTHON_SCRIPT
+
+    log_info "Generated: $output_file"
+}
+
+generate_plugin_interface_signatures() {
+    log_info "Generating plugin interface signatures..."
+
+    local output_file="${GOLDEN_DIR}/plugin_interfaces_v1.json"
+
+    if ! check_existing "$output_file"; then
+        return 0
+    fi
+
+    # Generate interface signatures
+    python3 << 'PYTHON_SCRIPT'
+import json
+import inspect
+from pathlib import Path
+import sys
+
+interfaces = {}
+
+try:
+    from floe_core.plugin_interfaces import (
+        ComputePlugin,
+        OrchestratorPlugin,
+        CatalogPlugin,
+        StoragePlugin,
+    )
+
+    for cls in [ComputePlugin, OrchestratorPlugin, CatalogPlugin, StoragePlugin]:
+        methods = {}
+        for name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+            if not name.startswith('_'):
+                sig = inspect.signature(method)
+                methods[name] = {
+                    "parameters": [p.name for p in sig.parameters.values() if p.name != 'self'],
+                    "return_annotation": str(sig.return_annotation) if sig.return_annotation != inspect.Parameter.empty else None
+                }
+        interfaces[cls.__name__] = {
+            "module": cls.__module__,
+            "methods": methods
+        }
+except ImportError:
+    print("Warning: Could not import plugin interfaces. Using placeholder.", file=sys.stderr)
+    interfaces = {
+        "ComputePlugin": {"methods": {"generate_profiles": {}, "validate_config": {}}},
+        "OrchestratorPlugin": {"methods": {"create_assets": {}, "create_schedules": {}}},
+        "CatalogPlugin": {"methods": {"create_namespace": {}, "load_table": {}}},
+        "StoragePlugin": {"methods": {"read_table": {}, "write_table": {}}}
+    }
+
+output = {
+    "$comment": {
+        "generated_by": "scripts/generate-contract-golden",
+        "interface_version": "1.0.0"
+    },
+    "interfaces": interfaces
+}
+
+output_path = Path("tests/fixtures/golden/plugin_interfaces_v1.json")
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(output, indent=2))
+print("Generated: tests/fixtures/golden/plugin_interfaces_v1.json")
+PYTHON_SCRIPT
+
+    log_info "Generated: $output_file"
+}
+
+generate_quality_thresholds() {
+    log_info "Generating quality thresholds baseline..."
+
+    local output_file="${GOLDEN_DIR}/quality_thresholds.json"
+
+    if ! check_existing "$output_file"; then
+        return 0
+    fi
+
+    cat > "$output_file" << 'EOF'
+{
+  "$comment": {
+    "generated_by": "scripts/generate-contract-golden",
+    "description": "Quality gate thresholds for CI/CD"
+  },
+  "test_coverage": {
+    "unit": {
+      "minimum_percent": 80,
+      "target_percent": 90
+    },
+    "integration": {
+      "minimum_percent": 70,
+      "target_percent": 85
+    }
+  },
+  "requirement_traceability": {
+    "minimum_percent": 100,
+    "description": "All tests must have @pytest.mark.requirement"
+  },
+  "code_quality": {
+    "max_complexity": 15,
+    "max_function_lines": 50,
+    "max_nesting_depth": 4
+  },
+  "security": {
+    "allowed_critical_issues": 0,
+    "allowed_high_issues": 0,
+    "max_medium_issues": 5
+  },
+  "architecture": {
+    "allowed_violations": 0,
+    "max_warnings": 10
+  }
+}
+EOF
+
+    log_info "Generated: $output_file"
+}
+
+main() {
+    log_info "Generating contract golden files..."
+
+    mkdir -p "$GOLDEN_DIR"
+
+    generate_compiled_artifacts_schema
+    generate_plugin_interface_signatures
+    generate_quality_thresholds
+
+    log_info ""
+    log_info "========================================="
+    log_info "GOLDEN FILES GENERATED"
+    log_info "========================================="
+    log_info "Location: $GOLDEN_DIR"
+    log_info ""
+    log_info "These files serve as regression baselines."
+    log_info "Run tests/contract/test_golden_regression.py to validate."
+}
+
+main "$@"

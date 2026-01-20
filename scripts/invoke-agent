@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# Agent Orchestration Script
+# Invokes Claude Code subagents for quality checks
+#
+# Usage:
+#   ./scripts/invoke-agent <agent-name> [target]
+#
+# Examples:
+#   ./scripts/invoke-agent test-edge-case-analyzer tests/unit/test_compiler.py
+#   ./scripts/invoke-agent critic
+#   ./scripts/invoke-agent security-scanner packages/floe-core/
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+AGENTS_DIR="${PROJECT_ROOT}/.claude/agents"
+
+# Colors
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${BLUE}[invoke-agent]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[invoke-agent]${NC} $1" >&2; }
+log_error() { echo -e "${RED}[invoke-agent]${NC} $1" >&2; }
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") <agent-name> [target]
+
+Available agents:
+
+Test Quality Family:
+  test-edge-case-analyzer   Haiku  - Empty, null, bounds, error paths
+  test-isolation-checker    Haiku  - Shared state, fixtures, determinism
+  test-flakiness-predictor  Sonnet - Random seeds, time.sleep, external deps
+  test-requirement-mapper   Sonnet - @requirement coverage, gap analysis
+  test-duplication-detector Sonnet - Overlapping assertions, redundant tests
+  test-design-reviewer      Opus   - Test architecture, patterns, maintainability
+
+Code Quality Family:
+  code-pattern-reviewer-low Haiku  - Single file anti-patterns
+  code-pattern-reviewer     Sonnet - Module anti-patterns, refactoring
+  security-scanner          Sonnet - OWASP, secrets, injection
+  docstring-validator       Haiku  - Google-style, type hints
+
+Quality Gate:
+  critic                    Opus   - Ruthless plan/implementation reviewer
+
+Examples:
+  $(basename "$0") test-edge-case-analyzer tests/unit/test_compiler.py
+  $(basename "$0") critic
+  $(basename "$0") security-scanner packages/floe-core/src/
+
+EOF
+    exit 1
+}
+
+validate_agent() {
+    local agent="$1"
+    local agent_file="${AGENTS_DIR}/${agent}.md"
+
+    if [[ ! -f "$agent_file" ]]; then
+        log_error "Agent not found: $agent"
+        log_error "Looking in: $agent_file"
+        echo ""
+        usage
+    fi
+}
+
+get_agent_model() {
+    local agent="$1"
+    local agent_file="${AGENTS_DIR}/${agent}.md"
+
+    # Extract model from agent file
+    local model
+    model=$(grep -E "^\*\*Model\*\*:" "$agent_file" | head -1 | sed 's/.*: *//' | tr '[:upper:]' '[:lower:]')
+
+    case "$model" in
+        haiku) echo "haiku" ;;
+        sonnet) echo "sonnet" ;;
+        opus) echo "opus" ;;
+        *) echo "sonnet" ;;  # default
+    esac
+}
+
+build_prompt() {
+    local agent="$1"
+    local target="${2:-}"
+
+    # Build prompt based on agent type
+    local prompt=""
+
+    case "$agent" in
+        test-edge-case-analyzer)
+            prompt="Analyze the following test file for missing edge case coverage.\n\nTarget: ${target:-all test files}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        test-isolation-checker)
+            prompt="Check the following test file for isolation issues (shared state, fixture pollution).\n\nTarget: ${target:-all test files}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        test-flakiness-predictor)
+            prompt="Analyze the following scope for potential flaky tests.\n\nTarget: ${target:-all tests}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        test-requirement-mapper)
+            prompt="Map test coverage to specification requirements.\n\nTarget: ${target:-all tests and specs}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        test-duplication-detector)
+            prompt="Detect duplicated and redundant tests.\n\nTarget: ${target:-all tests}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        test-design-reviewer)
+            prompt="Perform comprehensive test design review.\n\nTarget: ${target:-full test suite}\n\nFollow the review protocol in your agent definition."
+            ;;
+        code-pattern-reviewer-low)
+            prompt="Review the following file for code patterns and anti-patterns.\n\nTarget: ${target}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        code-pattern-reviewer)
+            prompt="Review the following module for code patterns across files.\n\nTarget: ${target:-changed modules}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        security-scanner)
+            prompt="Scan for security vulnerabilities (OWASP Top 10, secrets, injection).\n\nTarget: ${target:-all source files}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        docstring-validator)
+            prompt="Validate docstrings for presence, format, and completeness.\n\nTarget: ${target}\n\nFollow the analysis protocol in your agent definition."
+            ;;
+        critic)
+            prompt="Review the current plan/implementation with your ruthless critic lens.\n\nVerify every claim, check every file reference, simulate execution.\n\nIssue verdict: [OKAY / REJECT] with detailed findings."
+            ;;
+        *)
+            prompt="Execute your analysis on: ${target:-current context}"
+            ;;
+    esac
+
+    echo "$prompt"
+}
+
+main() {
+    if [[ $# -lt 1 ]]; then
+        usage
+    fi
+
+    local agent="$1"
+    local target="${2:-}"
+
+    validate_agent "$agent"
+
+    local model
+    model=$(get_agent_model "$agent")
+
+    local prompt
+    prompt=$(build_prompt "$agent" "$target")
+
+    log_info "Invoking agent: $agent"
+    log_info "Model tier: $model"
+    [[ -n "$target" ]] && log_info "Target: $target"
+
+    # Output the prompt for Claude Code to use
+    # In practice, this script is called by hooks which pass context to Claude
+    echo ""
+    echo "========================================="
+    echo "AGENT INVOCATION REQUEST"
+    echo "========================================="
+    echo "Agent: $agent"
+    echo "Model: $model"
+    echo "Target: ${target:-<current context>}"
+    echo ""
+    echo "Prompt:"
+    echo "-----------------------------------------"
+    echo -e "$prompt"
+    echo "-----------------------------------------"
+    echo ""
+    echo "To invoke this agent in Claude Code, use:"
+    echo "  Task($agent, \"$prompt\")"
+    echo ""
+
+    # Note: Actual agent execution happens via Claude Code Task tool
+    # This script prepares the invocation and can be extended to:
+    # 1. Track invocation history
+    # 2. Save quality state
+    # 3. Integrate with CI systems
+}
+
+main "$@"

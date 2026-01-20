@@ -42,16 +42,33 @@
         ]
       }
     ],
-    "PostToolUse": [
+    "PreToolUse": [
       {
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "python -m black --line-length 100 \"$FILE_PATH\" 2>/dev/null || true"
+            "command": "if echo \"$TOOL_INPUT\" | grep -q 'gh pr create'; then ./scripts/pre-pr-gate; fi",
+            "blocking": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then python -m black --line-length 100 \"$FILE_PATH\" 2>/dev/null || true; fi"
           },
           {
             "type": "command",
-            "command": "python -m isort \"$FILE_PATH\" 2>/dev/null || true"
+            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then python -m isort \"$FILE_PATH\" 2>/dev/null || true; fi"
+          },
+          {
+            "type": "command",
+            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then ./scripts/check-architecture-drift \"$FILE_PATH\" 2>/dev/null || true; fi"
           }
         ]
       }
