@@ -1,0 +1,17 @@
+Usage: floe rbac validate [OPTIONS]
+
+  Validate RBAC manifests against configuration (FR-061).
+
+  Checks that generated manifests match the expected configuration,
+  detecting missing or extra resources.
+
+  Examples:
+      $ floe rbac validate
+      $ floe rbac validate --manifest-dir deploy/rbac
+      $ floe rbac validate --output json
+
+Options:
+  -c, --config PATH         Path to manifest.yaml configuration file.
+  -m, --manifest-dir PATH   Directory containing generated RBAC manifests.
+  -o, --output [text|json]  Output format.
+  -h, --help                Show this message and exit.

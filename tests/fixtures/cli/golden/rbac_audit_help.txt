@@ -1,0 +1,17 @@
+Usage: floe rbac audit [OPTIONS]
+
+  Audit current cluster RBAC state (FR-062).
+
+  Analyzes RBAC configuration in the cluster and reports findings
+  such as wildcard permissions, missing resource constraints, etc.
+
+  Examples:
+      $ floe rbac audit
+      $ floe rbac audit --namespace floe-jobs
+      $ floe rbac audit --output json
+
+Options:
+  -n, --namespace TEXT      Namespaces to audit (default: all floe-managed).
+  -o, --output [text|json]  Output format.
+  --kubeconfig PATH         Path to kubeconfig file.
+  -h, --help                Show this message and exit.
