@@ -4,11 +4,13 @@ This module defines the result types returned by PolicyEnforcer.enforce():
 - Violation: A single policy violation with actionable details
 - EnforcementSummary: Statistics about the enforcement run
 - EnforcementResult: Top-level result with pass/fail status
+- compute_downstream_impact: Helper to compute downstream models from child_map
 
 These models form the contract between PolicyEnforcer and the compilation pipeline.
 
-Task: T025, T026, T027
-Requirements: FR-002 (Pipeline Integration), US1 (Compile-time Enforcement)
+Task: T025, T026, T027, T047
+Requirements: FR-002 (Pipeline Integration), US1 (Compile-time Enforcement),
+              FR-016 (Enhanced Context)
 """
 
 from __future__ import annotations
@@ -331,3 +333,138 @@ class EnforcementResult(BaseModel):
                 grouped[violation.model_name] = []
             grouped[violation.model_name].append(violation)
         return grouped
+
+
+# ==============================================================================
+# US4: Enhanced Violation Context Helpers (T047)
+# ==============================================================================
+
+
+def compute_downstream_impact(
+    model_name: str,
+    child_map: dict[str, list[str]],
+    *,
+    recursive: bool = False,
+) -> list[str]:
+    """Compute list of downstream models affected by a model.
+
+    Uses the dbt manifest child_map to find models that depend on the given
+    model. Can optionally compute transitive (recursive) dependencies.
+
+    Args:
+        model_name: Simple model name (e.g., "bronze_orders").
+        child_map: dbt manifest child_map mapping unique_ids to child unique_ids.
+        recursive: If True, include transitive dependencies. Default: False.
+
+    Returns:
+        List of simple model names that depend on this model. Empty if none.
+
+    Example:
+        >>> child_map = {
+        ...     "model.project.bronze_orders": ["model.project.silver_orders"],
+        ...     "model.project.silver_orders": ["model.project.gold_orders"],
+        ... }
+        >>> compute_downstream_impact("bronze_orders", child_map)
+        ['silver_orders']
+        >>> compute_downstream_impact("bronze_orders", child_map, recursive=True)
+        ['silver_orders', 'gold_orders']
+    """
+    # Find the unique_id for this model name
+    model_unique_id = _find_unique_id_for_model(model_name, child_map)
+
+    if model_unique_id is None:
+        return []
+
+    if recursive:
+        return _compute_recursive_children(model_unique_id, child_map)
+    return _extract_model_names(child_map.get(model_unique_id, []))
+
+
+def _find_unique_id_for_model(
+    model_name: str,
+    child_map: dict[str, list[str]],
+) -> str | None:
+    """Find unique_id in child_map that matches the model name.
+
+    Args:
+        model_name: Simple model name (e.g., "bronze_orders").
+        child_map: dbt manifest child_map.
+
+    Returns:
+        The unique_id if found, None otherwise.
+    """
+    # Look for a unique_id ending with the model name
+    for unique_id in child_map:
+        if unique_id.endswith(f".{model_name}"):
+            return unique_id
+    return None
+
+
+def _compute_recursive_children(
+    unique_id: str,
+    child_map: dict[str, list[str]],
+) -> list[str]:
+    """Compute all children recursively, handling circular references.
+
+    Args:
+        unique_id: Starting model unique_id.
+        child_map: dbt manifest child_map.
+
+    Returns:
+        List of all descendant model names (deduplicated).
+    """
+    visited: set[str] = set()
+    result: list[str] = []
+
+    def _visit(uid: str) -> None:
+        """Depth-first traversal with cycle detection."""
+        if uid in visited:
+            return
+        visited.add(uid)
+
+        children = child_map.get(uid, [])
+        for child_uid in children:
+            # Add child's model name (not unique_id)
+            model_name = _extract_model_name(child_uid)
+            if model_name and model_name not in [r for r in result]:
+                result.append(model_name)
+            # Recurse
+            _visit(child_uid)
+
+    # Start traversal from the given unique_id
+    _visit(unique_id)
+
+    return result
+
+
+def _extract_model_names(unique_ids: list[str]) -> list[str]:
+    """Extract simple model names from unique_ids.
+
+    Args:
+        unique_ids: List of dbt unique_ids (e.g., "model.project.silver_orders").
+
+    Returns:
+        List of simple model names (e.g., "silver_orders").
+    """
+    result: list[str] = []
+    for uid in unique_ids:
+        name = _extract_model_name(uid)
+        if name:
+            result.append(name)
+    return result
+
+
+def _extract_model_name(unique_id: str) -> str | None:
+    """Extract simple model name from a unique_id.
+
+    Args:
+        unique_id: dbt unique_id (e.g., "model.project.silver_orders").
+
+    Returns:
+        Simple model name (e.g., "silver_orders"), or None if invalid.
+    """
+    # unique_id format: "model.project_name.model_name"
+    parts = unique_id.split(".")
+    if len(parts) >= 3:
+        return parts[-1]  # Last part is the model name
+    return None

@@ -24,6 +24,7 @@ from floe_core.enforcement.result import (
     EnforcementResult,
     EnforcementSummary,
     Violation,
+    compute_downstream_impact,
 )
 from floe_core.enforcement.validators.coverage import CoverageValidator
 from floe_core.enforcement.validators.custom_rules import CustomRuleValidator
@@ -77,6 +78,7 @@ class PolicyEnforcer:
         manifest: dict[str, Any],
         *,
         dry_run: bool = False,
+        include_context: bool = False,
     ) -> EnforcementResult:
         """Run all policy validators against the dbt manifest.
 
@@ -88,6 +90,8 @@ class PolicyEnforcer:
             manifest: The compiled dbt manifest.json as a dictionary.
             dry_run: If True, violations are reported as warnings and
                 the result always passes. Useful for previewing impact.
+            include_context: If True, populates downstream_impact field on
+                violations using manifest child_map. Default: False (lazy).
 
         Returns:
             EnforcementResult containing pass/fail status, all violations,
@@ -133,6 +137,11 @@ class PolicyEnforcer:
         if self.governance_config.custom_rules:
             custom_violations = self._validate_custom_rules(manifest)
             violations.extend(custom_violations)
+
+        # Populate downstream_impact if requested (T048-T049)
+        if include_context:
+            child_map = manifest.get("child_map", {})
+            violations = self._populate_downstream_impact(violations, child_map)
 
         # Adjust severity for dry-run mode
         if dry_run:
@@ -316,6 +325,54 @@ class PolicyEnforcer:
         # Delegate to CustomRuleValidator (T027-T033)
         validator = CustomRuleValidator(custom_rules)
         return validator.validate(manifest)
+
+    def _populate_downstream_impact(
+        self,
+        violations: list[Violation],
+        child_map: dict[str, list[str]],
+    ) -> list[Violation]:
+        """Populate downstream_impact field on violations.
+
+        Uses compute_downstream_impact to find affected downstream models
+        for each violation.
+
+        Args:
+            violations: List of violations to enrich.
+            child_map: dbt manifest child_map for dependency lookup.
+
+        Returns:
+            New list of violations with downstream_impact populated.
+        """
+        if not child_map:
+            return violations
+
+        result: list[Violation] = []
+        for violation in violations:
+            impact = compute_downstream_impact(
+                model_name=violation.model_name,
+                child_map=child_map,
+                recursive=True,  # Include transitive dependencies
+            )
+            # Create new Violation with downstream_impact populated
+            enriched = Violation(
+                error_code=violation.error_code,
+                severity=violation.severity,
+                policy_type=violation.policy_type,
+                model_name=violation.model_name,
+                column_name=violation.column_name,
+                message=violation.message,
+                expected=violation.expected,
+                actual=violation.actual,
+                suggestion=violation.suggestion,
+                documentation_url=violation.documentation_url,
+                downstream_impact=impact if impact else None,
+                first_detected=violation.first_detected,
+                occurrences=violation.occurrences,
+                override_applied=violation.override_applied,
+            )
+            result.append(enriched)
+
+        return result
 
     def _downgrade_to_warnings(
         self,
