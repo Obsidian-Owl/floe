@@ -963,6 +963,7 @@ version = "0.1.0"
 source = { editable = "packages/floe-core" }
 dependencies = [
     { name = "httpx" },
+    { name = "jinja2" },
     { name = "kubernetes" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
@@ -977,6 +978,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "jinja2", specifier = ">=3.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "kubernetes", specifier = ">=28.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
