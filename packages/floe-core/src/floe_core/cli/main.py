@@ -31,6 +31,11 @@ from typing import TYPE_CHECKING
 
 import click
 
+# Import command groups
+from floe_core.cli.artifact import artifact
+from floe_core.cli.platform import platform
+from floe_core.cli.rbac import rbac
+
 if TYPE_CHECKING:
     pass
 
@@ -69,6 +74,12 @@ def cli(ctx: click.Context) -> None:
     """
     # Ensure context object exists for passing state between commands
     ctx.ensure_object(dict)
+
+
+# Register command groups
+cli.add_command(platform)
+cli.add_command(rbac)
+cli.add_command(artifact)
 
 
 def main(argv: list[str] | None = None) -> None:
