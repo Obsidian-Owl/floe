@@ -412,6 +412,75 @@ class ObservabilityConfig(BaseModel):
     )
 
 
+# ==============================================================================
+# Epic 3B: Enforcement Result Summary
+# ==============================================================================
+
+
+class EnforcementResultSummary(BaseModel):
+    """Lightweight summary of enforcement result for inclusion in CompiledArtifacts.
+
+    This summary contains only the essential metrics for downstream consumption.
+    Full violation details are exported separately (SARIF/JSON/HTML).
+
+    Contract Version: 0.3.0 (Epic 3B addition)
+
+    Attributes:
+        passed: Overall pass/fail status.
+        error_count: Number of error-severity violations.
+        warning_count: Number of warning-severity violations.
+        policy_types_checked: List of policy types that were enforced.
+        models_validated: Number of models that were validated.
+        enforcement_level: Applied enforcement level (off, warn, strict).
+
+    Example:
+        >>> summary = EnforcementResultSummary(
+        ...     passed=False,
+        ...     error_count=3,
+        ...     warning_count=5,
+        ...     policy_types_checked=["naming", "coverage", "documentation"],
+        ...     models_validated=50,
+        ...     enforcement_level="strict",
+        ... )
+        >>> summary.passed
+        False
+
+    See Also:
+        - data-model.md: EnforcementResultSummary entity specification
+        - EnforcementResult: Full result in enforcement module
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    passed: bool = Field(
+        ...,
+        description="Overall pass/fail status",
+    )
+    error_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of error-severity violations",
+    )
+    warning_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of warning-severity violations",
+    )
+    policy_types_checked: list[str] = Field(
+        ...,
+        description="List of policy types that were enforced",
+    )
+    models_validated: int = Field(
+        ...,
+        ge=0,
+        description="Number of models that were validated",
+    )
+    enforcement_level: Literal["off", "warn", "strict"] = Field(
+        ...,
+        description="Applied enforcement level",
+    )
+
+
 # Deployment mode types
 DeploymentMode = Literal["simple", "centralized", "mesh"]
 """Valid deployment modes for data products.
@@ -703,4 +772,6 @@ __all__ = [
     "ResolvedTransforms",
     # Governance resolution (v0.2.0)
     "ResolvedGovernance",
+    # Enforcement summary (v0.3.0 - Epic 3B)
+    "EnforcementResultSummary",
 ]
