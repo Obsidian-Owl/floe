@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/policy-override.json",
+  "title": "PolicyOverride",
+  "description": "Exception to normal policy enforcement for migration/legacy support",
+  "type": "object",
+  "required": ["pattern", "action", "reason"],
+  "properties": {
+    "pattern": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Glob pattern matching model names (e.g., 'legacy_*')"
+    },
+    "action": {
+      "type": "string",
+      "enum": ["downgrade", "exclude"],
+      "description": "downgrade=error→warning, exclude=skip validation"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Audit trail explaining why override exists"
+    },
+    "expires": {
+      "type": "string",
+      "format": "date",
+      "description": "Expiration date (ISO-8601, override ignored after)"
+    },
+    "policy_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["naming", "coverage", "documentation", "semantic", "custom"]
+      },
+      "description": "Limit to specific policy types (default: all)"
+    }
+  },
+  "examples": [
+    {
+      "pattern": "legacy_*",
+      "action": "downgrade",
+      "reason": "Legacy models being migrated - tracked in JIRA-123",
+      "expires": "2026-06-01"
+    },
+    {
+      "pattern": "test_*",
+      "action": "exclude",
+      "reason": "Test fixtures exempt from policy"
+    },
+    {
+      "pattern": "staging_*",
+      "action": "downgrade",
+      "reason": "Staging models have relaxed naming requirements",
+      "policy_types": ["naming"]
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/custom-rule.json",
+  "title": "CustomRule",
+  "description": "User-defined validation rule for policy enforcement",
+  "type": "object",
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["require_tags_for_prefix", "require_meta_field", "require_tests_of_type"],
+      "description": "Rule type discriminator"
+    },
+    "applies_to": {
+      "type": "string",
+      "default": "*",
+      "description": "Glob pattern for model selection"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "type": { "const": "require_tags_for_prefix" } }
+      },
+      "then": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model name prefix to match"
+          },
+          "required_tags": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1,
+            "description": "Tags that must be present on matching models"
+          }
+        },
+        "required": ["prefix", "required_tags"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "type": { "const": "require_meta_field" } }
+      },
+      "then": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Meta field name that must be present"
+          },
+          "required": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether field must have non-empty value"
+          }
+        },
+        "required": ["field"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "type": { "const": "require_tests_of_type" } }
+      },
+      "then": {
+        "properties": {
+          "test_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["not_null", "unique", "accepted_values", "relationships"]
+            },
+            "minItems": 1,
+            "description": "dbt test types that must be present"
+          },
+          "min_columns": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Minimum columns that must have these tests"
+          }
+        },
+        "required": ["test_types"]
+      }
+    }
+  ],
+  "examples": [
+    {
+      "type": "require_tags_for_prefix",
+      "prefix": "gold_",
+      "required_tags": ["tested", "documented"]
+    },
+    {
+      "type": "require_meta_field",
+      "field": "owner",
+      "applies_to": "gold_*"
+    },
+    {
+      "type": "require_tests_of_type",
+      "test_types": ["not_null", "unique"],
+      "applies_to": "*"
+    }
+  ]
+}
