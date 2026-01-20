@@ -24,6 +24,7 @@ from typing import Any
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    EnforcementResultSummary,
     ObservabilityConfig,
     ProductIdentity,
     ResolvedPlugins,
@@ -34,7 +35,10 @@ from floe_core.schemas.manifest import PlatformManifest
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 # Package version - should match pyproject.toml
-FLOE_VERSION = "0.2.0"
+FLOE_VERSION = "0.3.0"
+
+# Contract version - see compiled_artifacts.py version history
+CONTRACT_VERSION = "0.3.0"
 
 
 def build_artifacts(
@@ -46,6 +50,7 @@ def build_artifacts(
     *,
     spec_path: Path | None = None,
     manifest_path: Path | None = None,
+    enforcement_result: EnforcementResultSummary | None = None,
 ) -> CompiledArtifacts:
     """Build CompiledArtifacts from resolved configuration.
 
@@ -55,6 +60,10 @@ def build_artifacts(
     - Product identity from FloeSpec
     - Resolved plugins and transforms
     - Generated dbt profiles
+    - Enforcement result summary (optional, Epic 3B)
+
+    Task: T063
+    Requirements: FR-024, FR-025, FR-026 (Pipeline Integration)
 
     Args:
         spec: Validated FloeSpec.
@@ -64,6 +73,7 @@ def build_artifacts(
         dbt_profiles: Generated dbt profiles.yml content.
         spec_path: Optional path to spec file (for source hash).
         manifest_path: Optional path to manifest file (for source hash).
+        enforcement_result: Optional enforcement result summary (v0.3.0+).
 
     Returns:
         Complete CompiledArtifacts ready for output.
@@ -71,7 +81,7 @@ def build_artifacts(
     Example:
         >>> artifacts = build_artifacts(spec, manifest, plugins, transforms, profiles)
         >>> artifacts.version
-        '0.2.0'
+        '0.3.0'
         >>> artifacts.metadata.product_name
         'my-pipeline'
     """
@@ -113,7 +123,7 @@ def build_artifacts(
     )
 
     return CompiledArtifacts(
-        version="0.2.0",
+        version=CONTRACT_VERSION,
         metadata=metadata,
         identity=identity,
         mode="simple",
@@ -122,6 +132,7 @@ def build_artifacts(
         plugins=plugins,
         transforms=transforms,
         dbt_profiles=dbt_profiles,
+        enforcement_result=enforcement_result,
     )
 
 

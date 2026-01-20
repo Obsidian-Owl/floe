@@ -5,20 +5,24 @@ This module defines the result types returned by PolicyEnforcer.enforce():
 - EnforcementSummary: Statistics about the enforcement run
 - EnforcementResult: Top-level result with pass/fail status
 - compute_downstream_impact: Helper to compute downstream models from child_map
+- create_enforcement_summary: Create EnforcementResultSummary from EnforcementResult
 
 These models form the contract between PolicyEnforcer and the compilation pipeline.
 
-Task: T025, T026, T027, T047
+Task: T025, T026, T027, T047, T061
 Requirements: FR-002 (Pipeline Integration), US1 (Compile-time Enforcement),
-              FR-016 (Enhanced Context)
+              FR-016 (Enhanced Context), FR-024 (Pipeline Integration)
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
 
 
 class Violation(BaseModel):
@@ -468,3 +472,54 @@ def _extract_model_name(unique_id: str) -> str | None:
     if len(parts) >= 3:
         return parts[-1]  # Last part is the model name
     return None
+
+
+# ==============================================================================
+# T061: Create EnforcementResultSummary from EnforcementResult
+# ==============================================================================
+
+
+def create_enforcement_summary(result: EnforcementResult) -> "EnforcementResultSummary":
+    """Create an EnforcementResultSummary from an EnforcementResult.
+
+    This helper extracts the essential metrics from EnforcementResult for
+    inclusion in CompiledArtifacts. The summary is a lightweight representation
+    suitable for downstream consumption without the full violation details.
+
+    Task: T061
+    Requirements: FR-024 (Pipeline Integration)
+
+    Args:
+        result: Full EnforcementResult from PolicyEnforcer.enforce().
+
+    Returns:
+        EnforcementResultSummary containing essential metrics.
+
+    Example:
+        >>> result = enforcer.enforce(manifest)
+        >>> summary = create_enforcement_summary(result)
+        >>> summary.passed
+        True
+        >>> summary.error_count
+        0
+    """
+    # Import here to avoid circular dependency
+    from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+
+    # Collect unique policy types from violations
+    policy_types_checked = sorted(
+        {v.policy_type for v in result.violations}
+    ) if result.violations else []
+
+    # If no violations but enforcement ran, include default policy types
+    if not policy_types_checked and result.enforcement_level != "off":
+        policy_types_checked = ["coverage", "documentation", "naming"]
+
+    return EnforcementResultSummary(
+        passed=result.passed,
+        error_count=result.error_count,
+        warning_count=result.warning_count,
+        policy_types_checked=policy_types_checked,
+        models_validated=result.summary.models_validated,
+        enforcement_level=result.enforcement_level,
+    )

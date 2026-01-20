@@ -43,11 +43,12 @@ from floe_core.enforcement.patterns import (
 # Core enforcer (T029-T030)
 from floe_core.enforcement.policy_enforcer import PolicyEnforcer
 
-# Result models (T025-T027)
+# Result models (T025-T027, T061)
 from floe_core.enforcement.result import (
     EnforcementResult,
     EnforcementSummary,
     Violation,
+    create_enforcement_summary,
 )
 
 # Validators (T043-T045, T053-T059, T065-T069, T017-T020, T027-T033)
@@ -60,10 +61,11 @@ from floe_core.enforcement.validators import (
 )
 
 __all__: list[str] = [
-    # Result models (T025-T027)
+    # Result models (T025-T027, T061)
     "EnforcementResult",
     "EnforcementSummary",
     "Violation",
+    "create_enforcement_summary",
     # Error types (T028)
     "PolicyEnforcementError",
     # Core enforcer (T029-T030)

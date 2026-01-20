@@ -3,11 +3,12 @@
 CompiledArtifacts is the single source of truth for pipeline execution.
 It contains resolved, validated configuration after manifest inheritance.
 
-Contract Version: 0.2.0
+Contract Version: 0.3.0
 
 Version History:
     - 0.1.0: Initial version (metadata, identity, mode, observability)
     - 0.2.0: Add plugins, transforms, dbt_profiles, governance (Epic 2B)
+    - 0.3.0: Add enforcement_result summary (Epic 3B)
 
 See Also:
     - docs/contracts/compiled-artifacts.md: Full contract specification
@@ -502,10 +503,10 @@ class CompiledArtifacts(BaseModel):
     - OTLP Collector endpoint (Layer 2 - ENFORCED)
     - Backend plugin selection (Layer 3 - PLUGGABLE)
 
-    Contract Version: 0.2.0 (see docstring header for version history)
+    Contract Version: 0.3.0 (see docstring header for version history)
 
     Attributes:
-        version: Schema version (semver) - default 0.2.0
+        version: Schema version (semver) - default 0.3.0
         metadata: Compilation metadata
         identity: Product identity from catalog
         mode: Deployment mode (simple, centralized, mesh)
@@ -515,6 +516,7 @@ class CompiledArtifacts(BaseModel):
         transforms: Compiled transform configuration (v0.2.0+)
         dbt_profiles: Generated profiles.yml content (v0.2.0+)
         governance: Resolved governance settings (v0.2.0+, optional)
+        enforcement_result: Enforcement result summary (v0.3.0+, optional)
 
     Examples:
         >>> from datetime import datetime
@@ -562,7 +564,7 @@ class CompiledArtifacts(BaseModel):
     version: Annotated[
         str,
         Field(
-            default="0.2.0",
+            default="0.3.0",
             pattern=r"^\d+\.\d+\.\d+$",
             description="Schema version (semver)",
         ),
@@ -615,6 +617,12 @@ class CompiledArtifacts(BaseModel):
     governance: ResolvedGovernance | None = Field(
         default=None,
         description="Resolved governance settings (v0.2.0+, optional)",
+    )
+
+    # Epic 3B addition (v0.3.0)
+    enforcement_result: EnforcementResultSummary | None = Field(
+        default=None,
+        description="Enforcement result summary (v0.3.0+, optional for backward compat)",
     )
 
     def to_json_file(self, path: Path) -> None:
