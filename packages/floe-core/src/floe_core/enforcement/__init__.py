@@ -60,6 +60,14 @@ from floe_core.enforcement.validators import (
     SemanticValidator,
 )
 
+# Exporters (T054-T060, T067)
+from floe_core.enforcement.exporters import (
+    ensure_output_dir,
+    export_html,
+    export_json,
+    export_sarif,
+)
+
 __all__: list[str] = [
     # Result models (T025-T027, T061)
     "EnforcementResult",
@@ -85,4 +93,9 @@ __all__: list[str] = [
     "DocumentationValidator",
     "SemanticValidator",
     "CustomRuleValidator",
+    # Exporters (T054-T060, T067)
+    "export_json",
+    "export_sarif",
+    "export_html",
+    "ensure_output_dir",
 ]
