@@ -18,7 +18,6 @@ from typing import Any
 
 import pytest
 
-
 GOLDEN_DIR = Path(__file__).parent.parent / "fixtures" / "golden"
 
 

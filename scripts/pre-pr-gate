@@ -100,12 +100,26 @@ check_no_uncommitted_changes() {
 check_branch_up_to_date() {
     log_info "Checking if branch is up to date with main..."
 
-    # Fetch latest
+    # Fetch latest (with explicit refspec)
     git fetch origin main --quiet 2>/dev/null || true
 
-    # Check if we're behind main
+    # Validate refs exist before comparing
+    local origin_main="origin/main"
+    local head_ref="HEAD"
+
+    if ! git rev-parse --verify "$origin_main" >/dev/null 2>&1; then
+        log_warn "Could not find origin/main, skipping branch check"
+        return 0
+    fi
+
+    if ! git rev-parse --verify "$head_ref" >/dev/null 2>&1; then
+        log_warn "Could not verify HEAD, skipping branch check"
+        return 0
+    fi
+
+    # Check if we're behind main using validated refs
     local behind
-    behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")
+    behind=$(git rev-list --count "${head_ref}..${origin_main}" 2>/dev/null || echo "0")
 
     if [[ "$behind" -gt 0 ]]; then
         log_warn "Branch is ${behind} commits behind main. Consider rebasing."

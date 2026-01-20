@@ -171,6 +171,28 @@ check_file() {
     check_test_organization "$file"
 }
 
+validate_file_path() {
+    # Prevent path traversal - ensure file is within PROJECT_ROOT
+    local file="$1"
+    local resolved_path
+
+    # Resolve to absolute path and check it's within project
+    resolved_path=$(realpath -m "${PROJECT_ROOT}/${file}" 2>/dev/null) || return 1
+
+    # Ensure path starts with PROJECT_ROOT (no traversal)
+    if [[ "$resolved_path" != "${PROJECT_ROOT}"/* ]]; then
+        log_warn "Path traversal attempt blocked: $file"
+        return 1
+    fi
+
+    # Ensure file exists
+    if [[ ! -f "$resolved_path" ]]; then
+        return 1
+    fi
+
+    echo "$resolved_path"
+}
+
 main() {
     local target="${1:-}"
 
@@ -181,9 +203,21 @@ main() {
         # Check all changed files
         log_info "Checking all changed Python files..."
 
-        # Get changed files vs main
+        # Validate git refs exist before using them
+        local base_ref="main"
+        local head_ref="HEAD"
+
+        if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+            base_ref="HEAD~10"
+            if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+                log_info "No valid base ref found, skipping check"
+                exit 0
+            fi
+        fi
+
+        # Get changed files using validated refs with -- separator
         local changed_files
-        changed_files=$(git diff --name-only main...HEAD 2>/dev/null || git diff --name-only HEAD~10...HEAD 2>/dev/null || true)
+        changed_files=$(git diff --name-only "${base_ref}...${head_ref}" -- "*.py" 2>/dev/null || true)
 
         if [[ -z "$changed_files" ]]; then
             log_info "No changed files to check"
@@ -191,8 +225,12 @@ main() {
         fi
 
         while IFS= read -r file; do
-            if [[ "$file" == *.py ]]; then
-                check_file "${PROJECT_ROOT}/${file}"
+            # Validate and resolve path (prevents traversal)
+            local safe_path
+            safe_path=$(validate_file_path "$file") || continue
+
+            if [[ "$safe_path" == *.py ]]; then
+                check_file "$safe_path"
             fi
         done <<< "$changed_files"
     fi

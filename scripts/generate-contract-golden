@@ -104,7 +104,7 @@ schema["$comment"] = {
 output_path = Path("tests/fixtures/golden/compiled_artifacts_v2_schema.json")
 output_path.parent.mkdir(parents=True, exist_ok=True)
 output_path.write_text(json.dumps(schema, indent=2))
-print(f"Generated: {output_path}")
+print("Generated: tests/fixtures/golden/compiled_artifacts_v2_schema.json")
 PYTHON_SCRIPT
 
     log_info "Generated: $output_file"
@@ -149,8 +149,8 @@ try:
             "module": cls.__module__,
             "methods": methods
         }
-except ImportError as e:
-    print(f"Warning: Could not import plugin interfaces: {e}", file=sys.stderr)
+except ImportError:
+    print("Warning: Could not import plugin interfaces. Using placeholder.", file=sys.stderr)
     interfaces = {
         "ComputePlugin": {"methods": {"generate_profiles": {}, "validate_config": {}}},
         "OrchestratorPlugin": {"methods": {"create_assets": {}, "create_schedules": {}}},
@@ -169,7 +169,7 @@ output = {
 output_path = Path("tests/fixtures/golden/plugin_interfaces_v1.json")
 output_path.parent.mkdir(parents=True, exist_ok=True)
 output_path.write_text(json.dumps(output, indent=2))
-print(f"Generated: {output_path}")
+print("Generated: tests/fixtures/golden/plugin_interfaces_v1.json")
 PYTHON_SCRIPT
 
     log_info "Generated: $output_file"
