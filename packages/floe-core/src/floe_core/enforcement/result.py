@@ -28,7 +28,7 @@ class Violation(BaseModel):
     Attributes:
         error_code: FLOE-EXXX format error code for lookup.
         severity: "error" (blocks compilation) or "warning" (advisory).
-        policy_type: Category of policy violated.
+        policy_type: Category of policy violated (naming, coverage, documentation, semantic, custom).
         model_name: dbt model where violation occurred.
         column_name: Column if applicable (None for model-level violations).
         message: Human-readable description of the violation.
@@ -36,6 +36,10 @@ class Violation(BaseModel):
         actual: What was found in the manifest.
         suggestion: Actionable remediation advice.
         documentation_url: Link to detailed documentation.
+        downstream_impact: List of downstream models affected (Epic 3B).
+        first_detected: When violation was first detected (placeholder, Epic 3B).
+        occurrences: Number of times detected (placeholder, Epic 3B).
+        override_applied: Override pattern that modified severity (Epic 3B).
 
     Example:
         >>> violation = Violation(
@@ -48,6 +52,7 @@ class Violation(BaseModel):
         ...     actual="stg_payments",
         ...     suggestion="Rename to bronze_payments",
         ...     documentation_url="https://floe.dev/docs/naming#medallion",
+        ...     downstream_impact=["dim_payments", "fct_transactions"],
         ... )
     """
 
@@ -69,7 +74,7 @@ class Violation(BaseModel):
         ...,
         description="Severity level: error (blocks compilation) or warning (advisory)",
     )
-    policy_type: Literal["naming", "coverage", "documentation"] = Field(
+    policy_type: Literal["naming", "coverage", "documentation", "semantic", "custom"] = Field(
         ...,
         description="Category of policy violated",
     )
@@ -100,6 +105,24 @@ class Violation(BaseModel):
     documentation_url: str = Field(
         ...,
         description="Link to detailed documentation",
+    )
+    # Epic 3B: Context fields for enhanced violation reporting
+    downstream_impact: list[str] | None = Field(
+        default=None,
+        description="List of downstream models affected by this model (computed from manifest child_map)",
+    )
+    first_detected: datetime | None = Field(
+        default=None,
+        description="When this violation was first detected (placeholder for historical tracking)",
+    )
+    occurrences: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of times this violation has been detected (placeholder for historical tracking)",
+    )
+    override_applied: str | None = Field(
+        default=None,
+        description="Override pattern that modified this violation's severity (e.g., 'legacy_*')",
     )
 
 
