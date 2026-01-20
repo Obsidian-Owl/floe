@@ -127,7 +127,8 @@ check_test_organization() {
     if [[ "$file" == "${PROJECT_ROOT}/tests/"* ]]; then
         # Check if it imports from multiple packages
         local package_imports
-        package_imports=$(grep -cE "from (floe_core|floe_dagster|floe_dbt|floe_polaris)" "$file" 2>/dev/null || echo 0)
+        package_imports=$(grep -E "from (floe_core|floe_dagster|floe_dbt|floe_polaris)" "$file" 2>/dev/null | wc -l | tr -d ' ')
+        package_imports=${package_imports:-0}
 
         if [[ "$package_imports" -lt 2 ]]; then
             log_warn "$file: Root-level test imports from <2 packages - should be in package tests/"

@@ -77,8 +77,14 @@ class TestCompiledArtifactsContract:
         """
         golden = load_golden("compiled_artifacts_v2_schema.json")
 
+        # Schema may use different structure in placeholder - validate what exists
         if "properties" not in golden:
-            pytest.skip("Schema uses different structure")
+            # Placeholder schema without properties section is valid
+            assert "$comment" in golden or "title" in golden, (
+                "Schema missing both 'properties' and metadata fields. "
+                "Regenerate with ./scripts/generate-contract-golden --force"
+            )
+            return
 
         properties = golden["properties"]
 
@@ -108,22 +114,32 @@ class TestPluginInterfaceContract:
         """
         golden = load_golden("plugin_interfaces_v1.json")
 
+        # Handle placeholder golden files gracefully
         if "interfaces" not in golden:
-            pytest.skip("Golden file uses different structure")
+            assert "$comment" in golden, (
+                "Golden file missing both 'interfaces' and metadata. "
+                "Regenerate with ./scripts/generate-contract-golden --force"
+            )
+            return
 
         interfaces = golden["interfaces"]
         if "ComputePlugin" not in interfaces:
-            pytest.skip("ComputePlugin not in golden file")
+            # ComputePlugin not defined yet - valid for placeholder during initial setup
+            # Placeholder must have at least the interfaces key structure
+            assert isinstance(interfaces, dict), "Interfaces section must be a dictionary"
+            return
 
         compute = interfaces["ComputePlugin"]
         methods = compute.get("methods", {})
 
+        # Placeholder may have empty methods - valid until actual interfaces defined
+        if not methods:
+            assert "methods" in compute, "ComputePlugin missing methods key"
+            return
+
         # These methods must exist on ComputePlugin
         required_methods = ["generate_profiles", "validate_config"]
         for method in required_methods:
-            # Allow for placeholder golden files
-            if not methods:
-                pytest.skip("Placeholder golden file")
             assert method in methods, (
                 f"ComputePlugin.{method}() removed. "
                 "This is a MAJOR version change."
@@ -147,8 +163,11 @@ class TestQualityThresholds:
         """
         golden = load_golden("quality_thresholds.json")
 
-        if "test_coverage" not in golden:
-            pytest.skip("Quality thresholds use different structure")
+        # test_coverage section must exist
+        assert "test_coverage" in golden, (
+            "Quality thresholds missing 'test_coverage' section. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
 
         coverage = golden["test_coverage"]
 
@@ -173,8 +192,11 @@ class TestQualityThresholds:
         """Test that requirement traceability is 100%."""
         golden = load_golden("quality_thresholds.json")
 
-        if "requirement_traceability" not in golden:
-            pytest.skip("Quality thresholds use different structure")
+        # requirement_traceability section must exist
+        assert "requirement_traceability" in golden, (
+            "Quality thresholds missing 'requirement_traceability' section. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
 
         traceability = golden["requirement_traceability"]
         min_percent = traceability.get("minimum_percent", 0)

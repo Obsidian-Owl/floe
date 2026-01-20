@@ -18,7 +18,6 @@ AGENTS_DIR="${PROJECT_ROOT}/.claude/agents"
 
 # Colors
 RED='\033[0;31m'
-GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
@@ -90,11 +89,6 @@ get_agent_model() {
 build_prompt() {
     local agent="$1"
     local target="${2:-}"
-    local agent_file="${AGENTS_DIR}/${agent}.md"
-
-    # Read agent definition
-    local agent_content
-    agent_content=$(cat "$agent_file")
 
     # Build prompt based on agent type
     local prompt=""
@@ -139,39 +133,6 @@ build_prompt() {
     esac
 
     echo "$prompt"
-}
-
-save_quality_state() {
-    local agent="$1"
-    local result="$2"
-
-    local state_dir="${PROJECT_ROOT}/.agent"
-    local state_file="${state_dir}/quality-state.json"
-
-    mkdir -p "$state_dir"
-
-    # Initialize or update state file
-    if [[ ! -f "$state_file" ]]; then
-        echo '{}' > "$state_file"
-    fi
-
-    # Update the specific agent's result
-    local key=""
-    case "$agent" in
-        test-*) key="test_review_passed" ;;
-        critic) key="critic_passed" ;;
-        *) key="${agent}_passed" ;;
-    esac
-
-    # Use jq to update if available, otherwise simple sed
-    if command -v jq &>/dev/null; then
-        local tmp
-        tmp=$(mktemp)
-        jq --arg key "$key" --argjson val "$result" '.[$key] = $val | .last_updated = now' "$state_file" > "$tmp"
-        mv "$tmp" "$state_file"
-    else
-        log_warn "jq not available - quality state not updated"
-    fi
 }
 
 main() {

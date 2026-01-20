@@ -31,6 +31,16 @@ log_error() {
     echo -e "${RED}[pre-pr-gate]${NC} $1" >&2
 }
 
+check_dependencies() {
+    # Check for required tools
+    if ! command -v jq &>/dev/null; then
+        log_error "jq is required but not installed."
+        log_error "Install with: brew install jq (macOS) or apt install jq (Linux)"
+        return 1
+    fi
+    return 0
+}
+
 check_quality_state() {
     if [[ ! -f "$QUALITY_STATE" ]]; then
         return 1
@@ -75,40 +85,6 @@ check_quality_state() {
     return 0
 }
 
-check_tests_pass() {
-    log_info "Checking if unit tests pass..."
-
-    # Quick unit test check
-    if ! make test-unit-quick 2>/dev/null; then
-        log_error "Unit tests failing. Fix before PR."
-        return 1
-    fi
-
-    return 0
-}
-
-check_lint_pass() {
-    log_info "Checking lint status..."
-
-    if ! make lint-check 2>/dev/null; then
-        log_error "Lint check failed. Run 'make lint' to fix."
-        return 1
-    fi
-
-    return 0
-}
-
-check_type_check_pass() {
-    log_info "Checking type annotations..."
-
-    if ! make typecheck 2>/dev/null; then
-        log_error "Type check failed. Fix type errors before PR."
-        return 1
-    fi
-
-    return 0
-}
-
 check_no_uncommitted_changes() {
     log_info "Checking for uncommitted changes..."
 
@@ -141,6 +117,9 @@ check_branch_up_to_date() {
 
 main() {
     log_info "Running pre-PR quality gate..."
+
+    # Check dependencies first
+    check_dependencies || exit 1
 
     local failed=0
 
