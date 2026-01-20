@@ -133,6 +133,21 @@ def success(message: str) -> None:
     click.echo(message)
 
 
+def info(message: str) -> None:
+    """Print an informational message to stderr.
+
+    Used for progress updates and status information that should
+    not be captured by stdout redirection.
+
+    Args:
+        message: Informational message to display.
+
+    Example:
+        info("Compiling spec: floe.yaml")
+    """
+    click.echo(message, err=True)
+
+
 def validate_file_exists(path: Path, description: str = "File") -> None:
     """Validate that a file exists and is readable.
 

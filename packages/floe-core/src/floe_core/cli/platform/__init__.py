@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import click
 
+from floe_core.cli.platform.compile import compile_command
+
 
 @click.group(
     name="platform",
@@ -32,6 +34,10 @@ def platform() -> None:
     publishing artifacts, and managing deployments.
     """
     pass
+
+
+# Register subcommands
+platform.add_command(compile_command)
 
 
 __all__: list[str] = ["platform"]

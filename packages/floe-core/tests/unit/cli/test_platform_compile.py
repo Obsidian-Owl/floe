@@ -55,8 +55,9 @@ class TestPlatformCompileCommand:
         )
 
         # Command should not fail on argument parsing
-        # (actual compilation may fail due to missing dependencies in unit test)
-        assert result.exit_code in (0, 1), f"Unexpected exit code: {result.exit_code}"
+        # Exit codes: 0=success, 1=general error, 6=compilation error (skeleton)
+        # The skeleton returns 6 until full implementation in T015-T020
+        assert result.exit_code in (0, 1, 6), f"Unexpected exit code: {result.exit_code}"
         assert "Error: No such option" not in (result.output or "")
 
     @pytest.mark.requirement("FR-011")
