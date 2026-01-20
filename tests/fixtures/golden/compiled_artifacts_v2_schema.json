@@ -1,5 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": {
+    "generated_by": "scripts/generate-contract-golden",
+    "contract_version": "2.0.0",
+    "breaking_change_rules": {
+      "MAJOR": "Remove field, change type, make required",
+      "MINOR": "Add optional field, new enum value",
+      "PATCH": "Documentation only"
+    }
+  },
   "title": "CompiledArtifacts",
   "description": "Cross-package contract schema (placeholder - install floe_core to generate)",
   "type": "object",
