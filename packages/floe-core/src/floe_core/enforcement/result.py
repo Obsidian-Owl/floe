@@ -138,6 +138,9 @@ class EnforcementSummary(BaseModel):
         naming_violations: Count of naming convention violations.
         coverage_violations: Count of test coverage violations.
         documentation_violations: Count of documentation violations.
+        semantic_violations: Count of semantic validation violations (Epic 3B).
+        custom_rule_violations: Count of custom rule violations (Epic 3B).
+        overrides_applied: Count of policy overrides applied (Epic 3B).
         duration_ms: Enforcement duration in milliseconds.
 
     Example:
@@ -147,6 +150,9 @@ class EnforcementSummary(BaseModel):
         ...     naming_violations=3,
         ...     coverage_violations=5,
         ...     documentation_violations=2,
+        ...     semantic_violations=1,
+        ...     custom_rule_violations=2,
+        ...     overrides_applied=3,
         ...     duration_ms=123.45,
         ... )
     """
@@ -184,6 +190,22 @@ class EnforcementSummary(BaseModel):
         default=0,
         ge=0,
         description="Count of documentation violations",
+    )
+    # Epic 3B: New violation counters
+    semantic_violations: int = Field(
+        default=0,
+        ge=0,
+        description="Count of semantic validation violations (ref/source, circular deps)",
+    )
+    custom_rule_violations: int = Field(
+        default=0,
+        ge=0,
+        description="Count of custom rule violations",
+    )
+    overrides_applied: int = Field(
+        default=0,
+        ge=0,
+        description="Count of policy overrides applied (downgrade/exclude)",
     )
     duration_ms: float = Field(
         default=0.0,
