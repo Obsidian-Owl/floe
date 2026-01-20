@@ -191,6 +191,46 @@ This skill enforces project principles:
   - Helm: `helm lint`, `helm template | kubectl apply --dry-run=client -f -`
 - **If validation fails**: Fix issues before proceeding (do NOT skip)
 
+### Step 6.5: Quality Verification Loop (NEW)
+
+**Pattern**: Verify implementation quality before closing task. Loop until pass.
+
+1. **Invoke Quality Agents** on changed files:
+   ```
+   # For test files
+   Task(test-edge-case-analyzer, "{test_file}")
+   Task(test-isolation-checker, "{test_file}")
+
+   # For source files
+   Task(code-pattern-reviewer-low, "{source_file}")
+   Task(docstring-validator, "{source_file}")
+   ```
+
+2. **Review Agent Findings**:
+   - CRITICAL issues: Must fix before proceeding
+   - WARNING issues: Should fix if straightforward
+   - SUGGESTIONS: Note for future improvement
+
+3. **Fix Critical Issues**:
+   - Address each critical finding
+   - Re-run validation (Step 6)
+   - Re-run quality agents
+
+4. **Verification Pass Criteria**:
+   - Zero CRITICAL findings
+   - Zero BLOCKER issues from architecture drift check
+   - All tests pass
+   - Type check passes
+
+5. **Maximum Iterations**: 3
+   - If still failing after 3 iterations, mark task as BLOCKED
+   - Create Linear comment explaining blockers
+
+**Output during verification**:
+```
+[QUALITY-LOOP] Iteration {n}/3 | Critical: {count} | Warnings: {count}
+```
+
 ### Step 7: Close Task
 
 - Query statuses, find status with type `completed` (usually "Done")

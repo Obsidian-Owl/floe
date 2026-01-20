@@ -1,0 +1,32 @@
+{
+  "$comment": {
+    "generated_by": "scripts/generate-contract-golden",
+    "interface_version": "1.0.0"
+  },
+  "interfaces": {
+    "ComputePlugin": {
+      "methods": {
+        "generate_profiles": {},
+        "validate_config": {}
+      }
+    },
+    "OrchestratorPlugin": {
+      "methods": {
+        "create_assets": {},
+        "create_schedules": {}
+      }
+    },
+    "CatalogPlugin": {
+      "methods": {
+        "create_namespace": {},
+        "load_table": {}
+      }
+    },
+    "StoragePlugin": {
+      "methods": {
+        "read_table": {},
+        "write_table": {}
+      }
+    }
+  }
+}
