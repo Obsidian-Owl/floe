@@ -106,8 +106,7 @@ class TestCompiledArtifactsContract:
 
         # version field MUST exist and be string type
         assert "version" in properties, (
-            "Schema missing 'version' property. "
-            "This is a breaking change."
+            "Schema missing 'version' property. This is a breaking change."
         )
         assert properties["version"].get("type") == "string", (
             f"version field type is '{properties['version'].get('type')}', expected 'string'. "
@@ -118,8 +117,7 @@ class TestCompiledArtifactsContract:
         expected_properties = ["metadata", "dbt_profiles", "dagster_config"]
         for prop in expected_properties:
             assert prop in properties, (
-                f"Schema missing '{prop}' property. "
-                "This is a breaking change."
+                f"Schema missing '{prop}' property. This is a breaking change."
             )
 
 
@@ -158,8 +156,7 @@ class TestPluginInterfaceContract:
         ]
         for interface in required_interfaces:
             assert interface in interfaces, (
-                f"Missing '{interface}' from plugin interfaces. "
-                "This is a breaking change."
+                f"Missing '{interface}' from plugin interfaces. This is a breaking change."
             )
 
     @pytest.mark.requirement("CONTRACT-002")
@@ -180,8 +177,7 @@ class TestPluginInterfaceContract:
         required_methods = ["generate_profiles", "validate_config"]
         for method in required_methods:
             assert method in methods, (
-                f"ComputePlugin.{method}() removed. "
-                "This is a MAJOR version change."
+                f"ComputePlugin.{method}() removed. This is a MAJOR version change."
             )
 
     @pytest.mark.requirement("CONTRACT-002")
@@ -202,8 +198,7 @@ class TestPluginInterfaceContract:
         required_methods = ["create_assets", "create_schedules"]
         for method in required_methods:
             assert method in methods, (
-                f"OrchestratorPlugin.{method}() removed. "
-                "This is a MAJOR version change."
+                f"OrchestratorPlugin.{method}() removed. This is a MAJOR version change."
             )
 
     @pytest.mark.requirement("CONTRACT-002")
@@ -224,8 +219,7 @@ class TestPluginInterfaceContract:
         required_methods = ["create_namespace", "load_table"]
         for method in required_methods:
             assert method in methods, (
-                f"CatalogPlugin.{method}() removed. "
-                "This is a MAJOR version change."
+                f"CatalogPlugin.{method}() removed. This is a MAJOR version change."
             )
 
     @pytest.mark.requirement("CONTRACT-002")
@@ -246,8 +240,7 @@ class TestPluginInterfaceContract:
         required_methods = ["read_table", "write_table"]
         for method in required_methods:
             assert method in methods, (
-                f"StoragePlugin.{method}() removed. "
-                "This is a MAJOR version change."
+                f"StoragePlugin.{method}() removed. This is a MAJOR version change."
             )
 
 
@@ -283,16 +276,14 @@ class TestQualityThresholds:
         assert "unit" in coverage, "Missing 'unit' coverage threshold"
         unit_min = coverage["unit"].get("minimum_percent", 0)
         assert unit_min >= 80, (
-            f"Unit test coverage threshold lowered to {unit_min}%. "
-            "Minimum must be 80%."
+            f"Unit test coverage threshold lowered to {unit_min}%. Minimum must be 80%."
         )
 
         # Integration test threshold MUST exist and be >= 70%
         assert "integration" in coverage, "Missing 'integration' coverage threshold"
         int_min = coverage["integration"].get("minimum_percent", 0)
         assert int_min >= 70, (
-            f"Integration test coverage threshold lowered to {int_min}%. "
-            "Minimum must be 70%."
+            f"Integration test coverage threshold lowered to {int_min}%. Minimum must be 70%."
         )
 
     @pytest.mark.requirement("CONTRACT-003")
