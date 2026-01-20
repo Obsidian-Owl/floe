@@ -121,6 +121,10 @@ def warn(message: str, **context: str | int | bool | None) -> None:
     click.echo(full_message, err=True)
 
 
+# Alias for warn
+warning = warn
+
+
 def success(message: str) -> None:
     """Print a success message to stdout.
 

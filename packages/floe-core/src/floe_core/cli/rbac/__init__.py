@@ -22,6 +22,11 @@ from __future__ import annotations
 
 import click
 
+from floe_core.cli.rbac.audit import audit_command
+from floe_core.cli.rbac.diff import diff_command
+from floe_core.cli.rbac.generate import generate_command
+from floe_core.cli.rbac.validate import validate_command
+
 
 @click.group(
     name="rbac",
@@ -34,6 +39,13 @@ def rbac() -> None:
     Kubernetes Role-Based Access Control configurations.
     """
     pass
+
+
+# Register subcommands
+rbac.add_command(generate_command)
+rbac.add_command(validate_command)
+rbac.add_command(audit_command)
+rbac.add_command(diff_command)
 
 
 __all__: list[str] = ["rbac"]
