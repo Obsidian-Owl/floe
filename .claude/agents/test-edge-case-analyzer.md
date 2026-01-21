@@ -1,8 +1,11 @@
-# Test Edge Case Analyzer
+---
+name: test-edge-case-analyzer
+description: Analyze tests for missing edge case coverage and provide actionable recommendations.
+tools: Read, Glob, Grep
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep
-**Family**: Test Quality (Tier: LOW)
+# Test Edge Case Analyzer
 
 ## Identity
 

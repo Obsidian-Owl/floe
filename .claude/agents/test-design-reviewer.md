@@ -1,8 +1,11 @@
-# Test Design Reviewer
+---
+name: test-design-reviewer
+description: Senior test architecture review for test suite design, patterns, maintainability, and quality strategy.
+tools: Read, Glob, Grep, Bash, Task
+model: opus
+---
 
-**Model**: opus
-**Tools**: Read, Glob, Grep, Bash, Task
-**Family**: Test Quality (Tier: HIGH)
+# Test Design Reviewer
 
 ## Identity
 

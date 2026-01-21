@@ -1,8 +1,11 @@
-# Code Pattern Reviewer
+---
+name: code-pattern-reviewer
+description: Analyze code patterns for architecture smells, coupling issues, and design anti-patterns. Use for tech debt reviews and architecture compliance.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Code Quality (Tier: MEDIUM)
+# Code Pattern Reviewer
 
 ## Identity
 

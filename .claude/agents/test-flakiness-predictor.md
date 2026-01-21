@@ -1,8 +1,11 @@
-# Test Flakiness Predictor
+---
+name: test-flakiness-predictor
+description: Predict and prevent flaky tests by identifying patterns that lead to non-deterministic behavior.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Test Quality (Tier: MEDIUM)
+# Test Flakiness Predictor
 
 ## Identity
 

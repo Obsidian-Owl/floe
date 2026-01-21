@@ -1,8 +1,11 @@
-# Test Isolation Checker
+---
+name: test-isolation-checker
+description: Detect shared state, fixture pollution, and test interdependencies that cause flaky or order-dependent tests.
+tools: Read, Glob, Grep
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep
-**Family**: Test Quality (Tier: LOW)
+# Test Isolation Checker
 
 ## Identity
 

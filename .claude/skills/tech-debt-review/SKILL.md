@@ -67,6 +67,14 @@ This skill validates adherence to project principles:
 - **Maintainability**: Keep technical debt manageable
 - **Security**: No known vulnerabilities in dependencies
 
+## Memory Integration
+
+### After Completion (Full Audit Only)
+Save audit findings for trend analysis:
+```bash
+./scripts/memory-save --decisions "Tech debt audit: Score {score}/100, {critical} critical issues, top areas: {categories}" --issues "{LinearIDs}"
+```
+
 ## Execution Steps
 
 ### Phase 0: Scope Determination
