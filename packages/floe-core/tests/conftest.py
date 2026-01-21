@@ -13,8 +13,23 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+
+@pytest.fixture
+def compiled_artifacts_version() -> str:
+    """Current CompiledArtifacts schema version.
+
+    Tests should use this fixture instead of hardcoding version strings.
+    When the schema version changes, all tests automatically adapt.
+
+    Returns:
+        Current version string (e.g., "0.3.0").
+    """
+    return COMPILED_ARTIFACTS_VERSION
 
 
 @pytest.fixture

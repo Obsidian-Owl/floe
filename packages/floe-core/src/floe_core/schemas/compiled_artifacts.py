@@ -3,12 +3,10 @@
 CompiledArtifacts is the single source of truth for pipeline execution.
 It contains resolved, validated configuration after manifest inheritance.
 
-Contract Version: 0.3.0
+Contract Version: See COMPILED_ARTIFACTS_VERSION in versions.py
 
 Version History:
-    - 0.1.0: Initial version (metadata, identity, mode, observability)
-    - 0.2.0: Add plugins, transforms, dbt_profiles, governance (Epic 2B)
-    - 0.3.0: Add enforcement_result summary (Epic 3B)
+    See COMPILED_ARTIFACTS_VERSION_HISTORY in versions.py
 
 See Also:
     - docs/contracts/compiled-artifacts.md: Full contract specification
@@ -26,6 +24,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import TelemetryConfig
 
 
@@ -564,7 +563,7 @@ class CompiledArtifacts(BaseModel):
     version: Annotated[
         str,
         Field(
-            default="0.3.0",
+            default=COMPILED_ARTIFACTS_VERSION,
             pattern=r"^\d+\.\d+\.\d+$",
             description="Schema version (semver)",
         ),

@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
@@ -67,10 +69,10 @@ class TestQuickstartExamples(IntegrationTestBase):
         from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
         return CompiledArtifacts(
-            version="0.3.0",
+            version=COMPILED_ARTIFACTS_VERSION,
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(timezone.utc),
-                floe_version="0.3.0",
+                floe_version=COMPILED_ARTIFACTS_VERSION,
                 source_hash=f"sha256:{unique_id}abc123def456",
                 product_name="my-data-product",  # Match quickstart example
                 product_version="1.0.0",
@@ -208,7 +210,7 @@ class TestQuickstartExamples(IntegrationTestBase):
 
         # Verify pulled content is valid CompiledArtifacts
         assert isinstance(pulled_artifacts, CompiledArtifacts)
-        assert pulled_artifacts.version == "0.3.0"
+        assert pulled_artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert pulled_artifacts.metadata.product_name == "my-data-product"
 
     @pytest.mark.requirement("8A-SC-001")

@@ -22,6 +22,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -68,7 +69,7 @@ def sample_compilation_metadata() -> CompilationMetadata:
     """Create a sample CompilationMetadata for testing."""
     return CompilationMetadata(
         compiled_at=datetime.now(),
-        floe_version="0.3.0",
+        floe_version=COMPILED_ARTIFACTS_VERSION,
         source_hash="sha256:abc123",
         product_name="test-product",
         product_version="1.0.0",
@@ -317,7 +318,7 @@ class TestCompiledArtifactsExtensions:
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
-                floe_version="0.3.0",
+                floe_version=COMPILED_ARTIFACTS_VERSION,
                 source_hash="sha256:abc123",
                 product_name="test",
                 product_version="1.0.0",
@@ -342,7 +343,7 @@ class TestCompiledArtifactsExtensions:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.3.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("2B-FR-007")
     def test_compiled_artifacts_with_plugins(
@@ -460,7 +461,7 @@ class TestCompiledArtifactsExtensions:
     ) -> None:
         """Test CompiledArtifacts with all v0.3.0 fields populated."""
         artifacts = CompiledArtifacts(
-            version="0.3.0",
+            version=COMPILED_ARTIFACTS_VERSION,
             metadata=sample_compilation_metadata,
             identity=sample_product_identity,
             mode="simple",
@@ -476,7 +477,7 @@ class TestCompiledArtifactsExtensions:
             dbt_profiles={"default": {"target": "dev", "outputs": {}}},
             governance=ResolvedGovernance(pii_encryption="required"),
         )
-        assert artifacts.version == "0.3.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.plugins is not None
         assert artifacts.transforms is not None
         assert artifacts.dbt_profiles is not None
@@ -502,7 +503,7 @@ class TestYamlSerialization:
     ) -> CompiledArtifacts:
         """Create a fully-populated CompiledArtifacts for YAML tests."""
         return CompiledArtifacts(
-            version="0.3.0",
+            version=COMPILED_ARTIFACTS_VERSION,
             metadata=sample_compilation_metadata,
             identity=sample_product_identity,
             mode="simple",

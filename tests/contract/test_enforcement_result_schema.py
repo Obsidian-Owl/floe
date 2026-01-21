@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 # These imports will fail until implementation (TDD)
 # The tests are written FIRST to define the expected contract
 
@@ -743,7 +745,7 @@ class TestCompiledArtifactsEnforcementFieldContract:
 
         # Check default version
         fields = CompiledArtifacts.model_fields
-        assert fields["version"].default == "0.3.0"
+        assert fields["version"].default == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("003b-FR-024")
     def test_compiled_artifacts_enforcement_result_serialization(self) -> None:
@@ -773,10 +775,10 @@ class TestCompiledArtifactsEnforcementFieldContract:
         )
 
         artifacts = CompiledArtifacts(
-            version="0.3.0",
+            version=COMPILED_ARTIFACTS_VERSION,
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
-                floe_version="0.3.0",
+                floe_version=COMPILED_ARTIFACTS_VERSION,
                 source_hash="sha256:abc123",
                 product_name="test-product",
                 product_version="1.0.0",

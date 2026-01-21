@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 
 @pytest.fixture(autouse=True)
 def patch_version_compat() -> Any:
@@ -159,7 +161,7 @@ class TestCompilationPerformance:
         duration = time.perf_counter() - start
 
         # Verify results
-        assert artifacts.version == "0.3.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.transforms is not None
         assert len(artifacts.transforms.models) == 10
 
@@ -185,7 +187,7 @@ class TestCompilationPerformance:
         duration = time.perf_counter() - start
 
         # Verify results
-        assert artifacts.version == "0.3.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.transforms is not None
         assert len(artifacts.transforms.models) == 50
 
@@ -325,7 +327,7 @@ class TestDryRunPerformance:
         # Time full compilation
         start = time.perf_counter()
         artifacts = compile_pipeline(spec_path, manifest_path)
-        assert artifacts.version == "0.3.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         compilation_time = time.perf_counter() - start
 
         # Validation should not take more than compilation

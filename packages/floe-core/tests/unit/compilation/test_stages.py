@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 if TYPE_CHECKING:
     pass
 
@@ -163,7 +165,7 @@ plugins:
 
         result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.version == "0.3.0"
+        assert result.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("FR-031")
     def test_compile_pipeline_has_plugins(self, tmp_path: Path) -> None:

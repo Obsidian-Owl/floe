@@ -23,6 +23,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 if TYPE_CHECKING:
     from collections.abc import Generator
 
@@ -125,7 +127,7 @@ def sample_compiled_artifacts_dict() -> dict[str, Any]:
         A dictionary that can be serialized as CompiledArtifacts JSON.
     """
     return {
-        "version": "0.3.0",
+        "version": COMPILED_ARTIFACTS_VERSION,
         "metadata": {
             "product_name": "test-product",
             "product_version": "1.0.0",
@@ -186,10 +188,10 @@ def sample_compiled_artifacts() -> Any:
     from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
     return CompiledArtifacts(
-        version="0.3.0",
+        version=COMPILED_ARTIFACTS_VERSION,
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.3.0",
+            floe_version=COMPILED_ARTIFACTS_VERSION,
             source_hash="sha256:abc123def456",
             product_name="test-product",
             product_version="1.0.0",
