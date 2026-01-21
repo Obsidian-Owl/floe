@@ -33,7 +33,7 @@ import click
 
 # Import command groups
 from floe_core.cli.artifact import artifact
-from floe_core.cli.data_team import (
+from floe_core.cli.data import (
     compile_command,
     run_command,
     test_command,

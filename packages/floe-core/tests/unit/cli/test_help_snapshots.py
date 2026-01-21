@@ -234,11 +234,18 @@ class TestGoldenFileComparison:
 
     @pytest.mark.requirement("FR-052")
     def test_root_help_matches_golden(self) -> None:
-        """Test that root help matches golden file if it exists."""
+        """Test that root help matches golden file.
+
+        Per Constitution V: tests FAIL, never skip.
+        Golden file must exist for regression testing.
+        """
         golden_file = GOLDEN_DIR / "root_help.txt"
 
         if not golden_file.exists():
-            pytest.skip("Golden file not yet created")
+            pytest.fail(
+                f"Golden file missing: {golden_file}\n"
+                "Run: floe --help > tests/fixtures/cli/golden/root_help.txt"
+            )
 
         runner = CliRunner()
         result = runner.invoke(cli, ["--help"])
@@ -253,11 +260,18 @@ class TestGoldenFileComparison:
 
     @pytest.mark.requirement("FR-052")
     def test_platform_help_matches_golden(self) -> None:
-        """Test that platform help matches golden file if it exists."""
+        """Test that platform help matches golden file.
+
+        Per Constitution V: tests FAIL, never skip.
+        Golden file must exist for regression testing.
+        """
         golden_file = GOLDEN_DIR / "platform_help.txt"
 
         if not golden_file.exists():
-            pytest.skip("Golden file not yet created")
+            pytest.fail(
+                f"Golden file missing: {golden_file}\n"
+                "Run: floe platform --help > tests/fixtures/cli/golden/platform_help.txt"
+            )
 
         runner = CliRunner()
         result = runner.invoke(cli, ["platform", "--help"])
