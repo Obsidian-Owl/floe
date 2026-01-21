@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -227,8 +228,201 @@ class TestRbacAuditInGroup:
         assert "audit" in result.output.lower()
 
 
+class TestAuditRoleHelper:
+    """Tests for the _audit_role helper function."""
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_returns_empty_list(self) -> None:
+        """Test _audit_role returns empty list for normal role."""
+        from floe_core.cli.rbac.audit import _audit_role
+
+        mock_role = MagicMock()
+        mock_role.metadata.name = "test-role"
+        mock_role.rules = []
+
+        findings = _audit_role(mock_role, "default")
+
+        assert isinstance(findings, list)
+        assert len(findings) == 0
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_with_none_namespace(self) -> None:
+        """Test _audit_role handles None namespace."""
+        from floe_core.cli.rbac.audit import _audit_role
+
+        mock_role = MagicMock()
+        mock_role.metadata.name = "test-role"
+        mock_role.rules = []
+
+        findings = _audit_role(mock_role, None)
+
+        assert isinstance(findings, list)
+
+
+class TestAuditRoleBindingHelper:
+    """Tests for the _audit_role_binding helper function."""
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_cluster_admin_role(self) -> None:
+        """Test _audit_role_binding detects cluster-admin reference."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "cluster-admin"
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = []
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        assert len(findings) == 1
+        assert "cluster-admin" in findings[0].message
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_admin_role(self) -> None:
+        """Test _audit_role_binding detects admin role reference."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "admin"
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = []
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        assert len(findings) == 1
+        assert "admin" in findings[0].message
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_edit_role(self) -> None:
+        """Test _audit_role_binding detects edit role reference."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "edit"
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = []
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        assert len(findings) == 1
+        assert "edit" in findings[0].message
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_service_account_no_namespace(self) -> None:
+        """Test _audit_role_binding detects ServiceAccount without namespace."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "custom-role"
+
+        mock_subject = MagicMock()
+        mock_subject.kind = "ServiceAccount"
+        mock_subject.name = "test-sa"
+        mock_subject.namespace = None
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = [mock_subject]
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        assert len(findings) == 1
+        assert "no namespace specified" in findings[0].message
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_service_account_with_namespace(self) -> None:
+        """Test _audit_role_binding passes ServiceAccount with namespace."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "custom-role"
+
+        mock_subject = MagicMock()
+        mock_subject.kind = "ServiceAccount"
+        mock_subject.name = "test-sa"
+        mock_subject.namespace = "default"
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = [mock_subject]
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        # No findings for properly namespaced ServiceAccount
+        assert len(findings) == 0
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_no_role_ref(self) -> None:
+        """Test _audit_role_binding handles missing role_ref."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = None
+        mock_binding.subjects = None
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        # No findings when no role_ref
+        assert len(findings) == 0
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_no_subjects(self) -> None:
+        """Test _audit_role_binding handles missing subjects."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "custom-role"
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = None
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        # No findings when no subjects
+        assert len(findings) == 0
+
+    @pytest.mark.requirement("FR-025")
+    def test_audit_role_binding_non_service_account_subject(self) -> None:
+        """Test _audit_role_binding ignores non-ServiceAccount subjects."""
+        from floe_core.cli.rbac.audit import _audit_role_binding
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.name = "custom-role"
+
+        mock_subject = MagicMock()
+        mock_subject.kind = "User"
+        mock_subject.name = "test-user"
+        mock_subject.namespace = None
+
+        mock_binding = MagicMock()
+        mock_binding.metadata.name = "test-binding"
+        mock_binding.role_ref = mock_role_ref
+        mock_binding.subjects = [mock_subject]
+
+        findings = _audit_role_binding(mock_binding, "default")
+
+        # No findings for User subject without namespace
+        assert len(findings) == 0
+
+
 __all__: list[str] = [
     "TestRbacAuditCommand",
     "TestRbacAuditKubernetesDependency",
     "TestRbacAuditInGroup",
+    "TestAuditRoleHelper",
+    "TestAuditRoleBindingHelper",
 ]

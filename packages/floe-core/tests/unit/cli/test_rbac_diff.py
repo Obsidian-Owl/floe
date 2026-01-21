@@ -12,12 +12,14 @@ Tests cover:
 - Command accepts --kubeconfig option (FR-026)
 - Command shows added, removed, modified resources (FR-027)
 - Exit code handling
+- _k8s_to_dict helper function
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -277,4 +279,118 @@ class TestRbacDiffInGroup:
         assert "diff" in result.output.lower()
 
 
-__all__: list[str] = ["TestRbacDiffCommand", "TestRbacDiffInGroup"]
+class TestK8sToDictHelper:
+    """Tests for the _k8s_to_dict helper function."""
+
+    @pytest.mark.requirement("FR-027")
+    def test_k8s_to_dict_role(self) -> None:
+        """Test _k8s_to_dict converts Role resources correctly."""
+        from floe_core.cli.rbac.diff import _k8s_to_dict
+
+        mock_rule = MagicMock()
+        mock_rule.api_groups = [""]
+        mock_rule.resources = ["pods"]
+        mock_rule.verbs = ["get", "list"]
+        mock_rule.resource_names = []
+
+        mock_resource = MagicMock()
+        mock_resource.metadata.name = "test-role"
+        mock_resource.metadata.namespace = "default"
+        mock_resource.rules = [mock_rule]
+
+        result = _k8s_to_dict(mock_resource, "Role")
+
+        assert result["kind"] == "Role"
+        assert result["apiVersion"] == "rbac.authorization.k8s.io/v1"
+        assert result["metadata"]["name"] == "test-role"
+        assert result["metadata"]["namespace"] == "default"
+        assert len(result["rules"]) == 1
+        assert result["rules"][0]["resources"] == ["pods"]
+
+    @pytest.mark.requirement("FR-027")
+    def test_k8s_to_dict_role_binding(self) -> None:
+        """Test _k8s_to_dict converts RoleBinding resources correctly."""
+        from floe_core.cli.rbac.diff import _k8s_to_dict
+
+        mock_subject = MagicMock()
+        mock_subject.kind = "ServiceAccount"
+        mock_subject.name = "test-sa"
+        mock_subject.namespace = "default"
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.api_group = "rbac.authorization.k8s.io"
+        mock_role_ref.kind = "Role"
+        mock_role_ref.name = "test-role"
+
+        mock_resource = MagicMock()
+        mock_resource.metadata.name = "test-rb"
+        mock_resource.metadata.namespace = "default"
+        mock_resource.role_ref = mock_role_ref
+        mock_resource.subjects = [mock_subject]
+
+        result = _k8s_to_dict(mock_resource, "RoleBinding")
+
+        assert result["kind"] == "RoleBinding"
+        assert result["apiVersion"] == "rbac.authorization.k8s.io/v1"
+        assert result["roleRef"]["name"] == "test-role"
+        assert len(result["subjects"]) == 1
+        assert result["subjects"][0]["name"] == "test-sa"
+
+    @pytest.mark.requirement("FR-027")
+    def test_k8s_to_dict_service_account(self) -> None:
+        """Test _k8s_to_dict converts ServiceAccount resources correctly."""
+        from floe_core.cli.rbac.diff import _k8s_to_dict
+
+        mock_resource = MagicMock()
+        mock_resource.metadata.name = "test-sa"
+        mock_resource.metadata.namespace = "default"
+
+        result = _k8s_to_dict(mock_resource, "ServiceAccount")
+
+        assert result["kind"] == "ServiceAccount"
+        assert result["apiVersion"] == "v1"
+        assert result["metadata"]["name"] == "test-sa"
+        assert result["metadata"]["namespace"] == "default"
+
+    @pytest.mark.requirement("FR-027")
+    def test_k8s_to_dict_role_without_rules(self) -> None:
+        """Test _k8s_to_dict handles Role without rules."""
+        from floe_core.cli.rbac.diff import _k8s_to_dict
+
+        mock_resource = MagicMock()
+        mock_resource.metadata.name = "empty-role"
+        mock_resource.metadata.namespace = "default"
+        mock_resource.rules = None
+
+        result = _k8s_to_dict(mock_resource, "Role")
+
+        assert result["kind"] == "Role"
+        assert "rules" not in result
+
+    @pytest.mark.requirement("FR-027")
+    def test_k8s_to_dict_role_binding_without_subjects(self) -> None:
+        """Test _k8s_to_dict handles RoleBinding without subjects."""
+        from floe_core.cli.rbac.diff import _k8s_to_dict
+
+        mock_role_ref = MagicMock()
+        mock_role_ref.api_group = "rbac.authorization.k8s.io"
+        mock_role_ref.kind = "Role"
+        mock_role_ref.name = "test-role"
+
+        mock_resource = MagicMock()
+        mock_resource.metadata.name = "test-rb"
+        mock_resource.metadata.namespace = "default"
+        mock_resource.role_ref = mock_role_ref
+        mock_resource.subjects = None
+
+        result = _k8s_to_dict(mock_resource, "RoleBinding")
+
+        assert result["kind"] == "RoleBinding"
+        assert "subjects" not in result
+
+
+__all__: list[str] = [
+    "TestRbacDiffCommand",
+    "TestRbacDiffInGroup",
+    "TestK8sToDictHelper",
+]
