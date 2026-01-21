@@ -152,7 +152,7 @@ class TestDagsterCanLoadCompiledArtifactsFromFile:
 
         artifacts = CompiledArtifacts.from_json_file(sample_artifacts_json)
 
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
         assert artifacts.metadata.product_name == "test-pipeline"
 
     @pytest.mark.requirement("FR-004")

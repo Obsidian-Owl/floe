@@ -124,7 +124,7 @@ class TestBuildArtifacts:
             sample_transforms,
             sample_dbt_profiles,
         )
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
 
     @pytest.mark.requirement("2B-FR-001")
     def test_build_artifacts_has_metadata(

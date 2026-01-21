@@ -365,7 +365,7 @@ class TestPullFromRegistry(IntegrationTestBase):
 
         # Verify it's a proper CompiledArtifacts instance
         assert isinstance(pulled, CompiledArtifacts)
-        assert pulled.version == "0.2.0"
+        assert pulled.version == "0.3.0"
         assert pulled.metadata is not None
 
     @pytest.mark.requirement("8A-SC-009")

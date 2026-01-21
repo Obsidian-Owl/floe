@@ -163,7 +163,7 @@ plugins:
 
         result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.version == "0.2.0"
+        assert result.version == "0.3.0"
 
     @pytest.mark.requirement("FR-031")
     def test_compile_pipeline_has_plugins(self, tmp_path: Path) -> None:

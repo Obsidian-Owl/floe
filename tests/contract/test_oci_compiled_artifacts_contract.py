@@ -196,7 +196,7 @@ class TestCompiledArtifactsSerializationContract:
         """
         data = json.loads(minimal_compiled_artifacts.model_dump_json())
         assert "version" in data
-        assert data["version"] == "0.2.0"
+        assert data["version"] == "0.3.0"
 
     @pytest.mark.requirement("8A-FR-001")
     def test_serialized_json_contains_metadata(
@@ -270,7 +270,7 @@ class TestCompiledArtifactsDeserializationContract:
         restored = CompiledArtifacts.model_validate(data)
 
         assert isinstance(restored, CompiledArtifacts)
-        assert restored.version == "0.2.0"
+        assert restored.version == "0.3.0"
 
     @pytest.mark.requirement("8A-FR-002")
     def test_deserialize_from_bytes(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
@@ -659,7 +659,7 @@ class TestFileBasedSerializationContract:
         # Read raw content and verify it's valid JSON
         content = file_path.read_text()
         data = json.loads(content)
-        assert data["version"] == "0.2.0"
+        assert data["version"] == "0.3.0"
 
     @pytest.mark.requirement("8A-FR-002")
     def test_file_digest_matches_content(

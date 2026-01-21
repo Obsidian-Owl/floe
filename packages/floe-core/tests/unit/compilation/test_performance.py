@@ -159,7 +159,7 @@ class TestCompilationPerformance:
         duration = time.perf_counter() - start
 
         # Verify results
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
         assert artifacts.transforms is not None
         assert len(artifacts.transforms.models) == 10
 
@@ -185,7 +185,7 @@ class TestCompilationPerformance:
         duration = time.perf_counter() - start
 
         # Verify results
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
         assert artifacts.transforms is not None
         assert len(artifacts.transforms.models) == 50
 
@@ -325,7 +325,7 @@ class TestDryRunPerformance:
         # Time full compilation
         start = time.perf_counter()
         artifacts = compile_pipeline(spec_path, manifest_path)
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
         compilation_time = time.perf_counter() - start
 
         # Validation should not take more than compilation

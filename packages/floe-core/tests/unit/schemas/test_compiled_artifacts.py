@@ -342,7 +342,7 @@ class TestCompiledArtifactsExtensions:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
 
     @pytest.mark.requirement("2B-FR-007")
     def test_compiled_artifacts_with_plugins(
@@ -476,7 +476,7 @@ class TestCompiledArtifactsExtensions:
             dbt_profiles={"default": {"target": "dev", "outputs": {}}},
             governance=ResolvedGovernance(pii_encryption="required"),
         )
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == "0.3.0"
         assert artifacts.plugins is not None
         assert artifacts.transforms is not None
         assert artifacts.dbt_profiles is not None

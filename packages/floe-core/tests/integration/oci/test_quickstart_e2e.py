@@ -208,7 +208,7 @@ class TestQuickstartExamples(IntegrationTestBase):
 
         # Verify pulled content is valid CompiledArtifacts
         assert isinstance(pulled_artifacts, CompiledArtifacts)
-        assert pulled_artifacts.version == "0.2.0"
+        assert pulled_artifacts.version == "0.3.0"
         assert pulled_artifacts.metadata.product_name == "my-data-product"
 
     @pytest.mark.requirement("8A-SC-001")
