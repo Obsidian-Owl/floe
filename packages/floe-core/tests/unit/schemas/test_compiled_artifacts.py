@@ -68,7 +68,7 @@ def sample_compilation_metadata() -> CompilationMetadata:
     """Create a sample CompilationMetadata for testing."""
     return CompilationMetadata(
         compiled_at=datetime.now(),
-        floe_version="0.2.0",
+        floe_version="0.3.0",
         source_hash="sha256:abc123",
         product_name="test-product",
         product_version="1.0.0",
@@ -312,12 +312,12 @@ class TestCompiledArtifactsExtensions:
     """Tests for CompiledArtifacts v0.2.0 extensions."""
 
     @pytest.mark.requirement("2B-FR-007")
-    def test_version_default_is_0_2_0(self) -> None:
-        """Test that default version is 0.2.0."""
+    def test_version_default_is_0_3_0(self) -> None:
+        """Test that default version is 0.3.0."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
-                floe_version="0.2.0",
+                floe_version="0.3.0",
                 source_hash="sha256:abc123",
                 product_name="test",
                 product_version="1.0.0",
@@ -458,9 +458,9 @@ class TestCompiledArtifactsExtensions:
         sample_product_identity: ProductIdentity,
         sample_observability_config: ObservabilityConfig,
     ) -> None:
-        """Test CompiledArtifacts with all v0.2.0 fields populated."""
+        """Test CompiledArtifacts with all v0.3.0 fields populated."""
         artifacts = CompiledArtifacts(
-            version="0.2.0",
+            version="0.3.0",
             metadata=sample_compilation_metadata,
             identity=sample_product_identity,
             mode="simple",
@@ -502,7 +502,7 @@ class TestYamlSerialization:
     ) -> CompiledArtifacts:
         """Create a fully-populated CompiledArtifacts for YAML tests."""
         return CompiledArtifacts(
-            version="0.2.0",
+            version="0.3.0",
             metadata=sample_compilation_metadata,
             identity=sample_product_identity,
             mode="simple",

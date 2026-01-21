@@ -47,10 +47,10 @@ from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 def minimal_compiled_artifacts() -> CompiledArtifacts:
     """Create a minimal valid CompiledArtifacts for testing."""
     return CompiledArtifacts(
-        version="0.2.0",
+        version="0.3.0",
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.2.0",
+            floe_version="0.3.0",
             source_hash="sha256:abc123def456",
             product_name="test-product",
             product_version="1.0.0",
@@ -92,10 +92,10 @@ def minimal_compiled_artifacts() -> CompiledArtifacts:
 def full_compiled_artifacts() -> CompiledArtifacts:
     """Create a CompiledArtifacts with all optional fields populated."""
     return CompiledArtifacts(
-        version="0.2.0",
+        version="0.3.0",
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.2.0",
+            floe_version="0.3.0",
             source_hash="sha256:fullhash123456",
             product_name="full-product",
             product_version="2.0.0",
@@ -302,7 +302,7 @@ class TestCompiledArtifactsDeserializationContract:
             "version": "1.0",  # Not valid semver
             "metadata": {
                 "compiled_at": datetime.now(timezone.utc).isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": "0.3.0",
                 "source_hash": "sha256:abc",
                 "product_name": "test",
                 "product_version": "1.0.0",

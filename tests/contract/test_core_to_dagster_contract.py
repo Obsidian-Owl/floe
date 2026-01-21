@@ -70,10 +70,10 @@ class TestDagsterCanLoadCompiledArtifactsFromFile:
         from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
         artifacts_data: dict[str, Any] = {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "metadata": {
                 "compiled_at": datetime.now().isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": "0.3.0",
                 "source_hash": "sha256:abc123def456",
                 "product_name": "test-pipeline",
                 "product_version": "1.0.0",
@@ -268,10 +268,10 @@ class TestDagsterCanUseDbtProfiles:
         }
 
         artifacts = CompiledArtifacts(
-            version="0.2.0",
+            version="0.3.0",
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
-                floe_version="0.2.0",
+                floe_version="0.3.0",
                 source_hash="sha256:abc123",
                 product_name="my-pipeline",
                 product_version="1.0.0",
@@ -422,10 +422,10 @@ class TestCompiledArtifactsRoundtrip:
         from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
         original = CompiledArtifacts(
-            version="0.2.0",
+            version="0.3.0",
             metadata=CompilationMetadata(
                 compiled_at=datetime(2026, 1, 17, 12, 0, 0),
-                floe_version="0.2.0",
+                floe_version="0.3.0",
                 source_hash="sha256:abc123",
                 product_name="roundtrip-test",
                 product_version="1.0.0",
@@ -514,10 +514,10 @@ class TestDagsterPluginConsumesCompiledArtifacts:
     def valid_compiled_artifacts_dict(self) -> dict[str, Any]:
         """Create a valid CompiledArtifacts dict for testing."""
         return {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "metadata": {
                 "compiled_at": datetime.now().isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": "0.3.0",
                 "source_hash": "sha256:abc123def456",
                 "product_name": "contract-test-pipeline",
                 "product_version": "1.0.0",
@@ -631,10 +631,10 @@ class TestDagsterPluginConsumesCompiledArtifacts:
 
         # Missing identity should fail validation
         invalid_artifacts = {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "metadata": {
                 "compiled_at": datetime.now().isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": "0.3.0",
                 "source_hash": "sha256:abc123",
                 "product_name": "test",
                 "product_version": "1.0.0",

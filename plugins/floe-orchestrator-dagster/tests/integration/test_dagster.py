@@ -89,10 +89,10 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
     def valid_compiled_artifacts(self) -> dict[str, Any]:
         """Create valid CompiledArtifacts for integration testing."""
         return {
-            "version": "0.2.0",
+            "version": "0.3.0",
             "metadata": {
                 "compiled_at": datetime.now(timezone.utc).isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": "0.3.0",
                 "source_hash": "sha256:integration123",
                 "product_name": "integration-test-pipeline",
                 "product_version": "1.0.0",

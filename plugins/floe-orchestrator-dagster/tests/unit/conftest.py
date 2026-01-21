@@ -46,10 +46,10 @@ def valid_compiled_artifacts() -> dict[str, Any]:
     that passes Pydantic validation.
     """
     return {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "metadata": {
             "compiled_at": datetime.now(timezone.utc).isoformat(),
-            "floe_version": "0.2.0",
+            "floe_version": "0.3.0",
             "source_hash": "sha256:abc123def456",
             "product_name": "test-pipeline",
             "product_version": "1.0.0",
@@ -97,10 +97,10 @@ def valid_compiled_artifacts_with_models() -> dict[str, Any]:
     models that have dependencies between them.
     """
     return {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "metadata": {
             "compiled_at": datetime.now(timezone.utc).isoformat(),
-            "floe_version": "0.2.0",
+            "floe_version": "0.3.0",
             "source_hash": "sha256:abc123def456",
             "product_name": "test-pipeline",
             "product_version": "1.0.0",
@@ -216,7 +216,7 @@ def invalid_compiled_artifacts_missing_metadata() -> dict[str, Any]:
     Use this fixture to test validation error handling.
     """
     return {
-        "version": "0.2.0",
+        "version": "0.3.0",
         # metadata is missing - should trigger validation error
         "identity": {
             "product_id": "default.test_pipeline",
@@ -243,10 +243,10 @@ def invalid_compiled_artifacts_missing_identity() -> dict[str, Any]:
     Use this fixture to test validation error handling.
     """
     return {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "metadata": {
             "compiled_at": datetime.now(timezone.utc).isoformat(),
-            "floe_version": "0.2.0",
+            "floe_version": "0.3.0",
             "source_hash": "sha256:abc123def456",
             "product_name": "test-pipeline",
             "product_version": "1.0.0",

@@ -34,10 +34,10 @@ def sample_compiled_artifacts_json() -> dict[str, Any]:
     (floe-dagster, floe-dbt) can rely on.
     """
     return {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "metadata": {
             "compiled_at": "2024-01-01T00:00:00Z",
-            "floe_version": "0.2.0",
+            "floe_version": "0.3.0",
             "source_hash": "sha256:abc123",
             "product_name": "test-product",
             "product_version": "1.0.0",
@@ -284,7 +284,7 @@ class TestCompileOutputContract:
                     "tool": {
                         "driver": {
                             "name": "floe-enforcement",
-                            "version": "0.2.0",
+                            "version": "0.3.0",
                             "rules": [],
                         }
                     },

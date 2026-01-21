@@ -82,7 +82,7 @@ def sample_compiled_artifacts_json() -> str:
     import json
 
     data: dict[str, Any] = {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "metadata": {
             "product_name": "integration-test-product",
             "product_version": "1.0.0",

@@ -56,10 +56,10 @@ def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "test
     from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
     return CompiledArtifacts(
-        version="0.2.0",
+        version="0.3.0",
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.2.0",
+            floe_version="0.3.0",
             source_hash=f"sha256:{unique_id}abc123",
             product_name=f"{product_prefix}-product-{unique_id}",
             product_version="1.0.0",
