@@ -69,7 +69,6 @@ floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editab
 testpaths = ["tests"]
 pythonpath = [
     "packages/floe-core/src",
-    "packages/floe-cli/src",
     "packages/floe-iceberg/src",
     "plugins/floe-compute-duckdb/src",
     "plugins/floe-catalog-polaris/src",

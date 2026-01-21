@@ -32,8 +32,10 @@ dev = [
     "ruff>=0.1.0",
 ]
 
-[project.scripts]
-floe = "floe_cli.main:cli"
+# Entry point removed during CLI unification (Epic 11)
+# The unified CLI is now provided by floe-core
+# [project.scripts]
+# floe = "floe_cli.main:cli"
 
 [build-system]
 requires = ["hatchling"]
