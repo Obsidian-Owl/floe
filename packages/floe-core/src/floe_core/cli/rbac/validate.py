@@ -3,7 +3,7 @@
 Task ID: T033
 Phase: 4 - User Story 2 (RBAC Command Migration)
 User Story: US2 - RBAC Command Migration
-Requirements: FR-022, FR-023
+Requirements: FR-022, FR-023, FR-061
 
 This module implements the `floe rbac validate` command which:
 - Validates RBAC manifests against configuration
@@ -19,10 +19,14 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success
+
+if TYPE_CHECKING:
+    from floe_core.schemas.rbac_validation import RBACValidationResult
 
 
 @click.command(
@@ -87,6 +91,11 @@ def validate_command(
 
     try:
         from floe_core.rbac import validate_all_manifests
+        from floe_core.rbac.validate import validate_manifest_against_config
+        from floe_core.schemas.rbac_validation import (
+            RBACValidationResult,
+            ValidationStatus,
+        )
 
         # Load manifests from directory
         manifests: dict[str, list[dict]] = {}
@@ -106,26 +115,80 @@ def validate_command(
             else:
                 manifests[filename] = []
 
-        # Validate all manifests
+        # Validate all manifests using existing function
         is_valid, errors = validate_all_manifests(manifests)
 
-        if output_format == "json":
-            import json
+        # Build type-safe validation result
+        all_issues = []
 
-            result = {
-                "valid": is_valid,
-                "errors": errors,
-                "manifest_dir": str(manifest_dir_path),
-            }
-            click.echo(json.dumps(result, indent=2))
+        # If config provided, also validate against expected resources
+        if config:
+            config_content = config.read_text()
+            config_data = yaml.safe_load(config_content) or {}
+
+            # Extract expected resources from config
+            expected_sa = config_data.get("rbac", {}).get("service_accounts", [])
+            expected_roles = config_data.get("rbac", {}).get("roles", [])
+
+            # Convert expected to manifest format for comparison
+            expected_sa_manifests = [
+                {"metadata": {"name": sa.get("name"), "namespace": sa.get("namespace")}}
+                for sa in expected_sa
+            ]
+            expected_role_manifests = [
+                {"metadata": {"name": r.get("name"), "namespace": r.get("namespace")}}
+                for r in expected_roles
+            ]
+
+            # Validate service accounts
+            sa_issues = validate_manifest_against_config(
+                manifests.get("serviceaccounts.yaml", []),
+                expected_sa_manifests,
+                "ServiceAccount",
+            )
+            all_issues.extend(sa_issues)
+
+            # Validate roles
+            role_issues = validate_manifest_against_config(
+                manifests.get("roles.yaml", []),
+                expected_role_manifests,
+                "Role",
+            )
+            all_issues.extend(role_issues)
+
+        # Determine status
+        if not is_valid or all_issues:
+            status = ValidationStatus.INVALID
         else:
-            if is_valid:
+            status = ValidationStatus.VALID
+
+        # Build result model
+        result = RBACValidationResult(
+            status=status,
+            config_path=str(config) if config else "N/A",
+            manifest_dir=str(manifest_dir_path),
+            issues=all_issues,
+            service_accounts_validated=len(manifests.get("serviceaccounts.yaml", [])),
+            roles_validated=len(manifests.get("roles.yaml", [])),
+            role_bindings_validated=len(manifests.get("rolebindings.yaml", [])),
+        )
+
+        if output_format == "json":
+            click.echo(result.model_dump_json(indent=2))
+        else:
+            if result.is_valid:
                 success("All manifests are valid.")
             else:
+                for issue in result.issues:
+                    click.echo(
+                        f"Error: [{issue.issue_type.value}] "
+                        f"{issue.resource_kind}/{issue.resource_name}: {issue.message}",
+                        err=True,
+                    )
                 for error in errors:
                     click.echo(f"Error: {error}", err=True)
                 error_exit(
-                    f"Validation failed with {len(errors)} error(s)",
+                    f"Validation failed with {len(result.issues) + len(errors)} error(s)",
                     exit_code=ExitCode.VALIDATION_ERROR,
                 )
 

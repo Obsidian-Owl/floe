@@ -381,3 +381,146 @@ def log_rbac_event(event: RBACGenerationAuditEvent) -> None:
             event.result.value,
             extra={"audit_event": log_data},
         )
+
+
+# =============================================================================
+# Security Audit Functions (FR-070)
+# =============================================================================
+
+
+def detect_wildcard_permissions(
+    rules: list[dict[str, Any]],
+    role_name: str,
+    namespace: str | None = None,
+) -> list["AuditFinding"]:
+    """Detect wildcard permissions in role rules (FR-070).
+
+    Args:
+        rules: List of role rule dictionaries from K8s API.
+        role_name: Name of the role being analyzed.
+        namespace: Namespace of the role (None for ClusterRole).
+
+    Returns:
+        List of AuditFinding objects for any wildcard permissions found.
+
+    Example:
+        >>> rules = [{"apiGroups": ["*"], "resources": ["secrets"], "verbs": ["get"]}]
+        >>> findings = detect_wildcard_permissions(rules, "my-role", "default")
+        >>> len(findings) > 0
+        True
+    """
+    from floe_core.schemas.rbac_audit import (
+        AuditFinding,
+        AuditFindingType,
+        AuditSeverity,
+    )
+
+    findings: list[AuditFinding] = []
+
+    for i, rule in enumerate(rules):
+        api_groups = rule.get("apiGroups", [])
+        resources = rule.get("resources", [])
+        verbs = rule.get("verbs", [])
+
+        # Check for wildcards in apiGroups
+        if "*" in api_groups:
+            findings.append(
+                AuditFinding(
+                    severity=AuditSeverity.CRITICAL,
+                    finding_type=AuditFindingType.WILDCARD_PERMISSION,
+                    resource_kind="Role" if namespace else "ClusterRole",
+                    resource_name=role_name,
+                    resource_namespace=namespace,
+                    message=f"Rule {i} contains wildcard in apiGroups",
+                    recommendation="Replace '*' with specific API groups",
+                    details={"rule_index": i, "field": "apiGroups", "value": api_groups},
+                )
+            )
+
+        # Check for wildcards in resources
+        if "*" in resources:
+            findings.append(
+                AuditFinding(
+                    severity=AuditSeverity.CRITICAL,
+                    finding_type=AuditFindingType.WILDCARD_PERMISSION,
+                    resource_kind="Role" if namespace else "ClusterRole",
+                    resource_name=role_name,
+                    resource_namespace=namespace,
+                    message=f"Rule {i} contains wildcard in resources",
+                    recommendation="Replace '*' with specific resource types",
+                    details={"rule_index": i, "field": "resources", "value": resources},
+                )
+            )
+
+        # Check for wildcards in verbs
+        if "*" in verbs:
+            findings.append(
+                AuditFinding(
+                    severity=AuditSeverity.CRITICAL,
+                    finding_type=AuditFindingType.WILDCARD_PERMISSION,
+                    resource_kind="Role" if namespace else "ClusterRole",
+                    resource_name=role_name,
+                    resource_namespace=namespace,
+                    message=f"Rule {i} contains wildcard in verbs",
+                    recommendation="Replace '*' with specific verbs (get, list, etc.)",
+                    details={"rule_index": i, "field": "verbs", "value": verbs},
+                )
+            )
+
+    return findings
+
+
+def check_missing_resource_names(
+    rules: list[dict[str, Any]],
+    role_name: str,
+    namespace: str | None = None,
+) -> list["AuditFinding"]:
+    """Check for rules accessing secrets without resourceNames constraint.
+
+    Args:
+        rules: List of role rule dictionaries from K8s API.
+        role_name: Name of the role being analyzed.
+        namespace: Namespace of the role (None for ClusterRole).
+
+    Returns:
+        List of AuditFinding objects for rules missing resourceNames on secrets.
+
+    Example:
+        >>> rules = [{"resources": ["secrets"], "verbs": ["get"]}]
+        >>> findings = check_missing_resource_names(rules, "my-role", "default")
+        >>> len(findings) > 0
+        True
+    """
+    from floe_core.schemas.rbac_audit import (
+        AuditFinding,
+        AuditFindingType,
+        AuditSeverity,
+    )
+
+    findings: list[AuditFinding] = []
+
+    for i, rule in enumerate(rules):
+        resources = rule.get("resources", [])
+        resource_names = rule.get("resourceNames", [])
+
+        # Check if rule accesses secrets without resourceNames
+        if "secrets" in resources and not resource_names:
+            findings.append(
+                AuditFinding(
+                    severity=AuditSeverity.WARNING,
+                    finding_type=AuditFindingType.MISSING_RESOURCE_NAMES,
+                    resource_kind="Role" if namespace else "ClusterRole",
+                    resource_name=role_name,
+                    resource_namespace=namespace,
+                    message=f"Rule {i} grants access to all secrets (no resourceNames)",
+                    recommendation="Add resourceNames constraint to limit secret access",
+                    details={"rule_index": i, "resources": resources},
+                )
+            )
+
+    return findings
+
+
+# Type hint for forward reference
+if False:  # TYPE_CHECKING would cause import at runtime
+    from floe_core.schemas.rbac_audit import AuditFinding

@@ -3,7 +3,7 @@
 Task ID: T034
 Phase: 4 - User Story 2 (RBAC Command Migration)
 User Story: US2 - RBAC Command Migration
-Requirements: FR-024, FR-025
+Requirements: FR-024, FR-025, FR-062, FR-070
 
 This module implements the `floe rbac audit` command which:
 - Audits current cluster RBAC state
@@ -19,11 +19,14 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+
+if TYPE_CHECKING:
+    from floe_core.schemas.rbac_audit import AuditFinding, RBACAuditReport
 
 
 @click.command(
@@ -103,6 +106,17 @@ def audit_command(
                 exit_code=ExitCode.GENERAL_ERROR,
             )
 
+        # Import type-safe models
+        from floe_core.rbac.audit import (
+            check_missing_resource_names,
+            detect_wildcard_permissions,
+        )
+        from floe_core.schemas.rbac_audit import (
+            AuditFinding,
+            AuditSeverity,
+            RBACAuditReport,
+        )
+
         # Load kubeconfig
         if kubeconfig:
             k8s_config.load_kube_config(config_file=str(kubeconfig))
@@ -116,38 +130,67 @@ def audit_command(
         rbac_api = client.RbacAuthorizationV1Api()
 
         # Audit roles and role bindings in namespace
-        findings: list[dict[str, Any]] = []
+        findings: list[AuditFinding] = []
+        total_roles = 0
+        total_role_bindings = 0
 
-        # Get roles
+        # Get roles and use type-safe detection functions
         roles = rbac_api.list_namespaced_role(namespace)
         for role in roles.items:
-            role_findings = _audit_role(role)
+            total_roles += 1
+            role_name = role.metadata.name
+            if role.rules:
+                # Convert K8s rules to dict format for detection functions
+                rules_dicts = [
+                    {
+                        "apiGroups": rule.api_groups or [],
+                        "resources": rule.resources or [],
+                        "verbs": rule.verbs or [],
+                        "resourceNames": rule.resource_names or [],
+                    }
+                    for rule in role.rules
+                ]
+                # Use type-safe detection functions
+                findings.extend(
+                    detect_wildcard_permissions(rules_dicts, role_name, namespace)
+                )
+                findings.extend(
+                    check_missing_resource_names(rules_dicts, role_name, namespace)
+                )
+            # Also check for legacy dict-based findings
+            role_findings = _audit_role(role, namespace)
             findings.extend(role_findings)
 
         # Get role bindings
         role_bindings = rbac_api.list_namespaced_role_binding(namespace)
         for binding in role_bindings.items:
-            binding_findings = _audit_role_binding(binding)
+            total_role_bindings += 1
+            binding_findings = _audit_role_binding(binding, namespace)
             findings.extend(binding_findings)
 
-        # Output results
-        if output_format == "json":
-            import json
+        # Build type-safe report
+        report = RBACAuditReport(
+            cluster_name="current-context",
+            findings=findings,
+            total_roles=total_roles,
+            total_role_bindings=total_role_bindings,
+        )
 
-            result = {
-                "namespace": namespace,
-                "findings": findings,
-                "finding_count": len(findings),
-            }
-            click.echo(json.dumps(result, indent=2))
+        # Output results using type-safe models
+        if output_format == "json":
+            click.echo(report.model_dump_json(indent=2))
         else:
-            if findings:
-                warning(f"Found {len(findings)} RBAC issue(s):")
-                for finding in findings:
-                    severity = finding.get("severity", "INFO")
-                    message = finding.get("message", "Unknown issue")
-                    resource = finding.get("resource", "Unknown")
-                    click.echo(f"  [{severity}] {resource}: {message}")
+            if report.findings:
+                if report.has_critical_findings():
+                    error_exit(
+                        f"Found {len(report.findings)} RBAC issue(s) including CRITICAL:",
+                        exit_code=ExitCode.VALIDATION_ERROR,
+                    )
+                warning(f"Found {len(report.findings)} RBAC issue(s):")
+                for finding in report.findings:
+                    severity = finding.severity.value.upper()
+                    resource = f"{finding.resource_kind}/{finding.resource_name}"
+                    click.echo(f"  [{severity}] {resource}: {finding.message}")
             else:
                 success("No RBAC issues found.")
 
@@ -158,81 +201,80 @@ def audit_command(
         )
 
 
-def _audit_role(role: Any) -> list[dict[str, Any]]:
-    """Audit a single Role for security issues.
+def _audit_role(role: Any, namespace: str | None) -> list["AuditFinding"]:
+    """Audit a single Role for additional security issues.
+
+    This function handles checks not covered by detect_wildcard_permissions.
 
     Args:
         role: Kubernetes Role object.
+        namespace: Namespace of the role.
 
     Returns:
-        List of finding dictionaries.
+        List of AuditFinding objects.
     """
-    findings: list[dict[str, Any]] = []
-    role_name = role.metadata.name
+    from floe_core.schemas.rbac_audit import (
+        AuditFinding,
+        AuditFindingType,
+        AuditSeverity,
+    )
 
-    if role.rules:
-        for rule in role.rules:
-            # Check for wildcard verbs
-            if rule.verbs and "*" in rule.verbs:
-                findings.append({
-                    "severity": "HIGH",
-                    "resource": f"Role/{role_name}",
-                    "message": "Role has wildcard verb (*) permission",
-                    "rule": str(rule),
-                })
-
-            # Check for wildcard resources
-            if rule.resources and "*" in rule.resources:
-                findings.append({
-                    "severity": "HIGH",
-                    "resource": f"Role/{role_name}",
-                    "message": "Role has wildcard resource (*) permission",
-                    "rule": str(rule),
-                })
-
-            # Check for wildcard API groups
-            if rule.api_groups and "*" in rule.api_groups:
-                findings.append({
-                    "severity": "MEDIUM",
-                    "resource": f"Role/{role_name}",
-                    "message": "Role has wildcard API group (*)",
-                    "rule": str(rule),
-                })
-
+    findings: list[AuditFinding] = []
+    # Additional checks can be added here in the future
+    # Primary wildcard detection is now handled by detect_wildcard_permissions
     return findings
 
 
-def _audit_role_binding(binding: Any) -> list[dict[str, Any]]:
+def _audit_role_binding(binding: Any, namespace: str | None) -> list["AuditFinding"]:
     """Audit a single RoleBinding for security issues.
 
     Args:
         binding: Kubernetes RoleBinding object.
+        namespace: Namespace of the role binding.
 
     Returns:
-        List of finding dictionaries.
+        List of AuditFinding objects.
     """
-    findings: list[dict[str, Any]] = []
+    from floe_core.schemas.rbac_audit import (
+        AuditFinding,
+        AuditFindingType,
+        AuditSeverity,
+    )
+
+    findings: list[AuditFinding] = []
     binding_name = binding.metadata.name
 
     # Check for bindings to cluster-admin or other powerful roles
     if binding.role_ref:
         role_name = binding.role_ref.name
         if role_name in ("cluster-admin", "admin", "edit"):
-            findings.append({
-                "severity": "MEDIUM",
-                "resource": f"RoleBinding/{binding_name}",
-                "message": f"RoleBinding references powerful role: {role_name}",
-            })
+            findings.append(
+                AuditFinding(
+                    severity=AuditSeverity.WARNING,
+                    finding_type=AuditFindingType.EXCESSIVE_PERMISSIONS,
+                    resource_kind="RoleBinding",
+                    resource_name=binding_name,
+                    resource_namespace=namespace,
+                    message=f"RoleBinding references powerful role: {role_name}",
+                    recommendation=f"Review if {role_name} permissions are required",
+                )
+            )
 
     # Check for subjects with no namespace (could be cluster-wide)
     if binding.subjects:
         for subject in binding.subjects:
             if subject.kind == "ServiceAccount" and not subject.namespace:
-                findings.append({
-                    "severity": "LOW",
-                    "resource": f"RoleBinding/{binding_name}",
-                    "message": f"ServiceAccount '{subject.name}' has no namespace specified",
-                })
+                findings.append(
+                    AuditFinding(
+                        severity=AuditSeverity.INFO,
+                        finding_type=AuditFindingType.CROSS_NAMESPACE_ACCESS,
+                        resource_kind="RoleBinding",
+                        resource_name=binding_name,
+                        resource_namespace=namespace,
+                        message=f"ServiceAccount '{subject.name}' has no namespace specified",
+                        recommendation="Specify namespace for ServiceAccount subject",
+                    )
+                )
 
     return findings
 

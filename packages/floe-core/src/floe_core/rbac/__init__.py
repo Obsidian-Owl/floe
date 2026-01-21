@@ -29,6 +29,14 @@ __all__ = [
     "RBACGenerationAuditEvent",
     "RBACGenerationResult",
     "log_rbac_event",
+    # Security audit functions (FR-070)
+    "detect_wildcard_permissions",
+    "check_missing_resource_names",
+    # Validation functions (FR-061, FR-062)
+    "validate_manifest_against_config",
+    # Diff functions (FR-063)
+    "compute_resource_diff",
+    "compute_rbac_diff",
 ]
 
 
@@ -83,5 +91,28 @@ def __getattr__(name: str) -> Any:
         from floe_core.rbac.audit import log_rbac_event
 
         return log_rbac_event
+    # Security audit functions (FR-070)
+    if name == "detect_wildcard_permissions":
+        from floe_core.rbac.audit import detect_wildcard_permissions
+
+        return detect_wildcard_permissions
+    if name == "check_missing_resource_names":
+        from floe_core.rbac.audit import check_missing_resource_names
+
+        return check_missing_resource_names
+    # Validation functions (FR-061, FR-062)
+    if name == "validate_manifest_against_config":
+        from floe_core.rbac.validate import validate_manifest_against_config
+
+        return validate_manifest_against_config
+    # Diff functions (FR-063)
+    if name == "compute_resource_diff":
+        from floe_core.rbac.diff import compute_resource_diff
+
+        return compute_resource_diff
+    if name == "compute_rbac_diff":
+        from floe_core.rbac.diff import compute_rbac_diff
+
+        return compute_rbac_diff
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

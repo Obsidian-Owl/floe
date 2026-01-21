@@ -3,7 +3,7 @@
 Task ID: T035
 Phase: 4 - User Story 2 (RBAC Command Migration)
 User Story: US2 - RBAC Command Migration
-Requirements: FR-026, FR-027
+Requirements: FR-026, FR-027, FR-063
 
 This module implements the `floe rbac diff` command which:
 - Compares expected vs deployed RBAC
@@ -19,11 +19,14 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+
+if TYPE_CHECKING:
+    from floe_core.schemas.rbac_diff import DiffChangeType, RBACDiffResult
 
 
 @click.command(
@@ -122,6 +125,10 @@ def diff_command(
         # Try to import yaml
         import yaml
 
+        # Import type-safe diff functions
+        from floe_core.rbac.diff import compute_rbac_diff
+        from floe_core.schemas.rbac_diff import DiffChangeType
+
         # Load kubeconfig
         if kubeconfig:
             k8s_config.load_kube_config(config_file=str(kubeconfig))
@@ -132,7 +139,7 @@ def diff_command(
                 k8s_config.load_kube_config()
 
         # Load expected manifests
-        expected: dict[str, list[dict[str, Any]]] = {}
+        expected_resources: list[dict[str, Any]] = []
         manifest_files = ["roles.yaml", "rolebindings.yaml", "serviceaccounts.yaml"]
 
         for filename in manifest_files:
@@ -141,101 +148,69 @@ def diff_command(
                 content = file_path.read_text()
                 if content.strip():
                     docs = list(yaml.safe_load_all(content))
-                    expected[filename] = [d for d in docs if d]
-                else:
-                    expected[filename] = []
-            else:
-                expected[filename] = []
+                    for doc in docs:
+                        if doc:
+                            expected_resources.append(doc)
 
         # Get deployed resources
         rbac_api = client.RbacAuthorizationV1Api()
         core_api = client.CoreV1Api()
 
-        deployed_roles = {r.metadata.name: r for r in rbac_api.list_namespaced_role(namespace).items}
-        deployed_bindings = {
-            rb.metadata.name: rb for rb in rbac_api.list_namespaced_role_binding(namespace).items
-        }
-        deployed_sa = {
-            sa.metadata.name: sa for sa in core_api.list_namespaced_service_account(namespace).items
-        }
+        actual_resources: list[dict[str, Any]] = []
 
-        # Compare and build diff
-        diff_results: dict[str, Any] = {
-            "added": [],
-            "removed": [],
-            "modified": [],
-        }
+        # Get deployed roles
+        for role in rbac_api.list_namespaced_role(namespace).items:
+            actual_resources.append(_k8s_to_dict(role, "Role"))
 
-        # Compare roles
-        expected_roles = {r["metadata"]["name"]: r for r in expected.get("roles.yaml", []) if r}
-        for name in expected_roles:
-            if name not in deployed_roles:
-                diff_results["added"].append({"kind": "Role", "name": name})
+        # Get deployed role bindings
+        for rb in rbac_api.list_namespaced_role_binding(namespace).items:
+            actual_resources.append(_k8s_to_dict(rb, "RoleBinding"))
 
-        for name in deployed_roles:
-            if name not in expected_roles:
-                diff_results["removed"].append({"kind": "Role", "name": name})
+        # Get deployed service accounts (skip default)
+        for sa in core_api.list_namespaced_service_account(namespace).items:
+            if sa.metadata.name != "default":
+                actual_resources.append(_k8s_to_dict(sa, "ServiceAccount"))
 
-        # Compare role bindings
-        expected_bindings = {
-            rb["metadata"]["name"]: rb for rb in expected.get("rolebindings.yaml", []) if rb
-        }
-        for name in expected_bindings:
-            if name not in deployed_bindings:
-                diff_results["added"].append({"kind": "RoleBinding", "name": name})
+        # Use type-safe diff function
+        diff_result = compute_rbac_diff(
+            expected_resources=expected_resources,
+            actual_resources=actual_resources,
+            expected_source=str(manifest_dir),
+            actual_source=f"cluster:{namespace}",
+        )
 
-        for name in deployed_bindings:
-            if name not in expected_bindings:
-                diff_results["removed"].append({"kind": "RoleBinding", "name": name})
-
-        # Compare service accounts
-        expected_sa = {
-            sa["metadata"]["name"]: sa for sa in expected.get("serviceaccounts.yaml", []) if sa
-        }
-        for name in expected_sa:
-            if name not in deployed_sa:
-                diff_results["added"].append({"kind": "ServiceAccount", "name": name})
-
-        for name in deployed_sa:
-            if name not in expected_sa and name != "default":  # Skip default SA
-                diff_results["removed"].append({"kind": "ServiceAccount", "name": name})
-
-        # Output results
+        # Output results using type-safe models
         if output_format == "json":
-            import json
-
-            result = {
-                "namespace": namespace,
-                "manifest_dir": str(manifest_dir),
-                "diff": diff_results,
-            }
-            click.echo(json.dumps(result, indent=2))
+            click.echo(diff_result.model_dump_json(indent=2))
         else:
-            total_changes = (
-                len(diff_results["added"])
-                + len(diff_results["removed"])
-                + len(diff_results["modified"])
-            )
-
-            if total_changes == 0:
+            if not diff_result.has_differences():
                 success("No differences found. Cluster matches expected manifests.")
             else:
+                total_changes = (
+                    diff_result.added_count
+                    + diff_result.removed_count
+                    + diff_result.modified_count
+                )
                 warning(f"Found {total_changes} difference(s):")
 
-                if diff_results["added"]:
+                by_type = diff_result.diffs_by_change_type()
+
+                if by_type[DiffChangeType.ADDED]:
                     click.echo("\nTo be created (in manifest but not deployed):")
-                    for item in diff_results["added"]:
-                        click.echo(f"  + {item['kind']}/{item['name']}")
+                    for diff in by_type[DiffChangeType.ADDED]:
+                        click.echo(f"  + {diff.resource_kind}/{diff.resource_name}")
 
-                if diff_results["removed"]:
+                if by_type[DiffChangeType.REMOVED]:
                     click.echo("\nTo be removed (deployed but not in manifest):")
-                    for item in diff_results["removed"]:
-                        click.echo(f"  - {item['kind']}/{item['name']}")
+                    for diff in by_type[DiffChangeType.REMOVED]:
+                        click.echo(f"  - {diff.resource_kind}/{diff.resource_name}")
 
-                if diff_results["modified"]:
+                if by_type[DiffChangeType.MODIFIED]:
                     click.echo("\nTo be modified:")
-                    for item in diff_results["modified"]:
-                        click.echo(f"  ~ {item['kind']}/{item['name']}")
+                    for diff in by_type[DiffChangeType.MODIFIED]:
+                        click.echo(f"  ~ {diff.resource_kind}/{diff.resource_name}")
+                        for detail in diff.diff_details:
+                            click.echo(f"      {detail}")
 
     except FileNotFoundError as e:
         error_exit(
@@ -247,6 +222,58 @@ def diff_command(
             f"RBAC diff failed: {e}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
+
+
+def _k8s_to_dict(resource: Any, kind: str) -> dict[str, Any]:
+    """Convert a Kubernetes API resource to a dictionary.
+
+    Args:
+        resource: Kubernetes API resource object.
+        kind: K8s resource kind.
+
+    Returns:
+        Dictionary representation of the resource.
+    """
+    result: dict[str, Any] = {
+        "kind": kind,
+        "apiVersion": "v1" if kind == "ServiceAccount" else "rbac.authorization.k8s.io/v1",
+        "metadata": {
+            "name": resource.metadata.name,
+            "namespace": resource.metadata.namespace,
+        },
+    }
+
+    # Add role-specific fields
+    if kind == "Role" and hasattr(resource, "rules") and resource.rules:
+        result["rules"] = [
+            {
+                "apiGroups": rule.api_groups or [],
+                "resources": rule.resources or [],
+                "verbs": rule.verbs or [],
+                "resourceNames": rule.resource_names or [],
+            }
+            for rule in resource.rules
+        ]
+
+    # Add role binding-specific fields
+    if kind == "RoleBinding":
+        if hasattr(resource, "role_ref") and resource.role_ref:
+            result["roleRef"] = {
+                "apiGroup": resource.role_ref.api_group,
+                "kind": resource.role_ref.kind,
+                "name": resource.role_ref.name,
+            }
+        if hasattr(resource, "subjects") and resource.subjects:
+            result["subjects"] = [
+                {
+                    "kind": subj.kind,
+                    "name": subj.name,
+                    "namespace": subj.namespace,
+                }
+                for subj in resource.subjects
+            ]
+
+    return result
 
 
 __all__: list[str] = ["diff_command"]
