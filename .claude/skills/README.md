@@ -14,6 +14,26 @@ Each skill follows the **progressive disclosure** pattern - injecting context on
 
 ## Available Skills
 
+### Code Quality & Technical Debt
+
+#### [tech-debt-review](tech-debt-review/SKILL.md)
+**Use when**: Reviewing code quality before PR, conducting periodic health checks, or investigating maintainability issues
+
+**Capabilities**:
+- Comprehensive 10-agent parallel analysis
+- PR mode (changed files) and full audit mode
+- Category filtering (complexity, deps, testing, etc.)
+- Historical trend tracking with debt score
+- Priority-based remediation recommendations
+
+**Key Resources**:
+- [SKILL.md](tech-debt-review/SKILL.md) - Main orchestrator skill
+- [debt-taxonomy.md](tech-debt-review/references/debt-taxonomy.md) - Complete debt categories
+- [prioritization.md](tech-debt-review/references/prioritization.md) - Risk/impact/effort framework
+- [severity-criteria.md](tech-debt-review/references/severity-criteria.md) - Severity classification
+
+---
+
 ### Infrastructure & Deployment
 
 #### [helm-k8s-deployment](helm-k8s-skill/SKILL.md)
@@ -193,6 +213,9 @@ Skills are automatically available. When working on a component:
 | Configure Polaris catalog | polaris-catalog | pyiceberg-storage |
 | Define semantic layer | cube-semantic-layer | dbt-transformations |
 | Implement compiler | pydantic-schemas | All (integration) |
+| Code quality review | tech-debt-review | - |
+| Pre-PR health check | tech-debt-review | speckit-test-review |
+| Monthly audit | tech-debt-review (--all) | - |
 
 ## Skill Development Guidelines
 
@@ -276,7 +299,7 @@ Skills reference architecture docs for requirements:
 
 ## Summary
 
-✅ **6 Skills** covering all major components
+✅ **7 Skills** covering all major components
 ✅ **Research-driven** - discover, don't invent
 ✅ **Context-injecting** - guide, don't prescribe
 ✅ **Version-agnostic** - verify runtime state
