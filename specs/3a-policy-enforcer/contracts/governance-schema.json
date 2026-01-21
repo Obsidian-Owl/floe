@@ -32,6 +32,22 @@
     "quality_gates": {
       "$ref": "#/$defs/QualityGatesConfig",
       "description": "Quality gate thresholds"
+    },
+    "custom_rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CustomRule"
+      },
+      "default": [],
+      "description": "Custom validation rules (Epic 3B)"
+    },
+    "policy_overrides": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PolicyOverride"
+      },
+      "default": [],
+      "description": "Override rules for legacy/migration support (Epic 3B)"
     }
   },
   "additionalProperties": false,
@@ -134,6 +150,130 @@
         }
       },
       "additionalProperties": false
+    },
+    "CustomRule": {
+      "oneOf": [
+        { "$ref": "#/$defs/RequireTagsForPrefix" },
+        { "$ref": "#/$defs/RequireMetaField" },
+        { "$ref": "#/$defs/RequireTestsOfType" }
+      ],
+      "description": "Discriminated union of custom rule types (Epic 3B)"
+    },
+    "RequireTagsForPrefix": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "require_tags_for_prefix",
+          "description": "Rule type discriminator"
+        },
+        "prefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model name prefix to match (e.g., 'gold_')"
+        },
+        "required_tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Tags that must be present on matching models"
+        },
+        "applies_to": {
+          "type": "string",
+          "default": "*",
+          "description": "Glob pattern for model selection (default: all models)"
+        }
+      },
+      "required": ["type", "prefix", "required_tags"],
+      "additionalProperties": false
+    },
+    "RequireMetaField": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "require_meta_field",
+          "description": "Rule type discriminator"
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the required meta field (e.g., 'owner')"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether field must have non-empty value"
+        },
+        "applies_to": {
+          "type": "string",
+          "default": "*",
+          "description": "Glob pattern for model selection (default: all models)"
+        }
+      },
+      "required": ["type", "field"],
+      "additionalProperties": false
+    },
+    "RequireTestsOfType": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "require_tests_of_type",
+          "description": "Rule type discriminator"
+        },
+        "test_types": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "List of required test types (e.g., ['not_null', 'unique'])"
+        },
+        "min_columns": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Minimum columns that must have these tests"
+        },
+        "applies_to": {
+          "type": "string",
+          "default": "*",
+          "description": "Glob pattern for model selection (default: all models)"
+        }
+      },
+      "required": ["type", "test_types"],
+      "additionalProperties": false
+    },
+    "PolicyOverride": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Glob pattern matching model names (e.g., 'legacy_*', 'test_*')"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["downgrade", "exclude"],
+          "description": "Override action: 'downgrade' (error to warning) or 'exclude' (skip validation)"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Audit trail explaining why this override exists"
+        },
+        "expires": {
+          "type": ["string", "null"],
+          "format": "date",
+          "description": "Expiration date (ISO-8601). Override ignored after this date."
+        },
+        "policy_types": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string",
+            "enum": ["naming", "coverage", "documentation", "semantic", "custom"]
+          },
+          "description": "Limit override to specific policy types (default: all policies)"
+        }
+      },
+      "required": ["pattern", "action", "reason"],
+      "additionalProperties": false
     }
   },
   "examples": [
@@ -152,6 +292,29 @@
           "gold": 100
         }
       }
+    },
+    {
+      "policy_enforcement_level": "warn",
+      "custom_rules": [
+        {
+          "type": "require_tags_for_prefix",
+          "prefix": "gold_",
+          "required_tags": ["tested", "documented"]
+        },
+        {
+          "type": "require_meta_field",
+          "field": "owner",
+          "applies_to": "gold_*"
+        }
+      ],
+      "policy_overrides": [
+        {
+          "pattern": "legacy_*",
+          "action": "downgrade",
+          "reason": "Legacy models being migrated - tracked in JIRA-123",
+          "expires": "2026-06-01"
+        }
+      ]
     }
   ]
 }
