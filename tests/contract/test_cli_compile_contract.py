@@ -353,28 +353,90 @@ class TestCompileCommandIntegrationContract:
     ) -> None:
         """Contract: floe platform compile produces CompiledArtifacts.
 
-        This test will invoke the actual CLI and validate output.
-        Currently a placeholder until compile command is implemented.
-
-        TDD: This test should FAIL until T014 (compile command) is done.
+        This test validates that the CLI correctly writes CompiledArtifacts
+        to the specified output path when compilation succeeds.
         """
-        # TODO: Invoke CLI once implemented
-        # from click.testing import CliRunner
-        # from floe_core.cli.main import cli
-        #
-        # runner = CliRunner()
-        # result = runner.invoke(cli, [
-        #     "platform", "compile",
-        #     "--spec", str(spec_path),
-        #     "--manifest", str(manifest_path),
-        #     "--output", str(temp_output_dir / "artifacts.json"),
-        # ])
-        #
-        # assert result.exit_code == 0
-        # assert (temp_output_dir / "artifacts.json").exists()
+        from datetime import datetime
+        from unittest.mock import patch
 
-        # Placeholder: test passes when compile is implemented
-        pass
+        from click.testing import CliRunner
+
+        from floe_core.cli.main import cli
+        from floe_core.schemas.compiled_artifacts import (
+            CompilationMetadata,
+            CompiledArtifacts,
+            ObservabilityConfig,
+            ProductIdentity,
+        )
+        from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+        # Create mock compiled artifacts that compile_pipeline would return
+        mock_artifacts = CompiledArtifacts(
+            version="0.3.0",
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(),
+                floe_version="0.3.0",
+                source_hash="sha256:test123",
+                product_name="test-product",
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id="default.test_product",
+                domain="default",
+                repository="github.com/acme/test",
+            ),
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    resource_attributes=ResourceAttributes(
+                        service_name="test",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="test",
+                        floe_product_name="test",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage_namespace="test-namespace",
+            ),
+        )
+
+        # Create test spec and manifest files
+        spec_path = temp_output_dir / "floe.yaml"
+        spec_path.write_text("name: test\nversion: '1.0.0'")
+
+        manifest_path = temp_output_dir / "manifest.yaml"
+        manifest_path.write_text("name: test-platform\nversion: '1.0.0'")
+
+        output_path = temp_output_dir / "artifacts.json"
+
+        runner = CliRunner()
+        with patch(
+            "floe_core.compilation.stages.compile_pipeline",
+            return_value=mock_artifacts,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "platform",
+                    "compile",
+                    "--spec",
+                    str(spec_path),
+                    "--manifest",
+                    str(manifest_path),
+                    "--output",
+                    str(output_path),
+                ],
+            )
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        assert output_path.exists(), "Output file not created"
+
+        # Verify output is valid JSON with expected fields
+        data = json.loads(output_path.read_text())
+        assert data["version"] == "0.3.0"
+        assert "metadata" in data
+        assert "identity" in data
 
     @pytest.mark.requirement("FR-012")
     def test_cli_compile_produces_enforcement_report(
@@ -383,24 +445,193 @@ class TestCompileCommandIntegrationContract:
     ) -> None:
         """Contract: floe platform compile --enforcement-report produces report.
 
-        This test will invoke the actual CLI and validate report output.
-        Currently a placeholder until compile command is implemented.
-
-        TDD: This test should FAIL until T014 (compile command) is done.
+        This test validates that the CLI produces an enforcement report
+        at the specified path when the --enforcement-report option is used.
         """
-        # TODO: Invoke CLI once implemented
-        # Placeholder: test passes when compile is implemented
-        pass
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from floe_core.cli.main import cli
+        from floe_core.schemas.compiled_artifacts import (
+            CompilationMetadata,
+            CompiledArtifacts,
+            ObservabilityConfig,
+            ProductIdentity,
+        )
+        from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+        # Create mock compiled artifacts
+        mock_artifacts = CompiledArtifacts(
+            version="0.3.0",
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(),
+                floe_version="0.3.0",
+                source_hash="sha256:test123",
+                product_name="test-product",
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id="default.test_product",
+                domain="default",
+                repository="github.com/acme/test",
+            ),
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    resource_attributes=ResourceAttributes(
+                        service_name="test",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="test",
+                        floe_product_name="test",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage_namespace="test-namespace",
+            ),
+        )
+
+        # Create test spec and manifest files
+        spec_path = temp_output_dir / "floe.yaml"
+        spec_path.write_text("name: test\nversion: '1.0.0'")
+
+        manifest_path = temp_output_dir / "manifest.yaml"
+        manifest_path.write_text("name: test-platform\nversion: '1.0.0'")
+
+        report_path = temp_output_dir / "enforcement_report.json"
+
+        runner = CliRunner()
+        with patch(
+            "floe_core.compilation.stages.compile_pipeline",
+            return_value=mock_artifacts,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "platform",
+                    "compile",
+                    "--spec",
+                    str(spec_path),
+                    "--manifest",
+                    str(manifest_path),
+                    "--enforcement-report",
+                    str(report_path),
+                ],
+            )
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        assert report_path.exists(), "Enforcement report not created"
+
+        # Verify report is valid JSON
+        report_data = json.loads(report_path.read_text())
+        assert isinstance(report_data, dict)
 
     @pytest.mark.requirement("FR-013")
-    def test_cli_compile_supports_all_enforcement_formats(self) -> None:
+    def test_cli_compile_supports_all_enforcement_formats(
+        self,
+        temp_output_dir: Path,
+    ) -> None:
         """Contract: compile supports json, sarif, html enforcement formats.
 
-        This test will invoke the actual CLI with each format option.
-        Currently a placeholder until compile command is implemented.
-
-        TDD: This test should FAIL until T014 (compile command) is done.
+        This test validates that the CLI correctly handles all three
+        enforcement format options (json, sarif, html).
         """
-        # TODO: Invoke CLI with each format once implemented
-        # Placeholder: test passes when compile is implemented
-        pass
+        from datetime import datetime
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from floe_core.cli.main import cli
+        from floe_core.schemas.compiled_artifacts import (
+            CompilationMetadata,
+            CompiledArtifacts,
+            ObservabilityConfig,
+            ProductIdentity,
+        )
+        from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+        # Create mock compiled artifacts
+        mock_artifacts = CompiledArtifacts(
+            version="0.3.0",
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(),
+                floe_version="0.3.0",
+                source_hash="sha256:test123",
+                product_name="test-product",
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id="default.test_product",
+                domain="default",
+                repository="github.com/acme/test",
+            ),
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    resource_attributes=ResourceAttributes(
+                        service_name="test",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="test",
+                        floe_product_name="test",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage_namespace="test-namespace",
+            ),
+        )
+
+        # Create test spec and manifest files
+        spec_path = temp_output_dir / "floe.yaml"
+        spec_path.write_text("name: test\nversion: '1.0.0'")
+
+        manifest_path = temp_output_dir / "manifest.yaml"
+        manifest_path.write_text("name: test-platform\nversion: '1.0.0'")
+
+        formats_and_extensions = [
+            ("json", ".json"),
+            ("sarif", ".sarif"),
+            ("html", ".html"),
+        ]
+
+        runner = CliRunner()
+        for format_name, extension in formats_and_extensions:
+            report_path = temp_output_dir / f"report{extension}"
+
+            with patch(
+                "floe_core.compilation.stages.compile_pipeline",
+                return_value=mock_artifacts,
+            ):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "platform",
+                        "compile",
+                        "--spec",
+                        str(spec_path),
+                        "--manifest",
+                        str(manifest_path),
+                        "--enforcement-report",
+                        str(report_path),
+                        "--enforcement-format",
+                        format_name,
+                    ],
+                )
+
+            assert result.exit_code == 0, (
+                f"CLI failed for format {format_name}: {result.output}"
+            )
+            assert report_path.exists(), (
+                f"Enforcement report not created for format {format_name}"
+            )
+
+            # Basic content validation
+            content = report_path.read_text()
+            if format_name == "html":
+                assert "<!DOCTYPE html>" in content or "<html>" in content
+            else:
+                # JSON and SARIF are both valid JSON
+                data = json.loads(content)
+                assert isinstance(data, dict)

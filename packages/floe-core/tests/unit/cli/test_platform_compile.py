@@ -318,6 +318,7 @@ class TestPlatformCompileCommand:
 class TestPlatformGroup:
     """Tests for the platform command group."""
 
+    @pytest.mark.requirement("FR-015")
     def test_platform_group_exists(
         self,
         cli_runner: CliRunner,
@@ -333,6 +334,7 @@ class TestPlatformGroup:
         assert result.exit_code == 0
         assert "platform" in result.output.lower()
 
+    @pytest.mark.requirement("FR-010")
     def test_platform_shows_compile_subcommand(
         self,
         cli_runner: CliRunner,

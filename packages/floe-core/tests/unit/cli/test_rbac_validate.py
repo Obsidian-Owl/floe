@@ -238,6 +238,7 @@ class TestRbacValidateCommand:
 class TestRbacValidateInGroup:
     """Tests for validate subcommand in rbac group."""
 
+    @pytest.mark.requirement("FR-023")
     def test_rbac_shows_validate_subcommand(
         self,
         cli_runner: CliRunner,

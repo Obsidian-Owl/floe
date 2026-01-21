@@ -210,6 +210,7 @@ class TestRbacAuditKubernetesDependency:
 class TestRbacAuditInGroup:
     """Tests for audit subcommand in rbac group."""
 
+    @pytest.mark.requirement("FR-024")
     def test_rbac_shows_audit_subcommand(
         self,
         cli_runner: CliRunner,

@@ -260,6 +260,7 @@ class TestRbacDiffCommand:
 class TestRbacDiffInGroup:
     """Tests for diff subcommand in rbac group."""
 
+    @pytest.mark.requirement("FR-026")
     def test_rbac_shows_diff_subcommand(
         self,
         cli_runner: CliRunner,

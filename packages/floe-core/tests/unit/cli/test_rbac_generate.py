@@ -218,6 +218,7 @@ class TestRbacGenerateCommand:
 class TestRbacGroup:
     """Tests for the rbac command group."""
 
+    @pytest.mark.requirement("FR-022")
     def test_rbac_group_exists(
         self,
         cli_runner: CliRunner,
@@ -233,6 +234,7 @@ class TestRbacGroup:
         assert result.exit_code == 0
         assert "rbac" in result.output.lower()
 
+    @pytest.mark.requirement("FR-022")
     def test_rbac_shows_generate_subcommand(
         self,
         cli_runner: CliRunner,
