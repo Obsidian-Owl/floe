@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import click
 
+from floe_core.cli.artifact.push import push_command
+
 
 @click.group(
     name="artifact",
@@ -27,6 +29,10 @@ def artifact() -> None:
     in OCI registries.
     """
     pass
+
+
+# Register subcommands
+artifact.add_command(push_command)
 
 
 __all__: list[str] = ["artifact"]
