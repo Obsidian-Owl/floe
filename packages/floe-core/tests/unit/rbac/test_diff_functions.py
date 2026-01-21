@@ -277,9 +277,7 @@ class TestComputeRbacDiff:
         """Test diff result includes source information."""
         from floe_core.rbac.diff import compute_rbac_diff
 
-        result = compute_rbac_diff(
-            [], [], "deploy/rbac/manifests.yaml", "cluster:production"
-        )
+        result = compute_rbac_diff([], [], "deploy/rbac/manifests.yaml", "cluster:production")
 
         assert result.expected_source == "deploy/rbac/manifests.yaml"
         assert result.actual_source == "cluster:production"
@@ -422,4 +420,3 @@ class TestCompareValues:
 
         assert len(diffs) == 1
         assert "type" in diffs[0].lower()
-

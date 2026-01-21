@@ -191,9 +191,7 @@ class SemanticValidator:
 
         # Build adjacency list for models only
         model_ids: set[str] = {
-            node_id
-            for node_id, node in nodes.items()
-            if node.get("resource_type") == "model"
+            node_id for node_id, node in nodes.items() if node.get("resource_type") == "model"
         }
 
         # Build graph: node_id -> list of dependent node_ids
@@ -230,9 +228,7 @@ class SemanticValidator:
         # If we couldn't sort all nodes, there's a cycle
         if sorted_count < len(model_ids):
             # Find nodes involved in cycle (non-zero in-degree after sort)
-            cycle_nodes = [
-                node_id for node_id, degree in in_degree.items() if degree > 0
-            ]
+            cycle_nodes = [node_id for node_id, degree in in_degree.items() if degree > 0]
 
             if cycle_nodes:
                 # Find the actual cycle path using DFS
@@ -297,8 +293,7 @@ class SemanticValidator:
             if cycle:
                 # Convert to model names
                 return [
-                    nodes.get(nid, {}).get("name", self._extract_model_name(nid))
-                    for nid in cycle
+                    nodes.get(nid, {}).get("name", self._extract_model_name(nid)) for nid in cycle
                 ]
 
         # Fallback: just return names of cycle nodes
@@ -394,8 +389,7 @@ class SemanticValidator:
             policy_type="semantic",
             model_name=model_name,
             message=(
-                f"Model '{model_name}' references undefined source "
-                f"'{source_name}.{table_name}'"
+                f"Model '{model_name}' references undefined source '{source_name}.{table_name}'"
             ),
             expected=f"Source '{source_name}.{table_name}' should be defined in a sources.yml file",
             actual=f"source('{source_name}', '{table_name}') resolves to nothing (ID: {source_id})",

@@ -120,9 +120,7 @@ def _build_template_context(result: EnforcementResult) -> dict[str, Any]:
     timestamp = result.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # Convert violations to dictionaries for template
-    violations = [
-        _violation_to_dict(v) for v in result.violations
-    ]
+    violations = [_violation_to_dict(v) for v in result.violations]
 
     # Convert summary to dictionary
     summary = result.summary.model_dump()

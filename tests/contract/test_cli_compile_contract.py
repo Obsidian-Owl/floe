@@ -617,12 +617,8 @@ class TestCompileCommandIntegrationContract:
                     ],
                 )
 
-            assert result.exit_code == 0, (
-                f"CLI failed for format {format_name}: {result.output}"
-            )
-            assert report_path.exists(), (
-                f"Enforcement report not created for format {format_name}"
-            )
+            assert result.exit_code == 0, f"CLI failed for format {format_name}: {result.output}"
+            assert report_path.exists(), f"Enforcement report not created for format {format_name}"
 
             # Basic content validation
             content = report_path.read_text()

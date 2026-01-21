@@ -523,9 +523,7 @@ class PolicyEnforcer:
 
         for violation in violations:
             # Find first matching override
-            matched_override = PolicyEnforcer._find_matching_override(
-                violation, active_overrides
-            )
+            matched_override = PolicyEnforcer._find_matching_override(violation, active_overrides)
 
             if matched_override is None:
                 # No match - keep violation unchanged
@@ -542,9 +540,7 @@ class PolicyEnforcer:
                 # Don't add to result - violation is excluded
             else:
                 # Downgrade action - convert error to warning (FR-012)
-                downgraded = PolicyEnforcer._apply_downgrade(
-                    violation, matched_override.pattern
-                )
+                downgraded = PolicyEnforcer._apply_downgrade(violation, matched_override.pattern)
                 log.warning(
                     "override_downgrade_applied",
                     pattern=matched_override.pattern,
@@ -689,9 +685,7 @@ class PolicyEnforcer:
 
         for override in overrides:
             # Check if pattern matches any model
-            matched_any = any(
-                fnmatch.fnmatch(name, override.pattern) for name in model_names
-            )
+            matched_any = any(fnmatch.fnmatch(name, override.pattern) for name in model_names)
             if not matched_any:
                 log.warning(
                     "override_matched_zero_models",

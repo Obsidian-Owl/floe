@@ -298,11 +298,13 @@ class TestCustomRuleDiscriminatedUnion:
         from pydantic import TypeAdapter
 
         adapter: TypeAdapter[CustomRule] = TypeAdapter(CustomRule)
-        rule: CustomRule = adapter.validate_python({
-            "type": "require_tags_for_prefix",
-            "prefix": "gold_",
-            "required_tags": ["tested"],
-        })
+        rule: CustomRule = adapter.validate_python(
+            {
+                "type": "require_tags_for_prefix",
+                "prefix": "gold_",
+                "required_tags": ["tested"],
+            }
+        )
 
         assert isinstance(rule, RequireTagsForPrefix)
         assert rule.prefix == "gold_"
@@ -318,10 +320,12 @@ class TestCustomRuleDiscriminatedUnion:
         from pydantic import TypeAdapter
 
         adapter: TypeAdapter[CustomRule] = TypeAdapter(CustomRule)
-        rule: CustomRule = adapter.validate_python({
-            "type": "require_meta_field",
-            "field": "owner",
-        })
+        rule: CustomRule = adapter.validate_python(
+            {
+                "type": "require_meta_field",
+                "field": "owner",
+            }
+        )
 
         assert isinstance(rule, RequireMetaField)
         assert rule.field == "owner"
@@ -337,10 +341,12 @@ class TestCustomRuleDiscriminatedUnion:
         from pydantic import TypeAdapter
 
         adapter: TypeAdapter[CustomRule] = TypeAdapter(CustomRule)
-        rule: CustomRule = adapter.validate_python({
-            "type": "require_tests_of_type",
-            "test_types": ["not_null", "unique"],
-        })
+        rule: CustomRule = adapter.validate_python(
+            {
+                "type": "require_tests_of_type",
+                "test_types": ["not_null", "unique"],
+            }
+        )
 
         assert isinstance(rule, RequireTestsOfType)
         assert rule.test_types == ["not_null", "unique"]
@@ -357,10 +363,12 @@ class TestCustomRuleDiscriminatedUnion:
 
         adapter: TypeAdapter[CustomRule] = TypeAdapter(CustomRule)
         with pytest.raises(ValidationError) as exc_info:
-            adapter.validate_python({
-                "type": "invalid_rule_type",
-                "field": "owner",
-            })
+            adapter.validate_python(
+                {
+                    "type": "invalid_rule_type",
+                    "field": "owner",
+                }
+            )
 
         # Should mention the invalid discriminator value
         error_str = str(exc_info.value).lower()
@@ -378,9 +386,11 @@ class TestCustomRuleDiscriminatedUnion:
 
         adapter: TypeAdapter[CustomRule] = TypeAdapter(CustomRule)
         with pytest.raises(ValidationError) as exc_info:
-            adapter.validate_python({
-                "field": "owner",
-            })
+            adapter.validate_python(
+                {
+                    "field": "owner",
+                }
+            )
 
         # Should mention missing discriminator
         error_str = str(exc_info.value).lower()

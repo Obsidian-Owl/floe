@@ -63,9 +63,7 @@ def export_json(
     data = result.model_dump(mode="json")
 
     # Write with pretty formatting for readability
-    output_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False, default=str)
-    )
+    output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str))
 
     log.info(
         "json_export_complete",

@@ -150,12 +150,8 @@ def audit_command(
                     for rule in role.rules
                 ]
                 # Use type-safe detection functions
-                findings.extend(
-                    detect_wildcard_permissions(rules_dicts, role_name, namespace)
-                )
-                findings.extend(
-                    check_missing_resource_names(rules_dicts, role_name, namespace)
-                )
+                findings.extend(detect_wildcard_permissions(rules_dicts, role_name, namespace))
+                findings.extend(check_missing_resource_names(rules_dicts, role_name, namespace))
             # Also check for legacy dict-based findings
             role_findings = _audit_role(role, namespace)
             findings.extend(role_findings)

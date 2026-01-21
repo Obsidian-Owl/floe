@@ -496,9 +496,7 @@ class TestViolationContextEdgeCases:
         )
 
         # Find violation for bronze_orders (if any)
-        bronze_violations = [
-            v for v in result.violations if v.model_name == "bronze_orders"
-        ]
+        bronze_violations = [v for v in result.violations if v.model_name == "bronze_orders"]
 
         if bronze_violations:
             # downstream_impact should be populated

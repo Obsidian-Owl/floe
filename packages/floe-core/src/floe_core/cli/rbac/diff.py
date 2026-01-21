@@ -188,9 +188,7 @@ def diff_command(
                 success("No differences found. Cluster matches expected manifests.")
             else:
                 total_changes = (
-                    diff_result.added_count
-                    + diff_result.removed_count
-                    + diff_result.modified_count
+                    diff_result.added_count + diff_result.removed_count + diff_result.modified_count
                 )
                 warning(f"Found {total_changes} difference(s):")
 

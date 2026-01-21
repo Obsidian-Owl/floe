@@ -69,8 +69,7 @@ class TestCompileIntegrationWithRealFiles:
 
         # Should succeed
         assert result.exit_code == 0, (
-            f"Compile failed with exit code {result.exit_code}.\n"
-            f"Output: {result.output}"
+            f"Compile failed with exit code {result.exit_code}.\nOutput: {result.output}"
         )
 
         # Verify output file exists
@@ -350,18 +349,14 @@ class TestCompileProductMetadata:
         # Verify product metadata from quickstart floe.yaml
         # Schema uses 'metadata' for product info and 'identity' for identification
         metadata = content.get("metadata", {})
-        assert (
-            metadata.get("product_name") == "customer-360"
-        ), "Product name should match floe.yaml"
-        assert (
-            metadata.get("product_version") == "1.0.0"
-        ), "Product version should match floe.yaml"
+        assert metadata.get("product_name") == "customer-360", "Product name should match floe.yaml"
+        assert metadata.get("product_version") == "1.0.0", "Product version should match floe.yaml"
 
         # Verify identity contains product_id derived from product name
         identity = content.get("identity", {})
-        assert "customer_360" in identity.get(
-            "product_id", ""
-        ), "Product ID should contain normalized product name"
+        assert "customer_360" in identity.get("product_id", ""), (
+            "Product ID should contain normalized product name"
+        )
 
 
 class TestCompileErrorHandling:

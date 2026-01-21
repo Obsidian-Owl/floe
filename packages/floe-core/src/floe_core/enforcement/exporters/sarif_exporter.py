@@ -28,7 +28,9 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # SARIF 2.1.0 schema URL
-SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+SARIF_SCHEMA = (
+    "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+)
 SARIF_VERSION = "2.1.0"
 
 # Tool information
@@ -148,9 +150,7 @@ def export_sarif(
     sarif_data = _build_sarif_document(result)
 
     # Write with pretty formatting
-    output_path.write_text(
-        json.dumps(sarif_data, indent=2, ensure_ascii=False)
-    )
+    output_path.write_text(json.dumps(sarif_data, indent=2, ensure_ascii=False))
 
     log.info(
         "sarif_export_complete",
@@ -194,9 +194,7 @@ def _build_sarif_document(result: EnforcementResult) -> dict[str, Any]:
                         "endTimeUtc": result.timestamp.isoformat().replace("+00:00", "Z"),
                     }
                 ],
-                "results": [
-                    _build_result(violation) for violation in result.violations
-                ],
+                "results": [_build_result(violation) for violation in result.violations],
             }
         ],
     }
@@ -231,14 +229,16 @@ def _build_rules(rule_ids: set[str]) -> list[dict[str, Any]]:
             "helpUri": TOOL_INFO_URI,
         }
         rule_def = RULE_DEFINITIONS.get(rule_id, default_rule)
-        rules.append({
-            "id": rule_id,
-            "name": rule_def["name"],
-            "shortDescription": {
-                "text": rule_def["shortDescription"],
-            },
-            "helpUri": rule_def["helpUri"],
-        })
+        rules.append(
+            {
+                "id": rule_id,
+                "name": rule_def["name"],
+                "shortDescription": {
+                    "text": rule_def["shortDescription"],
+                },
+                "helpUri": rule_def["helpUri"],
+            }
+        )
     return rules
 
 

@@ -117,8 +117,7 @@ class Violation(BaseModel):
     downstream_impact: list[str] | None = Field(
         default=None,
         description=(
-            "List of downstream models affected by this model "
-            "(computed from manifest child_map)"
+            "List of downstream models affected by this model (computed from manifest child_map)"
         ),
     )
     first_detected: datetime | None = Field(
@@ -129,8 +128,7 @@ class Violation(BaseModel):
         default=None,
         ge=1,
         description=(
-            "Number of times this violation has been detected "
-            "(placeholder for historical tracking)"
+            "Number of times this violation has been detected (placeholder for historical tracking)"
         ),
     )
     override_applied: str | None = Field(
@@ -514,9 +512,9 @@ def create_enforcement_summary(result: EnforcementResult) -> EnforcementResultSu
     from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
 
     # Collect unique policy types from violations
-    policy_types_checked = sorted(
-        {v.policy_type for v in result.violations}
-    ) if result.violations else []
+    policy_types_checked = (
+        sorted({v.policy_type for v in result.violations}) if result.violations else []
+    )
 
     # If no violations but enforcement ran, include default policy types
     if not policy_types_checked and result.enforcement_level != "off":

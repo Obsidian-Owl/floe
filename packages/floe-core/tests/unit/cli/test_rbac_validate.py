@@ -182,9 +182,7 @@ class TestRbacValidateCommand:
         )
 
         assert result.exit_code != 0
-        assert "Invalid value" in (result.output or "") or "invalid_format" in (
-            result.output or ""
-        )
+        assert "Invalid value" in (result.output or "") or "invalid_format" in (result.output or "")
 
     @pytest.mark.requirement("FR-022")
     def test_validate_shows_help(

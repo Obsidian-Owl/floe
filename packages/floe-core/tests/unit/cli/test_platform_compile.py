@@ -157,9 +157,9 @@ class TestPlatformCompileCommand:
                 ],
             )
 
-            assert "Error: Invalid value for '--enforcement-format'" not in (
-                result.output or ""
-            ), f"Format {format_choice} should be valid"
+            assert "Error: Invalid value for '--enforcement-format'" not in (result.output or ""), (
+                f"Format {format_choice} should be valid"
+            )
 
     @pytest.mark.requirement("FR-013")
     def test_compile_rejects_invalid_enforcement_format(
@@ -195,9 +195,7 @@ class TestPlatformCompileCommand:
 
         assert result.exit_code != 0
         # Click outputs error about invalid choice
-        assert "Invalid value" in (result.output or "") or "invalid_format" in (
-            result.output or ""
-        )
+        assert "Invalid value" in (result.output or "") or "invalid_format" in (result.output or "")
 
     @pytest.mark.requirement("FR-015")
     def test_compile_exits_with_zero_on_success(

@@ -217,9 +217,7 @@ class TestValidateRefs:
     """
 
     @pytest.mark.requirement("003b-FR-001")
-    def test_valid_refs_no_violations(
-        self, valid_manifest: dict[str, Any]
-    ) -> None:
+    def test_valid_refs_no_violations(self, valid_manifest: dict[str, Any]) -> None:
         """Test valid ref() references produce no violations.
 
         Given a manifest where all ref() calls resolve to existing models,
@@ -366,9 +364,7 @@ class TestDetectCircularDeps:
     """
 
     @pytest.mark.requirement("003b-FR-002")
-    def test_no_circular_deps_no_violations(
-        self, valid_manifest: dict[str, Any]
-    ) -> None:
+    def test_no_circular_deps_no_violations(self, valid_manifest: dict[str, Any]) -> None:
         """Test acyclic dependency graph produces no violations.
 
         Given a manifest with valid DAG structure (no cycles),
@@ -422,9 +418,7 @@ class TestDetectCircularDeps:
         # Message should mention the cycle participants
         message_lower = violation.message.lower()
         assert (
-            "model_a" in message_lower
-            or "model_b" in message_lower
-            or "model_c" in message_lower
+            "model_a" in message_lower or "model_b" in message_lower or "model_c" in message_lower
         )
 
     @pytest.mark.requirement("003b-FR-002")
@@ -493,9 +487,7 @@ class TestValidateSources:
     """
 
     @pytest.mark.requirement("003b-FR-003")
-    def test_valid_sources_no_violations(
-        self, valid_manifest: dict[str, Any]
-    ) -> None:
+    def test_valid_sources_no_violations(self, valid_manifest: dict[str, Any]) -> None:
         """Test valid source() references produce no violations.
 
         Given a manifest where all source() calls resolve to defined sources,
@@ -626,9 +618,7 @@ class TestSemanticValidatorValidate:
     @pytest.mark.requirement("003b-FR-001")
     @pytest.mark.requirement("003b-FR-002")
     @pytest.mark.requirement("003b-FR-003")
-    def test_validate_runs_all_checks(
-        self, valid_manifest: dict[str, Any]
-    ) -> None:
+    def test_validate_runs_all_checks(self, valid_manifest: dict[str, Any]) -> None:
         """Test validate() runs all semantic validation checks.
 
         Given a valid manifest,

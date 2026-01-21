@@ -70,9 +70,7 @@ class TestValidateManifestAgainstConfig:
             {"metadata": {"name": "my-role", "namespace": "floe-jobs"}},
         ]
 
-        issues = validate_manifest_against_config(
-            manifest_resources, expected_resources, "Role"
-        )
+        issues = validate_manifest_against_config(manifest_resources, expected_resources, "Role")
 
         assert len(issues) == 1
         assert issues[0].issue_type == ValidationIssueType.MISSING_ROLE
@@ -89,9 +87,7 @@ class TestValidateManifestAgainstConfig:
         ]
         expected_resources: list[dict] = []
 
-        issues = validate_manifest_against_config(
-            manifest_resources, expected_resources, "Role"
-        )
+        issues = validate_manifest_against_config(manifest_resources, expected_resources, "Role")
 
         assert len(issues) == 1
         assert issues[0].issue_type == ValidationIssueType.EXTRA_ROLE
@@ -243,4 +239,3 @@ class TestValidateManifestAgainstConfig:
         assert len(issues) == 1
         assert "missing-sa" in issues[0].message
         assert "expected" in issues[0].message.lower() or "not found" in issues[0].message.lower()
-
