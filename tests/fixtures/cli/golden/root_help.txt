@@ -8,7 +8,11 @@ Options:
 
 Commands:
   artifact  OCI artifact management commands.
+  compile   Compile Data Team floe.yaml (FR-040).
   platform  Platform team commands for governance and deployment.
   rbac      RBAC management commands for Kubernetes security.
+  run       Run Data Team pipeline (FR-042).
+  test      Run dbt tests (FR-043).
+  validate  Validate Data Team floe.yaml (FR-041).
 
   Use 'floe <command> --help' for command-specific help.

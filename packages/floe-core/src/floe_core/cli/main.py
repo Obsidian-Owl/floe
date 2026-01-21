@@ -33,6 +33,12 @@ import click
 
 # Import command groups
 from floe_core.cli.artifact import artifact
+from floe_core.cli.data_team import (
+    compile_command,
+    run_command,
+    test_command,
+    validate_command,
+)
 from floe_core.cli.platform import platform
 from floe_core.cli.rbac import rbac
 
@@ -80,6 +86,12 @@ def cli(ctx: click.Context) -> None:
 cli.add_command(platform)
 cli.add_command(rbac)
 cli.add_command(artifact)
+
+# Register Data Team stub commands (root level)
+cli.add_command(compile_command)
+cli.add_command(validate_command)
+cli.add_command(run_command)
+cli.add_command(test_command)
 
 
 def main(argv: list[str] | None = None) -> None:
