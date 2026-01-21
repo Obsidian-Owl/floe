@@ -1,0 +1,17 @@
+Usage: floe rbac diff [OPTIONS]
+
+  Show differences between expected and deployed RBAC (FR-063).
+
+Options:
+  -m, --manifest-dir PATH   Directory containing expected RBAC manifests.
+  -n, --namespace TEXT      Namespaces to diff (default: from manifests).
+  -o, --output [text|json]  Output format.
+  --kubeconfig PATH         Path to kubeconfig file.
+  -h, --help                Show this message and exit.
+
+  Compares the manifests in the target directory with the actual RBAC
+  configuration in the cluster.
+
+  Examples:     $ floe rbac diff     $ floe rbac diff --manifest-dir deploy/rbac
+  $ floe rbac diff --output json
+

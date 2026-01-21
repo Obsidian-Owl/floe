@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>floe Policy Enforcement Report</title>
+    <style>
+        :root {
+            --color-success: #22c55e;
+            --color-error: #ef4444;
+            --color-warning: #f59e0b;
+            --color-info: #3b82f6;
+            --color-text: #1f2937;
+            --color-text-muted: #6b7280;
+            --color-border: #e5e7eb;
+            --color-bg: #ffffff;
+            --color-bg-alt: #f9fafb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--color-text);
+            background-color: var(--color-bg);
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 1.875rem;
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 0.5rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            margin-top: 1.5rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .status-passed {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .status-failed {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .metadata {
+            color: var(--color-text-muted);
+            font-size: 0.875rem;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: var(--color-bg-alt);
+            border: 1px solid var(--color-border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+
+        .summary-card-title {
+            font-size: 0.875rem;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .summary-card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-top: 0.25rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        th {
+            background-color: var(--color-bg-alt);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr:hover {
+            background-color: var(--color-bg-alt);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-error {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-warning {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-naming {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-coverage {
+            background-color: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        .badge-documentation {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-semantic {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-custom {
+            background-color: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .violation-card {
+            border: 1px solid var(--color-border);
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .violation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background-color: var(--color-bg-alt);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .violation-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .violation-model {
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .violation-body {
+            padding: 1rem;
+        }
+
+        .violation-message {
+            margin-bottom: 0.75rem;
+        }
+
+        .violation-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .detail-item {
+            background: var(--color-bg-alt);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.25rem;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: var(--color-text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        .detail-value {
+            font-family: monospace;
+            word-break: break-word;
+        }
+
+        .downstream-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+
+        .downstream-item {
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        .suggestion {
+            background: #f0fdf4;
+            border-left: 4px solid var(--color-success);
+            padding: 0.75rem 1rem;
+            margin-top: 0.75rem;
+        }
+
+        .suggestion-label {
+            font-weight: 600;
+            color: #166534;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+
+        a {
+            color: var(--color-info);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .no-violations {
+            text-align: center;
+            padding: 3rem;
+            color: var(--color-text-muted);
+        }
+
+        .no-violations-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .footer {
+            margin-top: 3rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--color-border);
+            color: var(--color-text-muted);
+            font-size: 0.75rem;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .violation-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>floe Policy Enforcement Report</h1>
+            <div class="metadata">
+                Generated: {{ timestamp }}
+                | Manifest Version: {{ manifest_version }}
+                | Enforcement Level: {{ enforcement_level }}
+            </div>
+        </div>
+        <div class="status {% if passed %}status-passed{% else %}status-failed{% endif %}">
+            {% if passed %}Passed{% else %}Failed{% endif %}
+        </div>
+    </div>
+
+    <h2>Summary</h2>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="summary-card-title">Total Models</div>
+            <div class="summary-card-value">{{ summary.total_models }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-card-title">Models Validated</div>
+            <div class="summary-card-value">{{ summary.models_validated }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-card-title">Total Violations</div>
+            <div class="summary-card-value">{{ violations | length }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-card-title">Duration</div>
+            <div class="summary-card-value">{{ "%.0f"|format(summary.duration_ms) }}ms</div>
+        </div>
+    </div>
+
+    <h3>Violations by Type</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Policy Type</th>
+                <th>Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge badge-naming">Naming</span></td>
+                <td>{{ summary.naming_violations }}</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-coverage">Coverage</span></td>
+                <td>{{ summary.coverage_violations }}</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-documentation">Documentation</span></td>
+                <td>{{ summary.documentation_violations }}</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-semantic">Semantic</span></td>
+                <td>{{ summary.semantic_violations }}</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-custom">Custom Rules</span></td>
+                <td>{{ summary.custom_rule_violations }}</td>
+            </tr>
+            {% if summary.overrides_applied > 0 %}
+            <tr>
+                <td>Overrides Applied</td>
+                <td>{{ summary.overrides_applied }}</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <h2>Violations</h2>
+    {% if violations %}
+    {% for violation in violations %}
+    <div class="violation-card">
+        <div class="violation-header">
+            <div class="violation-title">
+                <span class="badge badge-{{ violation.severity }}">{{ violation.severity }}</span>
+                <span class="badge badge-{{ violation.policy_type }}">{{ violation.policy_type }}</span>
+                <span class="violation-model">{{ violation.model_name }}</span>
+                {% if violation.column_name %}
+                <span>.{{ violation.column_name }}</span>
+                {% endif %}
+            </div>
+            <div>
+                <a href="{{ violation.documentation_url }}" target="_blank">{{ violation.error_code }}</a>
+            </div>
+        </div>
+        <div class="violation-body">
+            <div class="violation-message">{{ violation.message }}</div>
+            <div class="violation-details">
+                <div class="detail-item">
+                    <div class="detail-label">Expected</div>
+                    <div class="detail-value">{{ violation.expected }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Actual</div>
+                    <div class="detail-value">{{ violation.actual }}</div>
+                </div>
+                {% if violation.downstream_impact %}
+                <div class="detail-item">
+                    <div class="detail-label">Downstream Impact</div>
+                    <div class="downstream-list">
+                        {% for model in violation.downstream_impact %}
+                        <span class="downstream-item">{{ model }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if violation.override_applied %}
+                <div class="detail-item">
+                    <div class="detail-label">Override Applied</div>
+                    <div class="detail-value">{{ violation.override_applied }}</div>
+                </div>
+                {% endif %}
+            </div>
+            <div class="suggestion">
+                <div class="suggestion-label">Suggestion</div>
+                <div>{{ violation.suggestion }}</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="no-violations">
+        <div class="no-violations-icon">&#10003;</div>
+        <p>No policy violations found. All models comply with governance policies.</p>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        Generated by floe Policy Enforcer v1.0.0 | <a href="https://floe.dev/docs/enforcement">Documentation</a>
+    </div>
+</body>
+</html>

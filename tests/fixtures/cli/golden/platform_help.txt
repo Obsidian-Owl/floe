@@ -1,0 +1,13 @@
+Usage: floe platform [OPTIONS] COMMAND [ARGS]...
+
+  Platform team commands for governance and deployment.
+
+Options:
+  -h, --help  Show this message and exit.
+
+Commands:
+  compile  Compile FloeSpec and Manifest into CompiledArtifacts (FR-010).
+  deploy   Deploy platform to environment (FR-018).
+  publish  Publish compiled artifacts to registry (FR-017).
+  status   Check deployment status (FR-019).
+  test     Run platform tests (FR-016).

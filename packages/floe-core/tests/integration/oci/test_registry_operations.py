@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 if TYPE_CHECKING:
     pass  # TYPE_CHECKING block preserved for future type-only imports
 
@@ -56,10 +58,10 @@ def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "test
     from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
     return CompiledArtifacts(
-        version="0.2.0",
+        version=COMPILED_ARTIFACTS_VERSION,
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.2.0",
+            floe_version=COMPILED_ARTIFACTS_VERSION,
             source_hash=f"sha256:{unique_id}abc123",
             product_name=f"{product_prefix}-product-{unique_id}",
             product_version="1.0.0",
@@ -365,7 +367,7 @@ class TestPullFromRegistry(IntegrationTestBase):
 
         # Verify it's a proper CompiledArtifacts instance
         assert isinstance(pulled, CompiledArtifacts)
-        assert pulled.version == "0.2.0"
+        assert pulled.version == COMPILED_ARTIFACTS_VERSION
         assert pulled.metadata is not None
 
     @pytest.mark.requirement("8A-SC-009")

@@ -662,8 +662,8 @@ class GCPWIAuthProvider(AuthProvider):
             return self._credentials
 
         try:
-            import google.auth  # type: ignore[import-untyped]
-            from google.auth.transport.requests import Request  # type: ignore[import-untyped]
+            import google.auth
+            from google.auth.transport.requests import Request
         except ImportError as e:
             raise AuthenticationError(
                 self._registry_uri,

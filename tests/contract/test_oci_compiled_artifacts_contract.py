@@ -36,6 +36,7 @@ from floe_core.schemas.oci import (
     ArtifactLayer,
     ArtifactManifest,
 )
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 # =============================================================================
@@ -47,10 +48,10 @@ from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 def minimal_compiled_artifacts() -> CompiledArtifacts:
     """Create a minimal valid CompiledArtifacts for testing."""
     return CompiledArtifacts(
-        version="0.2.0",
+        version=COMPILED_ARTIFACTS_VERSION,
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.2.0",
+            floe_version=COMPILED_ARTIFACTS_VERSION,
             source_hash="sha256:abc123def456",
             product_name="test-product",
             product_version="1.0.0",
@@ -92,10 +93,10 @@ def minimal_compiled_artifacts() -> CompiledArtifacts:
 def full_compiled_artifacts() -> CompiledArtifacts:
     """Create a CompiledArtifacts with all optional fields populated."""
     return CompiledArtifacts(
-        version="0.2.0",
+        version=COMPILED_ARTIFACTS_VERSION,
         metadata=CompilationMetadata(
             compiled_at=datetime.now(timezone.utc),
-            floe_version="0.2.0",
+            floe_version=COMPILED_ARTIFACTS_VERSION,
             source_hash="sha256:fullhash123456",
             product_name="full-product",
             product_version="2.0.0",
@@ -196,7 +197,7 @@ class TestCompiledArtifactsSerializationContract:
         """
         data = json.loads(minimal_compiled_artifacts.model_dump_json())
         assert "version" in data
-        assert data["version"] == "0.2.0"
+        assert data["version"] == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("8A-FR-001")
     def test_serialized_json_contains_metadata(
@@ -270,7 +271,7 @@ class TestCompiledArtifactsDeserializationContract:
         restored = CompiledArtifacts.model_validate(data)
 
         assert isinstance(restored, CompiledArtifacts)
-        assert restored.version == "0.2.0"
+        assert restored.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("8A-FR-002")
     def test_deserialize_from_bytes(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
@@ -302,7 +303,7 @@ class TestCompiledArtifactsDeserializationContract:
             "version": "1.0",  # Not valid semver
             "metadata": {
                 "compiled_at": datetime.now(timezone.utc).isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": COMPILED_ARTIFACTS_VERSION,
                 "source_hash": "sha256:abc",
                 "product_name": "test",
                 "product_version": "1.0.0",
@@ -659,7 +660,7 @@ class TestFileBasedSerializationContract:
         # Read raw content and verify it's valid JSON
         content = file_path.read_text()
         data = json.loads(content)
-        assert data["version"] == "0.2.0"
+        assert data["version"] == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("8A-FR-002")
     def test_file_digest_matches_content(

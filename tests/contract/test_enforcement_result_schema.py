@@ -16,6 +16,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 # These imports will fail until implementation (TDD)
 # The tests are written FIRST to define the expected contract
@@ -466,3 +467,361 @@ class TestEnforcementResultSchemaEvolution:
         assert "violations" in schema["properties"]
         assert "summary" in schema["properties"]
         assert "enforcement_level" in schema["properties"]
+
+
+# ==============================================================================
+# Epic 3B: EnforcementResultSummary Contract Tests (T064)
+# ==============================================================================
+
+
+class TestEnforcementResultSummarySchemaContract:
+    """Contract tests for EnforcementResultSummary schema stability.
+
+    EnforcementResultSummary is a lightweight summary included in CompiledArtifacts.
+    It provides essential metrics without full violation details.
+
+    Task: T064
+    Requirements: FR-024 (Pipeline Integration)
+    """
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_enforcement_result_summary_has_required_fields(self) -> None:
+        """Contract: EnforcementResultSummary MUST have all required fields.
+
+        Required fields:
+        - passed: bool
+        - error_count: int
+        - warning_count: int
+        - policy_types_checked: list[str]
+        - models_validated: int
+        - enforcement_level: Literal["off", "warn", "strict"]
+        """
+        from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+
+        summary = EnforcementResultSummary(
+            passed=True,
+            error_count=0,
+            warning_count=3,
+            policy_types_checked=["naming", "coverage", "documentation"],
+            models_validated=50,
+            enforcement_level="strict",
+        )
+
+        # All required fields accessible
+        assert hasattr(summary, "passed")
+        assert hasattr(summary, "error_count")
+        assert hasattr(summary, "warning_count")
+        assert hasattr(summary, "policy_types_checked")
+        assert hasattr(summary, "models_validated")
+        assert hasattr(summary, "enforcement_level")
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_enforcement_result_summary_serializable_to_json(self) -> None:
+        """Contract: EnforcementResultSummary MUST be JSON-serializable.
+
+        Downstream consumers need to access this from CompiledArtifacts JSON.
+        """
+        from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+
+        summary = EnforcementResultSummary(
+            passed=False,
+            error_count=5,
+            warning_count=10,
+            policy_types_checked=["naming", "coverage"],
+            models_validated=100,
+            enforcement_level="warn",
+        )
+
+        # Should serialize without error
+        json_str = summary.model_dump_json()
+        assert isinstance(json_str, str)
+
+        # Should be valid JSON
+        parsed = json.loads(json_str)
+        assert parsed["passed"] is False
+        assert parsed["error_count"] == 5
+        assert parsed["warning_count"] == 10
+        assert parsed["models_validated"] == 100
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_enforcement_result_summary_immutable(self) -> None:
+        """Contract: EnforcementResultSummary MUST be immutable (frozen=True).
+
+        Results should not be modified after creation for audit integrity.
+        """
+        from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+        from pydantic import ValidationError
+
+        summary = EnforcementResultSummary(
+            passed=True,
+            error_count=0,
+            warning_count=0,
+            policy_types_checked=[],
+            models_validated=0,
+            enforcement_level="off",
+        )
+
+        with pytest.raises((AttributeError, ValidationError)):
+            summary.passed = False  # type: ignore[misc]
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_enforcement_result_summary_extra_fields_forbidden(self) -> None:
+        """Contract: EnforcementResultSummary MUST reject extra fields."""
+        from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="extra_field"):
+            EnforcementResultSummary(
+                passed=True,
+                error_count=0,
+                warning_count=0,
+                policy_types_checked=[],
+                models_validated=0,
+                enforcement_level="warn",
+                extra_field="not allowed",  # type: ignore[call-arg]
+            )
+
+
+class TestCreateEnforcementSummaryContract:
+    """Contract tests for create_enforcement_summary helper function.
+
+    This helper converts EnforcementResult to EnforcementResultSummary
+    for inclusion in CompiledArtifacts.
+
+    Task: T061, T064
+    Requirements: FR-024 (Pipeline Integration)
+    """
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_create_enforcement_summary_returns_valid_summary(self) -> None:
+        """Contract: create_enforcement_summary MUST return valid EnforcementResultSummary."""
+        from floe_core.enforcement.result import (
+            EnforcementResult,
+            EnforcementSummary,
+            Violation,
+            create_enforcement_summary,
+        )
+        from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+
+        result = EnforcementResult(
+            passed=False,
+            violations=[
+                Violation(
+                    error_code="FLOE-E201",
+                    severity="error",
+                    policy_type="naming",
+                    model_name="test",
+                    message="Error",
+                    expected="x",
+                    actual="y",
+                    suggestion="Fix",
+                    documentation_url="https://floe.dev",
+                ),
+                Violation(
+                    error_code="FLOE-E222",
+                    severity="warning",
+                    policy_type="documentation",
+                    model_name="test2",
+                    message="Warning",
+                    expected="x",
+                    actual="y",
+                    suggestion="Fix",
+                    documentation_url="https://floe.dev",
+                ),
+            ],
+            summary=EnforcementSummary(total_models=10, models_validated=10),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        summary = create_enforcement_summary(result)
+
+        assert isinstance(summary, EnforcementResultSummary)
+        assert summary.passed is False
+        assert summary.error_count == 1
+        assert summary.warning_count == 1
+        assert summary.models_validated == 10
+        assert summary.enforcement_level == "strict"
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_create_enforcement_summary_includes_policy_types(self) -> None:
+        """Contract: create_enforcement_summary MUST include policy_types_checked."""
+        from floe_core.enforcement.result import (
+            EnforcementResult,
+            EnforcementSummary,
+            Violation,
+            create_enforcement_summary,
+        )
+
+        result = EnforcementResult(
+            passed=False,
+            violations=[
+                Violation(
+                    error_code="FLOE-E201",
+                    severity="error",
+                    policy_type="naming",
+                    model_name="test",
+                    message="Error",
+                    expected="x",
+                    actual="y",
+                    suggestion="Fix",
+                    documentation_url="https://floe.dev",
+                ),
+                Violation(
+                    error_code="FLOE-E210",
+                    severity="error",
+                    policy_type="coverage",
+                    model_name="test2",
+                    message="Error",
+                    expected="x",
+                    actual="y",
+                    suggestion="Fix",
+                    documentation_url="https://floe.dev",
+                ),
+            ],
+            summary=EnforcementSummary(total_models=5, models_validated=5),
+            enforcement_level="warn",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        summary = create_enforcement_summary(result)
+
+        # Policy types should be sorted
+        assert summary.policy_types_checked == ["coverage", "naming"]
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_create_enforcement_summary_handles_empty_violations(self) -> None:
+        """Contract: create_enforcement_summary MUST handle empty violations list."""
+        from floe_core.enforcement.result import (
+            EnforcementResult,
+            EnforcementSummary,
+            create_enforcement_summary,
+        )
+
+        result = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(total_models=50, models_validated=50),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        summary = create_enforcement_summary(result)
+
+        assert summary.passed is True
+        assert summary.error_count == 0
+        assert summary.warning_count == 0
+        # Should include default policy types when no violations
+        assert len(summary.policy_types_checked) > 0
+
+
+class TestCompiledArtifactsEnforcementFieldContract:
+    """Contract tests for enforcement_result field in CompiledArtifacts.
+
+    Task: T062, T064
+    Requirements: FR-024, FR-025, FR-026 (Pipeline Integration)
+    """
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_compiled_artifacts_has_enforcement_result_field(self) -> None:
+        """Contract: CompiledArtifacts MUST have optional enforcement_result field."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Check field exists in model fields
+        fields = CompiledArtifacts.model_fields
+        assert "enforcement_result" in fields
+
+        # Field should be optional (default None)
+        assert fields["enforcement_result"].default is None
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_compiled_artifacts_version_is_0_3_0(self) -> None:
+        """Contract: CompiledArtifacts version MUST be 0.3.0 for Epic 3B."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Check default version
+        fields = CompiledArtifacts.model_fields
+        assert fields["version"].default == COMPILED_ARTIFACTS_VERSION
+
+    @pytest.mark.requirement("003b-FR-024")
+    def test_compiled_artifacts_enforcement_result_serialization(self) -> None:
+        """Contract: enforcement_result MUST serialize correctly in CompiledArtifacts."""
+        from datetime import datetime
+
+        from floe_core.schemas.compiled_artifacts import (
+            CompilationMetadata,
+            CompiledArtifacts,
+            EnforcementResultSummary,
+            ObservabilityConfig,
+            PluginRef,
+            ProductIdentity,
+            ResolvedModel,
+            ResolvedPlugins,
+            ResolvedTransforms,
+        )
+        from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
+
+        enforcement_summary = EnforcementResultSummary(
+            passed=True,
+            error_count=0,
+            warning_count=2,
+            policy_types_checked=["naming", "documentation"],
+            models_validated=25,
+            enforcement_level="warn",
+        )
+
+        artifacts = CompiledArtifacts(
+            version=COMPILED_ARTIFACTS_VERSION,
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(),
+                floe_version=COMPILED_ARTIFACTS_VERSION,
+                source_hash="sha256:abc123",
+                product_name="test-product",
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id="default.test_product",
+                domain="default",
+                repository="https://github.com/test",
+            ),
+            mode="simple",
+            inheritance_chain=[],
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    enabled=True,
+                    resource_attributes=ResourceAttributes(
+                        service_name="test",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="default",
+                        floe_product_name="test",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage=True,
+                lineage_namespace="test",
+            ),
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.9.0"),
+                orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            ),
+            transforms=ResolvedTransforms(
+                models=[ResolvedModel(name="test_model", compute="duckdb")],
+                default_compute="duckdb",
+            ),
+            dbt_profiles={"default": {"target": "dev"}},
+            enforcement_result=enforcement_summary,
+        )
+
+        # Should serialize without error
+        json_str = artifacts.model_dump_json()
+        parsed = json.loads(json_str)
+
+        # Check enforcement_result is in output
+        assert "enforcement_result" in parsed
+        assert parsed["enforcement_result"]["passed"] is True
+        assert parsed["enforcement_result"]["warning_count"] == 2

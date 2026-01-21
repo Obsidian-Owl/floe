@@ -141,6 +141,31 @@ from floe_core.schemas.rbac import (
     WritableVolumeMount,
 )
 
+# RBAC Security Audit schemas (Epic 11)
+from floe_core.schemas.rbac_audit import (
+    AuditFinding,
+    AuditFindingType,
+    AuditSeverity,
+    NamespaceSummary,
+    RBACAuditReport,
+    ServiceAccountSummary,
+)
+
+# RBAC Diff schemas (Epic 11)
+from floe_core.schemas.rbac_diff import (
+    DiffChangeType,
+    RBACDiffResult,
+    ResourceDiff,
+)
+
+# RBAC Validation schemas (Epic 11)
+from floe_core.schemas.rbac_validation import (
+    RBACValidationResult,
+    ValidationIssue,
+    ValidationIssueType,
+    ValidationStatus,
+)
+
 # Secret models (T005, T008, T039, T040)
 from floe_core.schemas.secrets import (
     SECRET_NAME_PATTERN,
@@ -260,4 +285,20 @@ __all__: list[str] = [
     "ArtifactTag",
     "CacheEntry",
     "CacheIndex",
+    # RBAC Security Audit schemas (Epic 11)
+    "AuditSeverity",
+    "AuditFindingType",
+    "AuditFinding",
+    "ServiceAccountSummary",
+    "NamespaceSummary",
+    "RBACAuditReport",
+    # RBAC Validation schemas (Epic 11)
+    "ValidationStatus",
+    "ValidationIssueType",
+    "ValidationIssue",
+    "RBACValidationResult",
+    # RBAC Diff schemas (Epic 11)
+    "DiffChangeType",
+    "ResourceDiff",
+    "RBACDiffResult",
 ]

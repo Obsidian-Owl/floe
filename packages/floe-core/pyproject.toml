@@ -26,6 +26,8 @@ dependencies = [
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "structlog>=24.0",
+    # CLI framework (Epic 11 - CLI Unification)
+    "click>=8.1.0",
     # OpenTelemetry SDK and exporters (per ADR-0006, spec 001-opentelemetry)
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
@@ -36,6 +38,8 @@ dependencies = [
     # OCI client dependencies (Epic 8A)
     "oras>=0.2.38",  # ORAS Python SDK for OCI registry operations (pin to known working version)
     "httpx>=0.27.0",  # HTTP client for registry communication
+    # HTML report templating (Epic 3B)
+    "jinja2>=3.0",  # Jinja2 for HTML export templates
 ]
 
 [project.optional-dependencies]

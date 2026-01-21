@@ -4,14 +4,16 @@ PolicyEnforcer is the main orchestrator that coordinates all policy validators
 (naming, coverage, documentation) and aggregates their results into a single
 EnforcementResult.
 
-Task: T029, T030, T031, T032, T033
+Task: T029, T030, T031, T032, T033, T038-T044
 Requirements: FR-001 (PolicyEnforcer core module), FR-002 (Pipeline integration)
+             FR-011 through FR-015 (US3 - Severity Overrides)
 """
 
 from __future__ import annotations
 
+import fnmatch
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
@@ -20,10 +22,14 @@ from floe_core.enforcement.result import (
     EnforcementResult,
     EnforcementSummary,
     Violation,
+    compute_downstream_impact,
 )
 from floe_core.enforcement.validators.coverage import CoverageValidator
+from floe_core.enforcement.validators.custom_rules import CustomRuleValidator
 from floe_core.enforcement.validators.documentation import DocumentationValidator
 from floe_core.enforcement.validators.naming import NamingValidator
+from floe_core.enforcement.validators.semantic import SemanticValidator
+from floe_core.schemas.governance import PolicyOverride
 
 if TYPE_CHECKING:
     from floe_core.schemas.manifest import GovernanceConfig
@@ -71,6 +77,7 @@ class PolicyEnforcer:
         manifest: dict[str, Any],
         *,
         dry_run: bool = False,
+        include_context: bool = False,
     ) -> EnforcementResult:
         """Run all policy validators against the dbt manifest.
 
@@ -82,6 +89,8 @@ class PolicyEnforcer:
             manifest: The compiled dbt manifest.json as a dictionary.
             dry_run: If True, violations are reported as warnings and
                 the result always passes. Useful for previewing impact.
+            include_context: If True, populates downstream_impact field on
+                violations using manifest child_map. Default: False (lazy).
 
         Returns:
             EnforcementResult containing pass/fail status, all violations,
@@ -118,6 +127,20 @@ class PolicyEnforcer:
             if self.governance_config.quality_gates.require_descriptions:
                 doc_violations = self._validate_documentation(models)
                 violations.extend(doc_violations)
+
+        # Run semantic validation (always enabled - validates model relationships)
+        semantic_violations = self._validate_semantic(manifest)
+        violations.extend(semantic_violations)
+
+        # Run custom rule validation if configured (T032)
+        if self.governance_config.custom_rules:
+            custom_violations = self._validate_custom_rules(manifest)
+            violations.extend(custom_violations)
+
+        # Populate downstream_impact if requested (T048-T049)
+        if include_context:
+            child_map = manifest.get("child_map", {})
+            violations = self._populate_downstream_impact(violations, child_map)
 
         # Adjust severity for dry-run mode
         if dry_run:
@@ -258,6 +281,98 @@ class PolicyEnforcer:
         validator = DocumentationValidator(quality_gates)
         return validator.validate(models)
 
+    def _validate_semantic(
+        self,
+        manifest: dict[str, Any],
+    ) -> list[Violation]:
+        """Validate semantic relationships (refs, sources, dependencies).
+
+        Validates model references, source references, and detects
+        circular dependencies using the full manifest.
+
+        Args:
+            manifest: The full dbt manifest dictionary.
+
+        Returns:
+            List of semantic violations found (FLOE-E301, E302, E303).
+        """
+        # Delegate to SemanticValidator (T017-T020)
+        validator = SemanticValidator()
+        return validator.validate(manifest)
+
+    def _validate_custom_rules(
+        self,
+        manifest: dict[str, Any],
+    ) -> list[Violation]:
+        """Validate models against user-defined custom rules.
+
+        Applies custom rules from governance config:
+        - require_tags_for_prefix (FLOE-E400)
+        - require_meta_field (FLOE-E401)
+        - require_tests_of_type (FLOE-E402)
+
+        Args:
+            manifest: The full dbt manifest dictionary.
+
+        Returns:
+            List of custom rule violations found (FLOE-E4xx).
+        """
+        custom_rules = self.governance_config.custom_rules
+        if not custom_rules:
+            return []
+
+        # Delegate to CustomRuleValidator (T027-T033)
+        validator = CustomRuleValidator(custom_rules)
+        return validator.validate(manifest)
+
+    def _populate_downstream_impact(
+        self,
+        violations: list[Violation],
+        child_map: dict[str, list[str]],
+    ) -> list[Violation]:
+        """Populate downstream_impact field on violations.
+
+        Uses compute_downstream_impact to find affected downstream models
+        for each violation.
+
+        Args:
+            violations: List of violations to enrich.
+            child_map: dbt manifest child_map for dependency lookup.
+
+        Returns:
+            New list of violations with downstream_impact populated.
+        """
+        if not child_map:
+            return violations
+
+        result: list[Violation] = []
+        for violation in violations:
+            impact = compute_downstream_impact(
+                model_name=violation.model_name,
+                child_map=child_map,
+                recursive=True,  # Include transitive dependencies
+            )
+            # Create new Violation with downstream_impact populated
+            enriched = Violation(
+                error_code=violation.error_code,
+                severity=violation.severity,
+                policy_type=violation.policy_type,
+                model_name=violation.model_name,
+                column_name=violation.column_name,
+                message=violation.message,
+                expected=violation.expected,
+                actual=violation.actual,
+                suggestion=violation.suggestion,
+                documentation_url=violation.documentation_url,
+                downstream_impact=impact if impact else None,
+                first_detected=violation.first_detected,
+                occurrences=violation.occurrences,
+                override_applied=violation.override_applied,
+            )
+            result.append(enriched)
+
+        return result
+
     def _downgrade_to_warnings(
         self,
         violations: list[Violation],
@@ -331,6 +446,8 @@ class PolicyEnforcer:
         naming_count = sum(1 for v in violations if v.policy_type == "naming")
         coverage_count = sum(1 for v in violations if v.policy_type == "coverage")
         doc_count = sum(1 for v in violations if v.policy_type == "documentation")
+        semantic_count = sum(1 for v in violations if v.policy_type == "semantic")
+        custom_count = sum(1 for v in violations if v.policy_type == "custom")
 
         return EnforcementSummary(
             total_models=len(models),
@@ -338,6 +455,8 @@ class PolicyEnforcer:
             naming_violations=naming_count,
             coverage_violations=coverage_count,
             documentation_violations=doc_count,
+            semantic_violations=semantic_count,
+            custom_rule_violations=custom_count,
             duration_ms=duration_ms,
         )
 
@@ -351,3 +470,226 @@ class PolicyEnforcer:
         if level is None:
             return "warn"  # Default to warn if not specified
         return level
+
+    # ==========================================================================
+    # US3: Policy Override Support (T038-T044)
+    # ==========================================================================
+
+    @staticmethod
+    def apply_overrides(
+        violations: list[Violation],
+        overrides: list[PolicyOverride],
+    ) -> list[Violation]:
+        """Apply policy overrides to modify or exclude violations.
+
+        Processes violations through the override rules, applying the first
+        matching override for each violation. Supports:
+        - downgrade: Convert error severity to warning (FR-012)
+        - exclude: Remove violation entirely (FR-013)
+        - expires: Ignore override after expiration date (FR-014)
+        - policy_types: Limit override to specific policy types (FR-011)
+
+        The first matching override wins (no stacking).
+
+        Args:
+            violations: List of violations to process.
+            overrides: List of policy overrides to apply.
+
+        Returns:
+            List of violations after applying overrides. May be shorter
+            than input if exclude actions removed violations.
+
+        Example:
+            >>> violations = [Violation(model_name="legacy_orders", ...)]
+            >>> overrides = [PolicyOverride(pattern="legacy_*", action="downgrade", ...)]
+            >>> result = PolicyEnforcer.apply_overrides(violations, overrides)
+            >>> result[0].severity
+            'warning'
+        """
+        if not overrides:
+            return violations
+
+        log = logger.bind(component="PolicyEnforcer.apply_overrides")
+
+        # Filter out expired overrides and log warnings
+        active_overrides = PolicyEnforcer._filter_expired_overrides(overrides, log)
+
+        if not active_overrides:
+            log.debug("all_overrides_expired", total_overrides=len(overrides))
+            return violations
+
+        result: list[Violation] = []
+        overrides_applied_count = 0
+
+        for violation in violations:
+            # Find first matching override
+            matched_override = PolicyEnforcer._find_matching_override(violation, active_overrides)
+
+            if matched_override is None:
+                # No match - keep violation unchanged
+                result.append(violation)
+            elif matched_override.action == "exclude":
+                # Exclude action - skip this violation entirely (FR-013)
+                log.warning(
+                    "override_exclude_applied",
+                    pattern=matched_override.pattern,
+                    model_name=violation.model_name,
+                    reason=matched_override.reason,
+                )
+                overrides_applied_count += 1
+                # Don't add to result - violation is excluded
+            else:
+                # Downgrade action - convert error to warning (FR-012)
+                downgraded = PolicyEnforcer._apply_downgrade(violation, matched_override.pattern)
+                log.warning(
+                    "override_downgrade_applied",
+                    pattern=matched_override.pattern,
+                    model_name=violation.model_name,
+                    reason=matched_override.reason,
+                    original_severity=violation.severity,
+                    new_severity=downgraded.severity,
+                )
+                overrides_applied_count += 1
+                result.append(downgraded)
+
+        # Log warning if any override matched zero models (T044)
+        PolicyEnforcer._log_unused_overrides(active_overrides, violations, log)
+
+        if overrides_applied_count > 0:
+            log.info(
+                "overrides_summary",
+                overrides_applied=overrides_applied_count,
+                violations_before=len(violations),
+                violations_after=len(result),
+            )
+
+        return result
+
+    @staticmethod
+    def _filter_expired_overrides(
+        overrides: list[PolicyOverride],
+        log: structlog.BoundLogger,
+    ) -> list[PolicyOverride]:
+        """Filter out expired overrides and log warnings.
+
+        Args:
+            overrides: List of overrides to filter.
+            log: Bound logger for warnings.
+
+        Returns:
+            List of non-expired overrides.
+        """
+        today = date.today()
+        active: list[PolicyOverride] = []
+
+        for override in overrides:
+            if override.expires is not None and override.expires < today:
+                # Override has expired (FR-014)
+                log.warning(
+                    "override_expired",
+                    pattern=override.pattern,
+                    action=override.action,
+                    expired_on=override.expires.isoformat(),
+                    reason=override.reason,
+                )
+            else:
+                active.append(override)
+
+        return active
+
+    @staticmethod
+    def _find_matching_override(
+        violation: Violation,
+        overrides: list[PolicyOverride],
+    ) -> PolicyOverride | None:
+        """Find the first override matching a violation.
+
+        Matching criteria:
+        1. Pattern matches model_name using fnmatch (glob patterns) (T039)
+        2. If policy_types specified, violation policy_type must be in list (T043)
+
+        First match wins - no stacking of overrides.
+
+        Args:
+            violation: Violation to match against.
+            overrides: List of active (non-expired) overrides.
+
+        Returns:
+            First matching override, or None if no match.
+        """
+        for override in overrides:
+            # Check pattern match (T039)
+            if not fnmatch.fnmatch(violation.model_name, override.pattern):
+                continue
+
+            # Check policy_types filter if specified (T043)
+            if override.policy_types is not None:
+                if violation.policy_type not in override.policy_types:
+                    continue
+
+            # Match found
+            return override
+
+        return None
+
+    @staticmethod
+    def _apply_downgrade(
+        violation: Violation,
+        pattern: str,
+    ) -> Violation:
+        """Apply downgrade action to a violation.
+
+        Creates a new Violation with severity changed to "warning" and
+        override_applied field set to the matching pattern.
+
+        Args:
+            violation: Original violation.
+            pattern: The override pattern that matched.
+
+        Returns:
+            New Violation with downgraded severity.
+        """
+        return Violation(
+            error_code=violation.error_code,
+            severity="warning",
+            policy_type=violation.policy_type,
+            model_name=violation.model_name,
+            column_name=violation.column_name,
+            message=violation.message,
+            expected=violation.expected,
+            actual=violation.actual,
+            suggestion=violation.suggestion,
+            documentation_url=violation.documentation_url,
+            downstream_impact=violation.downstream_impact,
+            first_detected=violation.first_detected,
+            occurrences=violation.occurrences,
+            override_applied=pattern,
+        )
+
+    @staticmethod
+    def _log_unused_overrides(
+        overrides: list[PolicyOverride],
+        violations: list[Violation],
+        log: structlog.BoundLogger,
+    ) -> None:
+        """Log warning for overrides that matched zero violations.
+
+        Helps identify stale overrides that may need cleanup.
+
+        Args:
+            overrides: List of active overrides.
+            violations: Original violations list.
+            log: Bound logger for warnings.
+        """
+        model_names = {v.model_name for v in violations}
+
+        for override in overrides:
+            # Check if pattern matches any model
+            matched_any = any(fnmatch.fnmatch(name, override.pattern) for name in model_names)
+            if not matched_any:
+                log.warning(
+                    "override_matched_zero_models",
+                    pattern=override.pattern,
+                    action=override.action,
+                    reason=override.reason,
+                )

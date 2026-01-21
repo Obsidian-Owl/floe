@@ -22,6 +22,7 @@ from floe_core.schemas.compiled_artifacts import (
 )
 from floe_core.schemas.floe_spec import FloeMetadata, FloeSpec, TransformSpec
 from floe_core.schemas.manifest import PlatformManifest
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 
 @pytest.fixture
@@ -124,7 +125,7 @@ class TestBuildArtifacts:
             sample_transforms,
             sample_dbt_profiles,
         )
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("2B-FR-001")
     def test_build_artifacts_has_metadata(

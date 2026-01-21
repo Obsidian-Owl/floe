@@ -34,6 +34,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryConfig
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 if TYPE_CHECKING:
@@ -88,7 +89,7 @@ def sample_compilation_metadata() -> CompilationMetadata:
     """Create a sample CompilationMetadata for testing."""
     return CompilationMetadata(
         compiled_at=datetime.now(timezone.utc),
-        floe_version="0.2.0",
+        floe_version=COMPILED_ARTIFACTS_VERSION,
         source_hash="sha256:abc123",
         product_name="test-product",
         product_version="1.0.0",
@@ -136,7 +137,7 @@ def sample_compiled_artifacts(
 ) -> CompiledArtifacts:
     """Create a valid CompiledArtifacts for testing push operations."""
     return CompiledArtifacts(
-        version="0.2.0",
+        version=COMPILED_ARTIFACTS_VERSION,
         metadata=sample_compilation_metadata,
         identity=sample_product_identity,
         mode="simple",

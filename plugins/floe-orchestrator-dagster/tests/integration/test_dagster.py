@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 import pytest
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 
@@ -89,10 +90,10 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
     def valid_compiled_artifacts(self) -> dict[str, Any]:
         """Create valid CompiledArtifacts for integration testing."""
         return {
-            "version": "0.2.0",
+            "version": COMPILED_ARTIFACTS_VERSION,
             "metadata": {
                 "compiled_at": datetime.now(timezone.utc).isoformat(),
-                "floe_version": "0.2.0",
+                "floe_version": COMPILED_ARTIFACTS_VERSION,
                 "source_hash": "sha256:integration123",
                 "product_name": "integration-test-pipeline",
                 "product_version": "1.0.0",

@@ -3,11 +3,10 @@
 CompiledArtifacts is the single source of truth for pipeline execution.
 It contains resolved, validated configuration after manifest inheritance.
 
-Contract Version: 0.2.0
+Contract Version: See COMPILED_ARTIFACTS_VERSION in versions.py
 
 Version History:
-    - 0.1.0: Initial version (metadata, identity, mode, observability)
-    - 0.2.0: Add plugins, transforms, dbt_profiles, governance (Epic 2B)
+    See COMPILED_ARTIFACTS_VERSION_HISTORY in versions.py
 
 See Also:
     - docs/contracts/compiled-artifacts.md: Full contract specification
@@ -25,6 +24,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import TelemetryConfig
 
 
@@ -412,6 +412,75 @@ class ObservabilityConfig(BaseModel):
     )
 
 
+# ==============================================================================
+# Epic 3B: Enforcement Result Summary
+# ==============================================================================
+
+
+class EnforcementResultSummary(BaseModel):
+    """Lightweight summary of enforcement result for inclusion in CompiledArtifacts.
+
+    This summary contains only the essential metrics for downstream consumption.
+    Full violation details are exported separately (SARIF/JSON/HTML).
+
+    Contract Version: 0.3.0 (Epic 3B addition)
+
+    Attributes:
+        passed: Overall pass/fail status.
+        error_count: Number of error-severity violations.
+        warning_count: Number of warning-severity violations.
+        policy_types_checked: List of policy types that were enforced.
+        models_validated: Number of models that were validated.
+        enforcement_level: Applied enforcement level (off, warn, strict).
+
+    Example:
+        >>> summary = EnforcementResultSummary(
+        ...     passed=False,
+        ...     error_count=3,
+        ...     warning_count=5,
+        ...     policy_types_checked=["naming", "coverage", "documentation"],
+        ...     models_validated=50,
+        ...     enforcement_level="strict",
+        ... )
+        >>> summary.passed
+        False
+
+    See Also:
+        - data-model.md: EnforcementResultSummary entity specification
+        - EnforcementResult: Full result in enforcement module
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    passed: bool = Field(
+        ...,
+        description="Overall pass/fail status",
+    )
+    error_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of error-severity violations",
+    )
+    warning_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of warning-severity violations",
+    )
+    policy_types_checked: list[str] = Field(
+        ...,
+        description="List of policy types that were enforced",
+    )
+    models_validated: int = Field(
+        ...,
+        ge=0,
+        description="Number of models that were validated",
+    )
+    enforcement_level: Literal["off", "warn", "strict"] = Field(
+        ...,
+        description="Applied enforcement level",
+    )
+
+
 # Deployment mode types
 DeploymentMode = Literal["simple", "centralized", "mesh"]
 """Valid deployment modes for data products.
@@ -433,10 +502,10 @@ class CompiledArtifacts(BaseModel):
     - OTLP Collector endpoint (Layer 2 - ENFORCED)
     - Backend plugin selection (Layer 3 - PLUGGABLE)
 
-    Contract Version: 0.2.0 (see docstring header for version history)
+    Contract Version: 0.3.0 (see docstring header for version history)
 
     Attributes:
-        version: Schema version (semver) - default 0.2.0
+        version: Schema version (semver) - default 0.3.0
         metadata: Compilation metadata
         identity: Product identity from catalog
         mode: Deployment mode (simple, centralized, mesh)
@@ -446,6 +515,7 @@ class CompiledArtifacts(BaseModel):
         transforms: Compiled transform configuration (v0.2.0+)
         dbt_profiles: Generated profiles.yml content (v0.2.0+)
         governance: Resolved governance settings (v0.2.0+, optional)
+        enforcement_result: Enforcement result summary (v0.3.0+, optional)
 
     Examples:
         >>> from datetime import datetime
@@ -493,7 +563,7 @@ class CompiledArtifacts(BaseModel):
     version: Annotated[
         str,
         Field(
-            default="0.2.0",
+            default=COMPILED_ARTIFACTS_VERSION,
             pattern=r"^\d+\.\d+\.\d+$",
             description="Schema version (semver)",
         ),
@@ -546,6 +616,12 @@ class CompiledArtifacts(BaseModel):
     governance: ResolvedGovernance | None = Field(
         default=None,
         description="Resolved governance settings (v0.2.0+, optional)",
+    )
+
+    # Epic 3B addition (v0.3.0)
+    enforcement_result: EnforcementResultSummary | None = Field(
+        default=None,
+        description="Enforcement result summary (v0.3.0+, optional for backward compat)",
     )
 
     def to_json_file(self, path: Path) -> None:
@@ -703,4 +779,6 @@ __all__ = [
     "ResolvedTransforms",
     # Governance resolution (v0.2.0)
     "ResolvedGovernance",
+    # Enforcement summary (v0.3.0 - Epic 3B)
+    "EnforcementResultSummary",
 ]

@@ -27,6 +27,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedPlugins,
     ResolvedTransforms,
 )
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 from pydantic import ValidationError
 
@@ -41,10 +42,10 @@ CONTRACT_SCHEMA_PATH = CONTRACTS_DIR / "compiled-artifacts.json"
 def minimal_compiled_artifacts() -> CompiledArtifacts:
     """Create a minimal valid CompiledArtifacts for testing."""
     return CompiledArtifacts(
-        version="0.2.0",
+        version=COMPILED_ARTIFACTS_VERSION,
         metadata=CompilationMetadata(
             compiled_at=datetime.now(),
-            floe_version="0.2.0",
+            floe_version=COMPILED_ARTIFACTS_VERSION,
             source_hash="sha256:abc123",
             product_name="test-product",
             product_version="1.0.0",
@@ -90,15 +91,15 @@ class TestCompiledArtifactsSchemaContract:
     """
 
     @pytest.mark.requirement("2B-FR-004")
-    def test_version_is_0_2_0_by_default(self) -> None:
-        """Contract: Default version is 0.2.0.
+    def test_version_default_matches_constant(self) -> None:
+        """Contract: Default version matches COMPILED_ARTIFACTS_VERSION.
 
         This ensures downstream packages can rely on version for compatibility.
         """
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
-                floe_version="0.2.0",
+                floe_version=COMPILED_ARTIFACTS_VERSION,
                 source_hash="sha256:abc123",
                 product_name="test",
                 product_version="1.0.0",
@@ -123,7 +124,7 @@ class TestCompiledArtifactsSchemaContract:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.2.0"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("2B-FR-004")
     def test_version_format_is_semver(self) -> None:
@@ -501,7 +502,7 @@ class TestFileSerializationMethods:
 
         assert output_path.exists()
         data = json.loads(output_path.read_text())
-        assert data["version"] == "0.2.0"
+        assert data["version"] == COMPILED_ARTIFACTS_VERSION
         assert "metadata" in data
         assert "plugins" in data
 

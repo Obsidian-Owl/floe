@@ -20,7 +20,12 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
+from floe_core.schemas.governance import (
+    CustomRule,
+    NamingConfig,
+    PolicyOverride,
+    QualityGatesConfig,
+)
 from floe_core.schemas.metadata import ManifestMetadata
 from floe_core.schemas.plugins import PluginsConfig
 
@@ -64,6 +69,8 @@ class GovernanceConfig(BaseModel):
         data_retention_days: Data retention period in days
         naming: Naming convention configuration (NEW in Epic 3A)
         quality_gates: Quality gate thresholds (NEW in Epic 3A)
+        custom_rules: Custom validation rules (NEW in Epic 3B)
+        policy_overrides: Override rules for legacy/migration (NEW in Epic 3B)
 
     Example:
         >>> governance = GovernanceConfig(
@@ -131,6 +138,16 @@ class GovernanceConfig(BaseModel):
     quality_gates: QualityGatesConfig | None = Field(
         default=None,
         description="Quality gate thresholds (NEW in Epic 3A)",
+    )
+
+    # NEW in Epic 3B: Custom rules and policy overrides
+    custom_rules: list[CustomRule] = Field(
+        default_factory=list,
+        description="Custom validation rules (NEW in Epic 3B)",
+    )
+    policy_overrides: list[PolicyOverride] = Field(
+        default_factory=list,
+        description="Override rules for legacy/migration support (NEW in Epic 3B)",
     )
 
 

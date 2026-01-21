@@ -28,6 +28,14 @@ from __future__ import annotations
 # Error types (T028)
 from floe_core.enforcement.errors import PolicyEnforcementError
 
+# Exporters (T054-T060, T067)
+from floe_core.enforcement.exporters import (
+    ensure_output_dir,
+    export_html,
+    export_json,
+    export_sarif,
+)
+
 # Patterns module (T040-T042)
 from floe_core.enforcement.patterns import (
     DOCUMENTATION_URLS,
@@ -43,25 +51,29 @@ from floe_core.enforcement.patterns import (
 # Core enforcer (T029-T030)
 from floe_core.enforcement.policy_enforcer import PolicyEnforcer
 
-# Result models (T025-T027)
+# Result models (T025-T027, T061)
 from floe_core.enforcement.result import (
     EnforcementResult,
     EnforcementSummary,
     Violation,
+    create_enforcement_summary,
 )
 
-# Validators (T043-T045, T053-T059, T065-T069)
+# Validators (T043-T045, T053-T059, T065-T069, T017-T020, T027-T033)
 from floe_core.enforcement.validators import (
     CoverageValidator,
+    CustomRuleValidator,
     DocumentationValidator,
     NamingValidator,
+    SemanticValidator,
 )
 
 __all__: list[str] = [
-    # Result models (T025-T027)
+    # Result models (T025-T027, T061)
     "EnforcementResult",
     "EnforcementSummary",
     "Violation",
+    "create_enforcement_summary",
     # Error types (T028)
     "PolicyEnforcementError",
     # Core enforcer (T029-T030)
@@ -75,8 +87,15 @@ __all__: list[str] = [
     "matches_custom_patterns",
     "get_pattern_for_type",
     "get_documentation_url",
-    # Validators (T043-T045, T053-T059, T065-T069)
+    # Validators (T043-T045, T053-T059, T065-T069, T017-T020, T027-T033)
     "NamingValidator",
     "CoverageValidator",
     "DocumentationValidator",
+    "SemanticValidator",
+    "CustomRuleValidator",
+    # Exporters (T054-T060, T067)
+    "export_json",
+    "export_sarif",
+    "export_html",
+    "ensure_output_dir",
 ]

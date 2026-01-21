@@ -27,6 +27,8 @@ from typing import Any
 
 import pytest
 
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
 
 def generate_unique_tag(prefix: str = "test") -> str:
     """Generate a unique tag for test isolation.
@@ -82,7 +84,7 @@ def sample_compiled_artifacts_json() -> str:
     import json
 
     data: dict[str, Any] = {
-        "version": "0.2.0",
+        "version": COMPILED_ARTIFACTS_VERSION,
         "metadata": {
             "product_name": "integration-test-product",
             "product_version": "1.0.0",

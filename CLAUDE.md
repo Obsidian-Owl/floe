@@ -692,6 +692,8 @@ Linear app                      # Team progress view
 - N/A (PolicyEnforcer is stateless; reads dbt manifest.json) (3a-policy-enforcer)
 - Python 3.11 + kubernetes>=27.0.0, pydantic>=2.0.0, pyyaml>=6.0, structlog (7b-k8s-rbac)
 - File-based (YAML manifests in `target/rbac/` directory) (7b-k8s-rbac)
+- Python 3.10+ (matches floe-core requirements) + Click>=8.1.0 (CLI framework), Rich (optional, enhanced output), Pydantic>=2.0 (config validation), structlog (logging) (11-cli-unification)
+- N/A (CLI is stateless; outputs to filesystem) (11-cli-unification)
 
 ## Cognee Cloud API Quirks (CRITICAL)
 
@@ -754,8 +756,6 @@ result = await sdk.memify(dataset_name="my_dataset")
 See `CogneeClient.memify()` in `devtools/agent-memory/src/agent_memory/cognee_client.py`.
 
 ## Recent Changes
+- 11-cli-unification: Added Python 3.10+ (matches floe-core requirements) + Click>=8.1.0 (CLI framework), Rich (optional, enhanced output), Pydantic>=2.0 (config validation), structlog (logging)
+- 3b-policy-validation: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 3a-policy-enforcer: Added Python 3.10+ (matches floe-core requirements) + Pydantic v2 (schemas), structlog (logging), opentelemetry-api (tracing)
-- 7b-k8s-rbac: Added Python 3.11 + kubernetes>=27.0.0, pydantic>=2.0.0, pyyaml>=6.0, structlog
-- 4b-orchestrator-plugin: Added Python 3.10+ + Dagster 1.5+, PyIceberg >=0.5.0, structlog, opentelemetry-api
-- 7a-identity-secrets: Added Python 3.11
-- 4d-storage-plugin: Added Python 3.10+ (required for `importlib.metadata.entry_points()` improved API) + PyIceberg >=0.5.0, Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow
