@@ -104,16 +104,14 @@ def generate_command(
         from floe_core.rbac import RBACManifestGenerator
         from floe_core.schemas.security import SecurityConfig
 
-        # Load manifest
-        manifest = load_manifest(config)
+        # Load manifest (may be used in future for governance settings)
+        _manifest = load_manifest(config)
 
-        # Get security config
-        security_config = manifest.governance
-        if security_config is None:
-            # Create default security config with RBAC enabled
-            from floe_core.schemas.security import RBACConfig
+        # Get security config - always create SecurityConfig with RBAC enabled
+        # Note: GovernanceConfig is for policy enforcement, SecurityConfig is for RBAC
+        from floe_core.schemas.security import RBACConfig
 
-            security_config = SecurityConfig(rbac=RBACConfig(enabled=True))
+        security_config: SecurityConfig = SecurityConfig(rbac=RBACConfig(enabled=True))
 
         # Create generator - need an RBACPlugin
         # For now, use a simple mock/stub since full plugin may not be available

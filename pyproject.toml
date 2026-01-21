@@ -108,7 +108,8 @@ exclude = [
 
 # Optional runtime dependencies - these are only available when the specific plugin is installed
 # Using disable_error_code since ignore_missing_imports doesn't suppress import-not-found
-disable_error_code = ["import-not-found"]
+# Also disable import-untyped for packages like kubernetes that lack py.typed markers
+disable_error_code = ["import-not-found", "import-untyped"]
 
 [tool.ruff]
 target-version = "py310"

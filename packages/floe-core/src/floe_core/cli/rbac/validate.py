@@ -19,7 +19,7 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -98,7 +98,7 @@ def validate_command(
         )
 
         # Load manifests from directory
-        manifests: dict[str, list[dict]] = {}
+        manifests: dict[str, list[dict[str, Any]]] = {}
         manifest_files = [
             "namespaces.yaml",
             "serviceaccounts.yaml",

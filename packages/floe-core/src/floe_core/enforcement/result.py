@@ -512,7 +512,7 @@ def create_enforcement_summary(result: EnforcementResult) -> EnforcementResultSu
     from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
 
     # Collect unique policy types from violations
-    policy_types_checked = (
+    policy_types_checked: list[str] = (
         sorted({v.policy_type for v in result.violations}) if result.violations else []
     )
 

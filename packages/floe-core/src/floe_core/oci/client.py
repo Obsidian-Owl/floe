@@ -57,7 +57,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
-from oras.client import OrasClient  # type: ignore[import-untyped]
+from oras.client import OrasClient
 
 from floe_core.oci.auth import AuthProvider, create_auth_provider
 from floe_core.oci.cache import CacheManager
