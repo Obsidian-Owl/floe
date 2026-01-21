@@ -68,17 +68,13 @@ class TestVersionHistory:
     def test_history_descriptions_are_strings(self) -> None:
         """All history descriptions MUST be strings."""
         for version, description in COMPILED_ARTIFACTS_VERSION_HISTORY.items():
-            assert isinstance(description, str), (
-                f"Description for {version} is not a string"
-            )
+            assert isinstance(description, str), f"Description for {version} is not a string"
 
     @pytest.mark.requirement("SC-001")
     def test_history_descriptions_not_empty(self) -> None:
         """All history descriptions MUST not be empty."""
         for version, description in COMPILED_ARTIFACTS_VERSION_HISTORY.items():
-            assert len(description) > 0, (
-                f"Description for {version} is empty"
-            )
+            assert len(description) > 0, f"Description for {version} is empty"
 
 
 class TestGetCompiledArtifactsVersion:
