@@ -198,7 +198,7 @@ class SemanticValidator:
 
         # Build graph: node_id -> list of dependent node_ids
         graph: dict[str, list[str]] = {node_id: [] for node_id in model_ids}
-        in_degree: dict[str, int] = {node_id: 0 for node_id in model_ids}
+        in_degree: dict[str, int] = dict.fromkeys(model_ids, 0)
 
         for node_id in model_ids:
             node = nodes[node_id]

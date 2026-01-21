@@ -26,7 +26,7 @@ import click
 from floe_core.cli.utils import ExitCode, error_exit, info, success
 
 if TYPE_CHECKING:
-    from floe_core.schemas.rbac_validation import RBACValidationResult
+    pass
 
 
 @click.command(
@@ -99,7 +99,12 @@ def validate_command(
 
         # Load manifests from directory
         manifests: dict[str, list[dict]] = {}
-        manifest_files = ["namespaces.yaml", "serviceaccounts.yaml", "roles.yaml", "rolebindings.yaml"]
+        manifest_files = [
+            "namespaces.yaml",
+            "serviceaccounts.yaml",
+            "roles.yaml",
+            "rolebindings.yaml",
+        ]
 
         import yaml
 

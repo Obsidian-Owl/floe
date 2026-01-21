@@ -26,7 +26,7 @@ import click
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
 
 if TYPE_CHECKING:
-    from floe_core.schemas.rbac_audit import AuditFinding, RBACAuditReport
+    from floe_core.schemas.rbac_audit import AuditFinding
 
 
 @click.command(
@@ -99,7 +99,8 @@ def audit_command(
     try:
         # Try to import kubernetes client
         try:
-            from kubernetes import client, config as k8s_config
+            from kubernetes import client
+            from kubernetes import config as k8s_config
         except ImportError:
             error_exit(
                 "kubernetes package not installed. Install with: pip install kubernetes",
@@ -112,8 +113,6 @@ def audit_command(
             detect_wildcard_permissions,
         )
         from floe_core.schemas.rbac_audit import (
-            AuditFinding,
-            AuditSeverity,
             RBACAuditReport,
         )
 
@@ -201,7 +200,7 @@ def audit_command(
         )
 
 
-def _audit_role(role: Any, namespace: str | None) -> list["AuditFinding"]:
+def _audit_role(role: Any, namespace: str | None) -> list[AuditFinding]:
     """Audit a single Role for additional security issues.
 
     This function handles checks not covered by detect_wildcard_permissions.
@@ -213,11 +212,6 @@ def _audit_role(role: Any, namespace: str | None) -> list["AuditFinding"]:
     Returns:
         List of AuditFinding objects.
     """
-    from floe_core.schemas.rbac_audit import (
-        AuditFinding,
-        AuditFindingType,
-        AuditSeverity,
-    )
 
     findings: list[AuditFinding] = []
     # Additional checks can be added here in the future
@@ -225,7 +219,7 @@ def _audit_role(role: Any, namespace: str | None) -> list["AuditFinding"]:
     return findings
 
 
-def _audit_role_binding(binding: Any, namespace: str | None) -> list["AuditFinding"]:
+def _audit_role_binding(binding: Any, namespace: str | None) -> list[AuditFinding]:
     """Audit a single RoleBinding for security issues.
 
     Args:

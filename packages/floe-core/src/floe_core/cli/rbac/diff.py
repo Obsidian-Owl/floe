@@ -26,7 +26,7 @@ import click
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
 
 if TYPE_CHECKING:
-    from floe_core.schemas.rbac_diff import DiffChangeType, RBACDiffResult
+    pass
 
 
 @click.command(
@@ -115,7 +115,8 @@ def diff_command(
     try:
         # Try to import kubernetes client
         try:
-            from kubernetes import client, config as k8s_config
+            from kubernetes import client
+            from kubernetes import config as k8s_config
         except ImportError:
             error_exit(
                 "kubernetes package not installed. Install with: pip install kubernetes",

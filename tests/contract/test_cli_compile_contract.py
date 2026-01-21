@@ -360,7 +360,6 @@ class TestCompileCommandIntegrationContract:
         from unittest.mock import patch
 
         from click.testing import CliRunner
-
         from floe_core.cli.main import cli
         from floe_core.schemas.compiled_artifacts import (
             CompilationMetadata,
@@ -452,7 +451,6 @@ class TestCompileCommandIntegrationContract:
         from unittest.mock import patch
 
         from click.testing import CliRunner
-
         from floe_core.cli.main import cli
         from floe_core.schemas.compiled_artifacts import (
             CompilationMetadata,
@@ -542,7 +540,6 @@ class TestCompileCommandIntegrationContract:
         from unittest.mock import patch
 
         from click.testing import CliRunner
-
         from floe_core.cli.main import cli
         from floe_core.schemas.compiled_artifacts import (
             CompilationMetadata,

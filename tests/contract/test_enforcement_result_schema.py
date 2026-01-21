@@ -548,9 +548,8 @@ class TestEnforcementResultSummarySchemaContract:
 
         Results should not be modified after creation for audit integrity.
         """
-        from pydantic import ValidationError
-
         from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+        from pydantic import ValidationError
 
         summary = EnforcementResultSummary(
             passed=True,
@@ -567,9 +566,8 @@ class TestEnforcementResultSummarySchemaContract:
     @pytest.mark.requirement("003b-FR-024")
     def test_enforcement_result_summary_extra_fields_forbidden(self) -> None:
         """Contract: EnforcementResultSummary MUST reject extra fields."""
-        from pydantic import ValidationError
-
         from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError, match="extra_field"):
             EnforcementResultSummary(

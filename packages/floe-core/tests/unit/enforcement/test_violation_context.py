@@ -25,7 +25,6 @@ from floe_core.enforcement.result import (
     Violation,
 )
 
-
 # ==============================================================================
 # Test Fixtures
 # ==============================================================================
@@ -450,8 +449,8 @@ class TestViolationContextEdgeCases:
         Then: downstream_impact is None (not computed)
         """
         from floe_core.enforcement.policy_enforcer import PolicyEnforcer
-        from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.governance import NamingConfig
+        from floe_core.schemas.manifest import GovernanceConfig
 
         config = GovernanceConfig(
             policy_enforcement_level="strict",
@@ -481,8 +480,8 @@ class TestViolationContextEdgeCases:
         Then: downstream_impact is populated from child_map
         """
         from floe_core.enforcement.policy_enforcer import PolicyEnforcer
-        from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.governance import NamingConfig
+        from floe_core.schemas.manifest import GovernanceConfig
 
         # Use naming pattern that will generate violations for bronze_orders
         config = GovernanceConfig(

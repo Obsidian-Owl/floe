@@ -117,7 +117,7 @@ def compute_resource_diff(
     expected: dict[str, Any] | None,
     actual: dict[str, Any] | None,
     resource_kind: str,
-) -> "ResourceDiff":
+) -> ResourceDiff:
     """Compute the diff between expected and actual resource.
 
     Args:
@@ -206,7 +206,7 @@ def compute_rbac_diff(
     actual_resources: list[dict[str, Any]],
     expected_source: str,
     actual_source: str,
-) -> "RBACDiffResult":
+) -> RBACDiffResult:
     """Compute diff between expected and actual RBAC resources.
 
     Args:
@@ -225,7 +225,7 @@ def compute_rbac_diff(
         >>> result.has_differences()
         True
     """
-    from floe_core.schemas.rbac_diff import DiffChangeType, RBACDiffResult, ResourceDiff
+    from floe_core.schemas.rbac_diff import DiffChangeType, RBACDiffResult
 
     diffs: list[ResourceDiff] = []
     added_count = 0

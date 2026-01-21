@@ -153,9 +153,11 @@ def compile_command(
             f"Permission denied: {e}",
             exit_code=ExitCode.PERMISSION_ERROR,
         )
-    except Exception as e:
+    except Exception:
+        # SECURITY: Don't expose internal exception details that may contain paths
+        # or sensitive configuration. Log the full error internally for debugging.
         error_exit(
-            f"Compilation failed: {e}",
+            "Compilation failed. Check input files and configuration.",
             exit_code=ExitCode.COMPILATION_ERROR,
         )
 

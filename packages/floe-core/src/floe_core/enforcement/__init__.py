@@ -28,6 +28,14 @@ from __future__ import annotations
 # Error types (T028)
 from floe_core.enforcement.errors import PolicyEnforcementError
 
+# Exporters (T054-T060, T067)
+from floe_core.enforcement.exporters import (
+    ensure_output_dir,
+    export_html,
+    export_json,
+    export_sarif,
+)
+
 # Patterns module (T040-T042)
 from floe_core.enforcement.patterns import (
     DOCUMENTATION_URLS,
@@ -58,14 +66,6 @@ from floe_core.enforcement.validators import (
     DocumentationValidator,
     NamingValidator,
     SemanticValidator,
-)
-
-# Exporters (T054-T060, T067)
-from floe_core.enforcement.exporters import (
-    ensure_output_dir,
-    export_html,
-    export_json,
-    export_sarif,
 )
 
 __all__: list[str] = [

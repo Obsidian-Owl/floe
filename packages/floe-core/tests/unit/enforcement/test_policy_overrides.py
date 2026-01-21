@@ -629,7 +629,7 @@ class TestOverrideEdgeCases:
         )
 
         assert len(result) == len(sample_violations)
-        for original, processed in zip(sample_violations, result):
+        for original, processed in zip(sample_violations, result, strict=True):
             assert original.severity == processed.severity
 
     @pytest.mark.requirement("003b-FR-011")

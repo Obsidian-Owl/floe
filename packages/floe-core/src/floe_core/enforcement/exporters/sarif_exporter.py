@@ -316,7 +316,11 @@ def _get_model_path(model_name: str) -> str:
         layer = "staging"
     elif model_name.startswith("silver_") or model_name.startswith("int_"):
         layer = "intermediate"
-    elif model_name.startswith("gold_") or model_name.startswith("dim_") or model_name.startswith("fct_"):
+    elif (
+        model_name.startswith("gold_")
+        or model_name.startswith("dim_")
+        or model_name.startswith("fct_")
+    ):
         layer = "marts"
     else:
         layer = "models"

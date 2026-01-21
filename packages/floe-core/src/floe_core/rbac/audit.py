@@ -392,7 +392,7 @@ def detect_wildcard_permissions(
     rules: list[dict[str, Any]],
     role_name: str,
     namespace: str | None = None,
-) -> list["AuditFinding"]:
+) -> list[AuditFinding]:
     """Detect wildcard permissions in role rules (FR-070).
 
     Args:
@@ -474,7 +474,7 @@ def check_missing_resource_names(
     rules: list[dict[str, Any]],
     role_name: str,
     namespace: str | None = None,
-) -> list["AuditFinding"]:
+) -> list[AuditFinding]:
     """Check for rules accessing secrets without resourceNames constraint.
 
     Args:

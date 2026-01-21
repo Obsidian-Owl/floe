@@ -18,7 +18,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from floe_core.schemas.governance import PolicyOverride, VALID_POLICY_TYPES
+from floe_core.schemas.governance import VALID_POLICY_TYPES, PolicyOverride
 
 
 class TestPolicyOverrideBasic:

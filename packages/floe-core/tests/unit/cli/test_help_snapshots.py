@@ -18,9 +18,14 @@ from click.testing import CliRunner
 
 from floe_core.cli.main import cli
 
-
 # Path to golden files
-GOLDEN_DIR = Path(__file__).parent.parent.parent.parent.parent.parent / "tests" / "fixtures" / "cli" / "golden"
+GOLDEN_DIR = (
+    Path(__file__).parent.parent.parent.parent.parent.parent
+    / "tests"
+    / "fixtures"
+    / "cli"
+    / "golden"
+)
 
 
 class TestRootHelpSnapshot:

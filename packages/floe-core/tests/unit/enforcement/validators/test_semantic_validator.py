@@ -18,7 +18,6 @@ from typing import Any
 
 import pytest
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -422,7 +421,11 @@ class TestDetectCircularDeps:
         violation = violations[0]
         # Message should mention the cycle participants
         message_lower = violation.message.lower()
-        assert "model_a" in message_lower or "model_b" in message_lower or "model_c" in message_lower
+        assert (
+            "model_a" in message_lower
+            or "model_b" in message_lower
+            or "model_c" in message_lower
+        )
 
     @pytest.mark.requirement("003b-FR-002")
     def test_self_referencing_model_generates_violation(self) -> None:

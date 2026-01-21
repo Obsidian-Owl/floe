@@ -28,7 +28,7 @@ def validate_manifest_against_config(
     manifest_resources: list[dict[str, Any]],
     expected_resources: list[dict[str, Any]],
     resource_kind: str,
-) -> list["ValidationIssue"]:
+) -> list[ValidationIssue]:
     """Validate manifest resources against expected configuration.
 
     Args:

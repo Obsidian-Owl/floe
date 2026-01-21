@@ -381,7 +381,12 @@ class TestHtmlExporter:
 
         content = output_path.read_text()
         # Should indicate success
-        assert "Passed" in content or "PASSED" in content or "pass" in content.lower() or "success" in content.lower()
+        assert (
+            "Passed" in content
+            or "PASSED" in content
+            or "pass" in content.lower()
+            or "success" in content.lower()
+        )
 
     @pytest.mark.requirement("003b-FR-022")
     def test_export_html_includes_documentation_links(

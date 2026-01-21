@@ -469,7 +469,10 @@ class CustomRuleValidator:
             message=(
                 f"Model '{model_name}' is missing required test types: {missing_str}"
             ),
-            expected=f"Tests of type [{required_str}] should exist for at least {min_columns} column(s)",
+            expected=(
+                f"Tests of type [{required_str}] should exist "
+                f"for at least {min_columns} column(s)"
+            ),
             actual=f"Missing test types: {missing_str}",
             suggestion=(
                 f"Add the required tests to your model columns:\n"

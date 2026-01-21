@@ -112,7 +112,7 @@ def push_command(
     _push_to_registry(artifacts, registry_config, registry, tag)
 
 
-def _load_artifacts(artifact_path: Path) -> "CompiledArtifacts":
+def _load_artifacts(artifact_path: Path) -> CompiledArtifacts:
     """Load and validate CompiledArtifacts from file.
 
     Args:
@@ -136,8 +136,8 @@ def _load_artifacts(artifact_path: Path) -> "CompiledArtifacts":
 
 
 def _push_to_registry(
-    artifacts: "CompiledArtifacts",
-    registry_config: "RegistryConfig",
+    artifacts: CompiledArtifacts,
+    registry_config: RegistryConfig,
     registry: str,
     tag: str,
 ) -> None:
@@ -189,7 +189,7 @@ def _push_to_registry(
             )
 
 
-def _build_registry_config(registry_uri: str) -> "RegistryConfig":
+def _build_registry_config(registry_uri: str) -> RegistryConfig:
     """Build RegistryConfig from URI and environment.
 
     Args:
@@ -205,6 +205,9 @@ def _build_registry_config(registry_uri: str) -> "RegistryConfig":
     from floe_core.schemas.secrets import SecretReference, SecretSource
 
     # Determine auth type from environment
+    # SECURITY NOTE: We only check if credentials are SET (non-empty), never log values.
+    # Actual credential values are handled via SecretReference, which defers resolution
+    # to the OCI client at push time. No credential values are stored or logged here.
     username = os.environ.get("FLOE_REGISTRY_USERNAME", "")
     password = os.environ.get("FLOE_REGISTRY_PASSWORD", "")
     token = os.environ.get("FLOE_REGISTRY_TOKEN", "")

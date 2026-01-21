@@ -241,7 +241,6 @@ class TestComputeRbacDiff:
     def test_diff_mixed_changes(self) -> None:
         """Test diff with added, removed, and modified resources."""
         from floe_core.rbac.diff import compute_rbac_diff
-        from floe_core.schemas.rbac_diff import DiffChangeType
 
         expected = [
             {

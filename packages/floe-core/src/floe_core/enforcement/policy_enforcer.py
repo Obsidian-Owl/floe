@@ -18,8 +18,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
-from floe_core.schemas.governance import PolicyOverride
-
 from floe_core.enforcement.result import (
     EnforcementResult,
     EnforcementSummary,
@@ -31,6 +29,7 @@ from floe_core.enforcement.validators.custom_rules import CustomRuleValidator
 from floe_core.enforcement.validators.documentation import DocumentationValidator
 from floe_core.enforcement.validators.naming import NamingValidator
 from floe_core.enforcement.validators.semantic import SemanticValidator
+from floe_core.schemas.governance import PolicyOverride
 
 if TYPE_CHECKING:
     from floe_core.schemas.manifest import GovernanceConfig

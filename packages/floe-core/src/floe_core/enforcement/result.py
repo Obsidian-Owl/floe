@@ -34,7 +34,8 @@ class Violation(BaseModel):
     Attributes:
         error_code: FLOE-EXXX format error code for lookup.
         severity: "error" (blocks compilation) or "warning" (advisory).
-        policy_type: Category of policy violated (naming, coverage, documentation, semantic, custom).
+        policy_type: Category of policy violated
+            (naming, coverage, documentation, semantic, custom).
         model_name: dbt model where violation occurred.
         column_name: Column if applicable (None for model-level violations).
         message: Human-readable description of the violation.
@@ -115,7 +116,10 @@ class Violation(BaseModel):
     # Epic 3B: Context fields for enhanced violation reporting
     downstream_impact: list[str] | None = Field(
         default=None,
-        description="List of downstream models affected by this model (computed from manifest child_map)",
+        description=(
+            "List of downstream models affected by this model "
+            "(computed from manifest child_map)"
+        ),
     )
     first_detected: datetime | None = Field(
         default=None,
@@ -124,7 +128,10 @@ class Violation(BaseModel):
     occurrences: int | None = Field(
         default=None,
         ge=1,
-        description="Number of times this violation has been detected (placeholder for historical tracking)",
+        description=(
+            "Number of times this violation has been detected "
+            "(placeholder for historical tracking)"
+        ),
     )
     override_applied: str | None = Field(
         default=None,
@@ -430,7 +437,7 @@ def _compute_recursive_children(
         for child_uid in children:
             # Add child's model name (not unique_id)
             model_name = _extract_model_name(child_uid)
-            if model_name and model_name not in [r for r in result]:
+            if model_name and model_name not in result:
                 result.append(model_name)
             # Recurse
             _visit(child_uid)
@@ -479,7 +486,7 @@ def _extract_model_name(unique_id: str) -> str | None:
 # ==============================================================================
 
 
-def create_enforcement_summary(result: EnforcementResult) -> "EnforcementResultSummary":
+def create_enforcement_summary(result: EnforcementResult) -> EnforcementResultSummary:
     """Create an EnforcementResultSummary from an EnforcementResult.
 
     This helper extracts the essential metrics from EnforcementResult for
