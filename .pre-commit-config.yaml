@@ -96,6 +96,15 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Claude Code agent validation
+      - id: agent-lint
+        name: claude agent frontmatter
+        entry: scripts/pre-commit-agent-lint.sh
+        language: script
+        stages: [pre-commit]
+        pass_filenames: false
+        files: ^\.claude/agents/.*\.md$
+
   # ==========================================================
   # Pre-push hooks (slower, run before push)
   # Uses local hooks to match CI exactly (reads pyproject.toml)
