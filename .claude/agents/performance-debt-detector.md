@@ -1,8 +1,11 @@
-# Performance Debt Detector
+---
+name: performance-debt-detector
+description: Detect performance anti-patterns including N+1 queries, sync in async, unbounded collections, and O(n²) algorithms. Use for tech debt reviews.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Tech Debt (Tier: MEDIUM)
+# Performance Debt Detector
 
 ## Identity
 

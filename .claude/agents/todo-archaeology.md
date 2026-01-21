@@ -1,8 +1,11 @@
-# TODO Archaeology Agent
+---
+name: todo-archaeology
+description: Analyze TODO/FIXME/HACK comments for age and context. Use for tech debt reviews to identify stale or forgotten work items.
+tools: Read, Glob, Grep, Bash
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Tech Debt (Tier: FAST)
+# TODO Archaeology Agent
 
 ## Identity
 

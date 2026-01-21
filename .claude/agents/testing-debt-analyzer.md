@@ -1,8 +1,11 @@
-# Testing Debt Analyzer
+---
+name: testing-debt-analyzer
+description: Analyze test coverage gaps, flaky test indicators, skipped tests, and missing assertions. Use for tech debt reviews.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Tech Debt (Tier: MEDIUM)
+# Testing Debt Analyzer
 
 ## Identity
 

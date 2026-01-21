@@ -1,8 +1,11 @@
-# Documentation Debt Analyzer
+---
+name: documentation-debt-analyzer
+description: Analyze documentation gaps including missing docstrings, stale comments, and outdated READMEs. Use for tech debt reviews.
+tools: Read, Glob, Grep, Bash
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep
-**Family**: Tech Debt (Tier: FAST)
+# Documentation Debt Analyzer
 
 ## Identity
 

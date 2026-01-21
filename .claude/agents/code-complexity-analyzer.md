@@ -1,8 +1,11 @@
-# Code Complexity Analyzer
+---
+name: code-complexity-analyzer
+description: Analyze code complexity metrics (cyclomatic, cognitive, nesting depth). Use for tech debt reviews to identify maintainability risks.
+tools: Read, Glob, Grep, Bash
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Tech Debt (Tier: FAST)
+# Code Complexity Analyzer
 
 ## Identity
 

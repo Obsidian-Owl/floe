@@ -1,8 +1,11 @@
-# Dependency Debt Analyzer
+---
+name: dependency-debt-analyzer
+description: Analyze dependency health including CVEs, outdated packages, and unpinned versions. Use for tech debt reviews and security checks.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Bash, Grep, Glob
-**Family**: Tech Debt (Tier: MEDIUM)
+# Dependency Debt Analyzer
 
 ## Identity
 

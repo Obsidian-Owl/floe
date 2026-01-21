@@ -1,8 +1,11 @@
-# Dead Code Detector
+---
+name: dead-code-detector
+description: Detect unreachable code, unused imports, unused functions, and commented-out code blocks. Use for tech debt reviews.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Tech Debt (Tier: MEDIUM)
+# Dead Code Detector
 
 ## Identity
 

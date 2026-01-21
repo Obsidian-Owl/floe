@@ -1,8 +1,11 @@
-# Git Hotspot Analyzer
+---
+name: git-hotspot-analyzer
+description: Analyze git history for code hotspots, high churn files, and bug-prone areas. Use for tech debt reviews to identify risk areas.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Bash, Read, Grep, Glob
-**Family**: Tech Debt (Tier: MEDIUM)
+# Git Hotspot Analyzer
 
 ## Identity
 
