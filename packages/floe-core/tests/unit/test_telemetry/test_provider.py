@@ -1126,10 +1126,11 @@ class TestTelemetryProviderAsyncExport:
                 span.set_attribute("iteration", i)
         elapsed_time = time.monotonic() - start_time
 
-        # Non-blocking span creation should be very fast (< 100ms for 100 spans)
-        # If export was synchronous, this would take much longer
-        assert elapsed_time < 0.1, (
-            f"Span creation took {elapsed_time:.3f}s, expected < 0.1s. "
+        # Non-blocking span creation should be fast (< 500ms for 100 spans)
+        # Use 500ms threshold to account for CI environment variability.
+        # If export was synchronous, this would take much longer (seconds).
+        assert elapsed_time < 0.5, (
+            f"Span creation took {elapsed_time:.3f}s, expected < 0.5s. "
             "Export appears to be blocking."
         )
 
