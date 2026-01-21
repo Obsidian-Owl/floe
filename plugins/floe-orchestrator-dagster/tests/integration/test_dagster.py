@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 import pytest
-
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from testing.base_classes.integration_test_base import IntegrationTestBase
 

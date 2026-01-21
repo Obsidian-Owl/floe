@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 if TYPE_CHECKING:

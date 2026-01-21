@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from testing.base_classes.integration_test_base import IntegrationTestBase
 
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
-from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
     pass  # TYPE_CHECKING block preserved for future type-only imports

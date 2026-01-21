@@ -21,8 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -38,6 +36,7 @@ from floe_core.schemas.oci import (
     ArtifactLayer,
     ArtifactManifest,
 )
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 # =============================================================================

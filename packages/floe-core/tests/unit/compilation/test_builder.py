@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.schemas.compiled_artifacts import (
     PluginRef,
     ResolvedModel,
@@ -23,6 +22,7 @@ from floe_core.schemas.compiled_artifacts import (
 )
 from floe_core.schemas.floe_spec import FloeMetadata, FloeSpec, TransformSpec
 from floe_core.schemas.manifest import PlatformManifest
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 
 @pytest.fixture

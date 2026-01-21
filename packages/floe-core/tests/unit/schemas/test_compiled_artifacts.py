@@ -22,7 +22,6 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -34,6 +33,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedPlugins,
     ResolvedTransforms,
 )
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 

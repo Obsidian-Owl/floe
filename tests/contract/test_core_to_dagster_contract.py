@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 

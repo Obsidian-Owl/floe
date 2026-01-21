@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.oci.client import MUTABLE_TAG_PATTERNS, SEMVER_PATTERN, OCIClient
 from floe_core.oci.errors import ArtifactNotFoundError, ImmutabilityViolationError
 from floe_core.schemas.compiled_artifacts import (
@@ -35,6 +34,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryConfig
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 if TYPE_CHECKING:
