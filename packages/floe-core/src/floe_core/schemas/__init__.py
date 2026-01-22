@@ -47,6 +47,16 @@ from floe_core.schemas.audit import (
     AuditResult,
 )
 
+# Telemetry configuration schemas (12B-ARCH-001: Circular dependency resolution)
+from floe_core.schemas.telemetry import (
+    BatchSpanProcessorConfig,
+    LoggingConfig,
+    ResourceAttributes,
+    SamplingConfig,
+    TelemetryAuth,
+    TelemetryConfig,
+)
+
 # CompiledArtifacts models (T076)
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
@@ -199,6 +209,13 @@ __all__: list[str] = [
     "AuditEvent",
     "AuditOperation",
     "AuditResult",
+    # Telemetry configuration (12B-ARCH-001)
+    "BatchSpanProcessorConfig",
+    "LoggingConfig",
+    "ResourceAttributes",
+    "SamplingConfig",
+    "TelemetryAuth",
+    "TelemetryConfig",
     # Governance (Epic 3A)
     "LayerThresholds",
     "NamingConfig",
