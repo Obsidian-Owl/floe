@@ -48,7 +48,6 @@ See Also:
 
 from __future__ import annotations
 
-import re
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -71,10 +70,22 @@ from floe_core.oci.errors import (
 )
 from floe_core.oci.manifest import (
     build_manifest,
+    calculate_layers_total_size,
+    calculate_manifest_digest,
     create_empty_config,
+    parse_created_timestamp,
+    parse_manifest_response,
     serialize_layer,
 )
 from floe_core.oci.metrics import OCIMetrics, get_oci_metrics
+from floe_core.oci.layers import (
+    MUTABLE_TAG_PATTERNS,
+    SEMVER_PATTERN,
+    PullOperations,
+    TagClassifier,
+    URIParser,
+    create_temp_layer_files,
+)
 from floe_core.oci.resilience import CircuitBreaker, RetryPolicy
 from floe_core.schemas.oci import (
     ArtifactManifest,
@@ -88,19 +99,6 @@ if TYPE_CHECKING:
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 logger = structlog.get_logger(__name__)
-
-
-# Semver pattern for immutability enforcement
-SEMVER_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$")
-"""Pattern matching semantic versioning tags (e.g., v1.0.0, 1.2.3-alpha)."""
-
-# Mutable tag patterns that are allowed to be overwritten
-MUTABLE_TAG_PATTERNS = [
-    re.compile(r"^latest(-.*)?$"),  # latest, latest-dev, latest-staging
-    re.compile(r"^dev(-.*)?$"),  # dev, dev-branch
-    re.compile(r"^snapshot(-.*)?$"),  # snapshot, snapshot-123
-]
-"""Patterns for mutable tags that can be overwritten."""
 
 
 class OCIClient:
@@ -161,8 +159,15 @@ class OCIClient:
         self._retry_policy = retry_policy
         self._metrics = metrics
 
-        # Parse registry URI for hostname extraction
-        self._registry_host = self._extract_registry_host(registry_config.uri)
+        # Use URIParser for hostname extraction and target ref building
+        self._uri_parser = URIParser(registry_config.uri)
+        self._registry_host = self._uri_parser.registry_host
+
+        # Use TagClassifier for immutability checks
+        self._tag_classifier = TagClassifier()
+
+        # Lazy-initialized PullOperations helper
+        self._pull_ops: PullOperations | None = None
 
         logger.info(
             "oci_client_initialized",
@@ -226,6 +231,17 @@ class OCIClient:
             self._metrics = get_oci_metrics()
         return self._metrics
 
+    @property
+    def pull_operations(self) -> PullOperations:
+        """Get or create the pull operations helper."""
+        if self._pull_ops is None:
+            self._pull_ops = PullOperations(
+                cache_manager=self.cache_manager,
+                metrics=self.metrics,
+                registry_host=self._registry_host,
+            )
+        return self._pull_ops
+
     @contextmanager
     def _with_circuit_breaker(self, operation: str) -> Iterator[None]:
         """Context manager to wrap registry operations with circuit breaker.
@@ -260,6 +276,33 @@ class OCIClient:
             yield
         # Success is recorded automatically by protect() on clean exit
         # Failure is recorded automatically by protect() on exception
+
+    def _record_operation_metrics(
+        self,
+        operation: str,
+        start_time: float,
+        success: bool,
+        size: int | None = None,
+    ) -> float:
+        """Record metrics for an operation.
+
+        Args:
+            operation: Operation name (push, pull, inspect, list).
+            start_time: Monotonic time when operation started.
+            success: Whether operation succeeded.
+            size: Optional artifact size for push/pull.
+
+        Returns:
+            Duration in seconds.
+        """
+        import time
+
+        duration = time.monotonic() - start_time
+        self.metrics.record_duration(operation, self._registry_host, duration)
+        self.metrics.record_operation(operation, self._registry_host, success=success)
+        if size is not None and success:
+            self.metrics.record_artifact_size(operation, size)
+        return duration
 
     @classmethod
     def from_registry_config(
@@ -453,13 +496,10 @@ class OCIClient:
                                 f"Push failed: {response.status_code}: {response.text}",
                             )
 
-                # Record duration metric
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("push", self._registry_host, duration)
-
                 # Record success metrics
-                self.metrics.record_operation("push", self._registry_host, success=True)
-                self.metrics.record_artifact_size("push", manifest.size)
+                duration = self._record_operation_metrics(
+                    "push", start_time, success=True, size=manifest.size
+                )
 
                 # Add final digest to span
                 span.set_attribute("oci.artifact.digest", manifest.digest)
@@ -475,30 +515,20 @@ class OCIClient:
                 return manifest.digest
 
             except ImmutabilityViolationError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("push", self._registry_host, duration)
-                self.metrics.record_operation("push", self._registry_host, success=False)
+                self._record_operation_metrics("push", start_time, success=False)
                 raise
             except CircuitBreakerOpenError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("push", self._registry_host, duration)
-                self.metrics.record_operation("push", self._registry_host, success=False)
+                self._record_operation_metrics("push", start_time, success=False)
                 log.warning("push_circuit_breaker_open")
                 raise
             except AuthenticationError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("push", self._registry_host, duration)
-                self.metrics.record_operation("push", self._registry_host, success=False)
+                self._record_operation_metrics("push", start_time, success=False)
                 raise
             except RegistryUnavailableError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("push", self._registry_host, duration)
-                self.metrics.record_operation("push", self._registry_host, success=False)
+                self._record_operation_metrics("push", start_time, success=False)
                 raise
             except Exception as e:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("push", self._registry_host, duration)
-                self.metrics.record_operation("push", self._registry_host, success=False)
+                self._record_operation_metrics("push", start_time, success=False)
                 log.error("push_failed", error=str(e))
                 raise OCIError(f"Push failed: {e}") from e
 
@@ -550,112 +580,7 @@ class OCIClient:
         Returns:
             Full OCI reference (e.g., harbor.example.com/namespace/repo:tag).
         """
-        # Remove oci:// prefix if present
-        uri = self._config.uri
-        if uri.startswith("oci://"):
-            uri = uri[6:]
-
-        # Append tag
-        return f"{uri}:{tag}"
-
-    # =========================================================================
-    # Pull Helper Methods (T022 - Reduce Cyclomatic Complexity)
-    # =========================================================================
-
-    def _find_artifacts_file(
-        self, pulled_files: list[str], tmpdir: str
-    ) -> Path:
-        """Find compiled_artifacts.json in pulled files.
-
-        Uses O(1) dictionary lookup (T014 optimization).
-
-        Args:
-            pulled_files: List of file paths returned by ORAS pull.
-            tmpdir: Temporary directory where files were pulled.
-
-        Returns:
-            Path to compiled_artifacts.json.
-
-        Raises:
-            OCIError: If artifacts file not found.
-        """
-        tmpdir_path = Path(tmpdir)
-
-        # Build dictionary mapping filename to path for O(1) lookup
-        files_by_name: dict[str, Path] = {
-            Path(f).name: Path(f) for f in pulled_files
-        }
-
-        # O(1) dictionary lookup
-        artifacts_path = files_by_name.get("compiled_artifacts.json")
-
-        # Check relative paths if not found
-        if artifacts_path is None:
-            relative_path = tmpdir_path / "compiled_artifacts.json"
-            if relative_path.exists():
-                artifacts_path = relative_path
-
-        if artifacts_path is None or not artifacts_path.exists():
-            raise OCIError(
-                f"Artifact pulled but compiled_artifacts.json not found. "
-                f"Files: {pulled_files}"
-            )
-
-        return artifacts_path
-
-    def _record_pull_failure_metrics(self, start_time: float) -> None:
-        """Record metrics for a failed pull operation.
-
-        Args:
-            start_time: Monotonic time when operation started.
-        """
-        import time
-
-        duration = time.monotonic() - start_time
-        self.metrics.record_duration("pull", self._registry_host, duration)
-        self.metrics.record_operation("pull", self._registry_host, success=False)
-
-    def _try_cache_hit(
-        self, tag: str, span: Any, log: Any, start_time: float
-    ) -> CompiledArtifacts | None:
-        """Try to return artifacts from cache.
-
-        Args:
-            tag: Tag to look up in cache.
-            span: OpenTelemetry span for recording attributes.
-            log: Structured logger.
-            start_time: Monotonic time when operation started.
-
-        Returns:
-            CompiledArtifacts if cache hit, None otherwise.
-        """
-        import time
-
-        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-
-        if self.cache_manager is None:
-            span.set_attribute("oci.cache_hit", False)
-            return None
-
-        cache_entry = self.cache_manager.get(self._config.uri, tag)
-        if cache_entry is None:
-            span.set_attribute("oci.cache_hit", False)
-            self.metrics.record_cache_operation("miss")
-            return None
-
-        # Cache hit
-        log.info("pull_cache_hit", digest=cache_entry.digest)
-        span.set_attribute("oci.cache_hit", True)
-        self.metrics.record_cache_operation("hit")
-        content = cache_entry.path.read_bytes()
-        artifacts = CompiledArtifacts.model_validate_json(content)
-
-        # Record metrics
-        duration = time.monotonic() - start_time
-        self.metrics.record_duration("pull", self._registry_host, duration)
-        self.metrics.record_operation("pull", self._registry_host, success=True)
-
-        return artifacts
+        return self._uri_parser.build_target_ref(tag)
 
     def pull(
         self,
@@ -710,8 +635,10 @@ class OCIClient:
         # Wrap entire operation in a trace span
         with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
             try:
-                # Check cache first (T022: Extracted to helper method)
-                cached_artifacts = self._try_cache_hit(tag, span, log, start_time)
+                # Check cache first using PullOperations helper
+                cached_artifacts = self.pull_operations.try_cache_hit(
+                    tag, self._config.uri, span, log, start_time
+                )
                 if cached_artifacts is not None:
                     return cached_artifacts
 
@@ -732,8 +659,10 @@ class OCIClient:
                                 outdir=tmpdir,
                             )
 
-                            # Find artifacts file (T022: Extracted to helper method)
-                            artifacts_path = self._find_artifacts_file(pulled_files, tmpdir)
+                            # Find artifacts file using PullOperations helper
+                            artifacts_path = self.pull_operations.find_artifacts_file(
+                                pulled_files, tmpdir
+                            )
                             content = artifacts_path.read_bytes()
 
                             # Compute digest for cache
@@ -742,7 +671,7 @@ class OCIClient:
                             return content, digest
 
                         except OCIError:
-                            # Re-raise OCIError (including from _find_artifacts_file)
+                            # Re-raise OCIError (including from find_artifacts_file)
                             raise
                         except Exception as e:
                             error_str = str(e).lower()
@@ -789,13 +718,10 @@ class OCIClient:
                     )
                     log.debug("pull_cached", digest=digest, tag=tag)
 
-                # Record duration metric
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("pull", self._registry_host, duration)
-
                 # Record success metrics
-                self.metrics.record_operation("pull", self._registry_host, success=True)
-                self.metrics.record_artifact_size("pull", len(content))
+                duration = self._record_operation_metrics(
+                    "pull", start_time, success=True, size=len(content)
+                )
 
                 log.info(
                     "pull_completed",
@@ -807,20 +733,20 @@ class OCIClient:
                 return artifacts
 
             except ArtifactNotFoundError:
-                self._record_pull_failure_metrics(start_time)
+                self._record_operation_metrics("pull", start_time, success=False)
                 raise
             except CircuitBreakerOpenError:
-                self._record_pull_failure_metrics(start_time)
+                self._record_operation_metrics("pull", start_time, success=False)
                 log.warning("pull_circuit_breaker_open")
                 raise
             except AuthenticationError:
-                self._record_pull_failure_metrics(start_time)
+                self._record_operation_metrics("pull", start_time, success=False)
                 raise
             except RegistryUnavailableError:
-                self._record_pull_failure_metrics(start_time)
+                self._record_operation_metrics("pull", start_time, success=False)
                 raise
             except Exception as e:
-                self._record_pull_failure_metrics(start_time)
+                self._record_operation_metrics("pull", start_time, success=False)
                 log.error("pull_failed", error=str(e))
                 raise OCIError(f"Pull failed: {e}") from e
 
@@ -845,13 +771,9 @@ class OCIClient:
             >>> print(f"Digest: {manifest.digest}")
             >>> print(f"Size: {manifest.size} bytes")
         """
-        import hashlib
-        import json
         import time
-        from datetime import datetime, timezone
 
         from floe_core.oci.metrics import OCIMetrics
-        from floe_core.schemas.oci import ArtifactLayer, SignatureStatus
 
         log = logger.bind(
             registry=self._registry_host,
@@ -894,100 +816,41 @@ class OCIClient:
                             ) from e
                         raise
 
-                # Calculate manifest digest (sha256 of canonical JSON)
-                manifest_json = json.dumps(manifest_data, separators=(",", ":"), sort_keys=True)
-                manifest_digest = f"sha256:{hashlib.sha256(manifest_json.encode()).hexdigest()}"
-
-                # Parse layers from manifest
-                layers_data = manifest_data.get("layers", [])
-                layers: list[ArtifactLayer] = []
-                total_size = 0
-
-                for layer_data in layers_data:
-                    layer = ArtifactLayer(
-                        digest=layer_data.get("digest", ""),
-                        media_type=layer_data.get("mediaType", ""),
-                        size=layer_data.get("size", 0),
-                        annotations=layer_data.get("annotations", {}),
-                    )
-                    layers.append(layer)
-                    total_size += layer.size
-
-                # Extract artifact type (OCI v1.1) or fall back to config mediaType
-                artifact_type = manifest_data.get("artifactType", "")
-                if not artifact_type:
-                    config_data = manifest_data.get("config", {})
-                    artifact_type = config_data.get("mediaType", "application/octet-stream")
-
-                # Extract annotations
-                annotations = manifest_data.get("annotations", {})
-
-                # Parse created timestamp from annotations
-                created_str = annotations.get(
-                    "org.opencontainers.image.created",
-                    datetime.now(timezone.utc).isoformat(),
-                )
-                try:
-                    # Handle ISO format with or without Z suffix
-                    if created_str.endswith("Z"):
-                        created_str = created_str[:-1] + "+00:00"
-                    created_at = datetime.fromisoformat(created_str)
-                except ValueError:
-                    created_at = datetime.now(timezone.utc)
-
-                # Build ArtifactManifest
-                manifest = ArtifactManifest(
-                    digest=manifest_digest,
-                    artifact_type=artifact_type,
-                    size=total_size,
-                    created_at=created_at,
-                    annotations=annotations,
-                    layers=layers,
-                    signature_status=SignatureStatus.UNSIGNED,  # Placeholder for Epic 8B
-                )
+                # Parse manifest using shared parsing logic
+                manifest = parse_manifest_response(manifest_data)
 
                 # Add attributes to span
-                span.set_attribute("oci.artifact.digest", manifest_digest)
-                span.set_attribute("oci.artifact.size_bytes", total_size)
-                span.set_attribute("oci.artifact.layer_count", len(layers))
-
-                # Record duration metric
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("inspect", self._registry_host, duration)
+                span.set_attribute("oci.artifact.digest", manifest.digest)
+                span.set_attribute("oci.artifact.size_bytes", manifest.size)
+                span.set_attribute("oci.artifact.layer_count", len(manifest.layers))
 
                 # Record success metrics
-                self.metrics.record_operation("inspect", self._registry_host, success=True)
+                duration = self._record_operation_metrics(
+                    "inspect", start_time, success=True
+                )
 
                 log.info(
                     "inspect_completed",
-                    digest=manifest_digest,
-                    size=total_size,
-                    layer_count=len(layers),
+                    digest=manifest.digest,
+                    size=manifest.size,
+                    layer_count=len(manifest.layers),
                     duration_ms=int(duration * 1000),
                 )
 
                 return manifest
 
             except ArtifactNotFoundError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("inspect", self._registry_host, duration)
-                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                self._record_operation_metrics("inspect", start_time, success=False)
                 raise
             except CircuitBreakerOpenError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("inspect", self._registry_host, duration)
-                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                self._record_operation_metrics("inspect", start_time, success=False)
                 log.warning("inspect_circuit_breaker_open")
                 raise
             except AuthenticationError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("inspect", self._registry_host, duration)
-                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                self._record_operation_metrics("inspect", start_time, success=False)
                 raise
             except Exception as e:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("inspect", self._registry_host, duration)
-                self.metrics.record_operation("inspect", self._registry_host, success=False)
+                self._record_operation_metrics("inspect", start_time, success=False)
                 log.error("inspect_failed", error=str(e))
                 raise OCIError(f"Inspect failed: {e}") from e
 
@@ -1017,10 +880,7 @@ class OCIClient:
             ...     print(f"{tag.name}: {tag.digest}")
         """
         import fnmatch
-        import hashlib
-        import json
         import time
-        from datetime import datetime, timezone
 
         log = logger.bind(
             registry=self._registry_host,
@@ -1084,34 +944,16 @@ class OCIClient:
                         error=str(error),
                     )
 
-                # Build ArtifactTag list from fetched manifests
+                # Build ArtifactTag list from fetched manifests using shared parsing
                 result: list[ArtifactTag] = []
 
                 for tag_name, manifest_data in fetch_result.manifests.items():
-                    # Calculate manifest digest
-                    manifest_json = json.dumps(
-                        manifest_data, separators=(",", ":"), sort_keys=True
-                    )
-                    digest = f"sha256:{hashlib.sha256(manifest_json.encode()).hexdigest()}"
-
-                    # Extract created timestamp from annotations
+                    # Use shared parsing functions (lightweight size calc)
+                    digest = calculate_manifest_digest(manifest_data)
                     annotations = manifest_data.get("annotations", {})
-                    created_str = annotations.get(
-                        "org.opencontainers.image.created",
-                        datetime.now(timezone.utc).isoformat(),
-                    )
-
-                    # Parse created timestamp
-                    try:
-                        if created_str.endswith("Z"):
-                            created_str = created_str[:-1] + "+00:00"
-                        created_at = datetime.fromisoformat(created_str)
-                    except ValueError:
-                        created_at = datetime.now(timezone.utc)
-
-                    # Calculate total size from layers
+                    created_at = parse_created_timestamp(annotations)
                     layers_data = manifest_data.get("layers", [])
-                    total_size = sum(layer.get("size", 0) for layer in layers_data)
+                    total_size = calculate_layers_total_size(layers_data)
 
                     # Create ArtifactTag
                     artifact_tag = ArtifactTag(
@@ -1122,10 +964,8 @@ class OCIClient:
                     )
                     result.append(artifact_tag)
 
-            # Record duration metric
-            duration = time.monotonic() - start_time
-            self.metrics.record_duration("list", self._registry_host, duration)
-            self.metrics.record_operation("list", self._registry_host, success=True)
+            # Record success metrics
+            duration = self._record_operation_metrics("list", start_time, success=True)
 
             log.info(
                 "list_completed",
@@ -1136,20 +976,14 @@ class OCIClient:
             return result
 
         except CircuitBreakerOpenError:
-            duration = time.monotonic() - start_time
-            self.metrics.record_duration("list", self._registry_host, duration)
-            self.metrics.record_operation("list", self._registry_host, success=False)
+            self._record_operation_metrics("list", start_time, success=False)
             log.warning("list_circuit_breaker_open")
             raise
         except AuthenticationError:
-            duration = time.monotonic() - start_time
-            self.metrics.record_duration("list", self._registry_host, duration)
-            self.metrics.record_operation("list", self._registry_host, success=False)
+            self._record_operation_metrics("list", start_time, success=False)
             raise
         except Exception as e:
-            duration = time.monotonic() - start_time
-            self.metrics.record_duration("list", self._registry_host, duration)
-            self.metrics.record_operation("list", self._registry_host, success=False)
+            self._record_operation_metrics("list", start_time, success=False)
             log.error("list_failed", error=str(e))
             raise OCIError(f"List failed: {e}") from e
 
@@ -1307,17 +1141,7 @@ class OCIClient:
             >>> client.is_tag_immutable("latest-dev")
             False
         """
-        # Check if it matches semver pattern
-        if SEMVER_PATTERN.match(tag):
-            return True
-
-        # Check if it matches any mutable pattern
-        for pattern in MUTABLE_TAG_PATTERNS:
-            if pattern.match(tag):
-                return False
-
-        # Default: treat as immutable (safe default)
-        return True
+        return self._tag_classifier.is_immutable(tag)
 
     def tag_exists(self, tag: str) -> bool:
         """Check if a tag exists in the registry.
@@ -1338,7 +1162,8 @@ class OCIClient:
         except ArtifactNotFoundError:
             return False
 
-    def _extract_registry_host(self, uri: str) -> str:
+    @staticmethod
+    def _extract_registry_host(uri: str) -> str:
         """Extract registry hostname from OCI URI.
 
         Args:
@@ -1347,14 +1172,7 @@ class OCIClient:
         Returns:
             Registry hostname (e.g., harbor.example.com).
         """
-        # Remove oci:// prefix
-        if uri.startswith("oci://"):
-            uri = uri[6:]
-
-        # Extract hostname (first path component)
-        if "/" in uri:
-            return uri.split("/")[0]
-        return uri
+        return URIParser._extract_registry_host(uri)
 
     def _check_immutability_before_push(self, tag: str) -> None:
         """Check if push would violate immutability.
