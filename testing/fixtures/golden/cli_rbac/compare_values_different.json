@@ -1,0 +1,12 @@
+{
+  "name": "compare_values_different",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:23:27.040877+00:00",
+  "checksum": "8a3c6467d4a55781",
+  "output": [
+    "c: missing field",
+    "d: unexpected field",
+    "a: expected 1, got 2",
+    "b[2]: expected 3, got 4"
+  ]
+}

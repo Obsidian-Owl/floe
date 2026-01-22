@@ -1,0 +1,98 @@
+{
+  "name": "rbac_diff_empty_actual",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.160977+00:00",
+  "checksum": "96c33a61ddc241ae",
+  "output": {
+    "generated_at": "2026-01-22 02:22:43.160943+00:00",
+    "expected_source": "test/manifests",
+    "actual_source": "cluster:empty",
+    "diffs": [
+      {
+        "change_type": "added",
+        "resource_kind": "Role",
+        "resource_name": "floe-secret-reader",
+        "resource_namespace": "floe",
+        "expected_value": {
+          "kind": "Role",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "floe-secret-reader",
+            "namespace": "floe"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "secrets"
+              ],
+              "verbs": [
+                "get"
+              ],
+              "resourceNames": [
+                "db-creds"
+              ]
+            }
+          ]
+        },
+        "actual_value": null,
+        "diff_details": [
+          "Resource needs to be created"
+        ]
+      },
+      {
+        "change_type": "added",
+        "resource_kind": "RoleBinding",
+        "resource_name": "floe-worker-secret-binding",
+        "resource_namespace": "floe",
+        "expected_value": {
+          "kind": "RoleBinding",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "floe-worker-secret-binding",
+            "namespace": "floe"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "name": "floe-secret-reader"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "floe-worker",
+              "namespace": "floe"
+            }
+          ]
+        },
+        "actual_value": null,
+        "diff_details": [
+          "Resource needs to be created"
+        ]
+      },
+      {
+        "change_type": "added",
+        "resource_kind": "ServiceAccount",
+        "resource_name": "floe-worker",
+        "resource_namespace": "floe",
+        "expected_value": {
+          "kind": "ServiceAccount",
+          "apiVersion": "v1",
+          "metadata": {
+            "name": "floe-worker",
+            "namespace": "floe"
+          }
+        },
+        "actual_value": null,
+        "diff_details": [
+          "Resource needs to be created"
+        ]
+      }
+    ],
+    "added_count": 3,
+    "removed_count": 0,
+    "modified_count": 0
+  }
+}

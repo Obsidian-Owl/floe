@@ -558,6 +558,105 @@ class OCIClient:
         # Append tag
         return f"{uri}:{tag}"
 
+    # =========================================================================
+    # Pull Helper Methods (T022 - Reduce Cyclomatic Complexity)
+    # =========================================================================
+
+    def _find_artifacts_file(
+        self, pulled_files: list[str], tmpdir: str
+    ) -> Path:
+        """Find compiled_artifacts.json in pulled files.
+
+        Uses O(1) dictionary lookup (T014 optimization).
+
+        Args:
+            pulled_files: List of file paths returned by ORAS pull.
+            tmpdir: Temporary directory where files were pulled.
+
+        Returns:
+            Path to compiled_artifacts.json.
+
+        Raises:
+            OCIError: If artifacts file not found.
+        """
+        tmpdir_path = Path(tmpdir)
+
+        # Build dictionary mapping filename to path for O(1) lookup
+        files_by_name: dict[str, Path] = {
+            Path(f).name: Path(f) for f in pulled_files
+        }
+
+        # O(1) dictionary lookup
+        artifacts_path = files_by_name.get("compiled_artifacts.json")
+
+        # Check relative paths if not found
+        if artifacts_path is None:
+            relative_path = tmpdir_path / "compiled_artifacts.json"
+            if relative_path.exists():
+                artifacts_path = relative_path
+
+        if artifacts_path is None or not artifacts_path.exists():
+            raise OCIError(
+                f"Artifact pulled but compiled_artifacts.json not found. "
+                f"Files: {pulled_files}"
+            )
+
+        return artifacts_path
+
+    def _record_pull_failure_metrics(self, start_time: float) -> None:
+        """Record metrics for a failed pull operation.
+
+        Args:
+            start_time: Monotonic time when operation started.
+        """
+        import time
+
+        duration = time.monotonic() - start_time
+        self.metrics.record_duration("pull", self._registry_host, duration)
+        self.metrics.record_operation("pull", self._registry_host, success=False)
+
+    def _try_cache_hit(
+        self, tag: str, span: Any, log: Any, start_time: float
+    ) -> CompiledArtifacts | None:
+        """Try to return artifacts from cache.
+
+        Args:
+            tag: Tag to look up in cache.
+            span: OpenTelemetry span for recording attributes.
+            log: Structured logger.
+            start_time: Monotonic time when operation started.
+
+        Returns:
+            CompiledArtifacts if cache hit, None otherwise.
+        """
+        import time
+
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        if self.cache_manager is None:
+            span.set_attribute("oci.cache_hit", False)
+            return None
+
+        cache_entry = self.cache_manager.get(self._config.uri, tag)
+        if cache_entry is None:
+            span.set_attribute("oci.cache_hit", False)
+            self.metrics.record_cache_operation("miss")
+            return None
+
+        # Cache hit
+        log.info("pull_cache_hit", digest=cache_entry.digest)
+        span.set_attribute("oci.cache_hit", True)
+        self.metrics.record_cache_operation("hit")
+        content = cache_entry.path.read_bytes()
+        artifacts = CompiledArtifacts.model_validate_json(content)
+
+        # Record metrics
+        duration = time.monotonic() - start_time
+        self.metrics.record_duration("pull", self._registry_host, duration)
+        self.metrics.record_operation("pull", self._registry_host, success=True)
+
+        return artifacts
+
     def pull(
         self,
         tag: str,
@@ -611,35 +710,16 @@ class OCIClient:
         # Wrap entire operation in a trace span
         with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
             try:
-                # Check cache first (CacheManager handles TTL validation for mutable tags)
-                if self.cache_manager is not None:
-                    cache_entry = self.cache_manager.get(self._config.uri, tag)
-                    if cache_entry is not None:
-                        log.info(
-                            "pull_cache_hit",
-                            digest=cache_entry.digest,
-                        )
-                        span.set_attribute("oci.cache_hit", True)
-                        self.metrics.record_cache_operation("hit")
-                        content = cache_entry.path.read_bytes()
-                        artifacts = CompiledArtifacts.model_validate_json(content)
-
-                        # Record metrics
-                        duration = time.monotonic() - start_time
-                        self.metrics.record_duration("pull", self._registry_host, duration)
-                        self.metrics.record_operation("pull", self._registry_host, success=True)
-
-                        return artifacts
-                    else:
-                        # Cache miss - only record if cache was checked
-                        span.set_attribute("oci.cache_hit", False)
-                        self.metrics.record_cache_operation("miss")
-                else:
-                    span.set_attribute("oci.cache_hit", False)
+                # Check cache first (T022: Extracted to helper method)
+                cached_artifacts = self._try_cache_hit(tag, span, log, start_time)
+                if cached_artifacts is not None:
+                    return cached_artifacts
 
                 # Use retry policy for network operations
                 def _pull_with_oras() -> tuple[bytes, str]:
                     """Inner function to pull via ORAS with retry."""
+                    import hashlib
+
                     oras_client = self._create_oras_client()
                     target_ref = self._build_target_ref(tag)
 
@@ -652,44 +732,18 @@ class OCIClient:
                                 outdir=tmpdir,
                             )
 
-                            # Find the compiled_artifacts.json file
-                            # ORAS may return full paths or just the file
-                            artifacts_path: Path | None = None
-                            tmpdir_path = Path(tmpdir)
-
-                            for pulled_file in pulled_files:
-                                file_path = Path(pulled_file)
-                                if file_path.name == "compiled_artifacts.json":
-                                    artifacts_path = file_path
-                                    break
-                                # Also check relative to tmpdir
-                                relative_path = tmpdir_path / file_path.name
-                                is_target = relative_path.name == "compiled_artifacts.json"
-                                if relative_path.exists() and is_target:
-                                    artifacts_path = relative_path
-                                    break
-
-                            # Fallback: check tmpdir for the file
-                            if artifacts_path is None:
-                                potential_path = tmpdir_path / "compiled_artifacts.json"
-                                if potential_path.exists():
-                                    artifacts_path = potential_path
-
-                            if artifacts_path is None or not artifacts_path.exists():
-                                raise OCIError(
-                                    f"Artifact pulled but compiled_artifacts.json not found. "
-                                    f"Files: {pulled_files}"
-                                )
-
+                            # Find artifacts file (T022: Extracted to helper method)
+                            artifacts_path = self._find_artifacts_file(pulled_files, tmpdir)
                             content = artifacts_path.read_bytes()
 
                             # Compute digest for cache
-                            import hashlib
-
                             digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
 
                             return content, digest
 
+                        except OCIError:
+                            # Re-raise OCIError (including from _find_artifacts_file)
+                            raise
                         except Exception as e:
                             error_str = str(e).lower()
                             # Detect "manifest unknown" or 404 errors
@@ -753,30 +807,20 @@ class OCIClient:
                 return artifacts
 
             except ArtifactNotFoundError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("pull", self._registry_host, duration)
-                self.metrics.record_operation("pull", self._registry_host, success=False)
+                self._record_pull_failure_metrics(start_time)
                 raise
             except CircuitBreakerOpenError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("pull", self._registry_host, duration)
-                self.metrics.record_operation("pull", self._registry_host, success=False)
+                self._record_pull_failure_metrics(start_time)
                 log.warning("pull_circuit_breaker_open")
                 raise
             except AuthenticationError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("pull", self._registry_host, duration)
-                self.metrics.record_operation("pull", self._registry_host, success=False)
+                self._record_pull_failure_metrics(start_time)
                 raise
             except RegistryUnavailableError:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("pull", self._registry_host, duration)
-                self.metrics.record_operation("pull", self._registry_host, success=False)
+                self._record_pull_failure_metrics(start_time)
                 raise
             except Exception as e:
-                duration = time.monotonic() - start_time
-                self.metrics.record_duration("pull", self._registry_host, duration)
-                self.metrics.record_operation("pull", self._registry_host, success=False)
+                self._record_pull_failure_metrics(start_time)
                 log.error("pull_failed", error=str(e))
                 raise OCIError(f"Pull failed: {e}") from e
 
@@ -1020,57 +1064,63 @@ class OCIClient:
                         name for name in tag_names if fnmatch.fnmatch(name, filter_pattern)
                     ]
 
-                # Build ArtifactTag list by getting manifest for each tag
+                # Build tag references for parallel fetching
+                tag_refs = [
+                    (tag_name, self._build_target_ref(tag_name))
+                    for tag_name in tag_names
+                ]
+
+                # Use BatchFetcher for parallel manifest fetching (fixes N+1 pattern)
+                from floe_core.oci.batch_fetcher import BatchFetcher
+
+                batch_fetcher = BatchFetcher(max_workers=10)
+                fetch_result = batch_fetcher.fetch_manifests(oras_client, tag_refs)
+
+                # Log any failures
+                for tag_name, error in fetch_result.errors.items():
+                    log.warning(
+                        "list_tag_failed",
+                        tag=tag_name,
+                        error=str(error),
+                    )
+
+                # Build ArtifactTag list from fetched manifests
                 result: list[ArtifactTag] = []
 
-                for tag_name in tag_names:
+                for tag_name, manifest_data in fetch_result.manifests.items():
+                    # Calculate manifest digest
+                    manifest_json = json.dumps(
+                        manifest_data, separators=(",", ":"), sort_keys=True
+                    )
+                    digest = f"sha256:{hashlib.sha256(manifest_json.encode()).hexdigest()}"
+
+                    # Extract created timestamp from annotations
+                    annotations = manifest_data.get("annotations", {})
+                    created_str = annotations.get(
+                        "org.opencontainers.image.created",
+                        datetime.now(timezone.utc).isoformat(),
+                    )
+
+                    # Parse created timestamp
                     try:
-                        # Get manifest for this tag
-                        target_ref = self._build_target_ref(tag_name)
-                        manifest_data = oras_client.get_manifest(container=target_ref)
+                        if created_str.endswith("Z"):
+                            created_str = created_str[:-1] + "+00:00"
+                        created_at = datetime.fromisoformat(created_str)
+                    except ValueError:
+                        created_at = datetime.now(timezone.utc)
 
-                        # Calculate manifest digest
-                        manifest_json = json.dumps(
-                            manifest_data, separators=(",", ":"), sort_keys=True
-                        )
-                        digest = f"sha256:{hashlib.sha256(manifest_json.encode()).hexdigest()}"
+                    # Calculate total size from layers
+                    layers_data = manifest_data.get("layers", [])
+                    total_size = sum(layer.get("size", 0) for layer in layers_data)
 
-                        # Extract created timestamp from annotations
-                        annotations = manifest_data.get("annotations", {})
-                        created_str = annotations.get(
-                            "org.opencontainers.image.created",
-                            datetime.now(timezone.utc).isoformat(),
-                        )
-
-                        # Parse created timestamp
-                        try:
-                            if created_str.endswith("Z"):
-                                created_str = created_str[:-1] + "+00:00"
-                            created_at = datetime.fromisoformat(created_str)
-                        except ValueError:
-                            created_at = datetime.now(timezone.utc)
-
-                        # Calculate total size from layers
-                        layers_data = manifest_data.get("layers", [])
-                        total_size = sum(layer.get("size", 0) for layer in layers_data)
-
-                        # Create ArtifactTag
-                        artifact_tag = ArtifactTag(
-                            name=tag_name,
-                            digest=digest,
-                            created_at=created_at,
-                            size=total_size,
-                        )
-                        result.append(artifact_tag)
-
-                    except Exception as e:
-                        # Log warning but continue with other tags
-                        log.warning(
-                            "list_tag_failed",
-                            tag=tag_name,
-                            error=str(e),
-                        )
-                        continue
+                    # Create ArtifactTag
+                    artifact_tag = ArtifactTag(
+                        name=tag_name,
+                        digest=digest,
+                        created_at=created_at,
+                        size=total_size,
+                    )
+                    result.append(artifact_tag)
 
             # Record duration metric
             duration = time.monotonic() - start_time

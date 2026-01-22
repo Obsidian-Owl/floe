@@ -1,0 +1,17 @@
+{
+  "name": "normalize_resource",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.161904+00:00",
+  "checksum": "c960e007443c366e",
+  "output": {
+    "kind": "ServiceAccount",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "test-sa",
+      "namespace": "default",
+      "annotations": {
+        "custom-annotation": "value"
+      }
+    }
+  }
+}

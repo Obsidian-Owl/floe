@@ -5,6 +5,8 @@ Phase: 4 - User Story 2 (RBAC Command Migration)
 User Story: US2 - RBAC Command Migration
 Requirements: FR-026, FR-027, FR-063
 
+Refactored: T021 (Extract Method to reduce CC from 27 to ≤10)
+
 This module implements the `floe rbac diff` command which:
 - Compares expected vs deployed RBAC
 - Shows added, removed, and modified resources
@@ -26,7 +28,260 @@ import click
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
 
 if TYPE_CHECKING:
-    pass
+    from floe_core.schemas.rbac_diff import RBACDiffResult
+
+
+# =============================================================================
+# Extracted Helper Functions (T021 - Reduce Cyclomatic Complexity)
+# =============================================================================
+
+
+def _validate_required_options(
+    manifest_dir: Path | None,
+    namespace: str | None,
+) -> tuple[Path, str]:
+    """Validate required CLI options and return them.
+
+    Args:
+        manifest_dir: Directory containing expected RBAC manifests.
+        namespace: Namespace to diff.
+
+    Returns:
+        Tuple of validated (manifest_dir, namespace).
+
+    Raises:
+        SystemExit: If required options are missing.
+    """
+    if manifest_dir is None:
+        error_exit(
+            "Missing --manifest-dir option. Provide path to manifest directory.",
+            exit_code=ExitCode.USAGE_ERROR,
+        )
+    if namespace is None:
+        error_exit(
+            "Missing --namespace option. Provide namespace to diff.",
+            exit_code=ExitCode.USAGE_ERROR,
+        )
+    # Type narrowing - error_exit calls sys.exit so we never reach here if None
+    return manifest_dir, namespace
+
+
+def _load_kubeconfig(kubeconfig: Path | None) -> None:
+    """Load Kubernetes configuration.
+
+    Args:
+        kubeconfig: Optional path to kubeconfig file.
+
+    Raises:
+        SystemExit: If kubernetes package not installed.
+    """
+    try:
+        from kubernetes import config as k8s_config
+    except ImportError:
+        error_exit(
+            "kubernetes package not installed. Install with: pip install kubernetes",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
+
+    if kubeconfig:
+        k8s_config.load_kube_config(config_file=str(kubeconfig))
+    else:
+        try:
+            k8s_config.load_incluster_config()
+        except k8s_config.ConfigException:
+            k8s_config.load_kube_config()
+
+
+def _load_expected_manifests(manifest_dir: Path) -> list[dict[str, Any]]:
+    """Load expected RBAC resources from manifest files.
+
+    Args:
+        manifest_dir: Directory containing RBAC manifest files.
+
+    Returns:
+        List of resource dictionaries from manifest files.
+    """
+    import yaml
+
+    expected_resources: list[dict[str, Any]] = []
+    manifest_files = ["roles.yaml", "rolebindings.yaml", "serviceaccounts.yaml"]
+
+    for filename in manifest_files:
+        file_path = manifest_dir / filename
+        if file_path.exists():
+            content = file_path.read_text()
+            if content.strip():
+                docs = list(yaml.safe_load_all(content))
+                for doc in docs:
+                    if doc:
+                        expected_resources.append(doc)
+
+    return expected_resources
+
+
+def _fetch_deployed_resources(namespace: str) -> list[dict[str, Any]]:
+    """Fetch deployed RBAC resources from the cluster.
+
+    Args:
+        namespace: Kubernetes namespace to fetch from.
+
+    Returns:
+        List of resource dictionaries from the cluster.
+    """
+    from kubernetes import client
+
+    rbac_api = client.RbacAuthorizationV1Api()
+    core_api = client.CoreV1Api()
+
+    actual_resources: list[dict[str, Any]] = []
+
+    # Get deployed roles
+    for role in rbac_api.list_namespaced_role(namespace).items:
+        actual_resources.append(_k8s_to_dict(role, "Role"))
+
+    # Get deployed role bindings
+    for rb in rbac_api.list_namespaced_role_binding(namespace).items:
+        actual_resources.append(_k8s_to_dict(rb, "RoleBinding"))
+
+    # Get deployed service accounts (skip default)
+    for sa in core_api.list_namespaced_service_account(namespace).items:
+        if sa.metadata.name != "default":
+            actual_resources.append(_k8s_to_dict(sa, "ServiceAccount"))
+
+    return actual_resources
+
+
+def _output_diff_as_text(diff_result: RBACDiffResult) -> None:
+    """Output diff result in text format.
+
+    Args:
+        diff_result: The computed RBAC diff result.
+    """
+    from floe_core.schemas.rbac_diff import DiffChangeType
+
+    if not diff_result.has_differences():
+        success("No differences found. Cluster matches expected manifests.")
+        return
+
+    total_changes = (
+        diff_result.added_count + diff_result.removed_count + diff_result.modified_count
+    )
+    warning(f"Found {total_changes} difference(s):")
+
+    by_type = diff_result.diffs_by_change_type()
+
+    if by_type[DiffChangeType.ADDED]:
+        click.echo("\nTo be created (in manifest but not deployed):")
+        for diff in by_type[DiffChangeType.ADDED]:
+            click.echo(f"  + {diff.resource_kind}/{diff.resource_name}")
+
+    if by_type[DiffChangeType.REMOVED]:
+        click.echo("\nTo be removed (deployed but not in manifest):")
+        for diff in by_type[DiffChangeType.REMOVED]:
+            click.echo(f"  - {diff.resource_kind}/{diff.resource_name}")
+
+    if by_type[DiffChangeType.MODIFIED]:
+        click.echo("\nTo be modified:")
+        for diff in by_type[DiffChangeType.MODIFIED]:
+            click.echo(f"  ~ {diff.resource_kind}/{diff.resource_name}")
+            for detail in diff.diff_details:
+                click.echo(f"      {detail}")
+
+
+def _k8s_to_dict(resource: Any, kind: str) -> dict[str, Any]:
+    """Convert a Kubernetes API resource to a dictionary.
+
+    Args:
+        resource: Kubernetes API resource object.
+        kind: K8s resource kind.
+
+    Returns:
+        Dictionary representation of the resource.
+    """
+    result: dict[str, Any] = {
+        "kind": kind,
+        "apiVersion": _get_api_version(kind),
+        "metadata": {
+            "name": resource.metadata.name,
+            "namespace": resource.metadata.namespace,
+        },
+    }
+
+    # Add kind-specific fields
+    _add_role_fields(result, resource, kind)
+    _add_role_binding_fields(result, resource, kind)
+
+    return result
+
+
+def _get_api_version(kind: str) -> str:
+    """Get the API version for a resource kind.
+
+    Args:
+        kind: K8s resource kind.
+
+    Returns:
+        API version string.
+    """
+    return "v1" if kind == "ServiceAccount" else "rbac.authorization.k8s.io/v1"
+
+
+def _add_role_fields(result: dict[str, Any], resource: Any, kind: str) -> None:
+    """Add role-specific fields to the result dictionary.
+
+    Args:
+        result: Result dictionary to modify.
+        resource: Kubernetes API resource object.
+        kind: K8s resource kind.
+    """
+    if kind != "Role":
+        return
+    if not hasattr(resource, "rules") or not resource.rules:
+        return
+
+    result["rules"] = [
+        {
+            "apiGroups": rule.api_groups or [],
+            "resources": rule.resources or [],
+            "verbs": rule.verbs or [],
+            "resourceNames": rule.resource_names or [],
+        }
+        for rule in resource.rules
+    ]
+
+
+def _add_role_binding_fields(result: dict[str, Any], resource: Any, kind: str) -> None:
+    """Add role binding-specific fields to the result dictionary.
+
+    Args:
+        result: Result dictionary to modify.
+        resource: Kubernetes API resource object.
+        kind: K8s resource kind.
+    """
+    if kind != "RoleBinding":
+        return
+
+    if hasattr(resource, "role_ref") and resource.role_ref:
+        result["roleRef"] = {
+            "apiGroup": resource.role_ref.api_group,
+            "kind": resource.role_ref.kind,
+            "name": resource.role_ref.name,
+        }
+
+    if hasattr(resource, "subjects") and resource.subjects:
+        result["subjects"] = [
+            {
+                "kind": subj.kind,
+                "name": subj.name,
+                "namespace": subj.namespace,
+            }
+            for subj in resource.subjects
+        ]
+
+
+# =============================================================================
+# Main Command
+# =============================================================================
 
 
 @click.command(
@@ -91,125 +346,42 @@ def diff_command(
         kubeconfig: Path to kubeconfig file.
     """
     # Validate required options
-    if manifest_dir is None:
-        error_exit(
-            "Missing --manifest-dir option. Provide path to manifest directory.",
-            exit_code=ExitCode.USAGE_ERROR,
-        )
-
-    if namespace is None:
-        error_exit(
-            "Missing --namespace option. Provide namespace to diff.",
-            exit_code=ExitCode.USAGE_ERROR,
-        )
-
-    # Default values
+    validated_manifest_dir, validated_namespace = _validate_required_options(
+        manifest_dir, namespace
+    )
     output_format = output if output is not None else "text"
 
-    info(f"Comparing manifests in: {manifest_dir}")
-    info(f"Against namespace: {namespace}")
+    info(f"Comparing manifests in: {validated_manifest_dir}")
+    info(f"Against namespace: {validated_namespace}")
 
     if kubeconfig:
         info(f"Using kubeconfig: {kubeconfig}")
 
     try:
-        # Try to import kubernetes client
-        try:
-            from kubernetes import client
-            from kubernetes import config as k8s_config
-        except ImportError:
-            error_exit(
-                "kubernetes package not installed. Install with: pip install kubernetes",
-                exit_code=ExitCode.GENERAL_ERROR,
-            )
-
-        # Try to import yaml
-        import yaml
-
-        # Import type-safe diff functions
         from floe_core.rbac.diff import compute_rbac_diff
-        from floe_core.schemas.rbac_diff import DiffChangeType
 
         # Load kubeconfig
-        if kubeconfig:
-            k8s_config.load_kube_config(config_file=str(kubeconfig))
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except k8s_config.ConfigException:
-                k8s_config.load_kube_config()
+        _load_kubeconfig(kubeconfig)
 
         # Load expected manifests
-        expected_resources: list[dict[str, Any]] = []
-        manifest_files = ["roles.yaml", "rolebindings.yaml", "serviceaccounts.yaml"]
+        expected_resources = _load_expected_manifests(validated_manifest_dir)
 
-        for filename in manifest_files:
-            file_path = manifest_dir / filename
-            if file_path.exists():
-                content = file_path.read_text()
-                if content.strip():
-                    docs = list(yaml.safe_load_all(content))
-                    for doc in docs:
-                        if doc:
-                            expected_resources.append(doc)
+        # Fetch deployed resources
+        actual_resources = _fetch_deployed_resources(validated_namespace)
 
-        # Get deployed resources
-        rbac_api = client.RbacAuthorizationV1Api()
-        core_api = client.CoreV1Api()
-
-        actual_resources: list[dict[str, Any]] = []
-
-        # Get deployed roles
-        for role in rbac_api.list_namespaced_role(namespace).items:
-            actual_resources.append(_k8s_to_dict(role, "Role"))
-
-        # Get deployed role bindings
-        for rb in rbac_api.list_namespaced_role_binding(namespace).items:
-            actual_resources.append(_k8s_to_dict(rb, "RoleBinding"))
-
-        # Get deployed service accounts (skip default)
-        for sa in core_api.list_namespaced_service_account(namespace).items:
-            if sa.metadata.name != "default":
-                actual_resources.append(_k8s_to_dict(sa, "ServiceAccount"))
-
-        # Use type-safe diff function
+        # Compute diff using type-safe function
         diff_result = compute_rbac_diff(
             expected_resources=expected_resources,
             actual_resources=actual_resources,
-            expected_source=str(manifest_dir),
-            actual_source=f"cluster:{namespace}",
+            expected_source=str(validated_manifest_dir),
+            actual_source=f"cluster:{validated_namespace}",
         )
 
-        # Output results using type-safe models
+        # Output results
         if output_format == "json":
             click.echo(diff_result.model_dump_json(indent=2))
         else:
-            if not diff_result.has_differences():
-                success("No differences found. Cluster matches expected manifests.")
-            else:
-                total_changes = (
-                    diff_result.added_count + diff_result.removed_count + diff_result.modified_count
-                )
-                warning(f"Found {total_changes} difference(s):")
-
-                by_type = diff_result.diffs_by_change_type()
-
-                if by_type[DiffChangeType.ADDED]:
-                    click.echo("\nTo be created (in manifest but not deployed):")
-                    for diff in by_type[DiffChangeType.ADDED]:
-                        click.echo(f"  + {diff.resource_kind}/{diff.resource_name}")
-
-                if by_type[DiffChangeType.REMOVED]:
-                    click.echo("\nTo be removed (deployed but not in manifest):")
-                    for diff in by_type[DiffChangeType.REMOVED]:
-                        click.echo(f"  - {diff.resource_kind}/{diff.resource_name}")
-
-                if by_type[DiffChangeType.MODIFIED]:
-                    click.echo("\nTo be modified:")
-                    for diff in by_type[DiffChangeType.MODIFIED]:
-                        click.echo(f"  ~ {diff.resource_kind}/{diff.resource_name}")
-                        for detail in diff.diff_details:
-                            click.echo(f"      {detail}")
+            _output_diff_as_text(diff_result)
 
     except FileNotFoundError as e:
         error_exit(
@@ -221,58 +393,6 @@ def diff_command(
             f"RBAC diff failed: {e}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
-
-
-def _k8s_to_dict(resource: Any, kind: str) -> dict[str, Any]:
-    """Convert a Kubernetes API resource to a dictionary.
-
-    Args:
-        resource: Kubernetes API resource object.
-        kind: K8s resource kind.
-
-    Returns:
-        Dictionary representation of the resource.
-    """
-    result: dict[str, Any] = {
-        "kind": kind,
-        "apiVersion": "v1" if kind == "ServiceAccount" else "rbac.authorization.k8s.io/v1",
-        "metadata": {
-            "name": resource.metadata.name,
-            "namespace": resource.metadata.namespace,
-        },
-    }
-
-    # Add role-specific fields
-    if kind == "Role" and hasattr(resource, "rules") and resource.rules:
-        result["rules"] = [
-            {
-                "apiGroups": rule.api_groups or [],
-                "resources": rule.resources or [],
-                "verbs": rule.verbs or [],
-                "resourceNames": rule.resource_names or [],
-            }
-            for rule in resource.rules
-        ]
-
-    # Add role binding-specific fields
-    if kind == "RoleBinding":
-        if hasattr(resource, "role_ref") and resource.role_ref:
-            result["roleRef"] = {
-                "apiGroup": resource.role_ref.api_group,
-                "kind": resource.role_ref.kind,
-                "name": resource.role_ref.name,
-            }
-        if hasattr(resource, "subjects") and resource.subjects:
-            result["subjects"] = [
-                {
-                    "kind": subj.kind,
-                    "name": subj.name,
-                    "namespace": subj.namespace,
-                }
-                for subj in resource.subjects
-            ]
-
-    return result
 
 
 __all__: list[str] = ["diff_command"]

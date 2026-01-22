@@ -6,9 +6,14 @@ and deduplication of permissions across data products.
 
 Example:
     >>> from floe_core.rbac.generator import RBACManifestGenerator
-    >>> from floe_rbac_k8s.plugin import K8sRBACPlugin
-    >>> generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
-    >>> result = generator.generate(security_config, secret_refs)
+    >>> from floe_core.plugin_registry import PluginRegistry
+    >>> # Get RBACPlugin via registry (no direct plugin imports)
+    >>> registry = PluginRegistry()
+    >>> rbac_plugins = list(registry.list("floe.rbac"))
+    >>> if rbac_plugins:
+    ...     plugin = registry.get("floe.rbac", rbac_plugins[0].name)
+    ...     generator = RBACManifestGenerator(plugin=plugin)
+    ...     result = generator.generate(security_config, secret_refs)
 
 Task: T043, T044, T045, T046, T047, T065
 User Story: US4 - RBAC Manifest Generation
@@ -353,6 +358,44 @@ class RBACManifestGenerator:
     plugin: RBACPlugin
     output_dir: Path = field(default_factory=lambda: Path("target/rbac"))
 
+    # =========================================================================
+    # Helper Methods (T023 - Reduce Cyclomatic Complexity via Strategy Pattern)
+    # =========================================================================
+
+    def _generate_manifests_for_type(
+        self,
+        configs: list[Any] | None,
+        generator_fn: Any,
+        resource_type: str,
+        errors: list[str],
+    ) -> list[dict[str, Any]]:
+        """Generate manifests for a specific resource type.
+
+        Applies the Strategy pattern to consolidate repetitive generation loops.
+
+        Args:
+            configs: List of configuration objects (ServiceAccountConfig, etc.)
+            generator_fn: Plugin method to generate manifest (e.g., plugin.generate_role)
+            resource_type: Name of resource type for error messages
+            errors: List to append error messages to
+
+        Returns:
+            List of generated manifest dictionaries.
+        """
+        manifests: list[dict[str, Any]] = []
+        if not configs:
+            return manifests
+
+        for config in configs:
+            try:
+                manifest = generator_fn(config)
+                manifests.append(manifest)
+            except Exception as e:
+                config_name = getattr(config, "name", "unknown")
+                errors.append(f"Failed to generate {resource_type} {config_name}: {e}")
+
+        return manifests
+
     def generate(
         self,
         security_config: SecurityConfig,
@@ -437,50 +480,22 @@ class RBACManifestGenerator:
                 warnings=["RBAC generation disabled in security_config"],
             )
 
-        # Initialize manifest collections
-        sa_manifests: list[dict[str, Any]] = []
-        role_manifests: list[dict[str, Any]] = []
-        binding_manifests: list[dict[str, Any]] = []
-        ns_manifests: list[dict[str, Any]] = []
-
         errors: list[str] = []
         warnings: list[str] = []
 
-        # Generate ServiceAccount manifests
-        if service_accounts:
-            for sa_config in service_accounts:
-                try:
-                    manifest = self.plugin.generate_service_account(sa_config)
-                    sa_manifests.append(manifest)
-                except Exception as e:
-                    errors.append(f"Failed to generate ServiceAccount {sa_config.name}: {e}")
-
-        # Generate Role manifests
-        if roles:
-            for role_config in roles:
-                try:
-                    manifest = self.plugin.generate_role(role_config)
-                    role_manifests.append(manifest)
-                except Exception as e:
-                    errors.append(f"Failed to generate Role {role_config.name}: {e}")
-
-        # Generate RoleBinding manifests
-        if role_bindings:
-            for binding_config in role_bindings:
-                try:
-                    manifest = self.plugin.generate_role_binding(binding_config)
-                    binding_manifests.append(manifest)
-                except Exception as e:
-                    errors.append(f"Failed to generate RoleBinding {binding_config.name}: {e}")
-
-        # Generate Namespace manifests
-        if namespaces:
-            for ns_config in namespaces:
-                try:
-                    manifest = self.plugin.generate_namespace(ns_config)
-                    ns_manifests.append(manifest)
-                except Exception as e:
-                    errors.append(f"Failed to generate Namespace {ns_config.name}: {e}")
+        # Generate manifests using Strategy pattern (T023: Reduced CC from 24 to ~12)
+        sa_manifests = self._generate_manifests_for_type(
+            service_accounts, self.plugin.generate_service_account, "ServiceAccount", errors
+        )
+        role_manifests = self._generate_manifests_for_type(
+            roles, self.plugin.generate_role, "Role", errors
+        )
+        binding_manifests = self._generate_manifests_for_type(
+            role_bindings, self.plugin.generate_role_binding, "RoleBinding", errors
+        )
+        ns_manifests = self._generate_manifests_for_type(
+            namespaces, self.plugin.generate_namespace, "Namespace", errors
+        )
 
         # Aggregate permissions from secret references if no explicit roles provided
         if secret_references and not roles:
