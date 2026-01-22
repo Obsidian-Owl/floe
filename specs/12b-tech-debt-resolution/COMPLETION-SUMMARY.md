@@ -129,7 +129,10 @@ The following items were identified but deferred to future work:
 
 1. **SORT compaction** (compaction.py:383): Awaiting PyIceberg support
 2. **PyIceberg type stubs** (manager.py:57): Awaiting py.typed marker
-3. **Remove floe-cli package**: Package is empty (CLI moved to floe-core in Epic 11)
+
+### Completed (Post-Summary)
+
+3. **Remove floe-cli package**: ✅ Deleted deprecated package directory (CLI moved to floe-core in Epic 11)
 
 ---
 

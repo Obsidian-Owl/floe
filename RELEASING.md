@@ -34,7 +34,6 @@ Core packages share the same major.minor version:
 | Package | Example Version |
 |---------|-----------------|
 | `floe-core` | 0.1.0 |
-| `floe-cli` | 0.1.0 |
 | `floe-dbt` | 0.1.0 |
 | `floe-iceberg` | 0.1.0 |
 
