@@ -336,6 +336,58 @@ class TestComputeRbacDiff:
 
         assert not result.has_differences()
 
+    @pytest.mark.requirement("FR-063")
+    def test_max_resources_validation_exceeded(self) -> None:
+        """Test that exceeding max_resources raises ValueError."""
+        from floe_core.rbac.diff import compute_rbac_diff
+
+        # Create lists that together exceed the limit
+        expected = [
+            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            for i in range(6)
+        ]
+        actual = [
+            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}}
+            for i in range(5)
+        ]
+
+        # Total = 11, set limit to 10
+        with pytest.raises(ValueError, match="exceeds maximum"):
+            compute_rbac_diff(expected, actual, "expected.yaml", "cluster", max_resources=10)
+
+    @pytest.mark.requirement("FR-063")
+    def test_max_resources_validation_at_limit(self) -> None:
+        """Test that exactly at max_resources limit passes."""
+        from floe_core.rbac.diff import compute_rbac_diff
+
+        expected = [
+            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            for i in range(5)
+        ]
+        actual = [
+            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}}
+            for i in range(5)
+        ]
+
+        # Total = 10, limit = 10 - should pass
+        result = compute_rbac_diff(expected, actual, "expected.yaml", "cluster", max_resources=10)
+        assert result is not None
+
+    @pytest.mark.requirement("FR-063")
+    def test_max_resources_validation_disabled(self) -> None:
+        """Test that max_resources=0 disables validation."""
+        from floe_core.rbac.diff import compute_rbac_diff
+
+        expected = [
+            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            for i in range(100)
+        ]
+        actual: list[dict[str, Any]] = []
+
+        # Should not raise even with 100 resources when limit is 0
+        result = compute_rbac_diff(expected, actual, "expected.yaml", "cluster", max_resources=0)
+        assert result.added_count == 100
+
 
 class TestCompareValues:
     """Unit tests for _compare_values helper function."""

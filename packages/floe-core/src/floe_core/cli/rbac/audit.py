@@ -1,9 +1,9 @@
 """RBAC audit command implementation.
 
-Task ID: T034
-Phase: 4 - User Story 2 (RBAC Command Migration)
-User Story: US2 - RBAC Command Migration
-Requirements: FR-024, FR-025, FR-062, FR-070
+Task ID: T034, T067
+Phase: 4 - User Story 2 (RBAC Command Migration), 9 - US7 (Complexity Reduction)
+User Story: US2 - RBAC Command Migration, US7 - High Complexity Resolution
+Requirements: FR-024, FR-025, FR-062, FR-070, 12B-CX-002
 
 This module implements the `floe rbac audit` command which:
 - Audits current cluster RBAC state
@@ -26,7 +26,7 @@ import click
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
 
 if TYPE_CHECKING:
-    from floe_core.schemas.rbac_audit import AuditFinding
+    from floe_core.schemas.rbac_audit import AuditFinding, RBACAuditReport
 
 
 @click.command(
@@ -81,122 +81,221 @@ def audit_command(
         output: Output format (text or json).
         kubeconfig: Path to kubeconfig file.
     """
-    # Validate required namespace
+    _validate_audit_inputs(namespace)
+    output_format = output if output is not None else "text"
+
+    info(f"Auditing RBAC in namespace: {namespace}")
+    if kubeconfig:
+        info(f"Using kubeconfig: {kubeconfig}")
+
+    try:
+        rbac_api = _setup_kubernetes_client(kubeconfig)
+        report = _perform_audit(rbac_api, namespace)
+        _output_report(report, output_format)
+    except Exception as e:
+        error_exit(f"RBAC audit failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
+
+
+def _validate_audit_inputs(namespace: str | None) -> None:
+    """Validate audit command inputs.
+
+    Args:
+        namespace: Namespace to audit.
+
+    Raises:
+        SystemExit: If namespace is not provided.
+    """
     if namespace is None:
         error_exit(
             "Missing --namespace option. Provide namespace to audit.",
             exit_code=ExitCode.USAGE_ERROR,
         )
 
-    # Default values
-    output_format = output if output is not None else "text"
 
-    info(f"Auditing RBAC in namespace: {namespace}")
+def _setup_kubernetes_client(kubeconfig: Path | None) -> Any:
+    """Set up and return Kubernetes RBAC API client.
 
-    if kubeconfig:
-        info(f"Using kubeconfig: {kubeconfig}")
+    Args:
+        kubeconfig: Path to kubeconfig file, or None for default.
 
+    Returns:
+        RbacAuthorizationV1Api client instance.
+
+    Raises:
+        SystemExit: If kubernetes package is not installed.
+    """
     try:
-        # Try to import kubernetes client
-        try:
-            from kubernetes import client
-            from kubernetes import config as k8s_config
-        except ImportError:
-            error_exit(
-                "kubernetes package not installed. Install with: pip install kubernetes",
-                exit_code=ExitCode.GENERAL_ERROR,
-            )
-
-        # Import type-safe models
-        from floe_core.rbac.audit import (
-            check_missing_resource_names,
-            detect_wildcard_permissions,
-        )
-        from floe_core.schemas.rbac_audit import (
-            RBACAuditReport,
-        )
-
-        # Load kubeconfig
-        if kubeconfig:
-            k8s_config.load_kube_config(config_file=str(kubeconfig))
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except k8s_config.ConfigException:
-                k8s_config.load_kube_config()
-
-        # Get RBAC API
-        rbac_api = client.RbacAuthorizationV1Api()
-
-        # Audit roles and role bindings in namespace
-        findings: list[AuditFinding] = []
-        total_roles = 0
-        total_role_bindings = 0
-
-        # Get roles and use type-safe detection functions
-        roles = rbac_api.list_namespaced_role(namespace)
-        for role in roles.items:
-            total_roles += 1
-            role_name = role.metadata.name
-            if role.rules:
-                # Convert K8s rules to dict format for detection functions
-                rules_dicts = [
-                    {
-                        "apiGroups": rule.api_groups or [],
-                        "resources": rule.resources or [],
-                        "verbs": rule.verbs or [],
-                        "resourceNames": rule.resource_names or [],
-                    }
-                    for rule in role.rules
-                ]
-                # Use type-safe detection functions
-                findings.extend(detect_wildcard_permissions(rules_dicts, role_name, namespace))
-                findings.extend(check_missing_resource_names(rules_dicts, role_name, namespace))
-            # Also check for legacy dict-based findings
-            role_findings = _audit_role(role, namespace)
-            findings.extend(role_findings)
-
-        # Get role bindings
-        role_bindings = rbac_api.list_namespaced_role_binding(namespace)
-        for binding in role_bindings.items:
-            total_role_bindings += 1
-            binding_findings = _audit_role_binding(binding, namespace)
-            findings.extend(binding_findings)
-
-        # Build type-safe report
-        report = RBACAuditReport(
-            cluster_name="current-context",
-            findings=findings,
-            total_roles=total_roles,
-            total_role_bindings=total_role_bindings,
-        )
-
-        # Output results using type-safe models
-        if output_format == "json":
-            click.echo(report.model_dump_json(indent=2))
-        else:
-            if report.findings:
-                if report.has_critical_findings():
-                    error_exit(
-                        f"Found {len(report.findings)} RBAC issue(s) including CRITICAL:",
-                        exit_code=ExitCode.VALIDATION_ERROR,
-                    )
-                warning(f"Found {len(report.findings)} RBAC issue(s):")
-                for finding in report.findings:
-                    severity = finding.severity.value.upper()
-                    resource = f"{finding.resource_kind}/{finding.resource_name}"
-                    click.echo(f"  [{severity}] {resource}: {finding.message}")
-            else:
-                success("No RBAC issues found.")
-
-    except Exception as e:
+        from kubernetes import client
+        from kubernetes import config as k8s_config
+    except ImportError:
         error_exit(
-            f"RBAC audit failed: {e}",
+            "kubernetes package not installed. Install with: pip install kubernetes",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 
+    _load_kubeconfig(k8s_config, kubeconfig)
+    return client.RbacAuthorizationV1Api()
 
-def _audit_role(role: Any, namespace: str | None) -> list[AuditFinding]:
+
+def _load_kubeconfig(k8s_config: Any, kubeconfig: Path | None) -> None:
+    """Load Kubernetes configuration.
+
+    Args:
+        k8s_config: Kubernetes config module.
+        kubeconfig: Path to kubeconfig file, or None for default.
+    """
+    if kubeconfig:
+        k8s_config.load_kube_config(config_file=str(kubeconfig))
+        return
+
+    try:
+        k8s_config.load_incluster_config()
+    except k8s_config.ConfigException:
+        k8s_config.load_kube_config()
+
+
+def _perform_audit(rbac_api: Any, namespace: str | None) -> RBACAuditReport:
+    """Perform RBAC audit and return report.
+
+    Args:
+        rbac_api: Kubernetes RBAC API client.
+        namespace: Namespace to audit.
+
+    Returns:
+        RBACAuditReport with audit findings.
+    """
+    from floe_core.schemas.rbac_audit import RBACAuditReport
+
+    findings: list[AuditFinding] = []
+    total_roles, role_findings = _audit_roles(rbac_api, namespace)
+    findings.extend(role_findings)
+
+    total_role_bindings, binding_findings = _audit_role_bindings(rbac_api, namespace)
+    findings.extend(binding_findings)
+
+    return RBACAuditReport(
+        cluster_name="current-context",
+        findings=findings,
+        total_roles=total_roles,
+        total_role_bindings=total_role_bindings,
+    )
+
+
+def _audit_roles(rbac_api: Any, namespace: str | None) -> tuple[int, list[AuditFinding]]:
+    """Audit all roles in the namespace.
+
+    Args:
+        rbac_api: Kubernetes RBAC API client.
+        namespace: Namespace to audit.
+
+    Returns:
+        Tuple of (total_roles, findings).
+    """
+    from floe_core.rbac.audit import (
+        check_missing_resource_names,
+        detect_wildcard_permissions,
+    )
+
+    findings: list[AuditFinding] = []
+    total_roles = 0
+
+    roles = rbac_api.list_namespaced_role(namespace)
+    for role in roles.items:
+        total_roles += 1
+        role_findings = _audit_single_role(role, namespace)
+        findings.extend(role_findings)
+
+        if role.rules:
+            rules_dicts = _convert_rules_to_dicts(role.rules)
+            role_name = role.metadata.name
+            findings.extend(detect_wildcard_permissions(rules_dicts, role_name, namespace))
+            findings.extend(check_missing_resource_names(rules_dicts, role_name, namespace))
+
+    return total_roles, findings
+
+
+def _convert_rules_to_dicts(rules: list[Any]) -> list[dict[str, list[str]]]:
+    """Convert K8s rule objects to dict format for detection functions.
+
+    Args:
+        rules: List of Kubernetes PolicyRule objects.
+
+    Returns:
+        List of rule dictionaries.
+    """
+    return [
+        {
+            "apiGroups": rule.api_groups or [],
+            "resources": rule.resources or [],
+            "verbs": rule.verbs or [],
+            "resourceNames": rule.resource_names or [],
+        }
+        for rule in rules
+    ]
+
+
+def _audit_role_bindings(
+    rbac_api: Any, namespace: str | None
+) -> tuple[int, list[AuditFinding]]:
+    """Audit all role bindings in the namespace.
+
+    Args:
+        rbac_api: Kubernetes RBAC API client.
+        namespace: Namespace to audit.
+
+    Returns:
+        Tuple of (total_role_bindings, findings).
+    """
+    findings: list[AuditFinding] = []
+    total_role_bindings = 0
+
+    role_bindings = rbac_api.list_namespaced_role_binding(namespace)
+    for binding in role_bindings.items:
+        total_role_bindings += 1
+        binding_findings = _audit_role_binding(binding, namespace)
+        findings.extend(binding_findings)
+
+    return total_role_bindings, findings
+
+
+def _output_report(report: RBACAuditReport, output_format: str) -> None:
+    """Output the audit report in the specified format.
+
+    Args:
+        report: The audit report to output.
+        output_format: Output format ('json' or 'text').
+    """
+    if output_format == "json":
+        click.echo(report.model_dump_json(indent=2))
+        return
+
+    _output_report_as_text(report)
+
+
+def _output_report_as_text(report: RBACAuditReport) -> None:
+    """Output the audit report as text.
+
+    Args:
+        report: The audit report to output.
+    """
+    if not report.findings:
+        success("No RBAC issues found.")
+        return
+
+    if report.has_critical_findings():
+        error_exit(
+            f"Found {len(report.findings)} RBAC issue(s) including CRITICAL:",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+    warning(f"Found {len(report.findings)} RBAC issue(s):")
+    for finding in report.findings:
+        severity = finding.severity.value.upper()
+        resource = f"{finding.resource_kind}/{finding.resource_name}"
+        click.echo(f"  [{severity}] {resource}: {finding.message}")
+
+
+def _audit_single_role(role: Any, namespace: str | None) -> list[AuditFinding]:
     """Audit a single Role for additional security issues.
 
     This function handles checks not covered by detect_wildcard_permissions.
@@ -208,7 +307,8 @@ def _audit_role(role: Any, namespace: str | None) -> list[AuditFinding]:
     Returns:
         List of AuditFinding objects.
     """
-
+    _ = role  # Reserved for future checks
+    _ = namespace
     findings: list[AuditFinding] = []
     # Additional checks can be added here in the future
     # Primary wildcard detection is now handled by detect_wildcard_permissions

@@ -24,6 +24,12 @@ if TYPE_CHECKING:
     from floe_core.schemas.rbac_diff import RBACDiffResult, ResourceDiff
 
 
+# Maximum number of resources that can be diffed in a single call.
+# This prevents memory exhaustion from unbounded resource lists.
+# 10,000 resources is generous for typical RBAC configurations.
+MAX_RESOURCES_PER_DIFF = 10_000
+
+
 # Metadata fields to ignore when comparing resources
 _IGNORED_METADATA_FIELDS = frozenset(
     {
@@ -206,6 +212,8 @@ def compute_rbac_diff(
     actual_resources: list[dict[str, Any]],
     expected_source: str,
     actual_source: str,
+    *,
+    max_resources: int = MAX_RESOURCES_PER_DIFF,
 ) -> RBACDiffResult:
     """Compute diff between expected and actual RBAC resources.
 
@@ -214,9 +222,14 @@ def compute_rbac_diff(
         actual_resources: List of actual K8s resources from cluster.
         expected_source: Description of expected resources source.
         actual_source: Description of actual resources source.
+        max_resources: Maximum total resources allowed (default: 10,000).
+            Set to 0 to disable limit (not recommended for untrusted input).
 
     Returns:
         RBACDiffResult with all differences.
+
+    Raises:
+        ValueError: If total resources exceed max_resources limit.
 
     Example:
         >>> expected = [{"kind": "ServiceAccount", "metadata": {"name": "sa1"}}]
@@ -226,6 +239,15 @@ def compute_rbac_diff(
         True
     """
     from floe_core.schemas.rbac_diff import DiffChangeType, RBACDiffResult
+
+    # Validate resource count to prevent memory exhaustion
+    total_resources = len(expected_resources) + len(actual_resources)
+    if max_resources > 0 and total_resources > max_resources:
+        msg = (
+            f"Resource count {total_resources} exceeds maximum allowed "
+            f"{max_resources}. Split into smaller batches or increase limit."
+        )
+        raise ValueError(msg)
 
     diffs: list[ResourceDiff] = []
     added_count = 0

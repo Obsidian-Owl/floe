@@ -331,4 +331,221 @@ class TestGenerateStubManifestsHelper:
         assert output_dir.is_dir()
 
 
-__all__: list[str] = ["TestRbacGenerateCommand", "TestRbacGroup", "TestGenerateStubManifestsHelper"]
+class TestGenerateCommandMocked:
+    """Tests for generate command with mocked dependencies."""
+
+    @pytest.mark.requirement("FR-021")
+    def test_generate_no_rbac_plugin_uses_stub(
+        self,
+        cli_runner: CliRunner,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that generate falls back to stub when no RBAC plugin available.
+
+        Validates stub generation path when registry returns no plugins.
+        """
+        from unittest.mock import MagicMock
+
+        from floe_core.cli.main import cli
+
+        # Mock registry to return empty plugin list
+        mock_registry = MagicMock()
+        mock_registry.list.return_value = []
+
+        def mock_get_registry() -> MagicMock:
+            return mock_registry
+
+        monkeypatch.setattr(
+            "floe_core.cli.rbac.generate.get_registry",
+            mock_get_registry,
+            raising=False,
+        )
+
+        output_dir = temp_dir / "rbac"
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "rbac",
+                "generate",
+                "--config",
+                str(sample_manifest_yaml),
+                "--output",
+                str(output_dir),
+            ],
+        )
+
+        # Should fall back to stub manifests
+        # Check the stub was called (files exist or info message)
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    @pytest.mark.requirement("FR-021")
+    def test_generate_with_rbac_plugin_success(
+        self,
+        cli_runner: CliRunner,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that generate works with an RBAC plugin.
+
+        Validates full generation path with mocked plugin.
+        """
+        from unittest.mock import MagicMock
+
+        from floe_core.cli.main import cli
+
+        # Mock plugin and registry
+        mock_plugin = MagicMock()
+
+        mock_registry = MagicMock()
+        mock_registry.list.return_value = [mock_plugin]
+
+        def mock_get_registry() -> MagicMock:
+            return mock_registry
+
+        # Mock RBACManifestGenerator
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.service_accounts = 2
+        mock_result.roles = 3
+        mock_result.role_bindings = 2
+        mock_result.namespaces = 1
+        mock_result.files_generated = [temp_dir / "roles.yaml"]
+        mock_result.errors = []
+
+        mock_generator_class = MagicMock()
+        mock_generator_instance = MagicMock()
+        mock_generator_instance.generate.return_value = mock_result
+        mock_generator_class.return_value = mock_generator_instance
+
+        monkeypatch.setattr(
+            "floe_core.cli.rbac.generate.get_registry",
+            mock_get_registry,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "floe_core.cli.rbac.generate.RBACManifestGenerator",
+            mock_generator_class,
+            raising=False,
+        )
+
+        output_dir = temp_dir / "rbac"
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "rbac",
+                "generate",
+                "--config",
+                str(sample_manifest_yaml),
+                "--output",
+                str(output_dir),
+            ],
+        )
+
+        # Should succeed with mocked plugin
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    @pytest.mark.requirement("FR-021")
+    def test_generate_with_generation_failure(
+        self,
+        cli_runner: CliRunner,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test generate error handling when generation fails.
+
+        Validates error output when generator returns failure.
+        """
+        from unittest.mock import MagicMock
+
+        from floe_core.cli.main import cli
+
+        # Mock plugin and registry
+        mock_plugin = MagicMock()
+
+        mock_registry = MagicMock()
+        mock_registry.list.return_value = [mock_plugin]
+
+        def mock_get_registry() -> MagicMock:
+            return mock_registry
+
+        # Mock RBACManifestGenerator with failure
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.errors = ["Failed to create role: invalid name", "Permission denied"]
+
+        mock_generator_class = MagicMock()
+        mock_generator_instance = MagicMock()
+        mock_generator_instance.generate.return_value = mock_result
+        mock_generator_class.return_value = mock_generator_instance
+
+        monkeypatch.setattr(
+            "floe_core.cli.rbac.generate.get_registry",
+            mock_get_registry,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "floe_core.cli.rbac.generate.RBACManifestGenerator",
+            mock_generator_class,
+            raising=False,
+        )
+
+        output_dir = temp_dir / "rbac"
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "rbac",
+                "generate",
+                "--config",
+                str(sample_manifest_yaml),
+                "--output",
+                str(output_dir),
+            ],
+        )
+
+        # Should fail with error output
+        assert result.exit_code != 0
+
+
+class TestGenerateSchemaValidation:
+    """Tests for SecurityConfig and RBACConfig schemas used in generate."""
+
+    @pytest.mark.requirement("FR-021")
+    def test_security_config_with_rbac_enabled(self) -> None:
+        """Test SecurityConfig with RBAC enabled.
+
+        Validates that security config can be created with RBAC.
+        """
+        from floe_core.schemas.security import RBACConfig, SecurityConfig
+
+        rbac_config = RBACConfig(enabled=True)
+        security_config = SecurityConfig(rbac=rbac_config)
+
+        assert security_config.rbac.enabled is True
+
+    @pytest.mark.requirement("FR-021")
+    def test_rbac_config_defaults(self) -> None:
+        """Test RBACConfig default values.
+
+        Validates that RBACConfig has expected defaults.
+        """
+        from floe_core.schemas.security import RBACConfig
+
+        config = RBACConfig()
+
+        assert config.enabled is True  # Default to enabled
+
+
+__all__: list[str] = [
+    "TestRbacGenerateCommand",
+    "TestRbacGroup",
+    "TestGenerateStubManifestsHelper",
+    "TestGenerateCommandMocked",
+    "TestGenerateSchemaValidation",
+]

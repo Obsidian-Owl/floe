@@ -73,7 +73,7 @@ class TestPluginRegistryDiscovery:
         """Test discover_all() scans all 11 plugin type groups."""
         registry = PluginRegistry()
 
-        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
+        with patch("floe_core.plugins.discovery.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
             registry.discover_all()
 
@@ -94,7 +94,7 @@ class TestPluginRegistryDiscovery:
         """Test discover_all() only runs once (idempotent)."""
         registry = PluginRegistry()
 
-        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
+        with patch("floe_core.plugins.discovery.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
 
             # First call should scan
@@ -123,7 +123,7 @@ class TestPluginRegistryDiscovery:
                 return [ep1, ep2]
             return []
 
-        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
+        with patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             # Verify entry points were stored
@@ -153,8 +153,8 @@ class TestPluginRegistryDiscovery:
             return []
 
         with (
-            patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps),
-            patch("floe_core.plugin_registry.logger") as mock_logger,
+            patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps),
+            patch("floe_core.plugins.discovery.logger") as mock_logger,
         ):
             registry.discover_all()
 
@@ -190,7 +190,7 @@ class TestPluginRegistryDiscovery:
             }
             return mapping.get(group, [])
 
-        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
+        with patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             assert (PluginType.COMPUTE, "duckdb") in registry._discovered
@@ -226,7 +226,7 @@ class TestGetRegistrySingleton:
         reset_registry: None,
     ) -> None:
         """Test get_registry() automatically calls discover_all()."""
-        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
+        with patch("floe_core.plugins.discovery.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
 
             registry = get_registry()
@@ -275,7 +275,7 @@ class TestPluginRegistryErrorHandling:
             return []
 
         with patch(
-            "floe_core.plugin_registry.entry_points",
+            "floe_core.plugins.discovery.entry_points",
             side_effect=mock_eps_with_error,
         ):
             # Should not raise - graceful degradation
@@ -312,7 +312,7 @@ class TestPluginRegistryErrorHandling:
                 return [bad_ep, good_ep]
             return []
 
-        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
+        with patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             # Good entry point should still be discovered despite bad one
@@ -336,10 +336,10 @@ class TestPluginRegistryErrorHandling:
 
         with (
             patch(
-                "floe_core.plugin_registry.entry_points",
+                "floe_core.plugins.discovery.entry_points",
                 side_effect=mock_eps_error,
             ),
-            patch("floe_core.plugin_registry.logger") as mock_logger,
+            patch("floe_core.plugins.discovery.logger") as mock_logger,
         ):
             registry.discover_all()
 
@@ -357,7 +357,7 @@ class TestPluginRegistryErrorHandling:
         """Test discovery succeeds when no plugins are found."""
         registry = PluginRegistry()
 
-        with patch("floe_core.plugin_registry.entry_points", return_value=[]):
+        with patch("floe_core.plugins.discovery.entry_points", return_value=[]):
             registry.discover_all()
 
             assert registry._discovered_all is True

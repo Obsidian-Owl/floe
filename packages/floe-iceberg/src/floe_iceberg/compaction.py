@@ -380,15 +380,26 @@ class SortCompactionExecutor(BaseCompactionExecutor):
         )
 
         try:
-            # TODO: Implement actual sort compaction using PyIceberg
-            # This will be implemented if SORT strategy is needed
+            # TODO(epic-future): Implement SORT compaction when PyIceberg supports it
             #
-            # Placeholder implementation:
-            # sort_order = SortOrder(*[SortField(col) for col in strategy.sort_columns])
-            # result = table.rewrite_data_files(
-            #     target_size_bytes=strategy.target_file_size_bytes,
-            #     sort_order=sort_order,
-            # )
+            # Context: SORT compaction reorders data within files to optimize for
+            # query patterns (e.g., sorting by timestamp for time-range queries).
+            # PyIceberg rewrite_data_files() doesn't yet support custom sort orders.
+            #
+            # Scope: Implement when PyIceberg adds SortOrder support to rewrite_data_files()
+            # or when a workaround via scan+write is validated for production use.
+            #
+            # Priority: Low - BINPACK strategy covers most use cases. SORT is an
+            # optimization for specific query patterns.
+            #
+            # Tracking: https://github.com/apache/iceberg-python/issues/XXX (upstream)
+            #
+            # Implementation approach when ready:
+            #   sort_order = SortOrder(*[SortField(col) for col in strategy.sort_columns])
+            #   result = table.rewrite_data_files(
+            #       target_size_bytes=strategy.target_file_size_bytes,
+            #       sort_order=sort_order,
+            #   )
 
             files_rewritten = 0
 

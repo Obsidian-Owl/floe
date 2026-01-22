@@ -58,8 +58,9 @@ if TYPE_CHECKING:
     #
     # NOTE: PyIceberg does not ship with py.typed marker or type stubs.
     # Using `Any` provides flexibility while awaiting upstream typing support.
-    # Track: https://github.com/apache/iceberg-python/issues/XXX
-    # Consider contributing stubs to typeshed when API stabilizes.
+    # See: https://github.com/apache/iceberg-python (check for py.typed in releases)
+    # Priority: Low - PyIceberg API is still evolving. Consider contributing
+    # stubs to typeshed once PyIceberg reaches 1.0 and API stabilizes.
     Table = Any
 
 
