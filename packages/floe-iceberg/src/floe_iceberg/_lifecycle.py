@@ -254,6 +254,66 @@ class _IcebergTableLifecycle:
             return full_identifier in tables
         return True  # Assume exists in production (real catalog will verify)
 
+    @traced(
+        operation_name="iceberg.lifecycle.drop_table",
+        attributes={"operation": "drop"},
+    )
+    def drop_table(
+        self,
+        identifier: str,
+        purge: bool = False,
+    ) -> None:
+        """Drop (delete) a table from the catalog.
+
+        Removes the table metadata from the catalog. If purge=True, also
+        deletes the underlying data files (when supported by the catalog).
+
+        Args:
+            identifier: Full table identifier (e.g., "bronze.customers").
+            purge: If True, delete underlying data files. Default False
+                (keep data files for potential recovery).
+
+        Raises:
+            NoSuchTableError: If table doesn't exist.
+            ValidationError: If identifier format is invalid.
+
+        Example:
+            >>> # Soft delete (keep data files)
+            >>> lifecycle.drop_table("bronze.deprecated_table")
+
+            >>> # Hard delete (remove data files)
+            >>> lifecycle.drop_table("bronze.temp_table", purge=True)
+        """
+        from opentelemetry import trace
+
+        # Add span attributes for telemetry
+        span = trace.get_current_span()
+        span.set_attribute("table.identifier", identifier)
+        span.set_attribute("table.purge", purge)
+
+        self._log.debug(
+            "drop_table_requested",
+            identifier=identifier,
+            purge=purge,
+        )
+
+        # Validate identifier format
+        self._validate_identifier(identifier)
+
+        # Check if table exists
+        if not self.table_exists(identifier):
+            msg = f"Table '{identifier}' does not exist"
+            raise NoSuchTableError(msg)
+
+        # Drop table via catalog plugin
+        self._catalog_plugin.drop_table(identifier, purge=purge)
+
+        self._log.info(
+            "table_dropped",
+            identifier=identifier,
+            purge=purge,
+        )
+
     # =========================================================================
     # Private Helper Methods
     # =========================================================================

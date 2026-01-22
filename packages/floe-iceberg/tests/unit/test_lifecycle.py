@@ -399,13 +399,11 @@ class TestIcebergTableLifecycleLoad:
 class TestIcebergTableLifecycleDrop:
     """Tests for _IcebergTableLifecycle.drop_table() method.
 
-    Note: drop_table is not yet implemented in IcebergTableManager.
-    These tests are written TDD-style for the extraction in T030.
-    Currently marked with pytest.mark.skip until implementation.
+    Implemented in T024 (12B Tech Debt Epic) as part of US2 - Skipped Tests.
+    These tests validate table removal via catalog plugin.
     """
 
     @pytest.mark.requirement("FR-015")
-    @pytest.mark.skip(reason="drop_table not yet implemented - T030")
     def test_drop_table_removes_existing_table(
         self,
         lifecycle_manager: Any,
@@ -425,7 +423,6 @@ class TestIcebergTableLifecycleDrop:
         assert "bronze.customers" not in mock_catalog_plugin._tables
 
     @pytest.mark.requirement("FR-015")
-    @pytest.mark.skip(reason="drop_table not yet implemented - T030")
     def test_drop_table_raises_for_nonexistent_table(
         self,
         lifecycle_manager: Any,
@@ -437,7 +434,6 @@ class TestIcebergTableLifecycleDrop:
             lifecycle_manager.drop_table("bronze.nonexistent")
 
     @pytest.mark.requirement("FR-015")
-    @pytest.mark.skip(reason="drop_table not yet implemented - T030")
     def test_drop_table_with_purge_removes_data(
         self,
         lifecycle_manager: Any,

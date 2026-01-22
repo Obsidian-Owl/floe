@@ -342,6 +342,32 @@ class IcebergTableManager:
         """
         return self._lifecycle.table_exists(identifier)
 
+    def drop_table(self, identifier: str, purge: bool = False) -> None:
+        """Drop (delete) a table from the catalog.
+
+        Removes the table metadata from the catalog. If purge=True, also
+        deletes the underlying data files (when supported by the catalog).
+
+        Delegates to _IcebergTableLifecycle helper (T034 facade pattern).
+
+        Args:
+            identifier: Full table identifier (e.g., "bronze.customers").
+            purge: If True, delete underlying data files. Default False
+                (keep data files for potential recovery).
+
+        Raises:
+            NoSuchTableError: If table doesn't exist.
+            ValidationError: If identifier format is invalid.
+
+        Example:
+            >>> # Soft delete (keep data files)
+            >>> manager.drop_table("bronze.deprecated_table")
+
+            >>> # Hard delete (remove data files)
+            >>> manager.drop_table("bronze.temp_table", purge=True)
+        """
+        return self._lifecycle.drop_table(identifier, purge=purge)
+
     # =========================================================================
     # Private Helper Methods
     # =========================================================================
