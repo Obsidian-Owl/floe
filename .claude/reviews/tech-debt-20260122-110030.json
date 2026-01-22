@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-01-22T11:00:30Z",
+  "scope": "full-audit",
+  "branch": "tech-debt",
+  "commit": "fb6da52",
+  "debt_score": 68,
+  "categories": {
+    "complexity": {
+      "issues": 16,
+      "critical": 2,
+      "high": 3,
+      "medium": 6,
+      "low": 5
+    },
+    "dead_code": {
+      "issues": 6,
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 2
+    },
+    "dependencies": {
+      "issues": 4,
+      "critical": 0,
+      "high": 0,
+      "medium": 3,
+      "low": 1
+    },
+    "documentation": {
+      "issues": 4,
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0
+    },
+    "testing": {
+      "issues": 8,
+      "critical": 0,
+      "high": 4,
+      "medium": 3,
+      "low": 1
+    },
+    "todos": {
+      "issues": 4,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 4
+    },
+    "hotspots": {
+      "issues": 3,
+      "critical": 0,
+      "high": 0,
+      "medium": 3,
+      "low": 0
+    },
+    "performance": {
+      "issues": 8,
+      "critical": 2,
+      "high": 3,
+      "medium": 2,
+      "low": 1
+    },
+    "architecture": {
+      "issues": 5,
+      "critical": 1,
+      "high": 2,
+      "medium": 2,
+      "low": 0
+    }
+  },
+  "total_issues": 58,
+  "critical_issues": 5,
+  "high_issues": 12,
+  "medium_issues": 27,
+  "low_issues": 14,
+  "remediation_days": 18,
+  "key_findings": {
+    "circular_dependency": "floe_core <-> floe_rbac_k8s",
+    "god_module": "floe-core (119 files, 291 exports)",
+    "n_plus_one": "OCI client.list() and client.pull()",
+    "test_skips": "4 pytest.skip() calls violating policy",
+    "bus_factor": 1
+  }
+}

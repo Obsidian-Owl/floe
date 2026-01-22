@@ -1,8 +1,8 @@
 # Epic Overview
 
-**Total Requirements**: 387+
-**Total Epics**: 22
-**Requirement Domains**: 8
+**Total Requirements**: 406+
+**Total Epics**: 24
+**Requirement Domains**: 9
 
 ---
 
@@ -180,6 +180,11 @@ All Epics fall within the optimal or acceptable range.
 | 6A | OpenTelemetry | 20 | 2A, 4A, 4C |
 | 10A | Agent Memory (Cognee) | 12 | 2A, 4A, 4C, 6A (non-blocking enhancement) |
 
+### Independent (Can Run Anytime)
+| Epic | Name | Req Count | Notes |
+|------|------|-----------|-------|
+| 12A | Tech Debt Q1 2026 | 19 | Maintenance work, no dependencies |
+
 ### Wave 3 (Depends on Wave 2)
 | Epic | Name | Req Count | Depends On |
 |------|------|-----------|------------|
@@ -291,6 +296,7 @@ Each Epic has exclusive ownership of specific files to prevent merge conflicts:
 | 9A-B | `charts/` | Helm charts |
 | 9C | `testing/`, `Makefile`, `.github/workflows/test.yml` | Test infrastructure (Wave 0) |
 | 10A | `devtools/agent-memory/`, `scripts/cognee-sync`, `.cognee/` | AI agent memory (internal) |
+| 12A | `packages/floe-core/src/floe_core/oci/`, `packages/floe-iceberg/`, `testing/base_classes/` | Tech debt reduction (maintenance) |
 
 ---
 

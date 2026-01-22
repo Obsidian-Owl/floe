@@ -56,6 +56,9 @@ This directory contains detailed documentation for each of the 22 Epics.
 | [9C](09-deployment/epic-09c-testing-infrastructure.md) | Testing Infrastructure | 15 | Planned | [floe-09c-testing-infra](https://linear.app/obsidianowl/project/floe-09c-testing-infra-bc1023480bf2) |
 | **Contributor Tooling** |
 | [10A](10-contributor/epic-10a-agent-memory.md) | Agent Memory (Cognee) | 12 | Planned | TBD |
+| [10B](10-contributor/epic-10b-agent-memory-validation.md) | Agent Memory Validation | 8 | Planned | TBD |
+| **Tech Debt** |
+| [12A](12-tech-debt/epic-12a-jan2026-tech-debt.md) | January 2026 Tech Debt | 19 | Planned | [Epic 12A: Tech Debt Q1 2026](https://linear.app/obsidianowl/project/epic-12a-tech-debt-q1-2026-3797f63d2107) |
 
 ---
 
@@ -112,9 +115,14 @@ K8s deployment and testing infrastructure.
 - [Epic 9B: Helm Charts](09-deployment/epic-09b-helm-charts.md)
 - [Epic 9C: Testing Infrastructure](09-deployment/epic-09c-testing-infrastructure.md)
 
-### Contributor Tooling (Epic 10A)
+### Contributor Tooling (Epics 10A-10B)
 Internal tooling for AI coding agents and maintainers contributing to floe.
 - [Epic 10A: Agent Memory (Cognee)](10-contributor/epic-10a-agent-memory.md)
+- [Epic 10B: Agent Memory Validation](10-contributor/epic-10b-agent-memory-validation.md)
+
+### Tech Debt (Epic 12A)
+Periodic technical debt reduction sprints.
+- [Epic 12A: January 2026 Tech Debt](12-tech-debt/epic-12a-jan2026-tech-debt.md)
 
 ---
 

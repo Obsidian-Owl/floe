@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "recommendation": {
+    "id": "c8fae6f2-7e78-4685-8dec-2d8d443c0581",
+    "projectPath": "/Users/dmccarthy/Projects/floe",
+    "createdAt": "2026-01-22T01:08:01.566Z",
+    "type": "systemic",
+    "action": "Increase context compaction threshold from 85% to 90-92% to reduce frequent context loss during long development sessions",
+    "target": ".claude/settings.json compaction_threshold setting",
+    "rationale": "Current 85% threshold forces premature compaction when combined with 764-line CLAUDE.md, causing loss of conversational context. Sessions show 23% compaction rate which is excessive for complex architectural work.",
+    "priority": "high",
+    "tracedOrigin": {
+      "configGap": "Compaction threshold too aggressive for large configuration files"
+    },
+    "status": "open",
+    "events": [
+      {
+        "id": "2eba98c3-8a38-41be-a719-44d21c637d64",
+        "timestamp": "2026-01-22T01:08:01.566Z",
+        "type": "created",
+        "content": "Recommendation created: Increase context compaction threshold from 85% to 90-92% to reduce frequent context loss during long development sessions"
+      },
+      {
+        "id": "bb079f40-7f20-4f76-98d2-05a708ebce00",
+        "timestamp": "2026-01-22T04:30:48.401Z",
+        "type": "evidence",
+        "content": "Session stats: 942 sessions, 1,986 compressions (2.1x ratio), avg 67.8 turns. High compression rate indicates frequent context limits."
+      }
+    ]
+  }
+}
