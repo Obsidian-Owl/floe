@@ -62,7 +62,9 @@ Epic 12B addressed 104 tasks across 11 phases to resolve technical debt identifi
 
 ### US5: Dependency Pinning
 - **T048-T052**: Pinned all dependencies with upper bounds
-- `pip-audit` passes with 0 vulnerabilities
+- **T053**: `pip-audit` passes with 0 vulnerabilities
+- **T054**: Audited floe-cli - deprecated (no code, CLI moved to floe-core)
+- **T054a**: Verified all workspace dependencies are consistent
 
 ### US6: Test Coverage
 - **T055-T066**: Improved test coverage for critical paths
@@ -127,6 +129,7 @@ The following items were identified but deferred to future work:
 
 1. **SORT compaction** (compaction.py:383): Awaiting PyIceberg support
 2. **PyIceberg type stubs** (manager.py:57): Awaiting py.typed marker
+3. **Remove floe-cli package**: Package is empty (CLI moved to floe-core in Epic 11)
 
 ---
 
