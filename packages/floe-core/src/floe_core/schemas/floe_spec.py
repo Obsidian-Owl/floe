@@ -454,6 +454,25 @@ class FloeSpec(BaseModel):
         return v
 
 
+def _find_forbidden_in_list(items: list[Any], base_path: str) -> set[str]:
+    """Find forbidden fields in list items recursively.
+
+    Args:
+        items: List to search through.
+        base_path: Path prefix for error reporting.
+
+    Returns:
+        Set of forbidden field paths found in list items.
+    """
+    forbidden_found: set[str] = set()
+    for i, list_item in enumerate(items):
+        if isinstance(list_item, dict):
+            forbidden_found.update(
+                _find_forbidden_fields(dict(list_item), f"{base_path}[{i}]")
+            )
+    return forbidden_found
+
+
 def _find_forbidden_fields(
     data: dict[str, Any],
     path: str = "",
@@ -476,15 +495,9 @@ def _find_forbidden_fields(
             forbidden_found.add(current_path)
 
         if isinstance(value, dict):
-            # Recursive call - value is dict from isinstance check
             forbidden_found.update(_find_forbidden_fields(dict(value), current_path))
         elif isinstance(value, list):
-            for i, list_item in enumerate(value):
-                if isinstance(list_item, dict):
-                    # Recursive call - list_item is dict from isinstance check
-                    forbidden_found.update(
-                        _find_forbidden_fields(dict(list_item), f"{current_path}[{i}]")
-                    )
+            forbidden_found.update(_find_forbidden_in_list(value, current_path))
 
     return forbidden_found
 

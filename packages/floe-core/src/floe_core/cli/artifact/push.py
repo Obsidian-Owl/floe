@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import click
 
@@ -135,6 +135,32 @@ def _load_artifacts(artifact_path: Path) -> CompiledArtifacts:
         )
 
 
+def _handle_push_error(e: Exception) -> NoReturn:
+    """Handle push errors with appropriate exit codes.
+
+    Args:
+        e: Exception from push operation.
+
+    Raises:
+        SystemExit: Always exits with appropriate code.
+    """
+    error_type = type(e).__name__
+
+    # Map error types to messages and exit codes
+    error_mappings: list[tuple[str, str, ExitCode]] = [
+        ("Authentication", f"Authentication failed: {e}", ExitCode.GENERAL_ERROR),
+        ("Unavailable", f"Registry unavailable: {e}", ExitCode.GENERAL_ERROR),
+        ("Immutability", f"Cannot overwrite immutable tag: {e}", ExitCode.VALIDATION_ERROR),
+    ]
+
+    for keyword, message, exit_code in error_mappings:
+        if keyword in error_type:
+            error_exit(message, exit_code=exit_code)
+
+    # Default case
+    error_exit(f"Push failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
+
+
 def _push_to_registry(
     artifacts: CompiledArtifacts,
     registry_config: RegistryConfig,
@@ -156,37 +182,12 @@ def _push_to_registry(
 
     try:
         client = OCIClient.from_registry_config(registry_config)
-
         info(f"Pushing to {registry}:{tag}...")
-
         digest = client.push(artifacts, tag=tag)
-
         success(f"Pushed artifact with digest: {digest}")
         click.echo(digest)
-
     except Exception as e:
-        # Handle specific OCI errors
-        error_type = type(e).__name__
-        if "Authentication" in error_type:
-            error_exit(
-                f"Authentication failed: {e}",
-                exit_code=ExitCode.GENERAL_ERROR,
-            )
-        elif "Unavailable" in error_type:
-            error_exit(
-                f"Registry unavailable: {e}",
-                exit_code=ExitCode.GENERAL_ERROR,
-            )
-        elif "Immutability" in error_type:
-            error_exit(
-                f"Cannot overwrite immutable tag: {e}",
-                exit_code=ExitCode.VALIDATION_ERROR,
-            )
-        else:
-            error_exit(
-                f"Push failed: {e}",
-                exit_code=ExitCode.GENERAL_ERROR,
-            )
+        _handle_push_error(e)
 
 
 def _build_registry_config(registry_uri: str) -> RegistryConfig:

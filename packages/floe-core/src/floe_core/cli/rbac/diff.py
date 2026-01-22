@@ -92,6 +92,28 @@ def _load_kubeconfig(kubeconfig: Path | None) -> None:
             k8s_config.load_kube_config()
 
 
+def _parse_manifest_file(file_path: Path) -> list[dict[str, Any]]:
+    """Parse a single YAML manifest file into resource dictionaries.
+
+    Args:
+        file_path: Path to the YAML manifest file.
+
+    Returns:
+        List of non-empty resource dictionaries from the file.
+    """
+    import yaml
+
+    if not file_path.exists():
+        return []
+
+    content = file_path.read_text()
+    if not content.strip():
+        return []
+
+    docs = list(yaml.safe_load_all(content))
+    return [doc for doc in docs if doc]
+
+
 def _load_expected_manifests(manifest_dir: Path) -> list[dict[str, Any]]:
     """Load expected RBAC resources from manifest files.
 
@@ -101,20 +123,12 @@ def _load_expected_manifests(manifest_dir: Path) -> list[dict[str, Any]]:
     Returns:
         List of resource dictionaries from manifest files.
     """
-    import yaml
-
     expected_resources: list[dict[str, Any]] = []
     manifest_files = ["roles.yaml", "rolebindings.yaml", "serviceaccounts.yaml"]
 
     for filename in manifest_files:
         file_path = manifest_dir / filename
-        if file_path.exists():
-            content = file_path.read_text()
-            if content.strip():
-                docs = list(yaml.safe_load_all(content))
-                for doc in docs:
-                    if doc:
-                        expected_resources.append(doc)
+        expected_resources.extend(_parse_manifest_file(file_path))
 
     return expected_resources
 
