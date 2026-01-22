@@ -78,6 +78,7 @@ from testing.base_classes.golden_test_utils import (
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 # Plugin metadata, lifecycle, and discovery validation base classes
+from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
 from testing.base_classes.plugin_discovery_tests import BasePluginDiscoveryTests
 from testing.base_classes.plugin_lifecycle_tests import BasePluginLifecycleTests
 from testing.base_classes.plugin_metadata_tests import BasePluginMetadataTests
@@ -87,6 +88,7 @@ __all__ = [
     "AdapterTestBase",
     "AuditLogCapture",
     "BaseCatalogPluginTests",
+    "BaseHealthCheckTests",
     "BaseIdentityPluginTests",
     "BasePluginDiscoveryTests",
     "BasePluginLifecycleTests",

@@ -392,6 +392,238 @@ class TestPolarisIntegration(IntegrationTestBase):
 - `generate_unique_namespace(prefix)` - Create unique IDs
 - `get_service_host(service)` - Get K8s DNS name
 
+### BasePluginDiscoveryTests
+
+All plugin discovery tests should inherit from this base class to get standard
+entry point and metadata validation tests:
+
+```python
+from typing import Any, ClassVar
+
+import pytest
+from pydantic import SecretStr
+
+from testing.base_classes import BasePluginDiscoveryTests
+
+
+class TestMyPluginDiscovery(BasePluginDiscoveryTests):
+    """Test suite for MyPlugin entry point discovery."""
+
+    # Required class attributes
+    entry_point_group: ClassVar[str] = "floe.computes"
+    expected_name: ClassVar[str] = "my_plugin"
+    expected_module_prefix: ClassVar[str] = "floe_my_plugin"
+    expected_class_name: ClassVar[str] = "MyPlugin"
+
+    @property
+    def expected_plugin_abc(self) -> type[Any]:
+        """Return the expected ABC for type checking."""
+        from floe_core.plugins.compute import ComputePlugin
+        return ComputePlugin
+
+    def create_plugin_instance(self, plugin_class: type[Any]) -> Any:
+        """Create plugin with required configuration.
+
+        Override this if your plugin requires config to instantiate.
+        """
+        from floe_my_plugin import MyPluginConfig
+
+        config = MyPluginConfig(
+            api_key=SecretStr("test-key"),
+        )
+        return plugin_class(config=config)
+
+    # Add plugin-specific tests below the base class tests
+    @pytest.mark.requirement("MY-FR-001")
+    def test_plugin_has_specific_methods(self) -> None:
+        """Test plugin has domain-specific methods."""
+        # ...
+```
+
+**Inherited Tests** (automatic):
+1. `test_entry_point_is_registered` - Entry point exists in group
+2. `test_exactly_one_entry_point` - No duplicate registrations
+3. `test_entry_point_module_path` - Correct module reference
+4. `test_plugin_loads_successfully` - Plugin class loads via entry point
+5. `test_plugin_can_be_instantiated` - Plugin can be created
+6. `test_instantiated_plugin_has_correct_name` - Name matches
+7. `test_plugin_has_required_metadata_attributes` - PluginMetadata present
+8. `test_plugin_metadata_values_not_none` - Metadata values populated
+9. `test_plugin_inherits_from_expected_abc` - ABC compliance
+10. `test_plugin_instance_is_abc_instance` - Instance type check
+11. `test_plugin_has_lifecycle_methods` - startup/shutdown/health_check
+
+### BaseHealthCheckTests
+
+All plugin health check tests should inherit from this base class:
+
+```python
+from typing import Any
+
+import pytest
+
+from testing.base_classes import BaseHealthCheckTests
+
+
+class TestMyPluginHealthCheck(BaseHealthCheckTests):
+    """Test suite for MyPlugin health checks."""
+
+    @pytest.fixture
+    def unconnected_plugin(self) -> Any:
+        """Return an uninitialized plugin instance."""
+        from floe_my_plugin import MyPlugin, MyPluginConfig
+
+        config = MyPluginConfig(host="localhost", port=8080)
+        return MyPlugin(config=config)
+
+    @pytest.fixture
+    def connected_plugin(self, unconnected_plugin: Any) -> Any:
+        """Return an initialized/connected plugin instance."""
+        unconnected_plugin.startup()
+        yield unconnected_plugin
+        unconnected_plugin.shutdown()
+
+    # Add plugin-specific health check tests below
+    @pytest.mark.requirement("MY-FR-010")
+    def test_health_check_reports_backend_version(
+        self, connected_plugin: Any
+    ) -> None:
+        """Test health check includes backend version in details."""
+        result = connected_plugin.health_check()
+        assert "backend_version" in result.details
+```
+
+**Inherited Tests** (automatic):
+1. `test_health_check_exists` - Method exists and callable
+2. `test_health_check_returns_health_status` - Returns HealthStatus model
+3. `test_health_check_reports_healthy_when_connected` - HEALTHY state
+4. `test_health_check_reports_unhealthy_when_not_connected` - UNHEALTHY state
+5. `test_health_check_includes_response_time` - response_time_ms in details
+6. `test_health_check_completes_within_one_second` - Performance check
+7. `test_health_check_includes_checked_at_timestamp` - Timestamp present
+8. `test_health_check_accepts_timeout_parameter` - Timeout handling
+9. `test_health_check_rejects_invalid_timeout_*` - Boundary validation
+10. `test_health_check_does_not_raise_when_unhealthy` - Error handling
+11. `test_health_check_includes_message` - Non-empty message
+
+### Parametrized Test Patterns
+
+Use `pytest.mark.parametrize` to reduce test duplication when testing
+multiple scenarios with the same structure:
+
+```python
+import pytest
+
+
+class TestDryRunMode:
+    """Tests for dry-run mode behavior."""
+
+    @pytest.mark.requirement("US7")
+    @pytest.mark.parametrize(
+        ("dry_run", "expected_passed", "expected_severity"),
+        [
+            pytest.param(True, True, "warning", id="dry_run_passes_with_warnings"),
+            pytest.param(False, False, "error", id="normal_fails_with_errors"),
+        ],
+    )
+    def test_dry_run_mode_behavior(
+        self,
+        strict_governance_config: GovernanceConfig,
+        manifest_with_violation: dict[str, Any],
+        dry_run: bool,
+        expected_passed: bool,
+        expected_severity: str,
+    ) -> None:
+        """Test dry-run vs normal mode behavior with violations.
+
+        When dry_run=True: result.passed=True, violations are warnings
+        When dry_run=False: result.passed=False, violations are errors
+        """
+        from floe_core.enforcement import PolicyEnforcer
+
+        enforcer = PolicyEnforcer(governance_config=strict_governance_config)
+        result = enforcer.enforce(manifest_with_violation, dry_run=dry_run)
+
+        assert result.passed is expected_passed
+        assert len(result.violations) > 0
+
+        for violation in result.violations:
+            assert violation.severity == expected_severity
+```
+
+**Guidelines**:
+- Use `pytest.param(..., id="descriptive_name")` for readable test names
+- Extract common fixtures to conftest.py
+- Keep parameter tuples aligned for readability
+- Document what each parameter combination tests
+
+### Fixture Factory Patterns
+
+Use fixture factories in `conftest.py` to create reusable, configurable test data:
+
+```python
+# packages/floe-core/tests/unit/enforcement/conftest.py
+from typing import TYPE_CHECKING, Any
+
+import pytest
+
+if TYPE_CHECKING:
+    from floe_core.schemas.manifest import GovernanceConfig
+
+
+@pytest.fixture
+def strict_naming_governance_config() -> "GovernanceConfig":
+    """Provide strict governance config with medallion naming enforcement."""
+    from floe_core.schemas.governance import NamingConfig
+    from floe_core.schemas.manifest import GovernanceConfig
+
+    return GovernanceConfig(
+        policy_enforcement_level="strict",
+        naming=NamingConfig(
+            pattern="medallion",
+            enforcement="strict",
+        ),
+    )
+
+
+@pytest.fixture
+def dbt_manifest_with_naming_violation() -> dict[str, Any]:
+    """Provide dbt manifest with a medallion naming violation."""
+    return {
+        "metadata": {"dbt_version": "1.8.0"},
+        "nodes": {
+            "model.my_project.bad_model_name": {
+                "name": "bad_model_name",
+                "resource_type": "model",
+                "columns": {},
+            },
+        },
+    }
+
+
+@pytest.fixture
+def dbt_manifest_compliant() -> dict[str, Any]:
+    """Provide dbt manifest that is fully compliant with medallion naming."""
+    return {
+        "metadata": {"dbt_version": "1.8.0"},
+        "nodes": {
+            "model.my_project.bronze_orders": {
+                "name": "bronze_orders",
+                "resource_type": "model",
+                "description": "Raw order data from source system",
+                "columns": {},
+            },
+        },
+    }
+```
+
+**Guidelines**:
+- Place shared fixtures in the nearest `conftest.py`
+- Use `TYPE_CHECKING` imports to avoid circular dependencies
+- Return fully-configured objects, not builders
+- Document what makes each fixture unique (e.g., "with violation", "compliant")
+- Use descriptive fixture names that indicate the test scenario
+
 ---
 
 ## pytest Markers

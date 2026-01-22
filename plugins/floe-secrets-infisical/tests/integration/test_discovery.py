@@ -2,110 +2,106 @@
 
 Tests that the plugin can be discovered via the floe.secrets entry point.
 
-Task: T043
+Task: T043, T079
+Phase: 7, 10 - US7 (Test Duplication Reduction)
 Requirements: 7A-FR-004 (All plugins MUST inherit from PluginMetadata)
+
+This module inherits from BasePluginDiscoveryTests to reduce test duplication
+while adding Infisical-specific discovery tests.
 """
 
 from __future__ import annotations
 
 from importlib.metadata import entry_points
+from typing import Any, ClassVar
 
 import pytest
+from pydantic import SecretStr
+
+from testing.base_classes import BasePluginDiscoveryTests
 
 
-class TestInfisicalSecretsPluginDiscovery:
-    """Test plugin discovery via entry points."""
+class TestInfisicalSecretsPluginDiscovery(BasePluginDiscoveryTests):
+    """Tests for Infisical plugin entry point discovery.
 
-    @pytest.mark.requirement("7A-FR-004")
-    def test_plugin_discovered_via_entry_point(self) -> None:
-        """Test InfisicalSecretsPlugin is discoverable via floe.secrets entry point."""
-        eps = entry_points(group="floe.secrets")
+    Inherits standard discovery tests from BasePluginDiscoveryTests:
+    - test_entry_point_is_registered
+    - test_exactly_one_entry_point
+    - test_entry_point_module_path
+    - test_plugin_loads_successfully
+    - test_plugin_can_be_instantiated
+    - test_instantiated_plugin_has_correct_name
+    - test_plugin_has_required_metadata_attributes
+    - test_plugin_metadata_values_not_none
+    - test_plugin_inherits_from_expected_abc
+    - test_plugin_instance_is_abc_instance
+    - test_plugin_has_lifecycle_methods
+    """
 
-        # Find the infisical entry point
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
+    entry_point_group: ClassVar[str] = "floe.secrets"
+    expected_name: ClassVar[str] = "infisical"
+    expected_module_prefix: ClassVar[str] = "floe_secrets_infisical"
+    expected_class_name: ClassVar[str] = "InfisicalSecretsPlugin"
 
-        assert len(infisical_eps) == 1, "Expected exactly one 'infisical' entry point"
-        assert infisical_eps[0].name == "infisical"
-
-    @pytest.mark.requirement("7A-FR-004")
-    def test_plugin_loads_successfully(self) -> None:
-        """Test InfisicalSecretsPlugin loads without errors."""
-        eps = entry_points(group="floe.secrets")
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
-
-        assert len(infisical_eps) == 1
-
-        # Load the plugin class
-        plugin_class = infisical_eps[0].load()
-
-        # Verify it's a class (not instantiated yet - needs config)
-        assert plugin_class is not None
-        assert isinstance(plugin_class, type)
-
-    @pytest.mark.requirement("7A-FR-004")
-    def test_plugin_has_required_metadata_attributes(self) -> None:
-        """Test InfisicalSecretsPlugin has all required PluginMetadata attributes."""
-        eps = entry_points(group="floe.secrets")
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
-
-        plugin_class = infisical_eps[0].load()
-
-        # Required PluginMetadata class attributes
-        assert hasattr(plugin_class, "name")
-        assert hasattr(plugin_class, "version")
-        assert hasattr(plugin_class, "floe_api_version")
-        assert hasattr(plugin_class, "description")
-        assert hasattr(plugin_class, "get_config_schema")
-
-        # Verify class-level values
-        assert plugin_class.name == "infisical"
-        assert plugin_class.version is not None
-        assert plugin_class.floe_api_version is not None
-
-    @pytest.mark.requirement("7A-FR-020")
-    def test_plugin_is_secrets_plugin(self) -> None:
-        """Test InfisicalSecretsPlugin inherits from SecretsPlugin ABC."""
+    @property
+    def expected_plugin_abc(self) -> type[Any]:
+        """Return the expected ABC for type checking."""
         from floe_core.plugins.secrets import SecretsPlugin
 
-        eps = entry_points(group="floe.secrets")
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
+        return SecretsPlugin
 
-        plugin_class = infisical_eps[0].load()
+    def create_plugin_instance(self, plugin_class: type[Any]) -> Any:
+        """Create Infisical plugin with required configuration.
 
-        # Verify inheritance
-        assert issubclass(plugin_class, SecretsPlugin)
+        Args:
+            plugin_class: The InfisicalSecretsPlugin class.
+
+        Returns:
+            Configured InfisicalSecretsPlugin instance.
+        """
+        from floe_secrets_infisical import InfisicalSecretsConfig
+
+        config = InfisicalSecretsConfig(
+            site_url="https://infisical.example.com",
+            client_id="test-client-id",
+            client_secret=SecretStr("test-client-secret"),
+        )
+        return plugin_class(config=config)
+
+    # =========================================================================
+    # Secrets-Specific Method Tests
+    # =========================================================================
 
     @pytest.mark.requirement("7A-FR-002")
-    def test_plugin_has_secrets_methods(self) -> None:
-        """Test InfisicalSecretsPlugin has required SecretsPlugin methods."""
-        eps = entry_points(group="floe.secrets")
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
+    def test_plugin_has_secrets_specific_methods(self) -> None:
+        """Test plugin has SecretsPlugin-specific methods beyond lifecycle."""
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        plugin_class = infisical_eps[0].load()
+        assert len(matching) == 1
+        plugin_class = matching[0].load()
 
-        # Required SecretsPlugin methods (on class)
-        assert hasattr(plugin_class, "get_secret")
-        assert hasattr(plugin_class, "set_secret")
-        assert hasattr(plugin_class, "list_secrets")
-        assert hasattr(plugin_class, "health_check")
+        # SecretsPlugin-specific methods (beyond standard lifecycle)
+        secrets_methods = [
+            "get_secret",
+            "set_secret",
+            "list_secrets",
+        ]
 
-        # Lifecycle methods
-        assert hasattr(plugin_class, "startup")
-        assert hasattr(plugin_class, "shutdown")
-
-        # All should be callable (methods)
-        assert callable(plugin_class.get_secret)
-        assert callable(plugin_class.set_secret)
-        assert callable(plugin_class.list_secrets)
-        assert callable(plugin_class.health_check)
+        for method_name in secrets_methods:
+            assert hasattr(plugin_class, method_name), (
+                f"Plugin missing SecretsPlugin method: {method_name}"
+            )
+            assert callable(getattr(plugin_class, method_name))
 
     @pytest.mark.requirement("7A-FR-021")
     def test_plugin_supports_universal_auth(self) -> None:
-        """Test InfisicalSecretsPlugin requires config with Universal Auth."""
-        eps = entry_points(group="floe.secrets")
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
+        """Test plugin config requires Universal Auth fields."""
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        plugin_class = infisical_eps[0].load()
+        assert len(matching) == 1
+        plugin_class = matching[0].load()
 
         # Get the config schema
         config_schema = plugin_class.get_config_schema()
@@ -119,29 +115,8 @@ class TestInfisicalSecretsPluginDiscovery:
         assert "client_secret" in required_fields
 
 
-class TestInfisicalSecretsPluginEntryPointMetadata:
-    """Test entry point metadata."""
-
-    @pytest.mark.requirement("7A-FR-004")
-    def test_entry_point_group_name(self) -> None:
-        """Test entry point is registered under correct group."""
-        eps = entry_points(group="floe.secrets")
-
-        # Should have the infisical plugin
-        names = [ep.name for ep in eps]
-        assert "infisical" in names
-
-    @pytest.mark.requirement("7A-FR-004")
-    def test_entry_point_module_path(self) -> None:
-        """Test entry point points to correct module."""
-        eps = entry_points(group="floe.secrets")
-        infisical_eps = [ep for ep in eps if ep.name == "infisical"]
-
-        assert len(infisical_eps) == 1
-
-        # Entry point should reference the plugin module
-        ep = infisical_eps[0]
-        assert "floe_secrets_infisical" in ep.value
+class TestInfisicalSecretsPluginCoexistence:
+    """Test plugin coexistence with other secrets plugins."""
 
     @pytest.mark.requirement("7A-FR-020")
     def test_multiple_secrets_plugins_coexist(self) -> None:
