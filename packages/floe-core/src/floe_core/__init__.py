@@ -1,140 +1,56 @@
 """floe-core: Core plugin registry, schemas, and interfaces for the floe data platform.
 
-This package provides:
-- FloeSpec, CompiledArtifacts: Key schema types for data product definition
-- compile_pipeline: 6-stage compilation pipeline (Epic 2B)
-- CompilationError, CompilationStage: Structured error handling
-- PluginRegistry: Singleton for discovering and managing plugins
-- PluginMetadata: Base ABC for all plugin types
-- PluginType: Enum defining the 12 plugin categories
-- Plugin ABCs: Type-specific interfaces (ComputePlugin, etc.)
-- Compute Config Models: Pydantic models for compute plugin configuration
-- Errors: Custom exceptions for plugin and compute operations
-- Schemas: Pydantic models for manifest validation (floe_core.schemas)
-- Telemetry: OpenTelemetry SDK integration (floe_core.telemetry)
+This package provides a minimal public API. For specialized functionality,
+import from the appropriate submodule.
+
+Public API (15 symbols):
+- FloeSpec, CompiledArtifacts: Key schema types
+- compile_pipeline, CompilationError: Compilation pipeline
+- PluginRegistry, get_registry, PluginType, PluginMetadata: Plugin system
+- HealthState, HealthStatus: Plugin health reporting
+- schemas, telemetry, rbac, plugins: Submodule re-exports
 
 Example:
     >>> from floe_core import FloeSpec, CompiledArtifacts, compile_pipeline
     >>> artifacts = compile_pipeline(Path("floe.yaml"), Path("manifest.yaml"))
-    >>> artifacts.version
-    '0.2.0'
 
     >>> from floe_core import get_registry, PluginType
     >>> registry = get_registry()
     >>> registry.discover_all()
-    >>> compute_plugins = registry.list(PluginType.COMPUTE)
 
-    >>> from floe_core import ComputePlugin, CatalogPlugin
+    >>> from floe_core.plugins import ComputePlugin, CatalogPlugin
     >>> class MyCompute(ComputePlugin):
-    ...     # Implement abstract methods
     ...     pass
 
-    >>> from floe_core.schemas import PlatformManifest
-    >>> manifest = PlatformManifest.model_validate(yaml_data)
-
-    >>> from floe_core import TelemetryConfig, TelemetryProvider, ResourceAttributes
-    >>> attrs = ResourceAttributes(service_name="my-service", ...)
-    >>> config = TelemetryConfig(resource_attributes=attrs)
-    >>> with TelemetryProvider(config) as provider:
-    ...     pass  # Telemetry active
-
-    >>> from floe_core import DuckDBConfig, ConnectionStatus
-    >>> config = DuckDBConfig(path=":memory:", memory_limit="4GB")
-    >>> status = ConnectionStatus.HEALTHY
-
 See Also:
-    - floe_core.compilation: 6-stage compilation pipeline
-    - floe_core.plugins: All plugin ABCs with supporting dataclasses
+    - floe_core.plugins: All plugin ABCs (ComputePlugin, CatalogPlugin, etc.)
     - floe_core.schemas: Manifest and FloeSpec schema definitions
     - floe_core.telemetry: OpenTelemetry integration
     - floe_core.compute_config: Compute configuration models
     - floe_core.compute_errors: Compute error hierarchy
-    - docs/architecture/plugin-system/: Full architecture documentation
+    - floe_core.plugin_errors: Plugin error hierarchy
+    - floe_core.observability: OTel metrics and tracing helpers
 """
 
 from __future__ import annotations
 
 __version__ = "0.1.0"
 
-# Schemas submodule (imported for explicit re-export)
-# RBAC submodule (explicit re-export)
+# =============================================================================
+# Submodule re-exports (explicit)
+# =============================================================================
+from floe_core import plugins as plugins  # noqa: PLC0414
 from floe_core import rbac as rbac  # noqa: PLC0414
 from floe_core import schemas as schemas  # noqa: PLC0414
-
-# Telemetry submodule (explicit re-export)
 from floe_core import telemetry as telemetry  # noqa: PLC0414
 
+# =============================================================================
+# Essential public API
+# =============================================================================
+
 # Compilation pipeline (Epic 2B)
-from floe_core.compilation.errors import (
-    CompilationError,
-    CompilationException,
-)
-from floe_core.compilation.stages import (
-    CompilationStage,
-    compile_pipeline,
-)
-
-# Compiler functions
-from floe_core.compiler import (
-    EnvironmentParityError,
-    check_environment_parity,
-    compile_transforms,
-    resolve_transform_compute,
-    resolve_transforms_compute,
-    validate_environment_parity,
-)
-
-# Compute configuration models
-from floe_core.compute_config import (
-    WORKLOAD_PRESETS,
-    AttachConfig,
-    CatalogConfig,
-    ComputeConfig,
-    ConnectionResult,
-    ConnectionStatus,
-    DuckDBConfig,
-    ResourceSpec,
-)
-
-# Compute error hierarchy
-from floe_core.compute_errors import (
-    ComputeConfigurationError,
-    ComputeConnectionError,
-    ComputeError,
-    ComputeTimeoutError,
-)
-
-# Compute registry
-from floe_core.compute_registry import ComputeRegistry
-
-# Observability (OTel)
-from floe_core.observability import (
-    get_meter,
-    get_tracer,
-    record_validation_duration,
-    record_validation_error,
-    start_validation_span,
-)
-
-# Plugin error hierarchy
-from floe_core.plugin_errors import (
-    # Catalog operation errors
-    AuthenticationError,
-    CatalogError,
-    CatalogUnavailableError,
-    # Plugin registry errors
-    CircularDependencyError,
-    ConflictError,
-    DuplicatePluginError,
-    MissingDependencyError,
-    NotFoundError,
-    NotSupportedError,
-    PluginConfigurationError,
-    PluginError,
-    PluginIncompatibleError,
-    PluginNotFoundError,
-    PluginStartupError,
-)
+from floe_core.compilation.errors import CompilationError
+from floe_core.compilation.stages import compile_pipeline
 
 # Health types and PluginMetadata ABC
 from floe_core.plugin_metadata import (
@@ -152,140 +68,139 @@ from floe_core.plugin_registry import (
 # Plugin type categories
 from floe_core.plugin_types import PluginType
 
-# Plugin ABCs (12 types)
-from floe_core.plugins import (
-    CatalogPlugin,
-    ComputePlugin,
-    DBTPlugin,
-    IdentityPlugin,
-    IngestionPlugin,
-    LineageBackendPlugin,
-    OrchestratorPlugin,
-    QualityPlugin,
-    SecretsPlugin,
-    SemanticLayerPlugin,
-    StoragePlugin,
-    TelemetryBackendPlugin,
-)
-
-# Key schema exports (convenience imports from schemas submodule)
+# Key schema exports
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_core.schemas.floe_spec import FloeSpec
 
-# Security configuration exports (Epic 7B convenience imports)
+# =============================================================================
+# Backwards compatibility imports (not in __all__, use submodule imports)
+# =============================================================================
+
+# Compilation extras - use: from floe_core.compilation import ...
+from floe_core.compilation.errors import CompilationException as CompilationException
+from floe_core.compilation.stages import CompilationStage as CompilationStage
+
+# Compiler functions - use: from floe_core.compiler import ...
+from floe_core.compiler import (
+    EnvironmentParityError as EnvironmentParityError,
+    check_environment_parity as check_environment_parity,
+    compile_transforms as compile_transforms,
+    resolve_transform_compute as resolve_transform_compute,
+    resolve_transforms_compute as resolve_transforms_compute,
+    validate_environment_parity as validate_environment_parity,
+)
+
+# Compute config - use: from floe_core.compute_config import ...
+from floe_core.compute_config import (
+    WORKLOAD_PRESETS as WORKLOAD_PRESETS,
+    AttachConfig as AttachConfig,
+    CatalogConfig as CatalogConfig,
+    ComputeConfig as ComputeConfig,
+    ConnectionResult as ConnectionResult,
+    ConnectionStatus as ConnectionStatus,
+    DuckDBConfig as DuckDBConfig,
+    ResourceSpec as ResourceSpec,
+)
+
+# Compute errors - use: from floe_core.compute_errors import ...
+from floe_core.compute_errors import (
+    ComputeConfigurationError as ComputeConfigurationError,
+    ComputeConnectionError as ComputeConnectionError,
+    ComputeError as ComputeError,
+    ComputeTimeoutError as ComputeTimeoutError,
+)
+
+# Compute registry - use: from floe_core.compute_registry import ...
+from floe_core.compute_registry import ComputeRegistry as ComputeRegistry
+
+# Observability - use: from floe_core.observability import ...
+from floe_core.observability import (
+    get_meter as get_meter,
+    get_tracer as get_tracer,
+    record_validation_duration as record_validation_duration,
+    record_validation_error as record_validation_error,
+    start_validation_span as start_validation_span,
+)
+
+# Plugin errors - use: from floe_core.plugin_errors import ...
+from floe_core.plugin_errors import (
+    AuthenticationError as AuthenticationError,
+    CatalogError as CatalogError,
+    CatalogUnavailableError as CatalogUnavailableError,
+    CircularDependencyError as CircularDependencyError,
+    ConflictError as ConflictError,
+    DuplicatePluginError as DuplicatePluginError,
+    MissingDependencyError as MissingDependencyError,
+    NotFoundError as NotFoundError,
+    NotSupportedError as NotSupportedError,
+    PluginConfigurationError as PluginConfigurationError,
+    PluginError as PluginError,
+    PluginIncompatibleError as PluginIncompatibleError,
+    PluginNotFoundError as PluginNotFoundError,
+    PluginStartupError as PluginStartupError,
+)
+
+# Plugin ABCs - use: from floe_core.plugins import ...
+from floe_core.plugins import (
+    CatalogPlugin as CatalogPlugin,
+    ComputePlugin as ComputePlugin,
+    DBTPlugin as DBTPlugin,
+    IdentityPlugin as IdentityPlugin,
+    IngestionPlugin as IngestionPlugin,
+    LineageBackendPlugin as LineageBackendPlugin,
+    OrchestratorPlugin as OrchestratorPlugin,
+    QualityPlugin as QualityPlugin,
+    SecretsPlugin as SecretsPlugin,
+    SemanticLayerPlugin as SemanticLayerPlugin,
+    StoragePlugin as StoragePlugin,
+    TelemetryBackendPlugin as TelemetryBackendPlugin,
+)
+
+# Security config - use: from floe_core.schemas.security import ...
 from floe_core.schemas.security import (
-    RBACConfig,
-    SecurityConfig,
+    RBACConfig as RBACConfig,
+    SecurityConfig as SecurityConfig,
 )
 
-# Telemetry public API (convenience imports)
+# Telemetry - use: from floe_core.telemetry import ...
 from floe_core.telemetry import (
-    ProviderState,
-    ResourceAttributes,
-    SamplingConfig,
-    TelemetryConfig,
-    TelemetryProvider,
+    ProviderState as ProviderState,
+    ResourceAttributes as ResourceAttributes,
+    SamplingConfig as SamplingConfig,
+    TelemetryConfig as TelemetryConfig,
+    TelemetryProvider as TelemetryProvider,
 )
 
-# Version compatibility
+# Version compat - use: from floe_core.version_compat import ...
 from floe_core.version_compat import (
-    FLOE_PLUGIN_API_MIN_VERSION,
-    FLOE_PLUGIN_API_VERSION,
-    is_compatible,
+    FLOE_PLUGIN_API_MIN_VERSION as FLOE_PLUGIN_API_MIN_VERSION,
+    FLOE_PLUGIN_API_VERSION as FLOE_PLUGIN_API_VERSION,
+    is_compatible as is_compatible,
 )
 
+# =============================================================================
+# Public API (15 symbols)
+# =============================================================================
 __all__: list[str] = [
     # Package version
     "__version__",
-    # Schemas submodule and key exports
+    # Submodules
+    "plugins",
+    "rbac",
     "schemas",
+    "telemetry",
+    # Key schemas
     "CompiledArtifacts",
     "FloeSpec",
-    # RBAC submodule and security exports (Epic 7B)
-    "rbac",
-    "RBACConfig",
-    "SecurityConfig",
-    # Telemetry submodule and exports
-    "telemetry",
-    "TelemetryConfig",
-    "TelemetryProvider",
-    "ResourceAttributes",
-    "SamplingConfig",
-    "ProviderState",
-    # Compilation pipeline (Epic 2B)
+    # Compilation
     "CompilationError",
-    "CompilationException",
-    "CompilationStage",
     "compile_pipeline",
-    # Plugin type categories
+    # Plugin system
+    "get_registry",
+    "PluginRegistry",
     "PluginType",
-    # Plugin error hierarchy
-    "CircularDependencyError",
-    "DuplicatePluginError",
-    "MissingDependencyError",
-    "PluginConfigurationError",
-    "PluginError",
-    "PluginIncompatibleError",
-    "PluginNotFoundError",
-    "PluginStartupError",
-    # Catalog operation errors
-    "AuthenticationError",
-    "CatalogError",
-    "CatalogUnavailableError",
-    "ConflictError",
-    "NotFoundError",
-    "NotSupportedError",
-    # Compute configuration models
-    "AttachConfig",
-    "CatalogConfig",
-    "ComputeConfig",
-    "ConnectionResult",
-    "ConnectionStatus",
-    "DuckDBConfig",
-    "ResourceSpec",
-    "WORKLOAD_PRESETS",
-    # Compute error hierarchy
-    "ComputeConfigurationError",
-    "ComputeConnectionError",
-    "ComputeError",
-    "ComputeTimeoutError",
-    # Compute registry
-    "ComputeRegistry",
-    # Compiler functions
-    "EnvironmentParityError",
-    "check_environment_parity",
-    "compile_transforms",
-    "resolve_transform_compute",
-    "resolve_transforms_compute",
-    "validate_environment_parity",
-    # Version compatibility
-    "FLOE_PLUGIN_API_VERSION",
-    "FLOE_PLUGIN_API_MIN_VERSION",
-    "is_compatible",
-    # Health types and base ABC
+    "PluginMetadata",
+    # Health reporting
     "HealthState",
     "HealthStatus",
-    "PluginMetadata",
-    # Plugin registry
-    "PluginRegistry",
-    "get_registry",
-    # Plugin ABCs (12 types)
-    "CatalogPlugin",
-    "ComputePlugin",
-    "DBTPlugin",
-    "IdentityPlugin",
-    "IngestionPlugin",
-    "LineageBackendPlugin",
-    "OrchestratorPlugin",
-    "QualityPlugin",
-    "SecretsPlugin",
-    "SemanticLayerPlugin",
-    "StoragePlugin",
-    "TelemetryBackendPlugin",
-    # Observability (OTel)
-    "get_meter",
-    "get_tracer",
-    "record_validation_duration",
-    "record_validation_error",
-    "start_validation_span",
 ]

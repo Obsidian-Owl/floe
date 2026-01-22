@@ -27,7 +27,7 @@ from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 @pytest.fixture(autouse=True)
 def patch_version_compat() -> Any:
     """Patch version compatibility to allow DuckDB plugin (1.0) with platform (0.1)."""
-    with patch("floe_core.plugin_registry.is_compatible", return_value=True):
+    with patch("floe_core.plugins.loader.is_compatible", return_value=True):
         yield
 
 
