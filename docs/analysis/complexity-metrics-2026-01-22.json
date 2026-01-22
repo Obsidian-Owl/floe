@@ -1,0 +1,234 @@
+{
+  "summary": {
+    "total_functions": 982,
+    "total_classes": 282,
+    "critical_cyclomatic": 1,
+    "high_cyclomatic": 7,
+    "medium_cyclomatic": 22,
+    "critical_cognitive": 0,
+    "high_cognitive": 3,
+    "deep_nesting": 13,
+    "long_functions": 123,
+    "very_long_functions": 25,
+    "large_classes": 17,
+    "huge_classes": 3
+  },
+  "cyclomatic_distribution": {
+    "1-5": 862,
+    "6-10": 98,
+    "11-20": 21,
+    "21-30": 1,
+    ">30": 0
+  },
+  "top_10_cyclomatic": [
+    {
+      "name": "map_pyiceberg_error",
+      "file": "plugins/floe-catalog-polaris/src/floe_catalog_polaris/errors.py",
+      "line": 51,
+      "cyclomatic": 26,
+      "cognitive": 16,
+      "nesting_depth": 1,
+      "length": 242,
+      "parameters": 3
+    },
+    {
+      "name": "__getattr__",
+      "file": "packages/floe-core/src/floe_core/rbac/__init__.py",
+      "line": 44,
+      "cyclomatic": 18,
+      "cognitive": 17,
+      "nesting_depth": 1,
+      "length": 75,
+      "parameters": 1
+    },
+    {
+      "name": "audit_command",
+      "file": "packages/floe-core/src/floe_core/cli/rbac/audit.py",
+      "line": 68,
+      "cyclomatic": 18,
+      "cognitive": 13,
+      "nesting_depth": 4,
+      "length": 129,
+      "parameters": 3
+    },
+    {
+      "name": "validate_security_policy_not_weakened",
+      "file": "packages/floe-core/src/floe_core/schemas/validation.py",
+      "line": 107,
+      "cyclomatic": 17,
+      "cognitive": 10,
+      "nesting_depth": 2,
+      "length": 85,
+      "parameters": 2
+    },
+    {
+      "name": "enforce",
+      "file": "packages/floe-core/src/floe_core/enforcement/policy_enforcer.py",
+      "line": 75,
+      "cyclomatic": 17,
+      "cognitive": 12,
+      "nesting_depth": 3,
+      "length": 124,
+      "parameters": 5
+    },
+    {
+      "name": "validate",
+      "file": "plugins/floe-identity-keycloak/src/floe_identity_keycloak/token_validator.py",
+      "line": 121,
+      "cyclomatic": 17,
+      "cognitive": 15,
+      "nesting_depth": 3,
+      "length": 144,
+      "parameters": 2
+    },
+    {
+      "name": "list_secrets",
+      "file": "plugins/floe-secrets-infisical/src/floe_secrets_infisical/plugin.py",
+      "line": 613,
+      "cyclomatic": 16,
+      "cognitive": 9,
+      "nesting_depth": 2,
+      "length": 99,
+      "parameters": 2
+    },
+    {
+      "name": "pull",
+      "file": "packages/floe-core/src/floe_core/oci/client.py",
+      "line": 660,
+      "cyclomatic": 15,
+      "cognitive": 16,
+      "nesting_depth": 5,
+      "length": 166,
+      "parameters": 3
+    },
+    {
+      "name": "validate_command",
+      "file": "packages/floe-core/src/floe_core/cli/rbac/validate.py",
+      "line": 68,
+      "cyclomatic": 15,
+      "cognitive": 12,
+      "nesting_depth": 4,
+      "length": 142,
+      "parameters": 3
+    },
+    {
+      "name": "_analyze_files_for_compaction",
+      "file": "packages/floe-iceberg/src/floe_iceberg/compaction.py",
+      "line": 174,
+      "cyclomatic": 15,
+      "cognitive": 11,
+      "nesting_depth": 7,
+      "length": 61,
+      "parameters": 3
+    }
+  ],
+  "top_5_classes_by_methods": [
+    {
+      "name": "OCIClient",
+      "file": "packages/floe-core/src/floe_core/oci/client.py",
+      "line": 106,
+      "method_count": 27,
+      "attribute_count": 0
+    },
+    {
+      "name": "IcebergTableManager",
+      "file": "packages/floe-iceberg/src/floe_iceberg/manager.py",
+      "line": 66,
+      "method_count": 23,
+      "attribute_count": 0
+    },
+    {
+      "name": "KeycloakIdentityPlugin",
+      "file": "plugins/floe-identity-keycloak/src/floe_identity_keycloak/plugin.py",
+      "line": 71,
+      "method_count": 22,
+      "attribute_count": 0
+    },
+    {
+      "name": "PluginRegistry",
+      "file": "packages/floe-core/src/floe_core/plugin_registry.py",
+      "line": 61,
+      "method_count": 20,
+      "attribute_count": 0
+    },
+    {
+      "name": "PolicyEnforcer",
+      "file": "packages/floe-core/src/floe_core/enforcement/policy_enforcer.py",
+      "line": 40,
+      "method_count": 20,
+      "attribute_count": 0
+    }
+  ],
+  "critical_issues": [
+    {
+      "name": "map_pyiceberg_error",
+      "file": "plugins/floe-catalog-polaris/src/floe_catalog_polaris/errors.py",
+      "line": 51,
+      "cyclomatic": 26,
+      "cognitive": 16,
+      "nesting_depth": 1,
+      "length": 242,
+      "severity": "CRITICAL"
+    },
+    {
+      "name": "__getattr__",
+      "file": "packages/floe-core/src/floe_core/rbac/__init__.py",
+      "line": 44,
+      "cyclomatic": 18,
+      "cognitive": 17,
+      "nesting_depth": 1,
+      "length": 75,
+      "severity": "HIGH"
+    },
+    {
+      "name": "audit_command",
+      "file": "packages/floe-core/src/floe_core/cli/rbac/audit.py",
+      "line": 68,
+      "cyclomatic": 18,
+      "cognitive": 13,
+      "nesting_depth": 4,
+      "length": 129,
+      "severity": "HIGH"
+    },
+    {
+      "name": "validate_security_policy_not_weakened",
+      "file": "packages/floe-core/src/floe_core/schemas/validation.py",
+      "line": 107,
+      "cyclomatic": 17,
+      "cognitive": 10,
+      "nesting_depth": 2,
+      "length": 85,
+      "severity": "HIGH"
+    },
+    {
+      "name": "enforce",
+      "file": "packages/floe-core/src/floe_core/enforcement/policy_enforcer.py",
+      "line": 75,
+      "cyclomatic": 17,
+      "cognitive": 12,
+      "nesting_depth": 3,
+      "length": 124,
+      "severity": "HIGH"
+    },
+    {
+      "name": "validate",
+      "file": "plugins/floe-identity-keycloak/src/floe_identity_keycloak/token_validator.py",
+      "line": 121,
+      "cyclomatic": 17,
+      "cognitive": 15,
+      "nesting_depth": 3,
+      "length": 144,
+      "severity": "HIGH"
+    },
+    {
+      "name": "list_secrets",
+      "file": "plugins/floe-secrets-infisical/src/floe_secrets_infisical/plugin.py",
+      "line": 613,
+      "cyclomatic": 16,
+      "cognitive": 9,
+      "nesting_depth": 2,
+      "length": 99,
+      "severity": "HIGH"
+    }
+  ]
+}
