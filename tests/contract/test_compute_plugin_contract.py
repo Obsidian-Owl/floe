@@ -386,3 +386,115 @@ class TestComputeConfigurationModelsContract:
         # All presets should be ResourceSpec instances
         for name, spec in WORKLOAD_PRESETS.items():
             assert isinstance(spec, ResourceSpec), f"{name} should be ResourceSpec"
+
+
+class TestComputePluginDefaultImplementations:
+    """Tests for default method implementations in ComputePlugin.
+
+    These tests cover the concrete default implementations of optional methods.
+    """
+
+    @pytest.mark.requirement("001-FR-001")
+    def test_get_catalog_attachment_sql_default_returns_none(self) -> None:
+        """Verify default get_catalog_attachment_sql returns None.
+
+        The base implementation returns None for engines that don't need
+        catalog attachment SQL (like Snowflake, BigQuery).
+        """
+        from floe_core import CatalogConfig, ComputeConfig, ComputePlugin, ConnectionResult, ConnectionStatus
+        from floe_core.plugins.compute import ResourceSpec
+
+        # Create a minimal concrete implementation
+        class MinimalComputePlugin(ComputePlugin):
+            @property
+            def name(self) -> str:
+                return "minimal"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+            @property
+            def is_self_hosted(self) -> bool:
+                return True
+
+            def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
+                _ = config
+                return {"type": "test"}
+
+            def get_required_dbt_packages(self) -> list[str]:
+                return []
+
+            def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
+                _ = config
+                return ConnectionResult(status=ConnectionStatus.HEALTHY, latency_ms=1.0)
+
+            def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
+                _ = workload_size
+                return ResourceSpec()
+
+        plugin = MinimalComputePlugin()
+        catalog_config = CatalogConfig(
+            catalog_type="rest",
+            catalog_uri="http://polaris:8181/api/catalog",
+            catalog_name="test",
+        )
+
+        # Call the default implementation
+        result = plugin.get_catalog_attachment_sql(catalog_config)
+
+        assert result is None
+
+    @pytest.mark.requirement("001-FR-001")
+    def test_get_config_schema_default_returns_none(self) -> None:
+        """Verify default get_config_schema returns None.
+
+        The base implementation returns None for plugins that don't need
+        custom config validation.
+        """
+        from floe_core import ComputeConfig, ComputePlugin, ConnectionResult, ConnectionStatus
+        from floe_core.plugins.compute import ResourceSpec
+
+        # Create a minimal concrete implementation
+        class MinimalComputePlugin(ComputePlugin):
+            @property
+            def name(self) -> str:
+                return "minimal"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+            @property
+            def is_self_hosted(self) -> bool:
+                return True
+
+            def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
+                _ = config
+                return {"type": "test"}
+
+            def get_required_dbt_packages(self) -> list[str]:
+                return []
+
+            def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
+                _ = config
+                return ConnectionResult(status=ConnectionStatus.HEALTHY, latency_ms=1.0)
+
+            def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
+                _ = workload_size
+                return ResourceSpec()
+
+        plugin = MinimalComputePlugin()
+
+        # Call the default implementation
+        result = plugin.get_config_schema()
+
+        assert result is None
