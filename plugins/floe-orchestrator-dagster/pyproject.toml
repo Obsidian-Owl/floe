@@ -28,8 +28,6 @@ dependencies = [
     "dagster-dbt>=0.26.0",
     "openlineage-python>=1.0.0",
     "httpx>=0.24.0",
-    "croniter>=1.0.0",
-    "pytz>=2024.1",
 ]
 
 [project.optional-dependencies]

@@ -663,7 +663,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
     def _validate_cron(self, cron: str) -> None:
         """Validate cron expression format.
 
-        Uses croniter library to verify the cron expression is syntactically valid.
+        Uses regex pattern matching to verify the cron expression is syntactically valid.
+        Supports standard 5-field cron expressions (minute hour day month weekday).
 
         Args:
             cron: Cron expression to validate (e.g., "0 8 * * *").
@@ -671,7 +672,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         Raises:
             ValueError: If cron expression is invalid, with format guidance.
         """
-        from croniter import croniter
+        import re
 
         if not cron or not cron.strip():
             raise ValueError(
@@ -679,21 +680,36 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "Expected format: 'minute hour day month weekday' (e.g., '0 8 * * *')"
             )
 
-        try:
-            # croniter.is_valid returns True/False but doesn't give details
-            # Instantiating it will raise if invalid
-            croniter(cron)
-        except (ValueError, KeyError) as e:
+        # Regex patterns for each cron field
+        # Supports: numbers (with optional leading zeros), *, */N, N-M, N,M,O
+        # minute: 0-59 (allows 00-59)
+        minute_pattern = r"(\*|[0-5]?\d)(\/\d+)?(-[0-5]?\d)?(,[0-5]?\d(-[0-5]?\d)?)*(\/\d+)?|\*\/\d+"
+        # hour: 0-23 (allows 00-23, but not 24+)
+        hour_pattern = r"(\*|[01]?\d|2[0-3])(\/\d+)?(-(?:[01]?\d|2[0-3]))?(,(?:[01]?\d|2[0-3])(-(?:[01]?\d|2[0-3]))?)*(\/\d+)?|\*\/\d+"
+        # day: 1-31 (allows 01-31)
+        day_pattern = r"(\*|0?[1-9]|[12]\d|3[01])(\/\d+)?(-(?:0?[1-9]|[12]\d|3[01]))?(,(?:0?[1-9]|[12]\d|3[01])(-(?:0?[1-9]|[12]\d|3[01]))?)*(\/\d+)?|\*\/\d+"
+        # month: 1-12 (allows 01-12)
+        month_pattern = r"(\*|0?[1-9]|1[0-2])(\/\d+)?(-(?:0?[1-9]|1[0-2]))?(,(?:0?[1-9]|1[0-2])(-(?:0?[1-9]|1[0-2]))?)*(\/\d+)?|\*\/\d+"
+        # weekday: 0-6
+        weekday_pattern = r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
+
+        # Full cron pattern: 5 whitespace-separated fields
+        cron_pattern = (
+            rf"^\s*({minute_pattern})\s+({hour_pattern})\s+({day_pattern})\s+"
+            rf"({month_pattern})\s+({weekday_pattern})\s*$"
+        )
+
+        if not re.match(cron_pattern, cron.strip()):
             raise ValueError(
                 f"Invalid cron expression: '{cron}'. "
-                f"Expected format: 'minute hour day month weekday' (e.g., '0 8 * * *'). "
-                f"Error: {e}"
-            ) from e
+                "Expected format: 'minute hour day month weekday' (e.g., '0 8 * * *'). "
+                "Each field supports: numbers, *, */N, N-M, N,M"
+            )
 
     def _validate_timezone(self, timezone: str) -> None:
         """Validate IANA timezone identifier.
 
-        Uses pytz library to verify the timezone is a valid IANA timezone.
+        Uses zoneinfo (Python stdlib) to verify the timezone is a valid IANA timezone.
 
         Args:
             timezone: IANA timezone identifier (e.g., "America/New_York", "UTC").
@@ -701,7 +717,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         Raises:
             ValueError: If timezone is invalid, listing common valid examples.
         """
-        import pytz
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
         if not timezone or not timezone.strip():
             raise ValueError(
@@ -710,8 +726,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             )
 
         try:
-            pytz.timezone(timezone)
-        except pytz.UnknownTimeZoneError as e:
+            ZoneInfo(timezone)
+        except ZoneInfoNotFoundError as e:
             raise ValueError(
                 f"Invalid timezone: '{timezone}'. "
                 "Expected valid IANA timezone. "
