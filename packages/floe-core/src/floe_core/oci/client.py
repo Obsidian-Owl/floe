@@ -48,6 +48,7 @@ See Also:
 
 from __future__ import annotations
 
+import builtins
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -613,142 +614,197 @@ class OCIClient:
         import time
 
         from floe_core.oci.metrics import OCIMetrics
-        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
-        log = logger.bind(
-            registry=self._registry_host,
-            tag=tag,
-        )
-
+        log = logger.bind(registry=self._registry_host, tag=tag)
         log.info("pull_started")
-
-        # Start timing for duration metric
         start_time = time.monotonic()
 
-        # Span attributes for OTel tracing
         span_attributes: dict[str, Any] = {
             "oci.registry": self._registry_host,
             "oci.tag": tag,
             "oci.operation": "pull",
         }
 
-        # Wrap entire operation in a trace span
         with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
             try:
-                # Check cache first using PullOperations helper
-                cached_artifacts = self.pull_operations.try_cache_hit(
-                    tag, self._config.uri, span, log, start_time
-                )
-                if cached_artifacts is not None:
-                    return cached_artifacts
-
-                # Use retry policy for network operations
-                def _pull_with_oras() -> tuple[bytes, str]:
-                    """Inner function to pull via ORAS with retry."""
-                    import hashlib
-
-                    oras_client = self._create_oras_client()
-                    target_ref = self._build_target_ref(tag)
-
-                    # Pull to temp directory
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        try:
-                            # ORAS pull returns list of file paths
-                            pulled_files = oras_client.pull(
-                                target=target_ref,
-                                outdir=tmpdir,
-                            )
-
-                            # Find artifacts file using PullOperations helper
-                            artifacts_path = self.pull_operations.find_artifacts_file(
-                                pulled_files, tmpdir
-                            )
-                            content = artifacts_path.read_bytes()
-
-                            # Compute digest for cache
-                            digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
-
-                            return content, digest
-
-                        except OCIError:
-                            # Re-raise OCIError (including from find_artifacts_file)
-                            raise
-                        except Exception as e:
-                            error_str = str(e).lower()
-                            # Detect "manifest unknown" or 404 errors
-                            if "manifest unknown" in error_str or "not found" in error_str:
-                                raise ArtifactNotFoundError(
-                                    tag=tag,
-                                    registry=self._config.uri,
-                                ) from e
-                            raise
-
-                # Apply retry policy with circuit breaker protection
-                # Circuit breaker wraps retry - if circuit is open, fail fast
-                with self._with_circuit_breaker("pull"):
-                    try:
-                        content, digest = self.retry_policy.wrap(_pull_with_oras)()
-                    except ArtifactNotFoundError:
-                        # Don't retry 404 errors
-                        raise
-                    except ConnectionError as e:
-                        raise RegistryUnavailableError(
-                            self._registry_host,
-                            f"Connection failed after retries: {e}",
-                        ) from e
-
-                # Deserialize to CompiledArtifacts
-                try:
-                    artifacts = CompiledArtifacts.model_validate_json(content)
-                except Exception as e:
-                    raise OCIError(f"Failed to deserialize artifact: {e}") from e
-
-                # Add product info to span after deserialization
-                span.set_attribute("oci.product.name", artifacts.metadata.product_name)
-                span.set_attribute("oci.product.version", artifacts.metadata.product_version)
-                span.set_attribute("oci.artifact.digest", digest)
-
-                # Store in cache (CacheManager sets TTL based on tag type)
-                if self.cache_manager is not None:
-                    self.cache_manager.put(
-                        digest=digest,
-                        tag=tag,
-                        registry=self._config.uri,
-                        content=content,
-                    )
-                    log.debug("pull_cached", digest=digest, tag=tag)
-
-                # Record success metrics
-                duration = self._record_operation_metrics(
-                    "pull", start_time, success=True, size=len(content)
-                )
-
-                log.info(
-                    "pull_completed",
-                    digest=digest,
-                    size=len(content),
-                    duration_ms=int(duration * 1000),
-                )
-
-                return artifacts
-
-            except ArtifactNotFoundError:
-                self._record_operation_metrics("pull", start_time, success=False)
-                raise
-            except CircuitBreakerOpenError:
-                self._record_operation_metrics("pull", start_time, success=False)
-                log.warning("pull_circuit_breaker_open")
-                raise
-            except AuthenticationError:
-                self._record_operation_metrics("pull", start_time, success=False)
-                raise
-            except RegistryUnavailableError:
+                return self._pull_internal(tag, span, log, start_time)
+            except (ArtifactNotFoundError, CircuitBreakerOpenError, AuthenticationError, RegistryUnavailableError):
                 self._record_operation_metrics("pull", start_time, success=False)
                 raise
             except Exception as e:
                 self._record_operation_metrics("pull", start_time, success=False)
                 log.error("pull_failed", error=str(e))
                 raise OCIError(f"Pull failed: {e}") from e
+
+    def _pull_internal(
+        self,
+        tag: str,
+        span: Any,
+        log: Any,
+        start_time: float,
+    ) -> CompiledArtifacts:
+        """Internal pull logic with cache check, fetch, and deserialization.
+
+        Args:
+            tag: Tag to pull.
+            span: OTel tracing span.
+            log: Bound logger.
+            start_time: Monotonic time for metrics.
+
+        Returns:
+            Deserialized CompiledArtifacts.
+        """
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        # Check cache first
+        cached_artifacts = self.pull_operations.try_cache_hit(
+            tag, self._config.uri, span, log, start_time
+        )
+        if cached_artifacts is not None:
+            return cached_artifacts
+
+        # Fetch from registry
+        content, digest = self._fetch_from_registry(tag)
+
+        # Deserialize
+        artifacts = self._deserialize_artifacts(content)
+
+        # Update span and cache
+        self._finalize_pull(artifacts, content, digest, tag, span, log, start_time)
+
+        return artifacts
+
+    def _fetch_from_registry(self, tag: str) -> tuple[bytes, str]:
+        """Fetch artifact content from registry with retry and circuit breaker.
+
+        Args:
+            tag: Tag to fetch.
+
+        Returns:
+            Tuple of (content bytes, digest string).
+        """
+        def _pull_with_oras() -> tuple[bytes, str]:
+            return self._pull_content_with_oras(tag)
+
+        with self._with_circuit_breaker("pull"):
+            try:
+                return self.retry_policy.wrap(_pull_with_oras)()
+            except ArtifactNotFoundError:
+                raise
+            except ConnectionError as e:
+                raise RegistryUnavailableError(
+                    self._registry_host,
+                    f"Connection failed after retries: {e}",
+                ) from e
+
+    def _pull_content_with_oras(self, tag: str) -> tuple[bytes, str]:
+        """Pull content via ORAS client.
+
+        Args:
+            tag: Tag to pull.
+
+        Returns:
+            Tuple of (content bytes, digest string).
+        """
+        import hashlib
+
+        oras_client = self._create_oras_client()
+        target_ref = self._build_target_ref(tag)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                pulled_files = oras_client.pull(target=target_ref, outdir=tmpdir)
+                artifacts_path = self.pull_operations.find_artifacts_file(pulled_files, tmpdir)
+                content = artifacts_path.read_bytes()
+                digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+                return content, digest
+            except OCIError:
+                raise
+            except Exception as e:
+                self._handle_oras_pull_error(e, tag)
+
+        # This return is unreachable but satisfies type checker
+        raise OCIError("Unexpected error in pull")  # pragma: no cover
+
+    def _handle_oras_pull_error(self, error: Exception, tag: str) -> None:
+        """Handle ORAS pull errors and raise appropriate exceptions.
+
+        Args:
+            error: The exception that occurred.
+            tag: Tag being pulled.
+
+        Raises:
+            ArtifactNotFoundError: If error indicates missing artifact.
+            Exception: Re-raises original exception otherwise.
+        """
+        error_str = str(error).lower()
+        if "manifest unknown" in error_str or "not found" in error_str:
+            raise ArtifactNotFoundError(tag=tag, registry=self._config.uri) from error
+        raise error
+
+    def _deserialize_artifacts(self, content: bytes) -> CompiledArtifacts:
+        """Deserialize content to CompiledArtifacts.
+
+        Args:
+            content: JSON bytes to deserialize.
+
+        Returns:
+            Deserialized CompiledArtifacts.
+
+        Raises:
+            OCIError: If deserialization fails.
+        """
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        try:
+            return CompiledArtifacts.model_validate_json(content)
+        except Exception as e:
+            raise OCIError(f"Failed to deserialize artifact: {e}") from e
+
+    def _finalize_pull(
+        self,
+        artifacts: CompiledArtifacts,
+        content: bytes,
+        digest: str,
+        tag: str,
+        span: Any,
+        log: Any,
+        start_time: float,
+    ) -> None:
+        """Finalize pull by updating span, cache, and metrics.
+
+        Args:
+            artifacts: Deserialized artifacts.
+            content: Raw content bytes.
+            digest: Content digest.
+            tag: Tag that was pulled.
+            span: OTel tracing span.
+            log: Bound logger.
+            start_time: Monotonic time for metrics.
+        """
+        # Add product info to span
+        span.set_attribute("oci.product.name", artifacts.metadata.product_name)
+        span.set_attribute("oci.product.version", artifacts.metadata.product_version)
+        span.set_attribute("oci.artifact.digest", digest)
+
+        # Store in cache
+        if self.cache_manager is not None:
+            self.cache_manager.put(
+                digest=digest, tag=tag, registry=self._config.uri, content=content
+            )
+            log.debug("pull_cached", digest=digest, tag=tag)
+
+        # Record success metrics
+        duration = self._record_operation_metrics(
+            "pull", start_time, success=True, size=len(content)
+        )
+
+        log.info(
+            "pull_completed",
+            digest=digest,
+            size=len(content),
+            duration_ms=int(duration * 1000),
+        )
 
     def inspect(self, tag: str) -> ArtifactManifest:
         """Inspect artifact metadata without downloading content.
@@ -879,113 +935,137 @@ class OCIClient:
             >>> for tag in tags:
             ...     print(f"{tag.name}: {tag.digest}")
         """
-        import fnmatch
         import time
 
-        log = logger.bind(
-            registry=self._registry_host,
-            filter_pattern=filter_pattern,
-        )
-
+        log = logger.bind(registry=self._registry_host, filter_pattern=filter_pattern)
         log.info("list_started")
-
-        # Start timing for duration metric
         start_time = time.monotonic()
 
         try:
-            # Wrap registry operations with circuit breaker protection
-            with self._with_circuit_breaker("list"):
-                # Create ORAS client for registry operations
-                oras_client = self._create_oras_client()
-
-                # Build repository reference (without tag) for listing tags
-                uri = self._config.uri
-                if uri.startswith("oci://"):
-                    uri = uri[6:]
-
-                # Get list of tags from registry
-                try:
-                    tags_response = oras_client.get_tags(container=uri)
-                except Exception as e:
-                    error_str = str(e).lower()
-                    if "unauthorized" in error_str or "authentication" in error_str:
-                        raise AuthenticationError(
-                            self._config.uri,
-                            "Authentication failed while listing tags",
-                        ) from e
-                    raise OCIError(f"Failed to list tags: {e}") from e
-
-                # get_tags returns List[str] directly
-                tag_names: list[str] = tags_response
-
-                # Filter by pattern if provided
-                if filter_pattern:
-                    tag_names = [
-                        name for name in tag_names if fnmatch.fnmatch(name, filter_pattern)
-                    ]
-
-                # Build tag references for parallel fetching
-                tag_refs = [
-                    (tag_name, self._build_target_ref(tag_name))
-                    for tag_name in tag_names
-                ]
-
-                # Use BatchFetcher for parallel manifest fetching (fixes N+1 pattern)
-                from floe_core.oci.batch_fetcher import BatchFetcher
-
-                batch_fetcher = BatchFetcher(max_workers=10)
-                fetch_result = batch_fetcher.fetch_manifests(oras_client, tag_refs)
-
-                # Log any failures
-                for tag_name, error in fetch_result.errors.items():
-                    log.warning(
-                        "list_tag_failed",
-                        tag=tag_name,
-                        error=str(error),
-                    )
-
-                # Build ArtifactTag list from fetched manifests using shared parsing
-                result: list[ArtifactTag] = []
-
-                for tag_name, manifest_data in fetch_result.manifests.items():
-                    # Use shared parsing functions (lightweight size calc)
-                    digest = calculate_manifest_digest(manifest_data)
-                    annotations = manifest_data.get("annotations", {})
-                    created_at = parse_created_timestamp(annotations)
-                    layers_data = manifest_data.get("layers", [])
-                    total_size = calculate_layers_total_size(layers_data)
-
-                    # Create ArtifactTag
-                    artifact_tag = ArtifactTag(
-                        name=tag_name,
-                        digest=digest,
-                        created_at=created_at,
-                        size=total_size,
-                    )
-                    result.append(artifact_tag)
-
-            # Record success metrics
+            result = self._list_internal(filter_pattern, log)
             duration = self._record_operation_metrics("list", start_time, success=True)
-
-            log.info(
-                "list_completed",
-                tag_count=len(result),
-                duration_ms=int(duration * 1000),
-            )
-
+            log.info("list_completed", tag_count=len(result), duration_ms=int(duration * 1000))
             return result
-
-        except CircuitBreakerOpenError:
-            self._record_operation_metrics("list", start_time, success=False)
-            log.warning("list_circuit_breaker_open")
-            raise
-        except AuthenticationError:
+        except (CircuitBreakerOpenError, AuthenticationError):
             self._record_operation_metrics("list", start_time, success=False)
             raise
         except Exception as e:
             self._record_operation_metrics("list", start_time, success=False)
             log.error("list_failed", error=str(e))
             raise OCIError(f"List failed: {e}") from e
+
+    def _list_internal(
+        self, filter_pattern: str | None, log: Any
+    ) -> builtins.list[ArtifactTag]:
+        """Internal list logic with circuit breaker protection.
+
+        Args:
+            filter_pattern: Optional glob pattern to filter tags.
+            log: Bound logger.
+
+        Returns:
+            List of ArtifactTag objects.
+        """
+        with self._with_circuit_breaker("list"):
+            oras_client = self._create_oras_client()
+            tag_names = self._fetch_tag_names(oras_client)
+            tag_names = self._filter_tags(tag_names, filter_pattern)
+            return self._fetch_and_build_artifact_tags(oras_client, tag_names, log)
+
+    def _fetch_tag_names(self, oras_client: OrasClient) -> builtins.list[str]:
+        """Fetch tag names from registry.
+
+        Args:
+            oras_client: Authenticated ORAS client.
+
+        Returns:
+            List of tag names.
+        """
+        uri = self._config.uri
+        if uri.startswith("oci://"):
+            uri = uri[6:]
+
+        try:
+            tags_response: builtins.list[str] = oras_client.get_tags(container=uri)
+            return tags_response
+        except Exception as e:
+            error_str = str(e).lower()
+            if "unauthorized" in error_str or "authentication" in error_str:
+                raise AuthenticationError(
+                    self._config.uri, "Authentication failed while listing tags"
+                ) from e
+            raise OCIError(f"Failed to list tags: {e}") from e
+
+    def _filter_tags(
+        self, tag_names: builtins.list[str], filter_pattern: str | None
+    ) -> builtins.list[str]:
+        """Filter tag names by glob pattern.
+
+        Args:
+            tag_names: List of tag names to filter.
+            filter_pattern: Optional glob pattern.
+
+        Returns:
+            Filtered list of tag names.
+        """
+        if not filter_pattern:
+            return tag_names
+
+        import fnmatch
+
+        return [name for name in tag_names if fnmatch.fnmatch(name, filter_pattern)]
+
+    def _fetch_and_build_artifact_tags(
+        self, oras_client: OrasClient, tag_names: builtins.list[str], log: Any
+    ) -> builtins.list[ArtifactTag]:
+        """Fetch manifests and build ArtifactTag objects.
+
+        Args:
+            oras_client: Authenticated ORAS client.
+            tag_names: List of tag names to fetch.
+            log: Bound logger.
+
+        Returns:
+            List of ArtifactTag objects.
+        """
+        from floe_core.oci.batch_fetcher import BatchFetcher
+
+        tag_refs = [(tag_name, self._build_target_ref(tag_name)) for tag_name in tag_names]
+        batch_fetcher = BatchFetcher(max_workers=10)
+        fetch_result = batch_fetcher.fetch_manifests(oras_client, tag_refs)
+
+        # Log failures
+        for tag_name, error in fetch_result.errors.items():
+            log.warning("list_tag_failed", tag=tag_name, error=str(error))
+
+        return self._build_artifact_tag_list(fetch_result.manifests)
+
+    def _build_artifact_tag_list(
+        self, manifests: dict[str, dict[str, Any]]
+    ) -> builtins.list[ArtifactTag]:
+        """Build list of ArtifactTag from manifest data.
+
+        Args:
+            manifests: Dict mapping tag names to manifest data.
+
+        Returns:
+            List of ArtifactTag objects.
+        """
+        result: builtins.list[ArtifactTag] = []
+
+        for tag_name, manifest_data in manifests.items():
+            digest = calculate_manifest_digest(manifest_data)
+            annotations = manifest_data.get("annotations", {})
+            created_at = parse_created_timestamp(annotations)
+            layers_data = manifest_data.get("layers", [])
+            total_size = calculate_layers_total_size(layers_data)
+
+            artifact_tag = ArtifactTag(
+                name=tag_name, digest=digest, created_at=created_at, size=total_size
+            )
+            result.append(artifact_tag)
+
+        return result
 
     def promote_to_environment(
         self,
