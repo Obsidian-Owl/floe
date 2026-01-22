@@ -363,7 +363,12 @@ class PluginRegistry:
 
         return plugin
 
-    def list(self, plugin_type: PluginType) -> builtins.list[PluginMetadata]:
+    def list(
+        self,
+        plugin_type: PluginType,
+        *,
+        limit: int | None = None,
+    ) -> builtins.list[PluginMetadata]:
         """List all plugins of a specific type.
 
         Loads and returns all plugins for the given type. Each plugin
@@ -371,6 +376,9 @@ class PluginRegistry:
 
         Args:
             plugin_type: The plugin category to list.
+            limit: Optional maximum number of plugins to return.
+                If None, returns all plugins. Useful when only one
+                plugin is needed (e.g., `limit=1` for first available).
 
         Returns:
             List of plugin instances for that type (may be empty).
@@ -380,6 +388,8 @@ class PluginRegistry:
             >>> compute_plugins = registry.list(PluginType.COMPUTE)
             >>> [p.name for p in compute_plugins]
             ['duckdb', 'snowflake']
+            >>> # Get first available plugin only
+            >>> first_plugin = registry.list(PluginType.RBAC, limit=1)
         """
         plugins: builtins.list[PluginMetadata] = []
 
@@ -387,6 +397,10 @@ class PluginRegistry:
         for pt, name in self._discovered.keys():
             if pt != plugin_type:
                 continue
+
+            # Early exit if limit reached (performance optimization)
+            if limit is not None and len(plugins) >= limit:
+                break
 
             try:
                 # Use get() to leverage lazy loading and caching
@@ -405,6 +419,7 @@ class PluginRegistry:
             "list.completed",
             plugin_type=plugin_type.name,
             count=len(plugins),
+            limit=limit,
         )
 
         return plugins

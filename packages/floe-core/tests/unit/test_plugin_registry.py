@@ -623,6 +623,89 @@ class TestPluginRegistryList:
 
         assert result == []
 
+    @pytest.mark.requirement("FR-007")
+    def test_list_with_limit_parameter(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test list() with limit parameter returns at most limit plugins.
+
+        T015: Added limit parameter to plugin_registry.list() for performance.
+        """
+        registry = PluginRegistry()
+
+        # Create three compute plugins
+        class Plugin1(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin1"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        class Plugin2(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin2"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        class Plugin3(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin3"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        # Setup entry points (order: name, group, value)
+        ep1 = mock_entry_point("plugin1", "floe.computes", "test:Plugin1")
+        ep1.load.return_value = Plugin1
+
+        ep2 = mock_entry_point("plugin2", "floe.computes", "test:Plugin2")
+        ep2.load.return_value = Plugin2
+
+        ep3 = mock_entry_point("plugin3", "floe.computes", "test:Plugin3")
+        ep3.load.return_value = Plugin3
+
+        # Directly populate _discovered to avoid discovery complexity
+        registry._discovered[(PluginType.COMPUTE, "plugin1")] = ep1
+        registry._discovered[(PluginType.COMPUTE, "plugin2")] = ep2
+        registry._discovered[(PluginType.COMPUTE, "plugin3")] = ep3
+
+        # No limit - should return all 3
+        result_all = registry.list(PluginType.COMPUTE)
+        assert len(result_all) == 3
+
+        # Limit 1 - should return only 1
+        result_one = registry.list(PluginType.COMPUTE, limit=1)
+        assert len(result_one) == 1
+
+        # Limit 2 - should return 2
+        result_two = registry.list(PluginType.COMPUTE, limit=2)
+        assert len(result_two) == 2
+
+        # Limit higher than available - should return all
+        result_high = registry.list(PluginType.COMPUTE, limit=100)
+        assert len(result_high) == 3
+
     @pytest.mark.requirement("FR-002")
     def test_list_all_returns_all_plugin_names(
         self,

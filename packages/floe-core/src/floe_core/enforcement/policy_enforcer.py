@@ -78,6 +78,7 @@ class PolicyEnforcer:
         *,
         dry_run: bool = False,
         include_context: bool = False,
+        max_violations: int | None = None,
     ) -> EnforcementResult:
         """Run all policy validators against the dbt manifest.
 
@@ -91,6 +92,9 @@ class PolicyEnforcer:
                 the result always passes. Useful for previewing impact.
             include_context: If True, populates downstream_impact field on
                 violations using manifest child_map. Default: False (lazy).
+            max_violations: Optional maximum violations to collect before
+                early exit. Useful for fail-fast scenarios where only the
+                first few violations are needed. If None, collects all.
 
         Returns:
             EnforcementResult containing pass/fail status, all violations,
@@ -112,30 +116,45 @@ class PolicyEnforcer:
         # Collect violations from all validators
         violations: list[Violation] = []
 
+        def _should_stop() -> bool:
+            """Check if max_violations limit reached (early exit)."""
+            return max_violations is not None and len(violations) >= max_violations
+
         # Run naming validation if configured
         if self.governance_config.naming is not None:
             naming_violations = self._validate_naming(models)
             violations.extend(naming_violations)
+            if _should_stop():
+                violations = violations[:max_violations]  # Trim to exact limit
 
         # Run coverage validation if configured
-        if self.governance_config.quality_gates is not None:
+        if not _should_stop() and self.governance_config.quality_gates is not None:
             tests = self._extract_tests(manifest)
             coverage_violations = self._validate_coverage(models, tests)
             violations.extend(coverage_violations)
+            if _should_stop():
+                violations = violations[:max_violations]
 
             # Run documentation validation if configured
-            if self.governance_config.quality_gates.require_descriptions:
+            if not _should_stop() and self.governance_config.quality_gates.require_descriptions:
                 doc_violations = self._validate_documentation(models)
                 violations.extend(doc_violations)
+                if _should_stop():
+                    violations = violations[:max_violations]
 
         # Run semantic validation (always enabled - validates model relationships)
-        semantic_violations = self._validate_semantic(manifest)
-        violations.extend(semantic_violations)
+        if not _should_stop():
+            semantic_violations = self._validate_semantic(manifest)
+            violations.extend(semantic_violations)
+            if _should_stop():
+                violations = violations[:max_violations]
 
         # Run custom rule validation if configured (T032)
-        if self.governance_config.custom_rules:
+        if not _should_stop() and self.governance_config.custom_rules:
             custom_violations = self._validate_custom_rules(manifest)
             violations.extend(custom_violations)
+            if _should_stop():
+                violations = violations[:max_violations]
 
         # Populate downstream_impact if requested (T048-T049)
         if include_context:

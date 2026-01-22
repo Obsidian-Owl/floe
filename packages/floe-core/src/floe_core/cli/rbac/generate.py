@@ -113,17 +113,23 @@ def generate_command(
 
         security_config: SecurityConfig = SecurityConfig(rbac=RBACConfig(enabled=True))
 
-        # Create generator - need an RBACPlugin
-        # For now, use a simple mock/stub since full plugin may not be available
-        try:
-            from floe_rbac_k8s.plugin import K8sRBACPlugin
+        # Create generator - get RBACPlugin via registry (no direct imports)
+        from floe_core.plugin_registry import get_registry
+        from floe_core.plugin_types import PluginType
 
-            plugin = K8sRBACPlugin()
-        except ImportError:
-            # Fall back to generating without plugin
-            info("K8s RBAC plugin not available, using stub implementation")
+        registry = get_registry()
+        registry.discover_all()
+
+        # Get first available RBAC plugin via registry lookup
+        rbac_plugins = registry.list(PluginType.RBAC)
+        if not rbac_plugins:
+            # Fall back to generating stub manifests if no plugin available
+            info("No RBAC plugin available, using stub implementation")
             _generate_stub_manifests(output_dir, dry_run)
             return
+
+        # Use the first available RBAC plugin
+        plugin = rbac_plugins[0]
 
         # Create generator
         generator = RBACManifestGenerator(plugin=plugin, output_dir=output_dir)
