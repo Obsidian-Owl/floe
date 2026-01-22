@@ -346,7 +346,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             metadata=metadata if metadata else None,
             description=f"dbt model: {transform.name}",
         )
-        def _asset_fn():
+        def _asset_fn() -> None:
             """Placeholder asset for dbt model.
 
             Actual materialization happens via dbt resource integration.

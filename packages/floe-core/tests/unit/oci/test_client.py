@@ -769,9 +769,8 @@ class TestOCIClientList:
         - Empty namespace returns empty list, not None
         - No error raised for empty results
         """
-        mock_tags_response: dict[str, list[str]] = {
-            "tags": [],
-        }
+        # get_tags returns List[str] directly (not a dict)
+        mock_tags_response: list[str] = []
 
         with patch.object(oci_client, "_create_oras_client") as mock_create:
             mock_oras = MagicMock()
