@@ -13,6 +13,8 @@ Tests for semantic versioning rules:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -540,9 +542,143 @@ schema:
         assert result.valid is True
 
 
+class TestContractValidatorVersioningIntegration:
+    """Tests for ContractValidator.validate_with_versioning() integration.
+
+    Task: T054, T055
+    """
+
+    @pytest.mark.requirement("3C-FR-015")
+    def test_validate_with_versioning_first_registration(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test that first registration (no baseline) passes validation."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        # Create contract file
+        contract_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: test-contract
+version: 1.0.0
+name: test-contract
+status: active
+schema:
+  - name: customers
+    properties:
+      - name: id
+        logicalType: string
+"""
+        contract_file = tmp_path / "datacontract.yaml"
+        contract_file.write_text(contract_yaml)
+
+        validator = ContractValidator()
+        result = validator.validate_with_versioning(
+            contract_path=contract_file,
+            baseline_path=None,  # First registration
+        )
+
+        assert result.valid is True
+
+    @pytest.mark.requirement("3C-FR-020")
+    def test_validate_with_versioning_breaking_change(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test that breaking change without major bump fails."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        # Baseline contract
+        baseline_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: test-contract
+version: 1.0.0
+name: test-contract
+status: active
+schema:
+  - name: customers
+    properties:
+      - name: id
+        logicalType: string
+      - name: email
+        logicalType: string
+"""
+        baseline_file = tmp_path / "baseline" / "datacontract.yaml"
+        baseline_file.parent.mkdir(parents=True)
+        baseline_file.write_text(baseline_yaml)
+
+        # Current contract (email removed - breaking change)
+        current_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: test-contract
+version: 1.0.1
+name: test-contract
+status: active
+schema:
+  - name: customers
+    properties:
+      - name: id
+        logicalType: string
+"""
+        current_file = tmp_path / "datacontract.yaml"
+        current_file.write_text(current_yaml)
+
+        validator = ContractValidator()
+        result = validator.validate_with_versioning(
+            contract_path=current_file,
+            baseline_path=baseline_file,
+        )
+
+        assert result.valid is False
+        assert any(v.error_code == "FLOE-E520" for v in result.violations)
+
+    @pytest.mark.requirement("3C-FR-015")
+    def test_get_baseline_from_catalog_not_found(self, tmp_path: Path) -> None:
+        """Test that missing baseline returns None."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        validator = ContractValidator()
+        result = validator.get_baseline_from_catalog(
+            contract_id="nonexistent",
+            catalog_path=tmp_path,
+        )
+
+        assert result is None
+
+    @pytest.mark.requirement("3C-FR-015")
+    def test_get_baseline_from_catalog_found(self, tmp_path: Path) -> None:
+        """Test that existing baseline is returned."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        # Create baseline in catalog
+        baseline_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: test-contract
+version: 1.0.0
+name: test-contract
+status: active
+"""
+        baseline_file = tmp_path / "test-contract.yaml"
+        baseline_file.write_text(baseline_yaml)
+
+        validator = ContractValidator()
+        result = validator.get_baseline_from_catalog(
+            contract_id="test-contract",
+            catalog_path=tmp_path,
+        )
+
+        assert result is not None
+        assert "test-contract" in result
+
+
 __all__ = [
     "TestBreakingChangeDetection",
     "TestNonBreakingChangeDetection",
     "TestPatchChangeDetection",
     "TestSemanticVersioningEnforcement",
+    "TestContractValidatorVersioningIntegration",
 ]

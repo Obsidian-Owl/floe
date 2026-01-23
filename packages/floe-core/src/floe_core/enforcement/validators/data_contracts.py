@@ -753,6 +753,153 @@ class ContractValidator:
         return result
 
 
+    def validate_with_versioning(
+        self,
+        contract_path: Path,
+        baseline_path: Path | None = None,
+        enforcement_level: str = "strict",
+    ) -> ContractValidationResult:
+        """Validate a contract with version bump validation.
+
+        Task: T054, T055
+        Requirements: FR-015, FR-016, FR-017, FR-018, FR-019, FR-020
+
+        Validates the contract and, if a baseline contract is provided,
+        checks that version changes follow semantic versioning rules.
+
+        Args:
+            contract_path: Path to the current datacontract.yaml file.
+            baseline_path: Optional path to baseline/previous datacontract.yaml.
+                          If None, treated as first registration (always valid).
+            enforcement_level: Enforcement level from governance config.
+
+        Returns:
+            ContractValidationResult with all violations (ODCS + versioning).
+
+        Example:
+            >>> result = validator.validate_with_versioning(
+            ...     contract_path=Path("datacontract.yaml"),
+            ...     baseline_path=Path("baseline/datacontract.yaml"),
+            ... )
+            >>> if not result.valid:
+            ...     for v in result.violations:
+            ...         if v.error_code == "FLOE-E520":
+            ...             print("Breaking change requires MAJOR version bump")
+        """
+        # First validate the contract itself
+        result = self.validate(contract_path, enforcement_level)
+
+        # If validation failed, return base result
+        if not result.valid:
+            return result
+
+        # If no baseline, this is first registration (always valid per FR-015)
+        if baseline_path is None:
+            self._log.info(
+                "first_registration",
+                contract=str(contract_path),
+            )
+            return result
+
+        if not baseline_path.exists():
+            self._log.warning(
+                "baseline_contract_not_found",
+                path=str(baseline_path),
+            )
+            # Treat as first registration if baseline doesn't exist
+            return result
+
+        # Validate version changes
+        self._log.info(
+            "validating_version_change",
+            current=str(contract_path),
+            baseline=str(baseline_path),
+        )
+
+        from floe_core.enforcement.validators.versioning import VersioningValidator
+
+        versioning_validator = VersioningValidator()
+
+        # Read contracts as YAML
+        baseline_yaml = baseline_path.read_text()
+        current_yaml = contract_path.read_text()
+
+        versioning_result = versioning_validator.validate_version_change(
+            baseline_yaml=baseline_yaml,
+            current_yaml=current_yaml,
+        )
+
+        # Merge results
+        if not versioning_result.valid:
+            all_violations = result.violations + versioning_result.violations
+            all_warnings = result.warnings + versioning_result.warnings
+
+            return ContractValidationResult(
+                valid=False,
+                violations=all_violations,
+                warnings=all_warnings,
+                schema_hash=result.schema_hash,
+                validated_at=result.validated_at,
+                contract_name=result.contract_name,
+                contract_version=result.contract_version,
+            )
+
+        return result
+
+    def get_baseline_from_catalog(
+        self,
+        contract_id: str,
+        catalog_path: Path | None = None,
+    ) -> str | None:
+        """Retrieve baseline contract YAML from catalog.
+
+        Task: T054
+        Requirements: FR-015 (Baseline comparison)
+
+        Retrieves the previously registered contract from the catalog
+        for baseline comparison during version validation.
+
+        Args:
+            contract_id: The contract ID to look up.
+            catalog_path: Optional path to local contract catalog directory.
+                         Defaults to looking in standard locations.
+
+        Returns:
+            YAML content of baseline contract, or None if not found.
+
+        Note:
+            This is a placeholder for catalog integration. In production,
+            this would query the contract registry (e.g., S3, OCI registry).
+        """
+        self._log.debug("retrieving_baseline", contract_id=contract_id)
+
+        # Look for baseline in catalog directory
+        if catalog_path and catalog_path.exists():
+            # Try to find contract file in catalog
+            contract_file = catalog_path / f"{contract_id}.yaml"
+            if contract_file.exists():
+                self._log.info(
+                    "baseline_found",
+                    contract_id=contract_id,
+                    path=str(contract_file),
+                )
+                return contract_file.read_text()
+
+            # Try nested structure: catalog_path/contract_id/datacontract.yaml
+            nested_path = catalog_path / contract_id / "datacontract.yaml"
+            if nested_path.exists():
+                self._log.info(
+                    "baseline_found",
+                    contract_id=contract_id,
+                    path=str(nested_path),
+                )
+                return nested_path.read_text()
+
+        # No baseline found (first registration)
+        self._log.debug("no_baseline_found", contract_id=contract_id)
+        return None
+
+
 def _check_datacontract_cli() -> None:
     """Verify datacontract-cli is installed.
 
