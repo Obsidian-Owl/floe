@@ -29,6 +29,28 @@ if TYPE_CHECKING:
     pass
 
 
+def _load_manifest_file(file_path: Path) -> list[dict[str, Any]]:
+    """Load and parse a YAML manifest file.
+
+    Args:
+        file_path: Path to the YAML manifest file.
+
+    Returns:
+        List of non-empty resource dictionaries from the file.
+    """
+    import yaml
+
+    if not file_path.exists():
+        return []
+
+    content = file_path.read_text()
+    if not content.strip():
+        return []
+
+    docs = list(yaml.safe_load_all(content))
+    return [d for d in docs if d]
+
+
 @click.command(
     name="validate",
     help="Validate RBAC manifests against configuration (FR-061).",
@@ -98,27 +120,18 @@ def validate_command(
         )
 
         # Load manifests from directory
-        manifests: dict[str, list[dict[str, Any]]] = {}
         manifest_files = [
             "namespaces.yaml",
             "serviceaccounts.yaml",
             "roles.yaml",
             "rolebindings.yaml",
         ]
+        manifests: dict[str, list[dict[str, Any]]] = {
+            filename: _load_manifest_file(manifest_dir_path / filename)
+            for filename in manifest_files
+        }
 
         import yaml
-
-        for filename in manifest_files:
-            file_path = manifest_dir_path / filename
-            if file_path.exists():
-                content = file_path.read_text()
-                if content.strip():
-                    docs = list(yaml.safe_load_all(content))
-                    manifests[filename] = [d for d in docs if d]
-                else:
-                    manifests[filename] = []
-            else:
-                manifests[filename] = []
 
         # Validate all manifests using existing function
         is_valid, errors = validate_all_manifests(manifests)

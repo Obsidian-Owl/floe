@@ -237,7 +237,7 @@ class TestValidateComputeCredentials:
         mock_duckdb_plugin.get_config_schema.return_value = None
 
         with (
-            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch("floe_core.plugins.loader.is_compatible", return_value=True),
             patch(
                 "floe_core.compilation.resolver.get_compute_plugin",
                 return_value=mock_duckdb_plugin,
@@ -283,7 +283,7 @@ class TestValidateComputeCredentials:
         )
 
         with (
-            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch("floe_core.plugins.loader.is_compatible", return_value=True),
             patch(
                 "floe_core.compilation.resolver.get_compute_plugin",
                 return_value=mock_plugin,
@@ -330,7 +330,7 @@ class TestValidateComputeCredentials:
         )
 
         with (
-            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch("floe_core.plugins.loader.is_compatible", return_value=True),
             patch(
                 "floe_core.compilation.resolver.get_compute_plugin",
                 return_value=mock_plugin,
@@ -374,7 +374,7 @@ class TestValidateComputeCredentials:
         )
 
         with (
-            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch("floe_core.plugins.loader.is_compatible", return_value=True),
             patch(
                 "floe_core.compilation.resolver.get_compute_plugin",
                 return_value=mock_plugin,
@@ -405,7 +405,7 @@ class TestValidateComputeCredentials:
         )
 
         with (
-            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch("floe_core.plugins.loader.is_compatible", return_value=True),
             patch(
                 "floe_core.compilation.resolver.get_compute_plugin",
                 return_value=mock_plugin,
@@ -450,7 +450,7 @@ class TestValidateComputeCredentials:
         )
 
         with (
-            patch("floe_core.plugin_registry.is_compatible", return_value=True),
+            patch("floe_core.plugins.loader.is_compatible", return_value=True),
             patch(
                 "floe_core.compilation.resolver.get_compute_plugin",
                 return_value=mock_plugin,

@@ -1,8 +1,11 @@
-# Test Requirement Mapper
+---
+name: test-requirement-mapper
+description: Analyze test coverage against specification requirements to identify gaps and ensure traceability.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Test Quality (Tier: MEDIUM)
+# Test Requirement Mapper
 
 ## Identity
 

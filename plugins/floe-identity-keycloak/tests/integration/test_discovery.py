@@ -1,134 +1,99 @@
 """Integration tests for Keycloak plugin entry point discovery.
 
-Task: T060
+Task: T060, T078
+Phase: 7, 10 - US7 (Test Duplication Reduction)
 Requirements: 7A-FR-030 (KeycloakPlugin as default OIDC identity provider)
+
+This module inherits from BasePluginDiscoveryTests to reduce test duplication
+while adding Keycloak-specific discovery tests.
 """
 
 from __future__ import annotations
 
-from importlib.metadata import entry_points
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
+from pydantic import SecretStr
+from testing.base_classes import BasePluginDiscoveryTests
 
 if TYPE_CHECKING:
     pass
 
 
-class TestKeycloakPluginDiscovery:
-    """Tests for Keycloak plugin entry point discovery."""
+class TestKeycloakPluginDiscovery(BasePluginDiscoveryTests):
+    """Tests for Keycloak plugin entry point discovery.
 
-    @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_discovered_via_entry_point(self) -> None:
-        """Test that plugin is discovered via floe.identity entry point."""
-        # Get all identity plugins
-        eps = entry_points(group="floe.identity")
+    Inherits standard discovery tests from BasePluginDiscoveryTests:
+    - test_entry_point_is_registered
+    - test_exactly_one_entry_point
+    - test_entry_point_module_path
+    - test_plugin_loads_successfully
+    - test_plugin_can_be_instantiated
+    - test_instantiated_plugin_has_correct_name
+    - test_plugin_has_required_metadata_attributes
+    - test_plugin_metadata_values_not_none
+    - test_plugin_inherits_from_expected_abc
+    - test_plugin_instance_is_abc_instance
+    - test_plugin_has_lifecycle_methods
+    """
 
-        # Find keycloak plugin
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
+    entry_point_group: ClassVar[str] = "floe.identity"
+    expected_name: ClassVar[str] = "keycloak"
+    expected_module_prefix: ClassVar[str] = "floe_identity_keycloak"
+    expected_class_name: ClassVar[str] = "KeycloakIdentityPlugin"
 
-        assert len(keycloak_eps) == 1, "Keycloak plugin should be registered"
-        assert keycloak_eps[0].name == "keycloak"
-
-    @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_loads_successfully(self) -> None:
-        """Test that plugin loads successfully from entry point."""
-        eps = entry_points(group="floe.identity")
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
-
-        assert len(keycloak_eps) == 1, "Keycloak plugin should be registered"
-
-        # Load the plugin class
-        plugin_class = keycloak_eps[0].load()
-
-        assert plugin_class is not None
-        assert callable(plugin_class)
-
-    @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_has_required_metadata(self) -> None:
-        """Test that plugin has required metadata (name, version, floe_api_version)."""
-        eps = entry_points(group="floe.identity")
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
-
-        assert len(keycloak_eps) == 1
-
-        plugin_class = keycloak_eps[0].load()
-
-        # Check class-level metadata attributes
-        assert hasattr(plugin_class, "name")
-        assert hasattr(plugin_class, "version")
-        assert hasattr(plugin_class, "floe_api_version")
-
-        assert plugin_class.name == "keycloak"
-        assert isinstance(plugin_class.version, str)
-        assert isinstance(plugin_class.floe_api_version, str)
-
-    @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_has_description(self) -> None:
-        """Test that plugin has a description."""
-        eps = entry_points(group="floe.identity")
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
-
-        assert len(keycloak_eps) == 1
-
-        plugin_class = keycloak_eps[0].load()
-
-        assert hasattr(plugin_class, "description")
-        assert isinstance(plugin_class.description, str)
-        assert len(plugin_class.description) > 0
-
-    @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_implements_identity_interface(self) -> None:
-        """Test that plugin implements IdentityPlugin interface."""
+    @property
+    def expected_plugin_abc(self) -> type[Any]:
+        """Return the expected ABC for type checking."""
         from floe_core.plugins.identity import IdentityPlugin
 
-        eps = entry_points(group="floe.identity")
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
+        return IdentityPlugin
 
-        assert len(keycloak_eps) == 1
+    def create_plugin_instance(self, plugin_class: type[Any]) -> Any:
+        """Create Keycloak plugin with required configuration.
 
-        plugin_class = keycloak_eps[0].load()
+        Args:
+            plugin_class: The KeycloakIdentityPlugin class.
 
-        # Check that it's a subclass of IdentityPlugin
-        assert issubclass(plugin_class, IdentityPlugin)
+        Returns:
+            Configured KeycloakIdentityPlugin instance.
+        """
+        from floe_identity_keycloak import KeycloakIdentityConfig
+
+        config = KeycloakIdentityConfig(
+            server_url="https://keycloak.example.com",
+            realm="floe",
+            client_id="floe-client",
+            client_secret=SecretStr("test-secret"),
+        )
+        return plugin_class(config=config)
+
+    # =========================================================================
+    # Identity-Specific Method Tests
+    # =========================================================================
 
     @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_has_required_methods(self) -> None:
-        """Test that plugin has all required methods from IdentityPlugin."""
-        eps = entry_points(group="floe.identity")
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
+    def test_plugin_has_identity_specific_methods(self) -> None:
+        """Test that plugin has IdentityPlugin-specific methods beyond lifecycle."""
+        from importlib.metadata import entry_points
 
-        assert len(keycloak_eps) == 1
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        plugin_class = keycloak_eps[0].load()
+        assert len(matching) == 1
+        plugin_class = matching[0].load()
 
-        # Required methods from IdentityPlugin ABC
-        required_methods = [
+        # IdentityPlugin-specific methods (beyond standard lifecycle)
+        identity_methods = [
             "authenticate",
             "get_user_info",
             "validate_token",
-            "startup",
-            "shutdown",
-            "health_check",
         ]
 
-        for method_name in required_methods:
+        for method_name in identity_methods:
             assert hasattr(plugin_class, method_name), (
-                f"Plugin missing required method: {method_name}"
+                f"Plugin missing IdentityPlugin method: {method_name}"
             )
-
-    @pytest.mark.requirement("7A-FR-030")
-    def test_plugin_entry_point_module_path(self) -> None:
-        """Test that entry point points to correct module path."""
-        eps = entry_points(group="floe.identity")
-        keycloak_eps = [ep for ep in eps if ep.name == "keycloak"]
-
-        assert len(keycloak_eps) == 1
-
-        ep = keycloak_eps[0]
-
-        # Check module path
-        assert "floe_identity_keycloak" in ep.value
 
 
 class TestKeycloakPluginImport:
@@ -164,8 +129,6 @@ class TestKeycloakPluginInstantiation:
     @pytest.mark.requirement("7A-FR-030")
     def test_plugin_instantiation_with_config(self) -> None:
         """Test that plugin can be instantiated with config."""
-        from pydantic import SecretStr
-
         from floe_identity_keycloak import (
             KeycloakIdentityConfig,
             KeycloakIdentityPlugin,
@@ -186,8 +149,6 @@ class TestKeycloakPluginInstantiation:
     @pytest.mark.requirement("7A-FR-030")
     def test_plugin_metadata_after_instantiation(self) -> None:
         """Test plugin metadata is accessible after instantiation."""
-        from pydantic import SecretStr
-
         from floe_identity_keycloak import (
             KeycloakIdentityConfig,
             KeycloakIdentityPlugin,

@@ -34,6 +34,7 @@ class PluginType(Enum):
         SECRETS: Credential management (Vault, AWS Secrets Manager)
         IDENTITY: Authentication provider (OAuth, OIDC)
         QUALITY: Data quality validation (Great Expectations, Soda, dbt-expectations)
+        RBAC: Kubernetes RBAC manifest generation
 
     Example:
         >>> PluginType.COMPUTE.entry_point_group
@@ -54,6 +55,7 @@ class PluginType(Enum):
     SECRETS = "floe.secrets"
     IDENTITY = "floe.identity"
     QUALITY = "floe.quality"
+    RBAC = "floe.rbac"
 
     @property
     def entry_point_group(self) -> str:

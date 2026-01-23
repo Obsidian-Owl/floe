@@ -78,6 +78,7 @@ class PolicyEnforcer:
         *,
         dry_run: bool = False,
         include_context: bool = False,
+        max_violations: int | None = None,
     ) -> EnforcementResult:
         """Run all policy validators against the dbt manifest.
 
@@ -91,6 +92,9 @@ class PolicyEnforcer:
                 the result always passes. Useful for previewing impact.
             include_context: If True, populates downstream_impact field on
                 violations using manifest child_map. Default: False (lazy).
+            max_violations: Optional maximum violations to collect before
+                early exit. Useful for fail-fast scenarios where only the
+                first few violations are needed. If None, collects all.
 
         Returns:
             EnforcementResult containing pass/fail status, all violations,
@@ -109,34 +113,127 @@ class PolicyEnforcer:
             dry_run=dry_run,
         )
 
-        # Collect violations from all validators
+        # Run all validators and collect violations
+        violations = self._run_all_validators(manifest, models, max_violations)
+
+        # Post-process violations
+        violations = self._post_process_violations(violations, manifest, dry_run, include_context)
+
+        # Build result
+        return self._build_enforcement_result(
+            violations, models, manifest_version, dry_run, start_time
+        )
+
+    def _run_all_validators(
+        self,
+        manifest: dict[str, Any],
+        models: list[dict[str, Any]],
+        max_violations: int | None,
+    ) -> list[Violation]:
+        """Run all configured validators and collect violations.
+
+        Args:
+            manifest: The dbt manifest dictionary.
+            models: Extracted model nodes.
+            max_violations: Optional limit for early exit.
+
+        Returns:
+            List of violations from all validators.
+        """
         violations: list[Violation] = []
 
         # Run naming validation if configured
         if self.governance_config.naming is not None:
-            naming_violations = self._validate_naming(models)
-            violations.extend(naming_violations)
+            violations.extend(self._validate_naming(models))
+            if self._limit_reached(violations, max_violations):
+                return violations[:max_violations]
 
-        # Run coverage validation if configured
-        if self.governance_config.quality_gates is not None:
-            tests = self._extract_tests(manifest)
-            coverage_violations = self._validate_coverage(models, tests)
-            violations.extend(coverage_violations)
+        # Run quality gate validators
+        violations = self._run_quality_gate_validators(manifest, models, violations, max_violations)
+        if self._limit_reached(violations, max_violations):
+            return violations[:max_violations]
 
-            # Run documentation validation if configured
-            if self.governance_config.quality_gates.require_descriptions:
-                doc_violations = self._validate_documentation(models)
-                violations.extend(doc_violations)
+        # Run semantic validation (always enabled)
+        violations.extend(self._validate_semantic(manifest))
+        if self._limit_reached(violations, max_violations):
+            return violations[:max_violations]
 
-        # Run semantic validation (always enabled - validates model relationships)
-        semantic_violations = self._validate_semantic(manifest)
-        violations.extend(semantic_violations)
-
-        # Run custom rule validation if configured (T032)
+        # Run custom rule validation if configured
         if self.governance_config.custom_rules:
-            custom_violations = self._validate_custom_rules(manifest)
-            violations.extend(custom_violations)
+            violations.extend(self._validate_custom_rules(manifest))
+            if self._limit_reached(violations, max_violations):
+                return violations[:max_violations]
 
+        return violations
+
+    def _run_quality_gate_validators(
+        self,
+        manifest: dict[str, Any],
+        models: list[dict[str, Any]],
+        violations: list[Violation],
+        max_violations: int | None,
+    ) -> list[Violation]:
+        """Run quality gate validators (coverage, documentation).
+
+        Args:
+            manifest: The dbt manifest dictionary.
+            models: Extracted model nodes.
+            violations: Current list of violations.
+            max_violations: Optional limit for early exit.
+
+        Returns:
+            Updated list of violations.
+        """
+        quality_gates = self.governance_config.quality_gates
+        if quality_gates is None:
+            return violations
+
+        # Run coverage validation
+        tests = self._extract_tests(manifest)
+        violations.extend(self._validate_coverage(models, tests))
+        if self._limit_reached(violations, max_violations):
+            return violations
+
+        # Run documentation validation if configured
+        if quality_gates.require_descriptions:
+            violations.extend(self._validate_documentation(models))
+
+        return violations
+
+    def _limit_reached(
+        self,
+        violations: list[Violation],
+        max_violations: int | None,
+    ) -> bool:
+        """Check if max_violations limit reached (early exit).
+
+        Args:
+            violations: Current violations list.
+            max_violations: Optional limit.
+
+        Returns:
+            True if limit reached, False otherwise.
+        """
+        return max_violations is not None and len(violations) >= max_violations
+
+    def _post_process_violations(
+        self,
+        violations: list[Violation],
+        manifest: dict[str, Any],
+        dry_run: bool,
+        include_context: bool,
+    ) -> list[Violation]:
+        """Post-process violations (downstream impact, dry-run downgrade).
+
+        Args:
+            violations: Raw violations from validators.
+            manifest: The dbt manifest dictionary.
+            dry_run: Whether this is a dry-run.
+            include_context: Whether to include downstream impact.
+
+        Returns:
+            Post-processed violations.
+        """
         # Populate downstream_impact if requested (T048-T049)
         if include_context:
             child_map = manifest.get("child_map", {})
@@ -146,16 +243,31 @@ class PolicyEnforcer:
         if dry_run:
             violations = self._downgrade_to_warnings(violations)
 
-        # Determine pass/fail based on enforcement level and violations
+        return violations
+
+    def _build_enforcement_result(
+        self,
+        violations: list[Violation],
+        models: list[dict[str, Any]],
+        manifest_version: str,
+        dry_run: bool,
+        start_time: float,
+    ) -> EnforcementResult:
+        """Build the final EnforcementResult.
+
+        Args:
+            violations: Processed violations.
+            models: Model nodes from manifest.
+            manifest_version: dbt version string.
+            dry_run: Whether this is a dry-run.
+            start_time: Start time from perf_counter().
+
+        Returns:
+            Complete EnforcementResult.
+        """
         passed = self._determine_passed(violations, dry_run)
-
-        # Calculate duration
         duration_ms = (time.perf_counter() - start_time) * 1000
-
-        # Build summary
         summary = self._build_summary(models, violations, duration_ms)
-
-        # Determine effective enforcement level
         enforcement_level = self._get_effective_enforcement_level()
 
         result = EnforcementResult(

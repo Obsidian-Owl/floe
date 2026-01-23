@@ -1,0 +1,23 @@
+{
+  "name": "pull_transforms",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:36:07.293500+00:00",
+  "checksum": "0beda2659ea18570",
+  "output": {
+    "models": [
+      {
+        "name": "stg_golden_customers",
+        "compute": "duckdb",
+        "tags": null,
+        "depends_on": null
+      },
+      {
+        "name": "fct_golden_orders",
+        "compute": "duckdb",
+        "tags": null,
+        "depends_on": null
+      }
+    ],
+    "default_compute": "duckdb"
+  }
+}

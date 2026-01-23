@@ -1,114 +1,84 @@
 """Integration tests for DuckDB plugin discovery via entry points.
 
 Tests for:
-- FR-001: Plugin is discoverable via floe.computes entry point
-- FR-001: Plugin correctly implements ComputePlugin ABC
+- FR-006: Plugin is discoverable via floe.computes entry point
+- FR-004: Plugin correctly implements PluginMetadata
+- FR-024: Plugin entry point discovery
 
 These tests verify that the DuckDB plugin is correctly registered
 via entry points and can be discovered at runtime.
 
-Note: Registry-based tests are intentionally excluded because the platform
-API version (0.1) is lower than the plugin's required version (1.0).
-This is expected during development - the entry point mechanism is the
-primary discovery method being tested.
+This module uses BasePluginDiscoveryTests to provide standard discovery
+test cases, reducing test duplication across plugins.
+
+Task ID: T048
+Phase: 7 - US7 (Reduce Test Duplication)
+User Story: US7 - Reduce Test Duplication
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, ClassVar
+
 import pytest
+from floe_core.plugins import ComputePlugin
+from testing.base_classes import BasePluginDiscoveryTests
+
+if TYPE_CHECKING:
+    from typing import Any
 
 
-class TestPluginDiscovery:
-    """Integration tests for DuckDB plugin discovery."""
+@pytest.mark.integration
+class TestDuckDBPluginDiscovery(BasePluginDiscoveryTests):
+    """Integration tests for DuckDB plugin discovery.
 
-    @pytest.mark.integration
+    Inherits standard discovery tests from BasePluginDiscoveryTests:
+    - Entry point registration tests
+    - Plugin loading tests
+    - Metadata presence tests
+    - ABC compliance tests
+    - Lifecycle method presence tests
+
+    DuckDB-specific tests are added below.
+    """
+
+    # Required class variables for BasePluginDiscoveryTests
+    entry_point_group: ClassVar[str] = "floe.computes"
+    expected_name: ClassVar[str] = "duckdb"
+    expected_module_prefix: ClassVar[str] = "floe_compute_duckdb"
+    expected_class_name: ClassVar[str] = "DuckDBComputePlugin"
+    expected_plugin_abc: ClassVar[type[Any]] = ComputePlugin
+
+    # =========================================================================
+    # DuckDB-Specific Tests
+    # =========================================================================
+
     @pytest.mark.requirement("001-FR-001")
-    def test_duckdb_plugin_discovered_via_entry_points(self) -> None:
-        """Test DuckDBComputePlugin is discoverable via entry points.
+    def test_duckdb_plugin_is_self_hosted(self) -> None:
+        """Test DuckDBComputePlugin is marked as self-hosted.
 
-        Verifies that the plugin can be discovered using Python's
-        importlib.metadata entry_points mechanism.
+        DuckDB runs within the platform K8s cluster (self-hosted),
+        unlike cloud services like Snowflake or BigQuery.
         """
         from importlib.metadata import entry_points
 
-        # Get all floe.computes entry points
-        eps = entry_points(group="floe.computes")
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        # Find duckdb entry point
-        duckdb_eps = [ep for ep in eps if ep.name == "duckdb"]
+        assert len(matching) == 1
+        plugin = matching[0].load()()
 
-        assert len(duckdb_eps) == 1, "Expected exactly one 'duckdb' entry point"
-
-        # Load the plugin class
-        ep = duckdb_eps[0]
-        plugin_class = ep.load()
-
-        # Verify it's the correct class
-        assert plugin_class.__name__ == "DuckDBComputePlugin"
-
-        # Verify it can be instantiated
-        plugin = plugin_class()
-        assert plugin.name == "duckdb"
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("001-FR-001")
-    def test_duckdb_plugin_is_compute_plugin(self) -> None:
-        """Test DuckDBComputePlugin implements ComputePlugin ABC.
-
-        Verifies that the plugin loaded via entry points is a valid
-        ComputePlugin implementation with all required properties.
-        """
-        from importlib.metadata import entry_points
-
-        from floe_core import ComputePlugin
-
-        # Load plugin class via entry point
-        eps = entry_points(group="floe.computes")
-        duckdb_ep = next(ep for ep in eps if ep.name == "duckdb")
-        plugin_class = duckdb_ep.load()
-
-        # Instantiate and verify ABC compliance
-        plugin = plugin_class()
-
-        assert isinstance(plugin, ComputePlugin)
-        assert plugin.name == "duckdb"
         assert plugin.is_self_hosted is True
 
-    @pytest.mark.integration
     @pytest.mark.requirement("001-FR-001")
-    def test_duckdb_plugin_metadata_complete(self) -> None:
-        """Test DuckDB plugin has complete metadata.
-
-        Verifies that all required PluginMetadata fields are properly
-        populated with valid values.
-        """
+    def test_duckdb_plugin_description_mentions_duckdb(self) -> None:
+        """Test DuckDB plugin description mentions DuckDB."""
         from importlib.metadata import entry_points
 
-        # Load plugin via entry point
-        eps = entry_points(group="floe.computes")
-        duckdb_ep = next(ep for ep in eps if ep.name == "duckdb")
-        plugin = duckdb_ep.load()()
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        # Verify all metadata properties
-        assert plugin.name == "duckdb"
-        assert len(plugin.version.split(".")) == 3  # Semver format
-        assert plugin.floe_api_version == "1.0"
+        assert len(matching) == 1
+        plugin = matching[0].load()()
+
         assert "DuckDB" in plugin.description
-        assert plugin.is_self_hosted is True
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("001-FR-001")
-    def test_entry_point_module_path(self) -> None:
-        """Test entry point correctly references plugin module.
-
-        Verifies that the entry point value correctly references
-        the DuckDBComputePlugin class in the expected module.
-        """
-        from importlib.metadata import entry_points
-
-        eps = entry_points(group="floe.computes")
-        duckdb_ep = next(ep for ep in eps if ep.name == "duckdb")
-
-        # Verify entry point references correct module and class
-        assert "floe_compute_duckdb" in duckdb_ep.value
-        assert "DuckDBComputePlugin" in duckdb_ep.value

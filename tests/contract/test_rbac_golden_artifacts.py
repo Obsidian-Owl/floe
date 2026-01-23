@@ -340,6 +340,7 @@ class TestGoldenArtifactNamespace:
 class TestGoldenArtifactVersioning:
     """Tests for golden artifact versioning and migration."""
 
+    @pytest.mark.requirement("FR-035")
     @pytest.mark.contract
     def test_v1_fixtures_exist(self) -> None:
         """Test v1 fixture directory exists with required files."""
@@ -358,6 +359,7 @@ class TestGoldenArtifactVersioning:
             filepath = v1_dir / filename
             assert filepath.exists(), f"Missing v1 fixture: {filename}"
 
+    @pytest.mark.requirement("FR-035")
     @pytest.mark.contract
     def test_v1_fixtures_are_valid_yaml(self) -> None:
         """Test all v1 fixtures are valid YAML."""
@@ -369,6 +371,7 @@ class TestGoldenArtifactVersioning:
                 assert content is not None, f"Empty fixture: {filepath.name}"
                 assert isinstance(content, dict), f"Invalid YAML: {filepath.name}"
 
+    @pytest.mark.requirement("FR-035")
     @pytest.mark.contract
     def test_v1_fixtures_have_required_k8s_fields(self) -> None:
         """Test all v1 fixtures have apiVersion and kind."""

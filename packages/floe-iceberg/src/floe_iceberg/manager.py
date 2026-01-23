@@ -31,22 +31,17 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from floe_iceberg._compaction_manager import _IcebergCompactionManager
+from floe_iceberg._lifecycle import _IcebergTableLifecycle
+from floe_iceberg._schema_manager import _IcebergSchemaManager
+from floe_iceberg._snapshot_manager import _IcebergSnapshotManager
 from floe_iceberg.errors import (
-    CompactionError,
-    IncompatibleSchemaChangeError,
     NoSuchNamespaceError,
-    NoSuchTableError,
-    SchemaEvolutionError,
-    SnapshotNotFoundError,
-    TableAlreadyExistsError,
     ValidationError,
 )
 from floe_iceberg.models import (
     CompactionStrategy,
-    FieldType,
     IcebergTableManagerConfig,
-    SchemaChange,
-    SchemaChangeType,
     SchemaEvolution,
     SnapshotInfo,
     TableConfig,
@@ -63,58 +58,10 @@ if TYPE_CHECKING:
     #
     # NOTE: PyIceberg does not ship with py.typed marker or type stubs.
     # Using `Any` provides flexibility while awaiting upstream typing support.
-    # Track: https://github.com/apache/iceberg-python/issues/XXX
-    # Consider contributing stubs to typeshed when API stabilizes.
+    # See: https://github.com/apache/iceberg-python (check for py.typed in releases)
+    # Priority: Low - PyIceberg API is still evolving. Consider contributing
+    # stubs to typeshed once PyIceberg reaches 1.0 and API stabilizes.
     Table = Any
-
-
-# =============================================================================
-# Type Mapping Utilities
-# =============================================================================
-
-
-def _get_pyiceberg_type_mapping() -> dict[FieldType, Any]:
-    """Build mapping from FieldType enum to PyIceberg type instances.
-
-    This function is used by schema evolution operations to convert
-    floe-iceberg FieldType enums to PyIceberg type objects.
-
-    Returns:
-        Dictionary mapping FieldType enum values to PyIceberg type instances.
-
-    Note:
-        PyIceberg types are imported lazily inside this function to avoid
-        import-time dependencies and support environments where PyIceberg
-        is not installed.
-
-    Example:
-        >>> mapping = _get_pyiceberg_type_mapping()
-        >>> iceberg_type = mapping.get(FieldType.STRING)
-        >>> # iceberg_type is StringType()
-    """
-    from pyiceberg.types import (
-        BooleanType,
-        DateType,
-        DoubleType,
-        FloatType,
-        IntegerType,
-        LongType,
-        StringType,
-        TimestampType,
-        TimestamptzType,
-    )
-
-    return {
-        FieldType.BOOLEAN: BooleanType(),
-        FieldType.INT: IntegerType(),
-        FieldType.LONG: LongType(),
-        FieldType.FLOAT: FloatType(),
-        FieldType.DOUBLE: DoubleType(),
-        FieldType.STRING: StringType(),
-        FieldType.DATE: DateType(),
-        FieldType.TIMESTAMP: TimestampType(),
-        FieldType.TIMESTAMPTZ: TimestamptzType(),
-    }
 
 
 class IcebergTableManager:
@@ -197,6 +144,12 @@ class IcebergTableManager:
 
         # Retrieve FileIO (FR-010)
         self._fileio = self._retrieve_fileio()
+
+        # Initialize helper classes for facade pattern (T034)
+        self._lifecycle = _IcebergTableLifecycle(self._catalog, self._catalog_plugin)
+        self._schema_manager = _IcebergSchemaManager(self._catalog_plugin)
+        self._snapshot_manager = _IcebergSnapshotManager(self._config)
+        self._compaction_manager = _IcebergCompactionManager()
 
         self._log.info(
             "iceberg_table_manager_initialized",
@@ -315,10 +268,6 @@ class IcebergTableManager:
     # Table Operations
     # =========================================================================
 
-    @traced(
-        operation_name="iceberg.create_table",
-        attributes={"operation": "create"},
-    )
     def create_table(
         self,
         config: TableConfig,
@@ -328,6 +277,8 @@ class IcebergTableManager:
 
         Creates a new table in the catalog with schema, partitioning,
         and properties from the configuration.
+
+        Delegates to _IcebergTableLifecycle helper (T034 facade pattern).
 
         Args:
             config: TableConfig with namespace, name, schema, partition spec.
@@ -353,57 +304,12 @@ class IcebergTableManager:
             >>> # Idempotent creation
             >>> table = manager.create_table(config, if_not_exists=True)
         """
-        from opentelemetry import trace
-
-        identifier = config.identifier
-
-        # Add span attributes for telemetry
-        span = trace.get_current_span()
-        span.set_attribute("table.identifier", identifier)
-        span.set_attribute("table.namespace", config.namespace)
-
-        self._log.debug(
-            "create_table_requested",
-            identifier=identifier,
-            if_not_exists=if_not_exists,
-        )
-
-        # Validate namespace exists
-        self._validate_namespace_exists(config.namespace)
-
-        # Check if table already exists
-        if self.table_exists(identifier):
-            if if_not_exists:
-                self._log.info(
-                    "table_already_exists_returning_existing",
-                    identifier=identifier,
-                )
-                return self.load_table(identifier)
-            msg = f"Table '{identifier}' already exists"
-            raise TableAlreadyExistsError(msg)
-
-        # Convert schema to dict for catalog plugin
-        schema_dict = self._table_schema_to_dict(config.table_schema)
-
-        # Create table via catalog plugin
-        self._catalog_plugin.create_table(
-            identifier=identifier,
-            schema=schema_dict,
-            location=config.location,
-            properties=config.properties,
-        )
-
-        self._log.info(
-            "table_created",
-            identifier=identifier,
-            has_partitioning=config.partition_spec is not None,
-        )
-
-        # Load and return the created table
-        return self.load_table(identifier)
+        return self._lifecycle.create_table(config, if_not_exists)
 
     def load_table(self, identifier: str) -> Table:
         """Load an existing table by identifier.
+
+        Delegates to _IcebergTableLifecycle helper (T034 facade pattern).
 
         Args:
             identifier: Full table identifier (e.g., "bronze.customers").
@@ -418,25 +324,12 @@ class IcebergTableManager:
         Example:
             >>> table = manager.load_table("bronze.customers")
         """
-        self._log.debug("load_table_requested", identifier=identifier)
-
-        # Validate identifier format
-        self._validate_identifier(identifier)
-
-        # Check if table exists
-        if not self.table_exists(identifier):
-            msg = f"Table '{identifier}' does not exist"
-            raise NoSuchTableError(msg)
-
-        # Load table from catalog
-        table = self._catalog.load_table(identifier)
-
-        self._log.debug("table_loaded", identifier=identifier)
-
-        return table
+        return self._lifecycle.load_table(identifier)
 
     def table_exists(self, identifier: str) -> bool:
         """Check if a table exists.
+
+        Delegates to _IcebergTableLifecycle helper (T034 facade pattern).
 
         Args:
             identifier: Full table identifier (e.g., "bronze.customers").
@@ -448,28 +341,33 @@ class IcebergTableManager:
             >>> if not manager.table_exists("bronze.new_table"):
             ...     manager.create_table(config)
         """
-        self._log.debug("table_exists_check", identifier=identifier)
+        return self._lifecycle.table_exists(identifier)
 
-        # Parse identifier to get namespace and table name
-        parts = identifier.rsplit(".", 1)
-        if len(parts) < 2:
-            # Invalid identifier format - can't exist
-            return False
+    def drop_table(self, identifier: str, purge: bool = False) -> None:
+        """Drop (delete) a table from the catalog.
 
-        namespace = parts[0]
-        table_name = parts[1]
+        Removes the table metadata from the catalog. If purge=True, also
+        deletes the underlying data files (when supported by the catalog).
 
-        # Check if namespace exists (mock-specific attribute for unit testing)
-        namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
-        if namespaces is not None and namespace not in namespaces:
-            return False
+        Delegates to _IcebergTableLifecycle helper (T034 facade pattern).
 
-        # Check if table exists in catalog (mock-specific attribute for unit testing)
-        tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
-        if tables is not None:
-            full_identifier = f"{namespace}.{table_name}"
-            return full_identifier in tables
-        return True  # Assume exists in production (real catalog will verify)
+        Args:
+            identifier: Full table identifier (e.g., "bronze.customers").
+            purge: If True, delete underlying data files. Default False
+                (keep data files for potential recovery).
+
+        Raises:
+            NoSuchTableError: If table doesn't exist.
+            ValidationError: If identifier format is invalid.
+
+        Example:
+            >>> # Soft delete (keep data files)
+            >>> manager.drop_table("bronze.deprecated_table")
+
+            >>> # Hard delete (remove data files)
+            >>> manager.drop_table("bronze.temp_table", purge=True)
+        """
+        return self._lifecycle.drop_table(identifier, purge=purge)
 
     # =========================================================================
     # Private Helper Methods
@@ -530,16 +428,6 @@ class IcebergTableManager:
     # Schema Evolution (T039-T044)
     # =========================================================================
 
-    # Type widening rules (compatible promotions)
-    _VALID_TYPE_WIDENINGS: dict[FieldType, set[FieldType]] = {
-        FieldType.INT: {FieldType.LONG},
-        FieldType.FLOAT: {FieldType.DOUBLE},
-    }
-
-    @traced(
-        operation_name="iceberg.evolve_schema",
-        attributes={"operation": "evolve_schema"},
-    )
     def evolve_schema(
         self,
         table: Table,
@@ -550,6 +438,8 @@ class IcebergTableManager:
         Applies schema evolution operations atomically. Safe operations
         (add column, rename, widen type) are allowed by default.
         Incompatible changes (delete column) require explicit flag.
+
+        Delegates to _IcebergSchemaManager helper (T034 facade pattern).
 
         Args:
             table: PyIceberg Table instance (or mock in tests).
@@ -577,257 +467,19 @@ class IcebergTableManager:
             ... )
             >>> table = manager.evolve_schema(table, evolution)
         """
-        from opentelemetry import trace
-
-        # Add span attributes for telemetry
-        span = trace.get_current_span()
-        span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
-        span.set_attribute("changes.count", len(evolution.changes))
-
-        self._log.debug(
-            "evolve_schema_requested",
-            num_changes=len(evolution.changes),
-            allow_incompatible=evolution.allow_incompatible_changes,
-        )
-
-        # Validate all changes before applying any
-        self._validate_schema_evolution(table, evolution)
-
-        # Apply schema changes via PyIceberg UpdateSchema API
-        self._apply_real_schema_changes(table, evolution)
-
-        self._log.info(
-            "schema_evolved",
-            num_changes=len(evolution.changes),
-        )
-
-        # Refresh to get updated schema if supported
-        if hasattr(table, "refresh"):
-            table.refresh()
-
-        return table
-
-    def _apply_real_schema_changes(
-        self,
-        table: Table,
-        evolution: SchemaEvolution,
-    ) -> None:
-        """Apply schema changes to a real PyIceberg table.
-
-        Args:
-            table: Real PyIceberg Table instance.
-            evolution: SchemaEvolution with list of changes.
-        """
-        from pyiceberg.types import StringType
-
-        # Use module-level helper for type mapping (reusable, documented)
-        type_mapping = _get_pyiceberg_type_mapping()
-
-        with table.update_schema() as update:
-            for change in evolution.changes:
-                if change.change_type == SchemaChangeType.ADD_COLUMN:
-                    if change.field:
-                        iceberg_type = type_mapping.get(change.field.field_type, StringType())
-                        update.add_column(
-                            change.field.name,
-                            iceberg_type,
-                            doc=change.field.doc,
-                        )
-
-                elif change.change_type == SchemaChangeType.RENAME_COLUMN:
-                    if change.source_column and change.new_name:
-                        update.rename_column(change.source_column, change.new_name)
-
-                elif change.change_type == SchemaChangeType.MAKE_OPTIONAL:
-                    if change.source_column:
-                        update.make_column_optional(change.source_column)
-
-                elif change.change_type == SchemaChangeType.DELETE_COLUMN:
-                    if change.source_column:
-                        update.delete_column(change.source_column)
-
-                elif change.change_type == SchemaChangeType.UPDATE_DOC:
-                    if change.source_column and change.new_doc is not None:
-                        update.update_column(change.source_column, doc=change.new_doc)
-
-    def _validate_schema_evolution(
-        self,
-        table: Table,
-        evolution: SchemaEvolution,
-    ) -> None:
-        """Validate all schema changes before applying.
-
-        Args:
-            table: Table to validate against.
-            evolution: Schema evolution to validate.
-
-        Raises:
-            IncompatibleSchemaChangeError: If incompatible changes without flag.
-            SchemaEvolutionError: If changes reference nonexistent columns.
-        """
-        for change in evolution.changes:
-            # Check for incompatible changes
-            if self._is_incompatible_change(change):
-                if not evolution.allow_incompatible_changes:
-                    msg = (
-                        f"Incompatible change '{change.change_type.value}' "
-                        "requires allow_incompatible_changes=True"
-                    )
-                    raise IncompatibleSchemaChangeError(msg)
-
-            # Validate change-specific requirements
-            self._validate_change(table, change, evolution.allow_incompatible_changes)
-
-    def _is_incompatible_change(self, change: SchemaChange) -> bool:
-        """Check if a change is incompatible (breaking).
-
-        Args:
-            change: Change to check.
-
-        Returns:
-            True if change is incompatible.
-        """
-        # DELETE_COLUMN is always incompatible
-        if change.change_type == SchemaChangeType.DELETE_COLUMN:
-            return True
-
-        # ADD_COLUMN with required=True is incompatible (breaks existing data)
-        if change.change_type == SchemaChangeType.ADD_COLUMN:
-            if change.field is not None and change.field.required:
-                return True
-
-        return False
-
-    def _validate_change(
-        self,
-        table: Table,
-        change: SchemaChange,
-        allow_incompatible: bool,
-    ) -> None:
-        """Validate a single schema change.
-
-        Args:
-            table: Table to validate against.
-            change: Change to validate.
-            allow_incompatible: Whether incompatible changes are allowed.
-
-        Raises:
-            SchemaEvolutionError: If change is invalid.
-            IncompatibleSchemaChangeError: If type widening is invalid.
-        """
-        if change.change_type == SchemaChangeType.RENAME_COLUMN:
-            # Check source column exists (via catalog plugin mock)
-            if change.source_column is not None:
-                if not self._column_exists(table, change.source_column):
-                    msg = f"Column '{change.source_column}' does not exist"
-                    raise SchemaEvolutionError(msg)
-
-        elif change.change_type == SchemaChangeType.WIDEN_TYPE:
-            # Check source column exists and widening is valid
-            if change.source_column is not None:
-                if not self._column_exists(table, change.source_column):
-                    msg = f"Column '{change.source_column}' does not exist"
-                    raise SchemaEvolutionError(msg)
-
-                # Check if type widening is valid
-                if change.target_type is not None:
-                    source_type = self._get_column_type(table, change.source_column)
-                    if not self._is_valid_type_widening(source_type, change.target_type):
-                        msg = (
-                            f"Cannot widen type from '{source_type}' to "
-                            f"'{change.target_type.value}'"
-                        )
-                        raise IncompatibleSchemaChangeError(msg)
-
-        elif change.change_type in (
-            SchemaChangeType.MAKE_OPTIONAL,
-            SchemaChangeType.UPDATE_DOC,
-            SchemaChangeType.DELETE_COLUMN,
-        ):
-            # Check source column exists
-            if change.source_column is not None:
-                if not self._column_exists(table, change.source_column):
-                    msg = f"Column '{change.source_column}' does not exist"
-                    raise SchemaEvolutionError(msg)
-
-    def _column_exists(self, table: Table, column_name: str) -> bool:
-        """Check if a column exists in the table schema.
-
-        Args:
-            table: Table to check.
-            column_name: Column name to look for.
-
-        Returns:
-            True if column exists.
-        """
-        # In mock, check via catalog plugin's table schema (mock-specific)
-        table_id = getattr(table, "identifier", None)
-        if table_id is not None:
-            tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
-            if tables is not None:
-                table_data = tables.get(table_id)
-                if table_data is not None:
-                    schema = table_data.get("schema", {})
-                    fields = schema.get("fields", [])
-                    return any(f.get("name") == column_name for f in fields)
-        return True  # Assume exists in production (PyIceberg will validate)
-
-    def _get_column_type(self, table: Table, column_name: str) -> FieldType | None:
-        """Get the type of a column.
-
-        Args:
-            table: Table to check.
-            column_name: Column name.
-
-        Returns:
-            FieldType of the column, or None if not found.
-        """
-        table_id = getattr(table, "identifier", None)
-        if table_id is not None:
-            tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
-            if tables is not None:
-                table_data = tables.get(table_id)
-                if table_data is not None:
-                    schema = table_data.get("schema", {})
-                    fields = schema.get("fields", [])
-                    for f in fields:
-                        if f.get("name") == column_name:
-                            try:
-                                return FieldType(f.get("type"))
-                            except ValueError:
-                                return None
-        return None
-
-    def _is_valid_type_widening(
-        self,
-        source_type: FieldType | None,
-        target_type: FieldType,
-    ) -> bool:
-        """Check if a type widening is valid.
-
-        Args:
-            source_type: Current column type.
-            target_type: Target type to widen to.
-
-        Returns:
-            True if widening is valid.
-        """
-        if source_type is None:
-            return False
-
-        valid_targets = self._VALID_TYPE_WIDENINGS.get(source_type, set())
-        return target_type in valid_targets
+        return self._schema_manager.evolve_schema(table, evolution)
 
     # =========================================================================
     # Snapshot Management Operations
     # =========================================================================
 
-    @traced(operation_name="iceberg.list_snapshots")
     def list_snapshots(self, table: Table) -> list[SnapshotInfo]:
         """List all snapshots for a table, ordered by timestamp (newest first).
 
         Retrieves snapshot metadata from the table and converts to SnapshotInfo
         objects for a consistent API.
+
+        Delegates to _IcebergSnapshotManager helper (T034 facade pattern).
 
         Args:
             table: PyIceberg Table object.
@@ -840,33 +492,15 @@ class IcebergTableManager:
             >>> for snapshot in snapshots:
             ...     print(f"ID: {snapshot.snapshot_id}, Records: {snapshot.added_records}")
         """
-        self._log.debug(
-            "list_snapshots_requested",
-            table_identifier=getattr(table, "identifier", None),
-        )
+        return self._snapshot_manager.list_snapshots(table)
 
-        # Get snapshots from PyIceberg table
-        snapshots: list[SnapshotInfo] = []
-        for snap in table.snapshots():
-            snapshot_info = SnapshotInfo.from_pyiceberg_snapshot(snap)
-            snapshots.append(snapshot_info)
-
-        # Sort by timestamp_ms (newest first)
-        snapshots.sort(key=lambda s: s.timestamp_ms, reverse=True)
-
-        self._log.info(
-            "snapshots_listed",
-            table_identifier=getattr(table, "identifier", None),
-            snapshot_count=len(snapshots),
-        )
-        return snapshots
-
-    @traced(operation_name="iceberg.rollback")
     def rollback_to_snapshot(self, table: Table, snapshot_id: int) -> Table:
         """Rollback table to a previous snapshot.
 
         Creates a new snapshot pointing to the specified historical snapshot.
         This is a non-destructive operation - previous snapshots are preserved.
+
+        Delegates to _IcebergSnapshotManager helper (T034 facade pattern).
 
         Args:
             table: PyIceberg Table object.
@@ -883,70 +517,8 @@ class IcebergTableManager:
             >>> old_snapshot = snapshots[-1]  # Oldest snapshot
             >>> table = manager.rollback_to_snapshot(table, old_snapshot.snapshot_id)
         """
-        from opentelemetry import trace
+        return self._snapshot_manager.rollback_to_snapshot(table, snapshot_id)
 
-        # Add span attributes
-        span = trace.get_current_span()
-        span.set_attribute("table.identifier", getattr(table, "identifier", "unknown"))
-        span.set_attribute("target.snapshot_id", snapshot_id)
-
-        self._log.debug(
-            "rollback_to_snapshot_requested",
-            table_identifier=getattr(table, "identifier", None),
-            snapshot_id=snapshot_id,
-        )
-
-        # Validate snapshot exists
-        snapshots = self.list_snapshots(table)
-        snapshot_ids = [s.snapshot_id for s in snapshots]
-
-        if snapshot_id not in snapshot_ids:
-            msg = f"Snapshot {snapshot_id} not found in table"
-            self._log.error(
-                "snapshot_not_found",
-                table_identifier=getattr(table, "identifier", None),
-                snapshot_id=snapshot_id,
-                available_snapshots=snapshot_ids,
-            )
-            raise SnapshotNotFoundError(msg)
-
-        # Use PyIceberg ManageSnapshots API for rollback
-        manage_snapshots = table.manage_snapshots()
-
-        # Check if set_current_snapshot is available (PyIceberg 0.11+)
-        if hasattr(manage_snapshots, "set_current_snapshot"):
-            manage_snapshots.set_current_snapshot(snapshot_id).commit()
-        elif hasattr(manage_snapshots, "rollback_to_snapshot"):
-            # Alternative API if available
-            manage_snapshots.rollback_to_snapshot(snapshot_id).commit()
-        else:
-            # PyIceberg 0.10.0 doesn't support snapshot rollback yet
-            import pyiceberg
-
-            msg = (
-                "Snapshot rollback not supported in PyIceberg "
-                f"{pyiceberg.__version__}. "
-                "Upgrade to PyIceberg 0.11+ for this feature."
-            )
-            self._log.error(
-                "rollback_not_supported",
-                table_identifier=getattr(table, "identifier", None),
-                pyiceberg_version=pyiceberg.__version__,
-            )
-            raise NotImplementedError(msg)
-
-        # Refresh to get the updated state
-        if hasattr(table, "refresh"):
-            table.refresh()
-
-        self._log.info(
-            "snapshot_rollback_completed",
-            table_identifier=getattr(table, "identifier", None),
-            target_snapshot_id=snapshot_id,
-        )
-        return table
-
-    @traced(operation_name="iceberg.expire_snapshots")
     def expire_snapshots(
         self,
         table: Table,
@@ -956,6 +528,8 @@ class IcebergTableManager:
 
         Removes old snapshots while respecting min_snapshots_to_keep from config.
         This helps manage storage costs and metadata overhead.
+
+        Delegates to _IcebergSnapshotManager helper (T034 facade pattern).
 
         Args:
             table: PyIceberg Table object.
@@ -969,100 +543,7 @@ class IcebergTableManager:
             >>> expired_count = manager.expire_snapshots(table, older_than_days=30)
             >>> print(f"Expired {expired_count} snapshots")
         """
-        if older_than_days is not None:
-            retention_days = older_than_days
-        else:
-            retention_days = self._config.default_retention_days
-
-        # Set span attributes for observability
-        from opentelemetry import trace
-
-        span = trace.get_current_span()
-        span.set_attribute("table.identifier", str(getattr(table, "identifier", "unknown")))
-
-        self._log.debug(
-            "expire_snapshots_requested",
-            table_identifier=getattr(table, "identifier", None),
-            retention_days=retention_days,
-            min_to_keep=self._config.min_snapshots_to_keep,
-        )
-
-        # Get current snapshots to count before/after
-        snapshots_before = list(table.snapshots())
-
-        if not snapshots_before:
-            span.set_attribute("expired.count", 0)
-            self._log.info(
-                "no_snapshots_to_expire",
-                table_identifier=getattr(table, "identifier", None),
-            )
-            return 0
-
-        # Calculate cutoff timestamp
-        import time
-        from datetime import datetime, timezone
-
-        cutoff_ms = int((time.time() - (retention_days * 24 * 60 * 60)) * 1000)
-        cutoff_datetime = datetime.fromtimestamp(cutoff_ms / 1000, tz=timezone.utc)
-
-        # Use PyIceberg ExpireSnapshots API
-        # Note: PyIceberg's expire_snapshots is available via table operations
-        if hasattr(table, "expire_snapshots"):
-            # PyIceberg 0.11+ has expire_snapshots method
-            expire_op = table.expire_snapshots()
-            expire_op.expire_older_than(cutoff_datetime)
-            expire_op.retain_last(self._config.min_snapshots_to_keep)
-            expire_op.commit()
-        elif hasattr(table, "manage_snapshots"):
-            # Alternative: use ManageSnapshots API
-            manage_snapshots = table.manage_snapshots()
-            # Identify snapshots to expire
-            min_to_keep = self._config.min_snapshots_to_keep
-            snapshots_sorted = sorted(
-                snapshots_before,
-                key=lambda s: s.timestamp_ms,
-                reverse=True,
-            )
-
-            # Keep minimum snapshots
-            snapshots_to_consider = snapshots_sorted[min_to_keep:]
-
-            # Expire snapshots older than cutoff
-            for snap in snapshots_to_consider:
-                if snap.timestamp_ms < cutoff_ms:
-                    if hasattr(manage_snapshots, "remove_snapshot"):
-                        manage_snapshots.remove_snapshot(snap.snapshot_id)
-
-            manage_snapshots.commit()
-        else:
-            # PyIceberg version doesn't support snapshot expiration
-            self._log.warning(
-                "expire_snapshots_not_supported",
-                table_identifier=getattr(table, "identifier", None),
-                message="PyIceberg version does not support snapshot expiration",
-            )
-            span.set_attribute("expired.count", 0)
-            return 0
-
-        # Refresh and count snapshots after
-        if hasattr(table, "refresh"):
-            table.refresh()
-
-        snapshots_after = list(table.snapshots())
-        expired_count = len(snapshots_before) - len(snapshots_after)
-
-        # Set expired count span attribute
-        span.set_attribute("expired.count", expired_count)
-
-        self._log.info(
-            "snapshots_expired",
-            table_identifier=getattr(table, "identifier", None),
-            expired_count=expired_count,
-            remaining_count=len(snapshots_after),
-            retention_days=retention_days,
-        )
-
-        return expired_count
+        return self._snapshot_manager.expire_snapshots(table, older_than_days)
 
     # =========================================================================
     # Write Operations
@@ -1295,7 +776,6 @@ class IcebergTableManager:
     # Compaction Operations
     # =========================================================================
 
-    @traced(operation_name="iceberg.compact_table")
     def compact_table(
         self,
         table: Table,
@@ -1305,6 +785,8 @@ class IcebergTableManager:
 
         Rewrites small files into larger files using the specified strategy.
         This reduces metadata overhead and improves query performance.
+
+        Delegates to _IcebergCompactionManager helper (T034 facade pattern).
 
         Note: The orchestrator (Dagster) is responsible for scheduling when
         to call this method. This method only performs the execution.
@@ -1329,63 +811,7 @@ class IcebergTableManager:
             >>> files_rewritten = manager.compact_table(table, strategy)
             >>> print(f"Rewrote {files_rewritten} files")
         """
-        from floe_iceberg.compaction import execute_compaction
-
-        # Use default strategy if not provided
-        if strategy is None:
-            strategy = CompactionStrategy()
-
-        table_identifier = str(getattr(table, "identifier", "unknown"))
-
-        # Set span attributes for observability
-        from opentelemetry import trace
-
-        span = trace.get_current_span()
-        span.set_attribute("table.identifier", table_identifier)
-        span.set_attribute("strategy.type", strategy.strategy_type.value)
-        span.set_attribute("strategy.target_file_size_bytes", strategy.target_file_size_bytes)
-        span.set_attribute(
-            "strategy.max_concurrent_rewrites", strategy.max_concurrent_file_group_rewrites
-        )
-
-        self._log.debug(
-            "compact_table_requested",
-            table_identifier=table_identifier,
-            strategy_type=strategy.strategy_type.value,
-            target_file_size_bytes=strategy.target_file_size_bytes,
-        )
-
-        try:
-            # Execute compaction using the compaction module
-            result = execute_compaction(table, strategy)
-            files_rewritten = result.files_rewritten
-
-            # Set files rewritten span attribute
-            span.set_attribute("files.rewritten", files_rewritten)
-
-            self._log.info(
-                "compact_table_completed",
-                table_identifier=table_identifier,
-                strategy_type=strategy.strategy_type.value,
-                files_rewritten=files_rewritten,
-            )
-
-            return files_rewritten
-
-        except CompactionError as e:
-            # Record error on OTel span and re-raise
-            from opentelemetry.trace import Status, StatusCode
-
-            span.set_status(Status(StatusCode.ERROR, "Compaction failed"))
-            span.record_exception(e)
-
-            self._log.error(
-                "compact_table_failed",
-                table_identifier=table_identifier,
-                strategy_type=strategy.strategy_type.value,
-                error=str(e),
-            )
-            raise
+        return self._compaction_manager.compact_table(table, strategy)
 
 
 __all__ = ["IcebergTableManager"]

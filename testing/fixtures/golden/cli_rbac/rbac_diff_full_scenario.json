@@ -1,0 +1,146 @@
+{
+  "name": "rbac_diff_full_scenario",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.160102+00:00",
+  "checksum": "f34fa7bf47016280",
+  "output": {
+    "generated_at": "2026-01-22 02:22:43.160057+00:00",
+    "expected_source": "test/manifests",
+    "actual_source": "cluster:floe",
+    "diffs": [
+      {
+        "change_type": "modified",
+        "resource_kind": "Role",
+        "resource_name": "floe-secret-reader",
+        "resource_namespace": "floe",
+        "expected_value": {
+          "kind": "Role",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "floe-secret-reader",
+            "namespace": "floe"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "secrets"
+              ],
+              "verbs": [
+                "get"
+              ],
+              "resourceNames": [
+                "db-creds"
+              ]
+            }
+          ]
+        },
+        "actual_value": {
+          "kind": "Role",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "floe-secret-reader",
+            "namespace": "floe"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "secrets"
+              ],
+              "verbs": [
+                "get",
+                "list"
+              ],
+              "resourceNames": [
+                "db-creds"
+              ]
+            }
+          ]
+        },
+        "diff_details": [
+          "rules[0].verbs: list length mismatch (expected 1, got 2)"
+        ]
+      },
+      {
+        "change_type": "removed",
+        "resource_kind": "Role",
+        "resource_name": "orphan-role",
+        "resource_namespace": "floe",
+        "expected_value": null,
+        "actual_value": {
+          "kind": "Role",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "orphan-role",
+            "namespace": "floe"
+          },
+          "rules": []
+        },
+        "diff_details": [
+          "Resource should be removed"
+        ]
+      },
+      {
+        "change_type": "added",
+        "resource_kind": "RoleBinding",
+        "resource_name": "new-binding",
+        "resource_namespace": "floe",
+        "expected_value": {
+          "kind": "RoleBinding",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "new-binding",
+            "namespace": "floe"
+          },
+          "roleRef": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "name": "floe-secret-reader"
+          },
+          "subjects": [
+            {
+              "kind": "ServiceAccount",
+              "name": "new-sa",
+              "namespace": "floe"
+            }
+          ]
+        },
+        "actual_value": null,
+        "diff_details": [
+          "Resource needs to be created"
+        ]
+      },
+      {
+        "change_type": "unchanged",
+        "resource_kind": "ServiceAccount",
+        "resource_name": "floe-worker",
+        "resource_namespace": "floe",
+        "expected_value": {
+          "kind": "ServiceAccount",
+          "apiVersion": "v1",
+          "metadata": {
+            "name": "floe-worker",
+            "namespace": "floe"
+          }
+        },
+        "actual_value": {
+          "kind": "ServiceAccount",
+          "apiVersion": "v1",
+          "metadata": {
+            "name": "floe-worker",
+            "namespace": "floe"
+          }
+        },
+        "diff_details": []
+      }
+    ],
+    "added_count": 1,
+    "removed_count": 1,
+    "modified_count": 1
+  }
+}

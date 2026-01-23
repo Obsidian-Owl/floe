@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Epic 12A: Tech Debt Q1 2026
+
+**Architecture Improvements:**
+
+- Break circular dependency between `floe_core` and `floe_rbac_k8s` via registry lookup pattern
+- Extract `_BatchFetcher` class for parallel OCI manifest fetching (fixes N+1 performance issue)
+- Split `IcebergTableManager` god class into focused internal classes:
+  - `_IcebergTableLifecycle` - create, drop, exists operations
+  - `_IcebergSchemaManager` - schema evolution operations
+  - `_IcebergSnapshotManager` - snapshot operations
+  - `_IcebergCompactionManager` - compaction operations
+
+**Performance Optimizations:**
+
+- OCI client `list()` now uses parallel fetching with ThreadPoolExecutor (5x faster)
+- OCI client `pull()` uses dictionary lookup instead of linear search
+- Added `limit` parameter to `plugin_registry.list()` for pagination
+- Added `max_violations` parameter to `PolicyEnforcer.enforce()` for early exit
+
+**Testing Infrastructure:**
+
+- New base test classes in `testing/base_classes/`:
+  - `BasePluginMetadataTests` - Validates PluginMetadata ABC compliance
+  - `BasePluginLifecycleTests` - Validates lifecycle hook implementations
+  - `BasePluginDiscoveryTests` - Validates entry point discovery (11 reusable tests)
+- Migrated DuckDB, Polaris, and Dagster plugin tests to use base classes
+- Eliminated 100% of duplicated discovery test code across plugins
+- Golden test utilities for behavior-preserving refactoring
+
+**Dependency Cleanup:**
+
+- Removed `croniter` dependency (replaced with regex-based cron validation)
+- Removed `pytz` dependency (replaced with Python stdlib `zoneinfo`)
+
+**Code Quality:**
+
+- All 3991 unit tests pass with 87.77% coverage
+- mypy --strict passes on key modified files
+- No circular import errors
+
 #### Epic 7A: Identity & Secrets Plugin System
 
 **New Packages:**

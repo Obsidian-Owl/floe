@@ -229,14 +229,17 @@ class TestTimezoneValidation:
 
         Note: Dagster uses Python's zoneinfo module which is case-sensitive.
         IANA timezone names require proper case (e.g., America/New_York).
-        Only UTC and utc are typically accepted as case variants.
+        UTC must be uppercase - lowercase 'utc' is NOT a valid IANA timezone.
         """
-        # UTC variants are valid (special handling in zoneinfo)
+        # UTC (uppercase) is valid
         dagster_plugin.schedule_job("job_utc", "0 8 * * *", "UTC")
-        dagster_plugin.schedule_job("job_utc_lower", "0 8 * * *", "utc")
 
         # Proper case IANA timezones work
         dagster_plugin.schedule_job("job_proper", "0 8 * * *", "America/New_York")
+
+        # lowercase 'utc' is NOT a valid IANA timezone (case-sensitive)
+        with pytest.raises(ValueError, match="Invalid timezone"):
+            dagster_plugin.schedule_job("job_utc_lower", "0 8 * * *", "utc")
 
         # Invalid timezones are rejected
         with pytest.raises(ValueError):

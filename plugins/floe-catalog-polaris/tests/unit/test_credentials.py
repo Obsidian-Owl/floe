@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core import AuthenticationError, NotFoundError, NotSupportedError
+from floe_core.plugin_errors import AuthenticationError, NotFoundError, NotSupportedError
 from pyiceberg.exceptions import ForbiddenError, NoSuchTableError
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
@@ -334,7 +334,7 @@ class TestVendCredentialsNotConnected:
         Validates that calling vend_credentials before connect() raises
         a CatalogUnavailableError with clear message.
         """
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         # Act & Assert
         with pytest.raises(CatalogUnavailableError, match="not connected"):

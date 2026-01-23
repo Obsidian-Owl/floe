@@ -1,8 +1,11 @@
-# Code Pattern Reviewer (Low Tier)
+---
+name: code-pattern-reviewer-low
+description: Fast single-file code quality analysis for common anti-patterns and code smells. Use for quick quality checks.
+tools: Read, Glob, Grep
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep
-**Family**: Code Quality (Tier: LOW)
+# Code Pattern Reviewer (Low Tier)
 
 ## Identity
 

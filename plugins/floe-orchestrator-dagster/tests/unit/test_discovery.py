@@ -1,115 +1,73 @@
 """Unit tests for Dagster orchestrator plugin discovery via entry points.
 
 Tests for:
-- FR-002: Plugin is discoverable via floe.orchestrators entry point
-- FR-003: Plugin has complete metadata
-- FR-004: Plugin correctly implements OrchestratorPlugin ABC
+- FR-006: Plugin is discoverable via floe.orchestrators entry point
+- FR-004: Plugin correctly implements PluginMetadata
+- FR-024: Plugin entry point discovery
 
 These tests verify that the Dagster orchestrator plugin is correctly registered
 via entry points and can be discovered at runtime. They do NOT require external
 services (K8s, Dagster).
+
+This module uses BasePluginDiscoveryTests to provide standard discovery
+test cases, reducing test duplication across plugins.
+
+Task ID: T050
+Phase: 7 - US7 (Reduce Test Duplication)
+User Story: US7 - Reduce Test Duplication
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, ClassVar
+
 import pytest
+from floe_core.plugins.orchestrator import OrchestratorPlugin
+from testing.base_classes import BasePluginDiscoveryTests
+
+if TYPE_CHECKING:
+    from typing import Any
 
 
-class TestDagsterOrchestratorPluginDiscovery:
+class TestDagsterOrchestratorPluginDiscovery(BasePluginDiscoveryTests):
     """Unit tests for Dagster orchestrator plugin discovery.
 
-    These tests use importlib.metadata entry_points which is pure Python
-    and does not require any external services.
+    Inherits standard discovery tests from BasePluginDiscoveryTests:
+    - Entry point registration tests
+    - Plugin loading tests
+    - Metadata presence tests
+    - ABC compliance tests
+    - Lifecycle method presence tests
+
+    Dagster-specific tests are added below.
     """
 
-    @pytest.mark.requirement("004-FR-002")
-    def test_dagster_plugin_discovered_via_entry_points(self) -> None:
-        """Test DagsterOrchestratorPlugin is discoverable via entry points.
+    # Required class variables for BasePluginDiscoveryTests
+    entry_point_group: ClassVar[str] = "floe.orchestrators"
+    expected_name: ClassVar[str] = "dagster"
+    expected_module_prefix: ClassVar[str] = "floe_orchestrator_dagster"
+    expected_class_name: ClassVar[str] = "DagsterOrchestratorPlugin"
+    expected_plugin_abc: ClassVar[type[Any]] = OrchestratorPlugin
 
-        Verifies that the plugin can be discovered using Python's
-        importlib.metadata entry_points mechanism.
-        """
-        from importlib.metadata import entry_points
-
-        # Get all floe.orchestrators entry points
-        eps = entry_points(group="floe.orchestrators")
-
-        # Find dagster entry point
-        dagster_eps = [ep for ep in eps if ep.name == "dagster"]
-
-        assert len(dagster_eps) == 1, "Expected exactly one 'dagster' entry point"
-
-        # Load the plugin class
-        ep = dagster_eps[0]
-        plugin_class = ep.load()
-
-        # Verify it's the correct class
-        assert plugin_class.__name__ == "DagsterOrchestratorPlugin"
-
-        # Verify it can be instantiated
-        plugin = plugin_class()
-        assert plugin.name == "dagster"
-
-    @pytest.mark.requirement("004-FR-004")
-    def test_dagster_plugin_is_orchestrator_plugin(self) -> None:
-        """Test DagsterOrchestratorPlugin implements OrchestratorPlugin ABC.
-
-        Verifies that the plugin loaded via entry points is a valid
-        OrchestratorPlugin implementation with all required properties.
-        """
-        from importlib.metadata import entry_points
-
-        from floe_core.plugins.orchestrator import OrchestratorPlugin
-
-        # Load plugin class via entry point
-        eps = entry_points(group="floe.orchestrators")
-        dagster_ep = next(ep for ep in eps if ep.name == "dagster")
-        plugin_class = dagster_ep.load()
-
-        # Instantiate and verify ABC compliance
-        plugin = plugin_class()
-
-        assert isinstance(plugin, OrchestratorPlugin)
-        assert plugin.name == "dagster"
+    # =========================================================================
+    # Dagster-Specific Tests
+    # =========================================================================
 
     @pytest.mark.requirement("004-FR-003")
-    def test_dagster_plugin_metadata_complete(self) -> None:
-        """Test Dagster plugin has complete metadata.
-
-        Verifies that all required PluginMetadata fields are properly
-        populated with valid values.
-        """
+    def test_dagster_plugin_description_mentions_dagster(self) -> None:
+        """Test Dagster plugin description mentions Dagster."""
         from importlib.metadata import entry_points
 
-        # Load plugin via entry point
-        eps = entry_points(group="floe.orchestrators")
-        dagster_ep = next(ep for ep in eps if ep.name == "dagster")
-        plugin = dagster_ep.load()()
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        # Verify all metadata properties
-        assert plugin.name == "dagster"
-        assert len(plugin.version.split(".")) == 3  # Semver format
-        assert plugin.floe_api_version == "1.0"
+        assert len(matching) == 1
+        plugin = self.create_plugin_instance(matching[0].load())
+
         assert "dagster" in plugin.description.lower()
 
     @pytest.mark.requirement("004-FR-002")
-    def test_entry_point_module_path(self) -> None:
-        """Test entry point correctly references plugin module.
-
-        Verifies that the entry point value correctly references
-        the DagsterOrchestratorPlugin class in the expected module.
-        """
-        from importlib.metadata import entry_points
-
-        eps = entry_points(group="floe.orchestrators")
-        dagster_ep = next(ep for ep in eps if ep.name == "dagster")
-
-        # Verify entry point references correct module and class
-        assert "floe_orchestrator_dagster" in dagster_ep.value
-        assert "DagsterOrchestratorPlugin" in dagster_ep.value
-
-    @pytest.mark.requirement("004-FR-002")
-    def test_plugin_instantiation_without_dependencies(self) -> None:
+    def test_dagster_plugin_instantiation_without_dependencies(self) -> None:
         """Test plugin can be instantiated without external services.
 
         Verifies that the plugin can be created without needing
@@ -118,14 +76,13 @@ class TestDagsterOrchestratorPluginDiscovery:
         from importlib.metadata import entry_points
 
         # Load and instantiate plugin
-        eps = entry_points(group="floe.orchestrators")
-        dagster_ep = next(ep for ep in eps if ep.name == "dagster")
-        plugin_class = dagster_ep.load()
+        eps = entry_points(group=self.entry_point_group)
+        matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        # Should not raise any exceptions
-        plugin = plugin_class()
+        assert len(matching) == 1
+        plugin = self.create_plugin_instance(matching[0].load())
 
-        # Basic properties should be accessible
+        # Basic properties should be accessible without external deps
         assert plugin.name is not None
         assert plugin.version is not None
         assert plugin.floe_api_version is not None

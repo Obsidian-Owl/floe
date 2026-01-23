@@ -1,8 +1,8 @@
-"""Plugin type ABCs for the floe platform.
+"""Plugin type ABCs and registry components for the floe platform.
 
-This module provides abstract base classes (ABCs) for all pluggable component
-types in the floe platform. Each ABC defines the interface that concrete
-plugin implementations must satisfy.
+This module provides:
+1. Abstract base classes (ABCs) for all pluggable component types
+2. Registry components for plugin discovery, loading, and lifecycle management
 
 Plugin Categories (12 types):
     Compute: Database execution engines (DuckDB, Snowflake, BigQuery)
@@ -18,9 +18,16 @@ Plugin Categories (12 types):
     Identity: Authentication providers (OAuth2, OIDC)
     Quality: Data quality validators (Great Expectations, Soda, dbt-expectations)
 
+Registry Components (Epic 12B US4):
+    PluginDiscovery: Entry point scanning for installed plugins
+    PluginLoader: Lazy loading and caching of plugin instances
+    PluginLifecycle: Activation, shutdown, and health check management
+    DependencyResolver: Topological sorting of plugin dependencies
+
 Example:
     >>> from floe_core.plugins import ComputePlugin, CatalogPlugin
     >>> from floe_core.plugins import ComputeConfig, IngestionResult
+    >>> from floe_core.plugins import PluginDiscovery, PluginLoader
 
 See Also:
     - docs/architecture/plugin-system/interfaces.md: Full interface specification
@@ -51,6 +58,10 @@ from floe_core.plugins.dbt import (
     LintResult,
 )
 
+# Registry components (Epic 12B US4 - God Module Decomposition)
+from floe_core.plugins.dependencies import DependencyResolver
+from floe_core.plugins.discovery import PluginDiscovery
+
 # Identity plugin
 from floe_core.plugins.identity import (
     IdentityPlugin,
@@ -64,9 +75,15 @@ from floe_core.plugins.ingestion import (
     IngestionPlugin,
     IngestionResult,
 )
+from floe_core.plugins.lifecycle import (
+    DEFAULT_HEALTH_CHECK_TIMEOUT,
+    DEFAULT_LIFECYCLE_TIMEOUT,
+    PluginLifecycle,
+)
 
 # Lineage plugin
 from floe_core.plugins.lineage import LineageBackendPlugin
+from floe_core.plugins.loader import PluginLoader
 
 # Orchestrator plugin
 from floe_core.plugins.orchestrator import (
@@ -142,4 +159,11 @@ __all__ = [
     "StoragePlugin",
     # Telemetry
     "TelemetryBackendPlugin",
+    # Registry components (Epic 12B US4)
+    "DependencyResolver",
+    "PluginDiscovery",
+    "PluginLoader",
+    "PluginLifecycle",
+    "DEFAULT_LIFECYCLE_TIMEOUT",
+    "DEFAULT_HEALTH_CHECK_TIMEOUT",
 ]

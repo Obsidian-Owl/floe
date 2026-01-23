@@ -10,6 +10,16 @@ Classes:
     BaseCatalogPluginTests: Base class for CatalogPlugin ABC compliance testing
     BaseSecretsPluginTests: Base class for SecretsPlugin ABC compliance testing
     BaseIdentityPluginTests: Base class for IdentityPlugin ABC compliance testing
+    BasePluginMetadataTests: Base class for plugin metadata validation tests
+    BasePluginLifecycleTests: Base class for plugin lifecycle hook tests
+    BasePluginDiscoveryTests: Base class for plugin entry point discovery tests
+    GoldenTestCase: Base class for golden test suites
+    GoldenFixture: Represents a golden test fixture with metadata
+
+Functions:
+    capture_golden: Capture function output as a golden fixture
+    assert_golden_match: Assert output matches a golden fixture
+    golden_test: Decorator for creating golden tests
 
 Example:
     from testing.base_classes import IntegrationTestBase
@@ -51,20 +61,44 @@ from __future__ import annotations
 # Phase 4 exports - Base classes for integration testing
 from testing.base_classes.adapter_test_base import AdapterTestBase
 from testing.base_classes.base_catalog_plugin_tests import BaseCatalogPluginTests
+
+# Plugin metadata, lifecycle, and discovery validation base classes
+from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
 from testing.base_classes.base_identity_plugin_tests import BaseIdentityPluginTests
 from testing.base_classes.base_secrets_plugin_tests import (
     AuditLogCapture,
     BaseSecretsPluginTests,
 )
+
+# Golden test utilities for behavior-preserving refactoring
+from testing.base_classes.golden_test_utils import (
+    GoldenFixture,
+    GoldenTestCase,
+    assert_golden_match,
+    capture_golden,
+    golden_test,
+)
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.base_classes.plugin_discovery_tests import BasePluginDiscoveryTests
+from testing.base_classes.plugin_lifecycle_tests import BasePluginLifecycleTests
+from testing.base_classes.plugin_metadata_tests import BasePluginMetadataTests
 from testing.base_classes.plugin_test_base import PluginTestBase
 
 __all__ = [
     "AdapterTestBase",
     "AuditLogCapture",
     "BaseCatalogPluginTests",
+    "BaseHealthCheckTests",
     "BaseIdentityPluginTests",
+    "BasePluginDiscoveryTests",
+    "BasePluginLifecycleTests",
+    "BasePluginMetadataTests",
     "BaseSecretsPluginTests",
+    "GoldenFixture",
+    "GoldenTestCase",
     "IntegrationTestBase",
     "PluginTestBase",
+    "assert_golden_match",
+    "capture_golden",
+    "golden_test",
 ]

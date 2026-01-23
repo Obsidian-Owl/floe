@@ -1,0 +1,66 @@
+{
+  "name": "resource_diff_modified",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:23:27.040104+00:00",
+  "checksum": "a51d248063f7fbe2",
+  "output": {
+    "change_type": "modified",
+    "resource_kind": "Role",
+    "resource_name": "floe-secret-reader",
+    "resource_namespace": "floe",
+    "expected_value": {
+      "kind": "Role",
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "metadata": {
+        "name": "floe-secret-reader",
+        "namespace": "floe"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "secrets"
+          ],
+          "verbs": [
+            "get"
+          ],
+          "resourceNames": [
+            "db-creds"
+          ]
+        }
+      ]
+    },
+    "actual_value": {
+      "kind": "Role",
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "metadata": {
+        "name": "floe-secret-reader",
+        "namespace": "floe"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "secrets"
+          ],
+          "verbs": [
+            "get",
+            "list"
+          ],
+          "resourceNames": [
+            "db-creds",
+            "api-key"
+          ]
+        }
+      ]
+    },
+    "diff_details": [
+      "rules[0].verbs: list length mismatch (expected 1, got 2)",
+      "rules[0].resourceNames: list length mismatch (expected 1, got 2)"
+    ]
+  }
+}

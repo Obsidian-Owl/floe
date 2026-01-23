@@ -23,16 +23,16 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # PyIceberg 0.9.0+ required for native upsert support (FR-005)
-    "pyiceberg>=0.9.0",
-    # Pydantic v2 for configuration models (FR-045)
-    "pydantic>=2.0",
-    # Structured logging
-    "structlog>=24.0",
+    # PyIceberg 0.10.0+ for API stability; pin upper bound (12B-DEP)
+    "pyiceberg>=0.10.0,<0.11.0",
+    # Pydantic v2 for configuration models (FR-045); pin upper bound (12B-DEP-001)
+    "pydantic>=2.12.5,<3.0",
+    # Structured logging; pin upper bound (12B-DEP T049)
+    "structlog>=24.0,<26.0",
     # OpenTelemetry for observability (FR-041 to FR-044)
-    "opentelemetry-api>=1.20.0",
-    # PyArrow for data handling
-    "pyarrow>=14.0",
+    "opentelemetry-api>=1.39.0,<2.0",
+    # PyArrow for data handling; pin upper bound (12B-DEP T048)
+    "pyarrow>=14.0,<23.0",
     # floe-core for plugin interfaces (CatalogPlugin, StoragePlugin)
     "floe-core>=0.1.0",
 ]

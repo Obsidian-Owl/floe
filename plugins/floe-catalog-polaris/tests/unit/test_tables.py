@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core import AuthenticationError, ConflictError, NotFoundError
+from floe_core.plugin_errors import AuthenticationError, ConflictError, NotFoundError
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 from floe_catalog_polaris.plugin import PolarisCatalogPlugin
@@ -372,7 +372,7 @@ class TestTableNotConnected:
         sample_schema: dict[str, Any],
     ) -> None:
         """Test that create_table fails when not connected."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.create_table("bronze.customers", sample_schema)
@@ -383,7 +383,7 @@ class TestTableNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that list_tables fails when not connected."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.list_tables("bronze")
@@ -394,7 +394,7 @@ class TestTableNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that drop_table fails when not connected."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.drop_table("bronze.customers")
@@ -479,7 +479,7 @@ class TestTableErrorMapping:
         sample_schema: dict[str, Any],
     ) -> None:
         """Test that create_table maps PyIceberg errors correctly."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
         from pyiceberg.exceptions import ServiceUnavailableError
 
         mock_catalog.create_table.side_effect = ServiceUnavailableError("Catalog down")
@@ -494,7 +494,7 @@ class TestTableErrorMapping:
         mock_catalog: MagicMock,
     ) -> None:
         """Test that list_tables maps PyIceberg errors correctly."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
         from pyiceberg.exceptions import ServiceUnavailableError
 
         mock_catalog.list_tables.side_effect = ServiceUnavailableError("Catalog down")
@@ -509,7 +509,7 @@ class TestTableErrorMapping:
         mock_catalog: MagicMock,
     ) -> None:
         """Test that drop_table maps PyIceberg errors correctly."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
         from pyiceberg.exceptions import ServiceUnavailableError
 
         mock_catalog.drop_table.side_effect = ServiceUnavailableError("Catalog down")

@@ -57,7 +57,7 @@ def duckdb_plugin() -> Any:
 @pytest.fixture
 def memory_config() -> Any:
     """Create an in-memory DuckDB ComputeConfig for testing."""
-    from floe_core import ComputeConfig
+    from floe_core.compute_config import ComputeConfig
 
     return ComputeConfig(
         plugin="duckdb",
@@ -71,7 +71,7 @@ def memory_config() -> Any:
 @pytest.fixture
 def catalog_config() -> Any:
     """Create an Iceberg CatalogConfig for testing."""
-    from floe_core import CatalogConfig
+    from floe_core.compute_config import CatalogConfig
     from pydantic import SecretStr
 
     return CatalogConfig(

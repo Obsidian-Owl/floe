@@ -1,0 +1,24 @@
+{
+  "name": "resource_diff_added",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.157997+00:00",
+  "checksum": "6cdf25025dcff9f6",
+  "output": {
+    "change_type": "added",
+    "resource_kind": "ServiceAccount",
+    "resource_name": "floe-worker",
+    "resource_namespace": "floe",
+    "expected_value": {
+      "kind": "ServiceAccount",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "floe-worker",
+        "namespace": "floe"
+      }
+    },
+    "actual_value": null,
+    "diff_details": [
+      "Resource needs to be created"
+    ]
+  }
+}

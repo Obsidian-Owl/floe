@@ -24,8 +24,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from floe_core.schemas.telemetry import TelemetryConfig
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
-from floe_core.telemetry.config import TelemetryConfig
 
 
 class CompilationMetadata(BaseModel):
@@ -376,7 +376,7 @@ class ObservabilityConfig(BaseModel):
         lineage_namespace: Namespace for lineage events
 
     Examples:
-        >>> from floe_core.telemetry.config import TelemetryConfig, ResourceAttributes
+        >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes
         >>> config = ObservabilityConfig(
         ...     telemetry=TelemetryConfig(
         ...         enabled=True,
@@ -519,7 +519,7 @@ class CompiledArtifacts(BaseModel):
 
     Examples:
         >>> from datetime import datetime
-        >>> from floe_core.telemetry.config import TelemetryConfig, ResourceAttributes
+        >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes
         >>> artifacts = CompiledArtifacts(
         ...     version="0.2.0",
         ...     metadata=CompilationMetadata(

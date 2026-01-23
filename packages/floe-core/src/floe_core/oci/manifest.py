@@ -273,9 +273,206 @@ def create_empty_config() -> tuple[bytes, str]:
     return content, digest
 
 
+# =============================================================================
+# Manifest Parsing (for inspect/list operations)
+# =============================================================================
+
+
+def parse_manifest_response(
+    manifest_data: dict[str, Any],
+    *,
+    default_artifact_type: str = "application/octet-stream",
+) -> ArtifactManifest:
+    """Parse OCI manifest response data into ArtifactManifest.
+
+    Converts raw manifest data from registry API response into a typed
+    ArtifactManifest object. Handles both OCI v1.0 (config mediaType)
+    and OCI v1.1 (artifactType) formats.
+
+    Args:
+        manifest_data: Raw manifest dictionary from registry API.
+        default_artifact_type: Fallback artifact type if not specified
+            in manifest. Defaults to "application/octet-stream".
+
+    Returns:
+        ArtifactManifest with parsed metadata.
+
+    Example:
+        >>> manifest_data = {"layers": [...], "annotations": {...}}
+        >>> manifest = parse_manifest_response(manifest_data)
+        >>> print(f"Digest: {manifest.digest}")
+    """
+    from floe_core.schemas.oci import SignatureStatus
+
+    # Calculate manifest digest (sha256 of canonical JSON)
+    manifest_json = json.dumps(manifest_data, separators=(",", ":"), sort_keys=True)
+    manifest_digest = calculate_digest(manifest_json.encode("utf-8"))
+
+    # Parse layers
+    layers_data = manifest_data.get("layers", [])
+    layers, total_size = parse_layers(layers_data)
+
+    # Extract artifact type (OCI v1.1) or fall back to config mediaType
+    artifact_type = manifest_data.get("artifactType", "")
+    if not artifact_type:
+        config_data = manifest_data.get("config", {})
+        artifact_type = config_data.get("mediaType", default_artifact_type)
+
+    # Extract annotations
+    annotations = manifest_data.get("annotations", {})
+
+    # Parse created timestamp from annotations
+    created_at = parse_created_timestamp(annotations)
+
+    # Build ArtifactManifest
+    manifest = ArtifactManifest(
+        digest=manifest_digest,
+        artifact_type=artifact_type,
+        size=total_size,
+        created_at=created_at,
+        annotations=annotations,
+        layers=layers,
+        signature_status=SignatureStatus.UNSIGNED,  # Placeholder for Epic 8B
+    )
+
+    logger.debug(
+        "manifest_parsed",
+        digest=manifest_digest,
+        size=total_size,
+        layer_count=len(layers),
+        artifact_type=artifact_type,
+    )
+
+    return manifest
+
+
+def parse_layers(
+    layers_data: list[dict[str, Any]],
+) -> tuple[list[ArtifactLayer], int]:
+    """Parse layer data from manifest into ArtifactLayer objects.
+
+    Args:
+        layers_data: List of layer dictionaries from manifest.
+
+    Returns:
+        Tuple of (layers list, total size in bytes).
+
+    Example:
+        >>> layers_data = [{"digest": "sha256:...", "size": 1234}]
+        >>> layers, total_size = parse_layers(layers_data)
+        >>> len(layers)
+        1
+        >>> total_size
+        1234
+    """
+    layers: list[ArtifactLayer] = []
+    total_size = 0
+
+    for layer_data in layers_data:
+        layer = ArtifactLayer(
+            digest=layer_data.get("digest", ""),
+            media_type=layer_data.get("mediaType", ""),
+            size=layer_data.get("size", 0),
+            annotations=layer_data.get("annotations", {}),
+        )
+        layers.append(layer)
+        total_size += layer.size
+
+    return layers, total_size
+
+
+def calculate_layers_total_size(
+    layers_data: list[dict[str, Any]],
+) -> int:
+    """Calculate total size from layers data without validation.
+
+    This is a lightweight function that sums layer sizes without
+    creating ArtifactLayer objects. Use when you only need the
+    total size and don't need validated layer objects.
+
+    Args:
+        layers_data: List of layer dictionaries from manifest.
+
+    Returns:
+        Total size in bytes.
+
+    Example:
+        >>> layers_data = [{"size": 1234}, {"size": 5678}]
+        >>> calculate_layers_total_size(layers_data)
+        6912
+    """
+    return sum(layer.get("size", 0) for layer in layers_data)
+
+
+def parse_created_timestamp(
+    annotations: dict[str, str],
+) -> datetime:
+    """Parse creation timestamp from manifest annotations.
+
+    Looks for the standard OCI annotation "org.opencontainers.image.created"
+    and parses it as an ISO 8601 timestamp. Falls back to current time
+    if not present or invalid.
+
+    Args:
+        annotations: Manifest annotations dictionary.
+
+    Returns:
+        datetime object for the created timestamp.
+
+    Example:
+        >>> annotations = {"org.opencontainers.image.created": "2024-01-15T10:30:00Z"}
+        >>> created = parse_created_timestamp(annotations)
+        >>> created.year
+        2024
+    """
+    created_str = annotations.get(
+        "org.opencontainers.image.created",
+        datetime.now(timezone.utc).isoformat(),
+    )
+    try:
+        # Handle ISO format with or without Z suffix
+        if created_str.endswith("Z"):
+            created_str = created_str[:-1] + "+00:00"
+        return datetime.fromisoformat(created_str)
+    except ValueError:
+        logger.warning(
+            "invalid_created_timestamp",
+            value=created_str,
+        )
+        return datetime.now(timezone.utc)
+
+
+def calculate_manifest_digest(manifest_data: dict[str, Any]) -> str:
+    """Calculate digest for manifest data.
+
+    Uses canonical JSON encoding (sorted keys, minimal whitespace)
+    to ensure consistent digest calculation.
+
+    Args:
+        manifest_data: Manifest dictionary.
+
+    Returns:
+        Digest string in OCI format: "sha256:<hex>"
+
+    Example:
+        >>> digest = calculate_manifest_digest({"schemaVersion": 2})
+        >>> digest.startswith("sha256:")
+        True
+    """
+    manifest_json = json.dumps(manifest_data, separators=(",", ":"), sort_keys=True)
+    return calculate_digest(manifest_json.encode("utf-8"))
+
+
 __all__ = [
+    # Build operations (push)
     "build_manifest",
     "calculate_digest",
     "create_empty_config",
     "serialize_layer",
+    # Parse operations (pull/inspect)
+    "calculate_layers_total_size",
+    "calculate_manifest_digest",
+    "parse_created_timestamp",
+    "parse_layers",
+    "parse_manifest_response",
 ]

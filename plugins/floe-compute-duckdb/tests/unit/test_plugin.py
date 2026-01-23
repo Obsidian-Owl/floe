@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from floe_core import CatalogConfig, ComputeConfig
+    from floe_core.compute_config import CatalogConfig, ComputeConfig
 
     from floe_compute_duckdb import DuckDBComputePlugin
 
@@ -91,7 +91,7 @@ class TestGenerateDBTProfile:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation includes iceberg extension for Iceberg support."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -113,7 +113,7 @@ class TestGenerateDBTProfile:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation includes extensions when specified."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -134,7 +134,7 @@ class TestGenerateDBTProfile:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation includes DuckDB settings."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -153,7 +153,7 @@ class TestGenerateDBTProfile:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation with file-based database path."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -188,7 +188,7 @@ class TestGenerateDBTProfile:
         Validates FR-021: Query timeout enforcement via dbt profile.
         The dbt-duckdb adapter handles actual timeout enforcement.
         """
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -211,7 +211,7 @@ class TestGenerateDBTProfile:
         the default value (3600 seconds = 1 hour) is used in the
         generated dbt profile.
         """
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -237,7 +237,7 @@ class TestGenerateDBTProfileWithAttach:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation includes attach blocks when configured."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -267,7 +267,7 @@ class TestGenerateDBTProfileWithAttach:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test profile generation with multiple attach blocks."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -292,7 +292,7 @@ class TestGenerateDBTProfileWithAttach:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test attach block options are rendered properly."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -329,7 +329,7 @@ class TestGenerateDBTProfileWithAttach:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test attach with only required path field."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         config = ComputeConfig(
             plugin="duckdb",
@@ -493,7 +493,7 @@ class TestCatalogAttachmentSecurity:
         Catalog names are used as SQL identifiers (in AS clause),
         so they must be validated to prevent SQL injection.
         """
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         # SQL injection attempt via catalog_name
         config = CatalogConfig(
@@ -511,7 +511,7 @@ class TestCatalogAttachmentSecurity:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test that catalog names with special characters raise ValueError."""
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         invalid_names = [
             "catalog-with-dash",
@@ -537,7 +537,7 @@ class TestCatalogAttachmentSecurity:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test that valid catalog names are accepted."""
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         valid_names = [
             "floe",
@@ -565,7 +565,7 @@ class TestCatalogAttachmentSecurity:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test that single quotes in URI are properly escaped."""
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         config = CatalogConfig(
             catalog_type="rest",
@@ -586,7 +586,7 @@ class TestCatalogAttachmentSecurity:
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
         """Test that single quotes in warehouse path are properly escaped."""
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         config = CatalogConfig(
             catalog_type="rest",

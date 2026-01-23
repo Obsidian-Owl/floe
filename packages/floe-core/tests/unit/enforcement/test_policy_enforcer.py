@@ -344,6 +344,46 @@ class TestPolicyEnforcerEnforce:
         # Result should pass in dry-run mode
         assert result.passed is True
 
+    @pytest.mark.requirement("FR-008")
+    def test_enforce_with_max_violations_parameter(self) -> None:
+        """Test enforce() respects max_violations parameter for early exit.
+
+        T016: Added max_violations parameter for performance optimization.
+        """
+        from floe_core.enforcement.policy_enforcer import PolicyEnforcer
+        from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
+        from floe_core.schemas.manifest import GovernanceConfig
+
+        # Configure to generate multiple violations
+        naming = NamingConfig(enforcement="strict", pattern="medallion")
+        quality = QualityGatesConfig(
+            minimum_test_coverage=100,  # Will fail for any model without tests
+            require_descriptions=True,
+        )
+        config = GovernanceConfig(naming=naming, quality_gates=quality)
+        enforcer = PolicyEnforcer(governance_config=config)
+
+        # Create multiple models that all violate policies
+        manifest = create_dbt_manifest_with_models(
+            [
+                {"name": "bad_model_1", "columns": [{"name": "id"}]},
+                {"name": "bad_model_2", "columns": [{"name": "id"}]},
+                {"name": "bad_model_3", "columns": [{"name": "id"}]},
+            ]
+        )
+
+        # Without limit - should get all violations
+        result_all = enforcer.enforce(manifest)
+        assert len(result_all.violations) > 3  # Multiple violations expected
+
+        # With max_violations=1 - should get exactly 1
+        result_one = enforcer.enforce(manifest, max_violations=1)
+        assert len(result_one.violations) == 1
+
+        # With max_violations=3 - should get exactly 3
+        result_three = enforcer.enforce(manifest, max_violations=3)
+        assert len(result_three.violations) == 3
+
 
 class TestPolicyEnforcerMultipleValidators:
     """Tests for PolicyEnforcer with multiple validators (T023)."""

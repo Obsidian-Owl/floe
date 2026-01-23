@@ -27,7 +27,8 @@ from floe_catalog_polaris import PolarisCatalogPlugin
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 
 # Import from floe-core (the contract provider)
-from floe_core import CatalogPlugin, HealthStatus, PluginMetadata
+from floe_core import HealthStatus, PluginMetadata
+from floe_core.plugins import CatalogPlugin
 
 if TYPE_CHECKING:
     pass

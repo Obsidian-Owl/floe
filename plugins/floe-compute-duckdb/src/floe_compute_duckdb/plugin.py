@@ -21,17 +21,19 @@ import re
 import time
 from typing import TYPE_CHECKING, Any
 
-from floe_core import (
+from floe_core.compute_config import (
     CatalogConfig,
     ComputeConfig,
-    ComputePlugin,
     ConnectionResult,
     ConnectionStatus,
     ResourceSpec,
+)
+from floe_core.observability import (
     record_validation_duration,
     record_validation_error,
     start_validation_span,
 )
+from floe_core.plugins import ComputePlugin
 
 if TYPE_CHECKING:
     from pydantic import BaseModel

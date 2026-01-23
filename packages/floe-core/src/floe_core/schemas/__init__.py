@@ -183,6 +183,16 @@ from floe_core.schemas.security import (
     SecurityConfig,
 )
 
+# Telemetry configuration schemas (12B-ARCH-001: Circular dependency resolution)
+from floe_core.schemas.telemetry import (
+    BatchSpanProcessorConfig,
+    LoggingConfig,
+    ResourceAttributes,
+    SamplingConfig,
+    TelemetryAuth,
+    TelemetryConfig,
+)
+
 # Validation models (T031, T032, T036, T015-T017 Epic 3A)
 from floe_core.schemas.validation import (
     AUDIT_LOGGING_STRENGTH,
@@ -199,6 +209,13 @@ __all__: list[str] = [
     "AuditEvent",
     "AuditOperation",
     "AuditResult",
+    # Telemetry configuration (12B-ARCH-001)
+    "BatchSpanProcessorConfig",
+    "LoggingConfig",
+    "ResourceAttributes",
+    "SamplingConfig",
+    "TelemetryAuth",
+    "TelemetryConfig",
     # Governance (Epic 3A)
     "LayerThresholds",
     "NamingConfig",

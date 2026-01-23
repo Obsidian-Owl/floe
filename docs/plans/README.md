@@ -7,7 +7,7 @@
 
 ## Overview
 
-This directory contains the Epic-level delivery plan for the floe data platform. The plan covers **375+ requirements** across **21 Epics** organized into **9 categories**.
+This directory contains the Epic-level delivery plan for the floe data platform. The plan covers **406+ requirements** across **24 Epics** organized into **11 categories**.
 
 ### Quick Navigation
 
@@ -22,6 +22,8 @@ This directory contains the Epic-level delivery plan for the floe data platform.
 | [07-security](epics/07-security/) | 7A-7C | Identity, RBAC, network security |
 | [08-artifact-distribution](epics/08-artifact-distribution/) | 8A-8C | OCI registry, signing, promotion |
 | [09-deployment](epics/09-deployment/) | 9A-9C | K8s deployment, Helm, testing |
+| [10-contributor](epics/10-contributor/) | 10A, 10B | Agent memory, AI tooling |
+| [12-tech-debt](epics/12-tech-debt/) | 12A | Periodic tech debt reduction |
 
 ---
 
@@ -40,7 +42,7 @@ This directory contains the Epic-level delivery plan for the floe data platform.
 ### Linear Integration
 
 - **Initiative**: floe Platform Delivery
-- **Projects**: 21 (one per Epic)
+- **Projects**: 24 (one per Epic)
 - **Issues**: Created by `/speckit.taskstolinear`
 
 ### Workflow

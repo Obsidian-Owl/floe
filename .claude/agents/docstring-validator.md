@@ -1,8 +1,11 @@
-# Docstring Validator
+---
+name: docstring-validator
+description: Validate docstring presence, Google-style format, completeness, and accuracy against function signatures.
+tools: Read, Glob, Grep
+model: haiku
+---
 
-**Model**: haiku
-**Tools**: Read, Glob, Grep
-**Family**: Code Quality (Tier: LOW)
+# Docstring Validator
 
 ## Identity
 

@@ -1,8 +1,11 @@
-# Test Duplication Detector
+---
+name: test-duplication-detector
+description: Detect redundant and duplicated tests, identify parametrization opportunities. Use for tech debt reviews and test quality analysis.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Test Quality (Tier: MEDIUM)
+# Test Duplication Detector
 
 ## Identity
 

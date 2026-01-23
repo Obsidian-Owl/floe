@@ -1,0 +1,53 @@
+{
+  "name": "tag_classification",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:36:07.298360+00:00",
+  "checksum": "6b2efa168a86850e",
+  "output": {
+    "v1.0.0": {
+      "is_immutable": true
+    },
+    "v0.1.0": {
+      "is_immutable": true
+    },
+    "1.0.0": {
+      "is_immutable": true
+    },
+    "v1.0.0-alpha": {
+      "is_immutable": true
+    },
+    "v1.0.0-beta.1": {
+      "is_immutable": true
+    },
+    "v1.0.0+build123": {
+      "is_immutable": true
+    },
+    "latest": {
+      "is_immutable": false
+    },
+    "latest-dev": {
+      "is_immutable": false
+    },
+    "latest-staging": {
+      "is_immutable": false
+    },
+    "dev": {
+      "is_immutable": false
+    },
+    "dev-feature": {
+      "is_immutable": false
+    },
+    "snapshot": {
+      "is_immutable": false
+    },
+    "snapshot-20260115": {
+      "is_immutable": false
+    },
+    "main": {
+      "is_immutable": true
+    },
+    "feature-branch": {
+      "is_immutable": true
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "resource_diff_removed",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.158777+00:00",
+  "checksum": "4fadacbda0680ee1",
+  "output": {
+    "change_type": "removed",
+    "resource_kind": "ServiceAccount",
+    "resource_name": "floe-worker",
+    "resource_namespace": "floe",
+    "expected_value": null,
+    "actual_value": {
+      "kind": "ServiceAccount",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "floe-worker",
+        "namespace": "floe"
+      }
+    },
+    "diff_details": [
+      "Resource should be removed"
+    ]
+  }
+}

@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from floe_core import CatalogPlugin
+    from floe_core.plugins import CatalogPlugin
 
 
 class BaseCatalogPluginTests(ABC):

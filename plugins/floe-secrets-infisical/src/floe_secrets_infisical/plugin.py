@@ -392,83 +392,134 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             )
 
         try:
-            # Check if secret exists
-            existing = self.get_secret(key)
-
-            if existing is not None:
-                # Update existing secret
-                self._update_secret(key, value, metadata)
-                if span:
-                    span.set_attribute("secret.operation", "update")
-            else:
-                # Create new secret
-                self._create_secret(key, value, metadata)
-                if span:
-                    span.set_attribute("secret.operation", "create")
-
-            operation_type = "update" if existing else "create"
-            logger.info(
-                "Secret stored",
-                extra={
-                    "key": key,
-                    "path": self._config.secret_path,
-                    "operation": operation_type,
-                },
-            )
-            self._audit_logger.log_success(
-                requester_id="system",
-                secret_path=key,
-                operation=AuditOperation.SET,
-                plugin_type=self.name,
-                namespace=self._config.environment,
-                metadata={"action": operation_type, "path": self._config.secret_path},
-            )
+            operation_type = self._create_or_update_secret(key, value, metadata, span)
+            self._log_set_secret_success(key, operation_type)
 
         except (InfisicalAccessDeniedError, InfisicalBackendUnavailableError):
-            if span:
-                span.set_status(_get_span_status_error(), "Failed to set secret")
-            self._audit_logger.log_error(
-                requester_id="system",
-                secret_path=key,
-                operation=AuditOperation.SET,
-                error="Access denied or backend unavailable",
-                plugin_type=self.name,
-                namespace=self._config.environment,
-            )
+            self._log_set_secret_known_error(key, span)
             raise
         except Exception as e:
-            if span:
-                span.set_status(_get_span_status_error(), str(e))
-            error_str = str(e).lower()
-            if "forbidden" in error_str or "403" in error_str:
-                self._audit_logger.log_denied(
-                    requester_id="system",
-                    secret_path=key,
-                    operation=AuditOperation.SET,
-                    reason=str(e),
-                    plugin_type=self.name,
-                    namespace=self._config.environment,
-                )
-                raise InfisicalAccessDeniedError(
-                    secret_key=key,
-                    project_id=self._config.project_id or "",
-                    reason=str(e),
-                ) from e
-            self._audit_logger.log_error(
-                requester_id="system",
-                secret_path=key,
-                operation=AuditOperation.SET,
-                error=str(e),
-                plugin_type=self.name,
-                namespace=self._config.environment,
-            )
-            raise InfisicalBackendUnavailableError(
-                site_url=self._config.site_url,
-                reason=str(e),
-            ) from e
+            self._handle_set_secret_error(e, key, span)
         finally:
             if span:
                 span.end()
+
+    def _create_or_update_secret(
+        self,
+        key: str,
+        value: str,
+        metadata: dict[str, Any] | None,
+        span: Any,
+    ) -> str:
+        """Create or update a secret based on existence.
+
+        Args:
+            key: Secret key name.
+            value: Secret value.
+            metadata: Optional metadata.
+            span: OpenTelemetry span (may be None).
+
+        Returns:
+            Operation type ("create" or "update").
+        """
+        existing = self.get_secret(key)
+
+        if existing is not None:
+            self._update_secret(key, value, metadata)
+            if span:
+                span.set_attribute("secret.operation", "update")
+            return "update"
+
+        self._create_secret(key, value, metadata)
+        if span:
+            span.set_attribute("secret.operation", "create")
+        return "create"
+
+    def _log_set_secret_success(self, key: str, operation_type: str) -> None:
+        """Log successful set_secret operation.
+
+        Args:
+            key: Secret key.
+            operation_type: Operation performed ("create" or "update").
+        """
+        logger.info(
+            "Secret stored",
+            extra={
+                "key": key,
+                "path": self._config.secret_path,
+                "operation": operation_type,
+            },
+        )
+        self._audit_logger.log_success(
+            requester_id="system",
+            secret_path=key,
+            operation=AuditOperation.SET,
+            plugin_type=self.name,
+            namespace=self._config.environment,
+            metadata={"action": operation_type, "path": self._config.secret_path},
+        )
+
+    def _log_set_secret_known_error(self, key: str, span: Any) -> None:
+        """Log known error from set_secret (access denied or unavailable).
+
+        Args:
+            key: Secret key.
+            span: OpenTelemetry span (may be None).
+        """
+        if span:
+            span.set_status(_get_span_status_error(), "Failed to set secret")
+        self._audit_logger.log_error(
+            requester_id="system",
+            secret_path=key,
+            operation=AuditOperation.SET,
+            error="Access denied or backend unavailable",
+            plugin_type=self.name,
+            namespace=self._config.environment,
+        )
+
+    def _handle_set_secret_error(self, e: Exception, key: str, span: Any) -> None:
+        """Handle unknown errors from set_secret.
+
+        Args:
+            e: The exception that occurred.
+            key: Secret key.
+            span: OpenTelemetry span (may be None).
+
+        Raises:
+            InfisicalAccessDeniedError: If error indicates access denied.
+            InfisicalBackendUnavailableError: For all other errors.
+        """
+        if span:
+            span.set_status(_get_span_status_error(), str(e))
+
+        error_type = _classify_error(e)
+        if error_type == _ErrorType.ACCESS_DENIED:
+            self._audit_logger.log_denied(
+                requester_id="system",
+                secret_path=key,
+                operation=AuditOperation.SET,
+                reason=str(e),
+                plugin_type=self.name,
+                namespace=self._config.environment,
+            )
+            raise InfisicalAccessDeniedError(
+                secret_key=key,
+                project_id=self._config.project_id or "",
+                reason=str(e),
+            ) from e
+
+        self._audit_logger.log_error(
+            requester_id="system",
+            secret_path=key,
+            operation=AuditOperation.SET,
+            error=str(e),
+            plugin_type=self.name,
+            namespace=self._config.environment,
+        )
+        raise InfisicalBackendUnavailableError(
+            site_url=self._config.site_url,
+            reason=str(e),
+        ) from e
 
     def _create_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Create a new secret in Infisical.
@@ -645,70 +696,113 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             )
 
         try:
-            secrets = self._list_secrets_internal()
-
-            # Filter by prefix if provided
-            if prefix:
-                secrets = [s for s in secrets if s.startswith(prefix)]
-
-            if span:
-                span.set_attribute("secret.count", len(secrets))
-
-            self._audit_logger.log_success(
-                requester_id="system",
-                secret_path=prefix or "*",
-                operation=AuditOperation.LIST,
-                plugin_type=self.name,
-                namespace=self._config.environment,
-                metadata={"count": len(secrets), "path": self._config.secret_path},
-            )
-
-            return sorted(secrets)
+            secrets = self._list_secrets_with_filter(prefix)
+            self._log_list_secrets_success(prefix, len(secrets), span)
+            return secrets
 
         except (InfisicalAccessDeniedError, InfisicalBackendUnavailableError):
-            if span:
-                span.set_status(_get_span_status_error(), "Failed to list secrets")
-            self._audit_logger.log_error(
-                requester_id="system",
-                secret_path=prefix or "*",
-                operation=AuditOperation.LIST,
-                error="Access denied or backend unavailable",
-                plugin_type=self.name,
-                namespace=self._config.environment,
-            )
+            self._log_list_secrets_known_error(prefix, span)
             raise
         except Exception as e:
-            if span:
-                span.set_status(_get_span_status_error(), str(e))
-            error_str = str(e).lower()
-            if "forbidden" in error_str or "403" in error_str:
-                self._audit_logger.log_denied(
-                    requester_id="system",
-                    secret_path=prefix or "*",
-                    operation=AuditOperation.LIST,
-                    reason=str(e),
-                    plugin_type=self.name,
-                    namespace=self._config.environment,
-                )
-                raise InfisicalAccessDeniedError(
-                    project_id=self._config.project_id or "",
-                    reason=str(e),
-                ) from e
-            self._audit_logger.log_error(
-                requester_id="system",
-                secret_path=prefix or "*",
-                operation=AuditOperation.LIST,
-                error=str(e),
-                plugin_type=self.name,
-                namespace=self._config.environment,
-            )
-            raise InfisicalBackendUnavailableError(
-                site_url=self._config.site_url,
-                reason=str(e),
-            ) from e
+            self._handle_list_secrets_error(e, prefix, span)
         finally:
             if span:
                 span.end()
+
+    def _list_secrets_with_filter(self, prefix: str) -> list[str]:
+        """List secrets and filter by prefix.
+
+        Args:
+            prefix: Optional prefix to filter secrets.
+
+        Returns:
+            Sorted list of secret keys matching the prefix.
+        """
+        secrets = self._list_secrets_internal()
+        if prefix:
+            secrets = [s for s in secrets if s.startswith(prefix)]
+        return sorted(secrets)
+
+    def _log_list_secrets_success(self, prefix: str, count: int, span: Any) -> None:
+        """Log successful list_secrets operation.
+
+        Args:
+            prefix: Filter prefix used.
+            count: Number of secrets found.
+            span: OpenTelemetry span (may be None).
+        """
+        if span:
+            span.set_attribute("secret.count", count)
+
+        self._audit_logger.log_success(
+            requester_id="system",
+            secret_path=prefix or "*",
+            operation=AuditOperation.LIST,
+            plugin_type=self.name,
+            namespace=self._config.environment,
+            metadata={"count": count, "path": self._config.secret_path},
+        )
+
+    def _log_list_secrets_known_error(self, prefix: str, span: Any) -> None:
+        """Log known error from list_secrets (access denied or unavailable).
+
+        Args:
+            prefix: Filter prefix used.
+            span: OpenTelemetry span (may be None).
+        """
+        if span:
+            span.set_status(_get_span_status_error(), "Failed to list secrets")
+        self._audit_logger.log_error(
+            requester_id="system",
+            secret_path=prefix or "*",
+            operation=AuditOperation.LIST,
+            error="Access denied or backend unavailable",
+            plugin_type=self.name,
+            namespace=self._config.environment,
+        )
+
+    def _handle_list_secrets_error(self, e: Exception, prefix: str, span: Any) -> None:
+        """Handle unknown errors from list_secrets.
+
+        Args:
+            e: The exception that occurred.
+            prefix: Filter prefix used.
+            span: OpenTelemetry span (may be None).
+
+        Raises:
+            InfisicalAccessDeniedError: If error indicates access denied.
+            InfisicalBackendUnavailableError: For all other errors.
+        """
+        if span:
+            span.set_status(_get_span_status_error(), str(e))
+
+        error_type = _classify_error(e)
+        if error_type == _ErrorType.ACCESS_DENIED:
+            self._audit_logger.log_denied(
+                requester_id="system",
+                secret_path=prefix or "*",
+                operation=AuditOperation.LIST,
+                reason=str(e),
+                plugin_type=self.name,
+                namespace=self._config.environment,
+            )
+            raise InfisicalAccessDeniedError(
+                project_id=self._config.project_id or "",
+                reason=str(e),
+            ) from e
+
+        self._audit_logger.log_error(
+            requester_id="system",
+            secret_path=prefix or "*",
+            operation=AuditOperation.LIST,
+            error=str(e),
+            plugin_type=self.name,
+            namespace=self._config.environment,
+        )
+        raise InfisicalBackendUnavailableError(
+            site_url=self._config.site_url,
+            reason=str(e),
+        ) from e
 
     def _list_secrets_internal(self) -> list[str]:
         """Internal method to list secrets from Infisical.

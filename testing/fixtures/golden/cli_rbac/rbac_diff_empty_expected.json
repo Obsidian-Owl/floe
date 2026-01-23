@@ -1,0 +1,68 @@
+{
+  "name": "rbac_diff_empty_expected",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.160547+00:00",
+  "checksum": "8e6c84eec8ff862f",
+  "output": {
+    "generated_at": "2026-01-22 02:22:43.160515+00:00",
+    "expected_source": "test/empty",
+    "actual_source": "cluster:floe",
+    "diffs": [
+      {
+        "change_type": "removed",
+        "resource_kind": "Role",
+        "resource_name": "floe-secret-reader",
+        "resource_namespace": "floe",
+        "expected_value": null,
+        "actual_value": {
+          "kind": "Role",
+          "apiVersion": "rbac.authorization.k8s.io/v1",
+          "metadata": {
+            "name": "floe-secret-reader",
+            "namespace": "floe"
+          },
+          "rules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "secrets"
+              ],
+              "verbs": [
+                "get"
+              ],
+              "resourceNames": [
+                "db-creds"
+              ]
+            }
+          ]
+        },
+        "diff_details": [
+          "Resource should be removed"
+        ]
+      },
+      {
+        "change_type": "removed",
+        "resource_kind": "ServiceAccount",
+        "resource_name": "floe-worker",
+        "resource_namespace": "floe",
+        "expected_value": null,
+        "actual_value": {
+          "kind": "ServiceAccount",
+          "apiVersion": "v1",
+          "metadata": {
+            "name": "floe-worker",
+            "namespace": "floe"
+          }
+        },
+        "diff_details": [
+          "Resource should be removed"
+        ]
+      }
+    ],
+    "added_count": 0,
+    "removed_count": 2,
+    "modified_count": 0
+  }
+}

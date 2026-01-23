@@ -73,7 +73,7 @@ class TestPluginRegistryDiscovery:
         """Test discover_all() scans all 11 plugin type groups."""
         registry = PluginRegistry()
 
-        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
+        with patch("floe_core.plugins.discovery.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
             registry.discover_all()
 
@@ -94,7 +94,7 @@ class TestPluginRegistryDiscovery:
         """Test discover_all() only runs once (idempotent)."""
         registry = PluginRegistry()
 
-        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
+        with patch("floe_core.plugins.discovery.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
 
             # First call should scan
@@ -123,7 +123,7 @@ class TestPluginRegistryDiscovery:
                 return [ep1, ep2]
             return []
 
-        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
+        with patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             # Verify entry points were stored
@@ -153,8 +153,8 @@ class TestPluginRegistryDiscovery:
             return []
 
         with (
-            patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps),
-            patch("floe_core.plugin_registry.logger") as mock_logger,
+            patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps),
+            patch("floe_core.plugins.discovery.logger") as mock_logger,
         ):
             registry.discover_all()
 
@@ -190,7 +190,7 @@ class TestPluginRegistryDiscovery:
             }
             return mapping.get(group, [])
 
-        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
+        with patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             assert (PluginType.COMPUTE, "duckdb") in registry._discovered
@@ -226,7 +226,7 @@ class TestGetRegistrySingleton:
         reset_registry: None,
     ) -> None:
         """Test get_registry() automatically calls discover_all()."""
-        with patch("floe_core.plugin_registry.entry_points") as mock_entry_points:
+        with patch("floe_core.plugins.discovery.entry_points") as mock_entry_points:
             mock_entry_points.return_value = []
 
             registry = get_registry()
@@ -275,7 +275,7 @@ class TestPluginRegistryErrorHandling:
             return []
 
         with patch(
-            "floe_core.plugin_registry.entry_points",
+            "floe_core.plugins.discovery.entry_points",
             side_effect=mock_eps_with_error,
         ):
             # Should not raise - graceful degradation
@@ -312,7 +312,7 @@ class TestPluginRegistryErrorHandling:
                 return [bad_ep, good_ep]
             return []
 
-        with patch("floe_core.plugin_registry.entry_points", side_effect=mock_eps):
+        with patch("floe_core.plugins.discovery.entry_points", side_effect=mock_eps):
             registry.discover_all()
 
             # Good entry point should still be discovered despite bad one
@@ -336,10 +336,10 @@ class TestPluginRegistryErrorHandling:
 
         with (
             patch(
-                "floe_core.plugin_registry.entry_points",
+                "floe_core.plugins.discovery.entry_points",
                 side_effect=mock_eps_error,
             ),
-            patch("floe_core.plugin_registry.logger") as mock_logger,
+            patch("floe_core.plugins.discovery.logger") as mock_logger,
         ):
             registry.discover_all()
 
@@ -357,7 +357,7 @@ class TestPluginRegistryErrorHandling:
         """Test discovery succeeds when no plugins are found."""
         registry = PluginRegistry()
 
-        with patch("floe_core.plugin_registry.entry_points", return_value=[]):
+        with patch("floe_core.plugins.discovery.entry_points", return_value=[]):
             registry.discover_all()
 
             assert registry._discovered_all is True
@@ -622,6 +622,89 @@ class TestPluginRegistryList:
         result = registry.list(PluginType.COMPUTE)
 
         assert result == []
+
+    @pytest.mark.requirement("FR-007")
+    def test_list_with_limit_parameter(
+        self,
+        reset_registry: None,
+        mock_entry_point: Callable[[str, str, str], MagicMock],
+    ) -> None:
+        """Test list() with limit parameter returns at most limit plugins.
+
+        T015: Added limit parameter to plugin_registry.list() for performance.
+        """
+        registry = PluginRegistry()
+
+        # Create three compute plugins
+        class Plugin1(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin1"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        class Plugin2(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin2"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        class Plugin3(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "plugin3"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+        # Setup entry points (order: name, group, value)
+        ep1 = mock_entry_point("plugin1", "floe.computes", "test:Plugin1")
+        ep1.load.return_value = Plugin1
+
+        ep2 = mock_entry_point("plugin2", "floe.computes", "test:Plugin2")
+        ep2.load.return_value = Plugin2
+
+        ep3 = mock_entry_point("plugin3", "floe.computes", "test:Plugin3")
+        ep3.load.return_value = Plugin3
+
+        # Directly populate _discovered to avoid discovery complexity
+        registry._discovered[(PluginType.COMPUTE, "plugin1")] = ep1
+        registry._discovered[(PluginType.COMPUTE, "plugin2")] = ep2
+        registry._discovered[(PluginType.COMPUTE, "plugin3")] = ep3
+
+        # No limit - should return all 3
+        result_all = registry.list(PluginType.COMPUTE)
+        assert len(result_all) == 3
+
+        # Limit 1 - should return only 1
+        result_one = registry.list(PluginType.COMPUTE, limit=1)
+        assert len(result_one) == 1
+
+        # Limit 2 - should return 2
+        result_two = registry.list(PluginType.COMPUTE, limit=2)
+        assert len(result_two) == 2
+
+        # Limit higher than available - should return all
+        result_high = registry.list(PluginType.COMPUTE, limit=100)
+        assert len(result_high) == 3
 
     @pytest.mark.requirement("FR-002")
     def test_list_all_returns_all_plugin_names(

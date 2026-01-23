@@ -5,104 +5,84 @@ Tests the end-to-end dry-run behavior through run_enforce_stage:
 - Report output format with all violation details
 - Summary statistics in dry-run mode
 
-Task: T078
+Task: T078, T080
+Phase: 10 - US8 (Test Duplication Reduction)
 Requirements: FR-002 (Pipeline integration), US7 (Dry-run mode)
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from floe_core.schemas.manifest import GovernanceConfig
 
 
 class TestDryRunPipelineIntegration:
     """Tests for dry-run mode integration with compilation pipeline.
 
-    Task: T078
+    Task: T078, T080
     Requirement: US7 (Dry-run mode)
     """
 
     @pytest.mark.requirement("US7")
-    def test_dry_run_passes_through_run_enforce_stage(
+    @pytest.mark.parametrize(
+        ("dry_run", "expect_pass", "expect_severity"),
+        [
+            pytest.param(True, True, "warning", id="dry_run_passes_with_warnings"),
+            pytest.param(False, False, "error", id="normal_fails_with_errors"),
+        ],
+    )
+    def test_dry_run_pipeline_behavior(
         self,
+        strict_naming_governance_config: GovernanceConfig,
+        dbt_manifest_with_naming_violation: dict[str, Any],
+        dry_run: bool,
+        expect_pass: bool,
+        expect_severity: str,
     ) -> None:
-        """Dry-run flag MUST pass through run_enforce_stage correctly.
+        """Test dry-run vs normal mode behavior through run_enforce_stage.
 
-        When run_enforce_stage is called with dry_run=True, it should
-        delegate to PolicyEnforcer with the same flag.
+        When dry_run=True: result.passed=True, violations are warnings
+        When dry_run=False: result.passed=False, violations are errors
         """
         from floe_core.compilation.stages import run_enforce_stage
-        from floe_core.schemas.governance import NamingConfig
-        from floe_core.schemas.manifest import GovernanceConfig
+        from floe_core.enforcement.errors import PolicyEnforcementError
 
-        governance_config = GovernanceConfig(
-            policy_enforcement_level="strict",
-            naming=NamingConfig(
-                pattern="medallion",
-                enforcement="strict",
-            ),
-        )
+        if not dry_run:
+            # Normal mode should raise with strict enforcement
+            with pytest.raises(PolicyEnforcementError):
+                run_enforce_stage(
+                    governance_config=strict_naming_governance_config,
+                    dbt_manifest=dbt_manifest_with_naming_violation,
+                    dry_run=dry_run,
+                )
+        else:
+            result = run_enforce_stage(
+                governance_config=strict_naming_governance_config,
+                dbt_manifest=dbt_manifest_with_naming_violation,
+                dry_run=dry_run,
+            )
 
-        # Model that violates medallion naming
-        dbt_manifest: dict[str, Any] = {
-            "metadata": {"dbt_version": "1.8.0"},
-            "nodes": {
-                "model.my_project.bad_model_name": {
-                    "name": "bad_model_name",
-                    "resource_type": "model",
-                    "columns": {},
-                },
-            },
-        }
-
-        # Dry-run mode - should NOT raise even with strict enforcement
-        result = run_enforce_stage(
-            governance_config=governance_config,
-            dbt_manifest=dbt_manifest,
-            dry_run=True,
-        )
-
-        # Should pass despite violations
-        assert result.passed is True
-        # Violations should still be reported
-        assert len(result.violations) > 0
+            assert result.passed is expect_pass
+            assert len(result.violations) > 0
+            for violation in result.violations:
+                assert violation.severity == expect_severity
 
     @pytest.mark.requirement("US7")
     def test_dry_run_returns_complete_violation_details(
         self,
+        strict_naming_governance_config: GovernanceConfig,
+        dbt_manifest_with_naming_violation: dict[str, Any],
     ) -> None:
-        """Dry-run result MUST include complete violation details for reporting.
-
-        Each violation in dry-run mode should have all required fields
-        for a complete audit report.
-        """
+        """Dry-run result MUST include complete violation details for reporting."""
         from floe_core.compilation.stages import run_enforce_stage
-        from floe_core.schemas.governance import NamingConfig
-        from floe_core.schemas.manifest import GovernanceConfig
-
-        governance_config = GovernanceConfig(
-            policy_enforcement_level="strict",
-            naming=NamingConfig(
-                pattern="medallion",
-                enforcement="strict",
-            ),
-        )
-
-        dbt_manifest: dict[str, Any] = {
-            "metadata": {"dbt_version": "1.8.0"},
-            "nodes": {
-                "model.my_project.invalid_model": {
-                    "name": "invalid_model",
-                    "resource_type": "model",
-                    "columns": {},
-                },
-            },
-        }
 
         result = run_enforce_stage(
-            governance_config=governance_config,
-            dbt_manifest=dbt_manifest,
+            governance_config=strict_naming_governance_config,
+            dbt_manifest=dbt_manifest_with_naming_violation,
             dry_run=True,
         )
 
@@ -112,7 +92,7 @@ class TestDryRunPipelineIntegration:
         # All required report fields must be present
         assert violation.error_code is not None
         assert violation.policy_type == "naming"
-        assert violation.model_name == "invalid_model"
+        assert violation.model_name == "bad_model_name"
         assert violation.message is not None
         assert violation.suggestion is not None
         assert violation.documentation_url is not None
@@ -122,49 +102,15 @@ class TestDryRunPipelineIntegration:
     @pytest.mark.requirement("US7")
     def test_dry_run_summary_contains_all_statistics(
         self,
+        strict_multi_policy_governance_config: GovernanceConfig,
+        dbt_manifest_with_multiple_models: dict[str, Any],
     ) -> None:
-        """Dry-run summary MUST contain complete statistics.
-
-        The EnforcementResult summary should include all model and
-        violation counts for reporting purposes.
-        """
+        """Dry-run summary MUST contain complete statistics."""
         from floe_core.compilation.stages import run_enforce_stage
-        from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
-        from floe_core.schemas.manifest import GovernanceConfig
-
-        governance_config = GovernanceConfig(
-            policy_enforcement_level="strict",
-            naming=NamingConfig(
-                pattern="medallion",
-                enforcement="strict",
-            ),
-            quality_gates=QualityGatesConfig(
-                require_descriptions=True,
-            ),
-        )
-
-        # Model with multiple violations
-        dbt_manifest: dict[str, Any] = {
-            "metadata": {"dbt_version": "1.8.0"},
-            "nodes": {
-                "model.my_project.bad_name": {
-                    "name": "bad_name",
-                    "resource_type": "model",
-                    "description": "",  # Documentation violation
-                    "columns": {},
-                },
-                "model.my_project.another_bad": {
-                    "name": "another_bad",
-                    "resource_type": "model",
-                    "description": "",
-                    "columns": {},
-                },
-            },
-        }
 
         result = run_enforce_stage(
-            governance_config=governance_config,
-            dbt_manifest=dbt_manifest,
+            governance_config=strict_multi_policy_governance_config,
+            dbt_manifest=dbt_manifest_with_multiple_models,
             dry_run=True,
         )
 
@@ -176,82 +122,14 @@ class TestDryRunPipelineIntegration:
         assert result.summary.duration_ms >= 0.0
 
     @pytest.mark.requirement("US7")
-    def test_dry_run_does_not_raise_in_strict_mode(
-        self,
-    ) -> None:
-        """Dry-run MUST NOT raise PolicyEnforcementError even in strict mode.
-
-        This is the critical integration behavior: strict mode would normally
-        raise, but dry-run bypasses the raise.
-        """
-        from floe_core.compilation.stages import run_enforce_stage
-        from floe_core.enforcement.errors import PolicyEnforcementError
-        from floe_core.schemas.governance import NamingConfig
-        from floe_core.schemas.manifest import GovernanceConfig
-
-        governance_config = GovernanceConfig(
-            policy_enforcement_level="strict",
-            naming=NamingConfig(
-                pattern="medallion",
-                enforcement="strict",
-            ),
-        )
-
-        dbt_manifest: dict[str, Any] = {
-            "metadata": {"dbt_version": "1.8.0"},
-            "nodes": {
-                "model.my_project.bad_model": {
-                    "name": "bad_model",
-                    "resource_type": "model",
-                    "columns": {},
-                },
-            },
-        }
-
-        # First verify strict mode DOES raise when not dry-run
-        with pytest.raises(PolicyEnforcementError):
-            run_enforce_stage(
-                governance_config=governance_config,
-                dbt_manifest=dbt_manifest,
-                dry_run=False,
-            )
-
-        # Now verify dry-run does NOT raise
-        result = run_enforce_stage(
-            governance_config=governance_config,
-            dbt_manifest=dbt_manifest,
-            dry_run=True,
-        )
-
-        assert result.passed is True
-        assert result.error_count == 0  # Downgraded to warnings
-        assert result.warning_count > 0
-
-    @pytest.mark.requirement("US7")
     def test_dry_run_with_multiple_validator_types(
         self,
+        strict_multi_policy_governance_config: GovernanceConfig,
     ) -> None:
-        """Dry-run MUST report violations from all validator types.
-
-        When multiple validators find violations, all should be included
-        in the dry-run report, all as warnings.
-        """
+        """Dry-run MUST report violations from all validator types as warnings."""
         from floe_core.compilation.stages import run_enforce_stage
-        from floe_core.schemas.governance import NamingConfig, QualityGatesConfig
-        from floe_core.schemas.manifest import GovernanceConfig
 
-        governance_config = GovernanceConfig(
-            policy_enforcement_level="strict",
-            naming=NamingConfig(
-                pattern="medallion",
-                enforcement="strict",
-            ),
-            quality_gates=QualityGatesConfig(
-                require_descriptions=True,
-                minimum_test_coverage=100,  # High threshold
-            ),
-        )
-
+        # Model with multiple violation types
         dbt_manifest: dict[str, Any] = {
             "metadata": {"dbt_version": "1.8.0"},
             "nodes": {
@@ -270,7 +148,7 @@ class TestDryRunPipelineIntegration:
         }
 
         result = run_enforce_stage(
-            governance_config=governance_config,
+            governance_config=strict_multi_policy_governance_config,
             dbt_manifest=dbt_manifest,
             dry_run=True,
         )

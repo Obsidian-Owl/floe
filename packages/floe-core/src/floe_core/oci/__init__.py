@@ -65,11 +65,7 @@ from floe_core.oci.auth import (
 from floe_core.oci.cache import CacheManager
 
 # Client (T012)
-from floe_core.oci.client import (
-    MUTABLE_TAG_PATTERNS,
-    SEMVER_PATTERN,
-    OCIClient,
-)
+from floe_core.oci.client import OCIClient
 
 # Error hierarchy (T002)
 from floe_core.oci.errors import (
@@ -83,11 +79,29 @@ from floe_core.oci.errors import (
     RegistryUnavailableError,
 )
 
-# Manifest builder (T016)
+# Layer helpers (T044 - extracted from client.py)
+from floe_core.oci.layers import (
+    MUTABLE_TAG_PATTERNS,
+    SEMVER_PATTERN,
+    PullOperations,
+    PushOperations,
+    TagClassifier,
+    URIParser,
+    create_temp_layer_files,
+)
+
+# Manifest operations (T016, T043)
 from floe_core.oci.manifest import (
+    # Build operations (push)
     build_manifest,
     calculate_digest,
+    # Parse operations (pull/inspect)
+    calculate_layers_total_size,
+    calculate_manifest_digest,
     create_empty_config,
+    parse_created_timestamp,
+    parse_layers,
+    parse_manifest_response,
     serialize_layer,
 )
 
@@ -153,13 +167,26 @@ __all__: list[str] = [
     "set_oci_metrics",
     # Client (T012)
     "OCIClient",
+    # Layer helpers (T044)
     "SEMVER_PATTERN",
     "MUTABLE_TAG_PATTERNS",
-    # Manifest builder (T016)
+    "TagClassifier",
+    "URIParser",
+    "PullOperations",
+    "PushOperations",
+    "create_temp_layer_files",
+    # Manifest operations (T016, T043)
+    # Build operations (push)
     "build_manifest",
     "calculate_digest",
     "create_empty_config",
     "serialize_layer",
+    # Parse operations (pull/inspect)
+    "calculate_layers_total_size",
+    "calculate_manifest_digest",
+    "parse_created_timestamp",
+    "parse_layers",
+    "parse_manifest_response",
     # Configuration schemas
     "RegistryConfig",
     "CacheConfig",

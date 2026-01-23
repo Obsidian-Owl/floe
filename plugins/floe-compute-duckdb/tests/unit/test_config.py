@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from floe_core import AttachConfig, DuckDBConfig
+from floe_core.compute_config import AttachConfig, DuckDBConfig
 from pydantic import ValidationError
 
 if TYPE_CHECKING:

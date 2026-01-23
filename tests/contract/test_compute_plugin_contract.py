@@ -41,7 +41,7 @@ class TestComputePluginABCContract:
 
         Plugin implementations must subclass and implement all abstract methods.
         """
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         with pytest.raises(TypeError, match="abstract"):
             ComputePlugin()  # type: ignore[abstract]
@@ -57,7 +57,7 @@ class TestComputePluginABCContract:
         - validate_connection
         - get_resource_requirements
         """
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         # Get abstract methods
         abstract_methods = set()
@@ -93,7 +93,8 @@ class TestComputePluginABCContract:
 
         Plugin implementations depend on this exact signature.
         """
-        from floe_core import ComputeConfig, ComputePlugin
+        from floe_core.compute_config import ComputeConfig
+        from floe_core.plugins import ComputePlugin
 
         method = ComputePlugin.generate_dbt_profile
         sig = inspect.signature(method)
@@ -121,7 +122,8 @@ class TestComputePluginABCContract:
 
         Plugin implementations depend on this exact signature.
         """
-        from floe_core import ComputeConfig, ComputePlugin, ConnectionResult
+        from floe_core.compute_config import ComputeConfig, ConnectionResult
+        from floe_core.plugins import ComputePlugin
 
         method = ComputePlugin.validate_connection
         sig = inspect.signature(method)
@@ -149,7 +151,8 @@ class TestComputePluginABCContract:
 
         Plugin implementations depend on this exact signature.
         """
-        from floe_core import ComputePlugin, ResourceSpec
+        from floe_core.compute_config import ResourceSpec
+        from floe_core.plugins import ComputePlugin
 
         method = ComputePlugin.get_resource_requirements
         sig = inspect.signature(method)
@@ -178,7 +181,7 @@ class TestComputePluginABCContract:
 
         This property determines K8s resource provisioning behavior.
         """
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         # Verify it's a property
         assert hasattr(ComputePlugin, "is_self_hosted")
@@ -202,7 +205,7 @@ class TestComputePluginABCContract:
 
         Returns pip package specifiers for dbt adapter installation.
         """
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         method = ComputePlugin.get_required_dbt_packages
         sig = inspect.signature(method)
@@ -231,7 +234,8 @@ class TestComputePluginOptionalMethods:
         This method is optional - defaults to returning None.
         Engines that need catalog attachment (like DuckDB) override it.
         """
-        from floe_core import CatalogConfig, ComputePlugin
+        from floe_core.compute_config import CatalogConfig
+        from floe_core.plugins import ComputePlugin
 
         # Verify method exists and is not abstract
         assert hasattr(ComputePlugin, "get_catalog_attachment_sql")
@@ -253,7 +257,7 @@ class TestComputePluginOptionalMethods:
         This method is optional - defaults to returning None.
         Plugins can override to provide Pydantic validation schema.
         """
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         # Verify method exists and is not abstract
         assert hasattr(ComputePlugin, "get_config_schema")
@@ -275,7 +279,8 @@ class TestComputePluginInheritance:
 
         This is required for registry integration and lifecycle management.
         """
-        from floe_core import ComputePlugin, PluginMetadata
+        from floe_core import PluginMetadata
+        from floe_core.plugins import ComputePlugin
 
         assert issubclass(ComputePlugin, PluginMetadata), (
             "ComputePlugin must inherit from PluginMetadata"
@@ -287,7 +292,7 @@ class TestComputePluginInheritance:
 
         Plugins should have startup() and shutdown() for lifecycle management.
         """
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         assert hasattr(ComputePlugin, "startup")
         assert hasattr(ComputePlugin, "shutdown")
@@ -306,7 +311,7 @@ class TestComputeConfigurationModelsContract:
 
         Plugin implementations depend on these fields being available.
         """
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         # Create minimal config
         config = ComputeConfig(plugin="test")
@@ -324,7 +329,7 @@ class TestComputeConfigurationModelsContract:
 
         validate_connection implementations return this model.
         """
-        from floe_core import ConnectionResult, ConnectionStatus
+        from floe_core.compute_config import ConnectionResult, ConnectionStatus
 
         result = ConnectionResult(
             status=ConnectionStatus.HEALTHY,
@@ -342,7 +347,7 @@ class TestComputeConfigurationModelsContract:
 
         Plugin implementations use these enum values.
         """
-        from floe_core import ConnectionStatus
+        from floe_core.compute_config import ConnectionStatus
 
         # These exact values are part of the contract
         assert hasattr(ConnectionStatus, "HEALTHY")
@@ -360,7 +365,7 @@ class TestComputeConfigurationModelsContract:
 
         K8s resource specifications depend on these fields.
         """
-        from floe_core import ResourceSpec
+        from floe_core.compute_config import ResourceSpec
 
         spec = ResourceSpec()
 
@@ -376,7 +381,7 @@ class TestComputeConfigurationModelsContract:
 
         Plugins reference these preset names for resource allocation.
         """
-        from floe_core import WORKLOAD_PRESETS, ResourceSpec
+        from floe_core.compute_config import WORKLOAD_PRESETS, ResourceSpec
 
         # These preset names are part of the contract
         assert "small" in WORKLOAD_PRESETS
@@ -386,3 +391,126 @@ class TestComputeConfigurationModelsContract:
         # All presets should be ResourceSpec instances
         for name, spec in WORKLOAD_PRESETS.items():
             assert isinstance(spec, ResourceSpec), f"{name} should be ResourceSpec"
+
+
+class TestComputePluginDefaultImplementations:
+    """Tests for default method implementations in ComputePlugin.
+
+    These tests cover the concrete default implementations of optional methods.
+    """
+
+    @pytest.mark.requirement("001-FR-001")
+    def test_get_catalog_attachment_sql_default_returns_none(self) -> None:
+        """Verify default get_catalog_attachment_sql returns None.
+
+        The base implementation returns None for engines that don't need
+        catalog attachment SQL (like Snowflake, BigQuery).
+        """
+        from floe_core.compute_config import (
+            CatalogConfig,
+            ComputeConfig,
+            ConnectionResult,
+            ConnectionStatus,
+            ResourceSpec,
+        )
+        from floe_core.plugins import ComputePlugin
+
+        # Create a minimal concrete implementation
+        class MinimalComputePlugin(ComputePlugin):
+            @property
+            def name(self) -> str:
+                return "minimal"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+            @property
+            def is_self_hosted(self) -> bool:
+                return True
+
+            def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
+                _ = config
+                return {"type": "test"}
+
+            def get_required_dbt_packages(self) -> list[str]:
+                return []
+
+            def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
+                _ = config
+                return ConnectionResult(status=ConnectionStatus.HEALTHY, latency_ms=1.0)
+
+            def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
+                _ = workload_size
+                return ResourceSpec()
+
+        plugin = MinimalComputePlugin()
+        catalog_config = CatalogConfig(
+            catalog_type="rest",
+            catalog_uri="http://polaris:8181/api/catalog",
+            catalog_name="test",
+        )
+
+        # Call the default implementation
+        result = plugin.get_catalog_attachment_sql(catalog_config)
+
+        assert result is None
+
+    @pytest.mark.requirement("001-FR-001")
+    def test_get_config_schema_default_returns_none(self) -> None:
+        """Verify default get_config_schema returns None.
+
+        The base implementation returns None for plugins that don't need
+        custom config validation.
+        """
+        from floe_core.compute_config import (
+            ComputeConfig,
+            ConnectionResult,
+            ConnectionStatus,
+            ResourceSpec,
+        )
+        from floe_core.plugins import ComputePlugin
+
+        # Create a minimal concrete implementation
+        class MinimalComputePlugin(ComputePlugin):
+            @property
+            def name(self) -> str:
+                return "minimal"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+            @property
+            def is_self_hosted(self) -> bool:
+                return True
+
+            def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
+                _ = config
+                return {"type": "test"}
+
+            def get_required_dbt_packages(self) -> list[str]:
+                return []
+
+            def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
+                _ = config
+                return ConnectionResult(status=ConnectionStatus.HEALTHY, latency_ms=1.0)
+
+            def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
+                _ = workload_size
+                return ResourceSpec()
+
+        plugin = MinimalComputePlugin()
+
+        # Call the default implementation
+        result = plugin.get_config_schema()
+
+        assert result is None

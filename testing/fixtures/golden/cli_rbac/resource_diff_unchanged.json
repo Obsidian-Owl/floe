@@ -1,0 +1,61 @@
+{
+  "name": "resource_diff_unchanged",
+  "function_name": "",
+  "captured_at": "2026-01-22T02:22:43.159222+00:00",
+  "checksum": "72ffc229076891c4",
+  "output": {
+    "change_type": "unchanged",
+    "resource_kind": "Role",
+    "resource_name": "floe-secret-reader",
+    "resource_namespace": "floe",
+    "expected_value": {
+      "kind": "Role",
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "metadata": {
+        "name": "floe-secret-reader",
+        "namespace": "floe"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "secrets"
+          ],
+          "verbs": [
+            "get"
+          ],
+          "resourceNames": [
+            "db-creds"
+          ]
+        }
+      ]
+    },
+    "actual_value": {
+      "kind": "Role",
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "metadata": {
+        "name": "floe-secret-reader",
+        "namespace": "floe"
+      },
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "secrets"
+          ],
+          "verbs": [
+            "get"
+          ],
+          "resourceNames": [
+            "db-creds"
+          ]
+        }
+      ]
+    },
+    "diff_details": []
+  }
+}

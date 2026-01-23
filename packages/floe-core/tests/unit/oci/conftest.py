@@ -26,7 +26,43 @@ import pytest
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
+    from contextlib import AbstractContextManager
+
+
+@pytest.fixture
+def mock_span_context() -> Callable[
+    [str, dict[str, Any] | None], AbstractContextManager[MagicMock]
+]:
+    """Factory for mock span context managers.
+
+    Returns:
+        A callable that creates mock span context managers for testing
+        telemetry/tracing code without real OpenTelemetry spans.
+
+    Usage:
+        def test_with_span(mock_span_context: ...) -> None:
+            with mock_span_context("my_operation", {"key": "value"}) as span:
+                # span is a MagicMock with common span methods
+                span.set_attribute.assert_called_once()
+    """
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _create_mock_span(
+        name: str, attributes: dict[str, Any] | None = None
+    ) -> Generator[MagicMock, None, None]:
+        mock_span = MagicMock()
+        mock_span.name = name
+        mock_span.attributes = attributes or {}
+        mock_span.set_attribute = MagicMock()
+        mock_span.set_status = MagicMock()
+        mock_span.record_exception = MagicMock()
+        mock_span.add_event = MagicMock()
+        mock_span.is_recording = MagicMock(return_value=True)
+        yield mock_span
+
+    return _create_mock_span
 
 
 @pytest.fixture

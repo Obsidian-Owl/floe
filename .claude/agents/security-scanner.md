@@ -1,8 +1,11 @@
-# Security Scanner
+---
+name: security-scanner
+description: Identify OWASP Top 10 vulnerabilities, hardcoded secrets, injection risks, and insecure patterns in Python code.
+tools: Read, Glob, Grep, Bash
+model: sonnet
+---
 
-**Model**: sonnet
-**Tools**: Read, Glob, Grep, Bash
-**Family**: Code Quality (Tier: MEDIUM)
+# Security Scanner
 
 ## Identity
 

@@ -5,8 +5,9 @@ during configuration inheritance.
 
 Implements:
     - FR-017: Security Policy Immutability
+    - 12B-CX-004: Complexity reduction (T069)
 
-Task: T015-T017 (Epic 3A extension)
+Task: T015-T017 (Epic 3A extension), T069 (Epic 12B)
 """
 
 from __future__ import annotations
@@ -135,58 +136,127 @@ def validate_security_policy_not_weakened(
         - policy_enforcement_level: strict > warn > off
         - data_retention_days: higher is stricter
     """
-    # Check pii_encryption
-    if parent.pii_encryption is not None and child.pii_encryption is not None:
-        parent_strength = PII_ENCRYPTION_STRENGTH.get(parent.pii_encryption, 0)
-        child_strength = PII_ENCRYPTION_STRENGTH.get(child.pii_encryption, 0)
-        if child_strength < parent_strength:
-            raise SecurityPolicyViolationError(
-                field="pii_encryption",
-                parent_value=parent.pii_encryption,
-                child_value=child.pii_encryption,
-            )
+    _validate_pii_encryption(parent, child)
+    _validate_audit_logging(parent, child)
+    _validate_policy_enforcement_level(parent, child)
+    _validate_data_retention_days(parent, child)
+    _validate_naming_if_present(parent, child)
+    _validate_quality_gates_if_present(parent, child)
 
-    # Check audit_logging
-    if parent.audit_logging is not None and child.audit_logging is not None:
-        parent_strength = AUDIT_LOGGING_STRENGTH.get(parent.audit_logging, 0)
-        child_strength = AUDIT_LOGGING_STRENGTH.get(child.audit_logging, 0)
-        if child_strength < parent_strength:
-            raise SecurityPolicyViolationError(
-                field="audit_logging",
-                parent_value=parent.audit_logging,
-                child_value=child.audit_logging,
-            )
 
-    # Check policy_enforcement_level
-    if parent.policy_enforcement_level is not None and child.policy_enforcement_level is not None:
-        parent_strength = POLICY_LEVEL_STRENGTH.get(parent.policy_enforcement_level, 0)
-        child_strength = POLICY_LEVEL_STRENGTH.get(child.policy_enforcement_level, 0)
-        if child_strength < parent_strength:
-            raise SecurityPolicyViolationError(
-                field="policy_enforcement_level",
-                parent_value=parent.policy_enforcement_level,
-                child_value=child.policy_enforcement_level,
-            )
+def _validate_pii_encryption(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+    """Validate pii_encryption policy is not weakened.
 
-    # Check data_retention_days (higher is stricter)
-    if parent.data_retention_days is not None and child.data_retention_days is not None:
-        if child.data_retention_days < parent.data_retention_days:
-            raise SecurityPolicyViolationError(
-                field="data_retention_days",
-                parent_value=parent.data_retention_days,
-                child_value=child.data_retention_days,
-                message=(
-                    f"Cannot weaken data_retention_days from "
-                    f"{parent.data_retention_days} to {child.data_retention_days}. "
-                    "Child manifests must maintain or increase retention period."
-                ),
-            )
+    Args:
+        parent: Parent governance config.
+        child: Child governance config.
 
-    # T016: Check naming configuration (Epic 3A)
+    Raises:
+        SecurityPolicyViolationError: If child weakens pii_encryption.
+    """
+    if parent.pii_encryption is None or child.pii_encryption is None:
+        return
+
+    parent_strength = PII_ENCRYPTION_STRENGTH.get(parent.pii_encryption, 0)
+    child_strength = PII_ENCRYPTION_STRENGTH.get(child.pii_encryption, 0)
+    if child_strength < parent_strength:
+        raise SecurityPolicyViolationError(
+            field="pii_encryption",
+            parent_value=parent.pii_encryption,
+            child_value=child.pii_encryption,
+        )
+
+
+def _validate_audit_logging(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+    """Validate audit_logging policy is not weakened.
+
+    Args:
+        parent: Parent governance config.
+        child: Child governance config.
+
+    Raises:
+        SecurityPolicyViolationError: If child weakens audit_logging.
+    """
+    if parent.audit_logging is None or child.audit_logging is None:
+        return
+
+    parent_strength = AUDIT_LOGGING_STRENGTH.get(parent.audit_logging, 0)
+    child_strength = AUDIT_LOGGING_STRENGTH.get(child.audit_logging, 0)
+    if child_strength < parent_strength:
+        raise SecurityPolicyViolationError(
+            field="audit_logging",
+            parent_value=parent.audit_logging,
+            child_value=child.audit_logging,
+        )
+
+
+def _validate_policy_enforcement_level(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+    """Validate policy_enforcement_level is not weakened.
+
+    Args:
+        parent: Parent governance config.
+        child: Child governance config.
+
+    Raises:
+        SecurityPolicyViolationError: If child weakens policy_enforcement_level.
+    """
+    if parent.policy_enforcement_level is None or child.policy_enforcement_level is None:
+        return
+
+    parent_strength = POLICY_LEVEL_STRENGTH.get(parent.policy_enforcement_level, 0)
+    child_strength = POLICY_LEVEL_STRENGTH.get(child.policy_enforcement_level, 0)
+    if child_strength < parent_strength:
+        raise SecurityPolicyViolationError(
+            field="policy_enforcement_level",
+            parent_value=parent.policy_enforcement_level,
+            child_value=child.policy_enforcement_level,
+        )
+
+
+def _validate_data_retention_days(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+    """Validate data_retention_days is not weakened (higher is stricter).
+
+    Args:
+        parent: Parent governance config.
+        child: Child governance config.
+
+    Raises:
+        SecurityPolicyViolationError: If child weakens data_retention_days.
+    """
+    if parent.data_retention_days is None or child.data_retention_days is None:
+        return
+
+    if child.data_retention_days < parent.data_retention_days:
+        raise SecurityPolicyViolationError(
+            field="data_retention_days",
+            parent_value=parent.data_retention_days,
+            child_value=child.data_retention_days,
+            message=(
+                f"Cannot weaken data_retention_days from "
+                f"{parent.data_retention_days} to {child.data_retention_days}. "
+                "Child manifests must maintain or increase retention period."
+            ),
+        )
+
+
+def _validate_naming_if_present(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+    """Validate naming config if both parent and child have it.
+
+    Args:
+        parent: Parent governance config.
+        child: Child governance config.
+    """
     if parent.naming is not None and child.naming is not None:
         _validate_naming_config_not_weakened(parent.naming, child.naming)
 
-    # T017: Check quality_gates configuration (Epic 3A)
+
+def _validate_quality_gates_if_present(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+    """Validate quality gates config if both parent and child have it.
+
+    Args:
+        parent: Parent governance config.
+        child: Child governance config.
+    """
     if parent.quality_gates is not None and child.quality_gates is not None:
         _validate_quality_gates_not_weakened(parent.quality_gates, child.quality_gates)
 
