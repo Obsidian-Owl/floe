@@ -18,6 +18,8 @@ from floe_core.schemas.data_contract import (
     Classification,
     ContractStatus,
     ContractTerms,
+    ContractValidationResult,
+    ContractViolation,
     DataContract,
     DataContractElement,
     DataContractModel,
@@ -707,3 +709,150 @@ class TestSchemaComparisonResult:
         )
         assert result.matches is True
         assert result.extra_columns == ["_metadata", "_load_time"]
+
+
+class TestContractViolation:
+    """Tests for ContractViolation model (T017)."""
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_contract_violation_minimal(self) -> None:
+        """Test creating violation with minimum required fields."""
+        violation = ContractViolation(
+            error_code="FLOE-E501",
+            severity="error",
+            message="Element type mismatch",
+        )
+        assert violation.error_code == "FLOE-E501"
+        assert violation.severity == "error"
+        assert violation.message == "Element type mismatch"
+        assert violation.element_name is None
+        assert violation.model_name is None
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_contract_violation_full(self) -> None:
+        """Test creating violation with all fields."""
+        violation = ContractViolation(
+            error_code="FLOE-E502",
+            severity="warning",
+            message="Missing column in table",
+            element_name="customer_email",
+            model_name="customers",
+            expected="string column",
+            actual="column not found",
+            suggestion="Add customer_email column to table",
+        )
+        assert violation.error_code == "FLOE-E502"
+        assert violation.severity == "warning"
+        assert violation.element_name == "customer_email"
+        assert violation.model_name == "customers"
+        assert violation.suggestion == "Add customer_email column to table"
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_contract_violation_error_code_pattern(self) -> None:
+        """Test that error_code must match FLOE-E5xx pattern."""
+        # Valid codes
+        ContractViolation(error_code="FLOE-E500", severity="error", message="test")
+        ContractViolation(error_code="FLOE-E599", severity="error", message="test")
+
+        # Invalid: wrong prefix
+        with pytest.raises(ValidationError, match="String should match pattern"):
+            ContractViolation(error_code="FLOE-E400", severity="error", message="test")
+
+        # Invalid: wrong format
+        with pytest.raises(ValidationError, match="String should match pattern"):
+            ContractViolation(error_code="ERROR-501", severity="error", message="test")
+
+
+class TestContractValidationResult:
+    """Tests for ContractValidationResult model (T017)."""
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_valid(self) -> None:
+        """Test creating a valid (passing) validation result."""
+        result = ContractValidationResult(
+            valid=True,
+            violations=[],
+            warnings=[],
+            schema_hash="sha256:" + "a" * 64,
+            validated_at=datetime(2026, 1, 24, 12, 0, 0, tzinfo=timezone.utc),
+            contract_name="customers",
+            contract_version="1.0.0",
+        )
+        assert result.valid is True
+        assert len(result.violations) == 0
+        assert result.error_count == 0
+        assert result.warning_count == 0
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_with_violations(self) -> None:
+        """Test validation result with errors and warnings."""
+        error = ContractViolation(
+            error_code="FLOE-E501",
+            severity="error",
+            message="Type mismatch",
+        )
+        warning = ContractViolation(
+            error_code="FLOE-E510",
+            severity="warning",
+            message="Extra column in table",
+        )
+        result = ContractValidationResult(
+            valid=False,
+            violations=[error],
+            warnings=[warning],
+            schema_hash="sha256:" + "b" * 64,
+            validated_at=datetime(2026, 1, 24, 12, 0, 0, tzinfo=timezone.utc),
+            contract_name="orders",
+            contract_version="2.0.0",
+        )
+        assert result.valid is False
+        assert len(result.violations) == 1
+        assert len(result.warnings) == 1
+        assert result.error_count == 1
+        assert result.warning_count == 1
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_schema_hash_pattern(self) -> None:
+        """Test that schema_hash must match sha256 pattern."""
+        # Valid hash
+        ContractValidationResult(
+            valid=True,
+            schema_hash="sha256:" + "0123456789abcdef" * 4,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test",
+            contract_version="1.0.0",
+        )
+
+        # Invalid: wrong prefix
+        with pytest.raises(ValidationError, match="String should match pattern"):
+            ContractValidationResult(
+                valid=True,
+                schema_hash="md5:" + "a" * 64,
+                validated_at=datetime.now(timezone.utc),
+                contract_name="test",
+                contract_version="1.0.0",
+            )
+
+        # Invalid: wrong length
+        with pytest.raises(ValidationError, match="String should match pattern"):
+            ContractValidationResult(
+                valid=True,
+                schema_hash="sha256:abc123",
+                validated_at=datetime.now(timezone.utc),
+                contract_name="test",
+                contract_version="1.0.0",
+            )
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_frozen(self) -> None:
+        """Test that validation result is immutable."""
+        result = ContractValidationResult(
+            valid=True,
+            schema_hash="sha256:" + "c" * 64,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test",
+            contract_version="1.0.0",
+        )
+        assert result.valid is True
+        with pytest.raises(ValidationError):
+            result.valid = False  # type: ignore[misc]

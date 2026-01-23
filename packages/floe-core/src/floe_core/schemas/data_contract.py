@@ -23,7 +23,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ==============================================================================
 # T008: Enums for ODCS v3 types
 # ==============================================================================
@@ -619,8 +618,145 @@ class DataContract(BaseModel):
 
 
 # ==============================================================================
-# Validation Result Models (T017 - placeholder for US1)
+# Validation Result Models (T017)
 # ==============================================================================
+
+
+class ContractViolation(BaseModel):
+    """A single contract validation violation.
+
+    Self-contained violation model for contract validation results.
+    Can be converted to enforcement.Violation for pipeline integration.
+
+    Attributes:
+        error_code: FLOE-E5xx format error code.
+        severity: "error" or "warning".
+        message: Human-readable description.
+        element_name: Element (column) name if applicable.
+        model_name: Model name where violation occurred.
+        expected: What the contract expected.
+        actual: What was found.
+        suggestion: Remediation advice.
+
+    Example:
+        >>> violation = ContractViolation(
+        ...     error_code="FLOE-E501",
+        ...     severity="error",
+        ...     message="Element type mismatch",
+        ...     model_name="customers",
+        ...     element_name="email",
+        ...     expected="string",
+        ...     actual="integer",
+        ...     suggestion="Update contract or fix table schema",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    error_code: str = Field(
+        ...,
+        pattern=r"^FLOE-E5\d{2}$",
+        description="FLOE-E5xx format error code",
+    )
+    severity: Literal["error", "warning"] = Field(
+        ...,
+        description="Severity level",
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable description",
+    )
+    element_name: str | None = Field(
+        default=None,
+        description="Element (column) name if applicable",
+    )
+    model_name: str | None = Field(
+        default=None,
+        description="Model name where violation occurred",
+    )
+    expected: str | None = Field(
+        default=None,
+        description="What the contract expected",
+    )
+    actual: str | None = Field(
+        default=None,
+        description="What was found",
+    )
+    suggestion: str | None = Field(
+        default=None,
+        description="Remediation advice",
+    )
+
+
+class ContractValidationResult(BaseModel):
+    """Result of contract validation.
+
+    Contains validation outcome, violations, and metadata for a single
+    contract validation run.
+
+    Attributes:
+        valid: Whether contract passed validation (no errors).
+        violations: List of validation errors (FLOE-E5xx).
+        warnings: List of validation warnings.
+        schema_hash: SHA256 hash of contract schema for fingerprinting.
+        validated_at: Timestamp when validation was performed.
+        contract_name: Name of the validated contract.
+        contract_version: Version of the validated contract.
+
+    Example:
+        >>> result = ContractValidationResult(
+        ...     valid=True,
+        ...     violations=[],
+        ...     warnings=[],
+        ...     schema_hash="sha256:abc123...",
+        ...     validated_at=datetime.now(timezone.utc),
+        ...     contract_name="customers",
+        ...     contract_version="1.0.0",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    valid: bool = Field(
+        ...,
+        description="Whether contract passed validation (no errors)",
+    )
+    violations: list[ContractViolation] = Field(
+        default_factory=list,
+        description="Validation errors (FLOE-E5xx)",
+    )
+    warnings: list[ContractViolation] = Field(
+        default_factory=list,
+        description="Validation warnings",
+    )
+    schema_hash: str = Field(
+        ...,
+        pattern=r"^sha256:[a-f0-9]{64}$",
+        description="SHA256 hash of contract schema",
+    )
+    validated_at: datetime = Field(
+        ...,
+        description="Timestamp when validation was performed",
+    )
+    contract_name: str = Field(
+        ...,
+        description="Name of the validated contract",
+    )
+    contract_version: str = Field(
+        ...,
+        description="Version of the validated contract",
+    )
+
+    @property
+    def error_count(self) -> int:
+        """Count of error-severity violations."""
+        return sum(1 for v in self.violations if v.severity == "error")
+
+    @property
+    def warning_count(self) -> int:
+        """Count of warning-severity violations plus warnings list."""
+        warn_violations = sum(1 for v in self.violations if v.severity == "warning")
+        return warn_violations + len(self.warnings)
 
 
 class TypeMismatch(BaseModel):
@@ -689,7 +825,10 @@ __all__ = [
     "DataContractModel",
     # T004: Main contract
     "DataContract",
-    # Validation results (for drift detection)
+    # T017: Validation results
+    "ContractViolation",
+    "ContractValidationResult",
+    # Drift detection results
     "TypeMismatch",
     "SchemaComparisonResult",
 ]
