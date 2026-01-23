@@ -15,7 +15,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core.plugin_errors import AuthenticationError, ConflictError, NotFoundError, NotSupportedError
+from floe_core.plugin_errors import (
+    AuthenticationError,
+    ConflictError,
+    NotFoundError,
+    NotSupportedError,
+)
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 from floe_catalog_polaris.plugin import PolarisCatalogPlugin

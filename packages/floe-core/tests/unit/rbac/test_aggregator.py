@@ -10,9 +10,9 @@ from __future__ import annotations
 import pytest
 
 from floe_core.rbac.aggregator import (
+    _DEFAULT_CACHE_SIZE,
     Permission,
     RBACPermissionAggregator,
-    _DEFAULT_CACHE_SIZE,
 )
 
 

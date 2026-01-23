@@ -21,7 +21,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
-
 from floe_core import CatalogPlugin
 from testing.base_classes import BasePluginDiscoveryTests
 

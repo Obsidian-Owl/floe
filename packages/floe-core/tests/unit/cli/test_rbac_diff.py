@@ -515,8 +515,9 @@ metadata:
 
         Validates that roleRef and subjects are correctly added.
         """
-        from floe_core.cli.rbac.diff import _add_role_binding_fields
         from typing import Any
+
+        from floe_core.cli.rbac.diff import _add_role_binding_fields
 
         mock_subject = MagicMock()
         mock_subject.kind = "ServiceAccount"
@@ -547,8 +548,9 @@ metadata:
 
         Validates that non-RoleBinding resources are not modified.
         """
-        from floe_core.cli.rbac.diff import _add_role_binding_fields
         from typing import Any
+
+        from floe_core.cli.rbac.diff import _add_role_binding_fields
 
         mock_resource = MagicMock()
         mock_resource.role_ref = MagicMock()
@@ -707,6 +709,7 @@ class TestOutputDiffAsText:
         Validates that success message is shown for matching manifests.
         """
         from click.testing import CliRunner
+
         from floe_core.cli.rbac.diff import _output_diff_as_text
         from floe_core.schemas.rbac_diff import RBACDiffResult
 
@@ -737,6 +740,7 @@ class TestOutputDiffAsText:
         Validates that added resources are properly formatted.
         """
         from click.testing import CliRunner
+
         from floe_core.cli.rbac.diff import _output_diff_as_text
         from floe_core.schemas.rbac_diff import (
             DiffChangeType,
@@ -783,6 +787,7 @@ class TestOutputDiffAsText:
         Validates that removed resources are properly formatted.
         """
         from click.testing import CliRunner
+
         from floe_core.cli.rbac.diff import _output_diff_as_text
         from floe_core.schemas.rbac_diff import (
             DiffChangeType,
@@ -829,6 +834,7 @@ class TestOutputDiffAsText:
         Validates that modified resources and their details are properly formatted.
         """
         from click.testing import CliRunner
+
         from floe_core.cli.rbac.diff import _output_diff_as_text
         from floe_core.schemas.rbac_diff import (
             DiffChangeType,

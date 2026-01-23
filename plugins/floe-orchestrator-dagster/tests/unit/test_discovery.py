@@ -22,7 +22,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 import pytest
-
 from floe_core.plugins.orchestrator import OrchestratorPlugin
 from testing.base_classes import BasePluginDiscoveryTests
 

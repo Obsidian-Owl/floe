@@ -43,7 +43,6 @@ from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryC
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
-
 # Determine if we should update fixtures
 UPDATE_GOLDEN = os.environ.get("UPDATE_GOLDEN", "0") == "1"
 

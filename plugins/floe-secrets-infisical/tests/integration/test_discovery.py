@@ -17,7 +17,6 @@ from typing import Any, ClassVar
 
 import pytest
 from pydantic import SecretStr
-
 from testing.base_classes import BasePluginDiscoveryTests
 
 

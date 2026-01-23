@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def strict_naming_governance_config() -> "GovernanceConfig":
+def strict_naming_governance_config() -> GovernanceConfig:
     """Provide strict governance config with medallion naming enforcement.
 
     Returns:
@@ -46,7 +46,7 @@ def strict_naming_governance_config() -> "GovernanceConfig":
 
 
 @pytest.fixture
-def strict_multi_policy_governance_config() -> "GovernanceConfig":
+def strict_multi_policy_governance_config() -> GovernanceConfig:
     """Provide strict governance config with multiple policy types.
 
     Returns:

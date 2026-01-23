@@ -61,6 +61,9 @@ from __future__ import annotations
 # Phase 4 exports - Base classes for integration testing
 from testing.base_classes.adapter_test_base import AdapterTestBase
 from testing.base_classes.base_catalog_plugin_tests import BaseCatalogPluginTests
+
+# Plugin metadata, lifecycle, and discovery validation base classes
+from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
 from testing.base_classes.base_identity_plugin_tests import BaseIdentityPluginTests
 from testing.base_classes.base_secrets_plugin_tests import (
     AuditLogCapture,
@@ -76,9 +79,6 @@ from testing.base_classes.golden_test_utils import (
     golden_test,
 )
 from testing.base_classes.integration_test_base import IntegrationTestBase
-
-# Plugin metadata, lifecycle, and discovery validation base classes
-from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
 from testing.base_classes.plugin_discovery_tests import BasePluginDiscoveryTests
 from testing.base_classes.plugin_lifecycle_tests import BasePluginLifecycleTests
 from testing.base_classes.plugin_metadata_tests import BasePluginMetadataTests

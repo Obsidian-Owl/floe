@@ -16,11 +16,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from floe_core.oci.batch_fetcher import (
-    BatchFetchError,
-    BatchFetcher,
-    BatchFetchResult,
     DEFAULT_MAX_WORKERS,
     MAX_WORKERS_LIMIT,
+    BatchFetcher,
+    BatchFetchError,
+    BatchFetchResult,
 )
 
 

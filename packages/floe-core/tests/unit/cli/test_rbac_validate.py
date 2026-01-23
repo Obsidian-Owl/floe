@@ -374,8 +374,9 @@ subjects:
 
         Validates that JSON output contains expected structure.
         """
-        from floe_core.cli.main import cli
         import json
+
+        from floe_core.cli.main import cli
 
         manifest_dir = temp_dir / "rbac"
         manifest_dir.mkdir(parents=True, exist_ok=True)
