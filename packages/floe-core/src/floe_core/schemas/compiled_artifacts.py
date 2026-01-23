@@ -24,6 +24,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from floe_core.schemas.data_contract import DataContract
 from floe_core.schemas.telemetry import TelemetryConfig
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
@@ -516,6 +517,7 @@ class CompiledArtifacts(BaseModel):
         dbt_profiles: Generated profiles.yml content (v0.2.0+)
         governance: Resolved governance settings (v0.2.0+, optional)
         enforcement_result: Enforcement result summary (v0.3.0+, optional)
+        data_contracts: Validated data contracts (v0.3.0+, Epic 3C)
 
     Examples:
         >>> from datetime import datetime
@@ -622,6 +624,12 @@ class CompiledArtifacts(BaseModel):
     enforcement_result: EnforcementResultSummary | None = Field(
         default=None,
         description="Enforcement result summary (v0.3.0+, optional for backward compat)",
+    )
+
+    # Epic 3C addition (v0.3.0)
+    data_contracts: list[DataContract] = Field(
+        default_factory=list,
+        description="Validated data contracts with schema hash and validation metadata (v0.3.0+)",
     )
 
     def to_json_file(self, path: Path) -> None:
