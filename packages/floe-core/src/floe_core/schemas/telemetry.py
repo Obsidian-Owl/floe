@@ -370,9 +370,11 @@ class TelemetryConfig(BaseModel):
     )
     otlp_endpoint: str = Field(
         default="http://localhost:4317",
-        description="OTLP Collector endpoint (Layer 2). Default 'localhost' is for local development. "
-        "For K8s deployments, override with 'http://otel-collector:4317' (internal) or "
-        "'https://otlp.example.com:443' (external with TLS).",
+        description=(
+            "OTLP Collector endpoint (Layer 2). Default 'localhost' is for local "
+            "development. For K8s, use 'http://otel-collector:4317' (internal) or "
+            "'https://otlp.example.com:443' (external with TLS)."
+        ),
     )
     otlp_protocol: Literal["grpc", "http"] = Field(
         default="grpc",

@@ -70,7 +70,11 @@ def disabled_telemetry_config() -> TelemetryConfig:
         floe_product_version="1.0.0",
         floe_mode="dev",
     )
-    return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317", enabled=False)
+    return TelemetryConfig(
+        resource_attributes=attrs,
+        otlp_endpoint="http://localhost:4317",
+        enabled=False,
+    )
 
 
 @pytest.fixture
