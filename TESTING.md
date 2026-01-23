@@ -6,6 +6,26 @@
 
 ---
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [K8s-Native Testing](#k8s-native-testing)
+- [Canonical Test Structure](#canonical-test-structure)
+- [Running Tests](#running-tests)
+- [Pre-PR Test Review](#pre-pr-test-review)
+- [Requirement Traceability](#requirement-traceability)
+- [Tests FAIL, Never Skip](#tests-fail-never-skip)
+- [K8s Test Infrastructure](#k8s-test-infrastructure)
+- [Test Infrastructure Quick Reference](#test-infrastructure-quick-reference)
+- [Test Fixtures and Base Classes](#test-fixtures-and-base-classes)
+- [pytest Markers](#pytest-markers)
+- [Adding New Tests](#adding-new-tests)
+- [Coverage Requirements](#coverage-requirements)
+- [Troubleshooting](#troubleshooting)
+- [References](#references)
+
+---
+
 ## Quick Start
 
 ```bash
@@ -283,6 +303,63 @@ This avoids circular dependencies with Helm chart development.
 | Dagster | Orchestration (webserver, daemon) | `testing/k8s/services/dagster.yaml` |
 
 **Service Discovery**: Tests use K8s DNS (`polaris.floe-test.svc.cluster.local`)
+
+---
+
+## Test Infrastructure Quick Reference
+
+Quick navigation for available test infrastructure. For detailed usage, see the corresponding module docstrings.
+
+### Available Base Classes
+
+| Base Class | Location | Purpose |
+|------------|----------|---------|
+| `IntegrationTestBase` | `testing/base_classes/` | K8s service integration |
+| `BasePluginDiscoveryTests` | `testing/base_classes/` | Plugin entry point validation |
+| `BaseHealthCheckTests` | `testing/base_classes/` | Plugin health compliance |
+| `BaseCatalogPluginTests` | `testing/base_classes/` | CatalogPlugin ABC compliance |
+| `BaseSecretsPluginTests` | `testing/base_classes/` | SecretsPlugin ABC compliance |
+
+### Available Fixtures
+
+| Fixture | Module | Purpose |
+|---------|--------|---------|
+| `wait_for_condition()` | `testing.fixtures.polling` | Polling with timeout (replace `time.sleep()`) |
+| `wait_for_service()` | `testing.fixtures.polling` | Wait for service availability |
+| `generate_unique_namespace()` | `testing.fixtures.namespaces` | Test isolation |
+| `postgres_connection_context()` | `testing.fixtures.postgres` | PostgreSQL integration |
+| `polaris_catalog_context()` | `testing.fixtures.polaris` | Polaris catalog integration |
+| `minio_client_context()` | `testing.fixtures.minio` | S3-compatible storage |
+
+### IntegrationTestBase API
+
+```python
+from testing.base_classes import IntegrationTestBase
+
+class TestMyFeature(IntegrationTestBase):
+    required_services = [("polaris", 8181), ("localstack", 4566)]
+
+    def test_something(self) -> None:
+        self.check_infrastructure("polaris", 8181)  # FAILS if unavailable
+        ns = self.generate_unique_namespace("test")  # Test isolation
+        host = self.get_service_host("polaris")      # K8s-aware hostname
+```
+
+### Adding New Test Infrastructure
+
+**Policy**: If your feature needs new test infrastructure, it's part of YOUR Epic.
+
+| Type | Location | Pattern |
+|------|----------|---------|
+| Service fixtures | `testing/fixtures/` | See `postgres.py`, `polaris.py` |
+| Plugin base classes | `testing/base_classes/` | See `BaseCatalogPluginTests` |
+| Shared utilities | `testing/fixtures/` | See `polling.py`, `namespaces.py` |
+
+1. Check this section first - infrastructure may already exist
+2. If truly needed, add tasks to your Epic's tasks.md
+3. Follow existing patterns in the appropriate directory
+
+---
 
 ### Development Workflow
 

@@ -5,6 +5,14 @@ description: ALWAYS USE when working with dbt models, SQL transformations, tests
 
 # dbt Core Development (Research-Driven)
 
+## Constitution Alignment
+
+This skill enforces project principles:
+- **I. Technology Ownership**: dbt owns ALL SQL compilation, dialect translation - NEVER parse SQL in Python
+- **II. Plugin-First Architecture**: dbt adapter is pluggable (DuckDB default, Snowflake, BigQuery alternatives)
+- **IV. Contract-Driven Integration**: dbt profiles generated from CompiledArtifacts contract
+- **VIII. Observability By Default**: dbt metadata (manifest.json) feeds lineage and governance
+
 ## Philosophy
 
 This skill does NOT prescribe specific SQL patterns or dbt project structures. Instead, it guides you to:

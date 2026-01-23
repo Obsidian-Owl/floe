@@ -40,6 +40,45 @@ This skill enforces project principles:
 - **Contract-Driven**: CompiledArtifacts is the sole integration contract
 - **K8s-Native**: All designs must be Kubernetes-native
 
+## Integration Design (REQUIRED)
+
+Every plan.md MUST include an Integration Design section. This ensures features are designed to connect to the system, not operate in isolation.
+
+**Add to plan.md after Technical Context:**
+
+```markdown
+## Integration Design
+
+### Entry Point Integration
+- [ ] Feature reachable from: [CLI / Plugin / API / Internal]
+- [ ] Integration point: [specific file/module that exposes this]
+- [ ] Wiring task needed: [Yes/No - if Yes, add to tasks.md]
+
+### Dependency Integration
+| This Feature Uses | From Package | Integration Point |
+|-------------------|--------------|-------------------|
+| CompiledArtifacts | floe-core | Loaded via .from_json_file() |
+| [component] | [package] | [how integrated] |
+
+### Produces for Others
+| Output | Consumers | Contract |
+|--------|-----------|----------|
+| [schema/API/plugin] | [who uses it] | [Pydantic model/entry point] |
+
+### Cleanup Required (if refactoring)
+If this feature replaces or refactors existing code:
+- [ ] Old code to remove: [files/functions to delete]
+- [ ] Old tests to remove: [test files that test removed code]
+- [ ] Old docs to update: [docs referencing old code]
+```
+
+**Key Questions to Answer:**
+1. Can a user reach this feature from `floe` CLI or plugin loading?
+2. If this creates schemas, are they added to CompiledArtifacts or exported?
+3. If this replaces code, what gets deleted?
+
+**If integration is unclear**: Research existing patterns in `docs/architecture/` before designing.
+
 ## Outline
 
 1. **Setup**: Run `.specify/scripts/bash/setup-plan.sh --json` from repo root and parse JSON for FEATURE_SPEC, IMPL_PLAN, SPECS_DIR, BRANCH. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").

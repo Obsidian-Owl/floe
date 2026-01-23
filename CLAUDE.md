@@ -206,27 +206,38 @@ bd linear sync --pull
 
 **Complete Workflow**: See `docs/guides/linear-workflow.md`
 
-### Development Cycle
+### Development Cycle (with Integration Thinking)
 
-```bash
-# 1. Planning (Epic → Tasks → Linear issues)
-/speckit.specify    # Create spec.md
-/speckit.clarify    # Ask clarifying questions
-/speckit.plan       # Generate plan.md
-/speckit.tasks      # Break down to tasks
-/speckit.taskstolinear  # Create Linear issues with Epic labels
+Integration is planned upfront (Phase 1), not discovered later. Each phase has integration checkpoints.
 
-# 2. Implementation (Linear-coordinated)
-/speckit.implement       # One task at a time (with confirmation)
-/speckit.implement-epic  # ALL tasks (auto-continues, no confirmation)
-
-# 3. Pre-PR Review
-/speckit.test-review        # Test quality validation
-/speckit.integration-check  # Contract and merge readiness check
-
-# 4. PR Creation
-/speckit.pr  # Creates PR with Linear links, quality summary
 ```
+Phase 1: Planning (Integration Thinking Starts Here)
+├── /speckit.specify     → Create spec.md
+│   └── Document: entry points, dependencies, outputs
+├── /speckit.clarify     → Resolve ambiguities (incl. integration)
+├── /speckit.plan        → Generate plan.md
+│   └── Document: integration design, cleanup required
+├── /speckit.tasks       → Create tasks.md
+└── /speckit.taskstolinear → Sync to Linear
+
+Phase 2: Implementation (Per-Task Integration Checks)
+├── bd linear sync --pull → Get task status
+├── /speckit.implement    → Implement task
+│   ├── Step 7: Check integration (new code reachable)
+│   └── Cleanup: Remove replaced code, orphaned tests
+└── Repeat until all tasks complete
+
+Phase 3: Pre-PR Validation
+├── /speckit.test-review        → Test quality
+├── /speckit.verify-integration → Integration sanity check (recommended)
+├── /speckit.integration-check  → Contract stability
+└── /speckit.pr                 → Create PR
+
+Phase 4: Merge
+└── Merge when CI passes
+```
+
+**Key shift**: Integration is planned upfront, not an afterthought. Cleanup is expected, not optional.
 
 ---
 

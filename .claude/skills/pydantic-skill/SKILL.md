@@ -5,6 +5,14 @@ description: ALWAYS USE when working with Pydantic models, BaseModel, Field, val
 
 # Pydantic Schema Development (Research-Driven)
 
+## Constitution Alignment
+
+This skill enforces project principles:
+- **IV. Contract-Driven Integration**: CompiledArtifacts is the SOLE contract between packages
+- **Pydantic v2**: ALL schemas use Pydantic with `model_config = ConfigDict(frozen=True, extra="forbid")`
+- **JSON Schema Export**: All contracts export JSON Schema for IDE autocomplete
+- **Contract Versioning**: MAJOR (breaking), MINOR (additive), PATCH (docs only)
+
 ## Philosophy
 
 This skill does NOT prescribe specific patterns. Instead, it guides you to:
