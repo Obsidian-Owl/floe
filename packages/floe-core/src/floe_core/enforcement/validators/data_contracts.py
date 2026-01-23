@@ -1103,6 +1103,280 @@ class ContractValidator:
         self._log.debug("no_baseline_found", contract_id=contract_id)
         return None
 
+    def validate_and_register(
+        self,
+        contract_path: Path,
+        namespace: str,
+        catalog_plugin: Any,
+        enforcement_level: str = "strict",
+        owner: str = "unknown",
+    ) -> ContractValidationResult:
+        """Validate a contract and register it in the catalog.
+
+        Task: T074
+        Requirements: FR-026, FR-028
+
+        Validates the contract and, if validation passes, registers the
+        contract metadata in the Iceberg catalog namespace properties.
+
+        Args:
+            contract_path: Path to the datacontract.yaml file.
+            namespace: Iceberg namespace to register contract in.
+            catalog_plugin: CatalogPlugin instance for registration.
+            enforcement_level: Enforcement level from governance config.
+            owner: Owner identifier for the contract.
+
+        Returns:
+            ContractValidationResult with validation outcome.
+            Includes warning if registration fails (soft failure).
+        """
+        # First validate the contract
+        result = self.validate(contract_path, enforcement_level)
+
+        # If validation failed, don't attempt registration
+        if not result.valid:
+            return result
+
+        # Attempt registration
+        registrar = CatalogRegistrar(catalog_plugin=catalog_plugin)
+
+        try:
+            contract = self._parser.parse_contract(contract_path)
+            contract_id = contract.id or contract_path.stem
+            contract_version = contract.version or "unknown"
+        except Exception:
+            contract_id = contract_path.stem
+            contract_version = "unknown"
+
+        reg_result = registrar.register_contract(
+            contract_id=contract_id,
+            contract_version=contract_version,
+            schema_hash=result.schema_hash,
+            owner=owner,
+            namespace=namespace,
+        )
+
+        # If registration failed, add warning but don't fail validation
+        if not reg_result.success and reg_result.warning:
+            warnings = list(result.warnings)
+            warnings.append(
+                ContractViolation(
+                    error_code="FLOE-E540",
+                    severity="warning",
+                    message=f"Contract registration failed: {reg_result.warning}",
+                    suggestion="Check catalog connectivity and permissions",
+                )
+            )
+
+            return ContractValidationResult(
+                valid=result.valid,
+                violations=result.violations,
+                warnings=warnings,
+                schema_hash=result.schema_hash,
+                validated_at=result.validated_at,
+                contract_name=result.contract_name,
+                contract_version=result.contract_version,
+            )
+
+        return result
+
+
+class RegistrationResult:
+    """Result of contract registration in catalog.
+
+    Task: T070
+    Requirements: FR-026, FR-028
+
+    Attributes:
+        success: Whether registration succeeded.
+        contract_id: ID of the registered contract.
+        namespace: Namespace where contract was registered.
+        registered_at: Timestamp of registration (if successful).
+        warning: Warning message if registration failed (soft failure).
+    """
+
+    def __init__(
+        self,
+        success: bool,
+        contract_id: str,
+        namespace: str,
+        registered_at: datetime | None = None,
+        warning: str | None = None,
+    ) -> None:
+        """Initialize RegistrationResult.
+
+        Args:
+            success: Whether registration succeeded.
+            contract_id: ID of the registered contract.
+            namespace: Namespace where contract was registered.
+            registered_at: Timestamp of registration (if successful).
+            warning: Warning message if registration failed.
+        """
+        self.success = success
+        self.contract_id = contract_id
+        self.namespace = namespace
+        self.registered_at = registered_at
+        self.warning = warning
+
+
+class CatalogRegistrar:
+    """Registrar for storing contract metadata in Iceberg catalog.
+
+    Task: T070, T071, T072, T073
+    Requirements: FR-026, FR-027, FR-028
+
+    Stores contract metadata as namespace properties in Iceberg catalog,
+    enabling contract discovery and versioning through catalog queries.
+
+    Attributes:
+        _catalog: Catalog plugin for namespace property operations.
+        _log: Structured logger for this registrar instance.
+
+    Example:
+        >>> registrar = CatalogRegistrar(catalog_plugin=polaris_plugin)
+        >>> result = registrar.register_contract(
+        ...     contract_id="urn:datacontract:customers",
+        ...     contract_version="1.0.0",
+        ...     schema_hash="sha256:abc123",
+        ...     owner="data-team",
+        ...     namespace="production.customers",
+        ... )
+        >>> if result.success:
+        ...     print(f"Registered at {result.registered_at}")
+    """
+
+    def __init__(self, catalog_plugin: Any) -> None:
+        """Initialize CatalogRegistrar.
+
+        Args:
+            catalog_plugin: CatalogPlugin instance for catalog operations.
+        """
+        self._catalog = catalog_plugin
+        self._log = logger.bind(component="CatalogRegistrar")
+        self._log.debug("catalog_registrar_initialized")
+
+    def register_contract(
+        self,
+        contract_id: str,
+        contract_version: str,
+        schema_hash: str,
+        owner: str,
+        namespace: str,
+    ) -> RegistrationResult:
+        """Register contract metadata in catalog namespace properties.
+
+        Task: T071, T072, T073
+        Requirements: FR-026, FR-027, FR-028
+
+        Stores the following properties in the namespace:
+        - floe.contract.id: Contract identifier
+        - floe.contract.version: Contract version
+        - floe.contract.schema_hash: SHA256 hash of contract schema
+        - floe.contract.owner: Owner identifier
+        - floe.contract.registered_at: ISO timestamp of registration
+
+        Args:
+            contract_id: Contract identifier (URN format recommended).
+            contract_version: Semantic version of the contract.
+            schema_hash: SHA256 hash of the contract schema.
+            owner: Owner identifier (team or user).
+            namespace: Iceberg namespace to register in.
+
+        Returns:
+            RegistrationResult indicating success or soft failure.
+        """
+        self._log.info(
+            "registering_contract",
+            contract_id=contract_id,
+            version=contract_version,
+            namespace=namespace,
+        )
+
+        registered_at = datetime.now(timezone.utc)
+        properties = {
+            "floe.contract.id": contract_id,
+            "floe.contract.version": contract_version,
+            "floe.contract.schema_hash": schema_hash,
+            "floe.contract.owner": owner,
+            "floe.contract.registered_at": registered_at.isoformat(),
+        }
+
+        try:
+            self._catalog.set_namespace_properties(namespace, properties)
+
+            self._log.info(
+                "contract_registered",
+                contract_id=contract_id,
+                namespace=namespace,
+            )
+
+            return RegistrationResult(
+                success=True,
+                contract_id=contract_id,
+                namespace=namespace,
+                registered_at=registered_at,
+            )
+
+        except ConnectionError as e:
+            warning = f"Catalog unreachable: {e}"
+            self._log.warning(
+                "registration_failed",
+                contract_id=contract_id,
+                error="connection_error",
+                message=str(e),
+            )
+            return RegistrationResult(
+                success=False,
+                contract_id=contract_id,
+                namespace=namespace,
+                warning=warning,
+            )
+
+        except TimeoutError as e:
+            warning = f"Catalog timeout: {e}"
+            self._log.warning(
+                "registration_failed",
+                contract_id=contract_id,
+                error="timeout",
+                message=str(e),
+            )
+            return RegistrationResult(
+                success=False,
+                contract_id=contract_id,
+                namespace=namespace,
+                warning=warning,
+            )
+
+        except PermissionError as e:
+            warning = f"Permission denied: {e}"
+            self._log.warning(
+                "registration_failed",
+                contract_id=contract_id,
+                error="permission_denied",
+                message=str(e),
+            )
+            return RegistrationResult(
+                success=False,
+                contract_id=contract_id,
+                namespace=namespace,
+                warning=warning,
+            )
+
+        except Exception as e:
+            warning = f"Registration failed: {e}"
+            self._log.warning(
+                "registration_failed",
+                contract_id=contract_id,
+                error="unknown",
+                message=str(e),
+            )
+            return RegistrationResult(
+                success=False,
+                contract_id=contract_id,
+                namespace=namespace,
+                warning=warning,
+            )
+
 
 def _check_datacontract_cli() -> None:
     """Verify datacontract-cli is installed.
@@ -1307,4 +1581,6 @@ __all__ = [
     "ContractValidator",
     "ContractValidationError",
     "ContractLintError",
+    "CatalogRegistrar",
+    "RegistrationResult",
 ]
