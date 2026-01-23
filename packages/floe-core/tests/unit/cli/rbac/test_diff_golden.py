@@ -26,17 +26,21 @@ from typing import Any
 
 import pytest
 
-
 # Determine if we should update fixtures
 UPDATE_GOLDEN = os.environ.get("UPDATE_GOLDEN", "0") == "1"
 
 # Golden fixtures directory
 # Path: tests/unit/cli/rbac/test_diff_golden.py
 # Need: packages/floe-core/tests/unit/cli/rbac -> floe (7 parents)
-FIXTURES_DIR = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "testing" / "fixtures" / "golden" / "cli_rbac"
+FIXTURES_DIR = (
+    Path(__file__).parent.parent.parent.parent.parent.parent.parent
+    / "testing" / "fixtures" / "golden" / "cli_rbac"
+)
 
 
-def _save_golden_fixture(fixture_path: Path, name: str, output: Any, function_name: str = "") -> None:
+def _save_golden_fixture(
+    fixture_path: Path, name: str, output: Any, function_name: str = ""
+) -> None:
     """Save output as a golden fixture."""
     fixture_path.parent.mkdir(parents=True, exist_ok=True)
     output_json = json.dumps(output, sort_keys=True, default=str)

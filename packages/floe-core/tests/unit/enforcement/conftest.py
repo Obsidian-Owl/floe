@@ -21,9 +21,12 @@ Fixtures provided:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from floe_core.schemas.manifest import GovernanceConfig
 
 
 @pytest.fixture
@@ -282,7 +285,7 @@ def model_with_placeholder_description() -> dict[str, Any]:
 
 
 @pytest.fixture
-def strict_naming_governance_config() -> "GovernanceConfig":
+def strict_naming_governance_config() -> GovernanceConfig:
     """Provide strict governance config with medallion naming enforcement.
 
     Returns:
@@ -301,7 +304,7 @@ def strict_naming_governance_config() -> "GovernanceConfig":
 
 
 @pytest.fixture
-def strict_multi_policy_governance_config() -> "GovernanceConfig":
+def strict_multi_policy_governance_config() -> GovernanceConfig:
     """Provide strict governance config with multiple policy types.
 
     Returns:

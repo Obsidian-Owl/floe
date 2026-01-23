@@ -22,7 +22,6 @@ Operations covered:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -467,7 +466,7 @@ class TestIcebergTableLifecycleEdgeCases:
         from floe_iceberg.models import TableConfig, TableSchema
 
         # Empty fields list - Pydantic should validate
-        with pytest.raises(Exception):  # ValidationError from Pydantic
+        with pytest.raises(ValueError):  # ValidationError from Pydantic
             TableConfig(
                 namespace="bronze",
                 table_name="empty_schema",

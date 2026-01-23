@@ -100,7 +100,8 @@ def test_no_direct_k8s_rbac_plugin_import_in_generator() -> None:
             elif isinstance(node, ast.ImportFrom) and node.module:
                 if "floe_rbac_k8s" in node.module:
                     names = ", ".join(alias.name for alias in node.names)
-                    actual_forbidden.append(f"Line {node.lineno}: from {node.module} import {names}")
+                    msg = f"Line {node.lineno}: from {node.module} import {names}"
+                    actual_forbidden.append(msg)
 
     assert not actual_forbidden, (
         f"generator.py has direct K8sRBACPlugin imports (should use registry):\n"

@@ -683,15 +683,31 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # Regex patterns for each cron field
         # Supports: numbers (with optional leading zeros), *, */N, N-M, N,M,O
         # minute: 0-59 (allows 00-59)
-        minute_pattern = r"(\*|[0-5]?\d)(\/\d+)?(-[0-5]?\d)?(,[0-5]?\d(-[0-5]?\d)?)*(\/\d+)?|\*\/\d+"
+        minute_pattern = (  # noqa: E501
+            r"(\*|[0-5]?\d)(\/\d+)?(-[0-5]?\d)?(,[0-5]?\d(-[0-5]?\d)?)*(\/\d+)?|\*\/\d+"
+        )
         # hour: 0-23 (allows 00-23, but not 24+)
-        hour_pattern = r"(\*|[01]?\d|2[0-3])(\/\d+)?(-(?:[01]?\d|2[0-3]))?(,(?:[01]?\d|2[0-3])(-(?:[01]?\d|2[0-3]))?)*(\/\d+)?|\*\/\d+"
+        hour_pattern = (  # noqa: E501
+            r"(\*|[01]?\d|2[0-3])(\/\d+)?(-(?:[01]?\d|2[0-3]))?",
+            r"(,(?:[01]?\d|2[0-3])(-(?:[01]?\d|2[0-3]))?)*(\/\d+)?|\*\/\d+",
+        )
+        hour_pattern = "".join(hour_pattern)
         # day: 1-31 (allows 01-31)
-        day_pattern = r"(\*|0?[1-9]|[12]\d|3[01])(\/\d+)?(-(?:0?[1-9]|[12]\d|3[01]))?(,(?:0?[1-9]|[12]\d|3[01])(-(?:0?[1-9]|[12]\d|3[01]))?)*(\/\d+)?|\*\/\d+"
+        day_pattern = (  # noqa: E501
+            r"(\*|0?[1-9]|[12]\d|3[01])(\/\d+)?(-(?:0?[1-9]|[12]\d|3[01]))?",
+            r"(,(?:0?[1-9]|[12]\d|3[01])(-(?:0?[1-9]|[12]\d|3[01]))?)*(\/\d+)?|\*\/\d+",
+        )
+        day_pattern = "".join(day_pattern)
         # month: 1-12 (allows 01-12)
-        month_pattern = r"(\*|0?[1-9]|1[0-2])(\/\d+)?(-(?:0?[1-9]|1[0-2]))?(,(?:0?[1-9]|1[0-2])(-(?:0?[1-9]|1[0-2]))?)*(\/\d+)?|\*\/\d+"
+        month_pattern = (  # noqa: E501
+            r"(\*|0?[1-9]|1[0-2])(\/\d+)?(-(?:0?[1-9]|1[0-2]))?",
+            r"(,(?:0?[1-9]|1[0-2])(-(?:0?[1-9]|1[0-2]))?)*(\/\d+)?|\*\/\d+",
+        )
+        month_pattern = "".join(month_pattern)
         # weekday: 0-6
-        weekday_pattern = r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
+        weekday_pattern = (
+            r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
+        )
 
         # Full cron pattern: 5 whitespace-separated fields
         cron_pattern = (

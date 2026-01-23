@@ -27,12 +27,13 @@ from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
-
     from contextlib import AbstractContextManager
 
 
 @pytest.fixture
-def mock_span_context() -> Callable[[str, dict[str, Any] | None], AbstractContextManager[MagicMock]]:
+def mock_span_context() -> (
+    Callable[[str, dict[str, Any] | None], AbstractContextManager[MagicMock]]
+):
     """Factory for mock span context managers.
 
     Returns:
