@@ -57,8 +57,29 @@ from floe_core.schemas.compiled_artifacts import (
     ProductIdentity,
 )
 
-# Governance models (T011-T013, Epic 3A)
+# Data contract models (Epic 3C)
+from floe_core.schemas.data_contract import (
+    Classification,
+    ContractStatus,
+    ContractTerms,
+    DataContract,
+    DataContractElement,
+    DataContractModel,
+    DeprecationInfo,
+    ElementFormat,
+    ElementType,
+    FreshnessSLA,
+    QualitySLA,
+    SchemaComparisonResult,
+    SLAProperties,
+    TypeMismatch,
+)
+
+# Governance models (T011-T013, Epic 3A, Epic 3C)
 from floe_core.schemas.governance import (
+    AutoGenerationConfig,
+    DataContractsConfig,
+    DriftDetectionConfig,
     LayerThresholds,
     NamingConfig,
     QualityGatesConfig,
@@ -216,10 +237,28 @@ __all__: list[str] = [
     "SamplingConfig",
     "TelemetryAuth",
     "TelemetryConfig",
-    # Governance (Epic 3A)
+    # Governance (Epic 3A, Epic 3C)
     "LayerThresholds",
     "NamingConfig",
     "QualityGatesConfig",
+    "AutoGenerationConfig",
+    "DataContractsConfig",
+    "DriftDetectionConfig",
+    # Data Contracts (Epic 3C)
+    "Classification",
+    "ContractStatus",
+    "ContractTerms",
+    "DataContract",
+    "DataContractElement",
+    "DataContractModel",
+    "DeprecationInfo",
+    "ElementFormat",
+    "ElementType",
+    "FreshnessSLA",
+    "QualitySLA",
+    "SchemaComparisonResult",
+    "SLAProperties",
+    "TypeMismatch",
     # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",
