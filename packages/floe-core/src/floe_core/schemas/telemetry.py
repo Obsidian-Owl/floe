@@ -357,7 +357,7 @@ class TelemetryConfig(BaseModel):
     Examples:
         >>> config = TelemetryConfig(
         ...     enabled=True,
-        ...     otlp_endpoint="http://otel-collector:4317",
+        ...     otlp_endpoint="http://localhost:4317",
         ...     resource_attributes=ResourceAttributes(...),
         ... )
     """
@@ -369,10 +369,10 @@ class TelemetryConfig(BaseModel):
         description="Enable telemetry emission",
     )
     otlp_endpoint: str = Field(
-        default="http://otel-collector:4317",
-        description="OTLP Collector endpoint (Layer 2). HTTP is used for K8s-internal "
-        "cluster traffic where TLS termination happens at ingress. "
-        "Configure HTTPS for external/public endpoints.",
+        default="http://localhost:4317",
+        description="OTLP Collector endpoint (Layer 2). Default 'localhost' is for local development. "
+        "For K8s deployments, override with 'http://otel-collector:4317' (internal) or "
+        "'https://otlp.example.com:443' (external with TLS).",
     )
     otlp_protocol: Literal["grpc", "http"] = Field(
         default="grpc",

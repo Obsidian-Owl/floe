@@ -25,7 +25,7 @@ Example:
     ...     floe_product_version="1.0.0",
     ...     floe_mode="dev",
     ... )
-    >>> config = TelemetryConfig(resource_attributes=attrs)
+    >>> config = TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
     >>> with TelemetryProvider(config) as provider:
     ...     # Telemetry is active
     ...     pass

@@ -51,7 +51,7 @@ def telemetry_config() -> TelemetryConfig:
         floe_product_version="1.0.0",
         floe_mode="dev",
     )
-    return TelemetryConfig(resource_attributes=attrs)
+    return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
 
 
 @pytest.fixture
@@ -70,7 +70,7 @@ def disabled_telemetry_config() -> TelemetryConfig:
         floe_product_version="1.0.0",
         floe_mode="dev",
     )
-    return TelemetryConfig(resource_attributes=attrs, enabled=False)
+    return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317", enabled=False)
 
 
 @pytest.fixture
@@ -1079,7 +1079,7 @@ class TestTelemetryProviderAsyncExport:
             floe_product_version="1.0.0",
             floe_mode="dev",
         )
-        return TelemetryConfig(resource_attributes=attrs)
+        return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
 
     def test_provider_uses_batch_span_processor(
         self,
@@ -1274,7 +1274,7 @@ class TestTelemetryProviderGracefulDegradation:
             floe_product_version="1.0.0",
             floe_mode="dev",
         )
-        return TelemetryConfig(resource_attributes=attrs)
+        return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
 
     def test_span_creation_continues_when_export_fails(
         self,

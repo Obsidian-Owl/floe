@@ -48,10 +48,13 @@ class TestTelemetryConfigValidation:
         sample_resource_attributes: ResourceAttributes,
     ) -> None:
         """Test TelemetryConfig accepts valid required fields."""
-        config = TelemetryConfig(resource_attributes=sample_resource_attributes)
+        config = TelemetryConfig(
+            resource_attributes=sample_resource_attributes,
+            otlp_endpoint="http://localhost:4317",
+        )
 
         assert config.enabled is True
-        assert config.otlp_endpoint == "http://otel-collector:4317"
+        assert config.otlp_endpoint == "http://localhost:4317"
         assert config.otlp_protocol == "grpc"
         assert config.resource_attributes == sample_resource_attributes
 
@@ -102,6 +105,7 @@ class TestTelemetryConfigValidation:
         with pytest.raises(ValidationError) as exc_info:
             TelemetryConfig(
                 resource_attributes=sample_resource_attributes,
+                otlp_endpoint="http://localhost:4317",
                 otlp_protocol="invalid",  # type: ignore[arg-type]
             )
 
@@ -114,7 +118,10 @@ class TestTelemetryConfigValidation:
         sample_resource_attributes: ResourceAttributes,
     ) -> None:
         """Test TelemetryConfig is immutable (frozen=True)."""
-        config = TelemetryConfig(resource_attributes=sample_resource_attributes)
+        config = TelemetryConfig(
+            resource_attributes=sample_resource_attributes,
+            otlp_endpoint="http://localhost:4317",
+        )
 
         with pytest.raises(ValidationError):
             config.enabled = False
@@ -128,6 +135,7 @@ class TestTelemetryConfigValidation:
         with pytest.raises(ValidationError) as exc_info:
             TelemetryConfig(
                 resource_attributes=sample_resource_attributes,
+                otlp_endpoint="http://localhost:4317",
                 unknown_field="value",  # type: ignore[call-arg]
             )
 
@@ -142,6 +150,7 @@ class TestTelemetryConfigValidation:
         """Test TelemetryConfig.get_sampling_ratio() method."""
         config = TelemetryConfig(
             resource_attributes=sample_resource_attributes,
+            otlp_endpoint="http://localhost:4317",
             sampling=SamplingConfig(dev=1.0, staging=0.5, prod=0.1),
         )
 
@@ -155,7 +164,10 @@ class TestTelemetryConfigValidation:
         sample_resource_attributes: ResourceAttributes,
     ) -> None:
         """Test TelemetryConfig uses default SamplingConfig values."""
-        config = TelemetryConfig(resource_attributes=sample_resource_attributes)
+        config = TelemetryConfig(
+            resource_attributes=sample_resource_attributes,
+            otlp_endpoint="http://localhost:4317",
+        )
 
         assert config.sampling.dev == pytest.approx(1.0)
         assert config.sampling.staging == pytest.approx(0.5)
@@ -821,6 +833,7 @@ class TestTelemetryAuthHeaderInjection:
         )
         config = TelemetryConfig(
             resource_attributes=sample_resource_attributes,
+            otlp_endpoint="http://localhost:4317",
             authentication=auth,
         )
 
@@ -840,6 +853,7 @@ class TestTelemetryAuthHeaderInjection:
         )
         config = TelemetryConfig(
             resource_attributes=sample_resource_attributes,
+            otlp_endpoint="http://localhost:4317",
             authentication=auth,
         )
 
