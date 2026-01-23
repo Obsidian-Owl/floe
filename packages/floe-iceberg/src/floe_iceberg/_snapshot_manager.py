@@ -29,7 +29,7 @@ from floe_iceberg.models import SnapshotInfo
 from floe_iceberg.telemetry import traced
 
 if TYPE_CHECKING:
-    from floe_iceberg.models import IcebergConfig
+    from floe_iceberg.models import IcebergTableManagerConfig
 
     # Type alias for PyIceberg Table (Any due to missing type stubs)
     Table = Any
@@ -46,7 +46,7 @@ class _IcebergSnapshotManager:
     Use IcebergTableManager's public API instead.
 
     Attributes:
-        _config: IcebergConfig for retention settings.
+        _config: IcebergTableManagerConfig for retention settings.
         _log: Structured logger instance.
 
     Example:
@@ -55,11 +55,11 @@ class _IcebergSnapshotManager:
         >>> snapshots = snapshot_mgr.list_snapshots(table)
     """
 
-    def __init__(self, config: IcebergConfig) -> None:
+    def __init__(self, config: IcebergTableManagerConfig) -> None:
         """Initialize _IcebergSnapshotManager.
 
         Args:
-            config: IcebergConfig for retention settings.
+            config: IcebergTableManagerConfig for retention settings.
         """
         self._config = config
         self._log = structlog.get_logger(__name__)

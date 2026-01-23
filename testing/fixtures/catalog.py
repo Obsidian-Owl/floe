@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 if TYPE_CHECKING:
-    from floe_core import CatalogPlugin
+    from floe_core.plugins import CatalogPlugin
 
 
 class CatalogTestConfig(BaseModel):
