@@ -238,10 +238,7 @@ def assert_golden_match(
         actual_json = json.dumps(actual, indent=2, sort_keys=True, default=str)
         expected_json = json.dumps(expected_fixture.output, indent=2, sort_keys=True, default=str)
 
-        diff_msg = (
-            f"Golden test failed: output does not match fixture\n"
-            f"Fixture: {path}\n"
-        )
+        diff_msg = f"Golden test failed: output does not match fixture\nFixture: {path}\n"
         if message:
             diff_msg += f"Context: {message}\n"
         diff_msg += f"\nExpected:\n{expected_json}\n\nActual:\n{actual_json}"

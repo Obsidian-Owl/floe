@@ -142,9 +142,7 @@ class TokenValidator:
         except jwt.exceptions.PyJWTError as e:
             return self._handle_jwt_error(e)
         except Exception as e:
-            return TokenValidationResult(
-                valid=False, error=f"Token validation failed: {e}"
-            )
+            return TokenValidationResult(valid=False, error=f"Token validation failed: {e}")
 
     def _validate_token_internal(self, token: str) -> TokenValidationResult:
         """Internal token validation logic.
@@ -299,18 +297,12 @@ class TokenValidator:
             return TokenValidationResult(valid=False, error=error_messages[error_type])
 
         if isinstance(error, jwt.exceptions.MissingRequiredClaimError):
-            return TokenValidationResult(
-                valid=False, error=f"Missing required claim: {error}"
-            )
+            return TokenValidationResult(valid=False, error=f"Missing required claim: {error}")
 
         if isinstance(error, jwt.exceptions.DecodeError):
-            return TokenValidationResult(
-                valid=False, error=f"Failed to decode token: {error}"
-            )
+            return TokenValidationResult(valid=False, error=f"Failed to decode token: {error}")
 
-        return TokenValidationResult(
-            valid=False, error=f"Token validation failed: {error}"
-        )
+        return TokenValidationResult(valid=False, error=f"Token validation failed: {error}")
 
     def _fetch_jwks(self) -> None:
         """Fetch JWKS from the identity provider.

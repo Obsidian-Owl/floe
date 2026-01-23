@@ -184,13 +184,7 @@ def test_list_uses_thread_pool() -> None:
     import ast
     from pathlib import Path
 
-    client_path = (
-        Path(__file__).parents[3]
-        / "src"
-        / "floe_core"
-        / "oci"
-        / "client.py"
-    )
+    client_path = Path(__file__).parents[3] / "src" / "floe_core" / "oci" / "client.py"
     assert client_path.exists()
 
     content = client_path.read_text()
@@ -234,13 +228,7 @@ def test_pull_uses_dictionary_lookup() -> None:
     """
     from pathlib import Path
 
-    client_path = (
-        Path(__file__).parents[3]
-        / "src"
-        / "floe_core"
-        / "oci"
-        / "client.py"
-    )
+    client_path = Path(__file__).parents[3] / "src" / "floe_core" / "oci" / "client.py"
     assert client_path.exists()
 
     content = client_path.read_text()

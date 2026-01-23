@@ -34,7 +34,10 @@ UPDATE_GOLDEN = os.environ.get("UPDATE_GOLDEN", "0") == "1"
 # Need: packages/floe-core/tests/unit/cli/rbac -> floe (7 parents)
 FIXTURES_DIR = (
     Path(__file__).parent.parent.parent.parent.parent.parent.parent
-    / "testing" / "fixtures" / "golden" / "cli_rbac"
+    / "testing"
+    / "fixtures"
+    / "golden"
+    / "cli_rbac"
 )
 
 
@@ -83,8 +86,7 @@ def _assert_golden_match(actual: Any, fixture_path: Path, *, update: bool = Fals
 
     if not fixture_path.exists():
         pytest.fail(
-            f"Golden fixture not found: {fixture_path}\n"
-            f"Run with UPDATE_GOLDEN=1 to create it."
+            f"Golden fixture not found: {fixture_path}\nRun with UPDATE_GOLDEN=1 to create it."
         )
 
     data = json.loads(fixture_path.read_text())
@@ -239,9 +241,7 @@ class TestDiffCommandGolden:
                     "kind": "Role",
                     "name": "floe-secret-reader",
                 },
-                "subjects": [
-                    {"kind": "ServiceAccount", "name": "new-sa", "namespace": "floe"}
-                ],
+                "subjects": [{"kind": "ServiceAccount", "name": "new-sa", "namespace": "floe"}],
             },
         ]
 

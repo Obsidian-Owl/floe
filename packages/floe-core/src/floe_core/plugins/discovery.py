@@ -187,9 +187,7 @@ class PluginDiscovery:
         """
         return (plugin_type, name) in self._discovered
 
-    def get_entry_point(
-        self, plugin_type: PluginType, name: str
-    ) -> EntryPoint | None:
+    def get_entry_point(self, plugin_type: PluginType, name: str) -> EntryPoint | None:
         """Get the entry point for a discovered plugin.
 
         Args:
@@ -209,9 +207,7 @@ class PluginDiscovery:
         """
         return self._discovered.copy()
 
-    def list_discovered_names(
-        self, plugin_type: PluginType | None = None
-    ) -> list[str]:
+    def list_discovered_names(self, plugin_type: PluginType | None = None) -> list[str]:
         """List names of all discovered plugins.
 
         Args:
@@ -223,11 +219,7 @@ class PluginDiscovery:
         if plugin_type is None:
             return [name for (_, name) in self._discovered.keys()]
 
-        return [
-            name
-            for (pt, name) in self._discovered.keys()
-            if pt == plugin_type
-        ]
+        return [name for (pt, name) in self._discovered.keys() if pt == plugin_type]
 
     def list_all_by_type(self) -> dict[PluginType, list[str]]:
         """List all available plugins by type.

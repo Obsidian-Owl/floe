@@ -234,9 +234,7 @@ def _convert_rules_to_dicts(rules: list[Any]) -> list[dict[str, list[str]]]:
     ]
 
 
-def _audit_role_bindings(
-    rbac_api: Any, namespace: str | None
-) -> tuple[int, list[AuditFinding]]:
+def _audit_role_bindings(rbac_api: Any, namespace: str | None) -> tuple[int, list[AuditFinding]]:
     """Audit all role bindings in the namespace.
 
     Args:

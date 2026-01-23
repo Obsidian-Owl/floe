@@ -56,9 +56,7 @@ from pyiceberg.exceptions import (
 logger = structlog.get_logger(__name__)
 
 # Type alias for error handler functions
-ErrorHandler: TypeAlias = Callable[
-    [Exception, str | None, str | None], CatalogError
-]
+ErrorHandler: TypeAlias = Callable[[Exception, str | None, str | None], CatalogError]
 
 
 # =============================================================================

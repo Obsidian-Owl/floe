@@ -1025,6 +1025,4 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     span.set_attribute("health.response_time_ms", elapsed_ms)
                     set_error_attributes(span, e)
 
-                return self._build_error_status(
-                    error_message, elapsed_ms, checked_at, timeout
-                )
+                return self._build_error_status(error_message, elapsed_ms, checked_at, timeout)

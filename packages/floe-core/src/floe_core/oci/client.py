@@ -713,6 +713,7 @@ class OCIClient:
         Returns:
             Tuple of (content bytes, digest string).
         """
+
         def _pull_with_oras() -> tuple[bytes, str]:
             return self._pull_content_with_oras(tag)
 
@@ -1002,9 +1003,7 @@ class OCIClient:
             log.error("list_failed", error=str(e))
             raise OCIError(f"List failed: {e}") from e
 
-    def _list_internal(
-        self, filter_pattern: str | None, log: Any
-    ) -> builtins.list[ArtifactTag]:
+    def _list_internal(self, filter_pattern: str | None, log: Any) -> builtins.list[ArtifactTag]:
         """Internal list logic with circuit breaker protection.
 
         Args:

@@ -95,9 +95,7 @@ def _normalize_for_comparison(data: Any) -> Any:
     return data
 
 
-def _assert_golden_match(
-    actual: Any, fixture_path: Path, *, update: bool = False
-) -> None:
+def _assert_golden_match(actual: Any, fixture_path: Path, *, update: bool = False) -> None:
     """Assert that actual output matches the golden fixture."""
     if update:
         _save_golden_fixture(fixture_path, fixture_path.stem, actual)
@@ -105,8 +103,7 @@ def _assert_golden_match(
 
     if not fixture_path.exists():
         pytest.fail(
-            f"Golden fixture not found: {fixture_path}\n"
-            f"Run with UPDATE_GOLDEN=1 to create it."
+            f"Golden fixture not found: {fixture_path}\nRun with UPDATE_GOLDEN=1 to create it."
         )
 
     data = json.loads(fixture_path.read_text())
@@ -117,12 +114,8 @@ def _assert_golden_match(
     expected_normalized = _normalize_for_comparison(expected)
 
     if actual_normalized != expected_normalized:
-        actual_json = json.dumps(
-            actual_normalized, indent=2, sort_keys=True, default=str
-        )
-        expected_json = json.dumps(
-            expected_normalized, indent=2, sort_keys=True, default=str
-        )
+        actual_json = json.dumps(actual_normalized, indent=2, sort_keys=True, default=str)
+        expected_json = json.dumps(expected_normalized, indent=2, sort_keys=True, default=str)
 
         pytest.fail(
             f"Golden test failed: output does not match fixture\n"
@@ -406,9 +399,7 @@ class TestPullGolden:
             result = oci_client.pull(tag="v1.0.0")
 
         # Extract transforms
-        transforms_dict = (
-            result.transforms.model_dump() if result.transforms else None
-        )
+        transforms_dict = result.transforms.model_dump() if result.transforms else None
 
         fixture_path = FIXTURES_DIR / "pull_transforms.json"
         _assert_golden_match(transforms_dict, fixture_path, update=UPDATE_GOLDEN)
@@ -435,9 +426,7 @@ class TestPullGolden:
             result = oci_client.pull(tag="v1.0.0")
 
         # Extract observability config
-        observability_dict = (
-            result.observability.model_dump() if result.observability else None
-        )
+        observability_dict = result.observability.model_dump() if result.observability else None
 
         fixture_path = FIXTURES_DIR / "pull_observability.json"
         _assert_golden_match(observability_dict, fixture_path, update=UPDATE_GOLDEN)

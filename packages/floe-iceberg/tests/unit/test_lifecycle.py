@@ -162,9 +162,7 @@ class TestIcebergTableLifecycleCreate:
         original_table = lifecycle_manager.create_table(sample_table_config)
 
         # Second creation with if_not_exists=True should return existing
-        existing_table = lifecycle_manager.create_table(
-            sample_table_config, if_not_exists=True
-        )
+        existing_table = lifecycle_manager.create_table(sample_table_config, if_not_exists=True)
 
         assert existing_table is not None
         assert existing_table.identifier == original_table.identifier

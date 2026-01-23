@@ -265,9 +265,7 @@ class PluginLifecycle:
 
         return results
 
-    def shutdown_all(
-        self, timeout: float | None = None
-    ) -> dict[str, Exception | None]:
+    def shutdown_all(self, timeout: float | None = None) -> dict[str, Exception | None]:
         """Shutdown all activated plugins.
 
         Calls shutdown() on all plugins that have been activated, in reverse
@@ -432,9 +430,7 @@ class PluginLifecycle:
                 )
 
         # Log summary
-        healthy_count = sum(
-            1 for s in results.values() if s.state == HealthState.HEALTHY
-        )
+        healthy_count = sum(1 for s in results.values() if s.state == HealthState.HEALTHY)
         logger.info(
             "health_check_all.completed",
             total=len(results),

@@ -131,8 +131,7 @@ class BasePluginDiscoveryTests(ABC):
             f"'{self.expected_module_prefix}'"
         )
         assert self.expected_class_name in ep.value, (
-            f"Entry point value '{ep.value}' should contain class name "
-            f"'{self.expected_class_name}'"
+            f"Entry point value '{ep.value}' should contain class name '{self.expected_class_name}'"
         )
 
     # =========================================================================
@@ -255,8 +254,7 @@ class BasePluginDiscoveryTests(ABC):
         plugin_class = matching[0].load()
 
         assert issubclass(plugin_class, self.expected_plugin_abc), (
-            f"{plugin_class.__name__} should inherit from "
-            f"{self.expected_plugin_abc.__name__}"
+            f"{plugin_class.__name__} should inherit from {self.expected_plugin_abc.__name__}"
         )
 
     @pytest.mark.requirement("FR-006")

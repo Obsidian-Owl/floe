@@ -347,8 +347,7 @@ class TestComputeRbacDiff:
             for i in range(6)
         ]
         actual = [
-            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}}
-            for i in range(5)
+            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}} for i in range(5)
         ]
 
         # Total = 11, set limit to 10
@@ -365,8 +364,7 @@ class TestComputeRbacDiff:
             for i in range(5)
         ]
         actual = [
-            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}}
-            for i in range(5)
+            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}} for i in range(5)
         ]
 
         # Total = 10, limit = 10 - should pass

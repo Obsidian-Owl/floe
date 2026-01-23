@@ -98,9 +98,7 @@ class TestOCIMetricsNaming:
         ]
 
         for name in span_names:
-            assert name.startswith("floe.oci."), (
-                f"Span {name} should start with 'floe.oci.' prefix"
-            )
+            assert name.startswith("floe.oci."), f"Span {name} should start with 'floe.oci.' prefix"
 
 
 class TestRecordOperation:

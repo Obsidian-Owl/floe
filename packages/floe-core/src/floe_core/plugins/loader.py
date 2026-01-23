@@ -264,9 +264,7 @@ class PluginLoader:
         """
         return self._loaded.copy()
 
-    def list_loaded_names(
-        self, plugin_type: PluginType | None = None
-    ) -> list[str]:
+    def list_loaded_names(self, plugin_type: PluginType | None = None) -> list[str]:
         """List names of all loaded plugins.
 
         Args:
@@ -278,11 +276,7 @@ class PluginLoader:
         if plugin_type is None:
             return [name for (_, name) in self._loaded.keys()]
 
-        return [
-            name
-            for (pt, name) in self._loaded.keys()
-            if pt == plugin_type
-        ]
+        return [name for (pt, name) in self._loaded.keys() if pt == plugin_type]
 
     def unload(self, plugin_type: PluginType, name: str) -> bool:
         """Unload a plugin from the cache.

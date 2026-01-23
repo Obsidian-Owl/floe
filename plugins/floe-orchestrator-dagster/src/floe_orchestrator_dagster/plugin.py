@@ -705,9 +705,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         )
         month_pattern = "".join(month_pattern)
         # weekday: 0-6
-        weekday_pattern = (
-            r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
-        )
+        weekday_pattern = r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
 
         # Full cron pattern: 5 whitespace-separated fields
         cron_pattern = (

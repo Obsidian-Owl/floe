@@ -108,9 +108,7 @@ class DependencyResolver:
                     dependents[dep_name].append(plugin.name)
 
         # Kahn's algorithm: start with plugins that have no dependencies
-        queue: list[str] = [
-            name for name, degree in in_degree.items() if degree == 0
-        ]
+        queue: list[str] = [name for name, degree in in_degree.items() if degree == 0]
         sorted_names: list[str] = []
 
         logger.debug(
@@ -165,9 +163,7 @@ class DependencyResolver:
             MissingDependencyError: If any plugin has missing dependencies.
         """
         for plugin in plugins:
-            missing = [
-                dep for dep in plugin.dependencies if dep not in available_names
-            ]
+            missing = [dep for dep in plugin.dependencies if dep not in available_names]
             if missing:
                 logger.error(
                     "resolve.missing_dependency",

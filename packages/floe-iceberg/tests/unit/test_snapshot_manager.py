@@ -267,9 +267,7 @@ class TestSnapshotManagerRollback:
 
         assert result is not None
         # Verify set_current_snapshot was called with correct ID
-        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(
-            2000
-        )
+        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(2000)
 
     @pytest.mark.requirement("FR-019")
     def test_rollback_to_nonexistent_snapshot_raises(
@@ -293,9 +291,7 @@ class TestSnapshotManagerRollback:
         result = snapshot_manager.rollback_to_snapshot(table_with_snapshots, 1000)
 
         assert result is not None
-        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(
-            1000
-        )
+        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(1000)
 
     @pytest.mark.requirement("FR-019")
     def test_rollback_returns_updated_table(
@@ -336,11 +332,15 @@ class TestSnapshotManagerExpireSnapshots:
         # Empty after expiration
         table_with_snapshots.snapshots.side_effect = [
             # First call: 3 snapshots
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
             # Second call: still 3 (mock doesn't actually expire)
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
         ]
 
         result = snapshot_manager.expire_snapshots(table_with_snapshots)
@@ -365,15 +365,17 @@ class TestSnapshotManagerExpireSnapshots:
 
         # Both calls return same snapshots (mock)
         table_with_snapshots.snapshots.side_effect = [
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
         ]
 
-        result = snapshot_manager.expire_snapshots(
-            table_with_snapshots, older_than_days=30
-        )
+        result = snapshot_manager.expire_snapshots(table_with_snapshots, older_than_days=30)
 
         assert isinstance(result, int)
         # Verify expire_older_than was called
@@ -396,8 +398,10 @@ class TestSnapshotManagerExpireSnapshots:
 
         # First call: 3 snapshots, second call: 1 snapshot (2 expired)
         table_with_snapshots.snapshots.side_effect = [
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
             [MagicMock(snapshot_id=2, timestamp_ms=1705700000000)],  # 1 remaining
         ]
 
@@ -436,10 +440,14 @@ class TestSnapshotManagerExpireSnapshots:
 
         # Both calls return same snapshots (mock doesn't actually expire)
         table_with_snapshots.snapshots.side_effect = [
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
-            [MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
-             for i in range(3)],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
+            [
+                MagicMock(snapshot_id=i, timestamp_ms=1705500000000 + i * 100000000)
+                for i in range(3)
+            ],
         ]
 
         snapshot_manager.expire_snapshots(table_with_snapshots)
@@ -527,9 +535,7 @@ class TestSnapshotManagerEdgeCases:
             [new_snap],  # After (simulated expiration)
         ]
 
-        result = snapshot_manager.expire_snapshots(
-            table_with_snapshots, older_than_days=1
-        )
+        result = snapshot_manager.expire_snapshots(table_with_snapshots, older_than_days=1)
 
         # Should complete without error
         assert isinstance(result, int)

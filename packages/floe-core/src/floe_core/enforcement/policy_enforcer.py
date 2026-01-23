@@ -117,9 +117,7 @@ class PolicyEnforcer:
         violations = self._run_all_validators(manifest, models, max_violations)
 
         # Post-process violations
-        violations = self._post_process_violations(
-            violations, manifest, dry_run, include_context
-        )
+        violations = self._post_process_violations(violations, manifest, dry_run, include_context)
 
         # Build result
         return self._build_enforcement_result(
@@ -151,9 +149,7 @@ class PolicyEnforcer:
                 return violations[:max_violations]
 
         # Run quality gate validators
-        violations = self._run_quality_gate_validators(
-            manifest, models, violations, max_violations
-        )
+        violations = self._run_quality_gate_validators(manifest, models, violations, max_violations)
         if self._limit_reached(violations, max_violations):
             return violations[:max_violations]
 

@@ -49,9 +49,7 @@ class TestRBACPermissionAggregator:
     ) -> None:
         """Test aggregate_permissions returns empty frozenset for unknown resource."""
         aggregator = RBACPermissionAggregator()
-        aggregator.add_permission_rule(
-            "admin", "known-resource", {Permission.READ}
-        )
+        aggregator.add_permission_rule("admin", "known-resource", {Permission.READ})
         result = aggregator.aggregate_permissions("admin", "unknown-resource")
         assert result == frozenset()
 
@@ -59,9 +57,7 @@ class TestRBACPermissionAggregator:
     def test_add_permission_rule_and_aggregate(self) -> None:
         """Test adding permission rules and aggregating them."""
         aggregator = RBACPermissionAggregator()
-        aggregator.add_permission_rule(
-            "admin", "secret/db", {Permission.READ, Permission.WRITE}
-        )
+        aggregator.add_permission_rule("admin", "secret/db", {Permission.READ, Permission.WRITE})
 
         result = aggregator.aggregate_permissions("admin", "secret/db")
         assert Permission.READ in result

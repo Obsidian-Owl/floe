@@ -723,9 +723,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             secrets = [s for s in secrets if s.startswith(prefix)]
         return sorted(secrets)
 
-    def _log_list_secrets_success(
-        self, prefix: str, count: int, span: Any
-    ) -> None:
+    def _log_list_secrets_success(self, prefix: str, count: int, span: Any) -> None:
         """Log successful list_secrets operation.
 
         Args:
@@ -763,9 +761,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             namespace=self._config.environment,
         )
 
-    def _handle_list_secrets_error(
-        self, e: Exception, prefix: str, span: Any
-    ) -> None:
+    def _handle_list_secrets_error(self, e: Exception, prefix: str, span: Any) -> None:
         """Handle unknown errors from list_secrets.
 
         Args:

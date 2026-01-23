@@ -79,9 +79,7 @@ class RBACPermissionAggregator:
 
         # Create cached method with specified size
         # Using closure to bind cache_size at initialization
-        self._cached_aggregate = lru_cache(maxsize=cache_size)(
-            self._aggregate_permissions_impl
-        )
+        self._cached_aggregate = lru_cache(maxsize=cache_size)(self._aggregate_permissions_impl)
 
     def add_permission_rule(
         self,

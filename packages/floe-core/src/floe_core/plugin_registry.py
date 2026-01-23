@@ -98,9 +98,7 @@ class _DiscoveredProxy:
         """Return number of discovered plugins."""
         return len(self._discovery.get_discovered())
 
-    def get(
-        self, key: tuple[PluginType, str], default: Any = None
-    ) -> Any:
+    def get(self, key: tuple[PluginType, str], default: Any = None) -> Any:
         """Get with default."""
         return self._discovery.get_entry_point(key[0], key[1]) or default
 
@@ -440,9 +438,7 @@ class PluginRegistry:
             plugin_type_lookup=plugin_type_lookup,
         )
 
-    def shutdown_all(
-        self, timeout: float | None = None
-    ) -> dict[str, Exception | None]:
+    def shutdown_all(self, timeout: float | None = None) -> dict[str, Exception | None]:
         """Shutdown all activated plugins.
 
         Args:

@@ -40,9 +40,7 @@ def test_floe_core_imports_without_rbac_plugin() -> None:
     )
 
     assert result.returncode == 0, (
-        f"floe_core import failed:\n"
-        f"stdout: {result.stdout}\n"
-        f"stderr: {result.stderr}"
+        f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
     assert "success" in result.stdout
 
@@ -117,14 +115,7 @@ def test_no_direct_k8s_rbac_plugin_import_in_cli_generate() -> None:
     When it needs an RBAC plugin instance,
     Then it retrieves it via the plugin registry lookup (not direct import).
     """
-    generate_path = (
-        Path(__file__).parents[2]
-        / "src"
-        / "floe_core"
-        / "cli"
-        / "rbac"
-        / "generate.py"
-    )
+    generate_path = Path(__file__).parents[2] / "src" / "floe_core" / "cli" / "rbac" / "generate.py"
     assert generate_path.exists(), f"generate.py not found at {generate_path}"
 
     content = generate_path.read_text()
@@ -204,9 +195,7 @@ print("success")
     )
 
     assert result.returncode == 0, (
-        f"Import sequence test failed:\n"
-        f"stdout: {result.stdout}\n"
-        f"stderr: {result.stderr}"
+        f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
     assert "CIRCULAR_WARNING" not in result.stdout
     assert "success" in result.stdout
@@ -236,5 +225,3 @@ def test_generator_docstring_no_direct_import_example() -> None:
         "generator.py docstring shows direct K8sRBACPlugin import.\n"
         "Docstring should demonstrate registry-based plugin lookup pattern."
     )
-
-

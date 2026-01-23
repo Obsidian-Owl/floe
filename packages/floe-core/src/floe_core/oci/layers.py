@@ -358,9 +358,7 @@ class PullOperations:
         tmpdir_path = Path(tmpdir)
 
         # Build dictionary mapping filename to path for O(1) lookup
-        files_by_name: dict[str, Path] = {
-            Path(f).name: Path(f) for f in pulled_files
-        }
+        files_by_name: dict[str, Path] = {Path(f).name: Path(f) for f in pulled_files}
 
         # O(1) dictionary lookup
         artifacts_path = files_by_name.get("compiled_artifacts.json")
@@ -373,8 +371,7 @@ class PullOperations:
 
         if artifacts_path is None or not artifacts_path.exists():
             raise OCIError(
-                f"Artifact pulled but compiled_artifacts.json not found. "
-                f"Files: {pulled_files}"
+                f"Artifact pulled but compiled_artifacts.json not found. Files: {pulled_files}"
             )
 
         return artifacts_path
