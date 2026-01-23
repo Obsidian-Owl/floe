@@ -276,6 +276,172 @@ class ScheduleSpec(BaseModel):
     )
 
 
+class OutputPortColumn(BaseModel):
+    """Column definition for an output port schema (Epic 3C).
+
+    Defines a single column/field in an output port schema for automatic
+    contract generation.
+
+    Attributes:
+        name: Column name (dbt naming convention)
+        type: Data type (ODCS v3 logicalType)
+        description: Optional column description
+        required: Whether the column is required (default: False)
+        primary_key: Whether this is a primary key column (default: False)
+        classification: Optional data classification (e.g., "pii", "public")
+
+    Example:
+        >>> column = OutputPortColumn(
+        ...     name="customer_id",
+        ...     type="string",
+        ...     required=True,
+        ...     primary_key=True
+        ... )
+        >>> column.name
+        'customer_id'
+
+    See Also:
+        - specs/3c-data-contracts/spec.md: FR-003 (Auto-generation)
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "customer_id",
+                    "type": "string",
+                    "required": True,
+                    "primary_key": True,
+                },
+                {
+                    "name": "email",
+                    "type": "string",
+                    "required": True,
+                    "classification": "pii",
+                },
+            ]
+        },
+    )
+
+    name: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=128,
+            pattern=DBT_MODEL_NAME_PATTERN,
+            description="Column name (dbt naming convention)",
+            examples=["customer_id", "email", "created_at"],
+        ),
+    ]
+    type: str = Field(
+        description="Data type (ODCS v3 logicalType)",
+        examples=["string", "integer", "timestamp", "boolean"],
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Column description",
+    )
+    required: bool = Field(
+        default=False,
+        description="Whether the column is required (non-nullable)",
+    )
+    primary_key: bool = Field(
+        default=False,
+        alias="primaryKey",
+        description="Whether this is a primary key column",
+    )
+    classification: str | None = Field(
+        default=None,
+        description="Data classification (e.g., pii, public, confidential)",
+        examples=["pii", "public", "confidential"],
+    )
+
+
+class OutputPort(BaseModel):
+    """Output port definition for automatic contract generation (Epic 3C).
+
+    Defines a data product's output port with schema information that
+    can be used to auto-generate ODCS v3 data contracts.
+
+    Attributes:
+        name: Port name (used in generated contract name)
+        description: Optional port description
+        owner: Optional owner email or team
+        schema: List of column definitions
+
+    Example:
+        >>> port = OutputPort(
+        ...     name="customers",
+        ...     owner="analytics-team@acme.com",
+        ...     description="Customer master data",
+        ...     schema=[
+        ...         OutputPortColumn(name="customer_id", type="string", required=True, primary_key=True),
+        ...         OutputPortColumn(name="email", type="string", classification="pii"),
+        ...     ]
+        ... )
+        >>> port.name
+        'customers'
+
+    Generated Contract Naming:
+        contract_name = "{data_product_name}-{port_name}"
+        contract_version = data_product_version
+
+    See Also:
+        - specs/3c-data-contracts/spec.md: FR-003, FR-004
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "customers",
+                    "owner": "analytics-team@acme.com",
+                    "description": "Customer master data",
+                    "schema": [
+                        {"name": "customer_id", "type": "string", "required": True, "primaryKey": True},
+                        {"name": "email", "type": "string", "classification": "pii"},
+                    ],
+                }
+            ]
+        },
+    )
+
+    name: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=128,
+            pattern=DBT_MODEL_NAME_PATTERN,
+            description="Port name (used in generated contract name)",
+            examples=["customers", "orders", "products"],
+        ),
+    ]
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Port description",
+    )
+    owner: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Owner email or team name",
+        examples=["analytics-team@acme.com"],
+    )
+    schema_: Annotated[
+        list[OutputPortColumn],
+        Field(
+            alias="schema",
+            min_length=1,
+            description="List of column definitions (at least one required)",
+        ),
+    ]
+
+
 class PlatformRef(BaseModel):
     """Reference to a platform manifest.
 
@@ -402,6 +568,14 @@ class FloeSpec(BaseModel):
         default=None,
         description="Optional scheduling configuration",
     )
+    output_ports: Annotated[
+        list[OutputPort] | None,
+        Field(
+            default=None,
+            alias="outputPorts",
+            description="Output ports for auto-generation of data contracts (Epic 3C)",
+        ),
+    ]
 
     @model_validator(mode="before")
     @classmethod
@@ -505,6 +679,8 @@ __all__ = [
     "TransformSpec",
     "ScheduleSpec",
     "PlatformRef",
+    "OutputPortColumn",
+    "OutputPort",
     "FloeSpec",
     "FLOE_NAME_PATTERN",
     "SEMVER_PATTERN",
