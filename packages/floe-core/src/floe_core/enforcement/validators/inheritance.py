@@ -41,6 +41,32 @@ from floe_core.schemas.data_contract import (
     DataContract,
 )
 
+
+class CycleDetectionResult:
+    """Result of circular dependency detection.
+
+    Task: T044b
+    Requirements: FR-011
+
+    Attributes:
+        has_cycle: True if a circular dependency was detected.
+        cycle_path: List of contract IDs forming the cycle, or None if no cycle.
+    """
+
+    def __init__(
+        self,
+        has_cycle: bool,
+        cycle_path: list[str] | None = None,
+    ) -> None:
+        """Initialize CycleDetectionResult.
+
+        Args:
+            has_cycle: Whether a cycle was detected.
+            cycle_path: Path of contract IDs forming the cycle.
+        """
+        self.has_cycle = has_cycle
+        self.cycle_path = cycle_path
+
 logger = structlog.get_logger(__name__)
 
 # Classification hierarchy (higher index = more restrictive)
@@ -506,9 +532,146 @@ class InheritanceValidator:
 
         return classifications
 
+    def detect_circular_dependencies(
+        self,
+        contract_id: str,
+        contracts: dict[str, dict[str, Any]],
+    ) -> CycleDetectionResult:
+        """Detect circular dependencies in contract inheritance chain.
+
+        Task: T044b
+        Requirements: FR-011
+
+        Uses depth-first search to detect cycles in the inheritance graph.
+
+        Args:
+            contract_id: ID of the contract to check for cycles.
+            contracts: Dictionary mapping contract IDs to contract info.
+                Each entry should have:
+                - "id": Contract ID
+                - "inherits_from": Parent contract ID or None
+                - "yaml": Contract YAML content (optional)
+
+        Returns:
+            CycleDetectionResult indicating if a cycle was found and the path.
+
+        Example:
+            >>> contracts = {
+            ...     "a": {"id": "a", "inherits_from": "b"},
+            ...     "b": {"id": "b", "inherits_from": "a"},
+            ... }
+            >>> result = validator.detect_circular_dependencies("a", contracts)
+            >>> result.has_cycle
+            True
+            >>> result.cycle_path
+            ['a', 'b', 'a']
+        """
+        self._log.debug(
+            "detecting_circular_dependencies",
+            contract_id=contract_id,
+            total_contracts=len(contracts),
+        )
+
+        # Track visited nodes and current recursion stack
+        visited: set[str] = set()
+        rec_stack: set[str] = set()
+        path: list[str] = []
+
+        def dfs(current_id: str) -> CycleDetectionResult:
+            """Depth-first search for cycle detection."""
+            # Mark current node as visited and add to recursion stack
+            visited.add(current_id)
+            rec_stack.add(current_id)
+            path.append(current_id)
+
+            # Get parent contract
+            contract_info = contracts.get(current_id)
+            if not contract_info:
+                # Contract not found, no cycle from here
+                path.pop()
+                rec_stack.remove(current_id)
+                return CycleDetectionResult(has_cycle=False)
+
+            parent_id = contract_info.get("inherits_from")
+
+            if parent_id:
+                # Check for self-reference
+                if parent_id == current_id:
+                    cycle_path = [current_id, current_id]
+                    self._log.warning(
+                        "self_reference_detected",
+                        contract_id=current_id,
+                    )
+                    return CycleDetectionResult(has_cycle=True, cycle_path=cycle_path)
+
+                # Check if parent is in current recursion stack (cycle detected)
+                if parent_id in rec_stack:
+                    # Find the cycle path
+                    cycle_start_idx = path.index(parent_id)
+                    cycle_path = path[cycle_start_idx:] + [parent_id]
+                    self._log.warning(
+                        "circular_dependency_detected",
+                        cycle_path=cycle_path,
+                    )
+                    return CycleDetectionResult(has_cycle=True, cycle_path=cycle_path)
+
+                # If parent not visited, recurse
+                if parent_id not in visited:
+                    result = dfs(parent_id)
+                    if result.has_cycle:
+                        return result
+
+            # Pop from path and recursion stack
+            path.pop()
+            rec_stack.remove(current_id)
+
+            return CycleDetectionResult(has_cycle=False)
+
+        # Start DFS from the given contract
+        result = dfs(contract_id)
+
+        if not result.has_cycle:
+            self._log.debug(
+                "no_circular_dependency",
+                contract_id=contract_id,
+            )
+
+        return result
+
+    def cycle_to_violation(
+        self,
+        cycle_result: CycleDetectionResult,
+    ) -> ContractViolation:
+        """Convert a cycle detection result to a ContractViolation.
+
+        Task: T044b
+        Requirements: FR-011
+
+        Args:
+            cycle_result: Result from detect_circular_dependencies.
+
+        Returns:
+            ContractViolation with error code FLOE-E512.
+        """
+        if not cycle_result.has_cycle or not cycle_result.cycle_path:
+            raise ValueError("Cannot create violation for non-cycle result")
+
+        cycle_str = " -> ".join(cycle_result.cycle_path)
+
+        return ContractViolation(
+            error_code="FLOE-E512",
+            severity="error",
+            message=f"Circular contract dependency detected: {cycle_str}",
+            element_name=cycle_result.cycle_path[0],
+            expected="acyclic inheritance chain",
+            actual=cycle_str,
+            suggestion="Remove circular dependency in contract inheritance chain",
+        )
+
 
 __all__ = [
     "InheritanceValidator",
+    "CycleDetectionResult",
     "parse_iso8601_duration",
     "parse_percentage",
     "CLASSIFICATION_HIERARCHY",

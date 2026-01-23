@@ -1,6 +1,6 @@
 """Unit tests for contract inheritance validation.
 
-Task: T036, T037, T038
+Task: T036, T037, T038, T038b
 Requirements: FR-011 (Three-tier inheritance), FR-012 (SLA weakening),
               FR-013 (Classification weakening), FR-014 (FLOE-E510 error)
 
@@ -8,6 +8,7 @@ Tests for inheritance rules:
 - Child contracts cannot weaken parent SLA properties (freshness, availability, quality)
 - Child contracts cannot remove/weaken field classifications (e.g., PII to public)
 - Three-tier hierarchy: enterprise -> domain -> product
+- Circular dependency detection
 """
 
 from __future__ import annotations
@@ -741,9 +742,308 @@ schema:
         assert result.valid is True
 
 
+class TestCircularDependencyDetection:
+    """Tests for circular contract dependency detection.
+
+    Task: T038b
+    Requirements: FR-011 (inheritance chain validation includes cycle detection)
+
+    Circular dependencies occur when:
+    - A inherits from B, B inherits from A (direct cycle)
+    - A inherits from B, B inherits from C, C inherits from A (indirect cycle)
+    """
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_direct_circular_dependency_detected(self) -> None:
+        """Test that direct A -> B -> A cycle is detected.
+
+        Contract A inherits from B
+        Contract B inherits from A
+
+        Expected: FLOE-E512 error with cycle path
+        """
+        from floe_core.enforcement.validators.inheritance import InheritanceValidator
+
+        # Build a contract chain where A inherits from B
+        contracts = {
+            "contract-a": {
+                "id": "contract-a",
+                "inherits_from": "contract-b",
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: contract-a
+version: 1.0.0
+name: contract-a
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+            "contract-b": {
+                "id": "contract-b",
+                "inherits_from": "contract-a",  # Creates cycle!
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: contract-b
+version: 1.0.0
+name: contract-b
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+        }
+
+        validator = InheritanceValidator()
+        result = validator.detect_circular_dependencies(
+            contract_id="contract-a",
+            contracts=contracts,
+        )
+
+        assert result.has_cycle is True
+        assert result.cycle_path is not None
+        assert len(result.cycle_path) >= 2
+        assert "contract-a" in result.cycle_path
+        assert "contract-b" in result.cycle_path
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_indirect_circular_dependency_detected(self) -> None:
+        """Test that indirect A -> B -> C -> A cycle is detected.
+
+        Contract A inherits from B
+        Contract B inherits from C
+        Contract C inherits from A
+
+        Expected: FLOE-E512 error with full cycle path
+        """
+        from floe_core.enforcement.validators.inheritance import InheritanceValidator
+
+        contracts = {
+            "contract-a": {
+                "id": "contract-a",
+                "inherits_from": "contract-b",
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: contract-a
+version: 1.0.0
+name: contract-a
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+            "contract-b": {
+                "id": "contract-b",
+                "inherits_from": "contract-c",
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: contract-b
+version: 1.0.0
+name: contract-b
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+            "contract-c": {
+                "id": "contract-c",
+                "inherits_from": "contract-a",  # Creates cycle!
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: contract-c
+version: 1.0.0
+name: contract-c
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+        }
+
+        validator = InheritanceValidator()
+        result = validator.detect_circular_dependencies(
+            contract_id="contract-a",
+            contracts=contracts,
+        )
+
+        assert result.has_cycle is True
+        assert result.cycle_path is not None
+        assert len(result.cycle_path) >= 3
+        # Cycle should include all three contracts
+        assert "contract-a" in result.cycle_path
+        assert "contract-b" in result.cycle_path
+        assert "contract-c" in result.cycle_path
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_no_cycle_in_valid_chain(self) -> None:
+        """Test that valid inheritance chain (no cycle) passes.
+
+        Enterprise -> Domain -> Product (no cycles)
+
+        Expected: No cycle detected
+        """
+        from floe_core.enforcement.validators.inheritance import InheritanceValidator
+
+        contracts = {
+            "enterprise": {
+                "id": "enterprise",
+                "inherits_from": None,  # Root contract
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: enterprise
+version: 1.0.0
+name: enterprise
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+            "domain": {
+                "id": "domain",
+                "inherits_from": "enterprise",
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: domain
+version: 1.0.0
+name: domain
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+            "product": {
+                "id": "product",
+                "inherits_from": "domain",
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: product
+version: 1.0.0
+name: product
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+        }
+
+        validator = InheritanceValidator()
+        result = validator.detect_circular_dependencies(
+            contract_id="product",
+            contracts=contracts,
+        )
+
+        assert result.has_cycle is False
+        assert result.cycle_path is None
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_self_reference_detected(self) -> None:
+        """Test that self-reference (A -> A) is detected.
+
+        Contract A inherits from itself
+
+        Expected: FLOE-E512 error
+        """
+        from floe_core.enforcement.validators.inheritance import InheritanceValidator
+
+        contracts = {
+            "contract-a": {
+                "id": "contract-a",
+                "inherits_from": "contract-a",  # Self-reference!
+                "yaml": """
+apiVersion: v3.1.0
+kind: DataContract
+id: contract-a
+version: 1.0.0
+name: contract-a
+status: active
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+""",
+            },
+        }
+
+        validator = InheritanceValidator()
+        result = validator.detect_circular_dependencies(
+            contract_id="contract-a",
+            contracts=contracts,
+        )
+
+        assert result.has_cycle is True
+        assert result.cycle_path is not None
+        assert "contract-a" in result.cycle_path
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_cycle_violation_returned_with_path(self) -> None:
+        """Test that circular dependency creates FLOE-E512 violation with cycle path."""
+        from floe_core.enforcement.validators.inheritance import InheritanceValidator
+
+        contracts = {
+            "contract-a": {
+                "id": "contract-a",
+                "inherits_from": "contract-b",
+                "yaml": "...",
+            },
+            "contract-b": {
+                "id": "contract-b",
+                "inherits_from": "contract-a",
+                "yaml": "...",
+            },
+        }
+
+        validator = InheritanceValidator()
+        result = validator.detect_circular_dependencies(
+            contract_id="contract-a",
+            contracts=contracts,
+        )
+
+        # Convert to violation
+        if result.has_cycle:
+            violation = validator.cycle_to_violation(result)
+            assert violation.error_code == "FLOE-E512"
+            assert "circular" in violation.message.lower()
+            assert "contract-a" in violation.message
+            assert "contract-b" in violation.message
+
+
 __all__ = [
     "TestSLAWeakeningDetection",
     "TestClassificationWeakeningDetection",
     "TestThreeTierInheritance",
     "TestContractValidatorInheritanceIntegration",
+    "TestCircularDependencyDetection",
 ]
