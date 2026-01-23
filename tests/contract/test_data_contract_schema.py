@@ -7,307 +7,332 @@ These tests ensure schema stability for DataContract models across versions.
 Schema changes that break these tests require a version bump.
 
 Contract tests verify:
-1. Schema structure remains stable (field names, types)
-2. JSON Schema can be exported and validated against
-3. Serialization/deserialization round-trips correctly
-4. Required fields are enforced
-5. Optional fields have correct defaults
+1. ODCS re-exports are properly exposed
+2. Floe-specific models maintain stable structure
+3. Type constants have expected values
+4. Serialization works correctly
+
+Note: We use the official ODCS package (open-data-contract-standard) for
+DataContract, SchemaObject, SchemaProperty. These tests validate our
+integration with that package, not the package itself.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any
+from datetime import datetime, timezone
 
 import pytest
+
 from floe_core.schemas.data_contract import (
     Classification,
     ContractStatus,
-    ContractTerms,
+    ContractValidationResult,
+    ContractViolation,
     DataContract,
     DataContractElement,
     DataContractModel,
-    DeprecationInfo,
     ElementFormat,
     ElementType,
-    FreshnessSLA,
-    QualitySLA,
     SchemaComparisonResult,
-    SLAProperties,
+    SchemaObject,
+    SchemaProperty,
+    ServiceLevelAgreementProperty,
     TypeMismatch,
 )
 
 
-class TestDataContractSchemaStability:
-    """Contract tests for DataContract schema stability."""
+class TestODCSReExports:
+    """Test that ODCS models are properly re-exported from floe-core."""
 
     @pytest.mark.requirement("3C-FR-001")
-    def test_datacontract_required_fields(self) -> None:
-        """Test that DataContract has expected required fields.
+    def test_datacontract_is_opendata_contract_standard(self) -> None:
+        """Test DataContract is the official ODCS model."""
+        from open_data_contract_standard.model import OpenDataContractStandard
 
-        Breaking change if any of these fields become optional or removed.
-        """
-        schema = DataContract.model_json_schema()
-        required = set(schema.get("required", []))
+        assert DataContract is OpenDataContractStandard
 
-        # These fields MUST be required per ODCS v3
-        expected_required = {"apiVersion", "name", "version", "owner", "models"}
-        assert expected_required.issubset(required), (
-            f"Missing required fields: {expected_required - required}"
+    @pytest.mark.requirement("3C-FR-001")
+    def test_datacontract_model_is_schema_object(self) -> None:
+        """Test DataContractModel is SchemaObject alias."""
+        assert DataContractModel is SchemaObject
+
+    @pytest.mark.requirement("3C-FR-001")
+    def test_datacontract_element_is_schema_property(self) -> None:
+        """Test DataContractElement is SchemaProperty alias."""
+        assert DataContractElement is SchemaProperty
+
+    @pytest.mark.requirement("3C-FR-001")
+    def test_datacontract_can_be_instantiated(self) -> None:
+        """Test that DataContract (OpenDataContractStandard) can be created."""
+        # Minimal ODCS v3.1 contract
+        contract = DataContract(
+            apiVersion="v3.1.0",
+            kind="DataContract",
+            id="test-contract",
+            version="1.0.0",
+            status="active",
         )
+        assert contract.id == "test-contract"
+        assert contract.version == "1.0.0"
+        assert contract.apiVersion == "v3.1.0"
 
-    @pytest.mark.requirement("3C-FR-001")
-    def test_datacontract_field_types(self) -> None:
-        """Test that DataContract field types are stable.
-
-        Breaking change if field types change.
-        """
-        schema = DataContract.model_json_schema()
-        properties = schema.get("properties", {})
-
-        # Verify key field types
-        assert properties["apiVersion"]["type"] == "string"
-        assert properties["name"]["type"] == "string"
-        assert properties["version"]["type"] == "string"
-        assert properties["owner"]["type"] == "string"
-        assert properties["models"]["type"] == "array"
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_datacontract_api_version_pattern(self) -> None:
-        """Test that apiVersion enforces v3.x.x pattern.
-
-        Breaking change if pattern is relaxed or changed.
-        """
-        schema = DataContract.model_json_schema()
-        api_version_schema = schema["properties"]["apiVersion"]
-
-        assert "pattern" in api_version_schema
-        # Pattern must enforce v3.x.x format
-        assert "v3" in api_version_schema["pattern"]
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_datacontract_serialization_roundtrip(self) -> None:
-        """Test that DataContract serializes and deserializes correctly.
-
-        Ensures no data loss during serialization.
-        """
-        original = DataContract(
-            api_version="v3.0.2",
-            name="roundtrip-test",
-            version="1.2.3",
-            owner="test@example.com",
-            domain="analytics",
-            description="Test contract for serialization",
-            models=[
-                DataContractModel(
-                    name="test_model",
-                    description="Test model",
-                    elements=[
-                        DataContractElement(
-                            name="id",
-                            type=ElementType.STRING,
-                            required=True,
-                            primary_key=True,
-                        ),
-                        DataContractElement(
-                            name="email",
-                            type=ElementType.STRING,
-                            format=ElementFormat.EMAIL,
-                            classification=Classification.PII,
-                        ),
-                    ],
-                )
+    @pytest.mark.requirement("3C-FR-006")
+    def test_schema_object_can_be_instantiated(self) -> None:
+        """Test that SchemaObject can be created with properties."""
+        schema_obj = SchemaObject(
+            name="customers",
+            description="Customer table",
+            properties=[
+                SchemaProperty(name="id", logicalType="string"),
+                SchemaProperty(name="email", logicalType="string"),
             ],
-            sla_properties=SLAProperties(
-                freshness=FreshnessSLA(value="PT6H", element="updated_at"),
-                availability="99.9%",
-                quality=QualitySLA(completeness="99%", uniqueness="100%"),
-            ),
-            tags=["test", "contract"],
-            links={"docs": "https://example.com"},
         )
-
-        # Serialize to JSON
-        json_str = original.model_dump_json()
-        json_data = json.loads(json_str)
-
-        # Deserialize back
-        restored = DataContract.model_validate(json_data)
-
-        # Verify key fields match
-        assert restored.api_version == original.api_version
-        assert restored.name == original.name
-        assert restored.version == original.version
-        assert restored.owner == original.owner
-        assert restored.domain == original.domain
-        assert len(restored.models) == len(original.models)
-        assert restored.tags == original.tags
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_datacontract_json_schema_export(self) -> None:
-        """Test that JSON Schema can be exported for external validation.
-
-        This schema is used for IDE autocomplete and external tools.
-        """
-        schema = DataContract.model_json_schema()
-
-        # Must have standard JSON Schema fields
-        assert "$defs" in schema or "definitions" in schema or "properties" in schema
-        assert "properties" in schema
-        assert "required" in schema or len(schema.get("properties", {})) > 0
-
-        # Must be valid JSON (can be serialized)
-        json_str = json.dumps(schema)
-        assert len(json_str) > 0
-
-
-class TestDataContractElementSchemaStability:
-    """Contract tests for DataContractElement schema stability."""
+        assert schema_obj.name == "customers"
+        assert len(schema_obj.properties) == 2
 
     @pytest.mark.requirement("3C-FR-005")
-    def test_element_required_fields(self) -> None:
-        """Test DataContractElement required fields."""
-        schema = DataContractElement.model_json_schema()
-        required = set(schema.get("required", []))
+    def test_schema_property_can_be_instantiated(self) -> None:
+        """Test that SchemaProperty can be created."""
+        prop = SchemaProperty(
+            name="email",
+            logicalType="string",
+            required=True,
+            primaryKey=False,
+            classification="pii",
+        )
+        assert prop.name == "email"
+        assert prop.logicalType == "string"
+        assert prop.classification == "pii"
 
-        # Name and type are always required
-        assert "name" in required
-        assert "type" in required
+
+class TestElementTypeConstants:
+    """Test ElementType string constants."""
 
     @pytest.mark.requirement("3C-FR-005")
-    def test_element_type_enum_values(self) -> None:
-        """Test ElementType enum has all ODCS v3 types.
+    def test_element_type_has_core_odcs_types(self) -> None:
+        """Test ElementType has ODCS v3.1 core logicalTypes.
 
-        Breaking change if any type is removed.
+        ODCS v3.1 defines these logicalTypes:
+        string, integer, number, boolean, date, timestamp, time, array, object
         """
-        expected_types = {
-            "string",
-            "int",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "boolean",
-            "date",
-            "timestamp",
-            "time",
-            "bytes",
-            "array",
-            "object",
-        }
-        actual_types = {t.value for t in ElementType}
+        # Core ODCS v3.1 types
+        assert ElementType.STRING == "string"
+        assert ElementType.INTEGER == "integer"
+        assert ElementType.NUMBER == "number"
+        assert ElementType.BOOLEAN == "boolean"
+        assert ElementType.DATE == "date"
+        assert ElementType.TIMESTAMP == "timestamp"
+        assert ElementType.TIME == "time"
+        assert ElementType.ARRAY == "array"
+        assert ElementType.OBJECT == "object"
 
-        assert expected_types == actual_types, (
-            f"ElementType mismatch. Missing: {expected_types - actual_types}, "
-            f"Extra: {actual_types - expected_types}"
-        )
+    @pytest.mark.requirement("3C-FR-005")
+    def test_element_type_has_backward_compat_aliases(self) -> None:
+        """Test ElementType provides backward compatibility aliases."""
+        # These map to ODCS types
+        assert ElementType.INT == "integer"
+        assert ElementType.LONG == "integer"
+        assert ElementType.FLOAT == "number"
+        assert ElementType.DOUBLE == "number"
+        assert ElementType.DECIMAL == "number"
+
+
+class TestElementFormatConstants:
+    """Test ElementFormat string constants."""
 
     @pytest.mark.requirement("3C-FR-009")
-    def test_element_format_enum_values(self) -> None:
-        """Test ElementFormat enum has expected format constraints.
+    def test_element_format_has_expected_values(self) -> None:
+        """Test ElementFormat has common format constraints."""
+        assert ElementFormat.EMAIL == "email"
+        assert ElementFormat.URI == "uri"
+        assert ElementFormat.UUID == "uuid"
+        assert ElementFormat.PHONE == "phone"
+        assert ElementFormat.DATE == "date"
+        assert ElementFormat.DATETIME == "date-time"
+        assert ElementFormat.IPV4 == "ipv4"
+        assert ElementFormat.IPV6 == "ipv6"
 
-        Breaking change if any format is removed.
-        """
-        expected_formats = {
-            "email",
-            "uri",
-            "uuid",
-            "phone",
-            "date",
-            "date-time",
-            "ipv4",
-            "ipv6",
-        }
-        actual_formats = {f.value for f in ElementFormat}
 
-        assert expected_formats == actual_formats, (
-            f"ElementFormat mismatch. Missing: {expected_formats - actual_formats}, "
-            f"Extra: {actual_formats - expected_formats}"
-        )
+class TestClassificationConstants:
+    """Test Classification string constants."""
 
     @pytest.mark.requirement("3C-FR-008")
-    def test_classification_enum_values(self) -> None:
-        """Test Classification enum has expected values.
-
-        Breaking change if any classification is removed.
-        """
-        expected = {
-            "public",
-            "internal",
-            "confidential",
-            "pii",
-            "phi",
-            "sensitive",
-            "restricted",
-        }
-        actual = {c.value for c in Classification}
-
-        assert expected == actual, (
-            f"Classification mismatch. Missing: {expected - actual}, Extra: {actual - expected}"
-        )
+    def test_classification_has_expected_values(self) -> None:
+        """Test Classification has common data classification values."""
+        assert Classification.PUBLIC == "public"
+        assert Classification.INTERNAL == "internal"
+        assert Classification.CONFIDENTIAL == "confidential"
+        assert Classification.PII == "pii"
+        assert Classification.PHI == "phi"
+        assert Classification.SENSITIVE == "sensitive"
+        assert Classification.RESTRICTED == "restricted"
 
 
-class TestContractStatusSchemaStability:
-    """Contract tests for ContractStatus enum stability."""
+class TestContractStatusConstants:
+    """Test ContractStatus string constants."""
 
     @pytest.mark.requirement("3C-FR-001")
-    def test_contract_status_lifecycle(self) -> None:
-        """Test ContractStatus has ODCS v3 lifecycle states.
+    def test_contract_status_has_lifecycle_states(self) -> None:
+        """Test ContractStatus has ODCS lifecycle states."""
+        assert ContractStatus.ACTIVE == "active"
+        assert ContractStatus.DEPRECATED == "deprecated"
+        assert ContractStatus.SUNSET == "sunset"
+        assert ContractStatus.RETIRED == "retired"
+        assert ContractStatus.DRAFT == "draft"
 
-        Breaking change if any status is removed.
-        """
-        expected_statuses = {"active", "deprecated", "sunset", "retired"}
-        actual_statuses = {s.value for s in ContractStatus}
 
-        assert expected_statuses == actual_statuses, (
-            f"ContractStatus mismatch. Missing: {expected_statuses - actual_statuses}, "
-            f"Extra: {actual_statuses - expected_statuses}"
+class TestContractViolationSchemaStability:
+    """Contract tests for ContractViolation Pydantic model."""
+
+    @pytest.mark.requirement("3C-FR-001")
+    def test_contract_violation_required_fields(self) -> None:
+        """Test ContractViolation has expected required fields."""
+        schema = ContractViolation.model_json_schema()
+        required = set(schema.get("required", []))
+
+        # These fields MUST be required
+        expected_required = {"error_code", "severity", "message"}
+        assert expected_required == required
+
+    @pytest.mark.requirement("3C-FR-001")
+    def test_contract_violation_can_be_instantiated(self) -> None:
+        """Test ContractViolation can be created and validated."""
+        violation = ContractViolation(
+            error_code="FLOE-E501",
+            severity="error",
+            message="Type mismatch",
+            model_name="customers",
+            element_name="email",
+            expected="string",
+            actual="integer",
+            suggestion="Update contract schema",
+        )
+        assert violation.error_code == "FLOE-E501"
+        assert violation.severity == "error"
+
+    @pytest.mark.requirement("3C-FR-001")
+    def test_contract_violation_error_code_pattern(self) -> None:
+        """Test ContractViolation enforces FLOE-E5xx pattern."""
+        # Valid pattern
+        violation = ContractViolation(
+            error_code="FLOE-E500",
+            severity="error",
+            message="Test",
+        )
+        assert violation.error_code == "FLOE-E500"
+
+        # Invalid pattern should fail
+        with pytest.raises(Exception):  # ValidationError
+            ContractViolation(
+                error_code="INVALID",
+                severity="error",
+                message="Test",
+            )
+
+    @pytest.mark.requirement("3C-FR-001")
+    def test_contract_violation_serialization_roundtrip(self) -> None:
+        """Test ContractViolation serializes and deserializes correctly."""
+        original = ContractViolation(
+            error_code="FLOE-E502",
+            severity="warning",
+            message="Missing classification",
+            element_name="ssn",
         )
 
+        json_str = original.model_dump_json()
+        json_data = json.loads(json_str)
+        restored = ContractViolation.model_validate(json_data)
 
-class TestSLASchemaStability:
-    """Contract tests for SLA-related schema stability."""
+        assert restored.error_code == original.error_code
+        assert restored.message == original.message
 
-    @pytest.mark.requirement("3C-FR-007")
-    def test_freshness_sla_structure(self) -> None:
-        """Test FreshnessSLA schema structure."""
-        schema = FreshnessSLA.model_json_schema()
-        properties = schema.get("properties", {})
 
-        # Must have value field
-        assert "value" in properties
-        assert properties["value"]["type"] == "string"
-
-        # Must enforce ISO 8601 duration pattern
-        assert "pattern" in properties["value"]
+class TestContractValidationResultSchemaStability:
+    """Contract tests for ContractValidationResult Pydantic model."""
 
     @pytest.mark.requirement("3C-FR-002")
-    def test_quality_sla_fields(self) -> None:
-        """Test QualitySLA has expected fields."""
-        schema = QualitySLA.model_json_schema()
-        properties = schema.get("properties", {})
+    def test_validation_result_required_fields(self) -> None:
+        """Test ContractValidationResult has expected required fields."""
+        schema = ContractValidationResult.model_json_schema()
+        required = set(schema.get("required", []))
 
-        # These fields should exist
-        expected_fields = {"completeness", "uniqueness", "accuracy"}
-        actual_fields = set(properties.keys())
+        expected_required = {
+            "valid",
+            "schema_hash",
+            "validated_at",
+            "contract_name",
+            "contract_version",
+        }
+        assert expected_required == required
 
-        assert expected_fields.issubset(actual_fields), (
-            f"Missing QualitySLA fields: {expected_fields - actual_fields}"
+    @pytest.mark.requirement("3C-FR-002")
+    def test_validation_result_can_be_instantiated(self) -> None:
+        """Test ContractValidationResult can be created."""
+        result = ContractValidationResult(
+            valid=True,
+            violations=[],
+            warnings=[],
+            schema_hash="sha256:" + "a" * 64,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test-contract",
+            contract_version="1.0.0",
         )
+        assert result.valid is True
+        assert result.contract_name == "test-contract"
 
-    @pytest.mark.requirement("3C-FR-007")
-    def test_sla_properties_structure(self) -> None:
-        """Test SLAProperties combines SLA types correctly."""
-        schema = SLAProperties.model_json_schema()
-        properties = schema.get("properties", {})
-
-        # Must have freshness, availability, and quality
-        expected_fields = {"freshness", "availability", "quality"}
-        actual_fields = set(properties.keys())
-
-        assert expected_fields.issubset(actual_fields), (
-            f"Missing SLAProperties fields: {expected_fields - actual_fields}"
+    @pytest.mark.requirement("3C-FR-002")
+    def test_validation_result_schema_hash_pattern(self) -> None:
+        """Test ContractValidationResult enforces sha256 hash pattern."""
+        # Valid pattern
+        result = ContractValidationResult(
+            valid=True,
+            schema_hash="sha256:" + "a" * 64,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test",
+            contract_version="1.0.0",
         )
+        assert result.schema_hash.startswith("sha256:")
+
+        # Invalid pattern should fail
+        with pytest.raises(Exception):  # ValidationError
+            ContractValidationResult(
+                valid=True,
+                schema_hash="invalid-hash",
+                validated_at=datetime.now(timezone.utc),
+                contract_name="test",
+                contract_version="1.0.0",
+            )
+
+    @pytest.mark.requirement("3C-FR-002")
+    def test_validation_result_error_count_property(self) -> None:
+        """Test error_count property works correctly."""
+        result = ContractValidationResult(
+            valid=False,
+            violations=[
+                ContractViolation(
+                    error_code="FLOE-E501",
+                    severity="error",
+                    message="Error 1",
+                ),
+                ContractViolation(
+                    error_code="FLOE-E502",
+                    severity="warning",
+                    message="Warning 1",
+                ),
+                ContractViolation(
+                    error_code="FLOE-E503",
+                    severity="error",
+                    message="Error 2",
+                ),
+            ],
+            schema_hash="sha256:" + "b" * 64,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test",
+            contract_version="1.0.0",
+        )
+        assert result.error_count == 2
+        assert result.warning_count == 1
 
 
 class TestSchemaComparisonResultStability:
@@ -322,10 +347,26 @@ class TestSchemaComparisonResultStability:
         expected_fields = {"matches", "type_mismatches", "missing_columns", "extra_columns"}
         actual_fields = set(properties.keys())
 
-        assert expected_fields == actual_fields, (
-            f"SchemaComparisonResult mismatch. Missing: {expected_fields - actual_fields}, "
-            f"Extra: {actual_fields - expected_fields}"
+        assert expected_fields == actual_fields
+
+    @pytest.mark.requirement("3C-FR-021")
+    def test_schema_comparison_result_can_be_instantiated(self) -> None:
+        """Test SchemaComparisonResult can be created."""
+        result = SchemaComparisonResult(
+            matches=False,
+            type_mismatches=[
+                TypeMismatch(
+                    column="email",
+                    contract_type="string",
+                    table_type="integer",
+                )
+            ],
+            missing_columns=["ssn"],
+            extra_columns=["created_at"],
         )
+        assert result.matches is False
+        assert len(result.type_mismatches) == 1
+        assert "ssn" in result.missing_columns
 
     @pytest.mark.requirement("3C-FR-022")
     def test_type_mismatch_fields(self) -> None:
@@ -336,134 +377,85 @@ class TestSchemaComparisonResultStability:
         expected_fields = {"column", "contract_type", "table_type"}
         actual_fields = set(properties.keys())
 
-        assert expected_fields == actual_fields, (
-            f"TypeMismatch mismatch. Missing: {expected_fields - actual_fields}, "
-            f"Extra: {actual_fields - expected_fields}"
+        assert expected_fields == actual_fields
+
+    @pytest.mark.requirement("3C-FR-022")
+    def test_type_mismatch_is_immutable(self) -> None:
+        """Test TypeMismatch is frozen (immutable)."""
+        mismatch = TypeMismatch(
+            column="id",
+            contract_type="string",
+            table_type="integer",
         )
+        with pytest.raises(Exception):  # ValidationError
+            mismatch.column = "changed"  # type: ignore[misc]
 
 
-class TestDeprecationInfoStability:
-    """Contract tests for deprecation info schema."""
+class TestServiceLevelAgreementProperty:
+    """Test SLA property re-export from ODCS."""
 
-    @pytest.mark.requirement("3C-FR-001")
-    def test_deprecation_info_fields(self) -> None:
-        """Test DeprecationInfo has expected fields."""
-        schema = DeprecationInfo.model_json_schema()
-        properties = schema.get("properties", {})
-
-        # Fields from ODCS v3 deprecation spec
-        expected_fields = {"announced", "sunsetDate", "replacement", "migrationGuide", "reason"}
-        actual_fields = set(properties.keys())
-
-        assert expected_fields == actual_fields, (
-            f"DeprecationInfo mismatch. Missing: {expected_fields - actual_fields}, "
-            f"Extra: {actual_fields - expected_fields}"
+    @pytest.mark.requirement("3C-FR-007")
+    def test_sla_property_can_be_instantiated(self) -> None:
+        """Test ServiceLevelAgreementProperty can be created."""
+        sla = ServiceLevelAgreementProperty(
+            property="freshness",
+            value="PT6H",
+            element="updated_at",
         )
-
-
-class TestContractTermsStability:
-    """Contract tests for contract terms schema."""
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_terms_fields(self) -> None:
-        """Test ContractTerms has expected fields."""
-        schema = ContractTerms.model_json_schema()
-        properties = schema.get("properties", {})
-
-        # Fields from ODCS v3 terms spec
-        expected_fields = {"usage", "retention", "piiHandling", "limitations"}
-        actual_fields = set(properties.keys())
-
-        assert expected_fields == actual_fields, (
-            f"ContractTerms mismatch. Missing: {expected_fields - actual_fields}, "
-            f"Extra: {actual_fields - expected_fields}"
-        )
-
-
-class TestDataContractModelStability:
-    """Contract tests for DataContractModel schema."""
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_model_required_fields(self) -> None:
-        """Test DataContractModel required fields."""
-        schema = DataContractModel.model_json_schema()
-        required = set(schema.get("required", []))
-
-        # Name and elements are required
-        assert "name" in required
-        assert "elements" in required
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_model_elements_min_length(self) -> None:
-        """Test DataContractModel requires at least one element."""
-        schema = DataContractModel.model_json_schema()
-        elements_schema = schema["properties"]["elements"]
-
-        # Must enforce minimum length of 1
-        assert elements_schema.get("minItems", 0) >= 1
+        assert sla.property == "freshness"
+        assert sla.value == "PT6H"
 
 
 class TestBackwardCompatibility:
     """Tests for backward compatibility guarantees."""
 
     @pytest.mark.requirement("3C-FR-001")
-    def test_old_format_still_parses(self) -> None:
-        """Test that contracts created with earlier schema versions still parse.
-
-        This ensures we don't break existing contracts when evolving the schema.
-        """
-        # Minimal v3.0.0 format contract
-        old_format_data: dict[str, Any] = {
-            "apiVersion": "v3.0.0",
-            "kind": "DataContract",
-            "name": "legacy-contract",
-            "version": "1.0.0",
-            "owner": "legacy@example.com",
-            "models": [
-                {
-                    "name": "legacy_model",
-                    "elements": [
-                        {"name": "id", "type": "string"},
-                    ],
-                }
-            ],
-        }
-
-        # Should parse without errors
-        contract = DataContract.model_validate(old_format_data)
-        assert contract.name == "legacy-contract"
-        assert contract.api_version == "v3.0.0"
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_optional_fields_have_defaults(self) -> None:
-        """Test that all optional fields have sensible defaults.
-
-        Ensures new fields don't break existing contracts.
-        """
-        # Create contract with only required fields
+    def test_datacontract_with_schema_list(self) -> None:
+        """Test that DataContract works with schema list (ODCS v3.1 structure)."""
+        # ODCS uses 'schema' as input alias, stored as 'schema_'
         contract = DataContract(
-            api_version="v3.0.0",
-            name="defaults-test",
+            apiVersion="v3.1.0",
+            kind="DataContract",
+            id="compat-test",
             version="1.0.0",
-            owner="test@example.com",
-            models=[
-                DataContractModel(
-                    name="test",
-                    elements=[DataContractElement(name="id", type=ElementType.STRING)],
+            status="active",
+            schema=[
+                SchemaObject(
+                    name="customers",
+                    properties=[
+                        SchemaProperty(name="id", logicalType="string"),
+                    ],
                 )
             ],
         )
+        # Accessed as schema_ (Python attribute name)
+        assert len(contract.schema_) == 1
+        assert contract.schema_[0].name == "customers"
 
-        # Verify defaults are set
-        assert contract.status == ContractStatus.ACTIVE
-        assert contract.kind == "DataContract"
-        assert contract.domain is None
-        assert contract.team is None
-        assert contract.description is None
-        assert contract.sla_properties is None
-        assert contract.terms is None
-        assert contract.deprecation is None
-        assert contract.tags == []
-        assert contract.links == {}
-        assert contract.schema_hash is None
-        assert contract.validated_at is None
+    @pytest.mark.requirement("3C-FR-002")
+    def test_floe_models_json_schema_export(self) -> None:
+        """Test that floe-specific models can export JSON Schema."""
+        for model_class in [
+            ContractViolation,
+            ContractValidationResult,
+            TypeMismatch,
+            SchemaComparisonResult,
+        ]:
+            schema = model_class.model_json_schema()
+            assert "properties" in schema
+            json_str = json.dumps(schema)
+            assert len(json_str) > 0
+
+
+__all__ = [
+    "TestODCSReExports",
+    "TestElementTypeConstants",
+    "TestElementFormatConstants",
+    "TestClassificationConstants",
+    "TestContractStatusConstants",
+    "TestContractViolationSchemaStability",
+    "TestContractValidationResultSchemaStability",
+    "TestSchemaComparisonResultStability",
+    "TestServiceLevelAgreementProperty",
+    "TestBackwardCompatibility",
+]

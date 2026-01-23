@@ -44,18 +44,25 @@ The Open Data Contract Standard is a Linux Foundation project (via Bitol) defini
 - Dependency: Requires datacontract-cli (Python package)
 
 ```yaml
-# ODCS v3.x example
-apiVersion: v3.0.2
+# ODCS v3.1 example
+apiVersion: v3.1.0
 kind: DataContract
-name: customers
+id: customers
 version: 1.0.0
-models:
-  customers:
-    elements:
-      id: { type: string, primaryKey: true }
-      email: { type: string, classification: pii }
+status: active
+schema:
+  - name: customers
+    properties:
+      - name: id
+        logicalType: string
+        primaryKey: true
+      - name: email
+        logicalType: string
+        classification: pii
 slaProperties:
-  freshness: { value: "PT6H" }
+  - property: freshness
+    value: "PT6H"
+    element: updated_at
 ```
 
 #### 2. dbt Contracts
@@ -205,67 +212,82 @@ class ODCSDataContractPlugin(DataContractPlugin):
         return self._parse_drift_result(result)
 ```
 
-### ODCS v3 Schema Overview
+### ODCS v3.1 Schema Overview
 
-ODCS contracts contain 11 optional sections:
+ODCS v3.1 contracts use a structured format with the following sections:
 
 ```yaml
-apiVersion: v3.0.2          # Required: ODCS version
-kind: DataContract          # Required: Always "DataContract"
-
-# 1. Identification
-name: customers             # Contract identifier
+# Required fields
+apiVersion: v3.1.0          # ODCS version (v3.1.0+)
+kind: DataContract          # Always "DataContract"
+id: customers               # Contract identifier (unique ID)
 version: 1.0.0              # Contract version (semantic)
+status: active              # Lifecycle: active, deprecated, sunset, retired
+
+# Optional: Identification
+name: Customer Master Data  # Human-readable name
 domain: sales               # Business domain
 
-# 2. Ownership
-owner: data-team@acme.com   # Contact email
-team: Data Platform         # Team name
+# Optional: Ownership (ODCS uses team, not owner at root level)
+team:
+  - name: data-team@acme.com
 
-# 3. Description
-description: |              # Human-readable description
-  Customer master data...
+# Optional: Description
+description:
+  purpose: Customer master data for analytics
+  usage: Internal analytics only
+  limitations: No PII sharing
 
-# 4. Servers (Data Sources)
+# Optional: Servers (Data Sources)
 servers:
-  production:
+  - environment: production
     type: snowflake
     account: acme.us-east-1
 
-# 5. Models (Schema)
-models:
-  customers:
-    elements:
-      id: { type: string, primaryKey: true }
+# Optional: Schema (v3.1 uses schema, not models)
+# schema is a list of SchemaObject, each with name and properties
+schema:
+  - name: customers
+    description: Customer dimension table
+    properties:
+      - name: id
+        logicalType: string
+        primaryKey: true
+        required: true
+      - name: email
+        logicalType: string
+        classification: pii
 
-# 6. Definitions (Reusable Types)
-definitions:
-  email_type: { type: string, format: email }
-
-# 7. Service Level Agreements
+# Optional: Service Level Agreements (v3.1 uses list format)
 slaProperties:
-  freshness: { value: "PT6H" }
-  availability: { value: "99.9%" }
+  - property: freshness
+    value: "PT6H"
+    element: updated_at
+  - property: availability
+    value: "99.9%"
 
-# 8. Quality Rules
-quality:
-  type: great_expectations
-  specification: expectations.json
+# Optional: Data Quality
+dataQuality:
+  - type: great_expectations
+    specification: expectations.json
 
-# 9. Terms
-terms:
-  usage: "Internal analytics"
-  retention: "7 years"
-
-# 10. Tags
+# Optional: Tags (list format)
 tags:
   - gold-layer
   - customer-data
 
-# 11. Links
-links:
-  documentation: https://wiki.acme.com/customers
+# Optional: Custom Properties (for extensions)
+customProperties:
+  - property: retention
+    value: "7 years"
 ```
+
+**Key changes in v3.1:**
+- `id` is the primary identifier (not `name`)
+- `schema` replaces `models` (list of SchemaObject)
+- `slaProperties` is a list of objects with `property` and `value`
+- `team` replaces root-level `owner`
+- `description` is an object with `purpose`, `usage`, `limitations`
 
 ## Consequences
 

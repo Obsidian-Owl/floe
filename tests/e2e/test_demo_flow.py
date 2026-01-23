@@ -6,14 +6,22 @@ not just in isolation. It exercises the full compile → deploy → run cycle.
 Requirements Covered:
 - E2E-001: Full pipeline workflow validation
 - E2E-002: Platform services integration
+- E2E-003: Catalog integration
+
+Per testing standards: Tests FAIL when infrastructure is unavailable.
+No pytest.skip() - see .claude/rules/testing-standards.md
 """
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
+from testing.base_classes.integration_test_base import IntegrationTestBase
 
-class TestDemoFlow:
+
+class TestDemoFlow(IntegrationTestBase):
     """E2E tests for the demo data pipeline.
 
     These tests validate the complete floe platform workflow:
@@ -29,7 +37,7 @@ class TestDemoFlow:
     """
 
     # Services required for E2E tests
-    required_services = [
+    required_services: ClassVar[list[tuple[str, int]]] = [
         ("dagster", 3000),
         ("polaris", 8181),
         ("localstack", 4566),
@@ -37,18 +45,23 @@ class TestDemoFlow:
 
     @pytest.mark.e2e
     @pytest.mark.requirement("E2E-001")
-    def test_compile_deploy_run_validates(self, e2e_namespace: str) -> None:  # noqa: ARG002
+    def test_compile_deploy_run_validates(self, e2e_namespace: str) -> None:
         """Test complete pipeline: compile → deploy → run → validate.
 
         This is the canonical E2E test that validates the entire floe
         platform works as an integrated system.
 
         Args:
-            e2e_namespace: Unique namespace for test isolation (used when implemented).
+            e2e_namespace: Unique namespace for test isolation.
         """
-        # TODO: Implement when platform services are available
+        # Check infrastructure availability - FAIL if not available
+        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("localstack", 4566)
+
+        # TODO: Epic 13 - Implement E2E pipeline tests
+        # When implementing, replace this fail with actual test logic:
         #
-        # Implementation outline:
         # 1. Compile demo/floe.yaml
         #    artifacts = compile_floe_spec("demo/floe.yaml")
         #
@@ -64,7 +77,12 @@ class TestDemoFlow:
         # 5. Validate outputs exist
         #    assert status == "SUCCESS"
         #    assert output_table_exists(f"{e2e_namespace}.customers")
-        pytest.skip("E2E infrastructure not yet available - placeholder test")
+
+        pytest.fail(
+            "E2E test not yet implemented.\n"
+            "Track: Epic 13 - E2E Testing Infrastructure\n"
+            "This test validates the full compile → deploy → run cycle."
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("E2E-002")
@@ -74,9 +92,14 @@ class TestDemoFlow:
         This is a smoke test to verify E2E infrastructure is working
         before running more complex workflow tests.
         """
-        # TODO: Implement when platform services are available
+        # Check infrastructure availability - FAIL if not available
+        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("localstack", 4566)
+
+        # TODO: Epic 13 - Implement health check test
+        # When implementing, replace this fail with actual test logic:
         #
-        # Implementation outline:
         # 1. Check Dagster health endpoint
         #    assert dagster_client.health_check()
         #
@@ -85,15 +108,26 @@ class TestDemoFlow:
         #
         # 3. Check S3 (LocalStack) accessible
         #    assert s3_client.list_buckets()
-        pytest.skip("E2E infrastructure not yet available - placeholder test")
+
+        pytest.fail(
+            "E2E health check test not yet implemented.\n"
+            "Track: Epic 13 - E2E Testing Infrastructure\n"
+            "This test validates all platform services are healthy."
+        )
 
 
-class TestCatalogIntegration:
+class TestCatalogIntegration(IntegrationTestBase):
     """E2E tests for catalog integration across the platform."""
+
+    required_services: ClassVar[list[tuple[str, int]]] = [
+        ("dagster", 3000),
+        ("polaris", 8181),
+        ("localstack", 4566),
+    ]
 
     @pytest.mark.e2e
     @pytest.mark.requirement("E2E-003")
-    def test_table_registration_and_discovery(self, e2e_namespace: str) -> None:  # noqa: ARG002
+    def test_table_registration_and_discovery(self, e2e_namespace: str) -> None:
         """Test that tables created via dbt are discoverable in catalog.
 
         Validates the integration between:
@@ -102,12 +136,22 @@ class TestCatalogIntegration:
         - Dagster (orchestrates the workflow)
 
         Args:
-            e2e_namespace: Unique namespace for test isolation (used when implemented).
+            e2e_namespace: Unique namespace for test isolation.
         """
-        # TODO: Implement when platform services are available
+        # Check infrastructure availability - FAIL if not available
+        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("localstack", 4566)
+
+        # TODO: Epic 13 - Implement catalog integration test
+        # When implementing, replace this fail with actual test logic:
         #
-        # Implementation outline:
         # 1. Run dbt model that creates a table
         # 2. Verify table appears in Polaris catalog
         # 3. Verify table is queryable via Iceberg
-        pytest.skip("E2E infrastructure not yet available - placeholder test")
+
+        pytest.fail(
+            "E2E catalog integration test not yet implemented.\n"
+            "Track: Epic 13 - E2E Testing Infrastructure\n"
+            f"Namespace: {e2e_namespace}"
+        )

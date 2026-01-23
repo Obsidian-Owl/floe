@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.contracts.generator import ContractGenerator
 from floe_core.enforcement.result import Violation
@@ -1181,11 +1182,13 @@ class ContractValidator:
         return result
 
 
-class RegistrationResult:
+class RegistrationResult(BaseModel):
     """Result of contract registration in catalog.
 
     Task: T070
     Requirements: FR-026, FR-028
+
+    Pydantic model for consistent serialization and validation.
 
     Attributes:
         success: Whether registration succeeded.
@@ -1193,30 +1196,31 @@ class RegistrationResult:
         namespace: Namespace where contract was registered.
         registered_at: Timestamp of registration (if successful).
         warning: Warning message if registration failed (soft failure).
+
+    Example:
+        >>> result = RegistrationResult(
+        ...     success=True,
+        ...     contract_id="urn:datacontract:customers",
+        ...     namespace="production.customers",
+        ...     registered_at=datetime.now(timezone.utc),
+        ... )
+        >>> result.success
+        True
     """
 
-    def __init__(
-        self,
-        success: bool,
-        contract_id: str,
-        namespace: str,
-        registered_at: datetime | None = None,
-        warning: str | None = None,
-    ) -> None:
-        """Initialize RegistrationResult.
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-        Args:
-            success: Whether registration succeeded.
-            contract_id: ID of the registered contract.
-            namespace: Namespace where contract was registered.
-            registered_at: Timestamp of registration (if successful).
-            warning: Warning message if registration failed.
-        """
-        self.success = success
-        self.contract_id = contract_id
-        self.namespace = namespace
-        self.registered_at = registered_at
-        self.warning = warning
+    success: bool = Field(..., description="Whether registration succeeded")
+    contract_id: str = Field(..., description="ID of the registered contract")
+    namespace: str = Field(..., description="Namespace where contract was registered")
+    registered_at: datetime | None = Field(
+        default=None,
+        description="Timestamp of registration (if successful)",
+    )
+    warning: str | None = Field(
+        default=None,
+        description="Warning message if registration failed (soft failure)",
+    )
 
 
 class CatalogRegistrar:
