@@ -236,7 +236,7 @@ class TestBatchFetcher:
         latency = 0.05  # 50ms per request
 
         def mock_get_manifest(container: str) -> dict[str, Any]:
-            time.sleep(latency)
+            time.sleep(latency)  # simulate network latency
             tag = container.split(":")[-1]
             return {"schemaVersion": 2, "tag": tag}
 

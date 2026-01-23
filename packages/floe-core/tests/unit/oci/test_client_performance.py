@@ -44,13 +44,13 @@ class MockOrasClient:
 
     def get_tags(self, container: str) -> list[str]:  # noqa: ARG002
         """Return list of tags with simulated latency."""
-        time.sleep(self.latency)
+        time.sleep(self.latency)  # simulate network latency
         self.request_count += 1
         return self.tags
 
     def get_manifest(self, container: str) -> dict[str, Any]:  # noqa: ARG002
         """Return mock manifest with simulated latency."""
-        time.sleep(self.latency)
+        time.sleep(self.latency)  # simulate network latency
         self.request_count += 1
         return {
             "schemaVersion": 2,
