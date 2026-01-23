@@ -846,6 +846,210 @@ class ContractValidator:
 
         return result
 
+    def validate_with_drift_detection(
+        self,
+        contract_path: Path,
+        table_schema: Any | None = None,
+        enforcement_level: str = "strict",
+    ) -> ContractValidationResult:
+        """Validate a contract with schema drift detection against Iceberg table.
+
+        Task: T066
+        Requirements: FR-021, FR-022, FR-023, FR-024
+
+        Validates the contract and, if an Iceberg table schema is provided,
+        checks for schema drift between the contract and the actual table.
+
+        Args:
+            contract_path: Path to the datacontract.yaml file.
+            table_schema: Optional PyIceberg Schema from the table.
+                         If None, drift detection is skipped (table may not exist).
+            enforcement_level: Enforcement level from governance config.
+
+        Returns:
+            ContractValidationResult with all violations (ODCS + drift).
+
+        Example:
+            >>> from pyiceberg.catalog import load_catalog
+            >>> catalog = load_catalog("default")
+            >>> table = catalog.load_table("my_namespace.my_table")
+            >>> result = validator.validate_with_drift_detection(
+            ...     contract_path=Path("datacontract.yaml"),
+            ...     table_schema=table.schema(),
+            ... )
+            >>> if not result.valid:
+            ...     for v in result.violations:
+            ...         if v.error_code == "FLOE-E530":
+            ...             print(f"Type mismatch: {v.message}")
+        """
+        # First validate the contract itself
+        result = self.validate(contract_path, enforcement_level)
+
+        # If validation failed, return base result
+        if not result.valid:
+            return result
+
+        # If no table schema provided, skip drift detection (table may not exist)
+        if table_schema is None:
+            self._log.info(
+                "drift_detection_skipped",
+                contract=str(contract_path),
+                reason="no_table_schema",
+            )
+            return result
+
+        # Parse contract to get schema columns
+        try:
+            contract = self._parser.parse_contract(contract_path)
+        except (ContractValidationError, ContractLintError):
+            # Already handled in first validation pass
+            return result
+
+        # Extract columns from contract schema
+        contract_columns = self._extract_contract_columns(contract)
+
+        if not contract_columns:
+            self._log.debug(
+                "no_contract_columns",
+                contract=str(contract_path),
+            )
+            return result
+
+        # Perform drift detection
+        self._log.info(
+            "performing_drift_detection",
+            contract=str(contract_path),
+            contract_columns=len(contract_columns),
+        )
+
+        try:
+            from floe_iceberg.drift_detector import DriftDetector
+
+            detector = DriftDetector()
+            drift_result = detector.compare_schemas(
+                contract_columns=contract_columns,
+                table_schema=table_schema,
+            )
+        except ImportError:
+            self._log.warning(
+                "drift_detection_unavailable",
+                reason="floe_iceberg not installed",
+            )
+            return result
+        except Exception as e:
+            self._log.error(
+                "drift_detection_failed",
+                error=str(e),
+            )
+            return result
+
+        # Convert drift results to violations
+        if not drift_result.matches:
+            drift_violations = self._drift_result_to_violations(drift_result)
+            all_violations = result.violations + drift_violations
+
+            return ContractValidationResult(
+                valid=False,
+                violations=all_violations,
+                warnings=result.warnings,
+                schema_hash=result.schema_hash,
+                validated_at=result.validated_at,
+                contract_name=result.contract_name,
+                contract_version=result.contract_version,
+            )
+
+        self._log.info(
+            "drift_detection_passed",
+            contract=result.contract_name,
+            extra_columns=len(drift_result.extra_columns),
+        )
+
+        return result
+
+    def _extract_contract_columns(
+        self,
+        contract: DataContract,
+    ) -> list[dict[str, Any]]:
+        """Extract column definitions from contract schema.
+
+        Args:
+            contract: Parsed DataContract model.
+
+        Returns:
+            List of column dicts with 'name' and 'logicalType' keys.
+        """
+        columns: list[dict[str, Any]] = []
+
+        if not contract.schema_:
+            return columns
+
+        for schema in contract.schema_:
+            if schema.properties:
+                for prop in schema.properties:
+                    columns.append({
+                        "name": prop.name,
+                        "logicalType": prop.logicalType or "string",
+                    })
+
+        return columns
+
+    def _drift_result_to_violations(
+        self,
+        drift_result: Any,
+    ) -> list[ContractViolation]:
+        """Convert drift detection result to ContractViolations.
+
+        Args:
+            drift_result: SchemaComparisonResult from DriftDetector.
+
+        Returns:
+            List of ContractViolation for type mismatches and missing columns.
+        """
+        violations: list[ContractViolation] = []
+
+        # Type mismatches
+        for mismatch in drift_result.type_mismatches:
+            violations.append(
+                ContractViolation(
+                    error_code="FLOE-E530",
+                    severity="error",
+                    message=(
+                        f"Schema drift detected: column '{mismatch.column}' "
+                        f"has type '{mismatch.table_type}' in table but "
+                        f"'{mismatch.contract_type}' in contract"
+                    ),
+                    element_name=mismatch.column,
+                    expected=mismatch.contract_type,
+                    actual=mismatch.table_type,
+                    suggestion=(
+                        "Update the contract to match the table schema, "
+                        "or evolve the table schema to match the contract"
+                    ),
+                )
+            )
+
+        # Missing columns (in contract but not in table)
+        for col_name in drift_result.missing_columns:
+            violations.append(
+                ContractViolation(
+                    error_code="FLOE-E531",
+                    severity="error",
+                    message=(
+                        f"Schema drift detected: column '{col_name}' "
+                        "is defined in contract but missing from table"
+                    ),
+                    element_name=col_name,
+                    expected="Column present in table",
+                    actual="Column missing",
+                    suggestion=(
+                        "Add the column to the Iceberg table schema, "
+                        "or remove it from the contract"
+                    ),
+                )
+            )
+
+        return violations
+
     def get_baseline_from_catalog(
         self,
         contract_id: str,
