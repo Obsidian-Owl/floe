@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from floe_core import ComputeConfig, ConnectionStatus
+from floe_core.compute_config import ComputeConfig, ConnectionStatus
 
 from floe_compute_duckdb import DuckDBComputePlugin
 

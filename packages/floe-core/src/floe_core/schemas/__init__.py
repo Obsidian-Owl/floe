@@ -47,16 +47,6 @@ from floe_core.schemas.audit import (
     AuditResult,
 )
 
-# Telemetry configuration schemas (12B-ARCH-001: Circular dependency resolution)
-from floe_core.schemas.telemetry import (
-    BatchSpanProcessorConfig,
-    LoggingConfig,
-    ResourceAttributes,
-    SamplingConfig,
-    TelemetryAuth,
-    TelemetryConfig,
-)
-
 # CompiledArtifacts models (T076)
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
@@ -191,6 +181,16 @@ from floe_core.schemas.security import (
     PodSecurityLevelConfig,
     RBACConfig,
     SecurityConfig,
+)
+
+# Telemetry configuration schemas (12B-ARCH-001: Circular dependency resolution)
+from floe_core.schemas.telemetry import (
+    BatchSpanProcessorConfig,
+    LoggingConfig,
+    ResourceAttributes,
+    SamplingConfig,
+    TelemetryAuth,
+    TelemetryConfig,
 )
 
 # Validation models (T031, T032, T036, T015-T017 Epic 3A)

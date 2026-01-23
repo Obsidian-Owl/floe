@@ -428,7 +428,7 @@ class TestNamespaceHierarchy(IntegrationTestBase):
         Polaris requires parent namespaces to exist before creating children.
         This verifies the error handling for missing parent.
         """
-        from floe_core import CatalogUnavailableError, NotFoundError
+        from floe_core.plugin_errors import CatalogUnavailableError, NotFoundError
 
         plugin = self._get_connected_plugin()
         parent = self._generate_unique_namespace("orphan")

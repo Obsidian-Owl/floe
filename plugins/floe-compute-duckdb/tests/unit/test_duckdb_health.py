@@ -13,7 +13,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core import (
+from floe_core.compute_config import (
     ComputeConfig,
     ConnectionResult,
     ConnectionStatus,

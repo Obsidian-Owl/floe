@@ -42,7 +42,7 @@ def memory_config() -> Any:
         ...     result = duckdb_plugin.validate_connection(memory_config)
         ...     assert result.status == ConnectionStatus.HEALTHY
     """
-    from floe_core import ComputeConfig
+    from floe_core.compute_config import ComputeConfig
 
     return ComputeConfig(
         plugin="duckdb",
@@ -65,7 +65,7 @@ def catalog_config() -> Any:
         ...     sql = duckdb_plugin.get_catalog_attachment_sql(catalog_config)
         ...     assert sql is not None
     """
-    from floe_core import CatalogConfig
+    from floe_core.compute_config import CatalogConfig
     from pydantic import SecretStr
 
     return CatalogConfig(

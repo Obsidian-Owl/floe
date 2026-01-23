@@ -75,13 +75,12 @@ class TestFloeCorePubicExports:
 
     @pytest.mark.requirement("FR-001")
     def test_error_exports_available(self) -> None:
-        """Verify error classes are importable for exception handling.
+        """Verify error classes are importable from plugin_errors submodule.
 
         Consumer packages need these for proper error handling:
-        - PluginError (base class)
-        - PluginNotFoundError, PluginIncompatibleError, etc.
+        - from floe_core.plugin_errors import PluginError, PluginNotFoundError, etc.
         """
-        from floe_core import (
+        from floe_core.plugin_errors import (
             CircularDependencyError,
             DuplicatePluginError,
             MissingDependencyError,
@@ -104,13 +103,12 @@ class TestFloeCorePubicExports:
 
     @pytest.mark.requirement("FR-001")
     def test_version_compat_exports_available(self) -> None:
-        """Verify version compatibility exports are available.
+        """Verify version compatibility exports are available from version_compat submodule.
 
         Consumer packages need these for version checking:
-        - FLOE_PLUGIN_API_VERSION
-        - is_compatible function
+        - from floe_core.version_compat import FLOE_PLUGIN_API_VERSION, is_compatible
         """
-        from floe_core import (
+        from floe_core.version_compat import (
             FLOE_PLUGIN_API_MIN_VERSION,
             FLOE_PLUGIN_API_VERSION,
             is_compatible,
@@ -122,11 +120,12 @@ class TestFloeCorePubicExports:
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_abc_exports_available(self) -> None:
-        """Verify all 11 plugin ABC exports are available.
+        """Verify all 11 plugin ABC exports are available from plugins submodule.
 
-        Plugin packages need these for implementing specific plugin types.
+        Plugin packages should import from:
+        - from floe_core.plugins import ComputePlugin, CatalogPlugin, etc.
         """
-        from floe_core import (
+        from floe_core.plugins import (
             CatalogPlugin,
             ComputePlugin,
             DBTPlugin,
@@ -134,6 +133,7 @@ class TestFloeCorePubicExports:
             IngestionPlugin,
             LineageBackendPlugin,
             OrchestratorPlugin,
+            QualityPlugin,
             SecretsPlugin,
             SemanticLayerPlugin,
             StoragePlugin,
@@ -149,6 +149,7 @@ class TestFloeCorePubicExports:
             IngestionPlugin,
             LineageBackendPlugin,
             OrchestratorPlugin,
+            QualityPlugin,
             SecretsPlugin,
             SemanticLayerPlugin,
             StoragePlugin,
@@ -329,9 +330,11 @@ class TestRegistryIntegrationContract:
     def test_registry_not_found_error(self) -> None:
         """Verify PluginNotFoundError raised for missing plugins.
 
-        Consumers should be able to catch this specific error.
+        Consumers should be able to catch this specific error:
+        - from floe_core.plugin_errors import PluginNotFoundError
         """
-        from floe_core import PluginNotFoundError, PluginRegistry, PluginType
+        from floe_core import PluginRegistry, PluginType
+        from floe_core.plugin_errors import PluginNotFoundError
 
         registry = PluginRegistry()
 

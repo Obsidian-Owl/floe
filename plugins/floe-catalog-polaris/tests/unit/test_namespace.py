@@ -15,7 +15,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core import AuthenticationError, ConflictError, NotFoundError, NotSupportedError
+from floe_core.plugin_errors import AuthenticationError, ConflictError, NotFoundError, NotSupportedError
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
 from floe_catalog_polaris.plugin import PolarisCatalogPlugin
@@ -365,7 +365,7 @@ class TestNamespaceNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that create_namespace fails when not connected."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         # Plugin is not connected (no connect() called)
         with pytest.raises(CatalogUnavailableError, match="not connected"):
@@ -377,7 +377,7 @@ class TestNamespaceNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that list_namespaces fails when not connected."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.list_namespaces()
@@ -388,7 +388,7 @@ class TestNamespaceNotConnected:
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
         """Test that delete_namespace fails when not connected."""
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         with pytest.raises(CatalogUnavailableError, match="not connected"):
             polaris_plugin.delete_namespace("bronze")
@@ -495,7 +495,7 @@ class TestNamespaceErrorMapping:
 
         mock_catalog.list_namespaces.side_effect = ServiceUnavailableError("Service down")
 
-        from floe_core import CatalogUnavailableError
+        from floe_core.plugin_errors import CatalogUnavailableError
 
         with pytest.raises(CatalogUnavailableError):
             connected_plugin.list_namespaces()

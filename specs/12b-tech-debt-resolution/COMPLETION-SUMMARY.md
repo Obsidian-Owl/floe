@@ -134,6 +134,18 @@ The following items were identified but deferred to future work:
 
 3. **Remove floe-cli package**: ✅ Deleted deprecated package directory (CLI moved to floe-core in Epic 11)
 
+### Pre-PR Cleanup (Post-Summary)
+
+4. **Remove backward compat imports**: Deleted ~200 lines of unused backward compatibility imports from `floe_core/__init__.py` (pre-alpha, no releases). Reduced exports from 76→15 essential symbols.
+
+5. **Pin dependencies**: Added upper bounds to 6 dependencies (pyyaml, opentelemetry-sdk, opentelemetry-exporter-otlp-proto-grpc, opentelemetry-exporter-otlp-proto-http, oras, jinja2).
+
+6. **Extract test fixtures**: Added reusable `mock_span_context` fixture to `tests/unit/oci/conftest.py` for telemetry span mocking.
+
+7. **Created follow-up issues**:
+   - FLO-1483: Decompose OCIClient (1,335 lines) into focused modules
+   - FLO-1484: Decompose PolicyEnforcer (811 lines) using Chain of Responsibility
+
 ---
 
 ## Lessons Learned

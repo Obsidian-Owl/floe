@@ -11,7 +11,8 @@ The ComputeRegistry supports:
 - Hierarchical governance (Enterprise -> Domain -> Product)
 
 Example:
-    >>> from floe_core import ComputeRegistry, get_registry, PluginType
+    >>> from floe_core.compute_registry import ComputeRegistry
+    >>> from floe_core import get_registry, PluginType
     >>> registry = ComputeRegistry(
     ...     approved=["duckdb", "spark"],
     ...     default="duckdb"

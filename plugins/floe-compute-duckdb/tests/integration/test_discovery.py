@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
-from floe_core import ComputePlugin
+from floe_core.plugins import ComputePlugin
 from testing.base_classes import BasePluginDiscoveryTests
 
 if TYPE_CHECKING:

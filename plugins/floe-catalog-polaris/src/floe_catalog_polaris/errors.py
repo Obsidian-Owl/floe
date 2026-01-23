@@ -26,7 +26,7 @@ from collections.abc import Callable
 from typing import TypeAlias
 
 import structlog
-from floe_core import (
+from floe_core.plugin_errors import (
     AuthenticationError,
     CatalogError,
     CatalogUnavailableError,

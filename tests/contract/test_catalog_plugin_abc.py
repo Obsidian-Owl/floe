@@ -44,7 +44,7 @@ class TestCatalogPluginABCDefinition:
         CatalogPlugin must be abstract to enforce method implementation
         in concrete plugins.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         # Must be a class
         assert isinstance(CatalogPlugin, type)
@@ -59,7 +59,7 @@ class TestCatalogPluginABCDefinition:
         FR-001: CatalogPlugin must define connect() that returns a
         PyIceberg-compatible Catalog instance.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         # Method must exist
         assert hasattr(CatalogPlugin, "connect")
@@ -81,7 +81,7 @@ class TestCatalogPluginABCDefinition:
         FR-002: CatalogPlugin must define create_namespace() for
         namespace management.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "create_namespace")
 
@@ -100,7 +100,7 @@ class TestCatalogPluginABCDefinition:
         FR-002: CatalogPlugin must define list_namespaces() for
         namespace listing with optional parent filter.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "list_namespaces")
 
@@ -118,7 +118,7 @@ class TestCatalogPluginABCDefinition:
         FR-002: CatalogPlugin must define delete_namespace() for
         namespace deletion.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "delete_namespace")
 
@@ -136,7 +136,7 @@ class TestCatalogPluginABCDefinition:
         FR-003: CatalogPlugin must define create_table() for
         table creation.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "create_table")
 
@@ -155,7 +155,7 @@ class TestCatalogPluginABCDefinition:
         FR-003: CatalogPlugin must define list_tables() for
         table listing within a namespace.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "list_tables")
 
@@ -173,7 +173,7 @@ class TestCatalogPluginABCDefinition:
         FR-003: CatalogPlugin must define drop_table() for
         table removal.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "drop_table")
 
@@ -191,7 +191,7 @@ class TestCatalogPluginABCDefinition:
 
         Credential vending is required for secure table access.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "vend_credentials")
 
@@ -209,7 +209,7 @@ class TestCatalogPluginABCDefinition:
 
         health_check() is optional with a default that returns unhealthy.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "health_check")
 
@@ -236,7 +236,8 @@ class TestCatalogPluginMetadataRequirements:
 
         This ensures all catalog plugins have required metadata properties.
         """
-        from floe_core import CatalogPlugin, PluginMetadata
+        from floe_core import PluginMetadata
+        from floe_core.plugins import CatalogPlugin
 
         assert issubclass(CatalogPlugin, PluginMetadata)
 
@@ -246,7 +247,7 @@ class TestCatalogPluginMetadataRequirements:
 
         All plugins must have a unique name.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         # name comes from PluginMetadata and is abstract
         assert hasattr(CatalogPlugin, "name")
@@ -257,7 +258,7 @@ class TestCatalogPluginMetadataRequirements:
 
         All plugins must declare their version.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "version")
 
@@ -267,7 +268,7 @@ class TestCatalogPluginMetadataRequirements:
 
         All plugins must declare compatible API version.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         assert hasattr(CatalogPlugin, "floe_api_version")
 
@@ -287,7 +288,7 @@ class TestCatalogPluginInstantiationContract:
 
         Direct instantiation must fail because abstract methods are not implemented.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         with pytest.raises(TypeError, match="abstract"):
             CatalogPlugin()  # type: ignore[abstract]
@@ -299,7 +300,7 @@ class TestCatalogPluginInstantiationContract:
         A class that only implements some abstract methods should not
         be instantiable.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         class IncompletePlugin(CatalogPlugin):
             """Plugin missing most abstract methods."""
@@ -334,7 +335,7 @@ class TestCatalogPluginInstantiationContract:
 
         A class implementing all abstract methods should be instantiable.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         class CompleteMockPlugin(CatalogPlugin):
             """Complete mock plugin implementation for testing."""
@@ -414,7 +415,7 @@ class TestCatalogPluginTypeHints:
 
         FR-001: connect() must return a PyIceberg-compatible Catalog.
         """
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
         from floe_core.plugins.catalog import Catalog
 
         sig = inspect.signature(CatalogPlugin.connect)
@@ -426,7 +427,7 @@ class TestCatalogPluginTypeHints:
     @pytest.mark.requirement("FR-002")
     def test_list_namespaces_return_type_hint(self) -> None:
         """Verify list_namespaces() returns list[str]."""
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         sig = inspect.signature(CatalogPlugin.list_namespaces)
         return_annotation = sig.return_annotation
@@ -437,7 +438,7 @@ class TestCatalogPluginTypeHints:
     @pytest.mark.requirement("FR-003")
     def test_list_tables_return_type_hint(self) -> None:
         """Verify list_tables() returns list[str]."""
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         sig = inspect.signature(CatalogPlugin.list_tables)
         return_annotation = sig.return_annotation
@@ -448,7 +449,7 @@ class TestCatalogPluginTypeHints:
     @pytest.mark.requirement("FR-001")
     def test_vend_credentials_return_type_hint(self) -> None:
         """Verify vend_credentials() returns dict[str, Any]."""
-        from floe_core import CatalogPlugin
+        from floe_core.plugins import CatalogPlugin
 
         sig = inspect.signature(CatalogPlugin.vend_credentials)
         return_annotation = sig.return_annotation

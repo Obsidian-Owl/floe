@@ -33,13 +33,9 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from floe_core import (
-    CatalogPlugin,
-    CatalogUnavailableError,
-    HealthState,
-    HealthStatus,
-    NotSupportedError,
-)
+from floe_core import HealthState, HealthStatus
+from floe_core.plugin_errors import CatalogUnavailableError, NotSupportedError
+from floe_core.plugins import CatalogPlugin
 from floe_core.plugins.catalog import Catalog
 from pyiceberg.catalog import load_catalog
 from pyiceberg.schema import Schema as IcebergSchema

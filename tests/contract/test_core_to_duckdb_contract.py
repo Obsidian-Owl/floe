@@ -28,7 +28,7 @@ class TestDuckDBImplementsComputePluginContract:
     def test_duckdb_is_compute_plugin_instance(self) -> None:
         """Test DuckDBComputePlugin is a ComputePlugin instance."""
         from floe_compute_duckdb import DuckDBComputePlugin
-        from floe_core import ComputePlugin
+        from floe_core.plugins import ComputePlugin
 
         plugin = DuckDBComputePlugin()
 
@@ -61,7 +61,7 @@ class TestDuckDBImplementsComputePluginContract:
     def test_generate_dbt_profile_returns_dict(self) -> None:
         """Test generate_dbt_profile returns valid dict with required keys."""
         from floe_compute_duckdb import DuckDBComputePlugin
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         plugin = DuckDBComputePlugin()
         config = ComputeConfig(
@@ -85,7 +85,7 @@ class TestDuckDBImplementsComputePluginContract:
     def test_validate_connection_returns_connection_result(self) -> None:
         """Test validate_connection returns ConnectionResult model."""
         from floe_compute_duckdb import DuckDBComputePlugin
-        from floe_core import ComputeConfig, ConnectionResult, ConnectionStatus
+        from floe_core.compute_config import ComputeConfig, ConnectionResult, ConnectionStatus
 
         plugin = DuckDBComputePlugin()
         config = ComputeConfig(
@@ -109,7 +109,7 @@ class TestDuckDBImplementsComputePluginContract:
     def test_get_resource_requirements_returns_resource_spec(self) -> None:
         """Test get_resource_requirements returns ResourceSpec model."""
         from floe_compute_duckdb import DuckDBComputePlugin
-        from floe_core import ResourceSpec
+        from floe_core.compute_config import ResourceSpec
 
         plugin = DuckDBComputePlugin()
 
@@ -151,7 +151,7 @@ class TestDuckDBImplementsComputePluginContract:
     def test_get_catalog_attachment_sql_returns_list_or_none(self) -> None:
         """Test get_catalog_attachment_sql returns SQL list or None."""
         from floe_compute_duckdb import DuckDBComputePlugin
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         plugin = DuckDBComputePlugin()
         catalog_config = CatalogConfig(
@@ -178,7 +178,7 @@ class TestComputeConfigSerialization:
     @pytest.mark.requirement("001-FR-001")
     def test_compute_config_roundtrip(self) -> None:
         """Test ComputeConfig can be serialized and deserialized."""
-        from floe_core import ComputeConfig
+        from floe_core.compute_config import ComputeConfig
 
         original = ComputeConfig(
             plugin="duckdb",
@@ -209,7 +209,7 @@ class TestComputeConfigSerialization:
     @pytest.mark.requirement("001-FR-003")
     def test_connection_result_roundtrip(self) -> None:
         """Test ConnectionResult can be serialized and deserialized."""
-        from floe_core import ConnectionResult, ConnectionStatus
+        from floe_core.compute_config import ConnectionResult, ConnectionStatus
 
         original = ConnectionResult(
             status=ConnectionStatus.HEALTHY,
@@ -238,7 +238,7 @@ class TestComputeConfigSerialization:
     @pytest.mark.requirement("001-FR-004")
     def test_resource_spec_roundtrip(self) -> None:
         """Test ResourceSpec can be serialized and deserialized."""
-        from floe_core import ResourceSpec
+        from floe_core.compute_config import ResourceSpec
 
         original = ResourceSpec(
             cpu_request="500m",
@@ -266,7 +266,7 @@ class TestComputeConfigSerialization:
     @pytest.mark.requirement("001-FR-007")
     def test_catalog_config_roundtrip(self) -> None:
         """Test CatalogConfig can be serialized and deserialized."""
-        from floe_core import CatalogConfig
+        from floe_core.compute_config import CatalogConfig
 
         original = CatalogConfig(
             catalog_type="rest",
