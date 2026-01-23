@@ -433,7 +433,15 @@ Example YAML:
 
 
 # Valid policy types for override filtering
-VALID_POLICY_TYPES = frozenset({"naming", "coverage", "documentation", "semantic", "custom"})
+# Epic 3C: Added "data_contract" for data contract validation
+VALID_POLICY_TYPES = frozenset({
+    "naming",
+    "coverage",
+    "documentation",
+    "semantic",
+    "custom",
+    "data_contract",  # Epic 3C: Data contract validation
+})
 
 
 class PolicyOverride(BaseModel):
