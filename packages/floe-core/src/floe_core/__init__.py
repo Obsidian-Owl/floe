@@ -74,7 +74,35 @@ from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_core.schemas.floe_spec import FloeSpec
 
 # =============================================================================
-# Public API (15 symbols)
+# Backward compatibility exports (for test compatibility)
+# =============================================================================
+# NOTE: These are re-exports for backward compatibility with test code.
+# New code should import from the specific submodule (e.g., floe_core.plugins).
+# Plugin ABCs
+from floe_core.plugins import (
+    CatalogConfig,
+    CatalogPlugin,
+    ComputeConfig,
+    ComputePlugin,
+    ConnectionResult,
+    ResourceSpec,
+)
+
+# Compute config
+from floe_core.compute_config import WORKLOAD_PRESETS, ConnectionStatus
+
+# Plugin error hierarchy
+from floe_core.plugin_errors import (
+    AuthenticationError,
+    CatalogError,
+    CatalogUnavailableError,
+    ConflictError,
+    NotFoundError,
+    NotSupportedError,
+)
+
+# =============================================================================
+# Public API (15 symbols) + Backward Compatibility Exports
 # =============================================================================
 __all__: list[str] = [
     # Package version
@@ -98,4 +126,21 @@ __all__: list[str] = [
     # Health reporting
     "HealthState",
     "HealthStatus",
+    # Backward compatibility (plugin ABCs)
+    "CatalogConfig",
+    "CatalogPlugin",
+    "ComputeConfig",
+    "ComputePlugin",
+    "ConnectionResult",
+    "ResourceSpec",
+    # Backward compatibility (compute config)
+    "ConnectionStatus",
+    "WORKLOAD_PRESETS",
+    # Backward compatibility (error classes)
+    "AuthenticationError",
+    "CatalogError",
+    "CatalogUnavailableError",
+    "ConflictError",
+    "NotFoundError",
+    "NotSupportedError",
 ]
