@@ -432,6 +432,165 @@ Example YAML:
 """
 
 
+# ==============================================================================
+# Epic 3C: Data Contract Configuration
+# ==============================================================================
+
+
+class AutoGenerationConfig(BaseModel):
+    """Configuration for automatic contract generation from output_ports.
+
+    Controls how contracts are auto-generated when no explicit datacontract.yaml
+    exists but floe.yaml defines output_ports.
+
+    Attributes:
+        enabled: Enable auto-generation of contracts. Default: True
+        include_descriptions: Include column descriptions from port schema. Default: True
+        default_classification: Default classification for generated fields. Default: "internal"
+
+    Example:
+        >>> config = AutoGenerationConfig(
+        ...     enabled=True,
+        ...     default_classification="confidential"
+        ... )
+
+    See Also:
+        - spec.md: FR-003, FR-004
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable auto-generation of contracts from output_ports",
+    )
+    include_descriptions: bool = Field(
+        default=True,
+        description="Include column descriptions from port schema in generated contract",
+    )
+    default_classification: Literal[
+        "public", "internal", "confidential", "pii", "phi", "sensitive", "restricted"
+    ] = Field(
+        default="internal",
+        description="Default classification for auto-generated fields",
+    )
+
+
+class DriftDetectionConfig(BaseModel):
+    """Configuration for schema drift detection between contract and actual table.
+
+    Controls how drift detection compares the contract schema against the actual
+    Iceberg table schema via IcebergTableManager.
+
+    Attributes:
+        enabled: Enable drift detection. Default: True
+        fail_on_type_mismatch: Fail on column type mismatches (FLOE-E530). Default: True
+        fail_on_missing_column: Fail on columns in contract but not table (FLOE-E531). Default: True
+        warn_on_extra_column: Warn on columns in table but not contract (FLOE-E532). Default: True
+
+    Example:
+        >>> config = DriftDetectionConfig(
+        ...     enabled=True,
+        ...     fail_on_type_mismatch=True,
+        ...     warn_on_extra_column=False  # Ignore extra columns
+        ... )
+
+    See Also:
+        - spec.md: FR-021 through FR-025
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable schema drift detection against actual Iceberg table",
+    )
+    fail_on_type_mismatch: bool = Field(
+        default=True,
+        description="Fail on column type mismatches (FLOE-E530)",
+    )
+    fail_on_missing_column: bool = Field(
+        default=True,
+        description="Fail on columns in contract but not in table (FLOE-E531)",
+    )
+    warn_on_extra_column: bool = Field(
+        default=True,
+        description="Warn on columns in table but not in contract (FLOE-E532)",
+    )
+
+
+class DataContractsConfig(BaseModel):
+    """Configuration for data contract validation in governance block.
+
+    Defines how data contracts are validated, including enforcement level,
+    auto-generation settings, drift detection, and inheritance mode.
+
+    Attributes:
+        enforcement: Enforcement level (off, warn, strict). Default: "warn"
+        auto_generation: Auto-generation settings for contracts from output_ports.
+        drift_detection: Schema drift detection settings.
+        inheritance_mode: Contract inheritance mode. Default: "merge"
+
+    Example:
+        >>> config = DataContractsConfig(
+        ...     enforcement="strict",
+        ...     auto_generation=AutoGenerationConfig(enabled=True),
+        ...     drift_detection=DriftDetectionConfig(enabled=True),
+        ... )
+
+    Strength Ordering (for inheritance):
+        - enforcement: strict (3) > warn (2) > off (1)
+        - Child cannot disable auto_generation or drift_detection if parent enables
+
+    See Also:
+        - spec.md: FR-036, FR-037, FR-038
+        - data-model.md: DataContractsConfig entity specification
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "enforcement": "strict",
+                    "auto_generation": {"enabled": True},
+                    "drift_detection": {"enabled": True, "fail_on_type_mismatch": True},
+                    "inheritance_mode": "merge",
+                }
+            ]
+        },
+    )
+
+    enforcement: Literal["off", "warn", "strict"] = Field(
+        default="warn",
+        description="Enforcement level for data contract validation (strict > warn > off)",
+    )
+    auto_generation: AutoGenerationConfig = Field(
+        default_factory=AutoGenerationConfig,
+        description="Auto-generation settings for contracts from output_ports",
+    )
+    drift_detection: DriftDetectionConfig = Field(
+        default_factory=DriftDetectionConfig,
+        description="Schema drift detection settings",
+    )
+    inheritance_mode: Literal["merge", "override", "strict"] = Field(
+        default="merge",
+        description=(
+            "Contract inheritance mode: "
+            "'merge' (child extends parent), "
+            "'override' (child replaces parent), "
+            "'strict' (child must match parent exactly)"
+        ),
+    )
+
+
 # Valid policy types for override filtering
 # Epic 3C: Added "data_contract" for data contract validation
 VALID_POLICY_TYPES = frozenset({
@@ -557,4 +716,8 @@ __all__ = [
     # Epic 3B: Policy override
     "PolicyOverride",
     "VALID_POLICY_TYPES",
+    # Epic 3C: Data contract configuration
+    "AutoGenerationConfig",
+    "DriftDetectionConfig",
+    "DataContractsConfig",
 ]
