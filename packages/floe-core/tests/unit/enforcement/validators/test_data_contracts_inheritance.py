@@ -12,6 +12,8 @@ Tests for inheritance rules:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from floe_core.schemas.data_contract import (
@@ -604,8 +606,144 @@ schema:
         assert result.violations[0].error_code == "FLOE-E510"
 
 
+class TestContractValidatorInheritanceIntegration:
+    """Tests for ContractValidator.validate_with_inheritance().
+
+    Task: T045
+    """
+
+    @pytest.fixture
+    def parent_contract_file(self, tmp_path: Path) -> Path:
+        """Create a parent contract with strict SLA."""
+        contract_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: enterprise-contract
+version: 1.0.0
+name: enterprise-contract
+status: active
+slaProperties:
+  - property: freshness
+    value: PT6H
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+"""
+        contract_path = tmp_path / "parent-contract.yaml"
+        contract_path.write_text(contract_yaml)
+        return contract_path
+
+    @pytest.fixture
+    def valid_child_contract_file(self, tmp_path: Path) -> Path:
+        """Create a child contract with stronger SLA (valid)."""
+        contract_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: product-contract
+version: 1.0.0
+name: product-contract
+status: active
+slaProperties:
+  - property: freshness
+    value: PT1H
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+"""
+        contract_path = tmp_path / "valid-child-contract.yaml"
+        contract_path.write_text(contract_yaml)
+        return contract_path
+
+    @pytest.fixture
+    def invalid_child_contract_file(self, tmp_path: Path) -> Path:
+        """Create a child contract with weaker SLA (invalid)."""
+        contract_yaml = """
+apiVersion: v3.1.0
+kind: DataContract
+id: product-contract
+version: 1.0.0
+name: product-contract
+status: active
+slaProperties:
+  - property: freshness
+    value: PT12H
+schema:
+  - name: data
+    properties:
+      - name: id
+        logicalType: string
+"""
+        contract_path = tmp_path / "invalid-child-contract.yaml"
+        contract_path.write_text(contract_yaml)
+        return contract_path
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_validate_with_inheritance_passes_for_stronger_sla(
+        self,
+        parent_contract_file: Path,
+        valid_child_contract_file: Path,
+    ) -> None:
+        """Test that valid child (stronger SLA) passes inheritance validation."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        validator = ContractValidator()
+        result = validator.validate_with_inheritance(
+            contract_path=valid_child_contract_file,
+            parent_contract_path=parent_contract_file,
+            enforcement_level="strict",
+        )
+
+        assert result.valid is True
+        assert len(result.violations) == 0
+
+    @pytest.mark.requirement("3C-FR-012")
+    def test_validate_with_inheritance_fails_for_weaker_sla(
+        self,
+        parent_contract_file: Path,
+        invalid_child_contract_file: Path,
+    ) -> None:
+        """Test that invalid child (weaker SLA) fails inheritance validation."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        validator = ContractValidator()
+        result = validator.validate_with_inheritance(
+            contract_path=invalid_child_contract_file,
+            parent_contract_path=parent_contract_file,
+            enforcement_level="strict",
+        )
+
+        assert result.valid is False
+        assert len(result.violations) >= 1
+        # Should have FLOE-E510 for SLA weakening
+        error_codes = [v.error_code for v in result.violations]
+        assert "FLOE-E510" in error_codes
+
+    @pytest.mark.requirement("3C-FR-011")
+    def test_validate_with_inheritance_no_parent(
+        self,
+        valid_child_contract_file: Path,
+    ) -> None:
+        """Test that validation works without parent contract."""
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
+
+        validator = ContractValidator()
+        result = validator.validate_with_inheritance(
+            contract_path=valid_child_contract_file,
+            parent_contract_path=None,
+            enforcement_level="strict",
+        )
+
+        # Should still validate ODCS compliance
+        assert result.valid is True
+
+
 __all__ = [
     "TestSLAWeakeningDetection",
     "TestClassificationWeakeningDetection",
     "TestThreeTierInheritance",
+    "TestContractValidatorInheritanceIntegration",
 ]

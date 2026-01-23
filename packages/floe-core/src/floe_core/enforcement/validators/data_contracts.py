@@ -679,6 +679,79 @@ class ContractValidator:
             contract_version=contract.version or "unknown",
         )
 
+    def validate_with_inheritance(
+        self,
+        contract_path: Path,
+        parent_contract_path: Path | None = None,
+        enforcement_level: str = "strict",
+    ) -> ContractValidationResult:
+        """Validate a contract with optional inheritance validation.
+
+        Task: T045
+        Requirements: FR-011, FR-012, FR-013, FR-014
+
+        Validates the contract and, if a parent contract is provided,
+        checks that the child contract does not weaken parent requirements.
+
+        Args:
+            contract_path: Path to the child datacontract.yaml file.
+            parent_contract_path: Optional path to parent datacontract.yaml.
+            enforcement_level: Enforcement level from governance config.
+
+        Returns:
+            ContractValidationResult with all violations (ODCS + inheritance).
+        """
+        # First validate the contract itself
+        result = self.validate(contract_path, enforcement_level)
+
+        # If validation failed or no parent, return base result
+        if not result.valid or parent_contract_path is None:
+            return result
+
+        if not parent_contract_path.exists():
+            self._log.warning(
+                "parent_contract_not_found",
+                path=str(parent_contract_path),
+            )
+            return result
+
+        # Validate inheritance
+        self._log.info(
+            "validating_inheritance",
+            child=str(contract_path),
+            parent=str(parent_contract_path),
+        )
+
+        from floe_core.enforcement.validators.inheritance import InheritanceValidator
+
+        inheritance_validator = InheritanceValidator()
+
+        # Read contracts as YAML
+        parent_yaml = parent_contract_path.read_text()
+        child_yaml = contract_path.read_text()
+
+        inheritance_result = inheritance_validator.validate_inheritance(
+            parent_yaml=parent_yaml,
+            child_yaml=child_yaml,
+        )
+
+        # Merge results
+        if not inheritance_result.valid:
+            all_violations = result.violations + inheritance_result.violations
+            all_warnings = result.warnings + inheritance_result.warnings
+
+            return ContractValidationResult(
+                valid=False,
+                violations=all_violations,
+                warnings=all_warnings,
+                schema_hash=result.schema_hash,
+                validated_at=result.validated_at,
+                contract_name=result.contract_name,
+                contract_version=result.contract_version,
+            )
+
+        return result
+
 
 def _check_datacontract_cli() -> None:
     """Verify datacontract-cli is installed.
