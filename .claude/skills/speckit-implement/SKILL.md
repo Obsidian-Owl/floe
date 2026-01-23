@@ -152,14 +152,56 @@ This skill enforces project principles from `.specify/memory/constitution.md`:
    - Use project's existing patterns and tooling
    - Reference spec.md and plan.md for context
 
-7. **Validation**
+   **Cleanup (REQUIRED for refactors)**:
+   When changing existing code, you MUST clean up:
+   - Remove replaced code - don't leave old implementations behind
+   - Remove orphaned tests - tests for removed code should be deleted
+   - Remove unused imports - `ruff check --select F401` on changed files
+   - Update `__all__` exports - remove exports that no longer exist
+
+   **Quick cleanup check:**
+   ```bash
+   # Find unused imports in changed files
+   git diff HEAD~1 --name-only -- '*.py' | xargs -I{} uv run ruff check {} --select F401,F811
+   ```
+
+   **Principle**: Leave the codebase cleaner than you found it.
+
+7. **Integration Check (Per-Task)**
+   Before closing a task, verify deliverables are integrated into the system:
+
+   **For new modules/classes:**
+   - [ ] Imported by at least one other file in `src/` (not just tests)
+   - [ ] Has a path to an entry point (CLI command, plugin registry, or package `__all__`)
+
+   **For plugin implementations:**
+   - [ ] Entry point registered in `pyproject.toml` under `[project.entry-points]`
+   - [ ] Plugin discoverable via `PluginRegistry.get_plugins()`
+
+   **For new schemas:**
+   - [ ] Added to `CompiledArtifacts` or exported from package
+   - [ ] Has a consumer that imports it
+
+   **Quick integration check:**
+   ```bash
+   # Verify new files are imported somewhere in src/
+   for f in $(git diff HEAD~1 --name-only --diff-filter=A -- '*.py' | grep '/src/'); do
+     basename="${f##*/}"
+     module="${basename%.py}"
+     grep -r "from.*import.*$module\|import.*$module" $(dirname $f)/.. --include="*.py" | grep -v test | head -1
+   done
+   ```
+
+   **If new code isn't reachable**: Wire it up before closing the task. Add a wiring commit if needed.
+
+8. **Validation**
    - Run checks appropriate to what was implemented:
      - Python: `uv run mypy --strict`, `uv run ruff check`, `uv run pytest <relevant tests>`
      - Helm: `helm lint`, `helm template | kubectl apply --dry-run=client -f -`
      - General: verify code imports, builds, integrates with existing code
    - **Block closure if validation fails** - fix issues first
 
-8. **Close Task**
+9. **Close Task**
    - Ask user confirmation via AskUserQuestion tool
    - Query statuses again, find status with type `completed` (usually "Done")
    - You MUST update Linear status via `mcp__plugin_linear_linear__update_issue`
@@ -175,13 +217,13 @@ This skill enforces project principles from `.specify/memory/constitution.md`:
    - Commit changes with message: `{type}(scope): {title} ({TaskID}, {LinearID})`
    - Example: `feat(plugin-api): add PluginMetadata ABC (T001, FLO-33)`
 
-9. **Continue or Complete**
+10. **Continue or Complete**
    - Query Linear for remaining ready tasks (status type `unstarted` or `backlog`)
    - If more tasks: ask user "Continue to next task?" via AskUserQuestion
    - If yes: loop back to step 2
    - If no or none remaining: display session summary and Linear project URL
 
-10. **Save Session Decisions** (end of session):
+11. **Save Session Decisions** (end of session):
     - If implementation involved significant decisions, save them for future reference:
       ```bash
       ./scripts/memory-save --decisions "{key decisions made}" --issues "{LinearIDs}"

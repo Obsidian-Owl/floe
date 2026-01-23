@@ -151,6 +151,100 @@ def test_complete_pipeline_flow() -> None:
     assert run_status(run_id) == "SUCCESS"
 ```
 
+## Integration Test Responsibility
+
+### When to Write Integration Tests
+
+**MANDATORY integration tests for:**
+- Any feature touching external services (Polaris, S3, PostgreSQL)
+- Cross-package contracts (floe-core → floe-dagster)
+- Plugin implementations (real service validation)
+- "Wire X to Y" tasks (verify the wiring works)
+
+**Decision tree for integration tests:**
+1. Does feature touch an external service? → **Integration test required**
+2. Does feature cross package boundaries? → **Contract test (may need integration)**
+3. Is this a plugin implementation? → **Plugin compliance integration test**
+4. Is this internal to one package? → **Unit test sufficient**
+
+### Integration Test Location
+
+| Scope | Location | Example |
+|-------|----------|---------|
+| Single package + service | `packages/X/tests/integration/` | Polaris catalog operations |
+| Cross-package | `tests/integration/` (root) | floe-core + floe-dagster |
+| Full workflow | `tests/e2e/` (root) | compile → deploy → run |
+
+### Required Base Classes
+
+```python
+# For service integration
+from testing.base_classes import IntegrationTestBase
+
+class TestMyFeature(IntegrationTestBase):
+    """Integration tests for feature X."""
+
+    required_services = [("polaris", 8181), ("localstack", 4566)]
+
+    @pytest.mark.requirement("XXX-FR-001")
+    def test_feature_with_real_service(self) -> None:
+        """Test feature with actual external service."""
+        self.check_infrastructure("polaris", 8181)
+        namespace = self.generate_unique_namespace("test_feature")
+        # ... test implementation
+```
+
+### E2E Test Pattern
+
+E2E tests validate complete workflows across the entire platform:
+
+```python
+# tests/e2e/test_compile_deploy_run.py
+from __future__ import annotations
+
+import pytest
+from testing.base_classes import IntegrationTestBase
+
+
+class TestFullPipelineWorkflow(IntegrationTestBase):
+    """E2E tests validating the complete floe workflow."""
+
+    required_services = [
+        ("dagster", 3000),
+        ("polaris", 8181),
+        ("localstack", 4566),
+    ]
+
+    @pytest.mark.e2e
+    @pytest.mark.requirement("E2E-001")
+    def test_full_pipeline_workflow(self) -> None:
+        """Compile spec → Deploy to Dagster → Run → Validate output."""
+        # 1. Compile
+        artifacts = compile_floe_spec("demo/floe.yaml")
+        assert artifacts.version
+
+        # 2. Deploy
+        deploy_to_dagster(artifacts)
+
+        # 3. Execute
+        run_id = trigger_pipeline("demo_pipeline")
+
+        # 4. Validate
+        status = poll_for_completion(run_id, timeout=300)
+        assert status == "SUCCESS"
+```
+
+### Integration Test Checklist
+
+Before marking a task complete, verify integration tests if applicable:
+
+- [ ] External service interaction tested with real service
+- [ ] Cross-package contracts have contract tests
+- [ ] Plugin implementations pass compliance tests
+- [ ] Test inherits from `IntegrationTestBase`
+- [ ] Test has `@pytest.mark.requirement()` marker
+- [ ] Test uses unique namespace (no test pollution)
+
 ## Package vs Root Placement Rules
 
 ### Package-Level Tests

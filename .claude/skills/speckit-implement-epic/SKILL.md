@@ -67,6 +67,15 @@ Read: .specify/memory/constitution.md
 
 ---
 
+## Constitution Alignment
+
+This skill enforces project principles:
+- **III. Causal-First**: Implementation traces to task → spec → requirement
+- **V. Debuggable**: Commit messages link to Linear issues
+- **VI. Traceable**: Task ID in commits, Linear comments on closure
+- **VII. Consistent**: Loads full spec context to ensure alignment
+- **IX. Agent-Aware**: Structured steps for unattended execution
+
 ## Memory Integration
 
 ### Before Starting

@@ -5,6 +5,14 @@ description: ALWAYS USE when writing tests, test fixtures, test utilities, or de
 
 # Testing Skill (Research-Driven)
 
+## Constitution Alignment
+
+This skill enforces project principles:
+- **V. K8s-Native Testing**: All integration/E2E tests run in Kubernetes for production parity
+- **Tests FAIL, Never Skip**: `pytest.skip()` is FORBIDDEN except for `importorskip`
+- **Requirement Traceability**: 100% of integration tests MUST have `@pytest.mark.requirement()` markers
+- **Contract Tests**: Cross-package contracts MUST have root-level tests in `tests/contract/`
+
 ## Philosophy
 
 **Tests are production code.** Apply the same rigor to test code as production code: type safety, security, maintainability, and quality standards.
@@ -14,6 +22,15 @@ This skill does NOT prescribe specific test implementations. Instead, it guides 
 2. **Discover** existing test utilities, fixtures, and base classes
 3. **Validate** tests follow project standards (TESTING.md)
 4. **Verify** tests align with K8s-native production parity goals
+
+## Quick Reference
+
+For available test infrastructure (base classes, fixtures, utilities):
+- **See**: `TESTING.md` → "Test Infrastructure Quick Reference"
+
+This keeps the skill lean. TESTING.md has the detailed tables and API reference.
+
+---
 
 ## Core Principles
 

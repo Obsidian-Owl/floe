@@ -35,6 +35,44 @@ This skill aligns with project principles:
 - **Testable Requirements**: Every requirement must be verifiable
 - **Clear Boundaries**: Explicit scope and out-of-scope declarations
 
+## Integration Considerations (REQUIRED)
+
+When specifying a feature, you MUST document integration points. This prevents isolated implementations that don't connect to the system.
+
+**Add to spec.md under "Scope" section:**
+
+1. **Entry Points**: How will users access this feature?
+   - CLI command? → Which command group?
+   - Plugin? → Which plugin type?
+   - API? → Which endpoint?
+
+2. **Dependencies**: What existing components does this feature need?
+   - Which packages? (floe-core, floe-dagster, etc.)
+   - Which plugins? (ComputePlugin, CatalogPlugin, etc.)
+   - Which services? (Polaris, S3, etc.)
+
+3. **Outputs**: What does this feature produce that others consume?
+   - New schemas? → Add to CompiledArtifacts
+   - New plugins? → Register entry points
+   - New APIs? → Document contracts
+
+**If integration is unclear**: Ask during `/speckit.clarify` before planning begins.
+
+**Example integration section in spec.md:**
+```markdown
+### Integration Points
+
+**Entry Point**: `floe validate` CLI command (floe-cli package)
+
+**Dependencies**:
+- floe-core: CompiledArtifacts, ValidationError
+- floe-dbt: DbtManifest for SQL validation
+
+**Produces**:
+- ValidationResult schema (new, added to floe-core)
+- Used by: floe-dagster pre-run checks
+```
+
 ## Outline
 
 The text the user typed after `/speckit.specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below. Do not ask the user to repeat it unless they provided an empty command.

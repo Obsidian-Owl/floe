@@ -10,6 +10,14 @@ description: |
 
 # Dagster Orchestration with dbt Integration
 
+## Constitution Alignment
+
+This skill enforces project principles:
+- **I. Technology Ownership**: Dagster owns orchestration, dbt owns SQL
+- **II. Plugin-First Architecture**: Orchestrator is pluggable (Dagster default, Airflow 3.x alternative)
+- **III. Enforced vs Pluggable**: Iceberg format ENFORCED, compute engine PLUGGABLE
+- **VIII. Observability By Default**: All operations emit OpenTelemetry traces and OpenLineage events
+
 ## Related ADRs
 
 | ADR | Decision | Relevance |
