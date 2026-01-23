@@ -137,11 +137,23 @@ def _check_datacontract_cli() -> None:
     This is called during ContractParser initialization to fail fast
     if the required dependency is missing.
 
+    Task: T019
+    Requirements: FR-001 (hard dependency on datacontract-cli)
+
     Raises:
         ContractValidationError: If datacontract-cli is not installed.
+
+    Example:
+        >>> _check_datacontract_cli()  # No error if installed
+        >>> # Raises ContractValidationError if not installed
     """
-    # Implementation in T019
-    raise NotImplementedError("T019: Implement _check_datacontract_cli")
+    try:
+        from datacontract.data_contract import DataContract as DCContract  # noqa: F401
+    except ImportError as e:
+        raise ContractValidationError(
+            "datacontract-cli is required but not installed. "
+            "Install with: pip install datacontract-cli"
+        ) from e
 
 
 def _lint_error_to_violation(
