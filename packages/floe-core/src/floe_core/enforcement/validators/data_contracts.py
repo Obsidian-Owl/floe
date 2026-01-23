@@ -20,13 +20,19 @@ Example:
 
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import structlog
 
 from floe_core.enforcement.result import Violation
-from floe_core.schemas.data_contract import DataContract
+from floe_core.schemas.data_contract import (
+    ContractValidationResult,
+    ContractViolation,
+    DataContract,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -216,6 +222,308 @@ class ContractParser:
 
         # Get the parsed ODCS model
         return dc.get_data_contract()
+
+
+class ContractValidator:
+    """Validator for ODCS v3 data contracts.
+
+    ContractValidator is the main entry point for validating data contracts
+    at compile time. It orchestrates contract parsing, ODCS compliance checking,
+    and future validation steps (inheritance, versioning, drift detection).
+
+    Task: T023
+    Requirements: FR-001, FR-002, FR-005-FR-010
+
+    Attributes:
+        _parser: ContractParser instance for loading contracts.
+        _log: Structured logger for this validator instance.
+
+    Example:
+        >>> from floe_core.enforcement.validators.data_contracts import ContractValidator
+        >>> validator = ContractValidator()
+        >>>
+        >>> # Validate a contract file
+        >>> result = validator.validate(Path("datacontract.yaml"))
+        >>> if result.valid:
+        ...     print(f"Contract {result.contract_name} is valid")
+        ... else:
+        ...     for v in result.violations:
+        ...         print(f"{v.error_code}: {v.message}")
+        >>>
+        >>> # Validate with enforcement level
+        >>> result = validator.validate(
+        ...     Path("datacontract.yaml"),
+        ...     enforcement_level="strict"
+        ... )
+    """
+
+    def __init__(self) -> None:
+        """Initialize ContractValidator.
+
+        Creates a ContractParser instance for loading contracts.
+
+        Raises:
+            ContractValidationError: If datacontract-cli is not installed.
+        """
+        self._parser = ContractParser()
+        self._log = logger.bind(component="ContractValidator")
+        self._log.debug("contract_validator_initialized")
+
+    def validate(
+        self,
+        contract_path: Path,
+        enforcement_level: str = "strict",
+    ) -> ContractValidationResult:
+        """Validate a data contract file.
+
+        Task: T023
+        Requirements: FR-001, FR-002, FR-005-FR-010, FR-032
+
+        Performs the following validation steps:
+        1. Parse and lint contract via datacontract-cli (ODCS compliance)
+        2. Future: Inheritance validation (T039-T045)
+        3. Future: Version validation (T049-T055)
+        4. Future: Drift detection (T061-T066)
+
+        Args:
+            contract_path: Path to the datacontract.yaml file.
+            enforcement_level: Enforcement level from governance config.
+                - "off": Skip validation entirely
+                - "warn": Validate but don't fail
+                - "strict": Validate and fail on errors
+
+        Returns:
+            ContractValidationResult with validation outcome, violations,
+            and metadata (schema hash, timestamp).
+
+        Raises:
+            FileNotFoundError: If contract file doesn't exist.
+        """
+        self._log.info(
+            "validating_contract",
+            path=str(contract_path),
+            enforcement_level=enforcement_level,
+        )
+
+        # Check if validation is disabled
+        if enforcement_level == "off":
+            self._log.info("contract_validation_skipped", reason="enforcement=off")
+            return self._create_skipped_result(contract_path)
+
+        violations: list[ContractViolation] = []
+        warnings: list[ContractViolation] = []
+        contract: DataContract | None = None
+
+        # Step 1: Parse and validate ODCS compliance
+        try:
+            contract = self._parser.parse_contract(contract_path)
+            self._log.debug(
+                "contract_parsed_successfully",
+                contract_id=contract.id,
+                version=contract.version,
+            )
+        except ContractLintError as e:
+            # Convert Violations to ContractViolations
+            for v in e.violations:
+                contract_violation = ContractViolation(
+                    error_code=v.error_code,
+                    severity=v.severity,
+                    message=v.message,
+                    model_name=v.model_name,
+                    element_name=v.column_name,
+                    expected=v.expected,
+                    actual=v.actual,
+                    suggestion=v.suggestion,
+                )
+                if v.severity == "warning":
+                    warnings.append(contract_violation)
+                else:
+                    violations.append(contract_violation)
+        except ContractValidationError as e:
+            # Generic validation error
+            violations.append(
+                ContractViolation(
+                    error_code="FLOE-E509",
+                    severity="error",
+                    message=str(e),
+                    suggestion="Check the contract file syntax and ODCS compliance",
+                )
+            )
+
+        # Compute schema hash for fingerprinting
+        schema_hash = self._compute_schema_hash(contract_path)
+
+        # Determine contract name and version
+        contract_name = contract.name if contract else contract_path.stem
+        contract_version = contract.version if contract else "unknown"
+
+        # Build result
+        result = ContractValidationResult(
+            valid=len(violations) == 0,
+            violations=violations,
+            warnings=warnings,
+            schema_hash=schema_hash,
+            validated_at=datetime.now(timezone.utc),
+            contract_name=contract_name or contract_path.stem,
+            contract_version=contract_version or "unknown",
+        )
+
+        # Log outcome
+        if result.valid:
+            self._log.info(
+                "contract_validation_passed",
+                contract_name=result.contract_name,
+                warnings=len(warnings),
+            )
+        else:
+            self._log.warning(
+                "contract_validation_failed",
+                contract_name=result.contract_name,
+                errors=len(violations),
+                warnings=len(warnings),
+            )
+
+        return result
+
+    def validate_string(
+        self,
+        yaml_content: str,
+        name: str = "inline",
+        enforcement_level: str = "strict",
+    ) -> ContractValidationResult:
+        """Validate a data contract from YAML string.
+
+        Convenience method for validating contracts from strings rather than files.
+
+        Args:
+            yaml_content: YAML content as a string.
+            name: Name to use for the contract in results.
+            enforcement_level: Enforcement level from governance config.
+
+        Returns:
+            ContractValidationResult with validation outcome.
+        """
+        self._log.info(
+            "validating_contract_string",
+            name=name,
+            enforcement_level=enforcement_level,
+        )
+
+        if enforcement_level == "off":
+            return self._create_skipped_result_string(name)
+
+        violations: list[ContractViolation] = []
+        warnings: list[ContractViolation] = []
+        contract: DataContract | None = None
+
+        try:
+            contract = self._parser.parse_contract_string(yaml_content, name)
+        except ContractLintError as e:
+            for v in e.violations:
+                contract_violation = ContractViolation(
+                    error_code=v.error_code,
+                    severity=v.severity,
+                    message=v.message,
+                    model_name=v.model_name,
+                    element_name=v.column_name,
+                    expected=v.expected,
+                    actual=v.actual,
+                    suggestion=v.suggestion,
+                )
+                if v.severity == "warning":
+                    warnings.append(contract_violation)
+                else:
+                    violations.append(contract_violation)
+        except ContractValidationError as e:
+            violations.append(
+                ContractViolation(
+                    error_code="FLOE-E509",
+                    severity="error",
+                    message=str(e),
+                    suggestion="Check the contract YAML syntax and ODCS compliance",
+                )
+            )
+
+        schema_hash = self._compute_schema_hash_string(yaml_content)
+        contract_name = contract.name if contract else name
+        contract_version = contract.version if contract else "unknown"
+
+        return ContractValidationResult(
+            valid=len(violations) == 0,
+            violations=violations,
+            warnings=warnings,
+            schema_hash=schema_hash,
+            validated_at=datetime.now(timezone.utc),
+            contract_name=contract_name or name,
+            contract_version=contract_version or "unknown",
+        )
+
+    def _compute_schema_hash(self, contract_path: Path) -> str:
+        """Compute SHA256 hash of contract file for fingerprinting.
+
+        Args:
+            contract_path: Path to the contract file.
+
+        Returns:
+            Hash string in format "sha256:<64-char-hex>".
+        """
+        try:
+            content = contract_path.read_bytes()
+            hash_value = hashlib.sha256(content).hexdigest()
+            return f"sha256:{hash_value}"
+        except Exception:
+            # Return placeholder if file can't be read
+            return f"sha256:{'0' * 64}"
+
+    def _compute_schema_hash_string(self, yaml_content: str) -> str:
+        """Compute SHA256 hash of contract string for fingerprinting.
+
+        Args:
+            yaml_content: YAML content as string.
+
+        Returns:
+            Hash string in format "sha256:<64-char-hex>".
+        """
+        hash_value = hashlib.sha256(yaml_content.encode("utf-8")).hexdigest()
+        return f"sha256:{hash_value}"
+
+    def _create_skipped_result(self, contract_path: Path) -> ContractValidationResult:
+        """Create a result for skipped validation.
+
+        Args:
+            contract_path: Path to the contract file.
+
+        Returns:
+            ContractValidationResult indicating validation was skipped.
+        """
+        return ContractValidationResult(
+            valid=True,
+            violations=[],
+            warnings=[],
+            schema_hash=self._compute_schema_hash(contract_path),
+            validated_at=datetime.now(timezone.utc),
+            contract_name=contract_path.stem,
+            contract_version="skipped",
+        )
+
+    def _create_skipped_result_string(self, name: str) -> ContractValidationResult:
+        """Create a result for skipped string validation.
+
+        Args:
+            name: Name for the contract.
+
+        Returns:
+            ContractValidationResult indicating validation was skipped.
+        """
+        return ContractValidationResult(
+            valid=True,
+            violations=[],
+            warnings=[],
+            schema_hash=f"sha256:{'0' * 64}",
+            validated_at=datetime.now(timezone.utc),
+            contract_name=name,
+            contract_version="skipped",
+        )
 
 
 def _check_datacontract_cli() -> None:
@@ -415,6 +723,7 @@ def _get_suggestion(error_code: str, context: str) -> str:
 
 __all__ = [
     "ContractParser",
+    "ContractValidator",
     "ContractValidationError",
     "ContractLintError",
 ]

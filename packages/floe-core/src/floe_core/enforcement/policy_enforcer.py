@@ -14,6 +14,7 @@ from __future__ import annotations
 import fnmatch
 import time
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
@@ -26,6 +27,7 @@ from floe_core.enforcement.result import (
 )
 from floe_core.enforcement.validators.coverage import CoverageValidator
 from floe_core.enforcement.validators.custom_rules import CustomRuleValidator
+from floe_core.enforcement.validators.data_contracts import ContractValidator
 from floe_core.enforcement.validators.documentation import DocumentationValidator
 from floe_core.enforcement.validators.naming import NamingValidator
 from floe_core.enforcement.validators.semantic import SemanticValidator
@@ -76,6 +78,7 @@ class PolicyEnforcer:
         self,
         manifest: dict[str, Any],
         *,
+        contract_path: Path | None = None,
         dry_run: bool = False,
         include_context: bool = False,
         max_violations: int | None = None,
@@ -83,11 +86,14 @@ class PolicyEnforcer:
         """Run all policy validators against the dbt manifest.
 
         This is the main entry point for policy enforcement. It coordinates
-        all validators (naming, coverage, documentation) and aggregates
-        their results into a single EnforcementResult.
+        all validators (naming, coverage, documentation, data contracts) and
+        aggregates their results into a single EnforcementResult.
 
         Args:
             manifest: The compiled dbt manifest.json as a dictionary.
+            contract_path: Optional path to datacontract.yaml for ODCS v3
+                contract validation. If provided and governance.data_contracts
+                is configured, validates the contract (Epic 3C).
             dry_run: If True, violations are reported as warnings and
                 the result always passes. Useful for previewing impact.
             include_context: If True, populates downstream_impact field on
@@ -111,10 +117,11 @@ class PolicyEnforcer:
             manifest_version=manifest_version,
             model_count=len(models),
             dry_run=dry_run,
+            has_contract=contract_path is not None,
         )
 
         # Run all validators and collect violations
-        violations = self._run_all_validators(manifest, models, max_violations)
+        violations = self._run_all_validators(manifest, models, max_violations, contract_path)
 
         # Post-process violations
         violations = self._post_process_violations(violations, manifest, dry_run, include_context)
@@ -129,6 +136,7 @@ class PolicyEnforcer:
         manifest: dict[str, Any],
         models: list[dict[str, Any]],
         max_violations: int | None,
+        contract_path: Path | None = None,
     ) -> list[Violation]:
         """Run all configured validators and collect violations.
 
@@ -136,6 +144,8 @@ class PolicyEnforcer:
             manifest: The dbt manifest dictionary.
             models: Extracted model nodes.
             max_violations: Optional limit for early exit.
+            contract_path: Optional path to datacontract.yaml for ODCS v3
+                contract validation (Epic 3C).
 
         Returns:
             List of violations from all validators.
@@ -161,6 +171,12 @@ class PolicyEnforcer:
         # Run custom rule validation if configured
         if self.governance_config.custom_rules:
             violations.extend(self._validate_custom_rules(manifest))
+            if self._limit_reached(violations, max_violations):
+                return violations[:max_violations]
+
+        # Run data contract validation if configured (Epic 3C, T026)
+        if contract_path is not None or self.governance_config.data_contracts is not None:
+            violations.extend(self._validate_data_contracts(contract_path))
             if self._limit_reached(violations, max_violations):
                 return violations[:max_violations]
 
@@ -436,6 +452,112 @@ class PolicyEnforcer:
         # Delegate to CustomRuleValidator (T027-T033)
         validator = CustomRuleValidator(custom_rules)
         return validator.validate(manifest)
+
+    def _validate_data_contracts(
+        self,
+        contract_path: Path | None = None,
+    ) -> list[Violation]:
+        """Validate ODCS v3 data contracts.
+
+        Task: T025
+        Requirements: FR-001, FR-002, FR-005-FR-010, FR-032
+
+        Validates data contracts using ContractValidator. Respects the
+        enforcement level from governance.data_contracts.enforcement config.
+
+        Args:
+            contract_path: Path to the datacontract.yaml file. If None,
+                attempts to find contract in standard locations.
+
+        Returns:
+            List of contract violations found (FLOE-E5xx).
+        """
+        # Check if data contracts validation is configured
+        data_contracts_config = self.governance_config.data_contracts
+        if data_contracts_config is None:
+            self._log.debug("data_contracts_validation_skipped", reason="not_configured")
+            return []
+
+        # Get enforcement level
+        enforcement_level = data_contracts_config.enforcement
+        if enforcement_level == "off":
+            self._log.debug("data_contracts_validation_skipped", reason="enforcement=off")
+            return []
+
+        # Skip if no contract path provided
+        if contract_path is None:
+            self._log.debug("data_contracts_validation_skipped", reason="no_contract_path")
+            return []
+
+        # Skip if contract file doesn't exist
+        if not contract_path.exists():
+            self._log.debug(
+                "data_contracts_validation_skipped",
+                reason="contract_not_found",
+                path=str(contract_path),
+            )
+            return []
+
+        # Validate the contract
+        try:
+            validator = ContractValidator()
+            result = validator.validate(contract_path, enforcement_level=enforcement_level)
+
+            # Convert ContractViolations to Violations
+            violations: list[Violation] = []
+            for cv in result.violations:
+                violations.append(
+                    Violation(
+                        error_code=cv.error_code,
+                        severity=cv.severity,
+                        policy_type="data_contract",
+                        model_name=cv.model_name or result.contract_name,
+                        column_name=cv.element_name,
+                        message=cv.message,
+                        expected=cv.expected,
+                        actual=cv.actual,
+                        suggestion=cv.suggestion,
+                        documentation_url=f"https://floe.dev/docs/errors/{cv.error_code}",
+                    )
+                )
+
+            # Log validation outcome
+            if result.valid:
+                self._log.info(
+                    "data_contract_validation_passed",
+                    contract_name=result.contract_name,
+                    contract_version=result.contract_version,
+                )
+            else:
+                self._log.warning(
+                    "data_contract_validation_failed",
+                    contract_name=result.contract_name,
+                    violation_count=len(violations),
+                )
+
+            return violations
+
+        except Exception as e:
+            self._log.error(
+                "data_contract_validation_error",
+                error=str(e),
+                path=str(contract_path),
+            )
+            # Return a generic violation for the error
+            return [
+                Violation(
+                    error_code="FLOE-E509",
+                    severity="error",
+                    policy_type="data_contract",
+                    model_name=contract_path.stem,
+                    column_name=None,
+                    message=f"Contract validation failed: {e}",
+                    expected="Valid ODCS v3 contract",
+                    actual="Validation error",
+                    suggestion="Check the contract file and datacontract-cli installation",
+                    documentation_url="https://floe.dev/docs/errors/FLOE-E509",
+                )
+            ]
 
     def _populate_downstream_impact(
         self,
