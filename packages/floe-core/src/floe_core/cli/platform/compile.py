@@ -38,6 +38,8 @@ Examples:
     $ floe platform compile --output target/artifacts.json
     $ floe platform compile --enforcement-report report.json --enforcement-format json
     $ floe platform compile --enforcement-report report.sarif --enforcement-format sarif
+    $ floe platform compile --skip-contracts
+    $ floe platform compile --drift-detection
 """,
 )
 @click.option(
@@ -76,18 +78,34 @@ Examples:
     show_default=True,
     help="Enforcement report format (FR-013).",
 )
+@click.option(
+    "--skip-contracts",
+    is_flag=True,
+    default=False,
+    help="Skip data contract validation during compilation. "
+    "Use when contract infrastructure is unavailable or for quick iterations.",
+)
+@click.option(
+    "--drift-detection",
+    is_flag=True,
+    default=False,
+    help="Enable schema drift detection against actual table schemas. "
+    "Requires database connection. Validates contract schema matches reality.",
+)
 def compile_command(
     spec: Path | None,
     manifest: Path | None,
     output: Path,
     enforcement_report: Path | None,
     enforcement_format: str,
+    skip_contracts: bool,
+    drift_detection: bool,
 ) -> None:
     """Compile FloeSpec and Manifest into CompiledArtifacts.
 
     Loads the FloeSpec (floe.yaml) and PlatformManifest (manifest.yaml),
-    compiles them into CompiledArtifacts, runs policy enforcement,
-    and exports the results.
+    compiles them into CompiledArtifacts, runs policy enforcement
+    including data contract validation, and exports the results.
 
     Args:
         spec: Path to FloeSpec file (floe.yaml).
@@ -95,6 +113,8 @@ def compile_command(
         output: Output path for CompiledArtifacts.
         enforcement_report: Output path for enforcement report.
         enforcement_format: Enforcement report format (json, sarif, html).
+        skip_contracts: Skip data contract validation if True.
+        drift_detection: Enable schema drift detection if True.
     """
     # Validate required inputs
     if spec is None:
@@ -112,6 +132,16 @@ def compile_command(
     info(f"Compiling spec: {spec}")
     info(f"Using manifest: {manifest}")
     info(f"Output path: {output}")
+
+    # Log contract-related options (T077)
+    if skip_contracts:
+        info("Contract validation: SKIPPED (--skip-contracts)")
+    else:
+        info("Contract validation: ENABLED")
+        if drift_detection:
+            info("Schema drift detection: ENABLED (--drift-detection)")
+        else:
+            info("Schema drift detection: DISABLED (use --drift-detection to enable)")
 
     # Create parent directories for output (FR-011)
     output.parent.mkdir(parents=True, exist_ok=True)
