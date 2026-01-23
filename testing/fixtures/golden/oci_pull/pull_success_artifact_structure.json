@@ -24,7 +24,7 @@
     "observability": {
       "telemetry": {
         "enabled": true,
-        "otlp_endpoint": "http://otel-collector:4317",
+        "otlp_endpoint": "http://localhost:4317",
         "otlp_protocol": "grpc",
         "sampling": {
           "dev": 1.0,
