@@ -1,7 +1,10 @@
-"""Data contract models for ODCS v3 compliance.
+"""Data contract models using Open Data Contract Standard (ODCS).
 
-This module provides Pydantic models for data contracts following the
-Open Data Contract Standard (ODCS) v3 specification.
+This module re-exports Pydantic models from the official ODCS package
+(open-data-contract-standard) and provides floe-specific validation models.
+
+ODCS v3.1+ is the Linux Foundation standard for data contracts.
+See: https://bitol-io.github.io/open-data-contract-standard/
 
 Implements:
     - FR-001: Parse datacontract.yaml files (ODCS v3)
@@ -12,88 +15,150 @@ Implements:
     - FR-008: Validate classification values
     - FR-009: Validate format constraints
 
-Tasks: T004, T005, T006, T007, T008
+Tasks: T004, T005, T006, T007, T008, T020
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 # ==============================================================================
-# T008: Enums for ODCS v3 types
+# Re-export official ODCS models from open-data-contract-standard package
 # ==============================================================================
 
+from open_data_contract_standard.model import (  # type: ignore[import-untyped]
+    AuthoritativeDefinition,
+    CustomProperty,
+    DataQuality,
+    Description,
+    OpenDataContractStandard,
+    Pricing,
+    Relationship,
+    Role,
+    SchemaObject,
+    SchemaProperty,
+    Server,
+    ServiceLevelAgreementProperty,
+    Support,
+    Team,
+    TeamMember,
+)
 
-class ContractStatus(str, Enum):
-    """Contract lifecycle status (ODCS v3).
+# Alias for backwards compatibility and clearer naming
+DataContract = OpenDataContractStandard
+"""ODCS DataContract model (alias for OpenDataContractStandard).
 
-    Attributes:
-        ACTIVE: Contract is active and in use.
-        DEPRECATED: Contract is deprecated but still available.
-        SUNSET: Contract is being phased out.
-        RETIRED: Contract is no longer available.
+The official ODCS model provides:
+- apiVersion: ODCS version (e.g., "v3.1.0")
+- kind: Always "DataContract"
+- id: Contract identifier
+- version: Contract version (semver)
+- status: Lifecycle status (string)
+- name: Human-readable name
+- domain: Business domain
+- description: Description object with purpose, limitations, usage
+- schema_: List of SchemaObject (tables/models)
+- slaProperties: List of ServiceLevelAgreementProperty
+- team: Team or list of TeamMember
+
+Example:
+    >>> from floe_core.schemas.data_contract import DataContract
+    >>> # Load from YAML using datacontract-cli
+    >>> from datacontract.data_contract import DataContract as DC
+    >>> dc = DC(data_contract_file="datacontract.yaml")
+    >>> contract: DataContract = dc.get_data_contract()
+    >>> print(f"Contract: {contract.id} v{contract.version}")
+"""
+
+DataContractModel = SchemaObject
+"""ODCS SchemaObject (alias for backwards compatibility).
+
+Represents a table/model within a contract with:
+- name: Table/model name
+- description: Human-readable description
+- properties: List of SchemaProperty (columns)
+- logicalType: Logical type of the schema object
+"""
+
+DataContractElement = SchemaProperty
+"""ODCS SchemaProperty (alias for backwards compatibility).
+
+Represents a column/field within a schema with:
+- name: Column name
+- logicalType: Data type (string, not enum)
+- required: Whether non-nullable
+- primaryKey: Whether primary key
+- unique: Whether unique constraint
+- classification: Data classification (string)
+"""
+
+# SLA types
+FreshnessSLA = ServiceLevelAgreementProperty
+"""ODCS ServiceLevelAgreementProperty (alias for SLA).
+
+Used for freshness, availability, quality SLAs with:
+- property: SLA property name (e.g., "freshness", "availability")
+- value: SLA value (e.g., "PT6H" for 6 hours)
+- element: Column to check (for freshness)
+"""
+
+QualitySLA = ServiceLevelAgreementProperty
+"""ODCS ServiceLevelAgreementProperty (alias for quality SLA)."""
+
+SLAProperties = ServiceLevelAgreementProperty
+"""ODCS ServiceLevelAgreementProperty (alias for SLA properties)."""
+
+# Deprecation info is handled via ODCS status field and customProperties
+DeprecationInfo = CustomProperty
+"""ODCS CustomProperty (used for deprecation metadata)."""
+
+# Contract terms are handled via ODCS Description or customProperties
+ContractTerms = CustomProperty
+"""ODCS CustomProperty (used for contract terms)."""
+
+
+# ==============================================================================
+# Type constants for ODCS logicalType values
+# These are common logical types used in ODCS schema properties
+# ==============================================================================
+
+class ElementType:
+    """ODCS v3.1 logicalType values.
+
+    These are the only valid logicalType values in ODCS v3.1:
+    string, date, timestamp, time, number, integer, object, array, boolean
+
+    Example:
+        >>> from floe_core.schemas.data_contract import ElementType
+        >>> prop = SchemaProperty(name="id", logicalType=ElementType.STRING)
     """
 
-    ACTIVE = "active"
-    DEPRECATED = "deprecated"
-    SUNSET = "sunset"
-    RETIRED = "retired"
-
-
-class ElementType(str, Enum):
-    """ODCS v3 element (column) types.
-
-    Maps to PyIceberg types for schema drift detection.
-
-    Attributes:
-        STRING: String/text type.
-        INT: 32-bit integer.
-        LONG: 64-bit integer.
-        FLOAT: 32-bit floating point.
-        DOUBLE: 64-bit floating point.
-        DECIMAL: Arbitrary precision decimal.
-        BOOLEAN: Boolean true/false.
-        DATE: Date without time.
-        TIMESTAMP: Date with time.
-        TIME: Time without date.
-        BYTES: Binary data.
-        ARRAY: List/array type.
-        OBJECT: Nested object/struct.
-    """
-
+    # Core ODCS v3.1 logicalTypes
     STRING = "string"
-    INT = "int"
-    LONG = "long"
-    FLOAT = "float"
-    DOUBLE = "double"
-    DECIMAL = "decimal"
+    INTEGER = "integer"
+    NUMBER = "number"
     BOOLEAN = "boolean"
     DATE = "date"
     TIMESTAMP = "timestamp"
     TIME = "time"
-    BYTES = "bytes"
     ARRAY = "array"
     OBJECT = "object"
 
+    # Aliases for backwards compatibility (mapped to ODCS types)
+    INT = "integer"  # Alias for INTEGER
+    LONG = "integer"  # Mapped to INTEGER
+    FLOAT = "number"  # Mapped to NUMBER
+    DOUBLE = "number"  # Mapped to NUMBER
+    DECIMAL = "number"  # Mapped to NUMBER
 
-class ElementFormat(str, Enum):
-    """ODCS v3 element format constraints.
 
-    Used for additional validation of string types.
+class ElementFormat:
+    """Common format constraint values.
 
-    Attributes:
-        EMAIL: Email address format.
-        URI: URI/URL format.
-        UUID: UUID format.
-        PHONE: Phone number format.
-        DATE: Date string format.
-        DATETIME: ISO 8601 datetime format.
-        IPV4: IPv4 address format.
-        IPV6: IPv6 address format.
+    Used with logicalType for additional validation hints.
     """
 
     EMAIL = "email"
@@ -106,19 +171,11 @@ class ElementFormat(str, Enum):
     IPV6 = "ipv6"
 
 
-class Classification(str, Enum):
-    """Data classification levels (ODCS v3).
+class Classification:
+    """Common data classification values.
 
-    Used for data governance and access control.
-
-    Attributes:
-        PUBLIC: Data is publicly available.
-        INTERNAL: Internal use only.
-        CONFIDENTIAL: Confidential business data.
-        PII: Personally identifiable information.
-        PHI: Protected health information.
-        SENSITIVE: Sensitive data requiring extra protection.
-        RESTRICTED: Highly restricted access.
+    ODCS uses strings for classification for flexibility.
+    These constants provide common values.
     """
 
     PUBLIC = "public"
@@ -130,495 +187,21 @@ class Classification(str, Enum):
     RESTRICTED = "restricted"
 
 
-# ==============================================================================
-# T006: SLA Property Models
-# ==============================================================================
+class ContractStatus:
+    """Common contract status values.
 
-
-class FreshnessSLA(BaseModel):
-    """Freshness SLA definition (ODCS v3).
-
-    Defines how fresh data should be, typically measured by a timestamp column.
-
-    Attributes:
-        value: ISO 8601 duration (e.g., "PT6H" for 6 hours, "P1D" for 1 day).
-        element: Column to check for freshness (e.g., "updated_at").
-
-    Example:
-        >>> sla = FreshnessSLA(value="PT6H", element="updated_at")
-        >>> sla.value
-        'PT6H'
+    ODCS uses strings for status for flexibility.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    value: Annotated[
-        str,
-        Field(
-            pattern=r"^P(?:T?\d+[DHMS])+$",
-            description="ISO 8601 duration (e.g., 'PT6H' for 6 hours)",
-        ),
-    ]
-    element: str | None = Field(
-        default=None,
-        description="Column to check for freshness (e.g., 'updated_at')",
-    )
-
-
-class QualitySLA(BaseModel):
-    """Quality SLA definition (ODCS v3).
-
-    Defines data quality thresholds for completeness, uniqueness, and accuracy.
-
-    Attributes:
-        completeness: Percentage of non-null required fields (e.g., "99%").
-        uniqueness: Percentage for primary key uniqueness (e.g., "100%").
-        accuracy: Optional accuracy score (e.g., "95%").
-
-    Example:
-        >>> sla = QualitySLA(completeness="99%", uniqueness="100%")
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    completeness: Annotated[
-        str | None,
-        Field(
-            default=None,
-            pattern=r"^\d+(\.\d+)?%$",
-            description="Percentage of non-null required fields",
-        ),
-    ]
-    uniqueness: Annotated[
-        str | None,
-        Field(
-            default=None,
-            pattern=r"^\d+(\.\d+)?%$",
-            description="Percentage for primary key uniqueness",
-        ),
-    ]
-    accuracy: Annotated[
-        str | None,
-        Field(
-            default=None,
-            pattern=r"^\d+(\.\d+)?%$",
-            description="Optional accuracy score",
-        ),
-    ]
-
-
-class SLAProperties(BaseModel):
-    """Service level agreement properties (ODCS v3).
-
-    Combines freshness, availability, and quality SLAs.
-
-    Attributes:
-        freshness: Data freshness requirement.
-        availability: Uptime percentage (e.g., "99.9%").
-        quality: Quality thresholds.
-
-    Example:
-        >>> sla = SLAProperties(
-        ...     freshness=FreshnessSLA(value="PT6H"),
-        ...     availability="99.9%",
-        ...     quality=QualitySLA(completeness="99%"),
-        ... )
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    freshness: FreshnessSLA | None = Field(
-        default=None,
-        description="Data freshness requirement",
-    )
-    availability: Annotated[
-        str | None,
-        Field(
-            default=None,
-            pattern=r"^\d+(\.\d+)?%$",
-            description="Uptime percentage (e.g., '99.9%')",
-        ),
-    ]
-    quality: QualitySLA | None = Field(
-        default=None,
-        description="Quality thresholds",
-    )
+    ACTIVE = "active"
+    DEPRECATED = "deprecated"
+    SUNSET = "sunset"
+    RETIRED = "retired"
+    DRAFT = "draft"
 
 
 # ==============================================================================
-# T007: Contract Terms and Deprecation Models
-# ==============================================================================
-
-
-class ContractTerms(BaseModel):
-    """Contract terms and governance (ODCS v3).
-
-    Defines usage policies, retention, and handling requirements.
-
-    Attributes:
-        usage: Intended use cases.
-        retention: Data retention policy.
-        pii_handling: PII handling requirements.
-        limitations: Usage limitations.
-
-    Example:
-        >>> terms = ContractTerms(
-        ...     usage="Analytics and reporting",
-        ...     retention="7 years",
-        ...     pii_handling="Anonymize before export",
-        ... )
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
-    usage: str | None = Field(
-        default=None,
-        description="Intended use cases",
-    )
-    retention: str | None = Field(
-        default=None,
-        description="Data retention policy",
-    )
-    pii_handling: str | None = Field(
-        default=None,
-        alias="piiHandling",
-        description="PII handling requirements",
-    )
-    limitations: str | None = Field(
-        default=None,
-        description="Usage limitations",
-    )
-
-
-class DeprecationInfo(BaseModel):
-    """Deprecation information for contracts (ODCS v3).
-
-    Used when contract status is deprecated, sunset, or retired.
-
-    Attributes:
-        announced: Date deprecation was announced (ISO 8601).
-        sunset_date: Date contract will be sunset.
-        replacement: Replacement contract name.
-        migration_guide: URL to migration documentation.
-        reason: Reason for deprecation.
-
-    Example:
-        >>> info = DeprecationInfo(
-        ...     announced="2026-01-01",
-        ...     sunset_date="2026-06-01",
-        ...     replacement="customers-v2",
-        ...     reason="Schema redesign for GDPR compliance",
-        ... )
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
-    announced: Annotated[
-        str | None,
-        Field(
-            default=None,
-            pattern=r"^\d{4}-\d{2}-\d{2}$",
-            description="Date deprecation was announced (ISO 8601)",
-        ),
-    ]
-    sunset_date: Annotated[
-        str | None,
-        Field(
-            default=None,
-            alias="sunsetDate",
-            pattern=r"^\d{4}-\d{2}-\d{2}$",
-            description="Date contract will be sunset",
-        ),
-    ]
-    replacement: str | None = Field(
-        default=None,
-        description="Replacement contract name",
-    )
-    migration_guide: str | None = Field(
-        default=None,
-        alias="migrationGuide",
-        description="URL to migration documentation",
-    )
-    reason: str | None = Field(
-        default=None,
-        description="Reason for deprecation",
-    )
-
-
-# ==============================================================================
-# T005: Element and Model Definitions
-# ==============================================================================
-
-
-class DataContractElement(BaseModel):
-    """Column/field definition within a model (ODCS v3).
-
-    Represents a single column or field with type, constraints,
-    and classification information.
-
-    Attributes:
-        name: Element identifier (column name).
-        type: Data type (string, int, timestamp, etc.).
-        required: Whether element is required (non-nullable).
-        primary_key: Whether element is primary key.
-        unique: Whether element values must be unique.
-        format: Format constraint (email, uri, uuid, etc.).
-        classification: Data classification (pii, phi, etc.).
-        enum: Allowed values (for string types).
-        description: Human-readable description.
-
-    Example:
-        >>> element = DataContractElement(
-        ...     name="email",
-        ...     type=ElementType.STRING,
-        ...     required=True,
-        ...     format=ElementFormat.EMAIL,
-        ...     classification=Classification.PII,
-        ...     description="Customer email address",
-        ... )
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
-    name: Annotated[
-        str,
-        Field(
-            min_length=1,
-            pattern=r"^[a-z][a-z0-9_]*$",
-            description="Element identifier (column name)",
-        ),
-    ]
-    type: ElementType = Field(
-        ...,
-        description="Data type",
-    )
-    required: bool = Field(
-        default=False,
-        description="Whether element is required (non-nullable)",
-    )
-    primary_key: bool = Field(
-        default=False,
-        alias="primaryKey",
-        description="Whether element is primary key",
-    )
-    unique: bool = Field(
-        default=False,
-        description="Whether element values must be unique",
-    )
-    format: ElementFormat | None = Field(
-        default=None,
-        description="Format constraint (email, uri, uuid, etc.)",
-    )
-    classification: Classification | None = Field(
-        default=None,
-        description="Data classification (pii, phi, etc.)",
-    )
-    enum: list[str] | None = Field(
-        default=None,
-        description="Allowed values (for string types)",
-    )
-    description: str | None = Field(
-        default=None,
-        description="Human-readable description",
-    )
-
-
-class DataContractModel(BaseModel):
-    """Individual model (table/object) within a contract (ODCS v3).
-
-    Represents a single data structure with its element definitions.
-
-    Attributes:
-        name: Model identifier (table name).
-        description: Human-readable description.
-        elements: Column/field definitions.
-
-    Example:
-        >>> model = DataContractModel(
-        ...     name="customers",
-        ...     description="Customer master data",
-        ...     elements=[
-        ...         DataContractElement(name="id", type=ElementType.STRING, primary_key=True),
-        ...         DataContractElement(name="email", type=ElementType.STRING, format=ElementFormat.EMAIL),
-        ...     ],
-        ... )
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
-    name: Annotated[
-        str,
-        Field(
-            min_length=1,
-            pattern=r"^[a-z][a-z0-9_]*$",
-            description="Model identifier (table name)",
-        ),
-    ]
-    description: str | None = Field(
-        default=None,
-        description="Human-readable description",
-    )
-    elements: Annotated[
-        list[DataContractElement],
-        Field(
-            min_length=1,
-            description="Column/field definitions",
-        ),
-    ]
-
-
-# ==============================================================================
-# T004: Main DataContract Model
-# ==============================================================================
-
-
-class DataContract(BaseModel):
-    """ODCS v3 data contract representation.
-
-    Represents a formal agreement between data producers and consumers
-    defining schema structure, SLAs, and governance requirements.
-
-    Attributes:
-        api_version: ODCS schema version (e.g., "v3.0.2").
-        kind: Always "DataContract".
-        name: Human-readable contract name.
-        version: Contract version (semver).
-        status: Lifecycle status.
-        owner: Contact email for contract owner.
-        domain: Business domain.
-        team: Team name.
-        description: Human-readable description.
-        models: Schema definitions (tables/objects).
-        sla_properties: Service level agreements.
-        terms: Terms of use.
-        deprecation: Deprecation info (when status != active).
-        tags: Categorization tags.
-        links: Related URLs.
-        schema_hash: SHA256 hash of schema (added by floe).
-        validated_at: Validation timestamp (added by floe).
-
-    Example:
-        >>> contract = DataContract(
-        ...     api_version="v3.0.2",
-        ...     name="customers",
-        ...     version="1.0.0",
-        ...     owner="data-team@example.com",
-        ...     models=[DataContractModel(name="customers", elements=[...])],
-        ... )
-
-    See Also:
-        - ODCS v3 Specification: https://bitol-io.github.io/open-data-contract-standard/
-        - FR-001, FR-002: ODCS parsing and validation requirements
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-        populate_by_name=True,
-    )
-
-    # Required ODCS fields
-    api_version: Annotated[
-        str,
-        Field(
-            alias="apiVersion",
-            pattern=r"^v3\.\d+\.\d+$",
-            description="ODCS schema version (e.g., 'v3.0.2')",
-        ),
-    ]
-    kind: Literal["DataContract"] = Field(
-        default="DataContract",
-        description="Resource kind, always 'DataContract'",
-    )
-    name: Annotated[
-        str,
-        Field(
-            min_length=1,
-            max_length=255,
-            pattern=r"^[a-z][a-z0-9-]*$",
-            description="Contract identifier (DNS-compatible)",
-        ),
-    ]
-    version: Annotated[
-        str,
-        Field(
-            pattern=r"^\d+\.\d+\.\d+$",
-            description="Contract version (semver)",
-        ),
-    ]
-    status: ContractStatus = Field(
-        default=ContractStatus.ACTIVE,
-        description="Lifecycle status",
-    )
-    owner: Annotated[
-        str,
-        Field(
-            min_length=1,
-            description="Contact email for contract owner",
-        ),
-    ]
-
-    # Optional ODCS fields
-    domain: str | None = Field(
-        default=None,
-        description="Business domain",
-    )
-    team: str | None = Field(
-        default=None,
-        description="Team name",
-    )
-    description: str | None = Field(
-        default=None,
-        description="Human-readable description",
-    )
-
-    # Schema
-    models: Annotated[
-        list[DataContractModel],
-        Field(
-            min_length=1,
-            description="Schema definitions (tables/objects)",
-        ),
-    ]
-
-    # SLA and governance
-    sla_properties: SLAProperties | None = Field(
-        default=None,
-        alias="slaProperties",
-        description="Service level agreements",
-    )
-    terms: ContractTerms | None = Field(
-        default=None,
-        description="Terms of use",
-    )
-    deprecation: DeprecationInfo | None = Field(
-        default=None,
-        description="Deprecation info (when status != active)",
-    )
-
-    # Metadata
-    tags: list[str] = Field(
-        default_factory=list,
-        description="Categorization tags",
-    )
-    links: dict[str, str] = Field(
-        default_factory=dict,
-        description="Related URLs (documentation, dashboard, etc.)",
-    )
-
-    # Floe-added validation metadata
-    schema_hash: str | None = Field(
-        default=None,
-        description="SHA256 hash of schema (added by floe during validation)",
-    )
-    validated_at: datetime | None = Field(
-        default=None,
-        description="Validation timestamp (added by floe)",
-    )
-
-
-# ==============================================================================
-# Validation Result Models (T017)
+# Floe-specific validation result models (not in ODCS)
 # ==============================================================================
 
 
@@ -704,6 +287,7 @@ class ContractValidationResult(BaseModel):
         contract_version: Version of the validated contract.
 
     Example:
+        >>> from datetime import datetime, timezone
         >>> result = ContractValidationResult(
         ...     valid=True,
         ...     violations=[],
@@ -808,27 +392,38 @@ class SchemaComparisonResult(BaseModel):
 
 
 __all__ = [
-    # T008: Enums
-    "ContractStatus",
+    # ODCS models (re-exported from open-data-contract-standard)
+    "OpenDataContractStandard",
+    "DataContract",  # Alias for OpenDataContractStandard
+    "SchemaObject",
+    "DataContractModel",  # Alias for SchemaObject
+    "SchemaProperty",
+    "DataContractElement",  # Alias for SchemaProperty
+    "ServiceLevelAgreementProperty",
+    "FreshnessSLA",  # Alias
+    "QualitySLA",  # Alias
+    "SLAProperties",  # Alias
+    "Description",
+    "Team",
+    "TeamMember",
+    "Server",
+    "Support",
+    "Role",
+    "Pricing",
+    "Relationship",
+    "DataQuality",
+    "AuthoritativeDefinition",
+    "CustomProperty",
+    "DeprecationInfo",  # Alias for CustomProperty
+    "ContractTerms",  # Alias for CustomProperty
+    # Type constants (ODCS uses strings, these provide common values)
     "ElementType",
     "ElementFormat",
     "Classification",
-    # T006: SLA models
-    "FreshnessSLA",
-    "QualitySLA",
-    "SLAProperties",
-    # T007: Terms and deprecation
-    "ContractTerms",
-    "DeprecationInfo",
-    # T005: Element and model
-    "DataContractElement",
-    "DataContractModel",
-    # T004: Main contract
-    "DataContract",
-    # T017: Validation results
+    "ContractStatus",
+    # Floe-specific validation models
     "ContractViolation",
     "ContractValidationResult",
-    # Drift detection results
     "TypeMismatch",
     "SchemaComparisonResult",
 ]
