@@ -53,6 +53,19 @@ from floe_core.compilation.errors import CompilationError
 # Compilation pipeline (essential export)
 from floe_core.compilation.stages import compile_pipeline
 
+# Compute config
+from floe_core.compute_config import WORKLOAD_PRESETS, ConnectionStatus
+
+# Plugin error hierarchy
+from floe_core.plugin_errors import (
+    AuthenticationError,
+    CatalogError,
+    CatalogUnavailableError,
+    ConflictError,
+    NotFoundError,
+    NotSupportedError,
+)
+
 # Health types and PluginMetadata ABC
 from floe_core.plugin_metadata import (
     HealthState,
@@ -69,10 +82,6 @@ from floe_core.plugin_registry import (
 # Plugin type categories
 from floe_core.plugin_types import PluginType
 
-# Key schema exports
-from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-from floe_core.schemas.floe_spec import FloeSpec
-
 # =============================================================================
 # Backward compatibility exports (for test compatibility)
 # =============================================================================
@@ -88,18 +97,9 @@ from floe_core.plugins import (
     ResourceSpec,
 )
 
-# Compute config
-from floe_core.compute_config import WORKLOAD_PRESETS, ConnectionStatus
-
-# Plugin error hierarchy
-from floe_core.plugin_errors import (
-    AuthenticationError,
-    CatalogError,
-    CatalogUnavailableError,
-    ConflictError,
-    NotFoundError,
-    NotSupportedError,
-)
+# Key schema exports
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_core.schemas.floe_spec import FloeSpec
 
 # =============================================================================
 # Public API (15 symbols) + Backward Compatibility Exports
