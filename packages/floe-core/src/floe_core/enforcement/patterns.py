@@ -48,16 +48,27 @@ def _build_documentation_urls() -> dict[str, str | dict[str, str]]:
             "custom": f"{base}/naming#custom",
         },
         # Epic 3C: Data contract error code documentation
+        # See: docs/architecture/data-contracts.md#error-codes
         "data_contracts": {
-            "FLOE-E500": f"{base}/errors/data-contracts#e500",  # No contract or ports
-            "FLOE-E501": f"{base}/errors/data-contracts#e501",  # Missing required field
-            "FLOE-E502": f"{base}/errors/data-contracts#e502",  # Invalid format
+            # Contract Parsing Errors (FLOE-E500-E509)
+            "FLOE-E500": f"{base}/errors/data-contracts#e500",  # Contract not found
+            "FLOE-E501": f"{base}/errors/data-contracts#e501",  # Invalid ODCS syntax
+            "FLOE-E502": f"{base}/errors/data-contracts#e502",  # Unsupported ODCS version
             "FLOE-E503": f"{base}/errors/data-contracts#e503",  # Invalid element type
+            "FLOE-E509": f"{base}/errors/data-contracts#e509",  # Parse error
+            # Inheritance Violations (FLOE-E510-E519)
             "FLOE-E510": f"{base}/errors/data-contracts#e510",  # SLA weakening
-            "FLOE-E520": f"{base}/errors/data-contracts#e520",  # Version bump required
+            "FLOE-E511": f"{base}/errors/data-contracts#e511",  # Classification weakening
+            "FLOE-E512": f"{base}/errors/data-contracts#e512",  # Circular dependency
+            # Version Validation Errors (FLOE-E520-E529)
+            "FLOE-E520": f"{base}/errors/data-contracts#e520",  # Breaking change without MAJOR
+            "FLOE-E521": f"{base}/errors/data-contracts#e521",  # Invalid version format
+            # Schema Drift Errors (FLOE-E530-E539)
             "FLOE-E530": f"{base}/errors/data-contracts#e530",  # Type mismatch (drift)
             "FLOE-E531": f"{base}/errors/data-contracts#e531",  # Missing column (drift)
             "FLOE-E532": f"{base}/errors/data-contracts#e532",  # Extra column (drift info)
+            # Registration Warnings (FLOE-E540-E549)
+            "FLOE-E540": f"{base}/errors/data-contracts#e540",  # Catalog unreachable
         },
     }
 
