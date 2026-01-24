@@ -1,0 +1,19 @@
+# dbt profiles for floe testing
+#
+# Uses DuckDB as the default target for fast, in-memory testing.
+# No external database required.
+
+floe_test:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # In-memory database for testing (no file created)
+      path: ":memory:"
+      threads: 1
+
+    # File-based target for tests that need persistence
+    file:
+      type: duckdb
+      path: "{{ env_var('DBT_TEST_DB_PATH', 'target/test.duckdb') }}"
+      threads: 1
