@@ -44,6 +44,7 @@ import structlog
 
 from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
 from floe_dbt_core.errors import DBTCompilationError, DBTExecutionError
+from floe_dbt_core.linting import LintViolation
 
 from .detection import detect_fusion, detect_fusion_binary
 from .errors import DBTFusionNotFoundError
@@ -432,22 +433,35 @@ class DBTFusionPlugin(DBTPlugin):
             check=False,
         )
 
-        issues: list[dict[str, Any]] = []
+        violations: list[LintViolation] = []
         files_checked = 0
         files_fixed = 0
 
         if result.returncode == 0 and result.stdout:
             try:
                 output = json.loads(result.stdout)
-                issues = output.get("violations", [])
+                raw_violations = output.get("violations", [])
                 files_checked = output.get("files_analyzed", 0)
                 files_fixed = output.get("files_fixed", 0) if fix else 0
+
+                # Convert raw violations to LintViolation models
+                for v in raw_violations:
+                    violations.append(
+                        LintViolation(
+                            file_path=v.get("file", ""),
+                            line=max(1, v.get("line", 1)),
+                            column=v.get("column", 0),
+                            code=v.get("rule", "UNKNOWN"),
+                            message=v.get("message", ""),
+                            severity=v.get("severity", "warning"),
+                        )
+                    )
             except json.JSONDecodeError:
                 pass
 
         return LintResult(
-            success=len(issues) == 0,
-            issues=issues,
+            success=len(violations) == 0,
+            violations=violations,
             files_checked=files_checked,
             files_fixed=files_fixed,
         )
