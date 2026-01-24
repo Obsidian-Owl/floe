@@ -122,12 +122,15 @@ jobs:
         run: |
           # uv-secure natively parses uv.lock files and ignores local packages
           # --no-check-uv-tool: CI manages its own uv version
+          # --ignore-vulns: Skip documented false positives (see pyproject.toml)
+          #   - GHSA-5j53-63w8-8625: fastapi-users OAuth/CSRF (not used)
+          #   - GHSA-7gcm-g887-7qv7: protobuf DoS (transitive dep, no fix yet)
           # Exit codes:
           #   0 = no vulnerabilities
           #   1 = vulnerabilities found (FAIL)
           #   2 = warnings only (pass with warning)
           #   3 = tool crash/parsing error (pass with warning if no vulns reported)
-          output=$(uv run uv-secure --no-check-uv-tool . 2>&1) || {
+          output=$(uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7 . 2>&1) || {
             exit_code=$?
             echo "$output"
 

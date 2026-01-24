@@ -228,22 +228,23 @@ class TestTimezoneValidation:
         """Test timezone case handling.
 
         Note: Python's zoneinfo module behavior varies by platform.
-        On many systems, zoneinfo is case-insensitive due to underlying tzdata.
-        Both 'UTC' and 'utc' may be valid on some platforms.
+        On macOS, zoneinfo may be case-insensitive due to underlying tzdata.
+        On Linux, zoneinfo is case-sensitive (IANA names are case-sensitive).
+        We test the documented IANA behavior: uppercase "UTC" is the canonical form.
         """
-        # UTC (uppercase) is always valid
+        # UTC (uppercase) is always valid - this is the canonical IANA form
         dagster_plugin.schedule_job("job_utc", "0 8 * * *", "UTC")
 
         # Proper case IANA timezones work
         dagster_plugin.schedule_job("job_proper", "0 8 * * *", "America/New_York")
 
-        # lowercase 'utc' may be valid on some platforms (case-insensitive)
-        # We don't enforce case-sensitivity since zoneinfo handles it
-        dagster_plugin.schedule_job("job_utc_lower", "0 8 * * *", "utc")
-
-        # Invalid timezones are still rejected
+        # Invalid timezones are rejected
         with pytest.raises(ValueError):
             dagster_plugin.schedule_job("job", "0 8 * * *", "Invalid_Zone")
+
+        # Note: lowercase 'utc' may work on some platforms (macOS) but fails on
+        # others (Linux). We don't test it because IANA timezone names are
+        # case-sensitive per the spec. Users should always use "UTC".
 
 
 class TestScheduleJobEdgeCases:
