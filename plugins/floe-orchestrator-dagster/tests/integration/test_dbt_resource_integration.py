@@ -35,10 +35,17 @@ except ImportError:
     DBT_AVAILABLE = False
 
 
-def skip_if_no_dbt() -> None:
-    """Skip test if dbt-core is not installed."""
+def require_dbt() -> None:
+    """Fail test if dbt-core is not installed.
+
+    Tests FAIL (not skip) when infrastructure missing per testing standards.
+    """
     if not DBT_AVAILABLE:
-        pytest.skip("dbt-core not installed - skipping integration test")
+        pytest.fail(
+            "dbt-core not installed - integration tests require dbt-core.\n"
+            "Install with: pip install dbt-core dbt-duckdb\n"
+            "Or run: uv sync --all-extras"
+        )
 
 
 class TestDBTResourceWithDagster(IntegrationTestBase):
@@ -105,7 +112,7 @@ test_profile:
     @pytest.mark.requirement("FR-030")
     def test_dbt_resource_loads_core_plugin(self, temp_dbt_project: Path) -> None:
         """Test that DBTResource loads the core plugin from registry."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -125,7 +132,7 @@ test_profile:
     @pytest.mark.requirement("FR-031")
     def test_dbt_resource_compile_with_real_dbt(self, temp_dbt_project: Path) -> None:
         """Test DBTResource.compile() with real dbt execution."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -147,7 +154,7 @@ test_profile:
         self, temp_dbt_project: Path
     ) -> None:
         """Test DBTResource.run_models() with real dbt execution."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -178,7 +185,7 @@ test_profile:
         self, temp_dbt_project: Path
     ) -> None:
         """Test DBTResource.run_models() with select pattern."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -202,7 +209,7 @@ test_profile:
     @pytest.mark.requirement("FR-031")
     def test_dbt_resource_get_manifest(self, temp_dbt_project: Path) -> None:
         """Test DBTResource.get_manifest() returns valid manifest."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -227,7 +234,7 @@ test_profile:
     @pytest.mark.requirement("FR-031")
     def test_dbt_resource_get_run_results(self, temp_dbt_project: Path) -> None:
         """Test DBTResource.get_run_results() returns valid results."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -253,7 +260,7 @@ test_profile:
     @pytest.mark.requirement("FR-031")
     def test_dbt_resource_supports_parallel_execution(self) -> None:
         """Test DBTResource.supports_parallel_execution() for core plugin."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -267,7 +274,7 @@ test_profile:
     @pytest.mark.requirement("FR-031")
     def test_dbt_resource_supports_sql_linting(self) -> None:
         """Test DBTResource.supports_sql_linting() for core plugin."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -281,7 +288,7 @@ test_profile:
     @pytest.mark.requirement("FR-031")
     def test_dbt_resource_get_runtime_metadata(self) -> None:
         """Test DBTResource.get_runtime_metadata() includes dbt version."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -343,7 +350,7 @@ test_profile:
         self, temp_dbt_project: Path
     ) -> None:
         """Test DBTResource can be used in Dagster Definitions."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from dagster import Definitions, asset
 
@@ -383,11 +390,9 @@ test_profile:
         self, temp_dbt_project: Path
     ) -> None:
         """Test asset materialization with DBTResource."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from dagster import (
-            AssetKey,
-            Definitions,
             Output,
             asset,
             materialize,
@@ -440,7 +445,7 @@ test_profile:
         self, tmp_path: Path
     ) -> None:
         """Test DBTResource.test_models() with real dbt execution."""
-        skip_if_no_dbt()
+        require_dbt()
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 

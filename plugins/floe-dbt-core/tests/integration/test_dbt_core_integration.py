@@ -18,19 +18,23 @@ Note:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
+from testing.base_classes.integration_test_base import IntegrationTestBase
 
 from floe_dbt_core import DBTCorePlugin
-from floe_dbt_core.errors import DBTCompilationError, DBTExecutionError
+from floe_dbt_core.errors import DBTCompilationError
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 
-class TestDBTCorePluginIntegration:
+class TestDBTCorePluginIntegration(IntegrationTestBase):
     """Integration tests for DBTCorePlugin with real dbt execution."""
+
+    # No external services required - just dbt-core locally
+    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-002")

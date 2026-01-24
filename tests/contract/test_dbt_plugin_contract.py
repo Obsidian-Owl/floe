@@ -293,11 +293,13 @@ def dbt_plugin(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
     Parametrized fixture that loads both 'core' and 'fusion' plugins.
     Tests using this fixture run twice - once per plugin.
 
+    Uses generator (yield) pattern to keep patches active during test execution.
+
     Args:
         request: Pytest fixture request with 'core' or 'fusion' param.
         tmp_path: Temporary directory for test files.
 
-    Returns:
+    Yields:
         Instantiated DBTPlugin (DBTCorePlugin or DBTFusionPlugin).
     """
     plugin_name = request.param
@@ -305,17 +307,27 @@ def dbt_plugin(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
     if plugin_name == "core":
         from floe_dbt_core import DBTCorePlugin
 
-        return DBTCorePlugin()
+        yield DBTCorePlugin()
 
     elif plugin_name == "fusion":
-        # Mock Fusion binary detection for testing
+        # Mock Fusion binary detection and detection info for testing
+        # Using yield keeps the patch active during test execution
+        mock_info = MagicMock()
+        mock_info.available = True
+        mock_info.version = "0.1.0-mock"
+        mock_info.binary_path = Path("/usr/local/bin/dbt-sa-cli")
+        mock_info.adapters_available = ["duckdb", "snowflake"]
+
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",
             return_value=Path("/usr/local/bin/dbt-sa-cli"),
+        ), patch(
+            "floe_dbt_fusion.plugin.detect_fusion",
+            return_value=mock_info,
         ):
             from floe_dbt_fusion import DBTFusionPlugin
 
-            return DBTFusionPlugin()
+            yield DBTFusionPlugin()
 
     else:
         raise ValueError(f"Unknown plugin: {plugin_name}")

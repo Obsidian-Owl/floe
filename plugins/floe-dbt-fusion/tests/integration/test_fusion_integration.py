@@ -12,11 +12,9 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 from .conftest import require_fusion
-
 
 # ---------------------------------------------------------------------------
 # Fusion CLI Integration Tests
@@ -215,6 +213,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         assert "results" in run_results
 
     @pytest.mark.integration
+    @pytest.mark.requirement("FR-020")
     def test_fusion_plugin_get_runtime_metadata(self) -> None:
         """DBTFusionPlugin returns runtime metadata."""
         require_fusion()
