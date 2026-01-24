@@ -279,12 +279,14 @@ class RegistryConfig(BaseModel):
     uri: str = Field(
         ...,
         min_length=1,
-        pattern=r"^oci://[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9](/[a-zA-Z0-9._-]+)*$",
+        # Allow hostname with optional port (e.g., localhost:30500)
+        pattern=r"^oci://[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9](:[0-9]+)?(/[a-zA-Z0-9._-]+)*$",
         description="OCI registry URI (e.g., oci://harbor.example.com/namespace)",
         examples=[
             "oci://harbor.example.com/floe-platform",
             "oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe",
             "oci://myregistry.azurecr.io/floe",
+            "oci://localhost:5000/floe",
         ],
     )
     auth: RegistryAuth = Field(
