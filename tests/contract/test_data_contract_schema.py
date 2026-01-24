@@ -23,8 +23,6 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import ValidationError
-
 from floe_core.schemas.data_contract import (
     Classification,
     ContractStatus,
@@ -41,6 +39,7 @@ from floe_core.schemas.data_contract import (
     ServiceLevelAgreementProperty,
     TypeMismatch,
 )
+from pydantic import ValidationError
 
 
 class TestODCSReExports:
