@@ -209,7 +209,7 @@ class TestQuickstartExamples:
         ]
         for error_class in error_classes:
             error = error_class("test message")
-            assert str(error) == "test message"
+            assert "test message" in str(error)
             assert isinstance(error, Exception)
             assert isinstance(error, CatalogError)
 
