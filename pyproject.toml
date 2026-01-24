@@ -134,6 +134,13 @@ exclude_dirs = ["tests", "packages/floe-core/tests"]
 skips = [
     "B101",  # Allow assert statements (used in tests)
     "B108",  # Allow /tmp as K8s container mount path (not temp file usage)
+    "B110",  # Allow try-except-pass (used for optional feature detection)
+    "B311",  # Allow random for non-crypto purposes (test data, jitter)
+    "B404",  # Allow subprocess import (needed for git operations)
+    "B603",  # Allow subprocess without shell=True (intentionally safe)
+    "B607",  # Allow partial executable paths (git, dbt - known tools)
+    "B105",  # Allow token username constant (not a real secret)
+    "B106",  # Allow empty credential defaults (populated at runtime)
 ]
 
 [tool.uv-secure.vulnerability_criteria]
