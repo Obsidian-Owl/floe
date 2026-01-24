@@ -89,6 +89,7 @@
       ],
       "default_compute": "duckdb"
     },
+    "data_contracts": [],
     "dbt_profiles": {
       "golden_profile": {
         "target": "dev",
