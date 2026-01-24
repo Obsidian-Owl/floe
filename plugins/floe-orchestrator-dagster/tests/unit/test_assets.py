@@ -124,14 +124,21 @@ class TestAssetDependencies:
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
     ) -> None:
-        """Test asset without dependencies has empty deps."""
+        """Test asset without transform dependencies only has resource deps.
+
+        Note: Dagster treats required_resource_keys (e.g., 'dbt') as
+        dependency_keys, so an asset with no transform dependencies
+        will still have the 'dbt' resource dependency.
+        """
+        from dagster import AssetKey
+
         transform = TransformConfig(name="source_model")
 
         result = dagster_plugin.create_assets_from_transforms([transform])
 
         asset = result[0]
-        # Asset should have no deps (or empty deps)
-        assert len(asset.dependency_keys) == 0
+        # Asset should only have 'dbt' resource dependency, no model deps
+        assert asset.dependency_keys == {AssetKey(["dbt"])}
 
     def test_dependency_chain_preserved(
         self,
