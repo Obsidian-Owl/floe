@@ -31,6 +31,14 @@ from .errors import (
     DBTLintError,
 )
 from .plugin import DBTCorePlugin
+from .linting import (
+    DEFAULT_DIALECT,
+    DIALECT_MAP,
+    LintResult,
+    get_adapter_from_profiles,
+    get_sqlfluff_dialect,
+    lint_sql_files,
+)
 from .tracing import (
     TRACER_NAME,
     dbt_span,
@@ -57,4 +65,11 @@ __all__ = [
     "dbt_span",
     "set_result_attributes",
     "set_runtime_attributes",
+    # Linting utilities
+    "LintResult",
+    "get_sqlfluff_dialect",
+    "lint_sql_files",
+    "get_adapter_from_profiles",
+    "DIALECT_MAP",
+    "DEFAULT_DIALECT",
 ]
