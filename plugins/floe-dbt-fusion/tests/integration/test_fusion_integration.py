@@ -9,16 +9,13 @@ Run these tests in the Kind cluster where Fusion is installed.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
-from .conftest import skip_if_no_fusion
-
-if TYPE_CHECKING:
-    pass
+from .conftest import require_fusion
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +36,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin compiles project using real Fusion CLI."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -60,7 +57,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin runs models using real Fusion CLI."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -82,7 +79,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin runs selected models using Fusion CLI."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -104,7 +101,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_with_tests: Path,
     ) -> None:
         """DBTFusionPlugin runs tests using real Fusion CLI."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -131,7 +128,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-018")
     def test_fusion_plugin_supports_parallel_execution(self) -> None:
         """DBTFusionPlugin correctly reports parallel execution support."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -147,7 +144,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_with_lint_issues: Path,
     ) -> None:
         """DBTFusionPlugin lints project using Fusion static analysis."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -170,7 +167,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin retrieves manifest after compilation."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -197,7 +194,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin retrieves run_results after execution."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -220,7 +217,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
     @pytest.mark.integration
     def test_fusion_plugin_get_runtime_metadata(self) -> None:
         """DBTFusionPlugin returns runtime metadata."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -247,7 +244,7 @@ class TestFusionDetectionIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-020")
     def test_detect_fusion_binary(self) -> None:
         """detect_fusion_binary() finds real Fusion CLI."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import detect_fusion_binary
 
@@ -261,7 +258,7 @@ class TestFusionDetectionIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-020")
     def test_get_fusion_version(self) -> None:
         """get_fusion_version() parses real Fusion CLI version."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import detect_fusion_binary, get_fusion_version
 
@@ -279,7 +276,7 @@ class TestFusionDetectionIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-021")
     def test_detect_fusion(self) -> None:
         """detect_fusion() returns complete detection info."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import detect_fusion
 
@@ -306,7 +303,7 @@ class TestFallbackIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-021")
     def test_get_best_plugin_returns_fusion_for_duckdb(self) -> None:
         """get_best_plugin() returns Fusion for supported adapter."""
-        skip_if_no_fusion()
+        require_fusion()
 
         from floe_dbt_fusion import get_best_plugin
 

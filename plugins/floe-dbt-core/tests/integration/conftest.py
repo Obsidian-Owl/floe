@@ -30,11 +30,15 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture(autouse=True)
-def skip_if_no_dbt() -> None:
-    """Skip integration tests if dbt-core is not installed.
+def require_dbt() -> None:
+    """Fail integration tests if dbt-core is not installed.
 
     This fixture runs automatically for all integration tests
-    in this directory.
+    in this directory. Tests FAIL (not skip) when infrastructure missing.
     """
     if not DBT_AVAILABLE:
-        pytest.skip("dbt-core not installed - skipping integration test")
+        pytest.fail(
+            "dbt-core not installed - integration tests require dbt-core.\n"
+            "Install with: pip install dbt-core\n"
+            "Or run: uv sync --all-extras"
+        )

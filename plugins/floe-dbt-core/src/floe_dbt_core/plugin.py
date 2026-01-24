@@ -25,10 +25,9 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-
 from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
 
-from .callbacks import DBTEventCollector, create_event_collector
+from .callbacks import create_event_collector
 from .errors import (
     DBTCompilationError,
     DBTConfigurationError,
@@ -100,7 +99,7 @@ class DBTCorePlugin(DBTPlugin):
     @property
     def floe_api_version(self) -> str:
         """Return compatible floe API version."""
-        return "1.0"
+        return "1.0.0"
 
     def compile_project(
         self,

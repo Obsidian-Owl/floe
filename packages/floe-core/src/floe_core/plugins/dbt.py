@@ -73,22 +73,48 @@ class LintResult:
 
     Attributes:
         success: Whether all files passed linting.
-        issues: List of linting issues found.
+        violations: List of linting violations (preferred).
         files_checked: Number of files checked.
         files_fixed: Number of files auto-fixed (if fix=True).
+
+    Note:
+        The `issues` property is deprecated. Use `violations` instead.
 
     Example:
         >>> result = LintResult(
         ...     success=False,
-        ...     issues=[{"file": "models/stg.sql", "line": 10, "rule": "L001"}],
+        ...     violations=[{"file": "models/stg.sql", "line": 10, "rule": "L001"}],
         ...     files_checked=15
         ... )
     """
 
     success: bool
-    issues: list[dict[str, Any]] = field(default_factory=lambda: [])
+    violations: list[Any] = field(default_factory=list)
     files_checked: int = 0
     files_fixed: int = 0
+
+    @property
+    def issues(self) -> list[dict[str, Any]]:
+        """Deprecated: Use violations instead.
+
+        Returns violations as list of dicts for backwards compatibility.
+        """
+        result: list[dict[str, Any]] = []
+        for v in self.violations:
+            if isinstance(v, dict):
+                result.append(v)
+            elif hasattr(v, "file_path"):
+                # LintViolation-like object
+                result.append({
+                    "file": getattr(v, "file_path", ""),
+                    "line": getattr(v, "line", 0),
+                    "column": getattr(v, "column", 0),
+                    "code": getattr(v, "code", ""),
+                    "description": getattr(v, "message", ""),
+                })
+            else:
+                result.append({"raw": str(v)})
+        return result
 
 
 class DBTPlugin(PluginMetadata):

@@ -36,7 +36,7 @@ from .detection import check_adapter_available, detect_fusion_binary
 from .errors import DBTAdapterUnavailableError, check_fallback_available
 
 if TYPE_CHECKING:
-    from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
+    from floe_core.plugins.dbt import DBTRunResult, LintResult
 
 logger = structlog.get_logger(__name__)
 

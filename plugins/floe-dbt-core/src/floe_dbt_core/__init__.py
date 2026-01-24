@@ -30,7 +30,6 @@ from .errors import (
     DBTExecutionError,
     DBTLintError,
 )
-from .plugin import DBTCorePlugin
 from .linting import (
     DEFAULT_DIALECT,
     DIALECT_MAP,
@@ -40,6 +39,7 @@ from .linting import (
     get_sqlfluff_dialect,
     lint_sql_files,
 )
+from .plugin import DBTCorePlugin
 from .tracing import (
     TRACER_NAME,
     dbt_span,

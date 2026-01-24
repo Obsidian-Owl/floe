@@ -38,19 +38,15 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
-
 from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
 from floe_dbt_core.errors import DBTCompilationError, DBTExecutionError
 from floe_dbt_core.linting import LintViolation
 
 from .detection import detect_fusion, detect_fusion_binary
 from .errors import DBTFusionNotFoundError
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger(__name__)
 

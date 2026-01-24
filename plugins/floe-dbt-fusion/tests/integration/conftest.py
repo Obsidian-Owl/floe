@@ -12,10 +12,17 @@ from pathlib import Path
 import pytest
 
 
-def skip_if_no_fusion() -> None:
-    """Skip test if Fusion CLI not available."""
+def require_fusion() -> None:
+    """Fail test if Fusion CLI not available.
+
+    Tests FAIL (not skip) when infrastructure missing per testing standards.
+    """
     if shutil.which("dbt-sa-cli") is None:
-        pytest.skip("dbt-sa-cli (Fusion CLI) not found in PATH")
+        pytest.fail(
+            "dbt-sa-cli (Fusion CLI) not found in PATH.\n"
+            "Install Fusion CLI to run integration tests.\n"
+            "See: https://github.com/dbt-labs/dbt-fusion"
+        )
 
 
 @pytest.fixture

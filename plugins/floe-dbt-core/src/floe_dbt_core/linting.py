@@ -34,13 +34,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
 import structlog
-
-if TYPE_CHECKING:
-    pass
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = structlog.get_logger(__name__)
 
@@ -280,12 +277,12 @@ def lint_sql_files(
                 files_fixed=0,
             )
 
-    except ImportError:
+    except ImportError as err:
         log.error("sqlfluff_not_installed")
         raise ImportError(
             "SQLFluff is required for SQL linting. "
             "Install with: pip install sqlfluff"
-        )
+        ) from err
 
 
 def get_adapter_from_profiles(
