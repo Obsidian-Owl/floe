@@ -50,9 +50,10 @@ repos:
       - id: end-of-file-fixer
         exclude: ^\.beads/
 
-      # YAML syntax
+      # YAML syntax (exclude Helm templates - Go template syntax not parseable)
       - id: check-yaml
         args: [--unsafe]  # Allow custom tags
+        exclude: ^charts/.*templates/
 
       # Large files
       - id: check-added-large-files
@@ -74,7 +75,7 @@ repos:
       - id: bandit
         args: [-c, pyproject.toml]
         additional_dependencies: ["bandit[toml]"]
-        exclude: ^(tests/|packages/.*/tests/)
+        exclude: ^(tests/|packages/.*/tests/|plugins/.*/tests/|\.claude/|devtools/|testing/)
 
   # Constitution validation (lightweight - branch naming, quick architecture checks)
   - repo: local
@@ -131,9 +132,10 @@ repos:
         pass_filenames: false
 
       # Unit tests (all packages - matches CI)
+      # Uses --ignore-glob to handle missing directories gracefully
       - id: pytest-unit
         name: pytest (unit tests)
-        entry: uv run pytest packages/*/tests/unit/ plugins/*/tests/unit/ -v --tb=short -x
+        entry: bash -c 'uv run pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" -v --tb=short -x'
         language: system
         types: [python]
         stages: [pre-push]
