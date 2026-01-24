@@ -1,24 +1,25 @@
-"""Integration tests for contract catalog registration.
+"""Unit tests for contract catalog registration.
 
 Task: T069
 Requirements: FR-026 (Catalog registration), FR-027 (Metadata storage),
               FR-028 (Soft failure handling)
 
-These tests validate CatalogRegistrar integration with catalog plugins:
+These tests validate CatalogRegistrar with mock catalog plugins:
 - Contract metadata stored as Iceberg namespace properties
 - Schema hash, version, owner, timestamp all persisted
 - Soft failure handling when catalog is unavailable
+
+Note: These are unit tests using MockCatalogPlugin. Integration tests with
+real Polaris catalog are in plugins/floe-catalog-polaris/tests/integration/.
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
-
-from testing.base_classes.integration_test_base import IntegrationTestBase
 
 
 class MockCatalogPlugin:
@@ -84,18 +85,15 @@ class MockCatalogPlugin:
         return self.namespaces.get(namespace, {})
 
 
-class TestCatalogRegistrarIntegration(IntegrationTestBase):
-    """Integration tests for CatalogRegistrar with mock catalog.
+class TestCatalogRegistrar:
+    """Unit tests for CatalogRegistrar with mock catalog.
 
     Task: T069
     Requirements: FR-026, FR-027
 
-    These tests verify the full registration flow with a mock catalog
+    These tests verify the registration flow with a mock catalog
     that simulates real namespace property operations.
     """
-
-    # No real K8s services required for mock-based integration tests
-    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.fixture
     def mock_catalog(self) -> MockCatalogPlugin:
@@ -140,22 +138,25 @@ schema:
 
         registrar = CatalogRegistrar(catalog_plugin=mock_catalog)
 
+        # Use unique namespace to ensure test isolation
+        namespace = f"test_{uuid.uuid4().hex[:8]}.customers"
+
         result = registrar.register_contract(
             contract_id="urn:datacontract:customers",
             contract_version="2.0.0",
             schema_hash="sha256:abc123def456",
             owner="analytics-team@acme.com",
-            namespace="production.customers",
+            namespace=namespace,
         )
 
         # Verify registration succeeded
         assert result.success is True
         assert result.contract_id == "urn:datacontract:customers"
-        assert result.namespace == "production.customers"
+        assert result.namespace == namespace
         assert result.registered_at is not None
 
         # Verify all properties stored in catalog
-        stored_props = mock_catalog.get_namespace_properties("production.customers")
+        stored_props = mock_catalog.get_namespace_properties(namespace)
         assert stored_props["floe.contract.id"] == "urn:datacontract:customers"
         assert stored_props["floe.contract.version"] == "2.0.0"
         assert stored_props["floe.contract.schema_hash"] == "sha256:abc123def456"
@@ -322,16 +323,14 @@ schema:
         assert "denied" in result.warning.lower() or "permission" in result.warning.lower()
 
 
-class TestContractValidatorRegistrationIntegration(IntegrationTestBase):
-    """Integration tests for ContractValidator.validate_and_register().
+class TestContractValidatorRegistration:
+    """Unit tests for ContractValidator.validate_and_register().
 
     Task: T069
     Requirements: FR-026, FR-028
 
-    Tests the full validation + registration workflow.
+    Tests the validation + registration workflow with mock catalog.
     """
-
-    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.fixture
     def mock_catalog(self) -> MockCatalogPlugin:
@@ -461,14 +460,12 @@ kind: DataContract
         assert "floe.contract.id" not in stored_props
 
 
-class TestMultipleContractRegistration(IntegrationTestBase):
-    """Integration tests for registering multiple contracts.
+class TestMultipleContractRegistration:
+    """Unit tests for registering multiple contracts.
 
     Task: T069
     Requirements: FR-026
     """
-
-    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.fixture
     def mock_catalog(self) -> MockCatalogPlugin:
@@ -517,7 +514,7 @@ class TestMultipleContractRegistration(IntegrationTestBase):
 
 
 __all__ = [
-    "TestCatalogRegistrarIntegration",
-    "TestContractValidatorRegistrationIntegration",
+    "TestCatalogRegistrar",
+    "TestContractValidatorRegistration",
     "TestMultipleContractRegistration",
 ]

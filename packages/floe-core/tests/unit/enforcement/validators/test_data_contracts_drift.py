@@ -280,23 +280,31 @@ schema:
         contract_path = tmp_path / "datacontract.yaml"
         contract_path.write_text(contract_yaml)
 
+        validator = ContractValidator()
+
         with patch(
             "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
         ) as mock_extract:
             mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
 
-            # Simulate ImportError for floe_iceberg
-            import sys
+            # Simulate ImportError for floe_iceberg.drift_detector
+            # We patch builtins.__import__ to raise ImportError for floe_iceberg
+            import builtins
 
-            # Remove floe_iceberg from sys.modules to trigger ImportError
-            for key in list(sys.modules.keys()):
-                if "floe_iceberg" in key:
-                    del sys.modules[key]
+            original_import = builtins.__import__
 
-            with patch.dict(  # noqa: SIM117
-                "sys.modules", {"floe_iceberg": None, "floe_iceberg.drift_detector": None}
-            ):
-                validator = ContractValidator()
+            def import_mock(
+                name: str,
+                globals_: dict[str, object] | None = None,
+                locals_: dict[str, object] | None = None,
+                fromlist: tuple[str, ...] = (),
+                level: int = 0,
+            ) -> object:
+                if "floe_iceberg" in name:
+                    raise ImportError(f"No module named '{name}'")
+                return original_import(name, globals_, locals_, fromlist, level)
+
+            with patch.object(builtins, "__import__", side_effect=import_mock):
                 result = validator.validate_with_drift_detection(
                     contract_path=contract_path,
                     table_schema=MagicMock(),

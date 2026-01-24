@@ -21,20 +21,25 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
+
+from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
     from click.testing import CliRunner
 
 
-class TestCompileIntegrationWithRealFiles:
+class TestCompileIntegrationWithRealFiles(IntegrationTestBase):
     """Integration tests for compile command with real fixtures.
 
     Task: T026
     Requirements: FR-010, FR-011
     """
+
+    # No external services required - tests use local files only
+    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.mark.requirement("011-FR-010")
     def test_compile_with_quickstart_fixtures_creates_artifacts(
@@ -119,12 +124,14 @@ class TestCompileIntegrationWithRealFiles:
         assert output_path.parent.exists(), "Parent directories should exist"
 
 
-class TestEnforcementReportIntegration:
+class TestEnforcementReportIntegration(IntegrationTestBase):
     """Integration tests for enforcement report generation.
 
     Task: T026
     Requirements: FR-012, FR-013, FR-014
     """
+
+    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.mark.requirement("011-FR-012")
     def test_compile_with_enforcement_report_json(
@@ -304,12 +311,14 @@ class TestEnforcementReportIntegration:
         assert report_path.exists(), "Nested report directories should be created"
 
 
-class TestCompileProductMetadata:
+class TestCompileProductMetadata(IntegrationTestBase):
     """Integration tests for product metadata in compiled artifacts.
 
     Task: T026
     Requirements: FR-010
     """
+
+    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.mark.requirement("011-FR-010")
     def test_compile_preserves_product_metadata(
@@ -359,12 +368,14 @@ class TestCompileProductMetadata:
         )
 
 
-class TestCompileErrorHandling:
+class TestCompileErrorHandling(IntegrationTestBase):
     """Integration tests for compile error handling.
 
     Task: T026
     Requirements: FR-015
     """
+
+    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.mark.requirement("011-FR-015")
     def test_compile_returns_nonzero_on_missing_spec(
@@ -429,7 +440,7 @@ class TestCompileErrorHandling:
         assert "manifest" in result.output.lower(), "Error should mention manifest"
 
 
-class TestCompileContractIntegration:
+class TestCompileContractIntegration(IntegrationTestBase):
     """Integration tests for compile command with contract features.
 
     Task: T078
@@ -440,6 +451,8 @@ class TestCompileContractIntegration:
     - --drift-detection flag to enable schema drift detection
     - Contract validation with valid ODCS contracts
     """
+
+    required_services: ClassVar[list[tuple[str, int]]] = []
 
     @pytest.fixture
     def contract_manifest_yaml(self, tmp_path: Path) -> Path:
@@ -546,13 +559,20 @@ schema:
             ],
         )
 
-        # The flag should be recognized and contract validation skipped
-        # Exit code 6 is COMPILATION_ERROR from later stages, not contract validation
+        # Verify the --skip-contracts flag was recognized and honored
         assert "SKIPPED" in result.output, (
             f"--skip-contracts should output SKIPPED message. Got: {result.output}"
         )
-        # Exit codes: 0=success, 6=compilation error (acceptable since contracts were skipped)
-        assert result.exit_code in (0, 6), f"Unexpected exit code: {result.exit_code}"
+        # Contract validation errors should NOT appear since we skipped it
+        assert "FLOE-E5" not in result.output, (
+            "Contract errors (FLOE-E5xx) should not appear when --skip-contracts is used"
+        )
+        # Exit code 0 means full success; exit code 6 is acceptable if from non-contract
+        # compilation stages (e.g., dbt profile generation which is not yet implemented)
+        assert result.exit_code in (0, 6), (
+            f"Unexpected exit code {result.exit_code}. "
+            f"Expected 0 (success) or 6 (non-contract compilation error)"
+        )
 
     @pytest.mark.requirement("3C-FR-032")
     def test_compile_with_drift_detection_flag(
