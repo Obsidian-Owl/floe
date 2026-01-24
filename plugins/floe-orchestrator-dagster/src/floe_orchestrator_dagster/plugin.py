@@ -317,8 +317,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """Create a Dagster asset definition for a single transform.
 
         Uses the @asset decorator to create a software-defined asset that
-        represents the dbt model. The asset is a placeholder that can be
-        materialized by the dbt resource.
+        represents the dbt model. The asset receives DBTResource and uses
+        it to run the specific dbt model via select pattern.
 
         Args:
             transform: TransformConfig with model details.
@@ -327,8 +327,17 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         Returns:
             AssetsDefinition for the transform.
+
+        Requirements:
+            FR-030: Delegate dbt operations to DBTPlugin (via DBTResource)
+            FR-031: Use DBTRunResult to populate asset metadata
         """
-        from dagster import asset
+        from dagster import AssetExecutionContext, asset
+
+        from floe_orchestrator_dagster.resources import DBTResource
+
+        # Capture transform name for use in inner function
+        model_name = transform.name
 
         # Security: MEDIUM-02 remediation - Dynamic asset creation is safe because:
         # 1. All inputs (transform.name, deps, metadata) are validated through
@@ -345,13 +354,36 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             deps=deps if deps else None,
             metadata=metadata if metadata else None,
             description=f"dbt model: {transform.name}",
+            required_resource_keys={"dbt"},
         )
-        def _asset_fn() -> None:
-            """Placeholder asset for dbt model.
+        def _asset_fn(context: AssetExecutionContext, dbt: DBTResource) -> None:
+            """Execute dbt model via DBTResource.
 
-            Actual materialization happens via dbt resource integration.
+            Materializes the dbt model by delegating to DBTPlugin through
+            DBTResource. The model is selected using dbt's select syntax.
+
+            Args:
+                context: Dagster asset execution context.
+                dbt: DBTResource for dbt operations.
+
+            Requirements:
+                FR-030: Delegate to DBTPlugin, never invoke dbtRunner directly
+                FR-031: Use DBTRunResult for metadata
             """
-            return None
+            # Run the specific model using dbt select syntax
+            result = dbt.run_models(select=model_name)
+
+            # Log execution results (FR-031: use DBTRunResult for metadata)
+            context.log.info(
+                f"dbt model '{model_name}' completed: "
+                f"success={result.success}, "
+                f"models_run={result.models_run}, "
+                f"failures={result.failures}"
+            )
+
+            if not result.success:
+                msg = f"dbt model '{model_name}' failed with {result.failures} failures"
+                raise RuntimeError(msg)
 
         return _asset_fn
 
