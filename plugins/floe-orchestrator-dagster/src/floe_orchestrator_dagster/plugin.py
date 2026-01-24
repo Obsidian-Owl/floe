@@ -21,7 +21,7 @@ Example:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from dagster import AssetKey, AssetsDefinition, asset
 from floe_core.plugins.orchestrator import (
@@ -33,9 +33,6 @@ from floe_core.plugins.orchestrator import (
 )
 from floe_core.schemas import CompiledArtifacts
 from pydantic import ValidationError as PydanticValidationError
-
-if TYPE_CHECKING:
-    from dagster import AssetExecutionContext
 
 logger = logging.getLogger(__name__)
 

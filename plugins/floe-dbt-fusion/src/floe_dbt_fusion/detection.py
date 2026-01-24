@@ -140,7 +140,17 @@ def get_fusion_version(binary_path: Path) -> str | None:
 
         # Parse version from output like "dbt-sa-cli 0.1.0" or "dbt-sa-cli version 0.1.0"
         output = result.stdout.strip()
-        version_match = re.search(r"(?:version\s+)?(\d+\.\d+\.\d+(?:-\w+)?)", output)
+
+        # Security: Limit input length to prevent ReDoS attacks (version output is short)
+        if len(output) > 256:
+            return None
+
+        # Use explicit quantifier limits to prevent polynomial backtracking
+        # Pattern: optional "version ", then semver with optional prerelease suffix
+        version_match = re.search(
+            r"(?:version\s{1,10})?(\d{1,10}\.\d{1,10}\.\d{1,10}(?:-\w{1,20})?)",
+            output,
+        )
         if version_match:
             return version_match.group(1)
 
