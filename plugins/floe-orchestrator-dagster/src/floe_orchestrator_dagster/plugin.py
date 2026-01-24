@@ -21,8 +21,9 @@ Example:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from dagster import AssetKey, AssetsDefinition, asset
 from floe_core.plugins.orchestrator import (
     Dataset,
     OrchestratorPlugin,
@@ -32,9 +33,6 @@ from floe_core.plugins.orchestrator import (
 )
 from floe_core.schemas import CompiledArtifacts
 from pydantic import ValidationError as PydanticValidationError
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +57,9 @@ _RESOURCE_PRESETS: dict[str, ResourceSpec] = {
         memory_limit="2Gi",
     ),
 }
+
+# PERF: Pre-created frozenset for asset resource keys (avoid per-asset set creation)
+_DBT_RESOURCE_KEYS: frozenset[str] = frozenset({"dbt"})
 
 
 class DagsterOrchestratorPlugin(OrchestratorPlugin):
@@ -258,19 +259,22 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             >>> len(assets)
             2
         """
-        from dagster import AssetKey, AssetsDefinition
+        # PERF: Pre-bind methods and classes to avoid repeated attribute lookups
+        _AssetKey = AssetKey
+        _build_metadata = self._build_asset_metadata
+        _create_asset = self._create_asset_for_transform
 
         assets: list[AssetsDefinition] = []
 
         for transform in transforms:
             # Convert depends_on names to AssetKeys
-            deps = [AssetKey(dep) for dep in transform.depends_on]
+            deps = [_AssetKey(dep) for dep in transform.depends_on]
 
             # Build metadata for the asset
-            metadata = self._build_asset_metadata(transform)
+            metadata = _build_metadata(transform)
 
             # Create the asset using @asset decorator factory
-            asset_def = self._create_asset_for_transform(
+            asset_def = _create_asset(
                 transform=transform,
                 deps=deps,
                 metadata=metadata,
@@ -317,8 +321,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """Create a Dagster asset definition for a single transform.
 
         Uses the @asset decorator to create a software-defined asset that
-        represents the dbt model. The asset is a placeholder that can be
-        materialized by the dbt resource.
+        represents the dbt model. The asset receives DBTResource and uses
+        it to run the specific dbt model via select pattern.
 
         Args:
             transform: TransformConfig with model details.
@@ -327,8 +331,13 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         Returns:
             AssetsDefinition for the transform.
+
+        Requirements:
+            FR-030: Delegate dbt operations to DBTPlugin (via DBTResource)
+            FR-031: Use DBTRunResult to populate asset metadata
         """
-        from dagster import asset
+        # Capture transform name for use in inner function
+        model_name = transform.name
 
         # Security: MEDIUM-02 remediation - Dynamic asset creation is safe because:
         # 1. All inputs (transform.name, deps, metadata) are validated through
@@ -339,19 +348,44 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # No user-controlled input reaches this function without validation.
         #
         # Note: We avoid type annotations in the inner function due to
-        # Dagster's type hint resolution with `from __future__ import annotations`
+        # Dagster's type hint resolution with `from __future__ import annotations`.
+        # Dagster cannot resolve string annotations for AssetExecutionContext.
+        # PERF: Use pre-created frozenset and avoid unnecessary conditionals
         @asset(
             name=transform.name,
-            deps=deps if deps else None,
-            metadata=metadata if metadata else None,
+            deps=deps or None,
+            metadata=metadata or None,
             description=f"dbt model: {transform.name}",
+            required_resource_keys=_DBT_RESOURCE_KEYS,
         )
-        def _asset_fn() -> None:
-            """Placeholder asset for dbt model.
+        def _asset_fn(context, dbt) -> None:  # noqa: ANN001
+            """Execute dbt model via DBTResource.
 
-            Actual materialization happens via dbt resource integration.
+            Materializes the dbt model by delegating to DBTPlugin through
+            DBTResource. The model is selected using dbt's select syntax.
+
+            Args:
+                context: Dagster AssetExecutionContext.
+                dbt: DBTResource for dbt operations.
+
+            Requirements:
+                FR-030: Delegate to DBTPlugin, never invoke dbtRunner directly
+                FR-031: Use DBTRunResult for metadata
             """
-            return None
+            # Run the specific model using dbt select syntax
+            result = dbt.run_models(select=model_name)
+
+            # Log execution results (FR-031: use DBTRunResult for metadata)
+            context.log.info(
+                f"dbt model '{model_name}' completed: "
+                f"success={result.success}, "
+                f"models_run={result.models_run}, "
+                f"failures={result.failures}"
+            )
+
+            if not result.success:
+                msg = f"dbt model '{model_name}' failed with {result.failures} failures"
+                raise RuntimeError(msg)
 
         return _asset_fn
 

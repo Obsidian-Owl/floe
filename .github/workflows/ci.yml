@@ -86,6 +86,36 @@ jobs:
           fi
           echo "No problematic hardcoded sleeps found"
 
+      - name: Validate dbt version requirements
+        run: |
+          echo "Validating dbt plugin version requirements..."
+
+          # Check floe-dbt-core requires dbt-core>=1.6,<2.0 (NFR-003)
+          CORE_DEP=$(grep -E '"dbt-core.*"' plugins/floe-dbt-core/pyproject.toml || true)
+          if [[ -z "$CORE_DEP" ]]; then
+            echo "ERROR: floe-dbt-core must depend on dbt-core" >&2
+            exit 1
+          fi
+          if ! echo "$CORE_DEP" | grep -qE '>=1\.6.*<2\.0'; then
+            echo "ERROR: floe-dbt-core must require dbt-core>=1.6,<2.0" >&2
+            echo "Current: $CORE_DEP" >&2
+            echo "Required: dbt-core>=1.6,<2.0 (NFR-003)" >&2
+            exit 1
+          fi
+          echo "✓ floe-dbt-core: $CORE_DEP"
+
+          # Check floe-dbt-fusion requires dbt Fusion CLI >=1.0 (NFR-004)
+          # Note: Fusion is a CLI binary, not a Python dependency
+          # We validate the detection module checks for version >=1.0
+          FUSION_CHECK=$(grep -E 'MIN_FUSION_VERSION|>=.*1\.0' plugins/floe-dbt-fusion/src/floe_dbt_fusion/detection.py || true)
+          if [[ -z "$FUSION_CHECK" ]]; then
+            echo "WARNING: Could not verify Fusion version check in detection.py" >&2
+          else
+            echo "✓ floe-dbt-fusion: Fusion version check found"
+          fi
+
+          echo "dbt version requirements validated"
+
   # ============================================================
   # Stage 1b: Security Scanning (Bandit + pip-audit)
   # ============================================================

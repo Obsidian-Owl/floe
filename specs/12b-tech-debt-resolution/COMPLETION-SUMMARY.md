@@ -160,5 +160,5 @@ The following items were identified but deferred to future work:
 ## Next Steps
 
 1. Create PR for merge to `main`
-2. Run `/speckit.integration-check` before PR
+2. Run `/speckit.wiring-check` and `/speckit.merge-check` before PR
 3. Delete epic auto-mode state file after PR merge

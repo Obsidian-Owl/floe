@@ -1,6 +1,7 @@
 ---
-name: speckit-integration-check
-description: Validate this Epic branch against main and detect contract changes before PR creation
+name: speckit-merge-check
+description: Validate Epic branch merge readiness - contract stability, merge conflicts, and architecture compliance. Use before PR.
+user_invocable: true
 ---
 
 ## User Input
@@ -34,7 +35,7 @@ This skill answers: **Is this Epic safe to merge?**
 ### After Completion
 Save pre-PR decisions:
 ```bash
-./scripts/memory-save --decisions "Integration check for {epic}: {findings}" --issues "{LinearIDs}"
+./scripts/memory-save --decisions "Merge check for {epic}: {findings}" --issues "{LinearIDs}"
 ```
 
 ## Constitution Alignment
@@ -198,7 +199,7 @@ Produce a structured markdown report.
 
 - [ ] {First action item}
 - [ ] {Second action item}
-- [ ] Re-run `/speckit.integration-check` to verify (if changes made)
+- [ ] Re-run `/speckit.merge-check` to verify (if changes made)
 ```
 
 ## Key Rules

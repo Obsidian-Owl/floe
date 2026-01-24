@@ -53,9 +53,13 @@ from floe_core.plugins.compute import (
 
 # DBT plugin
 from floe_core.plugins.dbt import (
+    DBTCompilationError,
+    DBTError,
+    DBTExecutionError,
     DBTPlugin,
     DBTRunResult,
     LintResult,
+    LintViolation,
 )
 
 # Registry components (Epic 12B US4 - God Module Decomposition)
@@ -130,6 +134,10 @@ __all__ = [
     "DBTPlugin",
     "DBTRunResult",
     "LintResult",
+    "LintViolation",
+    "DBTError",
+    "DBTCompilationError",
+    "DBTExecutionError",
     # Identity
     "IdentityPlugin",
     "TokenValidationResult",

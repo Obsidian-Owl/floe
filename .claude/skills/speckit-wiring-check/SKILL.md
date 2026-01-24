@@ -1,6 +1,6 @@
 ---
-name: speckit-verify-integration
-description: Verify features are integrated into the floe system - reachable from CLI, plugin registry, or package exports. Use before PR to ensure features connect to the system.
+name: speckit-wiring-check
+description: Verify new code is wired into the system - reachable from CLI, plugin registry, or package exports. Use before PR to catch orphaned code.
 user_invocable: true
 ---
 
@@ -14,7 +14,7 @@ You **MAY** consider the user input for scope filtering (if not empty).
 
 ## Overview
 
-Quick verification that implemented features are reachable from system entry points. This prevents orphaned code that builds but isn't accessible.
+Quick verification that new code is wired into system entry points. This prevents orphaned code that builds but isn't accessible.
 
 **Use this skill:**
 - Before `/speckit.pr` (recommended, not mandatory)
@@ -88,7 +88,7 @@ done
 ## Report Format
 
 ```markdown
-## Integration Check Report
+## Wiring Check Report
 
 ### New Modules
 | Module | Imported By | Status |
@@ -133,4 +133,4 @@ done
 
 - **[Plugin Architecture](../../../docs/architecture/plugin-system/index.md)** - Entry point patterns
 - **[Component Ownership](../../rules/component-ownership.md)** - Package boundaries
-- **[speckit.integration-check](../speckit-integration-check/SKILL.md)** - Contract stability (different focus)
+- **[speckit.merge-check](../speckit-merge-check/SKILL.md)** - Contract stability, merge conflicts (different focus)

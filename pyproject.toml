@@ -43,6 +43,9 @@ dependencies = [
     "floe-rbac-k8s",
     # Include orchestrator plugins for development
     "floe-orchestrator-dagster",
+    # Include dbt plugins for development (Epic 5A)
+    "floe-dbt-core",
+    "floe-dbt-fusion",
 ]
 
 [tool.uv]
@@ -64,6 +67,8 @@ floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = t
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
 floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editable = true }
+floe-dbt-core = { path = "plugins/floe-dbt-core", editable = true }
+floe-dbt-fusion = { path = "plugins/floe-dbt-fusion", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -77,6 +82,8 @@ pythonpath = [
     "plugins/floe-secrets-k8s/src",
     "plugins/floe-rbac-k8s/src",
     "plugins/floe-orchestrator-dagster/src",
+    "plugins/floe-dbt-core/src",
+    "plugins/floe-dbt-fusion/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]

@@ -1,0 +1,40 @@
+# Minimal dbt project for floe testing
+#
+# This project is used by unit and integration tests across:
+# - floe-dbt-core
+# - floe-dbt-fusion
+# - floe-orchestrator-dagster
+#
+# It provides a minimal but complete dbt project structure.
+
+name: floe_test_project
+version: 1.0.0
+config-version: 2
+
+# Profile defined in profiles.yml
+profile: floe_test
+
+# Standard dbt paths
+model-paths:
+  - models
+analysis-paths:
+  - analyses
+test-paths:
+  - tests
+seed-paths:
+  - seeds
+macro-paths:
+  - macros
+snapshot-paths:
+  - snapshots
+
+# Output paths
+clean-targets:
+  - target
+  - dbt_packages
+
+# Model configurations
+models:
+  floe_test_project:
+    # Default materialization
+    +materialized: view

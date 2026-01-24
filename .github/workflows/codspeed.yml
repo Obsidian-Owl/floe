@@ -13,7 +13,9 @@ permissions:
   id-token: write
 
 env:
-  PYTHON_VERSION_DEFAULT: "3.10"
+  # Python 3.12+ required for CodSpeed execution profiles
+  # See: https://codspeed.io/docs/instruments/cpu
+  PYTHON_VERSION_DEFAULT: "3.12"
   UV_CACHE_DIR: /tmp/.uv-cache
 
 jobs:
@@ -41,5 +43,7 @@ jobs:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@0d7de549485db8284c0b87a0d2c0dd871097e641  # v4
         with:
+          # CPU simulation for consistent comparisons with main branch
+          # Python 3.12+ enables execution profiles (flamegraphs)
           mode: simulation
           run: uv run pytest benchmarks/ --codspeed

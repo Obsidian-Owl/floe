@@ -262,7 +262,8 @@ Synthesize all reports into a unified strategic assessment.
 
 After completing this skill:
 - **Fix issues**: Address P0/P1 issues identified
-- **Check integration**: Run `/speckit.integration-check` before PR
+- **Check wiring**: Run `/speckit.wiring-check` to verify code connectivity
+- **Check merge readiness**: Run `/speckit.merge-check` before PR
 - **Create PR**: Run `/speckit.pr` when tests pass
 
 ## References

@@ -99,6 +99,15 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Prevent dbtRunner imports in orchestrator (SC-004)
+      - id: no-dbt-runner-in-orchestrator
+        name: no dbtRunner in orchestrator
+        entry: scripts/pre-commit-no-dbt-runner.sh
+        language: script
+        stages: [pre-commit]
+        pass_filenames: false
+        files: ^plugins/floe-orchestrator-dagster/
+
       # Claude Code agent validation
       - id: agent-lint
         name: claude agent frontmatter

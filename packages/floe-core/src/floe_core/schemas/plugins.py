@@ -32,7 +32,7 @@ PLUGIN_REGISTRY: dict[str, list[str]] = {
     "telemetry_backend": ["console", "jaeger", "datadog", "grafana-cloud"],
     "lineage_backend": ["marquez", "atlan", "openmetadata"],
     "identity": ["k8s-rbac", "custom"],
-    "dbt": ["local", "fusion"],
+    "dbt": ["core", "fusion"],
     "quality": ["great-expectations", "soda", "dbt-expectations"],
 }
 """Registry of known plugin types per category.
@@ -294,9 +294,9 @@ class PluginsConfig(BaseModel):
     )
 
     # Transformation
-    dbt: PluginSelection | None = Field(
-        default=None,
-        description="dbt execution (local, fusion)",
+    dbt: PluginSelection = Field(
+        default_factory=lambda: PluginSelection(type="core"),
+        description="dbt execution runtime (core, fusion). Defaults to 'core'.",
     )
 
     # Data quality

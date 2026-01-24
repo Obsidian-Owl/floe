@@ -50,13 +50,16 @@ bd ready                        # Show ready work
 # 1. Test quality review
 /speckit.test-review
 
-# 2. Integration and contract check
-/speckit.integration-check
+# 2. Wiring check (is new code connected?)
+/speckit.wiring-check
 
-# 3. Critic approval (automatic via pre-pr-gate)
+# 3. Merge check (contracts, conflicts)
+/speckit.merge-check
+
+# 4. Critic approval (automatic via pre-pr-gate)
 # Agent invoked automatically when running gh pr create
 
-# 4. Create PR
+# 5. Create PR
 /speckit.pr
 ```
 
@@ -90,7 +93,8 @@ When you edit/write Python files, these run automatically:
 When you run `gh pr create`:
 - Pre-PR quality gate runs
 - Must have passed /speckit.test-review
-- Must have passed /speckit.integration-check
+- Must have passed /speckit.wiring-check
+- Must have passed /speckit.merge-check
 - Must have critic OKAY verdict
 
 ## Quality State
@@ -130,7 +134,8 @@ If context compacts during `/speckit.implement-epic`:
 Run the required checks:
 ```bash
 /speckit.test-review
-/speckit.integration-check
+/speckit.wiring-check
+/speckit.merge-check
 ```
 
 ### "Architecture drift detected"

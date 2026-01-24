@@ -21,8 +21,9 @@ bd ready
 /speckit.implement-epic  # ALL tasks (auto-continues)
 
 # 4. Pre-PR validation
-/speckit.test-review        # Test quality check
-/speckit.integration-check  # Contract and merge readiness
+/speckit.test-review   # Test quality check
+/speckit.wiring-check  # Is new code wired into system?
+/speckit.merge-check   # Contract and merge readiness
 
 # 5. Create PR with Linear links
 /speckit.pr  # Generates PR body, links all Linear issues
@@ -815,7 +816,8 @@ Check dependency integrity:
   - [speckit-implement](../../.claude/skills/speckit-implement/SKILL.md)
   - [speckit-implement-epic](../../.claude/skills/speckit-implement-epic/SKILL.md)
   - [speckit-test-review](../../.claude/skills/speckit-test-review/SKILL.md)
-  - [speckit-integration-check](../../.claude/skills/speckit-integration-check/SKILL.md)
+  - [speckit-wiring-check](../../.claude/skills/speckit-wiring-check/SKILL.md)
+  - [speckit-merge-check](../../.claude/skills/speckit-merge-check/SKILL.md)
   - [speckit-pr](../../.claude/skills/speckit-pr/SKILL.md)
 - **Linear Resources**:
   - Initiative: https://linear.app/obsidianowl/initiative/floe-platform-delivery-25020298255a/overview
