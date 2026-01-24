@@ -378,7 +378,9 @@ class OutputPort(BaseModel):
         ...     owner="analytics-team@acme.com",
         ...     description="Customer master data",
         ...     schema=[
-        ...         OutputPortColumn(name="customer_id", type="string", required=True, primary_key=True),
+        ...         OutputPortColumn(
+        ...             name="customer_id", type="string", required=True, primary_key=True
+        ...         ),
         ...         OutputPortColumn(name="email", type="string", classification="pii"),
         ...     ]
         ... )
@@ -403,7 +405,12 @@ class OutputPort(BaseModel):
                     "owner": "analytics-team@acme.com",
                     "description": "Customer master data",
                     "schema": [
-                        {"name": "customer_id", "type": "string", "required": True, "primaryKey": True},
+                        {
+                            "name": "customer_id",
+                            "type": "string",
+                            "required": True,
+                            "primaryKey": True,
+                        },
                         {"name": "email", "type": "string", "classification": "pii"},
                     ],
                 }

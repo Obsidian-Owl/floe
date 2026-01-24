@@ -23,13 +23,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
 # ==============================================================================
 # Re-export official ODCS models from open-data-contract-standard package
 # ==============================================================================
-
-from open_data_contract_standard.model import (  # type: ignore[import-untyped]
+from open_data_contract_standard.model import (
     AuthoritativeDefinition,
     CustomProperty,
     DataQuality,
@@ -46,6 +43,7 @@ from open_data_contract_standard.model import (  # type: ignore[import-untyped]
     Team,
     TeamMember,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 # Alias for backwards compatibility and clearer naming
 DataContract = OpenDataContractStandard
@@ -124,6 +122,7 @@ ContractTerms = CustomProperty
 # Type constants for ODCS logicalType values
 # These are common logical types used in ODCS schema properties
 # ==============================================================================
+
 
 class ElementType:
     """ODCS v3.1 logicalType values.

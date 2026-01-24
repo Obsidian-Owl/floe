@@ -112,11 +112,7 @@ class SemanticVersion:
         Returns:
             True if only PATCH version was incremented.
         """
-        return (
-            self.major == other.major
-            and self.minor == other.minor
-            and self.patch > other.patch
-        )
+        return self.major == other.major and self.minor == other.minor and self.patch > other.patch
 
 
 class ChangeType:
@@ -185,6 +181,8 @@ class VersioningValidator:
             current = self._parser.parse_contract_string(current_yaml, "current")
         except Exception as e:
             self._log.error("current_contract_parse_error", error=str(e))
+            from datetime import datetime, timezone
+
             return ContractValidationResult(
                 valid=False,
                 violations=[
@@ -197,6 +195,7 @@ class VersioningValidator:
                 ],
                 warnings=[],
                 schema_hash="sha256:" + "0" * 64,
+                validated_at=datetime.now(timezone.utc),
                 contract_name="unknown",
                 contract_version="unknown",
             )
@@ -225,6 +224,8 @@ class VersioningValidator:
             baseline = self._parser.parse_contract_string(baseline_yaml, "baseline")
         except Exception as e:
             self._log.error("baseline_contract_parse_error", error=str(e))
+            from datetime import datetime, timezone
+
             return ContractValidationResult(
                 valid=False,
                 violations=[
@@ -237,6 +238,7 @@ class VersioningValidator:
                 ],
                 warnings=[],
                 schema_hash="sha256:" + "0" * 64,
+                validated_at=datetime.now(timezone.utc),
                 contract_name=current.name or "unknown",
                 contract_version=current.version or "unknown",
             )
@@ -302,9 +304,9 @@ class VersioningValidator:
                             f"(current: {current.version}, baseline: {baseline.version})",
                             element_name=change.get("element"),
                             expected=(
-                        f"MINOR bump (e.g., "
-                        f"{baseline_version.major}.{baseline_version.minor + 1}.0)"
-                    ),
+                                f"MINOR bump (e.g., "
+                                f"{baseline_version.major}.{baseline_version.minor + 1}.0)"
+                            ),
                             actual=current.version,
                             suggestion="Increment MINOR version for non-breaking changes",
                         )
@@ -508,7 +510,12 @@ class VersioningValidator:
         current_desc = current.description
 
         # Compare description purpose if available
-        if hasattr(baseline_desc, "purpose") and hasattr(current_desc, "purpose"):
+        if (
+            baseline_desc is not None
+            and current_desc is not None
+            and hasattr(baseline_desc, "purpose")
+            and hasattr(current_desc, "purpose")
+        ):
             return baseline_desc.purpose != current_desc.purpose
 
         return baseline_desc != current_desc

@@ -514,9 +514,9 @@ class PolicyEnforcer:
                         model_name=cv.model_name or result.contract_name,
                         column_name=cv.element_name,
                         message=cv.message,
-                        expected=cv.expected,
-                        actual=cv.actual,
-                        suggestion=cv.suggestion,
+                        expected=cv.expected or "N/A",
+                        actual=cv.actual or "N/A",
+                        suggestion=cv.suggestion or "Check the contract specification",
                         documentation_url=f"https://floe.dev/docs/errors/{cv.error_code}",
                     )
                 )

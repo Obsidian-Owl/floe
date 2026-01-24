@@ -67,6 +67,7 @@ class CycleDetectionResult:
         self.has_cycle = has_cycle
         self.cycle_path = cycle_path
 
+
 logger = structlog.get_logger(__name__)
 
 # Classification hierarchy (higher index = more restrictive)
@@ -190,6 +191,8 @@ class InheritanceValidator:
             child = self._parser.parse_contract_string(child_yaml, "child")
         except Exception as e:
             self._log.error("contract_parse_error", error=str(e))
+            from datetime import datetime, timezone
+
             return ContractValidationResult(
                 valid=False,
                 violations=[
@@ -202,7 +205,8 @@ class InheritanceValidator:
                 ],
                 warnings=[],
                 schema_hash="sha256:" + "0" * 64,
-                contract_name=child.name if "child" in dir() else "unknown",
+                validated_at=datetime.now(timezone.utc),
+                contract_name="unknown",
                 contract_version="unknown",
             )
 
@@ -211,9 +215,7 @@ class InheritanceValidator:
         violations.extend(sla_violations)
 
         # Validate classifications (FR-013)
-        classification_violations = self._validate_classification_inheritance(
-            parent, child
-        )
+        classification_violations = self._validate_classification_inheritance(parent, child)
         violations.extend(classification_violations)
 
         # Build result
@@ -468,9 +470,7 @@ class InheritanceValidator:
                         element_name=field_key,
                         expected=parent_class,
                         actual="none",
-                        suggestion=(
-                            f"Add classification '{parent_class}' to field '{field_key}'"
-                        ),
+                        suggestion=(f"Add classification '{parent_class}' to field '{field_key}'"),
                     )
                 )
                 continue
