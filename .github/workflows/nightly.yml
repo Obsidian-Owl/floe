@@ -61,29 +61,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Create Kind cluster
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3  # v1.12.0
-        with:
-          cluster_name: floe-nightly
-          config: testing/k8s/kind-config.yaml
-
-      - name: Deploy test services
-        run: |
-          kubectl apply -f testing/k8s/services/namespace.yaml
-          kubectl apply -f testing/k8s/services/
-
-      - name: Wait for services to be ready
-        run: |
-          echo "Waiting for pods to be ready..."
-          kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s
-
-          echo "Waiting for setup Jobs to complete..."
-          kubectl wait --for=condition=complete job/minio-setup -n floe-test --timeout=120s
-          kubectl wait --for=condition=complete job/minio-iam-setup -n floe-test --timeout=120s
-
-          echo "Verifying service health..."
-          kubectl get pods -n floe-test
-          kubectl get jobs -n floe-test
+      - name: Setup Kind cluster and deploy services
+        run: CLUSTER_NAME=floe-nightly ./testing/k8s/setup-cluster.sh
+        env:
+          SKIP_MONITORING: "true"
 
       - name: Run integration tests
         run: ./testing/ci/test-integration.sh
@@ -92,11 +73,7 @@ jobs:
 
       - name: Collect logs on failure
         if: failure()
-        run: |
-          echo "=== Pod Status ===" >&2
-          kubectl get pods -n floe-test -o wide
-          echo "=== Recent Events ===" >&2
-          kubectl get events -n floe-test --sort-by='.lastTimestamp' | tail -20
+        run: ./testing/ci/collect-logs.sh floe-test
 
       - name: Cleanup Kind cluster
         if: always()
