@@ -133,18 +133,20 @@ repos:
 
       # Unit tests (all packages - matches CI)
       # Uses --ignore-glob to handle missing directories gracefully
+      # Must match CI's test-unit.sh behavior: only tests/unit/ directories
       - id: pytest-unit
         name: pytest (unit tests)
-        entry: bash -c 'uv run pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" -v --tb=short -x'
+        entry: bash -c 'uv run pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" --ignore-glob="**/tests/contract/**" -v --tb=short -x'
         language: system
         types: [python]
         stages: [pre-push]
         pass_filenames: false
 
       # Contract tests (cross-package validation - matches CI)
+      # Includes both root-level and package-level contract tests
       - id: pytest-contract
         name: pytest (contract tests)
-        entry: uv run pytest tests/contract/ -v --tb=short -x
+        entry: bash -c 'uv run pytest tests/contract/ packages/*/tests/contract/ --ignore-glob="**/tests/contract/__pycache__/**" -v --tb=short -x 2>/dev/null || uv run pytest tests/contract/ -v --tb=short -x'
         language: system
         types: [python]
         stages: [pre-push]

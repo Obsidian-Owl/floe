@@ -233,7 +233,10 @@ jobs:
 
       - name: Run contract tests
         run: |
-          uv run pytest tests/contract/ \
+          # Run both root-level and package-level contract tests
+          # Package-level contract tests validate internal package contracts
+          uv run pytest tests/contract/ packages/*/tests/contract/ \
+            --ignore-glob="**/tests/contract/__pycache__/**" \
             -v \
             --tb=short
 
