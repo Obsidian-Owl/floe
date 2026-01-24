@@ -17,18 +17,20 @@ repos:
   # ==========================================================
 
   # Ruff: Fast Python linter and formatter
-  # Auto-fixes are applied. If files are modified, re-stage and commit again.
+  # Auto-fixes are applied on pre-commit. Pre-push runs check-only versions.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
     hooks:
-      # Linting with auto-fix (fixes are applied automatically)
+      # Linting with auto-fix (pre-commit only - fixes are applied automatically)
       - id: ruff
         args: [--fix]
         types_or: [python, pyi]
+        stages: [pre-commit]
 
-      # Formatting (auto-formats files)
+      # Formatting (pre-commit only - auto-formats files)
       - id: ruff-format
         types_or: [python, pyi]
+        stages: [pre-commit]
 
   # Secret detection with entropy analysis (replaces custom regex)
   - repo: https://github.com/Yelp/detect-secrets

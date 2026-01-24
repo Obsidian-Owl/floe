@@ -63,9 +63,9 @@ class TestOrchestratorPluginABCDefinition:
 
         # Must be abstract
         method = OrchestratorPlugin.create_definitions
-        assert getattr(
-            method, "__isabstractmethod__", False
-        ), "create_definitions() must be abstract"
+        assert getattr(method, "__isabstractmethod__", False), (
+            "create_definitions() must be abstract"
+        )
 
         # Check signature
         sig = inspect.signature(OrchestratorPlugin.create_definitions)
@@ -85,9 +85,9 @@ class TestOrchestratorPluginABCDefinition:
         assert hasattr(OrchestratorPlugin, "create_assets_from_transforms")
 
         method = OrchestratorPlugin.create_assets_from_transforms
-        assert getattr(
-            method, "__isabstractmethod__", False
-        ), "create_assets_from_transforms() must be abstract"
+        assert getattr(method, "__isabstractmethod__", False), (
+            "create_assets_from_transforms() must be abstract"
+        )
 
         sig = inspect.signature(OrchestratorPlugin.create_assets_from_transforms)
         params = list(sig.parameters.keys())
@@ -119,9 +119,9 @@ class TestOrchestratorPluginABCDefinition:
         assert hasattr(OrchestratorPlugin, "validate_connection")
 
         method = OrchestratorPlugin.validate_connection
-        assert getattr(
-            method, "__isabstractmethod__", False
-        ), "validate_connection() must be abstract"
+        assert getattr(method, "__isabstractmethod__", False), (
+            "validate_connection() must be abstract"
+        )
 
     @pytest.mark.requirement("FR-002")
     def test_get_resource_requirements_method_is_abstract(self) -> None:
@@ -135,9 +135,9 @@ class TestOrchestratorPluginABCDefinition:
         assert hasattr(OrchestratorPlugin, "get_resource_requirements")
 
         method = OrchestratorPlugin.get_resource_requirements
-        assert getattr(
-            method, "__isabstractmethod__", False
-        ), "get_resource_requirements() must be abstract"
+        assert getattr(method, "__isabstractmethod__", False), (
+            "get_resource_requirements() must be abstract"
+        )
 
         sig = inspect.signature(OrchestratorPlugin.get_resource_requirements)
         params = list(sig.parameters.keys())
@@ -155,9 +155,9 @@ class TestOrchestratorPluginABCDefinition:
         assert hasattr(OrchestratorPlugin, "emit_lineage_event")
 
         method = OrchestratorPlugin.emit_lineage_event
-        assert getattr(
-            method, "__isabstractmethod__", False
-        ), "emit_lineage_event() must be abstract"
+        assert getattr(method, "__isabstractmethod__", False), (
+            "emit_lineage_event() must be abstract"
+        )
 
         sig = inspect.signature(OrchestratorPlugin.emit_lineage_event)
         params = list(sig.parameters.keys())

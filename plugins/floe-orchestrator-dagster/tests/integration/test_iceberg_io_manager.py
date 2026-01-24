@@ -495,9 +495,9 @@ class TestIcebergIOManagerRealServices(IntegrationTestBase):
         # Verify hosts are resolvable (test assertion, not stub)
         assert polaris_host is not None, "Polaris host should be resolvable"
         assert minio_host is not None, "MinIO host should be resolvable"
-        assert namespace.startswith(
-            "test-iceberg-write-"
-        ), f"Namespace should have correct prefix: {namespace}"
+        assert namespace.startswith("test-iceberg-write-"), (
+            f"Namespace should have correct prefix: {namespace}"
+        )
 
     @pytest.mark.requirement("FR-039")
     def test_real_iceberg_read(self) -> None:
@@ -516,9 +516,9 @@ class TestIcebergIOManagerRealServices(IntegrationTestBase):
         # Verify hosts are resolvable (test assertion, not stub)
         assert polaris_host is not None, "Polaris host should be resolvable"
         assert minio_host is not None, "MinIO host should be resolvable"
-        assert namespace.startswith(
-            "test-iceberg-read-"
-        ), f"Namespace should have correct prefix: {namespace}"
+        assert namespace.startswith("test-iceberg-read-"), (
+            f"Namespace should have correct prefix: {namespace}"
+        )
 
         # Note: Full read test requires table with pre-existing data
         # This validates service connectivity as a smoke test

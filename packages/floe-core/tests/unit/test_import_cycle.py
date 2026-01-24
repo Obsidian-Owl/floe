@@ -39,9 +39,9 @@ def test_floe_core_imports_without_rbac_plugin() -> None:
         timeout=30,
     )
 
-    assert (
-        result.returncode == 0
-    ), f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
     assert "success" in result.stdout
 
 
@@ -194,9 +194,9 @@ print("success")
         timeout=30,
     )
 
-    assert (
-        result.returncode == 0
-    ), f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
     assert "CIRCULAR_WARNING" not in result.stdout
     assert "success" in result.stdout
 

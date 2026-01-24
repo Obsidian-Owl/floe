@@ -88,9 +88,9 @@ class TestInfisicalSecretsPluginDiscovery(BasePluginDiscoveryTests):
         ]
 
         for method_name in secrets_methods:
-            assert hasattr(
-                plugin_class, method_name
-            ), f"Plugin missing SecretsPlugin method: {method_name}"
+            assert hasattr(plugin_class, method_name), (
+                f"Plugin missing SecretsPlugin method: {method_name}"
+            )
             assert callable(getattr(plugin_class, method_name))
 
     @pytest.mark.requirement("7A-FR-021")
