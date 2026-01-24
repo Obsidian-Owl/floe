@@ -34,8 +34,11 @@ from .errors import (
     DBTFusionNotFoundError,
     check_fallback_available,
 )
+from .plugin import DBTFusionPlugin
 
 __all__ = [
+    # Main plugin
+    "DBTFusionPlugin",
     # Detection utilities
     "detect_fusion_binary",
     "get_fusion_version",
