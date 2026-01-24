@@ -294,9 +294,9 @@ class PluginsConfig(BaseModel):
     )
 
     # Transformation
-    dbt: PluginSelection | None = Field(
-        default=None,
-        description="dbt execution (local, fusion)",
+    dbt: PluginSelection = Field(
+        default_factory=lambda: PluginSelection(type="core"),
+        description="dbt execution runtime (core, fusion). Defaults to 'core'.",
     )
 
     # Data quality

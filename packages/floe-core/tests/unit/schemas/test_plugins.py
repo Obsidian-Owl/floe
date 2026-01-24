@@ -291,6 +291,56 @@ class TestPluginSpecificConfiguration:
         assert plugins.compute.config == {"threads": 4}
 
 
+class TestDBTPluginDefaults:
+    """Tests for dbt plugin default behavior (T065)."""
+
+    @pytest.mark.requirement("FR-028")
+    def test_dbt_defaults_to_core(self) -> None:
+        """Test that dbt plugin defaults to 'core' when not specified.
+
+        Given a PluginsConfig with no dbt specification,
+        When the config is created,
+        Then dbt.type should default to 'core'.
+        """
+        from floe_core.schemas import PluginsConfig
+
+        plugins = PluginsConfig()
+
+        assert plugins.dbt is not None
+        assert plugins.dbt.type == "core"
+
+    @pytest.mark.requirement("FR-028")
+    def test_dbt_can_be_overridden_to_fusion(self) -> None:
+        """Test that dbt plugin can be explicitly set to 'fusion'.
+
+        Given a PluginsConfig with dbt explicitly set to 'fusion',
+        When the config is created,
+        Then dbt.type should be 'fusion'.
+        """
+        from floe_core.schemas import PluginsConfig, PluginSelection
+
+        plugins = PluginsConfig(dbt=PluginSelection(type="fusion"))
+
+        assert plugins.dbt is not None
+        assert plugins.dbt.type == "fusion"
+
+    @pytest.mark.requirement("FR-028")
+    def test_dbt_default_in_yaml_style_dict(self) -> None:
+        """Test that dbt defaults to 'core' when loaded from dict without dbt key."""
+        from floe_core.schemas import PluginsConfig
+
+        data = {
+            "compute": {"type": "duckdb"},
+            "orchestrator": {"type": "dagster"},
+            # No dbt specified
+        }
+
+        plugins = PluginsConfig(**data)
+
+        assert plugins.dbt is not None
+        assert plugins.dbt.type == "core"
+
+
 class TestDomainPluginWhitelist:
     """Tests for domain plugin whitelist validation (T041)."""
 
