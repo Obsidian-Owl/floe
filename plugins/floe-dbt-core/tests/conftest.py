@@ -154,8 +154,7 @@ def temp_dbt_project(tmp_path: Path) -> Path:
     models_dir = project_dir / "models"
     models_dir.mkdir()
     (models_dir / "example.sql").write_text(
-        "-- Example model for testing\n"
-        "SELECT 1 AS id, 'test' AS name\n"
+        "-- Example model for testing\nSELECT 1 AS id, 'test' AS name\n"
     )
 
     # Create empty directories
@@ -272,8 +271,16 @@ def sample_run_results() -> dict[str, Any]:
                 "unique_id": "model.test_project.example",
                 "status": "success",
                 "timing": [
-                    {"name": "compile", "started_at": "2026-01-24T00:00:00Z", "completed_at": "2026-01-24T00:00:01Z"},
-                    {"name": "execute", "started_at": "2026-01-24T00:00:01Z", "completed_at": "2026-01-24T00:00:02Z"},
+                    {
+                        "name": "compile",
+                        "started_at": "2026-01-24T00:00:00Z",
+                        "completed_at": "2026-01-24T00:00:01Z",
+                    },
+                    {
+                        "name": "execute",
+                        "started_at": "2026-01-24T00:00:01Z",
+                        "completed_at": "2026-01-24T00:00:02Z",
+                    },
                 ],
                 "thread_id": "Thread-1",
                 "execution_time": 2.0,

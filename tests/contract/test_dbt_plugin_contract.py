@@ -318,12 +318,15 @@ def dbt_plugin(request: pytest.FixtureRequest, tmp_path: Path) -> Any:
         mock_info.binary_path = Path("/usr/local/bin/dbt-sa-cli")
         mock_info.adapters_available = ["duckdb", "snowflake"]
 
-        with patch(
-            "floe_dbt_fusion.plugin.detect_fusion_binary",
-            return_value=Path("/usr/local/bin/dbt-sa-cli"),
-        ), patch(
-            "floe_dbt_fusion.plugin.detect_fusion",
-            return_value=mock_info,
+        with (
+            patch(
+                "floe_dbt_fusion.plugin.detect_fusion_binary",
+                return_value=Path("/usr/local/bin/dbt-sa-cli"),
+            ),
+            patch(
+                "floe_dbt_fusion.plugin.detect_fusion",
+                return_value=mock_info,
+            ),
         ):
             from floe_dbt_fusion import DBTFusionPlugin
 
@@ -351,9 +354,7 @@ model-paths: ['models']
 
     # models directory
     (project_dir / "models").mkdir()
-    (project_dir / "models" / "test_model.sql").write_text(
-        "SELECT 1 AS id"
-    )
+    (project_dir / "models" / "test_model.sql").write_text("SELECT 1 AS id")
 
     # target directory for artifacts
     (project_dir / "target").mkdir()
@@ -432,9 +433,7 @@ class TestDBTPluginCompliance:
         assert callable(dbt_plugin.get_run_results)
 
     @pytest.mark.requirement("SC-003")
-    def test_supports_parallel_execution_returns_bool(
-        self, dbt_plugin: Any
-    ) -> None:
+    def test_supports_parallel_execution_returns_bool(self, dbt_plugin: Any) -> None:
         """Both plugins must return bool from supports_parallel_execution."""
         result = dbt_plugin.supports_parallel_execution()
         assert isinstance(result, bool)

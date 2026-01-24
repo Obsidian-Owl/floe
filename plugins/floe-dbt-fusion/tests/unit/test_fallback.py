@@ -131,9 +131,7 @@ class TestFallbackPluginBehavior:
     """Tests for FallbackPlugin behavior delegating to dbt-core."""
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_compile_delegates_to_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_compile_delegates_to_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.compile_project() delegates to DBTCorePlugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -157,9 +155,7 @@ class TestFallbackPluginBehavior:
         assert result == temp_dbt_project / "target" / "manifest.json"
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_run_delegates_to_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_run_delegates_to_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.run_models() delegates to DBTCorePlugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -189,9 +185,7 @@ class TestFallbackPluginBehavior:
         assert result.success is True
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_test_delegates_to_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_test_delegates_to_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.test_models() delegates to DBTCorePlugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -218,7 +212,10 @@ class TestFallbackPluginBehavior:
 
     @pytest.mark.requirement("FR-021")
     def test_fallback_plugin_supports_parallel_returns_false(self) -> None:
-        """FallbackPlugin.supports_parallel_execution() returns False (dbt-core is NOT thread-safe)."""
+        """FallbackPlugin.supports_parallel_execution() returns False.
+
+        dbt-core is NOT thread-safe.
+        """
         from floe_dbt_fusion.fallback import FallbackPlugin
 
         mock_core_plugin = MagicMock()
@@ -438,9 +435,7 @@ class TestFallbackEdgeCases:
     """Tests for edge cases in fallback behavior."""
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_lint_project_delegates(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_lint_project_delegates(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.lint_project() delegates to core."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -462,9 +457,7 @@ class TestFallbackEdgeCases:
         assert result.success is True
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_preserves_error_from_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_preserves_error_from_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin preserves errors from wrapped core plugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 

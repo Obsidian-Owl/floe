@@ -29,9 +29,7 @@ class TestDetectFusionBinary:
     """Tests for detect_fusion_binary() function."""
 
     @pytest.mark.requirement("FR-020")
-    def test_detect_fusion_binary_found_in_path(
-        self, mock_fusion_binary_exists: MagicMock
-    ) -> None:
+    def test_detect_fusion_binary_found_in_path(self, mock_fusion_binary_exists: MagicMock) -> None:
         """detect_fusion_binary() returns path when binary is in PATH."""
         from floe_dbt_fusion.detection import detect_fusion_binary
 
@@ -42,9 +40,7 @@ class TestDetectFusionBinary:
         mock_fusion_binary_exists.assert_called_once_with("dbt-sa-cli")
 
     @pytest.mark.requirement("FR-020")
-    def test_detect_fusion_binary_not_found(
-        self, mock_fusion_binary_not_found: MagicMock
-    ) -> None:
+    def test_detect_fusion_binary_not_found(self, mock_fusion_binary_not_found: MagicMock) -> None:
         """detect_fusion_binary() returns None when binary not in PATH."""
         from floe_dbt_fusion.detection import detect_fusion_binary
 
@@ -67,7 +63,7 @@ class TestDetectFusionBinary:
     @pytest.mark.requirement("FR-020")
     def test_detect_fusion_binary_checks_standard_paths(self) -> None:
         """detect_fusion_binary() checks standard installation paths."""
-        from floe_dbt_fusion.detection import STANDARD_FUSION_PATHS, detect_fusion_binary
+        from floe_dbt_fusion.detection import detect_fusion_binary
 
         # Mock shutil.which to return None (not in PATH)
         # Mock Path.exists to return True for a standard path

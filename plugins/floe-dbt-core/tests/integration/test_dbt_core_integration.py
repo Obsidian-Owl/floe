@@ -145,9 +145,7 @@ class TestDBTCorePluginIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-004")
-    def test_test_models_real_execution(
-        self, temp_dbt_project_with_tests: Path
-    ) -> None:
+    def test_test_models_real_execution(self, temp_dbt_project_with_tests: Path) -> None:
         """Test test_models with real dbt test execution.
 
         Verifies:
@@ -212,9 +210,7 @@ class TestDBTCorePluginIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-015")
-    def test_compile_failure_structured_error(
-        self, temp_dbt_project_invalid: Path
-    ) -> None:
+    def test_compile_failure_structured_error(self, temp_dbt_project_invalid: Path) -> None:
         """Test that compilation failures provide structured errors.
 
         Uses a project with invalid SQL to trigger a real dbt error.
@@ -235,9 +231,7 @@ class TestDBTCorePluginIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-014")
-    def test_automatic_dbt_deps(
-        self, temp_dbt_project_with_packages: Path
-    ) -> None:
+    def test_automatic_dbt_deps(self, temp_dbt_project_with_packages: Path) -> None:
         """Test that dbt deps runs automatically when packages.yml exists.
 
         Note: This test may take longer as it downloads packages.
@@ -324,8 +318,7 @@ test_profile:
     models_dir = project_dir / "models"
     models_dir.mkdir()
     (models_dir / "invalid_model.sql").write_text(
-        "-- Invalid model\n"
-        "SELECT {{ undefined_variable }} AS bad_column\n"
+        "-- Invalid model\nSELECT {{ undefined_variable }} AS bad_column\n"
     )
 
     return project_dir

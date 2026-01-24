@@ -92,8 +92,7 @@ test_profile:
         models_dir = project_dir / "models"
         models_dir.mkdir()
         (models_dir / "example.sql").write_text(
-            "-- Example model for testing\n"
-            "SELECT 1 AS id, 'test' AS name\n"
+            "-- Example model for testing\nSELECT 1 AS id, 'test' AS name\n"
         )
 
         return project_dir
@@ -150,9 +149,7 @@ test_profile:
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-031")
-    def test_dbt_resource_run_models_with_real_dbt(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_dbt_resource_run_models_with_real_dbt(self, temp_dbt_project: Path) -> None:
         """Test DBTResource.run_models() with real dbt execution."""
         require_dbt()
 
@@ -181,9 +178,7 @@ test_profile:
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-032")
-    def test_dbt_resource_run_models_with_select(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_dbt_resource_run_models_with_select(self, temp_dbt_project: Path) -> None:
         """Test DBTResource.run_models() with select pattern."""
         require_dbt()
 
@@ -346,9 +341,7 @@ test_profile:
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-037")
-    def test_dbt_resource_in_dagster_definitions(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_dbt_resource_in_dagster_definitions(self, temp_dbt_project: Path) -> None:
         """Test DBTResource can be used in Dagster Definitions."""
         require_dbt()
 
@@ -386,9 +379,7 @@ test_profile:
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-037")
-    def test_dbt_resource_asset_execution(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_dbt_resource_asset_execution(self, temp_dbt_project: Path) -> None:
         """Test asset materialization with DBTResource."""
         require_dbt()
 
@@ -434,16 +425,12 @@ test_profile:
 
         # Verify materialization succeeded
         assert result.success
-        materialization_event = result.asset_materializations_for_node(
-            "dbt_run_asset"
-        )
+        materialization_event = result.asset_materializations_for_node("dbt_run_asset")
         assert len(list(materialization_event)) == 1
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-031")
-    def test_dbt_resource_test_models(
-        self, tmp_path: Path
-    ) -> None:
+    def test_dbt_resource_test_models(self, tmp_path: Path) -> None:
         """Test DBTResource.test_models() with real dbt execution."""
         require_dbt()
 
@@ -476,9 +463,7 @@ test_profile:
 
         models_dir = project_dir / "models"
         models_dir.mkdir()
-        (models_dir / "example.sql").write_text(
-            "SELECT 1 AS id, 'test' AS name"
-        )
+        (models_dir / "example.sql").write_text("SELECT 1 AS id, 'test' AS name")
 
         # Create schema.yml with tests
         schema_yml = """\

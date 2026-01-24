@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,18 +29,18 @@ class TestFusionStaticAnalysis:
     """Tests for Fusion's built-in static analysis."""
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_calls_fusion_cli(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_calls_fusion_cli(self, temp_dbt_project: Path) -> None:
         """lint_project() invokes Fusion CLI with lint command."""
         from floe_dbt_fusion import DBTFusionPlugin
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": [],
-            "files_analyzed": 5,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": [],
+                "files_analyzed": 5,
+            }
+        )
         mock_result.stderr = ""
 
         with (
@@ -51,7 +51,7 @@ class TestFusionStaticAnalysis:
             patch("subprocess.run", return_value=mock_result) as mock_run,
         ):
             plugin = DBTFusionPlugin()
-            result = plugin.lint_project(
+            plugin.lint_project(
                 project_dir=temp_dbt_project,
                 profiles_dir=temp_dbt_project,
                 target="dev",
@@ -64,9 +64,7 @@ class TestFusionStaticAnalysis:
             assert "lint" in call_args
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_returns_violations(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_returns_violations(self, temp_dbt_project: Path) -> None:
         """lint_project() returns violations from Fusion analysis."""
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -83,10 +81,12 @@ class TestFusionStaticAnalysis:
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": violations,
-            "files_analyzed": 5,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": violations,
+                "files_analyzed": 5,
+            }
+        )
         mock_result.stderr = ""
 
         with (
@@ -110,18 +110,18 @@ class TestFusionStaticAnalysis:
             assert result.issues[0]["code"] == "L001"
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_success_no_violations(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_success_no_violations(self, temp_dbt_project: Path) -> None:
         """lint_project() returns success when no violations."""
         from floe_dbt_fusion import DBTFusionPlugin
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": [],
-            "files_analyzed": 10,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": [],
+                "files_analyzed": 10,
+            }
+        )
         mock_result.stderr = ""
 
         with (
@@ -144,19 +144,19 @@ class TestFusionStaticAnalysis:
             assert result.files_checked == 10
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_fix_mode(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_fix_mode(self, temp_dbt_project: Path) -> None:
         """lint_project() passes --fix flag when fix=True."""
         from floe_dbt_fusion import DBTFusionPlugin
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": [],
-            "files_analyzed": 5,
-            "files_fixed": 3,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": [],
+                "files_analyzed": 5,
+                "files_fixed": 3,
+            }
+        )
         mock_result.stderr = ""
 
         with (
@@ -180,18 +180,18 @@ class TestFusionStaticAnalysis:
             assert result.files_fixed == 3
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_json_format(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_json_format(self, temp_dbt_project: Path) -> None:
         """lint_project() requests JSON output format."""
         from floe_dbt_fusion import DBTFusionPlugin
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": [],
-            "files_analyzed": 5,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": [],
+                "files_analyzed": 5,
+            }
+        )
         mock_result.stderr = ""
 
         with (
@@ -236,9 +236,7 @@ class TestDBTFusionPluginLinting:
             assert plugin.supports_sql_linting() is True
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_handles_invalid_json(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_handles_invalid_json(self, temp_dbt_project: Path) -> None:
         """lint_project() handles invalid JSON from Fusion gracefully."""
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -267,9 +265,7 @@ class TestDBTFusionPluginLinting:
             assert len(result.issues) == 0
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_project_handles_cli_failure(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_handles_cli_failure(self, temp_dbt_project: Path) -> None:
         """lint_project() handles Fusion CLI failure."""
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -349,18 +345,18 @@ class TestFusionLintingEdgeCases:
     """Tests for edge cases in Fusion linting."""
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_empty_project(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_empty_project(self, temp_dbt_project: Path) -> None:
         """Linting empty project returns success with 0 files."""
         from floe_dbt_fusion import DBTFusionPlugin
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": [],
-            "files_analyzed": 0,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": [],
+                "files_analyzed": 0,
+            }
+        )
         mock_result.stderr = ""
 
         with (
@@ -382,9 +378,7 @@ class TestFusionLintingEdgeCases:
             assert result.files_checked == 0
 
     @pytest.mark.requirement("FR-019")
-    def test_lint_multiple_violations(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_multiple_violations(self, temp_dbt_project: Path) -> None:
         """Linting returns multiple violations."""
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -417,10 +411,12 @@ class TestFusionLintingEdgeCases:
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
-            "violations": violations,
-            "files_analyzed": 3,
-        })
+        mock_result.stdout = json.dumps(
+            {
+                "violations": violations,
+                "files_analyzed": 3,
+            }
+        )
         mock_result.stderr = ""
 
         with (

@@ -33,8 +33,7 @@ class TestDBTFusionPluginDiscovery(IntegrationTestBase):
         names = [ep.name for ep in eps]
 
         assert "fusion" in names, (
-            f"'fusion' entry point not found in floe.dbt group. "
-            f"Available: {names}"
+            f"'fusion' entry point not found in floe.dbt group. Available: {names}"
         )
 
     @pytest.mark.integration
@@ -76,12 +75,15 @@ class TestDBTFusionPluginDiscovery(IntegrationTestBase):
         mock_info.binary_path = Path("/usr/local/bin/dbt-sa-cli")
         mock_info.adapters_available = ["duckdb", "snowflake"]
 
-        with patch(
-            "floe_dbt_fusion.plugin.detect_fusion_binary",
-            return_value=Path("/usr/local/bin/dbt-sa-cli"),
-        ), patch(
-            "floe_dbt_fusion.plugin.detect_fusion",
-            return_value=mock_info,
+        with (
+            patch(
+                "floe_dbt_fusion.plugin.detect_fusion_binary",
+                return_value=Path("/usr/local/bin/dbt-sa-cli"),
+            ),
+            patch(
+                "floe_dbt_fusion.plugin.detect_fusion",
+                return_value=mock_info,
+            ),
         ):
             plugin = plugin_class()
             assert plugin.name == "fusion"

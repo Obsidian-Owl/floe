@@ -67,7 +67,7 @@ model-paths:
   outputs:
     dev:
       type: duckdb
-      path: {project_dir / 'dev.duckdb'}
+      path: {project_dir / "dev.duckdb"}
       threads: 1
 """
     (project_dir / "profiles.yml").write_text(profiles_content)
@@ -78,8 +78,7 @@ model-paths:
 
     # Simple model
     (models_dir / "example_model.sql").write_text(
-        "-- Example model for Fusion testing\n"
-        "SELECT 1 AS id, 'test' AS name\n"
+        "-- Example model for Fusion testing\nSELECT 1 AS id, 'test' AS name\n"
     )
 
     # Another model referencing the first

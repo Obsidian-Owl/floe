@@ -117,9 +117,7 @@ class TestManifestSchemaContract:
             assert hasattr(plugins, category), f"Missing category: {category}"
 
         # Most categories should be None by default (optional)
-        optional_categories = [
-            c for c in expected_categories if c != "dbt"
-        ]
+        optional_categories = [c for c in expected_categories if c != "dbt"]
         for category in optional_categories:
             assert getattr(plugins, category) is None, (
                 f"Category '{category}' should be None by default"

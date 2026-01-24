@@ -248,7 +248,7 @@ model-paths:
   outputs:
     dev:
       type: duckdb
-      path: {project_dir / 'dev.duckdb'}
+      path: {project_dir / "dev.duckdb"}
       threads: 1
 """
     (project_dir / "profiles.yml").write_text(profiles_content)
@@ -257,8 +257,7 @@ model-paths:
     models_dir = project_dir / "models"
     models_dir.mkdir()
     (models_dir / "example.sql").write_text(
-        "-- Example model for testing\n"
-        "SELECT 1 AS id, 'test' AS name\n"
+        "-- Example model for testing\nSELECT 1 AS id, 'test' AS name\n"
     )
 
     # Create target directory (where artifacts go)

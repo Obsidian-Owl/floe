@@ -246,9 +246,7 @@ class TestSQLFluffLinting:
     """Tests for SQLFluff linting functionality."""
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_project_calls_sqlfluff(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_calls_sqlfluff(self, temp_dbt_project: Path) -> None:
         """lint_project() invokes SQLFluff with correct dialect."""
         from floe_dbt_core.linting import lint_sql_files
 
@@ -266,9 +264,7 @@ class TestSQLFluffLinting:
             assert result.success is True
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_project_returns_violations(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_returns_violations(self, temp_dbt_project: Path) -> None:
         """lint_project() returns violations from SQLFluff."""
         from floe_dbt_core.linting import LintViolation, lint_sql_files
 
@@ -302,9 +298,7 @@ class TestSQLFluffLinting:
             assert result.issues[0]["code"] == "L001"
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_project_fix_mode(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_fix_mode(self, temp_dbt_project: Path) -> None:
         """lint_project() calls sqlfluff.fix when fix=True."""
         from floe_dbt_core.linting import lint_sql_files
 
@@ -320,9 +314,7 @@ class TestSQLFluffLinting:
             assert result.files_fixed >= 0
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_project_counts_files(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_project_counts_files(self, temp_dbt_project: Path) -> None:
         """lint_project() counts checked files."""
         from floe_dbt_core.linting import lint_sql_files
 
@@ -345,9 +337,7 @@ class TestDBTCorePluginLinting:
     """Tests for DBTCorePlugin.lint_project() method."""
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_project_success(
-        self, temp_dbt_project: Path, mock_dbt_runner: MagicMock
-    ) -> None:
+    def test_lint_project_success(self, temp_dbt_project: Path, mock_dbt_runner: MagicMock) -> None:
         """DBTCorePlugin.lint_project() returns success for clean project."""
         from floe_dbt_core import DBTCorePlugin
 
@@ -466,9 +456,7 @@ class TestLintingEdgeCases:
             assert result.files_checked == 0
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_handles_sqlfluff_error(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_handles_sqlfluff_error(self, temp_dbt_project: Path) -> None:
         """Linting handles SQLFluff errors gracefully by logging warning.
 
         Per implementation, SQLFluff errors per-file are caught and logged
@@ -491,9 +479,7 @@ class TestLintingEdgeCases:
             assert result.success is True  # No violations collected due to error
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_uses_project_sqlfluff_config(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_lint_uses_project_sqlfluff_config(self, temp_dbt_project: Path) -> None:
         """Linting respects project's .sqlfluff config if present."""
         from floe_dbt_core.linting import lint_sql_files
 

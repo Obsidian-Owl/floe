@@ -31,8 +31,7 @@ class TestDBTCorePluginDiscovery(IntegrationTestBase):
         names = [ep.name for ep in eps]
 
         assert "core" in names, (
-            f"'core' entry point not found in floe.dbt group. "
-            f"Available: {names}"
+            f"'core' entry point not found in floe.dbt group. Available: {names}"
         )
 
     @pytest.mark.integration
