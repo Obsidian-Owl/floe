@@ -13,4 +13,3 @@ Options:
 
   Examples:     $ floe rbac validate     $ floe rbac validate --manifest-dir
   deploy/rbac     $ floe rbac validate --output json
-

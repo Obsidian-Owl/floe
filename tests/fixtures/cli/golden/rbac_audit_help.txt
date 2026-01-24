@@ -13,4 +13,3 @@ Options:
 
   Examples:     $ floe rbac audit     $ floe rbac audit --namespace floe-jobs
   $ floe rbac audit --output json
-

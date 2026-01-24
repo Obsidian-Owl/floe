@@ -1,0 +1,188 @@
+# datacontract.yaml - ODCS v3.1 Data Contract
+#
+# This contract defines the schema, SLAs, and governance for the
+# customer_360 data product. It follows the Open Data Contract Standard (ODCS).
+#
+# See: https://github.com/bitol-io/open-data-contract-standard
+
+apiVersion: v3.1.0
+kind: DataContract
+
+# Contract identity
+id: urn:datacontract:acme:analytics:customer-360
+version: 1.0.0
+name: customer-360-contract
+
+# Ownership and classification
+owner: analytics-team@acme.com
+domain: analytics
+status: active
+
+description: |
+  Customer 360 data contract providing a consolidated view of customer data.
+  Combines CRM, transaction history, and support interactions into a unified
+  customer profile for analytics and business intelligence use cases.
+
+# Schema definition
+schema:
+  # Primary customer model
+  - name: customers
+    physicalName: mart_customer_360
+    description: Consolidated customer master data
+
+    columns:
+      - name: customer_id
+        logicalType: string
+        physicalType: VARCHAR(36)
+        required: true
+        primaryKey: true
+        description: Unique customer identifier (UUID format)
+
+      - name: email
+        logicalType: string
+        physicalType: VARCHAR(255)
+        required: true
+        unique: true
+        format: email
+        classification: pii
+        description: Customer email address
+
+      - name: full_name
+        logicalType: string
+        physicalType: VARCHAR(200)
+        required: true
+        classification: pii
+        description: Customer full name
+
+      - name: created_at
+        logicalType: timestamp
+        physicalType: TIMESTAMP
+        required: true
+        description: Account creation timestamp (UTC)
+
+      - name: updated_at
+        logicalType: timestamp
+        physicalType: TIMESTAMP
+        required: true
+        description: Last update timestamp (UTC)
+
+      - name: lifetime_value
+        logicalType: decimal
+        physicalType: DECIMAL(12,2)
+        required: false
+        description: Calculated customer lifetime value in USD
+
+      - name: segment
+        logicalType: string
+        physicalType: VARCHAR(50)
+        required: false
+        description: Customer segment classification
+        enum:
+          - enterprise
+          - mid-market
+          - smb
+          - individual
+
+      - name: total_orders
+        logicalType: integer
+        physicalType: INTEGER
+        required: false
+        description: Total number of orders placed
+
+      - name: is_active
+        logicalType: boolean
+        physicalType: BOOLEAN
+        required: true
+        default: true
+        description: Whether customer account is active
+
+# Service Level Agreements
+slaProperties:
+  freshness:
+    value: "PT6H"  # ISO 8601 duration - data updated within 6 hours
+    element: updated_at
+    description: Data must be refreshed every 6 hours
+
+  availability:
+    value: "99.9%"
+    description: Data must be available 99.9% of the time
+
+  latency:
+    value: "PT30S"  # 30 seconds max query latency
+    description: P95 query latency must be under 30 seconds
+
+# Data quality rules
+quality:
+  - name: email_format_valid
+    type: format
+    element: email
+    rule: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+    severity: error
+
+  - name: lifetime_value_non_negative
+    type: constraint
+    element: lifetime_value
+    rule: ">= 0"
+    severity: error
+
+  - name: customer_id_uuid_format
+    type: format
+    element: customer_id
+    rule: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    severity: error
+
+  - name: no_null_emails
+    type: null_check
+    element: email
+    rule: "NOT NULL"
+    severity: error
+
+# Terms and conditions
+terms:
+  usage: |
+    Internal analytics and business intelligence only.
+    Not approved for external sharing or ML model training without approval.
+
+  retention: "7 years per financial compliance requirements"
+
+  limitations: |
+    - PII fields require additional access approval
+    - Data should not be exported outside approved systems
+    - Contact data-governance@acme.com for external use requests
+
+# Classification and tags
+tags:
+  - customer-data
+  - gold-layer
+  - pii-contains
+  - analytics
+
+# Links to related resources
+links:
+  - name: Data Catalog Entry
+    url: https://catalog.acme.com/datasets/customer-360
+    type: catalog
+
+  - name: Documentation
+    url: https://docs.acme.com/data/customer-360
+    type: documentation
+
+  - name: Data Quality Dashboard
+    url: https://monitoring.acme.com/quality/customer-360
+    type: monitoring
+
+# Contact information
+contacts:
+  - name: Analytics Team
+    email: analytics-team@acme.com
+    role: owner
+
+  - name: Data Engineering
+    email: data-eng@acme.com
+    role: technical
+
+# Custom floe-specific properties
+customProperties:
+  floe.data_product: customer-360
+  floe.compute_target: duckdb
+  floe.iceberg_namespace: analytics.customer_360

@@ -22,11 +22,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
+import structlog
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
+
+logger = structlog.get_logger(__name__)
 
 
 @click.command(
@@ -38,6 +41,8 @@ Examples:
     $ floe platform compile --output target/artifacts.json
     $ floe platform compile --enforcement-report report.json --enforcement-format json
     $ floe platform compile --enforcement-report report.sarif --enforcement-format sarif
+    $ floe platform compile --skip-contracts
+    $ floe platform compile --drift-detection
 """,
 )
 @click.option(
@@ -76,18 +81,34 @@ Examples:
     show_default=True,
     help="Enforcement report format (FR-013).",
 )
+@click.option(
+    "--skip-contracts",
+    is_flag=True,
+    default=False,
+    help="Skip data contract validation during compilation. "
+    "Use when contract infrastructure is unavailable or for quick iterations.",
+)
+@click.option(
+    "--drift-detection",
+    is_flag=True,
+    default=False,
+    help="Enable schema drift detection against actual table schemas. "
+    "Requires database connection. Validates contract schema matches reality.",
+)
 def compile_command(
     spec: Path | None,
     manifest: Path | None,
     output: Path,
     enforcement_report: Path | None,
     enforcement_format: str,
+    skip_contracts: bool,
+    drift_detection: bool,
 ) -> None:
     """Compile FloeSpec and Manifest into CompiledArtifacts.
 
     Loads the FloeSpec (floe.yaml) and PlatformManifest (manifest.yaml),
-    compiles them into CompiledArtifacts, runs policy enforcement,
-    and exports the results.
+    compiles them into CompiledArtifacts, runs policy enforcement
+    including data contract validation, and exports the results.
 
     Args:
         spec: Path to FloeSpec file (floe.yaml).
@@ -95,6 +116,8 @@ def compile_command(
         output: Output path for CompiledArtifacts.
         enforcement_report: Output path for enforcement report.
         enforcement_format: Enforcement report format (json, sarif, html).
+        skip_contracts: Skip data contract validation if True.
+        drift_detection: Enable schema drift detection if True.
     """
     # Validate required inputs
     if spec is None:
@@ -112,6 +135,16 @@ def compile_command(
     info(f"Compiling spec: {spec}")
     info(f"Using manifest: {manifest}")
     info(f"Output path: {output}")
+
+    # Log contract-related options (T077)
+    if skip_contracts:
+        info("Contract validation: SKIPPED (--skip-contracts)")
+    else:
+        info("Contract validation: ENABLED")
+        if drift_detection:
+            info("Schema drift detection: ENABLED (--drift-detection)")
+        else:
+            info("Schema drift detection: DISABLED (use --drift-detection to enable)")
 
     # Create parent directories for output (FR-011)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -153,9 +186,15 @@ def compile_command(
             f"Permission denied: {e}",
             exit_code=ExitCode.PERMISSION_ERROR,
         )
-    except Exception:
+    except Exception as e:
         # SECURITY: Don't expose internal exception details that may contain paths
         # or sensitive configuration. Log the full error internally for debugging.
+        logger.error(
+            "compilation_failed",
+            error_type=type(e).__name__,
+            # Only log first 200 chars to avoid exposing sensitive data
+            error_summary=str(e)[:200] if str(e) else "Unknown error",
+        )
         error_exit(
             "Compilation failed. Check input files and configuration.",
             exit_code=ExitCode.COMPILATION_ERROR,

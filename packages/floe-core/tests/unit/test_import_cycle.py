@@ -86,7 +86,7 @@ def test_no_direct_k8s_rbac_plugin_import_in_generator() -> None:
     # Re-check imports excluding TYPE_CHECKING block
     actual_forbidden: list[str] = []
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
+        if isinstance(node, ast.Import | ast.ImportFrom):
             if hasattr(node, "lineno") and node.lineno in type_checking_lines:
                 continue  # Skip TYPE_CHECKING imports
 

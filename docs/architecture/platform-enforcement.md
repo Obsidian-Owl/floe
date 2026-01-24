@@ -582,7 +582,7 @@ slaProperties:
     value: "99.9%"
 ```
 
-See [Data Contracts Architecture](data-contracts.md) and [ADR-0026](adr/0026-data-contract-architecture.md) for full documentation.
+See [Data Contracts Architecture](data-contracts.md) for full documentation including error codes (FLOE-E5xx series) and [ADR-0026](adr/0026-data-contract-architecture.md) for architectural rationale.
 
 ---
 

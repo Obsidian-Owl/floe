@@ -47,6 +47,29 @@ def _build_documentation_urls() -> dict[str, str | dict[str, str]]:
             "kimball": f"{base}/naming#kimball",
             "custom": f"{base}/naming#custom",
         },
+        # Epic 3C: Data contract error code documentation
+        # See: docs/architecture/data-contracts.md#error-codes
+        "data_contracts": {
+            # Contract Parsing Errors (FLOE-E500-E509)
+            "FLOE-E500": f"{base}/errors/data-contracts#e500",  # Contract not found
+            "FLOE-E501": f"{base}/errors/data-contracts#e501",  # Invalid ODCS syntax
+            "FLOE-E502": f"{base}/errors/data-contracts#e502",  # Unsupported ODCS version
+            "FLOE-E503": f"{base}/errors/data-contracts#e503",  # Invalid element type
+            "FLOE-E509": f"{base}/errors/data-contracts#e509",  # Parse error
+            # Inheritance Violations (FLOE-E510-E519)
+            "FLOE-E510": f"{base}/errors/data-contracts#e510",  # SLA weakening
+            "FLOE-E511": f"{base}/errors/data-contracts#e511",  # Classification weakening
+            "FLOE-E512": f"{base}/errors/data-contracts#e512",  # Circular dependency
+            # Version Validation Errors (FLOE-E520-E529)
+            "FLOE-E520": f"{base}/errors/data-contracts#e520",  # Breaking change without MAJOR
+            "FLOE-E521": f"{base}/errors/data-contracts#e521",  # Invalid version format
+            # Schema Drift Errors (FLOE-E530-E539)
+            "FLOE-E530": f"{base}/errors/data-contracts#e530",  # Type mismatch (drift)
+            "FLOE-E531": f"{base}/errors/data-contracts#e531",  # Missing column (drift)
+            "FLOE-E532": f"{base}/errors/data-contracts#e532",  # Extra column (drift info)
+            # Registration Warnings (FLOE-E540-E549)
+            "FLOE-E540": f"{base}/errors/data-contracts#e540",  # Catalog unreachable
+        },
     }
 
 
@@ -283,6 +306,32 @@ def get_documentation_url(pattern_type: str) -> str:
     return f"https://floe.dev/docs/naming#{pattern_type}"
 
 
+def get_data_contract_error_url(error_code: str) -> str:
+    """Get the documentation URL for a data contract error code.
+
+    Args:
+        error_code: Error code like "FLOE-E500", "FLOE-E510", etc.
+
+    Returns:
+        The documentation URL string for the error code.
+
+    Example:
+        >>> get_data_contract_error_url("FLOE-E500")
+        'https://floe.dev/docs/errors/data-contracts#e500'
+    """
+    data_contract_urls = DOCUMENTATION_URLS.get("data_contracts", {})
+    if isinstance(data_contract_urls, dict):
+        url = data_contract_urls.get(error_code)
+        if url:
+            return url
+    # Fallback: construct URL from error code
+    base = DOCUMENTATION_URLS.get("base", "https://floe.dev/docs")
+    if isinstance(base, str):
+        code_suffix = error_code.lower().replace("floe-", "")
+        return f"{base}/errors/data-contracts#{code_suffix}"
+    return f"https://floe.dev/docs/errors/data-contracts#{error_code.lower()}"
+
+
 __all__ = [
     "MEDALLION_PATTERN",
     "KIMBALL_PATTERN",
@@ -293,4 +342,5 @@ __all__ = [
     "matches_custom_patterns",
     "get_pattern_for_type",
     "get_documentation_url",
+    "get_data_contract_error_url",  # Epic 3C: Data contract error URLs
 ]

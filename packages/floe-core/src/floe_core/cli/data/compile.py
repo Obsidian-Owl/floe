@@ -36,13 +36,19 @@ def _stub_message(command: str, alternative: str | None = None) -> None:
 Compile Data Team floe.yaml (FR-040).
 
 This command will validate your floe.yaml against platform
-constraints and compile it for execution.
+constraints and compile it for execution, including data contract validation.
 
 NOTE: This command is not yet implemented.
 For Platform Team compilation, use: floe platform compile
 
+Options (planned):
+  --skip-contracts    Skip data contract validation
+  --drift-detection   Enable schema drift detection against actual tables
+
 Example:
     $ floe compile --spec floe.yaml
+    $ floe compile --spec floe.yaml --skip-contracts
+    $ floe compile --spec floe.yaml --drift-detection
 """,
     context_settings={"help_option_names": ["-h", "--help"]},
 )

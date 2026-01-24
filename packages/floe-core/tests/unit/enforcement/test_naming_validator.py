@@ -614,3 +614,90 @@ class TestNamingValidatorIntegration:
         naming_violations = [v for v in result.violations if v.policy_type == "naming"]
         assert len(naming_violations) >= 1
         assert any(v.model_name == "stg_payments" for v in naming_violations)
+
+
+class TestDataContractErrorCodeURLs:
+    """Tests for data contract error code documentation URLs (T079).
+
+    Verifies that all FLOE-E5xx error codes have documentation URLs defined
+    in the patterns.py DOCUMENTATION_URLS dictionary.
+    """
+
+    # All FLOE-E5xx error codes that should have documentation URLs
+    # See: docs/architecture/data-contracts.md#error-codes
+    EXPECTED_ERROR_CODES: list[str] = [
+        # Contract Parsing Errors (FLOE-E500-E509)
+        "FLOE-E500",  # Contract not found
+        "FLOE-E501",  # Invalid ODCS syntax
+        "FLOE-E502",  # Unsupported ODCS version
+        "FLOE-E503",  # Invalid element type
+        "FLOE-E509",  # Parse error
+        # Inheritance Violations (FLOE-E510-E519)
+        "FLOE-E510",  # SLA weakening
+        "FLOE-E511",  # Classification weakening
+        "FLOE-E512",  # Circular dependency
+        # Version Validation Errors (FLOE-E520-E529)
+        "FLOE-E520",  # Breaking change without MAJOR bump
+        "FLOE-E521",  # Invalid version format
+        # Schema Drift Errors (FLOE-E530-E539)
+        "FLOE-E530",  # Type mismatch
+        "FLOE-E531",  # Missing column
+        "FLOE-E532",  # Extra column
+        # Registration Warnings (FLOE-E540-E549)
+        "FLOE-E540",  # Catalog unreachable
+    ]
+
+    @pytest.mark.requirement("3C-FR-034")
+    def test_all_error_codes_have_documentation_urls(self) -> None:
+        """All FLOE-E5xx error codes MUST have documentation URLs defined."""
+        from floe_core.enforcement.patterns import DOCUMENTATION_URLS
+
+        data_contract_urls = DOCUMENTATION_URLS.get("data_contracts", {})
+        assert isinstance(data_contract_urls, dict), "data_contracts section must be a dict"
+
+        missing_codes: list[str] = []
+        for code in self.EXPECTED_ERROR_CODES:
+            if code not in data_contract_urls:
+                missing_codes.append(code)
+
+        assert not missing_codes, f"Missing documentation URLs for error codes: {missing_codes}"
+
+    @pytest.mark.requirement("3C-FR-034")
+    def test_error_code_urls_are_valid_format(self) -> None:
+        """Error code URLs MUST be valid HTTPS URLs with anchor tags."""
+        from floe_core.enforcement.patterns import DOCUMENTATION_URLS
+
+        data_contract_urls = DOCUMENTATION_URLS.get("data_contracts", {})
+        assert isinstance(data_contract_urls, dict)
+
+        for code in self.EXPECTED_ERROR_CODES:
+            url = data_contract_urls.get(code)
+            assert url is not None, f"URL for {code} should not be None"
+            assert url.startswith("https://"), f"URL for {code} must be HTTPS: {url}"
+            assert "#" in url, f"URL for {code} must have anchor tag: {url}"
+            # Verify anchor matches error code (e.g., #e500 for FLOE-E500)
+            expected_anchor = code.lower().replace("floe-", "")
+            assert expected_anchor in url.lower(), (
+                f"URL anchor for {code} should contain '{expected_anchor}': {url}"
+            )
+
+    @pytest.mark.requirement("3C-FR-034")
+    def test_get_data_contract_error_url_returns_valid_url(self) -> None:
+        """get_data_contract_error_url() MUST return valid URL for known codes."""
+        from floe_core.enforcement.patterns import get_data_contract_error_url
+
+        for code in self.EXPECTED_ERROR_CODES:
+            url = get_data_contract_error_url(code)
+            assert url.startswith("https://"), f"URL for {code} must be HTTPS"
+            assert "#" in url, f"URL for {code} must have anchor"
+
+    @pytest.mark.requirement("3C-FR-034")
+    def test_get_data_contract_error_url_fallback_for_unknown_code(self) -> None:
+        """get_data_contract_error_url() MUST return fallback URL for unknown codes."""
+        from floe_core.enforcement.patterns import get_data_contract_error_url
+
+        # Unknown error code should still return a valid fallback URL
+        url = get_data_contract_error_url("FLOE-E599")
+        assert url.startswith("https://")
+        assert "data-contracts" in url
+        assert "e599" in url.lower()

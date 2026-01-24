@@ -57,8 +57,50 @@ from floe_core.schemas.compiled_artifacts import (
     ProductIdentity,
 )
 
-# Governance models (T011-T013, Epic 3A)
+# Data contract models (Epic 3C) - re-exports from official ODCS package
+from floe_core.schemas.data_contract import (
+    # ODCS models (from open-data-contract-standard)
+    AuthoritativeDefinition,
+    # Type constants
+    Classification,
+    ContractStatus,
+    # ODCS type aliases
+    ContractTerms,
+    # Floe-specific validation models
+    ContractValidationResult,
+    ContractViolation,
+    CustomProperty,
+    DataContract,
+    DataContractElement,
+    DataContractModel,
+    DataQuality,
+    DeprecationInfo,
+    Description,
+    ElementFormat,
+    ElementType,
+    FreshnessSLA,
+    OpenDataContractStandard,
+    Pricing,
+    QualitySLA,
+    Relationship,
+    Role,
+    SchemaComparisonResult,
+    SchemaObject,
+    SchemaProperty,
+    Server,
+    ServiceLevelAgreementProperty,
+    SLAProperties,
+    Support,
+    Team,
+    TeamMember,
+    TypeMismatch,
+)
+
+# Governance models (T011-T013, Epic 3A, Epic 3C)
 from floe_core.schemas.governance import (
+    AutoGenerationConfig,
+    DataContractsConfig,
+    DriftDetectionConfig,
     LayerThresholds,
     NamingConfig,
     QualityGatesConfig,
@@ -216,10 +258,47 @@ __all__: list[str] = [
     "SamplingConfig",
     "TelemetryAuth",
     "TelemetryConfig",
-    # Governance (Epic 3A)
+    # Governance (Epic 3A, Epic 3C)
     "LayerThresholds",
     "NamingConfig",
     "QualityGatesConfig",
+    "AutoGenerationConfig",
+    "DataContractsConfig",
+    "DriftDetectionConfig",
+    # Data Contracts (Epic 3C) - ODCS models from open-data-contract-standard
+    "OpenDataContractStandard",
+    "DataContract",  # Alias for OpenDataContractStandard
+    "SchemaObject",
+    "DataContractModel",  # Alias for SchemaObject
+    "SchemaProperty",
+    "DataContractElement",  # Alias for SchemaProperty
+    "ServiceLevelAgreementProperty",
+    "FreshnessSLA",  # Alias
+    "QualitySLA",  # Alias
+    "SLAProperties",  # Alias
+    "Description",
+    "Team",
+    "TeamMember",
+    "Server",
+    "Support",
+    "Role",
+    "Pricing",
+    "Relationship",
+    "DataQuality",
+    "AuthoritativeDefinition",
+    "CustomProperty",
+    "DeprecationInfo",  # Alias for CustomProperty
+    "ContractTerms",  # Alias for CustomProperty
+    # ODCS type constants
+    "ElementType",
+    "ElementFormat",
+    "Classification",
+    "ContractStatus",
+    # Floe-specific validation models
+    "ContractValidationResult",
+    "ContractViolation",
+    "SchemaComparisonResult",
+    "TypeMismatch",
     # Inheritance (Phase 2, Phase 4)
     "MergeStrategy",
     "FIELD_MERGE_STRATEGIES",

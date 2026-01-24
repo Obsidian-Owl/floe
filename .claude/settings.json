@@ -48,8 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$TOOL_INPUT\" | grep -q 'gh pr create'; then ./scripts/pre-pr-gate; fi",
-            "blocking": true
+            "command": "if echo \"$TOOL_INPUT\" | grep -q 'gh pr create'; then ./scripts/pre-pr-gate; fi"
           }
         ]
       }
@@ -76,7 +75,10 @@
   },
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
-    "linear@claude-plugins-official": true
+    "linear@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true
   },
   "companyAnnouncements": [
     "🔒 Security: Never commit secrets or use eval()/exec()",

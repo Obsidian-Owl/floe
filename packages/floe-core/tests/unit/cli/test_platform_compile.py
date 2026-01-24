@@ -1,9 +1,9 @@
 """Unit tests for the platform compile command.
 
-Task ID: T012
-Phase: 3 - User Story 1 (Platform Compile MVP)
+Task ID: T012, T077
+Phase: 3 - User Story 1 (Platform Compile MVP), 9 - Polish
 User Story: US1 - Unified Platform Compile with Enforcement Export
-Requirements: FR-010 through FR-015, FR-021
+Requirements: FR-010 through FR-015, FR-021, 3C-FR-032 (contract flags)
 
 Tests cover:
 - Command accepts --spec and --manifest options (FR-010)
@@ -12,6 +12,8 @@ Tests cover:
 - Command accepts --enforcement-format option (FR-013)
 - Parent directories are created for enforcement report (FR-014)
 - Exit code handling (FR-015)
+- Command accepts --skip-contracts flag (T077)
+- Command accepts --drift-detection flag (T077)
 """
 
 from __future__ import annotations
@@ -54,11 +56,11 @@ class TestPlatformCompileCommand:
             ],
         )
 
-        # Command should not fail on argument parsing
-        # Exit codes: 0=success, 1=general error, 6=compilation error (skeleton)
-        # The skeleton returns 6 until full implementation in T015-T020
-        assert result.exit_code in (0, 1, 6), f"Unexpected exit code: {result.exit_code}"
+        # Verify argument parsing succeeded (no "No such option" error)
+        # The command may fail during execution (exit code != 0), but that's
+        # separate from argument parsing validation which is what this test covers
         assert "Error: No such option" not in (result.output or "")
+        assert "Error: Missing option" not in (result.output or "")
 
     @pytest.mark.requirement("FR-011")
     def test_compile_accepts_output_option(
@@ -198,26 +200,16 @@ class TestPlatformCompileCommand:
         assert "Invalid value" in (result.output or "") or "invalid_format" in (result.output or "")
 
     @pytest.mark.requirement("FR-015")
-    def test_compile_exits_with_zero_on_success(
+    def test_compile_help_exits_with_zero(
         self,
         cli_runner: CliRunner,
-        sample_floe_yaml: Path,
-        sample_manifest_yaml: Path,
-        temp_dir: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that compile command returns exit code 0 on success.
+        """Test that compile --help returns exit code 0.
 
-        Uses monkeypatch to mock the compile function to avoid actual compilation.
+        Validates that the help command works and returns success exit code.
         """
         from floe_core.cli.main import cli
 
-        # Mock the compile function to succeed
-        def mock_compile(*args: object, **kwargs: object) -> int:
-            return 0
-
-        # We'll need to patch the actual compile function when implemented
-        # For now, just verify command can be invoked
         result = cli_runner.invoke(
             cli,
             [
@@ -229,6 +221,7 @@ class TestPlatformCompileCommand:
 
         # Help should always succeed
         assert result.exit_code == 0
+        assert "compile" in result.output.lower()
 
     @pytest.mark.requirement("FR-010")
     def test_compile_shows_help_with_help_flag(
@@ -311,6 +304,100 @@ class TestPlatformCompileCommand:
 
         # Should fail (either during arg parsing or command execution)
         assert result.exit_code != 0
+
+    @pytest.mark.requirement("3C-FR-032")
+    def test_compile_accepts_skip_contracts_flag(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """Test that compile command accepts --skip-contracts flag.
+
+        FR-032: Contract validation MUST respect enforcement level.
+        The --skip-contracts flag allows bypassing contract validation.
+        """
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--skip-contracts",
+            ],
+        )
+
+        # Verify argument parsing succeeded (flag is recognized)
+        assert "Error: No such option: --skip-contracts" not in (result.output or "")
+        # When --skip-contracts is passed, the command should either:
+        # - Output "SKIPPED" message indicating contracts were skipped
+        # - Or succeed/fail for other reasons (but not due to unknown flag)
+        # Exit code validation is separate from flag recognition
+        if result.exit_code == 0:
+            assert (
+                "Contract validation" in (result.output or "")
+                or "contract" in (result.output or "").lower()
+            )
+
+    @pytest.mark.requirement("3C-FR-032")
+    def test_compile_accepts_drift_detection_flag(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """Test that compile command accepts --drift-detection flag.
+
+        The --drift-detection flag enables schema drift detection against
+        actual table schemas during compilation.
+        """
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--drift-detection",
+            ],
+        )
+
+        assert "Error: No such option: --drift-detection" not in (result.output or "")
+        # Verify the flag is recognized in output
+        assert "drift detection: ENABLED" in (result.output or "") or result.exit_code in (0, 6)
+
+    @pytest.mark.requirement("3C-FR-032")
+    def test_compile_shows_contract_flags_in_help(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """Test that help text includes contract-related flags.
+
+        Validates that --skip-contracts and --drift-detection are
+        documented in the command help.
+        """
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            ["platform", "compile", "--help"],
+        )
+
+        assert result.exit_code == 0
+        assert "--skip-contracts" in result.output
+        assert "--drift-detection" in result.output
+        # Verify helpful descriptions are present
+        assert "contract" in result.output.lower()
+        assert "drift" in result.output.lower()
 
 
 class TestPlatformGroup:

@@ -388,6 +388,67 @@ data_contracts:
     prometheus_metrics: true
 ```
 
+## Error Codes
+
+Contract validation produces specific error codes (FLOE-E5xx series) for actionable diagnostics:
+
+### Contract Parsing Errors (FLOE-E500-E509)
+
+| Code | Description | Cause |
+|------|-------------|-------|
+| `FLOE-E500` | Contract not found | No `datacontract.yaml` AND no `output_ports` in `floe.yaml` |
+| `FLOE-E501` | Invalid ODCS syntax | YAML syntax error or missing required ODCS fields |
+| `FLOE-E502` | Unsupported ODCS version | Contract uses unsupported apiVersion |
+| `FLOE-E509` | Parse error | Failed to parse contract YAML |
+
+### Inheritance Violations (FLOE-E510-E519)
+
+| Code | Description | Cause |
+|------|-------------|-------|
+| `FLOE-E510` | SLA weakening | Child contract specifies weaker SLA than parent (e.g., fresher data requirement relaxed) |
+| `FLOE-E511` | Classification weakening | Child contract downgrades field classification (e.g., PII to public) |
+| `FLOE-E512` | Circular dependency | Contracts form a circular inheritance chain |
+
+### Version Validation Errors (FLOE-E520-E529)
+
+| Code | Description | Cause |
+|------|-------------|-------|
+| `FLOE-E520` | Breaking change without MAJOR bump | Column removed, type changed, or required column added without MAJOR version increment |
+| `FLOE-E521` | Invalid version format | Version doesn't follow semantic versioning (X.Y.Z) |
+
+### Schema Drift Errors (FLOE-E530-E539)
+
+| Code | Description | Cause |
+|------|-------------|-------|
+| `FLOE-E530` | Type mismatch | Contract specifies different type than actual table schema |
+| `FLOE-E531` | Missing column | Contract defines column not present in table |
+| `FLOE-E532` | Extra column | Table has column not defined in contract (informational) |
+
+### Registration Warnings (FLOE-E540-E549)
+
+| Code | Severity | Description |
+|------|----------|-------------|
+| `FLOE-E540` | warning | Catalog unreachable | Contract validated but registration failed due to catalog unavailability |
+
+### Example Error Output
+
+```bash
+$ floe compile
+
+[3/5] Validating data contracts
+      ✗ FLOE-E510: Child contract weakens 'freshness' SLA
+        Parent requires PT6H, child specifies PT12H
+        Suggestion: Strengthen 'freshness' to at least match parent: PT6H
+
+      ✗ FLOE-E511: Classification weakening for field 'customers.email'
+        Parent requires 'pii', child specifies 'public'
+        Suggestion: Use classification 'pii' or stronger for 'customers.email'
+
+      ✗ FLOE-E530: Type mismatch for column 'user_id'
+        Contract: string, Table: integer
+        Suggestion: Update contract schema or table definition to match
+```
+
 ## Observability
 
 ### OpenLineage Events

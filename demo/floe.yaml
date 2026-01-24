@@ -1,0 +1,98 @@
+# floe.yaml - Data Product Configuration
+#
+# This configuration defines the customer-360 data product.
+# The accompanying datacontract.yaml specifies the schema and SLAs.
+
+apiVersion: floe.dev/v1
+kind: FloeSpec
+
+metadata:
+  name: customer-360
+  version: 1.0.0
+  description: Customer 360 consolidated view data product
+  owner: analytics-team@acme.com
+  labels:
+    domain: analytics
+    tier: gold
+    pii: "true"
+
+# Platform manifest reference (OCI registry)
+platform:
+  manifest: oci://registry.acme.com/floe/platform:v1
+
+# Data contracts configuration
+governance:
+  data_contracts:
+    enforcement: warn  # off | warn | strict
+    # Contract file is auto-discovered from datacontract.yaml in same directory
+
+# Output ports define what this data product exposes
+output_ports:
+  - name: customers
+    description: Consolidated customer master data
+    table: analytics.customer_360.mart_customer_360
+    format: iceberg
+    # Schema is defined in datacontract.yaml
+
+# Input ports define dependencies on other data products
+input_ports:
+  - name: crm_customers
+    description: Customer data from CRM system
+    source: crm.customers
+    contract: urn:datacontract:acme:crm:customers:1.0.0
+
+  - name: transactions
+    description: Transaction history
+    source: sales.transactions
+    contract: urn:datacontract:acme:sales:transactions:2.0.0
+
+  - name: support_tickets
+    description: Customer support interactions
+    source: support.tickets
+
+# Transform definitions (dbt models)
+transforms:
+  - name: stg_crm_customers
+    description: Staged CRM customer data
+    tags: [staging]
+
+  - name: stg_transactions
+    description: Staged transaction data
+    tags: [staging]
+
+  - name: stg_support_tickets
+    description: Staged support ticket data
+    tags: [staging]
+
+  - name: int_customer_orders
+    description: Customer orders aggregation
+    tags: [intermediate]
+    dependsOn:
+      - stg_crm_customers
+      - stg_transactions
+
+  - name: int_customer_support
+    description: Customer support metrics
+    tags: [intermediate]
+    dependsOn:
+      - stg_crm_customers
+      - stg_support_tickets
+
+  - name: mart_customer_360
+    description: Final customer 360 view
+    tags: [marts, gold]
+    dependsOn:
+      - int_customer_orders
+      - int_customer_support
+
+# Scheduling configuration
+schedule:
+  cron: "0 6 * * *"  # Daily at 6 AM
+  timezone: America/New_York
+
+# Compute configuration (can override platform default)
+compute:
+  default: duckdb
+  overrides:
+    # Use Spark for the large aggregation model
+    int_customer_orders: spark

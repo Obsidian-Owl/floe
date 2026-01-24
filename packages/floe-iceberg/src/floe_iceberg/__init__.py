@@ -38,6 +38,8 @@ __all__ = [
     # Core manager (orchestrator-agnostic)
     "IcebergTableManager",
     "IcebergTableManagerConfig",
+    # Schema drift detection
+    "DriftDetector",
     # Note: IOManager is NOT exported here - it belongs in orchestrator plugins
     # See: plugins/floe-orchestrator-dagster/ (Epic 4B)
 ]
@@ -54,6 +56,10 @@ def __getattr__(name: str) -> object:
         from floe_iceberg.models import IcebergTableManagerConfig
 
         return IcebergTableManagerConfig
+    if name == "DriftDetector":
+        from floe_iceberg.drift_detector import DriftDetector
+
+        return DriftDetector
     # Note: IcebergIOManager is NOT available from floe-iceberg
     # IOManager belongs in orchestrator plugins (e.g., floe-orchestrator-dagster)
     msg = f"module {__name__!r} has no attribute {name!r}"

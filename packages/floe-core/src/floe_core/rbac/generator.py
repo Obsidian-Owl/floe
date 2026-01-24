@@ -314,7 +314,8 @@ def write_manifests(
             file_path.write_text("")
         else:
             # Write all documents with separator
-            yaml_content = yaml.dump_all(
+            # SECURITY: Use safe_dump_all to prevent arbitrary Python object serialization
+            yaml_content = yaml.safe_dump_all(
                 docs,
                 default_flow_style=False,
                 allow_unicode=True,

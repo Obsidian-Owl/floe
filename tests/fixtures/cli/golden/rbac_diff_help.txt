@@ -14,4 +14,3 @@ Options:
 
   Examples:     $ floe rbac diff     $ floe rbac diff --manifest-dir deploy/rbac
   $ floe rbac diff --output json
-

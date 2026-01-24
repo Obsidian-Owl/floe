@@ -81,7 +81,9 @@ class Violation(BaseModel):
         ...,
         description="Severity level: error (blocks compilation) or warning (advisory)",
     )
-    policy_type: Literal["naming", "coverage", "documentation", "semantic", "custom"] = Field(
+    policy_type: Literal[
+        "naming", "coverage", "documentation", "semantic", "custom", "data_contract"
+    ] = Field(
         ...,
         description="Category of policy violated",
     )
@@ -152,6 +154,7 @@ class EnforcementSummary(BaseModel):
         semantic_violations: Count of semantic validation violations (Epic 3B).
         custom_rule_violations: Count of custom rule violations (Epic 3B).
         overrides_applied: Count of policy overrides applied (Epic 3B).
+        contract_violations: Count of data contract violations (Epic 3C).
         duration_ms: Enforcement duration in milliseconds.
 
     Example:
@@ -217,6 +220,12 @@ class EnforcementSummary(BaseModel):
         default=0,
         ge=0,
         description="Count of policy overrides applied (downgrade/exclude)",
+    )
+    # Epic 3C: Data contract violations
+    contract_violations: int = Field(
+        default=0,
+        ge=0,
+        description="Count of data contract violations (ODCS, SLA, drift)",
     )
     duration_ms: float = Field(
         default=0.0,

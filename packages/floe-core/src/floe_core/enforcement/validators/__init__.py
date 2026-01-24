@@ -6,16 +6,21 @@ This module contains individual validators for different policy types:
 - DocumentationValidator: Validates model and column descriptions
 - SemanticValidator: Validates model relationships (refs, sources, circular deps)
 - CustomRuleValidator: Validates user-defined custom rules (tags, meta, tests)
+- ContractValidator: Validates ODCS v3 data contracts (Epic 3C)
 
 Task: T002 (part of enforcement module structure), T017-T020, T027-T033
 
 Example:
     >>> from floe_core.enforcement.validators import (
     ...     NamingValidator, CoverageValidator, DocumentationValidator,
-    ...     SemanticValidator, CustomRuleValidator
+    ...     SemanticValidator, CustomRuleValidator, ContractValidator
     ... )
     >>> validator = NamingValidator()
     >>> violations = validator.validate(dbt_manifest, naming_config)
+    >>>
+    >>> # Contract validation (Epic 3C)
+    >>> contract_validator = ContractValidator()
+    >>> result = contract_validator.validate(Path("datacontract.yaml"))
 """
 
 from __future__ import annotations
@@ -23,6 +28,12 @@ from __future__ import annotations
 # Validators - imported as implemented
 from floe_core.enforcement.validators.coverage import CoverageValidator
 from floe_core.enforcement.validators.custom_rules import CustomRuleValidator
+from floe_core.enforcement.validators.data_contracts import (
+    ContractLintError,
+    ContractParser,
+    ContractValidationError,
+    ContractValidator,
+)
 from floe_core.enforcement.validators.documentation import DocumentationValidator
 from floe_core.enforcement.validators.naming import NamingValidator
 from floe_core.enforcement.validators.semantic import SemanticValidator
@@ -38,4 +49,9 @@ __all__: list[str] = [
     "SemanticValidator",
     # T027-T033: CustomRuleValidator
     "CustomRuleValidator",
+    # Epic 3C: ContractValidator
+    "ContractValidator",
+    "ContractParser",
+    "ContractValidationError",
+    "ContractLintError",
 ]

@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from floe_core.schemas.governance import (
     CustomRule,
+    DataContractsConfig,
     NamingConfig,
     PolicyOverride,
     QualityGatesConfig,
@@ -71,6 +72,7 @@ class GovernanceConfig(BaseModel):
         quality_gates: Quality gate thresholds (NEW in Epic 3A)
         custom_rules: Custom validation rules (NEW in Epic 3B)
         policy_overrides: Override rules for legacy/migration (NEW in Epic 3B)
+        data_contracts: Data contract validation settings (NEW in Epic 3C)
 
     Example:
         >>> governance = GovernanceConfig(
@@ -148,6 +150,12 @@ class GovernanceConfig(BaseModel):
     policy_overrides: list[PolicyOverride] = Field(
         default_factory=list,
         description="Override rules for legacy/migration support (NEW in Epic 3B)",
+    )
+
+    # NEW in Epic 3C: Data contract configuration
+    data_contracts: DataContractsConfig | None = Field(
+        default=None,
+        description="Data contract validation settings (NEW in Epic 3C)",
     )
 
 
