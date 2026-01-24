@@ -197,8 +197,9 @@ bd linear sync --pull
 /speckit.implement  # Claims task, updates Linear, commits
 
 # 4. Pre-PR validation
-/speckit.test-review        # Test quality
-/speckit.integration-check  # Contract stability, merge readiness
+/speckit.test-review   # Test quality
+/speckit.wiring-check  # Is new code wired into system?
+/speckit.merge-check   # Contract stability, merge readiness
 
 # 5. Create PR
 /speckit.pr  # Links Linear issues, generates summary
@@ -228,10 +229,10 @@ Phase 2: Implementation (Per-Task Integration Checks)
 └── Repeat until all tasks complete
 
 Phase 3: Pre-PR Validation
-├── /speckit.test-review        → Test quality
-├── /speckit.verify-integration → Integration sanity check (recommended)
-├── /speckit.integration-check  → Contract stability
-└── /speckit.pr                 → Create PR
+├── /speckit.test-review   → Test quality
+├── /speckit.wiring-check  → Is new code wired into system?
+├── /speckit.merge-check   → Safe to merge? (contracts, conflicts)
+└── /speckit.pr            → Create PR
 
 Phase 4: Merge
 └── Merge when CI passes

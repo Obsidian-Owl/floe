@@ -303,8 +303,9 @@ Epic auto-mode has ended. State file removed.
 
 Next steps:
   1. /speckit.test-review - Review test quality
-  2. /speckit.integration-check - Validate integration
-  3. /speckit.pr - Create pull request with Linear links
+  2. /speckit.wiring-check - Verify code connectivity
+  3. /speckit.merge-check - Validate contracts and merge readiness
+  4. /speckit.pr - Create pull request with Linear links
 ================================================================================
 ```
 
@@ -397,7 +398,8 @@ Same as `/speckit.implement` - see that skill for Linear MCP tool reference.
 
 After completing this skill:
 - **Review tests**: Run `/speckit.test-review` to validate test quality
-- **Check integration**: Run `/speckit.integration-check` before PR
+- **Check wiring**: Run `/speckit.wiring-check` to verify code connectivity
+- **Check merge readiness**: Run `/speckit.merge-check` before PR
 - **Create PR**: Run `/speckit.pr` to create pull request with Linear links
 
 ## References

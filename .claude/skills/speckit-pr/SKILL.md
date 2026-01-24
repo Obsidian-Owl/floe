@@ -24,7 +24,8 @@ Automate PR creation with:
 Before running this skill:
 1. All tasks in `.linear-mapping.json` should be marked Done (or manual override)
 2. `/speckit.test-review` should pass (or run automatically)
-3. `/speckit.integration-check` should pass (or run automatically)
+3. `/speckit.wiring-check` should pass (new code is wired in)
+4. `/speckit.merge-check` should pass (or run automatically)
 4. On a feature branch (not main)
 
 ## Memory Integration
@@ -85,9 +86,16 @@ mcp__plugin_linear_linear__get_issue({id: linearId})
 - If P0 issues exist: STOP and show issues
 - If P1/P2 only: WARN but allow continue
 
-**Integration Check:**
+**Wiring Check:**
 ```
-/speckit.integration-check
+/speckit.wiring-check
+```
+- If ERROR: STOP and show orphaned code
+- If WARNING: WARN but allow continue
+
+**Merge Check:**
+```
+/speckit.merge-check
 ```
 - If Blocked: STOP and show issues
 - If Caution: WARN but allow continue
@@ -135,7 +143,8 @@ gh pr create --title "{type}({scope}): {epic-title}" --body "$(cat <<'EOF'
 - [ ] Integration tests pass
 - [ ] Contract tests pass
 - [ ] /speckit.test-review clean
-- [ ] /speckit.integration-check Ready
+- [ ] /speckit.wiring-check OK
+- [ ] /speckit.merge-check Ready
 
 ---
 
@@ -222,4 +231,5 @@ After completing this skill:
 
 - **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Full workflow documentation
 - **[speckit.test-review](../speckit-test-review/SKILL.md)** - Test quality review
-- **[speckit.integration-check](../speckit-integration-check/SKILL.md)** - Pre-PR validation
+- **[speckit.wiring-check](../speckit-wiring-check/SKILL.md)** - Code connectivity check
+- **[speckit.merge-check](../speckit-merge-check/SKILL.md)** - Contract and merge readiness

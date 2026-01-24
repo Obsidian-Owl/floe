@@ -64,7 +64,8 @@ check_quality_state() {
     local critic_passed
 
     test_review_passed=$(jq -r '.test_review_passed // false' "$QUALITY_STATE")
-    integration_check_passed=$(jq -r '.integration_check_passed // false' "$QUALITY_STATE")
+    wiring_check_passed=$(jq -r '.wiring_check_passed // false' "$QUALITY_STATE")
+    merge_check_passed=$(jq -r '.merge_check_passed // false' "$QUALITY_STATE")
     critic_passed=$(jq -r '.critic_passed // false' "$QUALITY_STATE")
 
     if [[ "$test_review_passed" != "true" ]]; then
@@ -72,8 +73,13 @@ check_quality_state() {
         return 1
     fi
 
-    if [[ "$integration_check_passed" != "true" ]]; then
-        log_error "Integration check not passed. Run /speckit.integration-check first."
+    if [[ "$wiring_check_passed" != "true" ]]; then
+        log_error "Wiring check not passed. Run /speckit.wiring-check first."
+        return 1
+    fi
+
+    if [[ "$merge_check_passed" != "true" ]]; then
+        log_error "Merge check not passed. Run /speckit.merge-check first."
         return 1
     fi
 
@@ -147,8 +153,9 @@ main() {
         log_warn "No quality state file found."
         log_warn "For full quality gate, run:"
         log_warn "  1. /speckit.test-review"
-        log_warn "  2. /speckit.integration-check"
-        log_warn "  3. Critic agent approval"
+        log_warn "  2. /speckit.wiring-check"
+        log_warn "  3. /speckit.merge-check"
+        log_warn "  4. Critic agent approval"
         log_warn ""
         log_warn "Proceeding with basic checks only..."
     fi
@@ -164,9 +171,10 @@ main() {
         log_error ""
         log_error "Required actions:"
         log_error "  1. Run /speckit.test-review"
-        log_error "  2. Run /speckit.integration-check"
-        log_error "  3. Get critic agent approval"
-        log_error "  4. Commit all changes"
+        log_error "  2. Run /speckit.wiring-check"
+        log_error "  3. Run /speckit.merge-check"
+        log_error "  4. Get critic agent approval"
+        log_error "  5. Commit all changes"
         log_error ""
         exit 1
     fi
