@@ -93,6 +93,13 @@ markers = [
     "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
     "benchmark: Marks performance benchmark tests (CodSpeed)",
 ]
+# Suppress deprecation warnings from third-party dependencies
+filterwarnings = [
+    "ignore::pydantic.PydanticDeprecatedSince20:dagster_shared.*:",
+    "ignore::pydantic.PydanticDeprecatedSince212:pyiceberg.*:",
+    "ignore:.*model_validator.*:pydantic.PydanticDeprecatedSince212:pyiceberg.*:",
+    "ignore:.*__fields__.*:pydantic.PydanticDeprecatedSince20:dagster_shared.*:",
+]
 
 [tool.mypy]
 python_version = "3.10"
