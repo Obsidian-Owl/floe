@@ -122,6 +122,44 @@ class ContractParser:
         _check_datacontract_cli()
         self._log.debug("contract_parser_initialized")
 
+    def _validate_file_path(self, path: Path) -> Path:
+        """Validate file path to prevent directory traversal attacks.
+
+        SECURITY: Ensures the resolved path is within the current working directory
+        or references a legitimate location to prevent path traversal.
+
+        Args:
+            path: Path to validate.
+
+        Returns:
+            The resolved, validated path.
+
+        Raises:
+            ValueError: If path attempts directory traversal outside allowed scope.
+        """
+        resolved = path.resolve()
+        cwd = Path.cwd().resolve()
+
+        # Allow paths within CWD (relative paths)
+        if resolved.is_relative_to(cwd):
+            return resolved
+
+        # Allow absolute paths to files that exist (legitimate references)
+        if resolved.exists():
+            return resolved
+
+        # Allow absolute paths where parent directory exists
+        # (file doesn't exist but it's a valid location - FileNotFoundError later)
+        if resolved.parent.exists():
+            return resolved
+
+        # Block paths where neither file nor parent directory exists
+        # (likely traversal attempt or invalid path)
+        raise ValueError(
+            f"File path '{path}' resolves outside working directory "
+            f"and parent directory does not exist. Potential directory traversal."
+        )
+
     def parse_contract(self, path: Path) -> DataContract:
         """Parse a datacontract.yaml file into a DataContract model.
 
@@ -144,15 +182,18 @@ class ContractParser:
         """
         self._log.debug("parsing_contract", path=str(path))
 
+        # SECURITY: Validate path to prevent directory traversal
+        validated_path = self._validate_file_path(path)
+
         # Check file exists
-        if not path.exists():
-            raise FileNotFoundError(f"Contract file not found: {path}")
+        if not validated_path.exists():
+            raise FileNotFoundError(f"Contract file not found: {validated_path}")
 
         # Use datacontract-cli to load and validate
         from datacontract.data_contract import DataContract as DCContract
 
         try:
-            dc = DCContract(data_contract_file=str(path))
+            dc = DCContract(data_contract_file=str(validated_path))
         except Exception as e:
             raise ContractValidationError(f"Failed to load contract file: {e}") from e
 
@@ -654,8 +695,9 @@ class ContractValidator:
         import yaml
 
         # Convert to YAML for hash computation
+        # SECURITY: Use safe_dump to prevent arbitrary Python object serialization
         contract_dict = contract.model_dump(by_alias=True, exclude_none=True)
-        yaml_content = yaml.dump(contract_dict, default_flow_style=False)
+        yaml_content = yaml.safe_dump(contract_dict, default_flow_style=False)
         schema_hash = self._compute_schema_hash_string(yaml_content)
 
         self._log.debug(

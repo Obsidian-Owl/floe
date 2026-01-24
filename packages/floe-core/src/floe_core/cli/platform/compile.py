@@ -22,11 +22,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
+import structlog
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
+
+logger = structlog.get_logger(__name__)
 
 
 @click.command(
@@ -183,9 +186,15 @@ def compile_command(
             f"Permission denied: {e}",
             exit_code=ExitCode.PERMISSION_ERROR,
         )
-    except Exception:
+    except Exception as e:
         # SECURITY: Don't expose internal exception details that may contain paths
         # or sensitive configuration. Log the full error internally for debugging.
+        logger.error(
+            "compilation_failed",
+            error_type=type(e).__name__,
+            # Only log first 200 chars to avoid exposing sensitive data
+            error_summary=str(e)[:200] if str(e) else "Unknown error",
+        )
         error_exit(
             "Compilation failed. Check input files and configuration.",
             exit_code=ExitCode.COMPILATION_ERROR,

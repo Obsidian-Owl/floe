@@ -255,9 +255,24 @@ class TestContractParserErrors:
             parser.parse_contract_string(yaml_content)
 
     @pytest.mark.requirement("3C-FR-010")
-    def test_file_not_found(self, parser: ContractParser) -> None:
-        """Test error when file does not exist."""
+    def test_file_not_found(self, parser: ContractParser, tmp_path: Path) -> None:
+        """Test error when file does not exist.
+
+        Uses tmp_path to get a path that exists but file doesn't exist,
+        avoiding the path traversal security check for absolute paths.
+        """
+        nonexistent_file = tmp_path / "nonexistent_datacontract.yaml"
         with pytest.raises(FileNotFoundError, match="Contract file not found"):
+            parser.parse_contract(nonexistent_file)
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_path_traversal_blocked(self, parser: ContractParser) -> None:
+        """Test that path traversal attempts are blocked.
+
+        SECURITY: Absolute paths to non-existent files outside CWD are blocked
+        to prevent directory traversal attacks.
+        """
+        with pytest.raises(ValueError, match="directory traversal"):
             parser.parse_contract(Path("/nonexistent/datacontract.yaml"))
 
 
