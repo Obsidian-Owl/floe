@@ -34,6 +34,12 @@ from .errors import (
     DBTExecutionError,
     parse_dbt_error_location,
 )
+from .tracing import (
+    dbt_span,
+    get_tracer,
+    set_result_attributes,
+    set_runtime_attributes,
+)
 
 # Lazy import dbtRunner to avoid import errors when dbt not installed
 try:
@@ -126,50 +132,67 @@ class DBTCorePlugin(DBTPlugin):
         )
         log.info("dbt_compile_started")
 
-        start_time = time.monotonic()
-
-        # Build dbt command
-        args = [
+        tracer = get_tracer()
+        with dbt_span(
+            tracer,
             "compile",
-            "--project-dir",
-            str(project_dir),
-            "--profiles-dir",
-            str(profiles_dir),
-            "--target",
-            target,
-        ]
+            project_dir=str(project_dir),
+            profiles_dir=str(profiles_dir),
+            target=target,
+        ) as span:
+            # Set runtime info
+            metadata = self.get_runtime_metadata()
+            set_runtime_attributes(
+                span,
+                runtime=metadata.get("runtime"),
+                dbt_version=metadata.get("dbt_version"),
+            )
 
-        # Execute dbt compile
-        dbt = dbtRunner()
-        result = dbt.invoke(args)
+            start_time = time.monotonic()
 
-        elapsed = time.monotonic() - start_time
+            # Build dbt command
+            args = [
+                "compile",
+                "--project-dir",
+                str(project_dir),
+                "--profiles-dir",
+                str(profiles_dir),
+                "--target",
+                target,
+            ]
 
-        if not result.success:
-            error_msg = str(result.exception) if result.exception else "Unknown error"
-            file_path, line_number = parse_dbt_error_location(error_msg)
+            # Execute dbt compile
+            dbt = dbtRunner()
+            result = dbt.invoke(args)
 
-            log.error(
-                "dbt_compile_failed",
-                error=error_msg,
+            elapsed = time.monotonic() - start_time
+            set_result_attributes(span, execution_time=elapsed)
+
+            if not result.success:
+                error_msg = str(result.exception) if result.exception else "Unknown error"
+                file_path, line_number = parse_dbt_error_location(error_msg)
+
+                log.error(
+                    "dbt_compile_failed",
+                    error=error_msg,
+                    elapsed_seconds=elapsed,
+                )
+
+                raise DBTCompilationError(
+                    message=error_msg,
+                    file_path=file_path,
+                    line_number=line_number,
+                    original_message=error_msg,
+                )
+
+            manifest_path = project_dir / "target" / "manifest.json"
+            log.info(
+                "dbt_compile_completed",
+                manifest_path=str(manifest_path),
                 elapsed_seconds=elapsed,
             )
 
-            raise DBTCompilationError(
-                message=error_msg,
-                file_path=file_path,
-                line_number=line_number,
-                original_message=error_msg,
-            )
-
-        manifest_path = project_dir / "target" / "manifest.json"
-        log.info(
-            "dbt_compile_completed",
-            manifest_path=str(manifest_path),
-            elapsed_seconds=elapsed,
-        )
-
-        return manifest_path
+            return manifest_path
 
     def run_models(
         self,
@@ -209,72 +232,99 @@ class DBTCorePlugin(DBTPlugin):
         )
         log.info("dbt_run_started")
 
-        start_time = time.monotonic()
-
-        # Build dbt command
-        args = [
+        tracer = get_tracer()
+        with dbt_span(
+            tracer,
             "run",
-            "--project-dir",
-            str(project_dir),
-            "--profiles-dir",
-            str(profiles_dir),
-            "--target",
-            target,
-        ]
+            project_dir=str(project_dir),
+            profiles_dir=str(profiles_dir),
+            target=target,
+            select=select,
+            exclude=exclude,
+            full_refresh=full_refresh,
+        ) as span:
+            # Set runtime info
+            metadata = self.get_runtime_metadata()
+            set_runtime_attributes(
+                span,
+                runtime=metadata.get("runtime"),
+                dbt_version=metadata.get("dbt_version"),
+            )
 
-        if select:
-            args.extend(["--select", select])
-        if exclude:
-            args.extend(["--exclude", exclude])
-        if full_refresh:
-            args.append("--full-refresh")
+            start_time = time.monotonic()
 
-        # Execute dbt run
-        dbt = dbtRunner()
-        result = dbt.invoke(args)
+            # Build dbt command
+            args = [
+                "run",
+                "--project-dir",
+                str(project_dir),
+                "--profiles-dir",
+                str(profiles_dir),
+                "--target",
+                target,
+            ]
 
-        elapsed = time.monotonic() - start_time
+            if select:
+                args.extend(["--select", select])
+            if exclude:
+                args.extend(["--exclude", exclude])
+            if full_refresh:
+                args.append("--full-refresh")
 
-        if not result.success:
-            error_msg = str(result.exception) if result.exception else "Unknown error"
-            file_path, line_number = parse_dbt_error_location(error_msg)
+            # Execute dbt run
+            dbt = dbtRunner()
+            result = dbt.invoke(args)
 
-            log.error(
-                "dbt_run_failed",
-                error=error_msg,
+            elapsed = time.monotonic() - start_time
+
+            if not result.success:
+                error_msg = str(result.exception) if result.exception else "Unknown error"
+                file_path, line_number = parse_dbt_error_location(error_msg)
+
+                log.error(
+                    "dbt_run_failed",
+                    error=error_msg,
+                    elapsed_seconds=elapsed,
+                )
+
+                raise DBTExecutionError(
+                    message=error_msg,
+                    file_path=file_path,
+                    line_number=line_number,
+                    original_message=error_msg,
+                )
+
+            # Parse run results for model count
+            run_results = self._load_run_results(project_dir)
+            models_run = len(run_results.get("results", []))
+            failures = sum(
+                1 for r in run_results.get("results", []) if r.get("status") == "error"
+            )
+
+            # Set result attributes on span
+            set_result_attributes(
+                span,
+                models_run=models_run,
+                failures=failures,
+                execution_time=elapsed,
+            )
+
+            log.info(
+                "dbt_run_completed",
+                models_run=models_run,
+                failures=failures,
                 elapsed_seconds=elapsed,
             )
 
-            raise DBTExecutionError(
-                message=error_msg,
-                file_path=file_path,
-                line_number=line_number,
-                original_message=error_msg,
+            return DBTRunResult(
+                success=True,
+                manifest_path=project_dir / "target" / "manifest.json",
+                run_results_path=project_dir / "target" / "run_results.json",
+                execution_time_seconds=elapsed,
+                models_run=models_run,
+                tests_run=0,
+                failures=failures,
             )
-
-        # Parse run results for model count
-        run_results = self._load_run_results(project_dir)
-        models_run = len(run_results.get("results", []))
-        failures = sum(
-            1 for r in run_results.get("results", []) if r.get("status") == "error"
-        )
-
-        log.info(
-            "dbt_run_completed",
-            models_run=models_run,
-            failures=failures,
-            elapsed_seconds=elapsed,
-        )
-
-        return DBTRunResult(
-            success=True,
-            manifest_path=project_dir / "target" / "manifest.json",
-            run_results_path=project_dir / "target" / "run_results.json",
-            execution_time_seconds=elapsed,
-            models_run=models_run,
-            tests_run=0,
-            failures=failures,
-        )
 
     def test_models(
         self,
@@ -308,65 +358,90 @@ class DBTCorePlugin(DBTPlugin):
         )
         log.info("dbt_test_started")
 
-        start_time = time.monotonic()
-
-        # Build dbt command
-        args = [
+        tracer = get_tracer()
+        with dbt_span(
+            tracer,
             "test",
-            "--project-dir",
-            str(project_dir),
-            "--profiles-dir",
-            str(profiles_dir),
-            "--target",
-            target,
-        ]
+            project_dir=str(project_dir),
+            profiles_dir=str(profiles_dir),
+            target=target,
+            select=select,
+        ) as span:
+            # Set runtime info
+            metadata = self.get_runtime_metadata()
+            set_runtime_attributes(
+                span,
+                runtime=metadata.get("runtime"),
+                dbt_version=metadata.get("dbt_version"),
+            )
 
-        if select:
-            args.extend(["--select", select])
+            start_time = time.monotonic()
 
-        # Execute dbt test
-        dbt = dbtRunner()
-        result = dbt.invoke(args)
+            # Build dbt command
+            args = [
+                "test",
+                "--project-dir",
+                str(project_dir),
+                "--profiles-dir",
+                str(profiles_dir),
+                "--target",
+                target,
+            ]
 
-        elapsed = time.monotonic() - start_time
+            if select:
+                args.extend(["--select", select])
 
-        if not result.success:
-            error_msg = str(result.exception) if result.exception else "Unknown error"
+            # Execute dbt test
+            dbt = dbtRunner()
+            result = dbt.invoke(args)
 
-            log.error(
-                "dbt_test_failed",
-                error=error_msg,
+            elapsed = time.monotonic() - start_time
+
+            if not result.success:
+                error_msg = str(result.exception) if result.exception else "Unknown error"
+
+                log.error(
+                    "dbt_test_failed",
+                    error=error_msg,
+                    elapsed_seconds=elapsed,
+                )
+
+                raise DBTExecutionError(
+                    message=error_msg,
+                    original_message=error_msg,
+                )
+
+            # Parse run results for test count
+            run_results = self._load_run_results(project_dir)
+            tests_run = len(run_results.get("results", []))
+            failures = sum(
+                1 for r in run_results.get("results", []) if r.get("status") == "fail"
+            )
+
+            # Set result attributes on span
+            set_result_attributes(
+                span,
+                tests_run=tests_run,
+                failures=failures,
+                execution_time=elapsed,
+            )
+
+            log.info(
+                "dbt_test_completed",
+                tests_run=tests_run,
+                failures=failures,
                 elapsed_seconds=elapsed,
             )
 
-            raise DBTExecutionError(
-                message=error_msg,
-                original_message=error_msg,
+            return DBTRunResult(
+                success=failures == 0,
+                manifest_path=project_dir / "target" / "manifest.json",
+                run_results_path=project_dir / "target" / "run_results.json",
+                execution_time_seconds=elapsed,
+                models_run=0,
+                tests_run=tests_run,
+                failures=failures,
             )
-
-        # Parse run results for test count
-        run_results = self._load_run_results(project_dir)
-        tests_run = len(run_results.get("results", []))
-        failures = sum(
-            1 for r in run_results.get("results", []) if r.get("status") == "fail"
-        )
-
-        log.info(
-            "dbt_test_completed",
-            tests_run=tests_run,
-            failures=failures,
-            elapsed_seconds=elapsed,
-        )
-
-        return DBTRunResult(
-            success=failures == 0,
-            manifest_path=project_dir / "target" / "manifest.json",
-            run_results_path=project_dir / "target" / "run_results.json",
-            execution_time_seconds=elapsed,
-            models_run=0,
-            tests_run=tests_run,
-            failures=failures,
-        )
 
     def lint_project(
         self,
@@ -389,14 +464,41 @@ class DBTCorePlugin(DBTPlugin):
         Returns:
             LintResult with all detected issues.
         """
-        # Linting implementation will be in T053-T057 (Phase 5)
-        # For now, return empty result
-        return LintResult(
-            success=True,
-            issues=[],
-            files_checked=0,
-            files_fixed=0,
-        )
+        tracer = get_tracer()
+        with dbt_span(
+            tracer,
+            "lint",
+            project_dir=str(project_dir),
+            profiles_dir=str(profiles_dir),
+            target=target,
+            extra_attributes={"dbt.lint.fix": fix},
+        ) as span:
+            # Set runtime info
+            metadata = self.get_runtime_metadata()
+            set_runtime_attributes(
+                span,
+                runtime=metadata.get("runtime"),
+                dbt_version=metadata.get("dbt_version"),
+            )
+
+            # Linting implementation will be in T053-T057 (Phase 5)
+            # For now, return empty result
+            result = LintResult(
+                success=True,
+                issues=[],
+                files_checked=0,
+                files_fixed=0,
+            )
+
+            # Set result attributes
+            set_result_attributes(
+                span,
+                files_checked=result.files_checked,
+                files_fixed=result.files_fixed,
+                issues_found=len(result.issues),
+            )
+
+            return result
 
     def get_manifest(self, project_dir: Path) -> dict[str, Any]:
         """Retrieve dbt manifest.json.

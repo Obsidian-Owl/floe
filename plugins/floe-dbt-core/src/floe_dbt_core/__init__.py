@@ -25,6 +25,13 @@ from .errors import (
     DBTLintError,
 )
 from .plugin import DBTCorePlugin
+from .tracing import (
+    TRACER_NAME,
+    dbt_span,
+    get_tracer,
+    set_result_attributes,
+    set_runtime_attributes,
+)
 
 __all__ = [
     "DBTCorePlugin",
@@ -33,4 +40,10 @@ __all__ = [
     "DBTExecutionError",
     "DBTConfigurationError",
     "DBTLintError",
+    # Tracing utilities
+    "TRACER_NAME",
+    "get_tracer",
+    "dbt_span",
+    "set_result_attributes",
+    "set_runtime_attributes",
 ]
