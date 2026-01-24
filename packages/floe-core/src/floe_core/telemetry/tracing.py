@@ -50,6 +50,7 @@ R = TypeVar("R")
 # Module-level tracer instance (can be overridden for testing)
 _tracer: Tracer | None = None
 _tracer_lock = threading.Lock()
+_tracer_init_failed: bool = False
 
 
 def get_tracer() -> Tracer:
@@ -59,15 +60,36 @@ def get_tracer() -> Tracer:
     This indirection allows tests to inject a test tracer.
     Thread-safe via double-checked locking pattern.
 
+    Returns a NoOpTracer if OTel initialization fails (e.g., corrupted state).
+
     Returns:
         Tracer instance for creating spans.
     """
-    global _tracer
-    if _tracer is None:
-        with _tracer_lock:
-            if _tracer is None:  # Double-check after acquiring lock
-                _tracer = trace.get_tracer("floe_core.telemetry")
-    return _tracer
+    global _tracer, _tracer_init_failed
+
+    if _tracer is not None:
+        return _tracer
+
+    if _tracer_init_failed:
+        return trace.NoOpTracer()
+
+    with _tracer_lock:
+        # Double-check after acquiring lock
+        if _tracer is not None:
+            return _tracer
+
+        if _tracer_init_failed:
+            return trace.NoOpTracer()
+
+        try:
+            _tracer = trace.get_tracer("floe_core.telemetry")
+            return _tracer
+        except RecursionError:
+            _tracer_init_failed = True
+            return trace.NoOpTracer()
+        except Exception:
+            _tracer_init_failed = True
+            return trace.NoOpTracer()
 
 
 def set_tracer(tracer: Tracer | None) -> None:

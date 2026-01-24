@@ -40,11 +40,16 @@ ATTR_OPERATION = "catalog.operation"
 ATTR_WAREHOUSE = "catalog.warehouse"
 
 
+_tracer: trace.Tracer | None = None
+_tracer_init_failed: bool = False
+
+
 def get_tracer() -> trace.Tracer:
     """Get the OpenTelemetry tracer for catalog operations.
 
     Returns a tracer instance configured for the Polaris catalog plugin.
-    If no tracer provider is configured, returns a no-op tracer.
+    If no tracer provider is configured or initialization fails, returns
+    a no-op tracer.
 
     Returns:
         OpenTelemetry Tracer instance.
@@ -54,7 +59,23 @@ def get_tracer() -> trace.Tracer:
         >>> with tracer.start_as_current_span("my_operation"):
         ...     pass
     """
-    return trace.get_tracer(TRACER_NAME)
+    global _tracer, _tracer_init_failed
+
+    if _tracer is not None:
+        return _tracer
+
+    if _tracer_init_failed:
+        return trace.NoOpTracer()
+
+    try:
+        _tracer = trace.get_tracer(TRACER_NAME)
+        return _tracer
+    except RecursionError:
+        _tracer_init_failed = True
+        return trace.NoOpTracer()
+    except Exception:
+        _tracer_init_failed = True
+        return trace.NoOpTracer()
 
 
 @contextmanager

@@ -55,6 +55,7 @@ Used to identify spans created by this package in distributed traces.
 # =============================================================================
 
 _tracer: Tracer | None = None
+_tracer_init_failed: bool = False
 
 
 def get_tracer() -> Tracer:
@@ -62,6 +63,9 @@ def get_tracer() -> Tracer:
 
     Returns the cached tracer instance, creating it on first call.
     Uses the global tracer provider configured by the application.
+
+    Returns a NoOpTracer if OTel is not properly configured or initialization
+    fails (e.g., due to corrupted global state from test fixtures).
 
     Returns:
         OpenTelemetry Tracer instance for floe-iceberg.
@@ -72,10 +76,33 @@ def get_tracer() -> Tracer:
         ...     # Span is active here
         ...     pass
     """
-    global _tracer  # noqa: PLW0603
-    if _tracer is None:
+    global _tracer, _tracer_init_failed  # noqa: PLW0603
+
+    if _tracer is not None:
+        return _tracer
+
+    if _tracer_init_failed:
+        # Already failed once, return NoOp without retrying
+        return trace.NoOpTracer()
+
+    try:
         _tracer = trace.get_tracer(TRACER_NAME)
-    return _tracer
+        return _tracer
+    except RecursionError:
+        # OTel global state corrupted (common in test environments)
+        _tracer_init_failed = True
+        return trace.NoOpTracer()
+    except Exception:
+        # Other OTel initialization failures
+        _tracer_init_failed = True
+        return trace.NoOpTracer()
+
+
+def _reset_tracer() -> None:
+    """Reset tracer state for test isolation."""
+    global _tracer, _tracer_init_failed  # noqa: PLW0603
+    _tracer = None
+    _tracer_init_failed = False
 
 
 # =============================================================================

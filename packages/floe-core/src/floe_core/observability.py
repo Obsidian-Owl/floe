@@ -51,11 +51,16 @@ OTEL_SERVICE_NAME = "floe-core"
 OTEL_SERVICE_VERSION = "0.1.0"
 
 
+_tracer_init_failed: bool = False
+
+
 def get_tracer() -> Tracer:
     """Get or create the floe-core OpenTelemetry tracer.
 
     Returns a configured tracer for distributed tracing. The tracer is
     lazily initialized on first call and reused for subsequent calls.
+
+    Returns a NoOpTracer if OTel initialization fails (e.g., corrupted state).
 
     Returns:
         OpenTelemetry Tracer instance for floe-core.
@@ -66,9 +71,17 @@ def get_tracer() -> Tracer:
         ...     span.set_attribute("my.attribute", "value")
         ...     # ... operation logic
     """
-    global _tracer
+    global _tracer, _tracer_init_failed
 
-    if _tracer is None:
+    if _tracer is not None:
+        return _tracer
+
+    if _tracer_init_failed:
+        from opentelemetry import trace
+
+        return trace.NoOpTracer()
+
+    try:
         from opentelemetry import trace
 
         _tracer = trace.get_tracer(
@@ -76,8 +89,17 @@ def get_tracer() -> Tracer:
             instrumenting_library_version=OTEL_SERVICE_VERSION,
         )
         logger.debug("observability.tracer_initialized", service=OTEL_SERVICE_NAME)
+        return _tracer
+    except RecursionError:
+        _tracer_init_failed = True
+        from opentelemetry import trace
 
-    return _tracer
+        return trace.NoOpTracer()
+    except Exception:
+        _tracer_init_failed = True
+        from opentelemetry import trace
+
+        return trace.NoOpTracer()
 
 
 def get_meter() -> Meter:

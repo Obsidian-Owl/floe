@@ -38,14 +38,47 @@ from floe_core.schemas.rbac import RoleRule
 
 # Lazy tracer initialization to avoid recursion during import
 _tracer: trace.Tracer | None = None
+_tracer_init_failed: bool = False
 
 
 def _get_tracer() -> trace.Tracer:
-    """Get the tracer, initializing lazily to avoid import-time recursion."""
-    global _tracer
-    if _tracer is None:
+    """Get the tracer, initializing lazily with fallback to NoOp.
+
+    Returns a NoOpTracer if OTel is not properly configured or initialization
+    fails (e.g., due to corrupted global state from test fixtures). This ensures
+    RBAC generation succeeds even when tracing is unavailable.
+    """
+    global _tracer, _tracer_init_failed
+
+    if _tracer is not None:
+        return _tracer
+
+    if _tracer_init_failed:
+        # Already failed once, return NoOp without retrying
+        return trace.NoOpTracer()
+
+    try:
         _tracer = trace.get_tracer(__name__)
-    return _tracer
+        return _tracer
+    except RecursionError:
+        # OTel global state corrupted (common in test environments)
+        _tracer_init_failed = True
+        return trace.NoOpTracer()
+    except Exception:
+        # Other OTel initialization failures
+        _tracer_init_failed = True
+        return trace.NoOpTracer()
+
+
+def _reset_tracer() -> None:
+    """Reset tracer state for test isolation.
+
+    Call this in test fixtures to ensure clean tracer state between tests.
+    """
+    global _tracer, _tracer_init_failed
+    _tracer = None
+    _tracer_init_failed = False
+
 
 if TYPE_CHECKING:
     from floe_core.plugins.rbac import RBACPlugin
