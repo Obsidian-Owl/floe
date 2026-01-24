@@ -17,6 +17,12 @@ Example:
 
 from __future__ import annotations
 
+from .callbacks import (
+    DBTEvent,
+    DBTEventCollector,
+    DBTEventLevel,
+    create_event_collector,
+)
 from .errors import (
     DBTCompilationError,
     DBTConfigurationError,
@@ -40,6 +46,11 @@ __all__ = [
     "DBTExecutionError",
     "DBTConfigurationError",
     "DBTLintError",
+    # Callback utilities
+    "DBTEvent",
+    "DBTEventLevel",
+    "DBTEventCollector",
+    "create_event_collector",
     # Tracing utilities
     "TRACER_NAME",
     "get_tracer",

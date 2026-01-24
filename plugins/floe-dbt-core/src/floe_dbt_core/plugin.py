@@ -28,6 +28,7 @@ import structlog
 
 from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
 
+from .callbacks import DBTEventCollector, create_event_collector
 from .errors import (
     DBTCompilationError,
     DBTConfigurationError,
@@ -161,21 +162,29 @@ class DBTCorePlugin(DBTPlugin):
                 target,
             ]
 
-            # Execute dbt compile
-            dbt = dbtRunner()
+            # Execute dbt compile with event collector for structured errors
+            collector = create_event_collector()
+            dbt = dbtRunner(callbacks=[collector.callback])
             result = dbt.invoke(args)
 
             elapsed = time.monotonic() - start_time
             set_result_attributes(span, execution_time=elapsed)
 
             if not result.success:
-                error_msg = str(result.exception) if result.exception else "Unknown error"
+                # Use collector's error summary for more structured error info
+                error_summary = collector.get_error_summary()
+                error_msg = error_summary or (
+                    str(result.exception) if result.exception else "Unknown error"
+                )
                 file_path, line_number = parse_dbt_error_location(error_msg)
 
+                # Log with structured event data
                 log.error(
                     "dbt_compile_failed",
                     error=error_msg,
                     elapsed_seconds=elapsed,
+                    error_count=len(collector.errors),
+                    warning_count=len(collector.warnings),
                 )
 
                 raise DBTCompilationError(
@@ -271,20 +280,29 @@ class DBTCorePlugin(DBTPlugin):
             if full_refresh:
                 args.append("--full-refresh")
 
-            # Execute dbt run
-            dbt = dbtRunner()
+            # Execute dbt run with event collector for structured errors
+            collector = create_event_collector()
+            dbt = dbtRunner(callbacks=[collector.callback])
             result = dbt.invoke(args)
 
             elapsed = time.monotonic() - start_time
 
             if not result.success:
-                error_msg = str(result.exception) if result.exception else "Unknown error"
+                # Use collector's error summary for more structured error info
+                error_summary = collector.get_error_summary()
+                error_msg = error_summary or (
+                    str(result.exception) if result.exception else "Unknown error"
+                )
                 file_path, line_number = parse_dbt_error_location(error_msg)
 
+                # Log with structured event data
                 log.error(
                     "dbt_run_failed",
                     error=error_msg,
                     elapsed_seconds=elapsed,
+                    error_count=len(collector.errors),
+                    warning_count=len(collector.warnings),
+                    failed_nodes=collector.get_failed_nodes(),
                 )
 
                 raise DBTExecutionError(
@@ -391,19 +409,28 @@ class DBTCorePlugin(DBTPlugin):
             if select:
                 args.extend(["--select", select])
 
-            # Execute dbt test
-            dbt = dbtRunner()
+            # Execute dbt test with event collector for structured errors
+            collector = create_event_collector()
+            dbt = dbtRunner(callbacks=[collector.callback])
             result = dbt.invoke(args)
 
             elapsed = time.monotonic() - start_time
 
             if not result.success:
-                error_msg = str(result.exception) if result.exception else "Unknown error"
+                # Use collector's error summary for more structured error info
+                error_summary = collector.get_error_summary()
+                error_msg = error_summary or (
+                    str(result.exception) if result.exception else "Unknown error"
+                )
 
+                # Log with structured event data
                 log.error(
                     "dbt_test_failed",
                     error=error_msg,
                     elapsed_seconds=elapsed,
+                    error_count=len(collector.errors),
+                    warning_count=len(collector.warnings),
+                    failed_nodes=collector.get_failed_nodes(),
                 )
 
                 raise DBTExecutionError(
