@@ -120,7 +120,7 @@ def parse_percentage(value: str | float | int) -> float | None:
     Returns:
         Float percentage value, or None if parsing fails.
     """
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
 
     if isinstance(value, str):

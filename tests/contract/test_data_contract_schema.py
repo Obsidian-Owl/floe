@@ -23,7 +23,6 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-
 from floe_core.schemas.data_contract import (
     Classification,
     ContractStatus,
@@ -222,8 +221,10 @@ class TestContractViolationSchemaStability:
         )
         assert violation.error_code == "FLOE-E500"
 
-        # Invalid pattern should fail
-        with pytest.raises(Exception):  # ValidationError
+        # Invalid pattern should fail (Pydantic ValidationError)
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
             ContractViolation(
                 error_code="INVALID",
                 severity="error",

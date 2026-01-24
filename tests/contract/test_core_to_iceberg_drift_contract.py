@@ -22,11 +22,10 @@ class TestDriftDetectionContract:
     @pytest.mark.requirement("3C-FR-021")
     def test_drift_detector_returns_schema_comparison_result(self) -> None:
         """Test that DriftDetector.compare_schemas returns SchemaComparisonResult."""
-        from pyiceberg.schema import NestedField, Schema
-        from pyiceberg.types import StringType
-
         from floe_core.schemas.data_contract import SchemaComparisonResult
         from floe_iceberg.drift_detector import DriftDetector
+        from pyiceberg.schema import NestedField, Schema
+        from pyiceberg.types import StringType
 
         contract_columns = [{"name": "id", "logicalType": "string"}]
         table_schema = Schema(
@@ -46,11 +45,10 @@ class TestDriftDetectionContract:
     @pytest.mark.requirement("3C-FR-021")
     def test_type_mismatch_model_used_correctly(self) -> None:
         """Test that TypeMismatch model is used for type mismatches."""
-        from pyiceberg.schema import NestedField, Schema
-        from pyiceberg.types import IntegerType
-
         from floe_core.schemas.data_contract import TypeMismatch
         from floe_iceberg.drift_detector import DriftDetector
+        from pyiceberg.schema import NestedField, Schema
+        from pyiceberg.types import IntegerType
 
         # Contract says string, table has integer
         contract_columns = [{"name": "id", "logicalType": "string"}]
@@ -74,10 +72,9 @@ class TestDriftDetectionContract:
     @pytest.mark.requirement("3C-FR-021")
     def test_schema_comparison_result_immutable(self) -> None:
         """Test that SchemaComparisonResult is immutable (frozen)."""
+        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField, Schema
         from pyiceberg.types import StringType
-
-        from floe_iceberg.drift_detector import DriftDetector
 
         contract_columns = [{"name": "id", "logicalType": "string"}]
         table_schema = Schema(
@@ -91,16 +88,15 @@ class TestDriftDetectionContract:
         )
 
         # Attempting to modify should raise an error (frozen model)
-        with pytest.raises(Exception):  # ValidationError or AttributeError
+        with pytest.raises((ValueError, AttributeError, TypeError)):
             result.matches = False  # type: ignore[misc]
 
     @pytest.mark.requirement("3C-FR-021")
     def test_missing_columns_list_immutable(self) -> None:
         """Test that missing_columns list is returned correctly."""
+        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField, Schema
         from pyiceberg.types import StringType
-
-        from floe_iceberg.drift_detector import DriftDetector
 
         # Contract has extra column not in table
         contract_columns = [
@@ -123,10 +119,9 @@ class TestDriftDetectionContract:
     @pytest.mark.requirement("3C-FR-024")
     def test_extra_columns_reported(self) -> None:
         """Test that extra columns in table are reported."""
+        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField, Schema
         from pyiceberg.types import StringType
-
-        from floe_iceberg.drift_detector import DriftDetector
 
         # Table has extra column not in contract
         contract_columns = [{"name": "id", "logicalType": "string"}]

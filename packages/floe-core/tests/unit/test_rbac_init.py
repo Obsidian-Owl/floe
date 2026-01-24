@@ -39,7 +39,7 @@ class TestRBACModuleExports:
         from floe_core.rbac import MANIFEST_FILES
 
         assert MANIFEST_FILES is not None
-        assert isinstance(MANIFEST_FILES, (list, tuple))
+        assert isinstance(MANIFEST_FILES, list | tuple)
 
     @pytest.mark.requirement("FR-002")
     def test_manifest_validation_error_import(self) -> None:

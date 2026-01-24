@@ -39,9 +39,9 @@ def test_floe_core_imports_without_rbac_plugin() -> None:
         timeout=30,
     )
 
-    assert result.returncode == 0, (
-        f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "success" in result.stdout
 
 
@@ -86,7 +86,7 @@ def test_no_direct_k8s_rbac_plugin_import_in_generator() -> None:
     # Re-check imports excluding TYPE_CHECKING block
     actual_forbidden: list[str] = []
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
+        if isinstance(node, ast.Import | ast.ImportFrom):
             if hasattr(node, "lineno") and node.lineno in type_checking_lines:
                 continue  # Skip TYPE_CHECKING imports
 
@@ -194,9 +194,9 @@ print("success")
         timeout=30,
     )
 
-    assert result.returncode == 0, (
-        f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "CIRCULAR_WARNING" not in result.stdout
     assert "success" in result.stdout
 
