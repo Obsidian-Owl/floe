@@ -1080,8 +1080,7 @@ class ContractValidator:
                     expected="Column present in table",
                     actual="Column missing",
                     suggestion=(
-                        "Add the column to the Iceberg table schema, "
-                        "or remove it from the contract"
+                        "Add the column to the Iceberg table schema, or remove it from the contract"
                     ),
                 )
             )

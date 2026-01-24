@@ -113,6 +113,26 @@ repos:
 
   - repo: local
     hooks:
+      # Ruff linting check (matches CI - verify no lint errors before push)
+      # Pre-commit auto-fixes, pre-push verifies no issues slip through
+      - id: ruff-check
+        name: ruff check (lint)
+        entry: uv run ruff check .
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
+      # Ruff formatting check (matches CI - verify format before push)
+      # Pre-commit auto-fixes, pre-push verifies no unformatted code slips through
+      - id: ruff-format-check
+        name: ruff format (check)
+        entry: uv run ruff format --check .
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
       # Type checking with mypy (matches CI exactly)
       - id: mypy-strict
         name: mypy (strict)
