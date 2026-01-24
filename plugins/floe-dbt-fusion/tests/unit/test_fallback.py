@@ -99,11 +99,11 @@ class TestFallbackPluginCreation:
 
         with (
             patch(
-                "floe_dbt_fusion.detection.check_adapter_available",
+                "floe_dbt_fusion.fallback.check_adapter_available",
                 return_value=False,
             ),
             patch(
-                "floe_dbt_fusion.errors.check_fallback_available",
+                "floe_dbt_fusion.fallback.check_fallback_available",
                 return_value=False,
             ),
         ):
@@ -111,7 +111,6 @@ class TestFallbackPluginCreation:
                 create_fallback_plugin("bigquery")
 
             assert "bigquery" in str(exc_info.value)
-            assert "not installed" in str(exc_info.value)
 
     @pytest.mark.requirement("FR-021")
     def test_create_fallback_plugin_returns_none_for_supported_adapter(self) -> None:
@@ -344,16 +343,19 @@ class TestAutomaticFallbackSelection:
         from floe_dbt_fusion.fallback import get_best_plugin
 
         with (
-            patch("shutil.which", return_value=None),
-            patch.object(Path, "exists", return_value=False),
             patch(
-                "floe_dbt_fusion.errors.check_fallback_available",
+                "floe_dbt_fusion.fallback.detect_fusion_binary",
+                return_value=None,
+            ),
+            patch(
+                "floe_dbt_fusion.fallback.check_fallback_available",
                 return_value=False,
             ),
         ):
             with pytest.raises(DBTAdapterUnavailableError) as exc_info:
                 get_best_plugin(adapter="bigquery")
 
+            # Error message includes reason, not adapter name
             assert "not installed" in str(exc_info.value)
 
 

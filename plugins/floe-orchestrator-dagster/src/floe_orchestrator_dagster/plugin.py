@@ -332,9 +332,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             FR-030: Delegate dbt operations to DBTPlugin (via DBTResource)
             FR-031: Use DBTRunResult to populate asset metadata
         """
-        from dagster import AssetExecutionContext, asset
-
-        from floe_orchestrator_dagster.resources import DBTResource
+        from dagster import asset
 
         # Capture transform name for use in inner function
         model_name = transform.name
@@ -348,7 +346,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # No user-controlled input reaches this function without validation.
         #
         # Note: We avoid type annotations in the inner function due to
-        # Dagster's type hint resolution with `from __future__ import annotations`
+        # Dagster's type hint resolution with `from __future__ import annotations`.
+        # Dagster cannot resolve string annotations for AssetExecutionContext.
         @asset(
             name=transform.name,
             deps=deps if deps else None,
@@ -356,14 +355,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             description=f"dbt model: {transform.name}",
             required_resource_keys={"dbt"},
         )
-        def _asset_fn(context: AssetExecutionContext, dbt: DBTResource) -> None:
+        def _asset_fn(context, dbt) -> None:  # noqa: ANN001
             """Execute dbt model via DBTResource.
 
             Materializes the dbt model by delegating to DBTPlugin through
             DBTResource. The model is selected using dbt's select syntax.
 
             Args:
-                context: Dagster asset execution context.
+                context: Dagster AssetExecutionContext.
                 dbt: DBTResource for dbt operations.
 
             Requirements:

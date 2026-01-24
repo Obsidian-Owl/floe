@@ -115,8 +115,19 @@ class TestManifestSchemaContract:
 
         for category in expected_categories:
             assert hasattr(plugins, category), f"Missing category: {category}"
-            # All should be None by default (optional)
-            assert getattr(plugins, category) is None
+
+        # Most categories should be None by default (optional)
+        optional_categories = [
+            c for c in expected_categories if c != "dbt"
+        ]
+        for category in optional_categories:
+            assert getattr(plugins, category) is None, (
+                f"Category '{category}' should be None by default"
+            )
+
+        # dbt is ENFORCED technology and defaults to 'core' (per Epic 5A)
+        assert plugins.dbt is not None
+        assert plugins.dbt.type == "core"
 
     @pytest.mark.requirement("001-FR-001")
     def test_plugin_selection_fields_contract(self) -> None:

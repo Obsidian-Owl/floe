@@ -106,7 +106,8 @@ class TestFusionStaticAnalysis:
 
             assert result.success is False
             assert len(result.issues) == 1
-            assert result.issues[0]["rule"] == "L001"
+            # LintResult.issues property maps 'rule' to 'code' key
+            assert result.issues[0]["code"] == "L001"
 
     @pytest.mark.requirement("FR-019")
     def test_lint_project_success_no_violations(
