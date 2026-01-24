@@ -14,9 +14,146 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 if TYPE_CHECKING:
     pass
+
+
+# ---------------------------------------------------------------------------
+# LintViolation Pydantic Model Tests
+# ---------------------------------------------------------------------------
+
+
+class TestLintViolationModel:
+    """Tests for LintViolation Pydantic model."""
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_creation(self) -> None:
+        """LintViolation can be created with valid data."""
+        from floe_dbt_core.linting import LintViolation
+
+        violation = LintViolation(
+            file_path="models/customers.sql",
+            line=10,
+            column=5,
+            code="L001",
+            message="Trailing whitespace",
+            severity="warning",
+        )
+
+        assert violation.file_path == "models/customers.sql"
+        assert violation.line == 10
+        assert violation.column == 5
+        assert violation.code == "L001"
+        assert violation.message == "Trailing whitespace"
+        assert violation.severity == "warning"
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_is_frozen(self) -> None:
+        """LintViolation is immutable (frozen)."""
+        from floe_dbt_core.linting import LintViolation
+
+        violation = LintViolation(
+            file_path="models/test.sql",
+            line=1,
+            column=0,
+            code="L001",
+            message="Test",
+            severity="warning",
+        )
+
+        with pytest.raises(ValidationError):
+            violation.line = 5  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_default_severity(self) -> None:
+        """LintViolation defaults to 'warning' severity."""
+        from floe_dbt_core.linting import LintViolation
+
+        violation = LintViolation(
+            file_path="models/test.sql",
+            line=1,
+            column=0,
+            code="L001",
+            message="Test",
+        )
+
+        assert violation.severity == "warning"
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_valid_severities(self) -> None:
+        """LintViolation accepts error, warning, info severities."""
+        from floe_dbt_core.linting import LintViolation
+
+        for severity in ["error", "warning", "info"]:
+            violation = LintViolation(
+                file_path="models/test.sql",
+                line=1,
+                column=0,
+                code="L001",
+                message="Test",
+                severity=severity,  # type: ignore[arg-type]
+            )
+            assert violation.severity == severity
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_invalid_severity(self) -> None:
+        """LintViolation rejects invalid severity."""
+        from floe_dbt_core.linting import LintViolation
+
+        with pytest.raises(ValidationError, match="severity"):
+            LintViolation(
+                file_path="models/test.sql",
+                line=1,
+                column=0,
+                code="L001",
+                message="Test",
+                severity="critical",  # type: ignore[arg-type]
+            )
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_line_must_be_positive(self) -> None:
+        """LintViolation requires line >= 1."""
+        from floe_dbt_core.linting import LintViolation
+
+        with pytest.raises(ValidationError, match="line"):
+            LintViolation(
+                file_path="models/test.sql",
+                line=0,  # Invalid: must be >= 1
+                column=0,
+                code="L001",
+                message="Test",
+            )
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_code_required(self) -> None:
+        """LintViolation requires non-empty code."""
+        from floe_dbt_core.linting import LintViolation
+
+        with pytest.raises(ValidationError, match="code"):
+            LintViolation(
+                file_path="models/test.sql",
+                line=1,
+                column=0,
+                code="",  # Invalid: must be non-empty
+                message="Test",
+            )
+
+    @pytest.mark.requirement("FR-013")
+    def test_lint_violation_forbids_extra_fields(self) -> None:
+        """LintViolation rejects extra fields (extra='forbid')."""
+        from floe_dbt_core.linting import LintViolation
+
+        with pytest.raises(ValidationError, match="extra"):
+            LintViolation(
+                file_path="models/test.sql",
+                line=1,
+                column=0,
+                code="L001",
+                message="Test",
+                extra_field="not allowed",  # type: ignore[call-arg]
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +270,7 @@ class TestSQLFluffLinting:
         self, temp_dbt_project: Path
     ) -> None:
         """lint_project() returns violations from SQLFluff."""
-        from floe_dbt_core.linting import lint_sql_files
+        from floe_dbt_core.linting import LintViolation, lint_sql_files
 
         mock_violations = [
             {
@@ -153,6 +290,14 @@ class TestSQLFluffLinting:
             )
 
             assert result.success is False
+            # Check new violations property (LintViolation objects)
+            assert len(result.violations) == 1
+            assert isinstance(result.violations[0], LintViolation)
+            assert result.violations[0].code == "L001"
+            assert result.violations[0].message == "Trailing whitespace"
+            assert result.violations[0].line == 10
+            assert result.violations[0].column == 5
+            # Check backwards-compatible issues property (dict format)
             assert len(result.issues) == 1
             assert result.issues[0]["code"] == "L001"
 

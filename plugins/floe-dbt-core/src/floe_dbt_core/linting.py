@@ -23,8 +23,8 @@ Example:
     ...     fix=False,
     ... )
     >>> if not result.success:
-    ...     for issue in result.issues:
-    ...         print(f"{issue['code']}: {issue['description']}")
+    ...     for violation in result.violations:
+    ...         print(f"{violation.code}: {violation.message}")
 
 Requirements:
     FR-013: Dialect-specific SQL linting
@@ -34,14 +34,52 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import BaseModel, ConfigDict, Field
 import structlog
 
 if TYPE_CHECKING:
     pass
 
 logger = structlog.get_logger(__name__)
+
+
+class LintViolation(BaseModel):
+    """A single linting violation detected in a SQL file.
+
+    Represents a rule violation found by SQLFluff or Fusion static analysis.
+
+    Attributes:
+        file_path: Path to the SQL file containing the violation.
+        line: Line number where the violation occurs (1-based).
+        column: Column number where the violation occurs (1-based).
+        code: Rule code (e.g., "L001", "ST01", "AM01").
+        message: Human-readable description of the violation.
+        severity: Severity level of the violation.
+
+    Example:
+        >>> violation = LintViolation(
+        ...     file_path="models/customers.sql",
+        ...     line=10,
+        ...     column=5,
+        ...     code="L001",
+        ...     message="Trailing whitespace",
+        ...     severity="warning",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file_path: str = Field(..., description="Path to the SQL file")
+    line: int = Field(..., ge=1, description="Line number (1-based)")
+    column: int = Field(..., ge=0, description="Column number (0-based for start of line)")
+    code: str = Field(..., min_length=1, description="Rule code (e.g., L001)")
+    message: str = Field(..., description="Human-readable violation description")
+    severity: Literal["error", "warning", "info"] = Field(
+        default="warning",
+        description="Severity level",
+    )
 
 # Map dbt adapter types to SQLFluff dialects
 DIALECT_MAP: dict[str, str] = {
@@ -65,16 +103,31 @@ class LintResult:
     """Result of SQL linting operation.
 
     Attributes:
-        success: True if no issues found.
-        issues: List of linting issues.
+        success: True if no violations found.
+        violations: List of linting violations.
+        issues: Deprecated alias for violations (dict format).
         files_checked: Number of SQL files checked.
         files_fixed: Number of files fixed (if fix=True).
     """
 
     success: bool
-    issues: list[dict[str, Any]] = field(default_factory=list)
+    violations: list[LintViolation] = field(default_factory=list)
     files_checked: int = 0
     files_fixed: int = 0
+
+    @property
+    def issues(self) -> list[dict[str, Any]]:
+        """Deprecated: Use violations instead. Returns dict format for backwards compatibility."""
+        return [
+            {
+                "file": v.file_path,
+                "line": v.line,
+                "column": v.column,
+                "code": v.code,
+                "description": v.message,
+            }
+            for v in self.violations
+        ]
 
 
 def get_sqlfluff_dialect(adapter: str) -> str:
@@ -180,48 +233,49 @@ def lint_sql_files(
             log.info("fixing_completed", files_fixed=fixed_files)
             return LintResult(
                 success=True,
-                issues=[],
+                violations=[],
                 files_checked=len(sql_files),
                 files_fixed=fixed_files,
             )
 
         else:
             # Lint mode
-            all_violations: list[dict[str, Any]] = []
+            all_raw_violations: list[dict[str, Any]] = []
 
             for sql_file in sql_files:
                 try:
-                    violations = sqlfluff.lint(
+                    raw_violations = sqlfluff.lint(
                         str(sql_file),
                         dialect=dialect,
                         **config_kwargs,
                     )
-                    all_violations.extend(violations)
+                    all_raw_violations.extend(raw_violations)
                 except Exception as e:
                     log.warning("file_lint_failed", file=str(sql_file), error=str(e))
 
-            # Convert violations to issue format
-            issues = [
-                {
-                    "file": v.get("filepath", ""),
-                    "line": v.get("start_line_no", 0),
-                    "column": v.get("start_line_pos", 0),
-                    "code": v.get("code", ""),
-                    "description": v.get("description", ""),
-                }
-                for v in all_violations
+            # Convert raw violations to LintViolation models
+            violations = [
+                LintViolation(
+                    file_path=v.get("filepath", ""),
+                    line=max(1, v.get("start_line_no", 1)),
+                    column=v.get("start_line_pos", 0),
+                    code=v.get("code", "UNKNOWN"),
+                    message=v.get("description", ""),
+                    severity="warning",
+                )
+                for v in all_raw_violations
             ]
 
-            success = len(issues) == 0
+            success = len(violations) == 0
             log.info(
                 "linting_completed",
                 files_checked=len(sql_files),
-                issues_found=len(issues),
+                violations_found=len(violations),
             )
 
             return LintResult(
                 success=success,
-                issues=issues,
+                violations=violations,
                 files_checked=len(sql_files),
                 files_fixed=0,
             )
@@ -277,6 +331,7 @@ def get_adapter_from_profiles(
 
 __all__ = [
     "LintResult",
+    "LintViolation",
     "get_sqlfluff_dialect",
     "lint_sql_files",
     "get_adapter_from_profiles",

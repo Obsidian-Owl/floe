@@ -35,6 +35,7 @@ from .linting import (
     DEFAULT_DIALECT,
     DIALECT_MAP,
     LintResult,
+    LintViolation,
     get_adapter_from_profiles,
     get_sqlfluff_dialect,
     lint_sql_files,
@@ -67,6 +68,7 @@ __all__ = [
     "set_runtime_attributes",
     # Linting utilities
     "LintResult",
+    "LintViolation",
     "get_sqlfluff_dialect",
     "lint_sql_files",
     "get_adapter_from_profiles",
