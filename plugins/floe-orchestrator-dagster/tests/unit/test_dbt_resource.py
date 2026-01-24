@@ -793,7 +793,7 @@ def mock_dbt_plugin() -> MagicMock:
     )
     mock_plugin.lint_project.return_value = LintResult(
         success=True,
-        issues=[],
+        violations=[],
         files_checked=5,
     )
     mock_plugin.get_manifest.return_value = {
