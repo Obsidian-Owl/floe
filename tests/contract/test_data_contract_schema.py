@@ -23,6 +23,8 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from pydantic import ValidationError
+
 from floe_core.schemas.data_contract import (
     Classification,
     ContractStatus,
@@ -222,8 +224,6 @@ class TestContractViolationSchemaStability:
         assert violation.error_code == "FLOE-E500"
 
         # Invalid pattern should fail (Pydantic ValidationError)
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             ContractViolation(
                 error_code="INVALID",
@@ -295,8 +295,8 @@ class TestContractValidationResultSchemaStability:
         )
         assert result.schema_hash.startswith("sha256:")
 
-        # Invalid pattern should fail
-        with pytest.raises(Exception):  # ValidationError
+        # Invalid pattern should fail (Pydantic ValidationError)
+        with pytest.raises(ValidationError):
             ContractValidationResult(
                 valid=True,
                 schema_hash="invalid-hash",
@@ -388,7 +388,7 @@ class TestSchemaComparisonResultStability:
             contract_type="string",
             table_type="integer",
         )
-        with pytest.raises(Exception):  # ValidationError
+        with pytest.raises(ValidationError):
             mismatch.column = "changed"  # type: ignore[misc]
 
 
