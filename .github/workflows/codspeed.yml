@@ -41,5 +41,8 @@ jobs:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@0d7de549485db8284c0b87a0d2c0dd871097e641  # v4
         with:
-          mode: simulation
+          # Use walltime mode to accurately measure I/O-heavy operations
+          # (telemetry init, module imports, Dagster definitions)
+          # See: https://codspeed.io/docs/instruments/walltime
+          mode: walltime
           run: uv run pytest benchmarks/ --codspeed
