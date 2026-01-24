@@ -90,8 +90,9 @@ spec:
             httpGet:
               path: /healthcheck
               port: 8182
-            initialDelaySeconds: 10
-            periodSeconds: 5
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /healthcheck

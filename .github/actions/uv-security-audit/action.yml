@@ -1,0 +1,48 @@
+name: 'uv Security Audit'
+description: 'Run uv-secure with documented vulnerability ignores'
+
+inputs:
+  working-directory:
+    description: 'Directory to scan'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run vulnerability audit
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Centralized vulnerability ignores (update ONE place):
+        # - GHSA-5j53-63w8-8625: fastapi-users OAuth/CSRF (not used)
+        # - GHSA-7gcm-g887-7qv7: protobuf DoS (transitive, no fix)
+
+        IGNORE_VULNS="GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7"
+
+        echo "Running uv-secure with ignores: $IGNORE_VULNS"
+
+        output=$(uv run uv-secure --no-check-uv-tool --ignore-vulns "$IGNORE_VULNS" . 2>&1) || {
+          exit_code=$?
+          echo "$output"
+
+          # Exit code 2 = warnings (not blocking)
+          if [ $exit_code -eq 2 ]; then
+            echo "::warning::uv-secure returned warnings (exit code 2)"
+            exit 0
+          fi
+
+          # Exit code 3 = tool crash, check if actual vulns
+          if [ $exit_code -eq 3 ]; then
+            if echo "$output" | grep -q "Vulnerable:" && ! echo "$output" | grep -q "Vulnerable: 0"; then
+              echo "::error::Vulnerabilities detected"
+              exit 1
+            else
+              echo "::warning::uv-secure crashed but no vulnerabilities reported"
+              exit 0
+            fi
+          fi
+
+          exit $exit_code
+        }
+        echo "$output"

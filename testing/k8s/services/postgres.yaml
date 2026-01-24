@@ -75,8 +75,9 @@ spec:
                 - pg_isready
                 - -U
                 - floe
-            initialDelaySeconds: 5
+            initialDelaySeconds: 15
             periodSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             exec:
               command:

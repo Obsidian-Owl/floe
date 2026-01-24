@@ -30,6 +30,10 @@ env:
   PYTHON_VERSION_DEFAULT: "3.10"
   UV_CACHE_DIR: /tmp/.uv-cache
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   # ============================================================
   # Integration Tests (K8s-native with Kind)
@@ -70,9 +74,16 @@ jobs:
 
       - name: Wait for services to be ready
         run: |
-          echo "Waiting for all pods to be ready..."
-          kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s || true
+          echo "Waiting for pods to be ready..."
+          kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s
+
+          echo "Waiting for setup Jobs to complete..."
+          kubectl wait --for=condition=complete job/minio-setup -n floe-test --timeout=120s
+          kubectl wait --for=condition=complete job/minio-iam-setup -n floe-test --timeout=120s
+
+          echo "Verifying service health..."
           kubectl get pods -n floe-test
+          kubectl get jobs -n floe-test
 
       - name: Run integration tests
         run: ./testing/ci/test-integration.sh
@@ -118,11 +129,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run vulnerability audit
-        run: |
-          echo "Checking for known vulnerabilities..."
-          # uv-secure natively parses uv.lock files and ignores local packages
-          # --no-check-uv-tool: CI manages its own uv version
-          uv run uv-secure --no-check-uv-tool .
+        uses: ./.github/actions/uv-security-audit
 
       - name: Check for stale dependencies
         run: |
