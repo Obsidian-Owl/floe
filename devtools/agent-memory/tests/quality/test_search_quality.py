@@ -271,9 +271,9 @@ class TestArchitectureQueryRelevance:
         report = await validate_quality(mock_cognee_client, architecture_queries)
 
         # Target: 90% pass rate for architecture queries
-        assert report.pass_rate >= 90.0, (
-            f"Architecture query relevance is {report.pass_rate}%, target is 90%"
-        )
+        assert (
+            report.pass_rate >= 90.0
+        ), f"Architecture query relevance is {report.pass_rate}%, target is 90%"
 
     @pytest.mark.requirement("FR-017")
     @pytest.mark.asyncio

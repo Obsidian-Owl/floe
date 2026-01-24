@@ -156,10 +156,7 @@ class ContractGenerator:
         owner = port.owner or product_owner
 
         # Create schema properties from port columns
-        properties = [
-            self._column_to_property(col)
-            for col in port.schema_
-        ]
+        properties = [self._column_to_property(col) for col in port.schema_]
 
         # Create schema object for the port
         schema_object = SchemaObject(

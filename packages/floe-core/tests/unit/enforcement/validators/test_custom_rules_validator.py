@@ -624,9 +624,9 @@ class TestCustomRuleErrorHandling:
 
         # All violations should have FLOE-E4xx codes
         for violation in violations:
-            assert violation.error_code.startswith("FLOE-E4"), (
-                f"Custom rule violation has non-E4xx code: {violation.error_code}"
-            )
+            assert violation.error_code.startswith(
+                "FLOE-E4"
+            ), f"Custom rule violation has non-E4xx code: {violation.error_code}"
 
     @pytest.mark.requirement("003b-FR-009")
     def test_applies_to_pattern_matching_edge_cases(self, valid_manifest: dict[str, Any]) -> None:
@@ -716,9 +716,9 @@ class TestCustomRuleErrorHandling:
 
         # All violations should have suggestions
         for violation in violations:
-            assert violation.suggestion is not None, (
-                f"Violation {violation.error_code} missing suggestion"
-            )
-            assert len(violation.suggestion) > 0, (
-                f"Violation {violation.error_code} has empty suggestion"
-            )
+            assert (
+                violation.suggestion is not None
+            ), f"Violation {violation.error_code} missing suggestion"
+            assert (
+                len(violation.suggestion) > 0
+            ), f"Violation {violation.error_code} has empty suggestion"

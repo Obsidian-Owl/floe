@@ -211,9 +211,9 @@ class TestRetryPolicyJitter:
 
         # Base delay for attempt 0 is 1.0s
         # With ±25% jitter, delays should be in range [0.75, 1.25]
-        assert all(0.75 <= d <= 1.25 for d in delays), (
-            f"Delays out of range: min={min(delays)}, max={max(delays)}"
-        )
+        assert all(
+            0.75 <= d <= 1.25 for d in delays
+        ), f"Delays out of range: min={min(delays)}, max={max(delays)}"
 
         # There should be variance (not all same value)
         unique_delays = {round(d, 4) for d in delays}

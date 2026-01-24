@@ -57,9 +57,9 @@ class TestOCIErrorHierarchy:
         ]
 
         for error_class in error_classes:
-            assert issubclass(error_class, OCIError), (
-                f"{error_class.__name__} should inherit from OCIError"
-            )
+            assert issubclass(
+                error_class, OCIError
+            ), f"{error_class.__name__} should inherit from OCIError"
 
     @pytest.mark.requirement("FR-019")
     def test_oci_error_inherits_from_exception(self) -> None:

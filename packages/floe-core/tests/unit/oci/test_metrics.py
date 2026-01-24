@@ -80,9 +80,9 @@ class TestOCIMetricsNaming:
         ]
 
         for name in metric_names:
-            assert name.startswith("floe_oci_"), (
-                f"Metric {name} should start with 'floe_oci_' prefix"
-            )
+            assert name.startswith(
+                "floe_oci_"
+            ), f"Metric {name} should start with 'floe_oci_' prefix"
 
     @pytest.mark.requirement("FR-021")
     def test_span_names_have_floe_oci_prefix(self) -> None:

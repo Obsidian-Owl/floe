@@ -17,4 +17,3 @@ Options:
   -o, --output PATH  Output directory for generated manifests.
   --dry-run          Show what would be generated without writing files.
   -h, --help         Show this message and exit.
-

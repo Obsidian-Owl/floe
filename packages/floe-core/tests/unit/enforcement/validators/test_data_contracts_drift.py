@@ -31,9 +31,7 @@ class TestValidateWithDriftDetection:
     """
 
     @pytest.mark.requirement("3C-FR-021")
-    def test_drift_detection_skipped_when_no_table_schema(
-        self, tmp_path: Path
-    ) -> None:
+    def test_drift_detection_skipped_when_no_table_schema(self, tmp_path: Path) -> None:
         """Test that drift detection is skipped when no table schema provided."""
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 
@@ -110,9 +108,7 @@ schema:
             mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
 
             # Mock the DriftDetector
-            with patch(
-                "floe_iceberg.drift_detector.DriftDetector"
-            ) as MockDriftDetector:
+            with patch("floe_iceberg.drift_detector.DriftDetector") as MockDriftDetector:
                 mock_detector = MagicMock()
                 mock_detector.compare_schemas.return_value = mock_drift_result
                 MockDriftDetector.return_value = mock_detector
@@ -179,9 +175,7 @@ schema:
                 {"name": "email", "logicalType": "string"},
             ]
 
-            with patch(
-                "floe_iceberg.drift_detector.DriftDetector"
-            ) as MockDriftDetector:
+            with patch("floe_iceberg.drift_detector.DriftDetector") as MockDriftDetector:
                 mock_detector = MagicMock()
                 mock_detector.compare_schemas.return_value = mock_drift_result
                 MockDriftDetector.return_value = mock_detector
@@ -238,9 +232,7 @@ schema:
         ) as mock_extract:
             mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
 
-            with patch(
-                "floe_iceberg.drift_detector.DriftDetector"
-            ) as MockDriftDetector:
+            with patch("floe_iceberg.drift_detector.DriftDetector") as MockDriftDetector:
                 mock_detector = MagicMock()
                 mock_detector.compare_schemas.return_value = mock_drift_result
                 MockDriftDetector.return_value = mock_detector
@@ -256,9 +248,7 @@ schema:
         assert len(result.violations) == 0
 
     @pytest.mark.requirement("3C-FR-021")
-    def test_drift_detection_unavailable_gracefully_handled(
-        self, tmp_path: Path
-    ) -> None:
+    def test_drift_detection_unavailable_gracefully_handled(self, tmp_path: Path) -> None:
         """Test that missing floe_iceberg doesn't cause hard failure."""
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 

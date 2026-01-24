@@ -20,8 +20,6 @@ from pyiceberg.types import (
     TimestampType,
 )
 
-from floe_core.schemas.data_contract import SchemaComparisonResult, TypeMismatch
-
 
 class TestTypeMismatchDetection:
     """Tests for type mismatch detection (FR-021, FR-022).
@@ -67,8 +65,9 @@ class TestTypeMismatchDetection:
     @pytest.mark.requirement("3C-FR-022")
     def test_integer_vs_long_compatible(self) -> None:
         """Test that integer and long are considered compatible."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         # Contract says integer, table has long (compatible)
         contract_schema = [
@@ -97,8 +96,9 @@ class TestTypeMismatchDetection:
     @pytest.mark.requirement("3C-FR-022")
     def test_number_vs_double_compatible(self) -> None:
         """Test that ODCS 'number' maps to Iceberg double."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         # ODCS 'number' should map to double
         contract_schema = [
@@ -125,8 +125,9 @@ class TestTypeMismatchDetection:
     @pytest.mark.requirement("3C-FR-022")
     def test_timestamp_type_mapping(self) -> None:
         """Test that ODCS 'timestamp' maps to Iceberg timestamp."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         contract_schema = [
             {"name": "created_at", "logicalType": "timestamp"},
@@ -152,8 +153,9 @@ class TestTypeMismatchDetection:
     @pytest.mark.requirement("3C-FR-021")
     def test_boolean_vs_string_mismatch(self) -> None:
         """Test that boolean vs string mismatch is detected."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         contract_schema = [
             {"name": "active", "logicalType": "boolean"},
@@ -188,8 +190,9 @@ class TestMissingColumnDetection:
     @pytest.mark.requirement("3C-FR-023")
     def test_column_in_contract_but_not_in_table(self) -> None:
         """Test detection of columns in contract but missing from table."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         # Contract expects id and email, table only has id
         contract_schema = [
@@ -218,8 +221,9 @@ class TestMissingColumnDetection:
     @pytest.mark.requirement("3C-FR-023")
     def test_multiple_missing_columns(self) -> None:
         """Test detection of multiple missing columns."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         contract_schema = [
             {"name": "id", "logicalType": "string"},
@@ -261,8 +265,9 @@ class TestExtraColumnDetection:
     @pytest.mark.requirement("3C-FR-024")
     def test_column_in_table_but_not_in_contract(self) -> None:
         """Test detection of columns in table but not in contract (info only)."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         # Contract expects id, table has id and extra_column
         contract_schema = [
@@ -297,8 +302,9 @@ class TestExtraColumnDetection:
     @pytest.mark.requirement("3C-FR-024")
     def test_extra_columns_with_type_match(self) -> None:
         """Test that extra columns are reported even when types match."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         contract_schema = [
             {"name": "id", "logicalType": "string"},
@@ -353,8 +359,9 @@ class TestCompleteSchemaComparison:
     @pytest.mark.requirement("3C-FR-021")
     def test_exact_schema_match(self) -> None:
         """Test that identical schemas match."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         contract_schema = [
             {"name": "id", "logicalType": "string"},
@@ -384,8 +391,9 @@ class TestCompleteSchemaComparison:
     @pytest.mark.requirement("3C-FR-021")
     def test_combined_issues(self) -> None:
         """Test detection of multiple issue types simultaneously."""
-        from floe_iceberg.drift_detector import DriftDetector
         from pyiceberg.schema import NestedField
+
+        from floe_iceberg.drift_detector import DriftDetector
 
         # Contract has type mismatch, missing column, and table has extra column
         contract_schema = [

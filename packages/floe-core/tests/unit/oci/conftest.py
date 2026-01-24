@@ -31,9 +31,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def mock_span_context() -> Callable[
-    [str, dict[str, Any] | None], AbstractContextManager[MagicMock]
-]:
+def mock_span_context() -> (
+    Callable[[str, dict[str, Any] | None], AbstractContextManager[MagicMock]]
+):
     """Factory for mock span context managers.
 
     Returns:

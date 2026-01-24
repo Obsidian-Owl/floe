@@ -677,9 +677,9 @@ class TestDataContractErrorCodeURLs:
             assert "#" in url, f"URL for {code} must have anchor tag: {url}"
             # Verify anchor matches error code (e.g., #e500 for FLOE-E500)
             expected_anchor = code.lower().replace("floe-", "")
-            assert expected_anchor in url.lower(), (
-                f"URL anchor for {code} should contain '{expected_anchor}': {url}"
-            )
+            assert (
+                expected_anchor in url.lower()
+            ), f"URL anchor for {code} should contain '{expected_anchor}': {url}"
 
     @pytest.mark.requirement("3C-FR-034")
     def test_get_data_contract_error_url_returns_valid_url(self) -> None:

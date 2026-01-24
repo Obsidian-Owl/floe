@@ -111,9 +111,9 @@ class BasePluginDiscoveryTests(ABC):
         eps = entry_points(group=self.entry_point_group)
         matching = [ep for ep in eps if ep.name == self.expected_name]
 
-        assert len(matching) == 1, (
-            f"Expected exactly one '{self.expected_name}' entry point, found {len(matching)}"
-        )
+        assert (
+            len(matching) == 1
+        ), f"Expected exactly one '{self.expected_name}' entry point, found {len(matching)}"
 
     @pytest.mark.requirement("FR-024")
     def test_entry_point_module_path(self) -> None:
@@ -130,9 +130,9 @@ class BasePluginDiscoveryTests(ABC):
             f"Entry point value '{ep.value}' should contain module prefix "
             f"'{self.expected_module_prefix}'"
         )
-        assert self.expected_class_name in ep.value, (
-            f"Entry point value '{ep.value}' should contain class name '{self.expected_class_name}'"
-        )
+        assert (
+            self.expected_class_name in ep.value
+        ), f"Entry point value '{ep.value}' should contain class name '{self.expected_class_name}'"
 
     # =========================================================================
     # Plugin Loading Tests
@@ -253,9 +253,9 @@ class BasePluginDiscoveryTests(ABC):
         assert len(matching) == 1
         plugin_class = matching[0].load()
 
-        assert issubclass(plugin_class, self.expected_plugin_abc), (
-            f"{plugin_class.__name__} should inherit from {self.expected_plugin_abc.__name__}"
-        )
+        assert issubclass(
+            plugin_class, self.expected_plugin_abc
+        ), f"{plugin_class.__name__} should inherit from {self.expected_plugin_abc.__name__}"
 
     @pytest.mark.requirement("FR-006")
     def test_plugin_instance_is_abc_instance(self) -> None:
@@ -278,9 +278,9 @@ class BasePluginDiscoveryTests(ABC):
         plugin_class = matching[0].load()
         plugin = self.create_plugin_instance(plugin_class)
 
-        assert isinstance(plugin, self.expected_plugin_abc), (
-            f"Plugin instance should be instance of {self.expected_plugin_abc.__name__}"
-        )
+        assert isinstance(
+            plugin, self.expected_plugin_abc
+        ), f"Plugin instance should be instance of {self.expected_plugin_abc.__name__}"
 
     # =========================================================================
     # Lifecycle Method Presence Tests

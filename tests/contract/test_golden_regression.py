@@ -105,9 +105,9 @@ class TestCompiledArtifactsContract:
         properties = golden["properties"]
 
         # version field MUST exist and be string type
-        assert "version" in properties, (
-            "Schema missing 'version' property. This is a breaking change."
-        )
+        assert (
+            "version" in properties
+        ), "Schema missing 'version' property. This is a breaking change."
         assert properties["version"].get("type") == "string", (
             f"version field type is '{properties['version'].get('type')}', expected 'string'. "
             "This is a MAJOR version change."
@@ -116,9 +116,9 @@ class TestCompiledArtifactsContract:
         # metadata, dbt_profiles, dagster_config MUST exist
         expected_properties = ["metadata", "dbt_profiles", "dagster_config"]
         for prop in expected_properties:
-            assert prop in properties, (
-                f"Schema missing '{prop}' property. This is a breaking change."
-            )
+            assert (
+                prop in properties
+            ), f"Schema missing '{prop}' property. This is a breaking change."
 
 
 class TestPluginInterfaceContract:
@@ -155,9 +155,9 @@ class TestPluginInterfaceContract:
             "StoragePlugin",
         ]
         for interface in required_interfaces:
-            assert interface in interfaces, (
-                f"Missing '{interface}' from plugin interfaces. This is a breaking change."
-            )
+            assert (
+                interface in interfaces
+            ), f"Missing '{interface}' from plugin interfaces. This is a breaking change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_compute_plugin_methods_stable(self) -> None:
@@ -176,9 +176,9 @@ class TestPluginInterfaceContract:
         methods = compute["methods"]
         required_methods = ["generate_profiles", "validate_config"]
         for method in required_methods:
-            assert method in methods, (
-                f"ComputePlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"ComputePlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_orchestrator_plugin_methods_stable(self) -> None:
@@ -197,9 +197,9 @@ class TestPluginInterfaceContract:
         methods = orchestrator["methods"]
         required_methods = ["create_assets", "create_schedules"]
         for method in required_methods:
-            assert method in methods, (
-                f"OrchestratorPlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"OrchestratorPlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_catalog_plugin_methods_stable(self) -> None:
@@ -218,9 +218,9 @@ class TestPluginInterfaceContract:
         methods = catalog["methods"]
         required_methods = ["create_namespace", "load_table"]
         for method in required_methods:
-            assert method in methods, (
-                f"CatalogPlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"CatalogPlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_storage_plugin_methods_stable(self) -> None:
@@ -239,9 +239,9 @@ class TestPluginInterfaceContract:
         methods = storage["methods"]
         required_methods = ["read_table", "write_table"]
         for method in required_methods:
-            assert method in methods, (
-                f"StoragePlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"StoragePlugin.{method}() removed. This is a MAJOR version change."
 
 
 class TestQualityThresholds:
@@ -275,16 +275,16 @@ class TestQualityThresholds:
         # Unit test threshold MUST exist and be >= 80%
         assert "unit" in coverage, "Missing 'unit' coverage threshold"
         unit_min = coverage["unit"].get("minimum_percent", 0)
-        assert unit_min >= 80, (
-            f"Unit test coverage threshold lowered to {unit_min}%. Minimum must be 80%."
-        )
+        assert (
+            unit_min >= 80
+        ), f"Unit test coverage threshold lowered to {unit_min}%. Minimum must be 80%."
 
         # Integration test threshold MUST exist and be >= 70%
         assert "integration" in coverage, "Missing 'integration' coverage threshold"
         int_min = coverage["integration"].get("minimum_percent", 0)
-        assert int_min >= 70, (
-            f"Integration test coverage threshold lowered to {int_min}%. Minimum must be 70%."
-        )
+        assert (
+            int_min >= 70
+        ), f"Integration test coverage threshold lowered to {int_min}%. Minimum must be 70%."
 
     @pytest.mark.requirement("CONTRACT-003")
     def test_requirement_traceability_is_100_percent(self) -> None:
@@ -304,12 +304,12 @@ class TestQualityThresholds:
         golden = load_golden("quality_thresholds.json")
         security = golden["security"]
 
-        assert security.get("allowed_critical_issues", 1) == 0, (
-            "Security threshold allows critical issues. Must be 0."
-        )
-        assert security.get("allowed_high_issues", 1) == 0, (
-            "Security threshold allows high issues. Must be 0."
-        )
+        assert (
+            security.get("allowed_critical_issues", 1) == 0
+        ), "Security threshold allows critical issues. Must be 0."
+        assert (
+            security.get("allowed_high_issues", 1) == 0
+        ), "Security threshold allows high issues. Must be 0."
 
     @pytest.mark.requirement("CONTRACT-003")
     def test_architecture_violations_not_allowed(self) -> None:
@@ -317,6 +317,6 @@ class TestQualityThresholds:
         golden = load_golden("quality_thresholds.json")
         architecture = golden["architecture"]
 
-        assert architecture.get("allowed_violations", 1) == 0, (
-            "Architecture threshold allows violations. Must be 0."
-        )
+        assert (
+            architecture.get("allowed_violations", 1) == 0
+        ), "Architecture threshold allows violations. Must be 0."

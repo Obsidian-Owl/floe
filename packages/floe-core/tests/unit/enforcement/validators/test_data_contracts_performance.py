@@ -10,10 +10,9 @@ These tests verify performance success criteria from the spec.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -177,6 +176,7 @@ schema:
     @pytest.fixture
     def mock_iceberg_schema_100_columns(self) -> MagicMock:
         """Create a mock Iceberg schema with 100 columns."""
+        from pyiceberg.schema import NestedField, Schema
         from pyiceberg.types import (
             BooleanType,
             IntegerType,
@@ -184,7 +184,6 @@ schema:
             StringType,
             TimestampType,
         )
-        from pyiceberg.schema import Schema, NestedField
 
         fields = []
         type_cycle = [StringType, IntegerType, LongType, BooleanType, TimestampType]
@@ -222,11 +221,13 @@ schema:
         contract_columns: list[dict[str, Any]] = []
         type_cycle = ["string", "integer", "decimal", "boolean", "timestamp"]
         for i in range(100):
-            contract_columns.append({
-                "name": f"column_{i:03d}",
-                "logicalType": type_cycle[i % 5],
-                "required": (i < 50),
-            })
+            contract_columns.append(
+                {
+                    "name": f"column_{i:03d}",
+                    "logicalType": type_cycle[i % 5],
+                    "required": (i < 50),
+                }
+            )
 
         # Measure drift detection time
         start_time = time.perf_counter()
@@ -322,9 +323,10 @@ class TestContractValidatorIntegrationPerformance:
         This tests the full workflow: contract validation (2s budget) +
         drift detection (5s budget) = 7s total budget.
         """
-        from floe_core.enforcement.validators.data_contracts import ContractValidator
-        from pyiceberg.schema import Schema, NestedField
+        from pyiceberg.schema import NestedField, Schema
         from pyiceberg.types import IntegerType, StringType, TimestampType
+
+        from floe_core.enforcement.validators.data_contracts import ContractValidator
 
         # Create contract with 50 columns
         columns = []

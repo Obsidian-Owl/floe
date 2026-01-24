@@ -254,9 +254,9 @@ class TestRbacDiffCommand:
                 ],
             )
 
-            assert "Error: Invalid value for '--output'" not in (result.output or ""), (
-                f"Format {output_format} should be valid"
-            )
+            assert "Error: Invalid value for '--output'" not in (
+                result.output or ""
+            ), f"Format {output_format} should be valid"
 
 
 class TestRbacDiffInGroup:

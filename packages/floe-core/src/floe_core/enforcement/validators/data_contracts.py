@@ -154,9 +154,7 @@ class ContractParser:
         try:
             dc = DCContract(data_contract_file=str(path))
         except Exception as e:
-            raise ContractValidationError(
-                f"Failed to load contract file: {e}"
-            ) from e
+            raise ContractValidationError(f"Failed to load contract file: {e}") from e
 
         # Lint the contract (validates against ODCS schema)
         lint_result = dc.lint()
@@ -207,9 +205,7 @@ class ContractParser:
         try:
             dc = DCContract(data_contract_str=yaml_content)
         except Exception as e:
-            raise ContractValidationError(
-                f"Failed to parse contract YAML: {e}"
-            ) from e
+            raise ContractValidationError(f"Failed to parse contract YAML: {e}") from e
 
         # Lint the contract
         lint_result = dc.lint()
@@ -628,9 +624,7 @@ class ContractValidator:
                         f"Data product '{spec.metadata.name}' must define either a "
                         "datacontract.yaml or output_ports for contract generation"
                     ),
-                    suggestion=(
-                        "Add a datacontract.yaml file or define outputPorts in floe.yaml"
-                    ),
+                    suggestion=("Add a datacontract.yaml file or define outputPorts in floe.yaml"),
                 )
             ],
             warnings=[],
@@ -752,7 +746,6 @@ class ContractValidator:
             )
 
         return result
-
 
     def validate_with_versioning(
         self,
@@ -987,10 +980,12 @@ class ContractValidator:
         for schema in contract.schema_:
             if schema.properties:
                 for prop in schema.properties:
-                    columns.append({
-                        "name": prop.name,
-                        "logicalType": prop.logicalType or "string",
-                    })
+                    columns.append(
+                        {
+                            "name": prop.name,
+                            "logicalType": prop.logicalType or "string",
+                        }
+                    )
 
         return columns
 

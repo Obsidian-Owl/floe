@@ -159,9 +159,9 @@ class TestPlatformCompileCommand:
                 ],
             )
 
-            assert "Error: Invalid value for '--enforcement-format'" not in (result.output or ""), (
-                f"Format {format_choice} should be valid"
-            )
+            assert "Error: Invalid value for '--enforcement-format'" not in (
+                result.output or ""
+            ), f"Format {format_choice} should be valid"
 
     @pytest.mark.requirement("FR-013")
     def test_compile_rejects_invalid_enforcement_format(
@@ -339,7 +339,10 @@ class TestPlatformCompileCommand:
         # - Or succeed/fail for other reasons (but not due to unknown flag)
         # Exit code validation is separate from flag recognition
         if result.exit_code == 0:
-            assert "Contract validation" in (result.output or "") or "contract" in (result.output or "").lower()
+            assert (
+                "Contract validation" in (result.output or "")
+                or "contract" in (result.output or "").lower()
+            )
 
     @pytest.mark.requirement("3C-FR-032")
     def test_compile_accepts_drift_detection_flag(

@@ -368,17 +368,11 @@ class TestContractValidationResult:
     def test_validation_result_error_count_property(self) -> None:
         """Test error_count and warning_count properties."""
         errors = [
-            ContractViolation(
-                error_code="FLOE-E501", severity="error", message="Error 1"
-            ),
-            ContractViolation(
-                error_code="FLOE-E502", severity="error", message="Error 2"
-            ),
+            ContractViolation(error_code="FLOE-E501", severity="error", message="Error 1"),
+            ContractViolation(error_code="FLOE-E502", severity="error", message="Error 2"),
         ]
         warnings_in_violations = [
-            ContractViolation(
-                error_code="FLOE-E510", severity="warning", message="Warn 1"
-            ),
+            ContractViolation(error_code="FLOE-E510", severity="warning", message="Warn 1"),
         ]
         result = ContractValidationResult(
             valid=False,

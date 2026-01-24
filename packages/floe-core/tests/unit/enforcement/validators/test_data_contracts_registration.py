@@ -55,9 +55,13 @@ class TestCatalogRegistrar:
 
         # Verify the properties passed include required metadata
         call_args = mock_catalog.set_namespace_properties.call_args
-        properties = call_args[1].get("properties", call_args[0][1] if len(call_args[0]) > 1 else {})
+        properties = call_args[1].get(
+            "properties", call_args[0][1] if len(call_args[0]) > 1 else {}
+        )
 
-        assert "floe.contract.id" in properties or any("contract" in str(k).lower() for k in properties.keys())
+        assert "floe.contract.id" in properties or any(
+            "contract" in str(k).lower() for k in properties.keys()
+        )
 
     @pytest.mark.requirement("3C-FR-027")
     def test_register_contract_includes_all_required_fields(self) -> None:
@@ -242,9 +246,7 @@ class TestCatalogRegistrarSoftFailure:
         from floe_core.enforcement.validators.data_contracts import CatalogRegistrar
 
         mock_catalog = MagicMock()
-        mock_catalog.set_namespace_properties = MagicMock(
-            side_effect=Exception("Unexpected error")
-        )
+        mock_catalog.set_namespace_properties = MagicMock(side_effect=Exception("Unexpected error"))
 
         registrar = CatalogRegistrar(catalog_plugin=mock_catalog)
 
@@ -354,9 +356,7 @@ schema:
             mock_registrar.register_contract.assert_called_once()
 
     @pytest.mark.requirement("3C-FR-028")
-    def test_validator_returns_warning_on_registration_failure(
-        self, tmp_path: Path
-    ) -> None:
+    def test_validator_returns_warning_on_registration_failure(self, tmp_path: Path) -> None:
         """Test that validation succeeds with warning if registration fails."""
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 

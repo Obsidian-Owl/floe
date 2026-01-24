@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
+from floe_core.schemas.data_contract import SchemaComparisonResult, TypeMismatch
 from pyiceberg.schema import Schema
 from pyiceberg.types import (
     BooleanType,
@@ -41,8 +42,6 @@ from pyiceberg.types import (
     TimestampType,
     TimeType,
 )
-
-from floe_core.schemas.data_contract import SchemaComparisonResult, TypeMismatch
 
 logger = structlog.get_logger(__name__)
 

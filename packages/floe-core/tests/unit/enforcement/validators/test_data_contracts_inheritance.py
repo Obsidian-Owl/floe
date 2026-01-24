@@ -17,11 +17,6 @@ from pathlib import Path
 
 import pytest
 
-from floe_core.schemas.data_contract import (
-    ContractValidationResult,
-    ContractViolation,
-)
-
 # Import from module that will be created
 # from floe_core.enforcement.validators.inheritance import InheritanceValidator
 

@@ -216,17 +216,17 @@ class TestPushToRegistry(IntegrationTestBase):
                 },
             )
 
-        assert response.status_code == 200, (
-            f"Expected 200 OK for pushed artifact, got {response.status_code}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200 OK for pushed artifact, got {response.status_code}"
 
         # Verify registry returns a valid digest header
         # Note: ORAS creates its own manifest, so registry digest may differ
         # from the one we computed locally. The key test is that a digest exists.
         docker_digest = response.headers.get("docker-content-digest", "")
-        assert docker_digest.startswith("sha256:"), (
-            f"Expected valid registry digest, got: {docker_digest}"
-        )
+        assert docker_digest.startswith(
+            "sha256:"
+        ), f"Expected valid registry digest, got: {docker_digest}"
 
     @pytest.mark.requirement("8A-FR-001")
     def test_push_returns_correct_digest(
@@ -846,9 +846,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
 
         # Verify error indicates authentication failure
         error_msg = str(exc_info.value).lower()
-        assert any(term in error_msg for term in ["auth", "401", "unauthorized"]), (
-            f"Expected auth-related error, got: {exc_info.value}"
-        )
+        assert any(
+            term in error_msg for term in ["auth", "401", "unauthorized"]
+        ), f"Expected auth-related error, got: {exc_info.value}"
 
     @pytest.mark.requirement("8A-SC-009")
     def test_basic_auth_anonymous_access_denied(
@@ -871,9 +871,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
             response = http_client.get(catalog_url)
 
         # Should get 401 Unauthorized
-        assert response.status_code == 401, (
-            f"Expected 401 Unauthorized for anonymous access, got {response.status_code}"
-        )
+        assert (
+            response.status_code == 401
+        ), f"Expected 401 Unauthorized for anonymous access, got {response.status_code}"
 
     @pytest.mark.requirement("8A-FR-006")
     def test_basic_auth_inspect_succeeds(
