@@ -265,7 +265,7 @@ class TestPolicyOverridePolicyTypes:
         When checking its contents,
         Then it contains all expected policy types.
         """
-        expected = {"naming", "coverage", "documentation", "semantic", "custom"}
+        expected = {"naming", "coverage", "documentation", "semantic", "custom", "data_contract"}
         assert VALID_POLICY_TYPES == expected
 
 
