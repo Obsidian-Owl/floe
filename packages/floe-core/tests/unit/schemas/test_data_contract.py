@@ -5,6 +5,11 @@ Requirements: FR-001 (ODCS Parsing), FR-002 (Schema Requirements),
               FR-005 (Type Validation), FR-006 (Schema Completeness),
               FR-007 (SLA Duration), FR-008 (Classification),
               FR-009 (Format Constraints), FR-010 (Error Codes)
+
+Note: ODCS re-exports (DataContract, SchemaObject, SchemaProperty) are tested
+in tests/contract/test_data_contract_schema.py. This file tests:
+1. Type constant classes (ElementType, ElementFormat, Classification, ContractStatus)
+2. Floe-specific validation models (ContractViolation, ContractValidationResult, etc.)
 """
 
 from __future__ import annotations
@@ -17,629 +22,105 @@ from pydantic import ValidationError
 from floe_core.schemas.data_contract import (
     Classification,
     ContractStatus,
-    ContractTerms,
     ContractValidationResult,
     ContractViolation,
-    DataContract,
-    DataContractElement,
-    DataContractModel,
-    DeprecationInfo,
     ElementFormat,
     ElementType,
-    FreshnessSLA,
-    QualitySLA,
     SchemaComparisonResult,
-    SLAProperties,
     TypeMismatch,
 )
 
 
 class TestContractStatus:
-    """Tests for ContractStatus enum."""
+    """Tests for ContractStatus string constants."""
 
     @pytest.mark.requirement("3C-FR-001")
     def test_valid_status_values(self) -> None:
-        """Test all valid ContractStatus values."""
-        assert ContractStatus.ACTIVE.value == "active"
-        assert ContractStatus.DEPRECATED.value == "deprecated"
-        assert ContractStatus.SUNSET.value == "sunset"
-        assert ContractStatus.RETIRED.value == "retired"
+        """Test all ContractStatus constant values."""
+        assert ContractStatus.ACTIVE == "active"
+        assert ContractStatus.DEPRECATED == "deprecated"
+        assert ContractStatus.SUNSET == "sunset"
+        assert ContractStatus.RETIRED == "retired"
+        assert ContractStatus.DRAFT == "draft"
 
     @pytest.mark.requirement("3C-FR-001")
-    def test_status_enum_membership(self) -> None:
-        """Test ContractStatus enum membership."""
-        statuses = {s.value for s in ContractStatus}
-        assert statuses == {"active", "deprecated", "sunset", "retired"}
-
-
-class TestElementType:
-    """Tests for ElementType enum (FR-005)."""
-
-    @pytest.mark.requirement("3C-FR-005")
-    def test_odcs_v3_type_system(self) -> None:
-        """Test ODCS v3 type system is fully supported."""
-        expected_types = {
-            "string",
-            "int",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "boolean",
-            "date",
-            "timestamp",
-            "time",
-            "bytes",
-            "array",
-            "object",
+    def test_status_all_values(self) -> None:
+        """Test ContractStatus has expected constants."""
+        expected = {"active", "deprecated", "sunset", "retired", "draft"}
+        actual = {
+            ContractStatus.ACTIVE,
+            ContractStatus.DEPRECATED,
+            ContractStatus.SUNSET,
+            ContractStatus.RETIRED,
+            ContractStatus.DRAFT,
         }
-        actual_types = {t.value for t in ElementType}
-        assert actual_types == expected_types
-
-    @pytest.mark.requirement("3C-FR-005")
-    def test_type_conversion(self) -> None:
-        """Test ElementType value conversion."""
-        assert ElementType.STRING.value == "string"
-        assert ElementType.TIMESTAMP.value == "timestamp"
-        assert ElementType.DECIMAL.value == "decimal"
-
-
-class TestElementFormat:
-    """Tests for ElementFormat enum (FR-009)."""
-
-    @pytest.mark.requirement("3C-FR-009")
-    def test_format_constraints(self) -> None:
-        """Test format constraint values are supported."""
-        expected_formats = {
-            "email",
-            "uri",
-            "uuid",
-            "phone",
-            "date",
-            "date-time",
-            "ipv4",
-            "ipv6",
-        }
-        actual_formats = {f.value for f in ElementFormat}
-        assert actual_formats == expected_formats
-
-
-class TestClassification:
-    """Tests for Classification enum (FR-008)."""
-
-    @pytest.mark.requirement("3C-FR-008")
-    def test_classification_values(self) -> None:
-        """Test classification values are complete."""
-        expected = {
-            "public",
-            "internal",
-            "confidential",
-            "pii",
-            "phi",
-            "sensitive",
-            "restricted",
-        }
-        actual = {c.value for c in Classification}
         assert actual == expected
 
 
-class TestDataContractElement:
-    """Tests for DataContractElement model."""
+class TestElementType:
+    """Tests for ElementType string constants (FR-005)."""
 
     @pytest.mark.requirement("3C-FR-005")
-    def test_minimal_element(self) -> None:
-        """Test creating element with minimum required fields."""
-        element = DataContractElement(
-            name="customer_id",
-            type=ElementType.STRING,
-        )
-        assert element.name == "customer_id"
-        assert element.type == ElementType.STRING
-        assert element.required is False  # default
-        assert element.primary_key is False  # default
-        assert element.unique is False  # default
+    def test_odcs_v31_core_types(self) -> None:
+        """Test ODCS v3.1 core logicalType values."""
+        # Core ODCS v3.1 types
+        assert ElementType.STRING == "string"
+        assert ElementType.INTEGER == "integer"
+        assert ElementType.NUMBER == "number"
+        assert ElementType.BOOLEAN == "boolean"
+        assert ElementType.DATE == "date"
+        assert ElementType.TIMESTAMP == "timestamp"
+        assert ElementType.TIME == "time"
+        assert ElementType.ARRAY == "array"
+        assert ElementType.OBJECT == "object"
 
     @pytest.mark.requirement("3C-FR-005")
-    def test_full_element(self) -> None:
-        """Test element with all fields populated."""
-        element = DataContractElement(
-            name="email",
-            type=ElementType.STRING,
-            description="Customer email address",
-            required=True,
-            primary_key=False,
-            unique=True,
-            format=ElementFormat.EMAIL,
-            classification=Classification.PII,
-            enum=None,
-        )
-        assert element.name == "email"
-        assert element.format == ElementFormat.EMAIL
-        assert element.classification == Classification.PII
-        assert element.unique is True
-
-    @pytest.mark.requirement("3C-FR-005")
-    def test_element_with_enum_values(self) -> None:
-        """Test element with enum constraint."""
-        element = DataContractElement(
-            name="status",
-            type=ElementType.STRING,
-            enum=["pending", "active", "completed", "cancelled"],
-        )
-        assert element.enum == ["pending", "active", "completed", "cancelled"]
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_element_name_required(self) -> None:
-        """Test that element name is required."""
-        with pytest.raises(ValidationError, match="name"):
-            DataContractElement(type=ElementType.STRING)  # type: ignore[call-arg]
-
-    @pytest.mark.requirement("3C-FR-005")
-    def test_element_type_required(self) -> None:
-        """Test that element type is required."""
-        with pytest.raises(ValidationError, match="type"):
-            DataContractElement(name="test_field")  # type: ignore[call-arg]
-
-    @pytest.mark.requirement("3C-FR-005")
-    def test_element_name_pattern(self) -> None:
-        """Test element name must match pattern (lowercase, starts with letter)."""
-        # Valid names
-        element = DataContractElement(name="customer_id", type=ElementType.STRING)
-        assert element.name == "customer_id"
-
-        # Invalid: starts with number
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            DataContractElement(name="123invalid", type=ElementType.STRING)
-
-        # Invalid: uppercase
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            DataContractElement(name="InvalidCase", type=ElementType.STRING)
+    def test_backward_compat_aliases(self) -> None:
+        """Test backward compatibility type aliases."""
+        # These map to ODCS core types
+        assert ElementType.INT == "integer"
+        assert ElementType.LONG == "integer"
+        assert ElementType.FLOAT == "number"
+        assert ElementType.DOUBLE == "number"
+        assert ElementType.DECIMAL == "number"
 
 
-class TestDataContractModel:
-    """Tests for DataContractModel."""
+class TestElementFormat:
+    """Tests for ElementFormat string constants (FR-009)."""
 
-    @pytest.mark.requirement("3C-FR-006")
-    def test_minimal_model(self) -> None:
-        """Test creating model with minimum required fields."""
-        model = DataContractModel(
-            name="customers",
-            elements=[
-                DataContractElement(name="id", type=ElementType.STRING),
-            ],
-        )
-        assert model.name == "customers"
-        assert len(model.elements) == 1
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_model_with_description(self) -> None:
-        """Test model with description."""
-        model = DataContractModel(
-            name="orders",
-            description="Customer orders fact table",
-            elements=[
-                DataContractElement(name="order_id", type=ElementType.STRING),
-                DataContractElement(name="amount", type=ElementType.DECIMAL),
-            ],
-        )
-        assert model.description == "Customer orders fact table"
-        assert len(model.elements) == 2
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_model_name_required(self) -> None:
-        """Test that model name is required."""
-        with pytest.raises(ValidationError, match="name"):
-            DataContractModel(  # type: ignore[call-arg]
-                elements=[DataContractElement(name="id", type=ElementType.STRING)]
-            )
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_model_elements_required(self) -> None:
-        """Test that elements list is required."""
-        with pytest.raises(ValidationError, match="elements"):
-            DataContractModel(name="test")  # type: ignore[call-arg]
-
-    @pytest.mark.requirement("3C-FR-006")
-    def test_model_requires_at_least_one_element(self) -> None:
-        """Test that model requires at least one element."""
-        with pytest.raises(ValidationError, match="at least 1"):
-            DataContractModel(name="test", elements=[])
+    @pytest.mark.requirement("3C-FR-009")
+    def test_format_constraint_values(self) -> None:
+        """Test format constraint constant values."""
+        assert ElementFormat.EMAIL == "email"
+        assert ElementFormat.URI == "uri"
+        assert ElementFormat.UUID == "uuid"
+        assert ElementFormat.PHONE == "phone"
+        assert ElementFormat.DATE == "date"
+        assert ElementFormat.DATETIME == "date-time"
+        assert ElementFormat.IPV4 == "ipv4"
+        assert ElementFormat.IPV6 == "ipv6"
 
 
-class TestFreshnessSLA:
-    """Tests for FreshnessSLA model (FR-007)."""
+class TestClassification:
+    """Tests for Classification string constants (FR-008)."""
 
-    @pytest.mark.requirement("3C-FR-007")
-    def test_iso8601_duration_valid(self) -> None:
-        """Test valid ISO 8601 duration formats."""
-        # Hours
-        sla = FreshnessSLA(value="PT6H", element="updated_at")
-        assert sla.value == "PT6H"
-
-        # Days
-        sla = FreshnessSLA(value="P1D", element="loaded_at")
-        assert sla.value == "P1D"
-
-        # Minutes
-        sla = FreshnessSLA(value="PT30M", element="timestamp")
-        assert sla.value == "PT30M"
-
-    @pytest.mark.requirement("3C-FR-007")
-    def test_freshness_sla_fields(self) -> None:
-        """Test all FreshnessSLA fields."""
-        sla = FreshnessSLA(value="PT1H", element="event_time")
-        assert sla.value == "PT1H"
-        assert sla.element == "event_time"
-
-    @pytest.mark.requirement("3C-FR-007")
-    def test_freshness_element_optional(self) -> None:
-        """Test that element field is optional."""
-        sla = FreshnessSLA(value="PT6H")
-        assert sla.value == "PT6H"
-        assert sla.element is None
-
-
-class TestQualitySLA:
-    """Tests for QualitySLA model."""
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_quality_sla_defaults(self) -> None:
-        """Test QualitySLA default values."""
-        sla = QualitySLA()
-        assert sla.completeness is None
-        assert sla.uniqueness is None
-        assert sla.accuracy is None
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_quality_sla_percentages(self) -> None:
-        """Test QualitySLA with percentage string values."""
-        sla = QualitySLA(completeness="99.5%", uniqueness="100%", accuracy="98%")
-        assert sla.completeness == "99.5%"
-        assert sla.uniqueness == "100%"
-        assert sla.accuracy == "98%"
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_quality_sla_invalid_format(self) -> None:
-        """Test QualitySLA rejects invalid percentage format."""
-        # Missing % sign
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            QualitySLA(completeness="99.5")
-
-        # Invalid format
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            QualitySLA(uniqueness="ninety-nine%")
-
-
-class TestSLAProperties:
-    """Tests for SLAProperties model."""
-
-    @pytest.mark.requirement("3C-FR-007")
-    def test_sla_properties_minimal(self) -> None:
-        """Test SLAProperties with minimal fields."""
-        sla = SLAProperties()
-        assert sla.freshness is None
-        assert sla.availability is None
-        assert sla.quality is None
-
-    @pytest.mark.requirement("3C-FR-007")
-    def test_sla_properties_full(self) -> None:
-        """Test SLAProperties with all fields."""
-        sla = SLAProperties(
-            freshness=FreshnessSLA(value="PT6H", element="updated_at"),
-            availability="99.9%",
-            quality=QualitySLA(completeness="99%", uniqueness="100%"),
-        )
-        assert sla.freshness is not None
-        assert sla.freshness.value == "PT6H"
-        assert sla.availability == "99.9%"
-        assert sla.quality is not None
-        assert sla.quality.completeness == "99%"
-
-
-class TestContractTerms:
-    """Tests for ContractTerms model."""
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_terms_minimal(self) -> None:
-        """Test ContractTerms with minimal fields."""
-        terms = ContractTerms()
-        assert terms.usage is None
-        assert terms.limitations is None
-        assert terms.retention is None
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_terms_full(self) -> None:
-        """Test ContractTerms with all fields."""
-        terms = ContractTerms(
-            usage="Internal analytics only",
-            limitations="Max 1M queries/day",
-            retention="7 years",
-            pii_handling="Anonymize before export",
-        )
-        assert terms.usage == "Internal analytics only"
-        assert terms.limitations == "Max 1M queries/day"
-        assert terms.retention == "7 years"
-
-
-class TestDeprecationInfo:
-    """Tests for DeprecationInfo model."""
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_deprecation_info(self) -> None:
-        """Test DeprecationInfo fields."""
-        deprecation = DeprecationInfo(
-            announced="2026-01-01",
-            sunset_date="2026-06-01",
-            replacement="new_customers_v2",
-            migration_guide="https://docs.example.com/migrate-customers",
-            reason="Schema redesign",
-        )
-        assert deprecation.announced == "2026-01-01"
-        assert deprecation.sunset_date == "2026-06-01"
-        assert deprecation.replacement == "new_customers_v2"
-        assert deprecation.reason == "Schema redesign"
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_deprecation_info_minimal(self) -> None:
-        """Test DeprecationInfo with minimal fields."""
-        deprecation = DeprecationInfo()
-        assert deprecation.announced is None
-        assert deprecation.sunset_date is None
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_deprecation_date_format(self) -> None:
-        """Test DeprecationInfo date format validation."""
-        # Invalid date format
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            DeprecationInfo(announced="01-01-2026")  # Wrong format
-
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            DeprecationInfo(sunset_date="2026/06/01")  # Wrong format
-
-
-class TestDataContract:
-    """Tests for DataContract model (FR-001, FR-002)."""
-
-    @pytest.fixture
-    def minimal_contract(self) -> DataContract:
-        """Create a minimal valid contract."""
-        return DataContract(
-            api_version="v3.0.0",
-            name="customers",
-            version="1.0.0",
-            owner="data-team@example.com",
-            models=[
-                DataContractModel(
-                    name="customers",
-                    elements=[
-                        DataContractElement(name="id", type=ElementType.STRING),
-                    ],
-                )
-            ],
-        )
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_minimal_contract(self, minimal_contract: DataContract) -> None:
-        """Test creating contract with minimum required fields."""
-        assert minimal_contract.name == "customers"
-        assert minimal_contract.version == "1.0.0"
-        assert minimal_contract.owner == "data-team@example.com"
-        assert len(minimal_contract.models) == 1
-        assert minimal_contract.api_version == "v3.0.0"
-        assert minimal_contract.kind == "DataContract"  # default
-        assert minimal_contract.status == ContractStatus.ACTIVE  # default
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_full_contract(self) -> None:
-        """Test contract with all ODCS v3 fields populated."""
-        contract = DataContract(
-            api_version="v3.0.2",
-            kind="DataContract",
-            version="2.1.0",
-            name="orders",
-            status=ContractStatus.ACTIVE,
-            owner="analytics@example.com",
-            domain="sales",
-            description="Customer orders data contract",
-            models=[
-                DataContractModel(
-                    name="orders",
-                    description="Order fact table",
-                    elements=[
-                        DataContractElement(
-                            name="order_id",
-                            type=ElementType.STRING,
-                            primary_key=True,
-                        ),
-                        DataContractElement(
-                            name="total_amount",
-                            type=ElementType.DECIMAL,
-                        ),
-                    ],
-                )
-            ],
-            sla_properties=SLAProperties(
-                freshness=FreshnessSLA(value="PT6H", element="updated_at"),
-                availability="99.9%",
-            ),
-            terms=ContractTerms(usage="Internal analytics"),
-            tags=["production", "gold"],
-            links={"documentation": "https://docs.example.com/orders"},
-        )
-        assert contract.api_version == "v3.0.2"
-        assert contract.status == ContractStatus.ACTIVE
-        assert contract.domain == "sales"
-        assert contract.sla_properties is not None
-        assert contract.sla_properties.freshness is not None
-        assert contract.tags == ["production", "gold"]
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_api_version_required(self) -> None:
-        """Test that contract api_version is required."""
-        with pytest.raises(ValidationError, match="apiVersion"):
-            DataContract(  # type: ignore[call-arg]
-                version="1.0.0",
-                name="test",
-                owner="test@example.com",
-                models=[
-                    DataContractModel(
-                        name="test",
-                        elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                    )
-                ],
-            )
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_version_required(self) -> None:
-        """Test that contract version is required."""
-        with pytest.raises(ValidationError, match="version"):
-            DataContract(  # type: ignore[call-arg]
-                api_version="v3.0.0",
-                name="test",
-                owner="test@example.com",
-                models=[
-                    DataContractModel(
-                        name="test",
-                        elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                    )
-                ],
-            )
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_name_required(self) -> None:
-        """Test that contract name is required."""
-        with pytest.raises(ValidationError, match="name"):
-            DataContract(  # type: ignore[call-arg]
-                api_version="v3.0.0",
-                version="1.0.0",
-                owner="test@example.com",
-                models=[
-                    DataContractModel(
-                        name="test",
-                        elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                    )
-                ],
-            )
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_owner_required(self) -> None:
-        """Test that contract owner is required."""
-        with pytest.raises(ValidationError, match="owner"):
-            DataContract(  # type: ignore[call-arg]
-                api_version="v3.0.0",
-                version="1.0.0",
-                name="test",
-                models=[
-                    DataContractModel(
-                        name="test",
-                        elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                    )
-                ],
-            )
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_models_required(self) -> None:
-        """Test that at least one model is required."""
-        with pytest.raises(ValidationError, match="models"):
-            DataContract(  # type: ignore[call-arg]
-                api_version="v3.0.0",
-                version="1.0.0",
-                name="test",
-                owner="test@example.com",
-            )
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_contract_frozen(self, minimal_contract: DataContract) -> None:
-        """Test that contract is immutable (frozen=True)."""
-        with pytest.raises(ValidationError):
-            minimal_contract.version = "2.0.0"  # type: ignore[misc]
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_contract_extra_forbid(self) -> None:
-        """Test that extra fields are forbidden."""
-        with pytest.raises(ValidationError, match="extra"):
-            DataContract(
-                api_version="v3.0.0",
-                version="1.0.0",
-                name="test",
-                owner="test@example.com",
-                models=[
-                    DataContractModel(
-                        name="test",
-                        elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                    )
-                ],
-                unexpected_field="should fail",  # type: ignore[call-arg]
-            )
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_contract_deprecation(self) -> None:
-        """Test contract with deprecation info."""
-        contract = DataContract(
-            api_version="v3.0.0",
-            version="1.0.0",
-            name="customers-v1",
-            owner="data-team@example.com",
-            status=ContractStatus.DEPRECATED,
-            models=[
-                DataContractModel(
-                    name="customers",
-                    elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                )
-            ],
-            deprecation=DeprecationInfo(
-                announced="2026-01-01",
-                sunset_date="2026-06-01",
-                replacement="customers-v2",
-            ),
-        )
-        assert contract.status == ContractStatus.DEPRECATED
-        assert contract.deprecation is not None
-        assert contract.deprecation.replacement == "customers-v2"
-
-    @pytest.mark.requirement("3C-FR-001")
-    def test_contract_validation_metadata(self) -> None:
-        """Test contract validation metadata fields."""
-        contract = DataContract(
-            api_version="v3.0.0",
-            version="1.0.0",
-            name="test",
-            owner="test@example.com",
-            models=[
-                DataContractModel(
-                    name="test",
-                    elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                )
-            ],
-            schema_hash="sha256:abc123def456",
-            validated_at=datetime(2026, 1, 24, 12, 0, 0, tzinfo=timezone.utc),
-        )
-        assert contract.schema_hash == "sha256:abc123def456"
-        assert contract.validated_at is not None
-
-    @pytest.mark.requirement("3C-FR-002")
-    def test_contract_api_version_pattern(self) -> None:
-        """Test api_version must match v3.x.x pattern."""
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            DataContract(
-                api_version="v2.0.0",  # Wrong major version
-                version="1.0.0",
-                name="test",
-                owner="test@example.com",
-                models=[
-                    DataContractModel(
-                        name="test",
-                        elements=[DataContractElement(name="id", type=ElementType.STRING)],
-                    )
-                ],
-            )
+    @pytest.mark.requirement("3C-FR-008")
+    def test_classification_values(self) -> None:
+        """Test classification constant values."""
+        assert Classification.PUBLIC == "public"
+        assert Classification.INTERNAL == "internal"
+        assert Classification.CONFIDENTIAL == "confidential"
+        assert Classification.PII == "pii"
+        assert Classification.PHI == "phi"
+        assert Classification.SENSITIVE == "sensitive"
+        assert Classification.RESTRICTED == "restricted"
 
 
 class TestTypeMismatch:
     """Tests for TypeMismatch model (drift detection)."""
 
     @pytest.mark.requirement("3C-FR-022")
-    def test_type_mismatch(self) -> None:
+    def test_type_mismatch_creation(self) -> None:
         """Test TypeMismatch for drift detection."""
         mismatch = TypeMismatch(
             column="amount",
@@ -649,6 +130,32 @@ class TestTypeMismatch:
         assert mismatch.column == "amount"
         assert mismatch.contract_type == "decimal"
         assert mismatch.table_type == "float"
+
+    @pytest.mark.requirement("3C-FR-022")
+    def test_type_mismatch_frozen(self) -> None:
+        """Test TypeMismatch is immutable."""
+        mismatch = TypeMismatch(
+            column="id",
+            contract_type="string",
+            table_type="integer",
+        )
+        with pytest.raises(ValidationError):
+            mismatch.column = "changed"
+
+    @pytest.mark.requirement("3C-FR-022")
+    def test_type_mismatch_required_fields(self) -> None:
+        """Test TypeMismatch requires all fields."""
+        with pytest.raises(ValidationError, match="column"):
+            TypeMismatch(  # type: ignore[call-arg]
+                contract_type="string",
+                table_type="integer",
+            )
+
+        with pytest.raises(ValidationError, match="contract_type"):
+            TypeMismatch(  # type: ignore[call-arg]
+                column="id",
+                table_type="integer",
+            )
 
 
 class TestSchemaComparisonResult:
@@ -710,6 +217,26 @@ class TestSchemaComparisonResult:
         assert result.matches is True
         assert result.extra_columns == ["_metadata", "_load_time"]
 
+    @pytest.mark.requirement("3C-FR-021")
+    def test_schema_comparison_result_frozen(self) -> None:
+        """Test SchemaComparisonResult is immutable."""
+        result = SchemaComparisonResult(
+            matches=True,
+            type_mismatches=[],
+            missing_columns=[],
+            extra_columns=[],
+        )
+        with pytest.raises(ValidationError):
+            result.matches = False
+
+    @pytest.mark.requirement("3C-FR-021")
+    def test_schema_comparison_result_defaults(self) -> None:
+        """Test SchemaComparisonResult default values."""
+        result = SchemaComparisonResult(matches=True)
+        assert result.type_mismatches == []
+        assert result.missing_columns == []
+        assert result.extra_columns == []
+
 
 class TestContractViolation:
     """Tests for ContractViolation model (T017)."""
@@ -762,6 +289,32 @@ class TestContractViolation:
         with pytest.raises(ValidationError, match="String should match pattern"):
             ContractViolation(error_code="ERROR-501", severity="error", message="test")
 
+    @pytest.mark.requirement("3C-FR-010")
+    def test_contract_violation_severity_literal(self) -> None:
+        """Test that severity must be 'error' or 'warning'."""
+        # Valid severities
+        ContractViolation(error_code="FLOE-E500", severity="error", message="test")
+        ContractViolation(error_code="FLOE-E500", severity="warning", message="test")
+
+        # Invalid severity
+        with pytest.raises(ValidationError, match="severity"):
+            ContractViolation(
+                error_code="FLOE-E500",
+                severity="info",  # type: ignore[arg-type]
+                message="test",
+            )
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_contract_violation_frozen(self) -> None:
+        """Test that violation is immutable."""
+        violation = ContractViolation(
+            error_code="FLOE-E500",
+            severity="error",
+            message="test",
+        )
+        with pytest.raises(ValidationError):
+            violation.message = "changed"
+
 
 class TestContractValidationResult:
     """Tests for ContractValidationResult model (T017)."""
@@ -812,6 +365,34 @@ class TestContractValidationResult:
         assert result.warning_count == 1
 
     @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_error_count_property(self) -> None:
+        """Test error_count and warning_count properties."""
+        errors = [
+            ContractViolation(
+                error_code="FLOE-E501", severity="error", message="Error 1"
+            ),
+            ContractViolation(
+                error_code="FLOE-E502", severity="error", message="Error 2"
+            ),
+        ]
+        warnings_in_violations = [
+            ContractViolation(
+                error_code="FLOE-E510", severity="warning", message="Warn 1"
+            ),
+        ]
+        result = ContractValidationResult(
+            valid=False,
+            violations=errors + warnings_in_violations,
+            warnings=[],
+            schema_hash="sha256:" + "c" * 64,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test",
+            contract_version="1.0.0",
+        )
+        assert result.error_count == 2
+        assert result.warning_count == 1
+
+    @pytest.mark.requirement("3C-FR-010")
     def test_validation_result_schema_hash_pattern(self) -> None:
         """Test that schema_hash must match sha256 pattern."""
         # Valid hash
@@ -855,4 +436,56 @@ class TestContractValidationResult:
         )
         assert result.valid is True
         with pytest.raises(ValidationError):
-            result.valid = False  # type: ignore[misc]
+            result.valid = False
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_required_fields(self) -> None:
+        """Test that required fields are enforced."""
+        with pytest.raises(ValidationError, match="valid"):
+            ContractValidationResult(  # type: ignore[call-arg]
+                schema_hash="sha256:" + "a" * 64,
+                validated_at=datetime.now(timezone.utc),
+                contract_name="test",
+                contract_version="1.0.0",
+            )
+
+        with pytest.raises(ValidationError, match="schema_hash"):
+            ContractValidationResult(  # type: ignore[call-arg]
+                valid=True,
+                validated_at=datetime.now(timezone.utc),
+                contract_name="test",
+                contract_version="1.0.0",
+            )
+
+        with pytest.raises(ValidationError, match="contract_name"):
+            ContractValidationResult(  # type: ignore[call-arg]
+                valid=True,
+                schema_hash="sha256:" + "a" * 64,
+                validated_at=datetime.now(timezone.utc),
+                contract_version="1.0.0",
+            )
+
+    @pytest.mark.requirement("3C-FR-010")
+    def test_validation_result_default_lists(self) -> None:
+        """Test that violations and warnings default to empty lists."""
+        result = ContractValidationResult(
+            valid=True,
+            schema_hash="sha256:" + "d" * 64,
+            validated_at=datetime.now(timezone.utc),
+            contract_name="test",
+            contract_version="1.0.0",
+        )
+        assert result.violations == []
+        assert result.warnings == []
+
+
+__all__ = [
+    "TestContractStatus",
+    "TestElementType",
+    "TestElementFormat",
+    "TestClassification",
+    "TestTypeMismatch",
+    "TestSchemaComparisonResult",
+    "TestContractViolation",
+    "TestContractValidationResult",
+]
