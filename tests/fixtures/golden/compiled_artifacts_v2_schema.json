@@ -25,6 +25,10 @@
     },
     "dagster_config": {
       "type": "object"
+    },
+    "data_contracts": {
+      "type": "array",
+      "description": "Data contracts for pipeline validation (Epic 3C)"
     }
   },
   "required": [
