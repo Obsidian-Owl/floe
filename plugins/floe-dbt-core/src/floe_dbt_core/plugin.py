@@ -153,16 +153,13 @@ class DBTCorePlugin(DBTPlugin):
 
             start_time = time.monotonic()
 
-            # Build dbt command
-            args = [
+            # Build dbt command using helper (CMPLX-001)
+            args = self._build_dbt_args(
                 "compile",
-                "--project-dir",
-                str(project_dir),
-                "--profiles-dir",
-                str(profiles_dir),
-                "--target",
+                project_dir,
+                profiles_dir,
                 target,
-            ]
+            )
 
             # Execute dbt compile with event collector for structured errors
             collector = create_event_collector()
@@ -264,23 +261,16 @@ class DBTCorePlugin(DBTPlugin):
 
             start_time = time.monotonic()
 
-            # Build dbt command
-            args = [
+            # Build dbt command using helper (CMPLX-002)
+            args = self._build_dbt_args(
                 "run",
-                "--project-dir",
-                str(project_dir),
-                "--profiles-dir",
-                str(profiles_dir),
-                "--target",
+                project_dir,
+                profiles_dir,
                 target,
-            ]
-
-            if select:
-                args.extend(["--select", select])
-            if exclude:
-                args.extend(["--exclude", exclude])
-            if full_refresh:
-                args.append("--full-refresh")
+                select=select,
+                exclude=exclude,
+                full_refresh=full_refresh,
+            )
 
             # Execute dbt run with event collector for structured errors
             collector = create_event_collector()
@@ -317,9 +307,7 @@ class DBTCorePlugin(DBTPlugin):
             # Parse run results for model count
             run_results = self._load_run_results(project_dir)
             models_run = len(run_results.get("results", []))
-            failures = sum(
-                1 for r in run_results.get("results", []) if r.get("status") == "error"
-            )
+            failures = sum(1 for r in run_results.get("results", []) if r.get("status") == "error")
 
             # Set result attributes on span
             set_result_attributes(
@@ -397,19 +385,14 @@ class DBTCorePlugin(DBTPlugin):
 
             start_time = time.monotonic()
 
-            # Build dbt command
-            args = [
+            # Build dbt command using helper
+            args = self._build_dbt_args(
                 "test",
-                "--project-dir",
-                str(project_dir),
-                "--profiles-dir",
-                str(profiles_dir),
-                "--target",
+                project_dir,
+                profiles_dir,
                 target,
-            ]
-
-            if select:
-                args.extend(["--select", select])
+                select=select,
+            )
 
             # Execute dbt test with event collector for structured errors
             collector = create_event_collector()
@@ -443,9 +426,7 @@ class DBTCorePlugin(DBTPlugin):
             # Parse run results for test count
             run_results = self._load_run_results(project_dir)
             tests_run = len(run_results.get("results", []))
-            failures = sum(
-                1 for r in run_results.get("results", []) if r.get("status") == "fail"
-            )
+            failures = sum(1 for r in run_results.get("results", []) if r.get("status") == "fail")
 
             # Set result attributes on span
             set_result_attributes(
@@ -559,8 +540,7 @@ class DBTCorePlugin(DBTPlugin):
         manifest_path = project_dir / "target" / "manifest.json"
         if not manifest_path.exists():
             raise FileNotFoundError(
-                f"manifest.json not found at {manifest_path}. "
-                "Run 'dbt compile' first."
+                f"manifest.json not found at {manifest_path}. Run 'dbt compile' first."
             )
 
         return json.loads(manifest_path.read_text())
@@ -660,6 +640,52 @@ class DBTCorePlugin(DBTPlugin):
             return project_config.get("profile", "default")
         except Exception:
             return "default"
+
+    def _build_dbt_args(
+        self,
+        command: str,
+        project_dir: Path,
+        profiles_dir: Path,
+        target: str,
+        *,
+        select: str | None = None,
+        exclude: str | None = None,
+        full_refresh: bool = False,
+    ) -> list[str]:
+        """Build dbt command arguments.
+
+        Centralizes argument building to reduce code duplication (CMPLX-001).
+
+        Args:
+            command: dbt command (compile, run, test).
+            project_dir: Path to dbt project directory.
+            profiles_dir: Path to directory containing profiles.yml.
+            target: dbt target name.
+            select: dbt selection syntax.
+            exclude: dbt exclusion syntax.
+            full_refresh: If True, rebuild incremental models.
+
+        Returns:
+            List of command arguments for dbtRunner.invoke().
+        """
+        args = [
+            command,
+            "--project-dir",
+            str(project_dir),
+            "--profiles-dir",
+            str(profiles_dir),
+            "--target",
+            target,
+        ]
+
+        if select:
+            args.extend(["--select", select])
+        if exclude:
+            args.extend(["--exclude", exclude])
+        if full_refresh:
+            args.append("--full-refresh")
+
+        return args
 
     def _run_deps_if_needed(
         self,

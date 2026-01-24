@@ -24,9 +24,185 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.plugin_metadata import PluginMetadata
+
+# =============================================================================
+# Error Classes (shared between plugins)
+# =============================================================================
+
+
+class DBTError(Exception):
+    """Base exception for all dbt plugin errors.
+
+    All dbt exceptions inherit from this class, allowing callers
+    to catch all dbt errors with a single except clause.
+
+    Attributes:
+        message: Human-readable error description.
+        file_path: Path to the file where error occurred (if available).
+        line_number: Line number in the file (if available).
+        original_message: The original dbt error message (for debugging).
+
+    Example:
+        >>> try:
+        ...     plugin.compile_project(...)
+        ... except DBTError as e:
+        ...     print(f"dbt operation failed: {e}")
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        file_path: str | None = None,
+        line_number: int | None = None,
+        original_message: str | None = None,
+    ) -> None:
+        """Initialize DBTError.
+
+        Args:
+            message: Human-readable error description.
+            file_path: Path to the file where error occurred.
+            line_number: Line number in the file.
+            original_message: The original dbt error message.
+        """
+        self.message = message
+        self.file_path = file_path
+        self.line_number = line_number
+        self.original_message = original_message or message
+
+        # Build formatted message with location if available
+        formatted = f"{message}"
+        if file_path:
+            formatted += f"\n    at {file_path}"
+            if line_number is not None:
+                formatted += f":{line_number}"
+
+        super().__init__(formatted)
+
+
+class DBTCompilationError(DBTError):
+    """Raised when dbt compilation fails.
+
+    This error indicates Jinja parsing, SQL generation, or other
+    compilation-phase failures.
+
+    Example:
+        >>> raise DBTCompilationError(
+        ...     message="Undefined ref: 'stg_orders'",
+        ...     file_path="models/marts/dim_customers.sql",
+        ...     line_number=23,
+        ... )
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        file_path: str | None = None,
+        line_number: int | None = None,
+        original_message: str | None = None,
+    ) -> None:
+        """Initialize DBTCompilationError."""
+        super().__init__(
+            f"Compilation failed: {message}",
+            file_path=file_path,
+            line_number=line_number,
+            original_message=original_message,
+        )
+
+
+class DBTExecutionError(DBTError):
+    """Raised when dbt model execution fails.
+
+    This error indicates runtime failures during model materialization
+    or test execution.
+
+    Example:
+        >>> raise DBTExecutionError(
+        ...     message="Column 'customer_id' does not exist",
+        ...     model_name="model.analytics.dim_customers",
+        ... )
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        model_name: str | None = None,
+        adapter: str | None = None,
+        file_path: str | None = None,
+        line_number: int | None = None,
+        original_message: str | None = None,
+    ) -> None:
+        """Initialize DBTExecutionError."""
+        self.model_name = model_name
+        self.adapter = adapter
+
+        # Build execution-specific message
+        full_message = f"Execution failed: {message}"
+        if model_name:
+            adapter_info = f" (adapter: {adapter})" if adapter else ""
+            full_message += f"\n    Model: {model_name}{adapter_info}"
+
+        super().__init__(
+            full_message,
+            file_path=file_path,
+            line_number=line_number,
+            original_message=original_message,
+        )
+        self.message = full_message
+
+
+# =============================================================================
+# Linting Types (shared between plugins)
+# =============================================================================
+
+
+class LintViolation(BaseModel):
+    """A single linting violation detected in a SQL file.
+
+    Represents a rule violation found by SQLFluff or Fusion static analysis.
+
+    Attributes:
+        file_path: Path to the SQL file containing the violation.
+        line: Line number where the violation occurs (1-based).
+        column: Column number where the violation occurs.
+        code: Rule code (e.g., "L001", "ST01", "AM01").
+        message: Human-readable description of the violation.
+        severity: Severity level of the violation.
+
+    Example:
+        >>> violation = LintViolation(
+        ...     file_path="models/customers.sql",
+        ...     line=10,
+        ...     column=5,
+        ...     code="L001",
+        ...     message="Trailing whitespace",
+        ...     severity="warning",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file_path: str = Field(..., description="Path to the SQL file")
+    line: int = Field(..., ge=1, description="Line number (1-based)")
+    column: int = Field(..., ge=0, description="Column number")
+    code: str = Field(..., min_length=1, description="Rule code (e.g., L001)")
+    message: str = Field(..., description="Human-readable violation description")
+    severity: Literal["error", "warning", "info"] = Field(
+        default="warning",
+        description="Severity level",
+    )
+
+
+# =============================================================================
+# Result Data Classes
+# =============================================================================
 
 
 @dataclass
@@ -81,15 +257,15 @@ class LintResult:
         The `issues` property is deprecated. Use `violations` instead.
 
     Example:
-        >>> result = LintResult(
-        ...     success=False,
-        ...     violations=[{"file": "models/stg.sql", "line": 10, "rule": "L001"}],
-        ...     files_checked=15
+        >>> v = LintViolation(
+        ...     file_path="models/stg.sql", line=10, column=0,
+        ...     code="L001", message="Issue"
         ... )
+        >>> result = LintResult(success=False, violations=[v], files_checked=15)
     """
 
     success: bool
-    violations: list[Any] = field(default_factory=list)
+    violations: list[LintViolation] = field(default_factory=list)
     files_checked: int = 0
     files_fixed: int = 0
 
@@ -99,22 +275,16 @@ class LintResult:
 
         Returns violations as list of dicts for backwards compatibility.
         """
-        result: list[dict[str, Any]] = []
-        for v in self.violations:
-            if isinstance(v, dict):
-                result.append(v)
-            elif hasattr(v, "file_path"):
-                # LintViolation-like object
-                result.append({
-                    "file": getattr(v, "file_path", ""),
-                    "line": getattr(v, "line", 0),
-                    "column": getattr(v, "column", 0),
-                    "code": getattr(v, "code", ""),
-                    "description": getattr(v, "message", ""),
-                })
-            else:
-                result.append({"raw": str(v)})
-        return result
+        return [
+            {
+                "file": v.file_path,
+                "line": v.line,
+                "column": v.column,
+                "code": v.code,
+                "description": v.message,
+            }
+            for v in self.violations
+        ]
 
 
 class DBTPlugin(PluginMetadata):
@@ -399,3 +569,16 @@ class DBTPlugin(PluginMetadata):
             }
         """
         ...
+
+
+__all__ = [
+    # Core classes
+    "DBTPlugin",
+    "DBTRunResult",
+    "LintResult",
+    "LintViolation",
+    # Error classes
+    "DBTError",
+    "DBTCompilationError",
+    "DBTExecutionError",
+]

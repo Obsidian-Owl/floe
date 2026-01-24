@@ -523,3 +523,187 @@ class TestDBTPluginDifferentiation:
             plugin = DBTFusionPlugin()
             metadata = plugin.get_runtime_metadata()
             assert metadata.get("runtime") == "fusion"
+
+
+# ---------------------------------------------------------------------------
+# LintViolation Schema Stability Tests (Tech Debt Remediation)
+# ---------------------------------------------------------------------------
+
+
+class TestLintViolationContract:
+    """Contract tests for LintViolation schema stability.
+
+    LintViolation is a Pydantic model used by both DBTCorePlugin and
+    DBTFusionPlugin. These tests ensure schema stability.
+    """
+
+    @pytest.mark.requirement("SC-003")
+    def test_lint_violation_is_pydantic_model(self) -> None:
+        """LintViolation should be a Pydantic BaseModel."""
+        from floe_core.plugins.dbt import LintViolation
+        from pydantic import BaseModel
+
+        assert issubclass(LintViolation, BaseModel)
+
+    @pytest.mark.requirement("SC-003")
+    def test_lint_violation_required_fields(self) -> None:
+        """LintViolation should have required fields."""
+        from floe_core.plugins.dbt import LintViolation
+
+        # Create valid violation
+        violation = LintViolation(
+            file_path="models/test.sql",
+            line=1,
+            column=0,
+            code="L001",
+            message="Test violation",
+        )
+
+        assert violation.file_path == "models/test.sql"
+        assert violation.line == 1
+        assert violation.column == 0
+        assert violation.code == "L001"
+        assert violation.message == "Test violation"
+        assert violation.severity == "warning"  # Default value
+
+    @pytest.mark.requirement("SC-003")
+    def test_lint_violation_severity_values(self) -> None:
+        """LintViolation severity should accept valid values."""
+        from floe_core.plugins.dbt import LintViolation
+
+        for severity in ("error", "warning", "info"):
+            violation = LintViolation(
+                file_path="test.sql",
+                line=1,
+                column=0,
+                code="L001",
+                message="Test",
+                severity=severity,  # type: ignore[arg-type]
+            )
+            assert violation.severity == severity
+
+    @pytest.mark.requirement("SC-003")
+    def test_lint_violation_is_frozen(self) -> None:
+        """LintViolation should be immutable (frozen)."""
+        from floe_core.plugins.dbt import LintViolation
+
+        violation = LintViolation(
+            file_path="test.sql",
+            line=1,
+            column=0,
+            code="L001",
+            message="Test",
+        )
+
+        # Pydantic v2: frozen models raise ValidationError on assignment
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            violation.file_path = "other.sql"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# DBT Error Hierarchy Contract Tests (Tech Debt Remediation)
+# ---------------------------------------------------------------------------
+
+
+class TestDBTErrorHierarchy:
+    """Contract tests for DBT error class hierarchy.
+
+    Error classes are now defined in floe-core and re-exported by plugins.
+    """
+
+    @pytest.mark.requirement("SC-003")
+    def test_dbt_error_is_exception(self) -> None:
+        """DBTError should be an Exception subclass."""
+        from floe_core.plugins.dbt import DBTError
+
+        assert issubclass(DBTError, Exception)
+
+    @pytest.mark.requirement("SC-003")
+    def test_dbt_compilation_error_inherits_from_dbt_error(self) -> None:
+        """DBTCompilationError should inherit from DBTError."""
+        from floe_core.plugins.dbt import DBTCompilationError, DBTError
+
+        assert issubclass(DBTCompilationError, DBTError)
+
+    @pytest.mark.requirement("SC-003")
+    def test_dbt_execution_error_inherits_from_dbt_error(self) -> None:
+        """DBTExecutionError should inherit from DBTError."""
+        from floe_core.plugins.dbt import DBTError, DBTExecutionError
+
+        assert issubclass(DBTExecutionError, DBTError)
+
+    @pytest.mark.requirement("SC-003")
+    def test_dbt_error_preserves_file_location(self) -> None:
+        """DBTError should preserve file path and line number."""
+        from floe_core.plugins.dbt import DBTError
+
+        error = DBTError(
+            message="Test error",
+            file_path="models/test.sql",
+            line_number=42,
+        )
+
+        assert error.message == "Test error"
+        assert error.file_path == "models/test.sql"
+        assert error.line_number == 42
+
+    @pytest.mark.requirement("SC-003")
+    def test_re_export_from_floe_dbt_core(self) -> None:
+        """Error classes should be re-exported from floe-dbt-core."""
+        from floe_core.plugins.dbt import DBTCompilationError as CoreCompilationError
+        from floe_core.plugins.dbt import DBTError as CoreDBTError
+        from floe_core.plugins.dbt import DBTExecutionError as CoreExecutionError
+        from floe_dbt_core import DBTCompilationError, DBTError, DBTExecutionError
+
+        # Should be the same classes
+        assert DBTError is CoreDBTError
+        assert DBTCompilationError is CoreCompilationError
+        assert DBTExecutionError is CoreExecutionError
+
+
+# ---------------------------------------------------------------------------
+# LintResult Backwards Compatibility Tests
+# ---------------------------------------------------------------------------
+
+
+class TestLintResultBackwardsCompatibility:
+    """Tests for LintResult backwards compatibility."""
+
+    @pytest.mark.requirement("SC-003")
+    def test_lint_result_issues_property(self) -> None:
+        """LintResult.issues property should return dict format."""
+        from floe_core.plugins.dbt import LintResult, LintViolation
+
+        violation = LintViolation(
+            file_path="test.sql",
+            line=10,
+            column=5,
+            code="L001",
+            message="Test violation",
+        )
+
+        result = LintResult(
+            success=False,
+            violations=[violation],
+            files_checked=1,
+        )
+
+        # issues property should return list of dicts
+        issues = result.issues
+        assert len(issues) == 1
+        assert issues[0]["file"] == "test.sql"
+        assert issues[0]["line"] == 10
+        assert issues[0]["column"] == 5
+        assert issues[0]["code"] == "L001"
+        assert issues[0]["description"] == "Test violation"
+
+    @pytest.mark.requirement("SC-003")
+    def test_lint_result_from_floe_dbt_core(self) -> None:
+        """LintResult should be importable from floe-dbt-core."""
+        from floe_core.plugins.dbt import LintResult as CoreLintResult
+        from floe_dbt_core import LintResult
+
+        # Should be the same class
+        assert LintResult is CoreLintResult

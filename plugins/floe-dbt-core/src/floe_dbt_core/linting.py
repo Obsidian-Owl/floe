@@ -32,51 +32,15 @@ Requirements:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field
+
+# Import shared types from floe-core (ARCH-001: avoid plugin cross-imports)
+from floe_core.plugins.dbt import LintResult, LintViolation
 
 logger = structlog.get_logger(__name__)
-
-
-class LintViolation(BaseModel):
-    """A single linting violation detected in a SQL file.
-
-    Represents a rule violation found by SQLFluff or Fusion static analysis.
-
-    Attributes:
-        file_path: Path to the SQL file containing the violation.
-        line: Line number where the violation occurs (1-based).
-        column: Column number where the violation occurs (1-based).
-        code: Rule code (e.g., "L001", "ST01", "AM01").
-        message: Human-readable description of the violation.
-        severity: Severity level of the violation.
-
-    Example:
-        >>> violation = LintViolation(
-        ...     file_path="models/customers.sql",
-        ...     line=10,
-        ...     column=5,
-        ...     code="L001",
-        ...     message="Trailing whitespace",
-        ...     severity="warning",
-        ... )
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    file_path: str = Field(..., description="Path to the SQL file")
-    line: int = Field(..., ge=1, description="Line number (1-based)")
-    column: int = Field(..., ge=0, description="Column number (0-based for start of line)")
-    code: str = Field(..., min_length=1, description="Rule code (e.g., L001)")
-    message: str = Field(..., description="Human-readable violation description")
-    severity: Literal["error", "warning", "info"] = Field(
-        default="warning",
-        description="Severity level",
-    )
 
 # Map dbt adapter types to SQLFluff dialects
 DIALECT_MAP: dict[str, str] = {
@@ -93,38 +57,6 @@ DIALECT_MAP: dict[str, str] = {
 
 # Default dialect when adapter not recognized
 DEFAULT_DIALECT = "ansi"
-
-
-@dataclass
-class LintResult:
-    """Result of SQL linting operation.
-
-    Attributes:
-        success: True if no violations found.
-        violations: List of linting violations.
-        issues: Deprecated alias for violations (dict format).
-        files_checked: Number of SQL files checked.
-        files_fixed: Number of files fixed (if fix=True).
-    """
-
-    success: bool
-    violations: list[LintViolation] = field(default_factory=list)
-    files_checked: int = 0
-    files_fixed: int = 0
-
-    @property
-    def issues(self) -> list[dict[str, Any]]:
-        """Deprecated: Use violations instead. Returns dict format for backwards compatibility."""
-        return [
-            {
-                "file": v.file_path,
-                "line": v.line,
-                "column": v.column,
-                "code": v.code,
-                "description": v.message,
-            }
-            for v in self.violations
-        ]
 
 
 def get_sqlfluff_dialect(adapter: str) -> str:
@@ -280,8 +212,7 @@ def lint_sql_files(
     except ImportError as err:
         log.error("sqlfluff_not_installed")
         raise ImportError(
-            "SQLFluff is required for SQL linting. "
-            "Install with: pip install sqlfluff"
+            "SQLFluff is required for SQL linting. Install with: pip install sqlfluff"
         ) from err
 
 

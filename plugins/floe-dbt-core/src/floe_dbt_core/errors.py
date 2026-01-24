@@ -1,14 +1,15 @@
 """DBT error hierarchy for floe-dbt-core.
 
 This module defines custom exceptions for dbt-core plugin operations.
-All exceptions inherit from DBTError, the base exception class.
+Base error classes (DBTError, DBTCompilationError, DBTExecutionError) are
+imported from floe-core. Plugin-specific errors are defined here.
 
 Exception Hierarchy:
-    DBTError (base)
-    ├── DBTCompilationError  # Jinja/SQL compilation failed (FR-033)
-    ├── DBTExecutionError    # Model execution failed (FR-034)
-    ├── DBTConfigurationError # Invalid profiles/project config (FR-035)
-    └── DBTLintError         # Linting process failed (FR-041)
+    DBTError (base, from floe-core)
+    ├── DBTCompilationError  # From floe-core
+    ├── DBTExecutionError    # From floe-core
+    ├── DBTConfigurationError # Plugin-specific (FR-035)
+    └── DBTLintError         # Plugin-specific (FR-041)
 
 All errors preserve file/line information when available per FR-036.
 
@@ -27,176 +28,16 @@ Example:
 
 from __future__ import annotations
 
+# Import base error classes from floe-core (ARCH-001: avoid plugin cross-imports)
+from floe_core.plugins.dbt import (
+    DBTCompilationError,
+    DBTError,
+    DBTExecutionError,
+)
 
-class DBTError(Exception):
-    """Base exception for all dbt plugin errors.
-
-    All dbt exceptions inherit from this class, allowing callers
-    to catch all dbt errors with a single except clause.
-
-    Attributes:
-        message: Human-readable error description.
-        file_path: Path to the file where error occurred (if available).
-        line_number: Line number in the file (if available).
-        original_message: The original dbt error message (for debugging).
-
-    Example:
-        >>> try:
-        ...     plugin.compile_project(...)
-        ... except DBTError as e:
-        ...     print(f"dbt operation failed: {e}")
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        file_path: str | None = None,
-        line_number: int | None = None,
-        original_message: str | None = None,
-    ) -> None:
-        """Initialize DBTError.
-
-        Args:
-            message: Human-readable error description.
-            file_path: Path to the file where error occurred.
-            line_number: Line number in the file.
-            original_message: The original dbt error message.
-        """
-        self.message = message
-        self.file_path = file_path
-        self.line_number = line_number
-        self.original_message = original_message or message
-
-        # Build formatted message with location if available
-        formatted = f"{message}"
-        if file_path:
-            formatted += f"\n    at {file_path}"
-            if line_number is not None:
-                formatted += f":{line_number}"
-
-        super().__init__(formatted)
-
-
-class DBTCompilationError(DBTError):
-    """Raised when dbt compilation fails (FR-033).
-
-    This error indicates Jinja parsing, SQL generation, or other
-    compilation-phase failures. Typically caused by:
-    - Undefined Jinja variables
-    - Invalid ref() or source() calls
-    - Syntax errors in SQL templates
-
-    Attributes:
-        message: Human-readable error description.
-        file_path: Path to the model file with the error.
-        line_number: Line number where compilation failed.
-        original_message: The original dbt error message.
-
-    Example:
-        >>> raise DBTCompilationError(
-        ...     message="Undefined ref: 'stg_orders'",
-        ...     file_path="models/marts/dim_customers.sql",
-        ...     line_number=23,
-        ... )
-        Traceback (most recent call last):
-            ...
-        DBTCompilationError: Compilation failed: Undefined ref: 'stg_orders'
-            at models/marts/dim_customers.sql:23
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        file_path: str | None = None,
-        line_number: int | None = None,
-        original_message: str | None = None,
-    ) -> None:
-        """Initialize DBTCompilationError.
-
-        Args:
-            message: Human-readable error description.
-            file_path: Path to the model file with the error.
-            line_number: Line number where compilation failed.
-            original_message: The original dbt error message.
-        """
-        super().__init__(
-            f"Compilation failed: {message}",
-            file_path=file_path,
-            line_number=line_number,
-            original_message=original_message,
-        )
-
-
-class DBTExecutionError(DBTError):
-    """Raised when dbt model execution fails (FR-034).
-
-    This error indicates runtime failures during model materialization
-    or test execution. Typically caused by:
-    - SQL syntax errors (dialect-specific)
-    - Database connection issues
-    - Data quality violations
-    - Permission errors
-
-    Attributes:
-        message: Human-readable error description.
-        model_name: The unique_id of the failed model (e.g., 'model.my_project.dim_customers').
-        adapter: The dbt adapter in use (e.g., 'duckdb', 'snowflake').
-        file_path: Path to the model file.
-        line_number: Line number (if available from adapter error).
-        original_message: The original dbt/adapter error message.
-
-    Example:
-        >>> raise DBTExecutionError(
-        ...     message="Column 'customer_id' does not exist",
-        ...     model_name="model.analytics.dim_customers",
-        ...     adapter="snowflake",
-        ... )
-        Traceback (most recent call last):
-            ...
-        DBTExecutionError: Execution failed: Column 'customer_id' does not exist
-            Model: model.analytics.dim_customers (adapter: snowflake)
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        model_name: str | None = None,
-        adapter: str | None = None,
-        file_path: str | None = None,
-        line_number: int | None = None,
-        original_message: str | None = None,
-    ) -> None:
-        """Initialize DBTExecutionError.
-
-        Args:
-            message: Human-readable error description.
-            model_name: The unique_id of the failed model.
-            adapter: The dbt adapter in use.
-            file_path: Path to the model file.
-            line_number: Line number (if available from adapter error).
-            original_message: The original dbt/adapter error message.
-        """
-        self.model_name = model_name
-        self.adapter = adapter
-
-        # Build execution-specific message
-        full_message = f"Execution failed: {message}"
-        if model_name:
-            adapter_info = f" (adapter: {adapter})" if adapter else ""
-            full_message += f"\n    Model: {model_name}{adapter_info}"
-
-        # Store original for later formatting
-        super().__init__(
-            full_message,
-            file_path=file_path,
-            line_number=line_number,
-            original_message=original_message,
-        )
-        # Override message since we already formatted it
-        self.message = full_message
+# =============================================================================
+# Plugin-specific error classes (extend floe-core base classes)
+# =============================================================================
 
 
 class DBTConfigurationError(DBTError):
@@ -369,3 +210,15 @@ def parse_dbt_error_location(error_message: str) -> tuple[str | None, int | None
             return file_path, line_number
 
     return None, None
+
+
+__all__ = [
+    # Re-exported from floe-core for backwards compatibility
+    "DBTError",
+    "DBTCompilationError",
+    "DBTExecutionError",
+    # Plugin-specific error classes
+    "DBTConfigurationError",
+    "DBTLintError",
+    "parse_dbt_error_location",
+]

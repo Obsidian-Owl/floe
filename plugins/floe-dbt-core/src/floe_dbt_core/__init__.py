@@ -17,24 +17,31 @@ Example:
 
 from __future__ import annotations
 
+# Re-export shared types from floe-core (ARCH-001: canonical location)
+from floe_core.plugins.dbt import (
+    DBTCompilationError,
+    DBTError,
+    DBTExecutionError,
+    LintResult,
+    LintViolation,
+)
+
 from .callbacks import (
     DBTEvent,
     DBTEventCollector,
     DBTEventLevel,
     create_event_collector,
 )
+
+# Plugin-specific errors (extend floe-core base classes)
 from .errors import (
-    DBTCompilationError,
     DBTConfigurationError,
-    DBTError,
-    DBTExecutionError,
     DBTLintError,
+    parse_dbt_error_location,
 )
 from .linting import (
     DEFAULT_DIALECT,
     DIALECT_MAP,
-    LintResult,
-    LintViolation,
     get_adapter_from_profiles,
     get_sqlfluff_dialect,
     lint_sql_files,
@@ -50,11 +57,14 @@ from .tracing import (
 
 __all__ = [
     "DBTCorePlugin",
+    # Error classes (re-exported from floe-core for backwards compatibility)
     "DBTError",
     "DBTCompilationError",
     "DBTExecutionError",
+    # Plugin-specific error classes
     "DBTConfigurationError",
     "DBTLintError",
+    "parse_dbt_error_location",
     # Callback utilities
     "DBTEvent",
     "DBTEventLevel",
@@ -66,7 +76,7 @@ __all__ = [
     "dbt_span",
     "set_result_attributes",
     "set_runtime_attributes",
-    # Linting utilities
+    # Linting utilities (re-exported from floe-core)
     "LintResult",
     "LintViolation",
     "get_sqlfluff_dialect",

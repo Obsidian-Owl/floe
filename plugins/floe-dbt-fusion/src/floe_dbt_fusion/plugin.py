@@ -41,9 +41,16 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
-from floe_dbt_core.errors import DBTCompilationError, DBTExecutionError
-from floe_dbt_core.linting import LintViolation
+
+# Import from floe-core ABCs only (ARCH-001: avoid plugin cross-imports)
+from floe_core.plugins.dbt import (
+    DBTCompilationError,
+    DBTExecutionError,
+    DBTPlugin,
+    DBTRunResult,
+    LintResult,
+    LintViolation,
+)
 
 from .detection import detect_fusion, detect_fusion_binary
 from .errors import DBTFusionNotFoundError
@@ -185,12 +192,20 @@ class DBTFusionPlugin(DBTPlugin):
         )
         log.debug("fusion_command_started", cmd=cmd)
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        # PERF-001: Add timeout to prevent hanging subprocess (5 min default)
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=300,  # 5 minute timeout for dbt commands
+            )
+        except subprocess.TimeoutExpired as err:
+            log.error("fusion_command_timeout", command=command, timeout=300)
+            raise DBTExecutionError(
+                message=f"Fusion {command} command timed out after 300 seconds",
+            ) from err
 
         log.debug(
             "fusion_command_completed",
@@ -302,9 +317,7 @@ class DBTFusionPlugin(DBTPlugin):
             run_results = json.loads(run_results_path.read_text())
             results = run_results.get("results", [])
             models_run = len(results)
-            failures = sum(
-                1 for r in results if r.get("status") not in ("success", "pass")
-            )
+            failures = sum(1 for r in results if r.get("status") not in ("success", "pass"))
             execution_time = run_results.get("elapsed_time", 0.0)
 
         return DBTRunResult(
@@ -370,9 +383,7 @@ class DBTFusionPlugin(DBTPlugin):
             run_results = json.loads(run_results_path.read_text())
             results = run_results.get("results", [])
             tests_run = len(results)
-            failures = sum(
-                1 for r in results if r.get("status") not in ("success", "pass")
-            )
+            failures = sum(1 for r in results if r.get("status") not in ("success", "pass"))
             execution_time = run_results.get("elapsed_time", 0.0)
 
         return DBTRunResult(
@@ -422,12 +433,25 @@ class DBTFusionPlugin(DBTPlugin):
             str(project_dir),
         ]
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        # PERF-002: Add timeout to prevent hanging subprocess (2 min for linting)
+        log = logger.bind(project_dir=str(project_dir), fix=fix)
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,  # 2 minute timeout for linting
+            )
+        except subprocess.TimeoutExpired:
+            log.error("fusion_lint_timeout", timeout=120)
+            # Return empty result on timeout rather than raising
+            return LintResult(
+                success=False,
+                violations=[],
+                files_checked=0,
+                files_fixed=0,
+            )
 
         violations: list[LintViolation] = []
         files_checked = 0
