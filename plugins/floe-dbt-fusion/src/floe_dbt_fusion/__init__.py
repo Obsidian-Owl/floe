@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from .detection import (
     DEFAULT_BINARY_NAME,
+    MIN_FUSION_VERSION,
     STANDARD_FUSION_PATHS,
     SUPPORTED_RUST_ADAPTERS,
     FusionDetectionInfo,
@@ -48,6 +49,7 @@ __all__ = [
     "detect_fusion",
     "FusionDetectionInfo",
     "DEFAULT_BINARY_NAME",
+    "MIN_FUSION_VERSION",
     "STANDARD_FUSION_PATHS",
     "SUPPORTED_RUST_ADAPTERS",
     # Error classes

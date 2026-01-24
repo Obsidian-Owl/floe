@@ -52,6 +52,9 @@ DEFAULT_BINARY_NAME = "dbt-sa-cli"
 # Adapters with Rust implementations in dbt Fusion
 SUPPORTED_RUST_ADAPTERS: list[str] = ["duckdb", "snowflake"]
 
+# Minimum required Fusion CLI version (NFR-004)
+MIN_FUSION_VERSION = "1.0.0"
+
 
 @dataclass
 class FusionDetectionInfo:
@@ -239,6 +242,7 @@ __all__ = [
     "STANDARD_FUSION_PATHS",
     "DEFAULT_BINARY_NAME",
     "SUPPORTED_RUST_ADAPTERS",
+    "MIN_FUSION_VERSION",
     "FusionDetectionInfo",
     "detect_fusion_binary",
     "get_fusion_version",
