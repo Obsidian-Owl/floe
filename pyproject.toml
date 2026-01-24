@@ -137,7 +137,7 @@ ignore = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["tests", "packages/floe-core/tests"]
+exclude_dirs = ["tests", "packages/floe-core/tests", ".venv", "**/.venv"]
 skips = [
     "B101",  # Allow assert statements (used in tests)
     "B108",  # Allow /tmp as K8s container mount path (not temp file usage)
@@ -157,7 +157,13 @@ skips = [
 # Impact: Not exploitable - agent-memory is internal tooling without OAuth/SSO
 # Root cause: cognee pins fastapi-users<15.0.0 (transitive dependency)
 # When cognee updates their dependency constraint, remove this ignore
-ignore_vulnerabilities = ["GHSA-5j53-63w8-8625"]
+#
+# GHSA-7gcm-g887-7qv7: DoS via ParseDict() in protobuf <= 6.33.4
+# Severity: High (8.2/10 CVSS v4)
+# Impact: Not exploitable - floe doesn't parse untrusted protobuf JSON
+# Root cause: Transitive dependency from dagster, dbt, opentelemetry
+# No fix version available yet. Remove when protobuf releases patch.
+ignore_vulnerabilities = ["GHSA-5j53-63w8-8625", "GHSA-7gcm-g887-7qv7"]
 
 [tool.coverage.run]
 source = ["packages/floe-core/src"]

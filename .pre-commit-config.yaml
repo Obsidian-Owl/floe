@@ -144,6 +144,24 @@ repos:
         stages: [pre-push]
         pass_filenames: false
 
+      # Security: Bandit static analysis (matches CI)
+      - id: bandit-security
+        name: bandit (security scan)
+        entry: uv run bandit -c pyproject.toml -r packages/ -ll
+        language: system
+        types: [python]
+        stages: [pre-push]
+        pass_filenames: false
+
+      # Security: Vulnerability audit (matches CI)
+      # Ignores documented false positives (see pyproject.toml for justification)
+      - id: uv-secure
+        name: uv-secure (vulnerability audit)
+        entry: uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7 .
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+
       # Architecture boundary enforcement
       - id: import-linter
         name: import-linter (architecture)
