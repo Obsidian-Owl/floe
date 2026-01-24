@@ -127,6 +127,9 @@ class DBTCorePlugin(DBTPlugin):
         """
         self._check_dbt_available()
 
+        # Run dbt deps if packages.yml exists (FR-014)
+        self._run_deps_if_needed(project_dir, profiles_dir, target)
+
         log = logger.bind(
             project_dir=str(project_dir),
             target=target,
@@ -621,3 +624,91 @@ class DBTCorePlugin(DBTPlugin):
             )
 
         return json.loads(run_results_path.read_text())
+
+    def _run_deps_if_needed(
+        self,
+        project_dir: Path,
+        profiles_dir: Path,
+        target: str,
+    ) -> bool:
+        """Run dbt deps if packages.yml exists.
+
+        Automatically installs dbt packages defined in packages.yml
+        before compilation. This ensures dependencies are available.
+
+        Args:
+            project_dir: Path to dbt project directory.
+            profiles_dir: Path to directory containing profiles.yml.
+            target: dbt target name.
+
+        Returns:
+            True if deps was run, False if packages.yml doesn't exist.
+
+        Raises:
+            DBTExecutionError: If dbt deps fails.
+
+        Requirements:
+            FR-014: Automatic dbt deps execution
+        """
+        packages_yml = project_dir / "packages.yml"
+        packages_yaml = project_dir / "packages.yaml"
+
+        # Check if packages file exists (either .yml or .yaml)
+        if not packages_yml.exists() and not packages_yaml.exists():
+            return False
+
+        log = logger.bind(
+            project_dir=str(project_dir),
+            target=target,
+        )
+        log.info("dbt_deps_started", reason="packages.yml exists")
+
+        tracer = get_tracer()
+        with dbt_span(
+            tracer,
+            "deps",
+            project_dir=str(project_dir),
+            profiles_dir=str(profiles_dir),
+            target=target,
+        ) as span:
+            # Set runtime info
+            metadata = self.get_runtime_metadata()
+            set_runtime_attributes(
+                span,
+                runtime=metadata.get("runtime"),
+                dbt_version=metadata.get("dbt_version"),
+            )
+
+            # Build dbt deps command
+            args = [
+                "deps",
+                "--project-dir",
+                str(project_dir),
+                "--profiles-dir",
+                str(profiles_dir),
+            ]
+
+            # Execute dbt deps with event collector
+            collector = create_event_collector()
+            dbt = dbtRunner(callbacks=[collector.callback])
+            result = dbt.invoke(args)
+
+            if not result.success:
+                error_summary = collector.get_error_summary()
+                error_msg = error_summary or (
+                    str(result.exception) if result.exception else "Unknown error"
+                )
+
+                log.error(
+                    "dbt_deps_failed",
+                    error=error_msg,
+                    error_count=len(collector.errors),
+                )
+
+                raise DBTExecutionError(
+                    message=f"dbt deps failed: {error_msg}",
+                    original_message=error_msg,
+                )
+
+            log.info("dbt_deps_completed")
+            return True
