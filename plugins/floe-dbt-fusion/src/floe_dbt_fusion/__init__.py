@@ -34,6 +34,7 @@ from .errors import (
     DBTFusionNotFoundError,
     check_fallback_available,
 )
+from .fallback import FallbackPlugin, create_fallback_plugin, get_best_plugin
 from .plugin import DBTFusionPlugin
 
 __all__ = [
@@ -54,4 +55,8 @@ __all__ = [
     "DBTFusionNotFoundError",
     "DBTAdapterUnavailableError",
     "check_fallback_available",
+    # Fallback utilities
+    "FallbackPlugin",
+    "create_fallback_plugin",
+    "get_best_plugin",
 ]
