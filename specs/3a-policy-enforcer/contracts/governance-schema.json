@@ -48,6 +48,10 @@
       },
       "default": [],
       "description": "Override rules for legacy/migration support (Epic 3B)"
+    },
+    "data_contracts": {
+      "$ref": "#/$defs/DataContractsConfig",
+      "description": "Data contract validation configuration (Epic 3C)"
     }
   },
   "additionalProperties": false,
@@ -273,6 +277,83 @@
         }
       },
       "required": ["pattern", "action", "reason"],
+      "additionalProperties": false
+    },
+    "DataContractsConfig": {
+      "type": "object",
+      "description": "Configuration for data contract validation (Epic 3C)",
+      "properties": {
+        "enforcement": {
+          "type": "string",
+          "enum": ["off", "warn", "strict"],
+          "default": "warn",
+          "description": "Enforcement level for contract validation (strict > warn > off)"
+        },
+        "auto_generation": {
+          "$ref": "#/$defs/AutoGenerationConfig",
+          "description": "Auto-generation settings for contracts from output_ports"
+        },
+        "drift_detection": {
+          "$ref": "#/$defs/DriftDetectionConfig",
+          "description": "Schema drift detection settings"
+        },
+        "inheritance_mode": {
+          "type": "string",
+          "enum": ["merge", "override", "strict"],
+          "default": "merge",
+          "description": "Contract inheritance mode"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AutoGenerationConfig": {
+      "type": "object",
+      "description": "Auto-generation settings for data contracts",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable auto-generation of contracts from output_ports"
+        },
+        "default_version": {
+          "type": "string",
+          "default": "1.0.0",
+          "description": "Default version for generated contracts"
+        },
+        "default_status": {
+          "type": "string",
+          "enum": ["draft", "active", "deprecated"],
+          "default": "draft",
+          "description": "Default status for generated contracts"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DriftDetectionConfig": {
+      "type": "object",
+      "description": "Schema drift detection settings",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable schema drift detection"
+        },
+        "fail_on_type_mismatch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fail validation on type mismatches"
+        },
+        "fail_on_missing_column": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fail validation on missing columns"
+        },
+        "warn_on_extra_column": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn on extra columns in table"
+        }
+      },
       "additionalProperties": false
     }
   },
