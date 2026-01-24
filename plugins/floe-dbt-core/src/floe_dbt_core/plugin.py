@@ -494,6 +494,12 @@ class DBTCorePlugin(DBTPlugin):
         Returns:
             LintResult with all detected issues.
         """
+        from .linting import (
+            get_adapter_from_profiles,
+            get_sqlfluff_dialect,
+            lint_sql_files,
+        )
+
         tracer = get_tracer()
         with dbt_span(
             tracer,
@@ -511,13 +517,22 @@ class DBTCorePlugin(DBTPlugin):
                 dbt_version=metadata.get("dbt_version"),
             )
 
-            # Linting implementation will be in T053-T057 (Phase 5)
-            # For now, return empty result
-            result = LintResult(
-                success=True,
-                issues=[],
-                files_checked=0,
-                files_fixed=0,
+            # Get adapter type from profiles.yml
+            profile_name = self._get_profile_name(project_dir)
+            adapter = get_adapter_from_profiles(
+                profiles_dir=profiles_dir,
+                profile_name=profile_name,
+                target=target,
+            )
+
+            # Map adapter to SQLFluff dialect
+            dialect = get_sqlfluff_dialect(adapter or "ansi")
+
+            # Delegate to lint_sql_files
+            result = lint_sql_files(
+                project_dir=project_dir,
+                dialect=dialect,
+                fix=fix,
             )
 
             # Set result attributes
@@ -525,7 +540,7 @@ class DBTCorePlugin(DBTPlugin):
                 span,
                 files_checked=result.files_checked,
                 files_fixed=result.files_fixed,
-                issues_found=len(result.issues),
+                issues_found=len(result.violations),
             )
 
             return result
@@ -624,6 +639,28 @@ class DBTCorePlugin(DBTPlugin):
             )
 
         return json.loads(run_results_path.read_text())
+
+    def _get_profile_name(self, project_dir: Path) -> str:
+        """Get profile name from dbt_project.yml.
+
+        Args:
+            project_dir: Path to dbt project directory.
+
+        Returns:
+            Profile name from dbt_project.yml, or "default" if not found.
+        """
+        import yaml
+
+        project_file = project_dir / "dbt_project.yml"
+        if not project_file.exists():
+            return "default"
+
+        try:
+            with project_file.open() as f:
+                project_config = yaml.safe_load(f)
+            return project_config.get("profile", "default")
+        except Exception:
+            return "default"
 
     def _run_deps_if_needed(
         self,
