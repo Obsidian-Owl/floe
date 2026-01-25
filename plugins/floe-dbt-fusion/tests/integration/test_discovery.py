@@ -21,10 +21,9 @@ from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
+from floe_core.plugins.dbt import DBTPlugin
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.base_classes.plugin_discovery_tests import BasePluginDiscoveryTests
-
-from floe_core.plugins.dbt import DBTPlugin
 
 
 class TestDBTFusionPluginDiscovery(BasePluginDiscoveryTests, IntegrationTestBase):

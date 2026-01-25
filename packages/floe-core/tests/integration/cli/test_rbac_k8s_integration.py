@@ -272,7 +272,9 @@ rules:
             # Keys are 'resource_kind' and 'resource_name' (not 'kind'/'name')
             added_diffs = [d for d in data["diffs"] if d.get("change_type") == "added"]
             # Our test role should appear in added diffs
-            role_names = [d["resource_name"] for d in added_diffs if d.get("resource_kind") == "Role"]
+            role_names = [
+                d["resource_name"] for d in added_diffs if d.get("resource_kind") == "Role"
+            ]
             assert "floe-test-role-nonexistent" in role_names
 
 

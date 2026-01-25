@@ -21,6 +21,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
@@ -38,9 +39,6 @@ ATTR_TABLE_NAME = "catalog.table.name"
 ATTR_TABLE_FULL_NAME = "catalog.table.full_name"
 ATTR_OPERATION = "catalog.operation"
 ATTR_WAREHOUSE = "catalog.warehouse"
-
-
-from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 
 
 def get_tracer() -> trace.Tracer:

@@ -16,10 +16,9 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import pytest
+from floe_core.plugins.dbt import DBTPlugin
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.base_classes.plugin_discovery_tests import BasePluginDiscoveryTests
-
-from floe_core.plugins.dbt import DBTPlugin
 
 
 class TestDBTCorePluginDiscovery(BasePluginDiscoveryTests, IntegrationTestBase):

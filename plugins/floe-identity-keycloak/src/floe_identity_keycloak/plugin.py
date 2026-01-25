@@ -46,7 +46,7 @@ _SPAN_AUTH_SUCCESS = "keycloak.auth.success"
 _SPAN_TOKEN_VALID = "keycloak.token.valid"
 
 
-def _get_tracer() -> "Tracer":
+def _get_tracer() -> Tracer:
     """Get OpenTelemetry tracer for this plugin.
 
     Returns:

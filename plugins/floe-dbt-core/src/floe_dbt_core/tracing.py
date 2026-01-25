@@ -24,6 +24,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
@@ -51,9 +52,6 @@ ATTR_DBT_FIX = "dbt.lint.fix"
 ATTR_DBT_FILES_CHECKED = "dbt.lint.files_checked"
 ATTR_DBT_FILES_FIXED = "dbt.lint.files_fixed"
 ATTR_DBT_ISSUES_FOUND = "dbt.lint.issues_found"
-
-
-from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 
 
 def get_tracer() -> trace.Tracer:

@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
-from testing.base_classes.integration_test_base import IntegrationTestBase
-
 from conftest import require_fusion
+from testing.base_classes.integration_test_base import IntegrationTestBase
 
 # ---------------------------------------------------------------------------
 # Fusion CLI Integration Tests
