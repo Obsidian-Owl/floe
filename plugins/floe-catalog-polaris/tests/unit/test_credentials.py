@@ -15,7 +15,7 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -290,7 +290,8 @@ class TestVendCredentialsExpiration:
         """
         # Arrange - credentials that expire in 1 hour (valid)
         now = datetime.now(timezone.utc)
-        valid_expiration = now.replace(hour=now.hour + 1).isoformat()
+        # Use timedelta to properly handle hour rollover (e.g., when hour is 23)
+        valid_expiration = (now + timedelta(hours=1)).isoformat()
         valid_credentials = {
             "access_key": "TEST_TEMP_ACCESS_KEY",
             "secret_key": "test_temp_secret",  # noqa: S105

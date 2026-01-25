@@ -29,10 +29,8 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, overload
 
-from opentelemetry.trace import Status, StatusCode, Tracer
-
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
-from floe_core.telemetry.tracer_factory import reset_tracer as _reset_tracer
+from opentelemetry.trace import Status, StatusCode, Tracer
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -36,7 +36,6 @@ from floe_core.rbac.audit import (
 from floe_core.rbac.result import GenerationResult
 from floe_core.schemas.rbac import RoleRule
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
-from floe_core.telemetry.tracer_factory import reset_tracer as _reset_tracer
 
 
 def _get_tracer() -> trace.Tracer:
