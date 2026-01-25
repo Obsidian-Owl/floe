@@ -29,10 +29,6 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "experimental: marks tests as experimental (may fail due to upstream changes)",
     )
-    config.addinivalue_line(
-        "markers",
-        "requires_snowflake: marks tests that require a real Snowflake connection",
-    )
 
 
 def require_fusion() -> None:

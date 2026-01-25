@@ -48,91 +48,9 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         assert manifest_path.exists()
         assert manifest_path.name == "manifest.json"
 
-    @pytest.mark.integration
-    @pytest.mark.requirement("FR-017")
-    @pytest.mark.requires_snowflake
-    def test_fusion_plugin_run_models(
-        self,
-        temp_dbt_project_for_fusion: Path,
-    ) -> None:
-        """DBTFusionPlugin runs models using real Fusion CLI.
-
-        Requires: Real Snowflake connection (mock credentials won't work).
-        """
-        require_fusion()
-
-        from floe_dbt_fusion import DBTFusionPlugin
-
-        plugin = DBTFusionPlugin()
-        result = plugin.run_models(
-            project_dir=temp_dbt_project_for_fusion,
-            profiles_dir=temp_dbt_project_for_fusion,
-            target="dev",
-        )
-
-        assert result.success is True
-        assert result.models_run > 0
-        assert result.failures == 0
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("FR-017")
-    @pytest.mark.requires_snowflake
-    def test_fusion_plugin_run_models_with_select(
-        self,
-        temp_dbt_project_for_fusion: Path,
-    ) -> None:
-        """DBTFusionPlugin runs selected models using Fusion CLI.
-
-        Requires: Real Snowflake connection.
-        """
-        require_fusion()
-
-        from floe_dbt_fusion import DBTFusionPlugin
-
-        plugin = DBTFusionPlugin()
-        result = plugin.run_models(
-            project_dir=temp_dbt_project_for_fusion,
-            profiles_dir=temp_dbt_project_for_fusion,
-            target="dev",
-            select="example_model",
-        )
-
-        assert result.success is True
-        assert result.models_run == 1
-
-    @pytest.mark.integration
-    @pytest.mark.requirement("FR-017")
-    @pytest.mark.requires_snowflake
-    def test_fusion_plugin_test_models(
-        self,
-        temp_dbt_project_with_tests: Path,
-    ) -> None:
-        """DBTFusionPlugin runs tests using real Fusion CLI.
-
-        Requires: Real Snowflake connection.
-        """
-        require_fusion()
-
-        from floe_dbt_fusion import DBTFusionPlugin
-
-        plugin = DBTFusionPlugin()
-
-        # First run models to populate data
-        plugin.run_models(
-            project_dir=temp_dbt_project_with_tests,
-            profiles_dir=temp_dbt_project_with_tests,
-            target="dev",
-        )
-
-        # Then run tests
-        result = plugin.test_models(
-            project_dir=temp_dbt_project_with_tests,
-            profiles_dir=temp_dbt_project_with_tests,
-            target="dev",
-        )
-
-        assert result.success is True
-        assert result.tests_run > 0
+    # NOTE: Tests for run_models, test_models removed - require real Snowflake connection.
+    # These will be added when floe-compute-snowflake plugin is implemented.
+    # See: FR-017 (run_models), FR-017 (test_models)
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-018")
@@ -206,36 +124,8 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         assert "metadata" in manifest
         assert "nodes" in manifest
 
-    @pytest.mark.integration
-    @pytest.mark.requirement("FR-020")
-    @pytest.mark.requires_snowflake
-    def test_fusion_plugin_get_run_results(
-        self,
-        temp_dbt_project_for_fusion: Path,
-    ) -> None:
-        """DBTFusionPlugin retrieves run_results after execution.
-
-        Requires: Real Snowflake connection (mock credentials won't work).
-        """
-        require_fusion()
-
-        from floe_dbt_fusion import DBTFusionPlugin
-
-        plugin = DBTFusionPlugin()
-
-        # Run first
-        plugin.run_models(
-            project_dir=temp_dbt_project_for_fusion,
-            profiles_dir=temp_dbt_project_for_fusion,
-            target="dev",
-        )
-
-        # Get run results
-        run_results = plugin.get_run_results(temp_dbt_project_for_fusion)
-
-        assert isinstance(run_results, dict)
-        assert "metadata" in run_results
-        assert "results" in run_results
+    # NOTE: test_fusion_plugin_get_run_results removed - requires real Snowflake connection.
+    # Will be added when floe-compute-snowflake plugin is implemented. See: FR-020
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-020")
