@@ -24,22 +24,11 @@ from floe_core.plugins.identity import (
     TokenValidationResult,
     UserInfo,
 )
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
+from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from .config import KeycloakIdentityConfig
 from .token_validator import TokenValidator
-
-# OpenTelemetry imports - optional dependency
-try:
-    from opentelemetry import trace
-    from opentelemetry.trace import SpanKind, Status, StatusCode
-
-    _OTEL_AVAILABLE = True
-except ImportError:
-    _OTEL_AVAILABLE = False
-    trace = None  # type: ignore[assignment]
-    SpanKind = None  # type: ignore[assignment, misc]
-    Status = None  # type: ignore[assignment, misc]
-    StatusCode = None  # type: ignore[assignment, misc]
 
 if TYPE_CHECKING:
     from opentelemetry.trace import Tracer
@@ -57,15 +46,13 @@ _SPAN_AUTH_SUCCESS = "keycloak.auth.success"
 _SPAN_TOKEN_VALID = "keycloak.token.valid"
 
 
-def _get_tracer() -> Tracer | None:
-    """Get OpenTelemetry tracer if available.
+def _get_tracer() -> "Tracer":
+    """Get OpenTelemetry tracer for this plugin.
 
     Returns:
-        Tracer instance or None if OTel not available.
+        Tracer instance from the shared factory.
     """
-    if not _OTEL_AVAILABLE or trace is None:
-        return None
-    return trace.get_tracer(_TRACER_NAME)
+    return _factory_get_tracer(_TRACER_NAME)
 
 
 class KeycloakIdentityPlugin(IdentityPlugin):
@@ -237,11 +224,6 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             }
 
         tracer = _get_tracer()
-        if tracer is None:
-            # No tracing available, execute directly
-            return self._do_authenticate(data)
-
-        # Execute with tracing
         with tracer.start_as_current_span(
             "keycloak.authenticate",
             kind=SpanKind.CLIENT,
@@ -350,11 +332,6 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             raise RuntimeError(_NOT_STARTED_ERROR)
 
         tracer = _get_tracer()
-        if tracer is None:
-            # No tracing available, execute directly
-            return self._validate_and_convert(token, self._token_validator)
-
-        # Execute with tracing
         with tracer.start_as_current_span(
             "keycloak.validate_token",
             kind=SpanKind.CLIENT,
@@ -469,10 +446,6 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         validator = self._get_or_create_realm_validator(realm)
 
         tracer = _get_tracer()
-        if tracer is None:
-            return self._validate_and_convert(token, validator)
-
-        # Execute with tracing
         with tracer.start_as_current_span(
             "keycloak.validate_token_for_realm",
             kind=SpanKind.CLIENT,
