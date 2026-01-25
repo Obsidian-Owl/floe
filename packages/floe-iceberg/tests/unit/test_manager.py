@@ -3192,8 +3192,10 @@ class TestCompactTableBinPack:
         )
 
         # Reset the cached tracer so it picks up the new provider
-        # (the telemetry module caches _tracer on first use)
-        telemetry_module._tracer = None
+        # (the factory caches tracers by name on first use)
+        from floe_core.telemetry.tracer_factory import reset_tracer
+
+        reset_tracer()
 
         # Set up in-memory span exporter for testing
         exporter = InMemorySpanExporter()

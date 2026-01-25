@@ -34,6 +34,7 @@ from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.secrets import SecretsPlugin
 
 from floe_secrets_infisical.config import InfisicalSecretsConfig
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from floe_secrets_infisical.errors import (
     InfisicalAccessDeniedError,
     InfisicalAuthError,
@@ -42,14 +43,27 @@ from floe_secrets_infisical.errors import (
 )
 
 if TYPE_CHECKING:
+    from opentelemetry.trace import StatusCode, Tracer
     from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+# Tracer name for this plugin
+_TRACER_NAME = "floe_secrets_infisical"
 
 # OpenTelemetry span attribute names (avoid S1192 duplicate string literals)
 _SPAN_SECRET_PATH = "secret.path"
 _SPAN_SECRET_KEY = "secret.key"
 _SPAN_SECRET_FOUND = "secret.found"
+
+
+def _get_tracer() -> Tracer:
+    """Get OpenTelemetry tracer for this plugin.
+
+    Returns:
+        Tracer instance from the shared factory.
+    """
+    return _factory_get_tracer(_TRACER_NAME)
 
 
 class _ErrorType:
@@ -82,25 +96,6 @@ def _classify_error(error: Exception) -> str:
         return _ErrorType.CONNECTION_ERROR
 
     return _ErrorType.UNKNOWN
-
-
-# OpenTelemetry tracing (lazy import for optional dependency)
-_tracer: Any = None
-_tracer_initialized = False
-
-
-def _get_tracer() -> Any:
-    """Get OpenTelemetry tracer, or None if not available."""
-    global _tracer, _tracer_initialized
-    if not _tracer_initialized:
-        _tracer_initialized = True
-        try:
-            from opentelemetry import trace
-
-            _tracer = trace.get_tracer("floe_secrets_infisical")
-        except ImportError:
-            _tracer = None  # Mark as unavailable
-    return _tracer
 
 
 class InfisicalSecretsPlugin(SecretsPlugin):
@@ -922,18 +917,15 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         return None
 
 
-def _get_span_status_error() -> Any:
+def _get_span_status_error() -> "StatusCode":
     """Get OpenTelemetry error status code.
 
     Returns:
-        Status code for error, or None if OTel not available.
+        StatusCode.ERROR for marking spans as errored.
     """
-    try:
-        from opentelemetry.trace import StatusCode
+    from opentelemetry.trace import StatusCode
 
-        return StatusCode.ERROR
-    except ImportError:
-        return None
+    return StatusCode.ERROR
 
 
 __all__ = ["InfisicalSecretsPlugin"]

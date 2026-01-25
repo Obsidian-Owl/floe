@@ -249,8 +249,10 @@ def reset_for_testing() -> None:
         >>> from floe_core.observability import reset_for_testing
         >>> reset_for_testing()
     """
-    global _tracer, _meter, _validation_duration_histogram, _validation_errors_counter
-    _tracer = None
+    from floe_core.telemetry.tracer_factory import reset_tracer
+
+    global _meter, _validation_duration_histogram, _validation_errors_counter
+    reset_tracer()  # Reset tracer via factory
     _meter = None
     _validation_duration_histogram = None
     _validation_errors_counter = None
