@@ -27,46 +27,20 @@ RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/re
     && mv kubectl /usr/local/bin/
 
 # =============================================================================
-# dbt-fusion - Build from source (pinned commit)
+# dbt Fusion CLI - Install from official distribution
 # =============================================================================
-# dbt-fusion has no published releases yet, so we build from source.
-# We pin to a specific commit for reproducibility and stability.
+# Install the official dbt Fusion CLI from dbt Labs CDN.
+# The official CLI supports: compile, run, test, build (full dbt compatibility).
 #
-# To update the pin:
-#   1. Check latest main: git ls-remote https://github.com/dbt-labs/dbt-fusion.git refs/heads/main
-#   2. Update DBT_FUSION_COMMIT below
-#   3. Test locally: docker build -t floe-test-runner:latest -f testing/Dockerfile .
-#   4. Commit the change
+# See: https://docs.getdbt.com/docs/fusion/install-fusion-cli
 
-# Install build dependencies for Rust
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Rust toolchain
 # hadolint ignore=DL3059
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && . /root/.cargo/env \
-    && rustup default stable
-
-# Clone and build dbt-fusion (pinned to specific commit)
-# Last updated: 2026-01-25
-ARG DBT_FUSION_COMMIT=091f521e4c45c95097e0a9ef65f61bb45aae194e
-# hadolint ignore=DL3059
-RUN . /root/.cargo/env \
-    && git clone https://github.com/dbt-labs/dbt-fusion.git /tmp/dbt-fusion \
-    && cd /tmp/dbt-fusion \
-    && git checkout ${DBT_FUSION_COMMIT} \
-    && cargo build --release --package dbt-sa-cli \
-    && cp target/release/dbt-sa-cli /usr/local/bin/ \
-    && chmod +x /usr/local/bin/dbt-sa-cli \
-    && rm -rf /tmp/dbt-fusion /root/.cargo/registry
+RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update \
+    && ln -sf /root/.local/bin/dbt /usr/local/bin/dbt
 
 # Verify installation
 # hadolint ignore=DL3059
-RUN dbt-sa-cli --version || echo "dbt-sa-cli installed (version check may fail on pre-release)"
+RUN dbt --version
 
 # Set working directory
 WORKDIR /app
