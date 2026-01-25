@@ -49,8 +49,8 @@ def mock_dbt_plugin() -> MagicMock:
 
     # Metadata
     type(mock_plugin).name = PropertyMock(return_value="mock-dbt")
-    type(mock_plugin).version = PropertyMock(return_value="1.0.0")
-    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0.0")
+    type(mock_plugin).version = PropertyMock(return_value="1.0")
+    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0")
 
     # Default successful method returns
     mock_plugin.compile_project.return_value = Path("target/manifest.json")
@@ -99,8 +99,8 @@ def mock_dbt_plugin_failure() -> MagicMock:
 
     # Metadata
     type(mock_plugin).name = PropertyMock(return_value="mock-dbt")
-    type(mock_plugin).version = PropertyMock(return_value="1.0.0")
-    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0.0")
+    type(mock_plugin).version = PropertyMock(return_value="1.0")
+    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0")
 
     # Configure to raise exceptions
     mock_plugin.compile_project.side_effect = Exception("Compilation failed")
@@ -123,7 +123,7 @@ def mock_dbt_plugin_parallel() -> MagicMock:
 
     type(mock_plugin).name = PropertyMock(return_value="mock-fusion")
     type(mock_plugin).version = PropertyMock(return_value="0.1.0")
-    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0.0")
+    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0")
 
     mock_plugin.supports_parallel_execution.return_value = True
     mock_plugin.compile_project.return_value = Path("target/manifest.json")

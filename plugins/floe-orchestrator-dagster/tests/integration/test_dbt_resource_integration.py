@@ -22,6 +22,12 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import pytest
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
+# Import types at module level for Dagster decorator resolution
+# (needed because `from __future__ import annotations` defers type hints)
+from dagster import Output
+
+from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
+
 if TYPE_CHECKING:
     pass
 

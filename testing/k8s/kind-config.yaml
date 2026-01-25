@@ -92,6 +92,14 @@ nodes:
       - containerPort: 30501
         hostPort: 30501
         protocol: TCP
+      # Keycloak (NodePort 30082 -> localhost 8082)
+      - containerPort: 30082
+        hostPort: 8082
+        protocol: TCP
+      # Infisical (NodePort 30083 -> localhost 8083)
+      - containerPort: 30083
+        hostPort: 8083
+        protocol: TCP
 
 networking:
   # Pod network CIDR

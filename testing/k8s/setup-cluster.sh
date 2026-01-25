@@ -199,6 +199,10 @@ deploy_services() {
     log_info "Deploying Jaeger..."
     kubectl apply -f "${SCRIPT_DIR}/services/jaeger.yaml"
 
+    # Apply Keycloak (for identity/OAuth2 integration tests)
+    log_info "Deploying Keycloak..."
+    kubectl apply -f "${SCRIPT_DIR}/services/keycloak.yaml"
+
     # Apply OCI Registry (for OCI client integration tests - Epic 8A)
     log_info "Deploying OCI Registry..."
     kubectl apply -f "${SCRIPT_DIR}/services/registry.yaml"
@@ -206,13 +210,29 @@ deploy_services() {
     # Apply OCI Registry with authentication (for basic auth tests - Epic 8A T060)
     log_info "Deploying OCI Registry with basic auth..."
     kubectl apply -f "${SCRIPT_DIR}/services/registry-auth.yaml"
+
+    # Deploy Infisical (via Helm) for secrets management integration tests
+    if command -v helm &> /dev/null; then
+        log_info "Deploying Infisical..."
+        helm repo add infisical https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/ 2>/dev/null || true
+        helm repo update
+        kubectl apply -f "${SCRIPT_DIR}/services/infisical-secrets.yaml"
+        helm upgrade --install infisical infisical/infisical-standalone \
+            -n "${NAMESPACE}" \
+            -f "${SCRIPT_DIR}/helm-values/infisical.yaml" \
+            --wait --timeout 5m 2>/dev/null || {
+            log_warn "Infisical deployment failed, secrets management tests may not work"
+        }
+    else
+        log_warn "Helm not installed, skipping Infisical deployment"
+    fi
 }
 
 # Wait for all services to be ready
 wait_for_services() {
     log_info "Waiting for all services to be ready..."
 
-    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger" "registry" "registry-auth")
+    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger" "keycloak" "registry" "registry-auth" "infisical")
 
     for service in "${services[@]}"; do
         log_info "Waiting for ${service}..."
@@ -265,6 +285,8 @@ print_info() {
     echo "  MinIO API:   http://localhost:9000"
     echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
     echo "  Jaeger:      http://localhost:16686"
+    echo "  Keycloak:    http://localhost:8082 (admin/admin-secret-123)"
+    echo "  Infisical:   http://localhost:8083"
     echo "  OCI Registry (anon):  http://localhost:30500/v2/"
     echo "  OCI Registry (auth):  http://localhost:30501/v2/ (testuser/testpass123)"
     echo "  Grafana:     http://localhost:3001 (admin/admin)"

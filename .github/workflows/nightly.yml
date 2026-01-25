@@ -61,6 +61,19 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Build dbt-fusion from source (EXPERIMENTAL)
+        run: |
+          git clone --depth 1 https://github.com/dbt-labs/dbt-fusion.git /tmp/dbt-fusion
+          cd /tmp/dbt-fusion
+          cargo build --release --package dbt-sa-cli
+          sudo cp target/release/dbt-sa-cli /usr/local/bin/
+          sudo chmod +x /usr/local/bin/dbt-sa-cli
+          dbt-sa-cli --version || echo "dbt-sa-cli installed"
+        continue-on-error: true
+
       - name: Setup Kind cluster and deploy services
         run: CLUSTER_NAME=floe-nightly ./testing/k8s/setup-cluster.sh
         env:

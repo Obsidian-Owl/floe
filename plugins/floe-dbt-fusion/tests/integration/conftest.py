@@ -2,6 +2,9 @@
 
 This module provides fixtures for integration tests that require
 real Fusion CLI execution.
+
+Note: dbt-fusion is EXPERIMENTAL (no stable releases). Tests may fail
+if upstream changes break the build.
 """
 
 from __future__ import annotations
@@ -10,6 +13,14 @@ import shutil
 from pathlib import Path
 
 import pytest
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register experimental marker for dbt-fusion tests."""
+    config.addinivalue_line(
+        "markers",
+        "experimental: marks tests as experimental (may fail due to upstream changes)",
+    )
 
 
 def require_fusion() -> None:

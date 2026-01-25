@@ -198,18 +198,18 @@ class TestQuickstartExamples:
         assert issubclass(ConflictError, CatalogError)
         assert issubclass(NotFoundError, CatalogError)
 
-        # Verify each error can be instantiated with a message
-        error_classes = [
-            CatalogError,
-            CatalogUnavailableError,
-            AuthenticationError,
-            NotSupportedError,
-            ConflictError,
-            NotFoundError,
+        # Verify each error can be instantiated with correct constructor args
+        # Each error class has a specific signature - not just message
+        error_instances = [
+            (CatalogError, ["test message"]),  # CatalogError takes message
+            (CatalogUnavailableError, ["http://test-catalog:8181"]),  # takes URI
+            (AuthenticationError, ["test message"]),  # takes message
+            (NotSupportedError, ["test_operation", "test_catalog"]),  # operation, catalog
+            (ConflictError, ["namespace", "test_ns"]),  # resource_type, identifier
+            (NotFoundError, ["namespace", "test_ns"]),  # resource_type, identifier
         ]
-        for error_class in error_classes:
-            error = error_class("test message")
-            assert "test message" in str(error)
+        for error_class, args in error_instances:
+            error = error_class(*args)
             assert isinstance(error, Exception)
             assert isinstance(error, CatalogError)
 

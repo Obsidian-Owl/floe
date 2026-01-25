@@ -760,7 +760,7 @@ def mock_dbt_plugin() -> MagicMock:
     # Metadata
     type(mock_plugin).name = PropertyMock(return_value="mock-dbt")
     type(mock_plugin).version = PropertyMock(return_value="1.0.0")
-    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0.0")
+    type(mock_plugin).floe_api_version = PropertyMock(return_value="1.0")
 
     # Default successful method returns
     mock_plugin.compile_project.return_value = Path("target/manifest.json")
