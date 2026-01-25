@@ -10,9 +10,18 @@ if upstream changes break the build.
 from __future__ import annotations
 
 import shutil
+import uuid
 from pathlib import Path
 
 import pytest
+
+
+def _generate_unique_project_name(prefix: str = "fusion_test_project") -> str:
+    """Generate unique project name to prevent test pollution.
+
+    Uses UUID suffix to ensure isolation between parallel test runs.
+    """
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -51,6 +60,7 @@ def temp_dbt_project_for_fusion(tmp_path: Path) -> Path:
     """Create a minimal dbt project for Fusion testing.
 
     Creates a valid dbt project with DuckDB target (supported by Fusion).
+    Uses unique project name to prevent test pollution.
 
     Args:
         tmp_path: pytest's temporary directory fixture.
@@ -58,12 +68,13 @@ def temp_dbt_project_for_fusion(tmp_path: Path) -> Path:
     Returns:
         Path to the temporary dbt project directory.
     """
-    project_dir = tmp_path / "fusion_test_project"
+    project_name = _generate_unique_project_name()
+    project_dir = tmp_path / project_name
     project_dir.mkdir(parents=True)
 
     # Create dbt_project.yml
-    dbt_project_content = """# Test dbt project for Fusion
-name: fusion_test_project
+    dbt_project_content = f"""# Test dbt project for Fusion
+name: {project_name}
 version: 1.0.0
 config-version: 2
 profile: fusion_test_profile

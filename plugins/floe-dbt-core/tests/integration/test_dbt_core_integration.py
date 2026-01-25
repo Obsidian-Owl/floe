@@ -61,7 +61,8 @@ class TestDBTCorePluginIntegration(IntegrationTestBase):
         # Verify manifest content
         manifest = plugin.get_manifest(temp_dbt_project)
         assert "metadata" in manifest
-        assert manifest["metadata"]["project_name"] == "test_project"
+        # Project name has unique suffix for test isolation
+        assert manifest["metadata"]["project_name"].startswith("test_project")
         assert "nodes" in manifest
         # Should contain our example model
         model_keys = [k for k in manifest["nodes"] if k.startswith("model.")]

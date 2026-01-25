@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,6 +25,20 @@ import pytest
 
 if TYPE_CHECKING:
     pass  # Reserved for future type-only imports
+
+
+def generate_unique_project_name(prefix: str = "test_project") -> str:
+    """Generate unique project name to prevent test pollution.
+
+    Uses UUID suffix to ensure isolation between parallel test runs.
+
+    Args:
+        prefix: Project name prefix (default: "test_project")
+
+    Returns:
+        Unique project name like "test_project_a1b2c3d4"
+    """
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +117,9 @@ def temp_dbt_project(tmp_path: Path) -> Path:
     - profiles.yml (DuckDB target)
     - models/example.sql (simple model)
 
+    Uses unique project name to prevent test pollution between
+    parallel test runs.
+
     Args:
         tmp_path: pytest's temporary directory fixture.
 
@@ -114,12 +132,13 @@ def temp_dbt_project(tmp_path: Path) -> Path:
             result = plugin.compile_project(temp_dbt_project)
             assert (temp_dbt_project / "target" / "manifest.json").exists()
     """
-    project_dir = tmp_path / "test_dbt_project"
+    project_name = generate_unique_project_name()
+    project_dir = tmp_path / project_name
     project_dir.mkdir(parents=True)
 
     # Create dbt_project.yml
     dbt_project = {
-        "name": "test_project",
+        "name": project_name,
         "version": "1.0.0",
         "config-version": 2,
         "profile": "test_profile",
