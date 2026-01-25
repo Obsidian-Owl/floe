@@ -314,11 +314,13 @@ test_profile:
 """
     (project_dir / "profiles.yml").write_text(profiles)
 
-    # Create invalid model with undefined variable
+    # Create invalid model that references a non-existent model
+    # This will fail dbt compilation because the ref target doesn't exist
     models_dir = project_dir / "models"
     models_dir.mkdir()
     (models_dir / "invalid_model.sql").write_text(
-        "-- Invalid model\nSELECT {{ undefined_variable }} AS bad_column\n"
+        "-- Invalid model: references non-existent upstream model\n"
+        "SELECT * FROM {{ ref('this_model_does_not_exist') }}\n"
     )
 
     return project_dir
