@@ -9,7 +9,6 @@ if upstream changes break the build.
 
 from __future__ import annotations
 
-import shutil
 import uuid
 from pathlib import Path
 
@@ -25,10 +24,14 @@ def _generate_unique_project_name(prefix: str = "fusion_test_project") -> str:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register experimental marker for dbt-fusion tests."""
+    """Register markers for dbt-fusion tests."""
     config.addinivalue_line(
         "markers",
         "experimental: marks tests as experimental (may fail due to upstream changes)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_snowflake: marks tests that require a real Snowflake connection",
     )
 
 
@@ -36,12 +39,16 @@ def require_fusion() -> None:
     """Fail test if Fusion CLI not available.
 
     Tests FAIL (not skip) when infrastructure missing per testing standards.
+    Checks for official Fusion CLI (dbt/dbtf) or legacy dbt-sa-cli.
     """
-    if shutil.which("dbt-sa-cli") is None:
+    from floe_dbt_fusion.detection import detect_fusion_binary
+
+    binary_path = detect_fusion_binary()
+    if binary_path is None:
         pytest.fail(
-            "dbt-sa-cli (Fusion CLI) not found in PATH.\n"
-            "Install Fusion CLI to run integration tests.\n"
-            "See: https://github.com/dbt-labs/dbt-fusion"
+            "dbt Fusion CLI not found in PATH.\n"
+            "Install from: https://docs.getdbt.com/docs/fusion/install-fusion-cli\n"
+            "Or run: curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh"
         )
 
 
@@ -50,9 +57,11 @@ def fusion_available() -> bool:
     """Check if Fusion CLI is available.
 
     Returns:
-        True if dbt-sa-cli is in PATH, False otherwise.
+        True if dbt Fusion CLI is available, False otherwise.
     """
-    return shutil.which("dbt-sa-cli") is not None
+    from floe_dbt_fusion.detection import detect_fusion_binary
+
+    return detect_fusion_binary() is not None
 
 
 @pytest.fixture
@@ -83,13 +92,21 @@ model-paths:
 """
     (project_dir / "dbt_project.yml").write_text(dbt_project_content)
 
-    # Create profiles.yml with DuckDB target (supported by Fusion)
-    profiles_content = f"""fusion_test_profile:
+    # Create profiles.yml with Snowflake target (supported by official Fusion CLI)
+    # Uses mock credentials - Fusion can parse but won't connect
+    # Note: DuckDB is NOT supported in official Fusion, only in dbt-sa-cli standalone
+    profiles_content = """fusion_test_profile:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: {project_dir / "dev.duckdb"}
+      type: snowflake
+      account: test_account_12345
+      user: test_user
+      password: test_password_placeholder
+      role: TEST_ROLE
+      warehouse: TEST_WH
+      database: TEST_DB
+      schema: TEST_SCHEMA
       threads: 1
 """
     (project_dir / "profiles.yml").write_text(profiles_content)
