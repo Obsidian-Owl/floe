@@ -29,8 +29,10 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, overload
 
-from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode, Tracer
+
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
+from floe_core.telemetry.tracer_factory import reset_tracer as _reset_tracer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -51,17 +53,14 @@ Used to identify spans created by this package in distributed traces.
 
 
 # =============================================================================
-# Tracer Singleton
+# Tracer Access
 # =============================================================================
-
-_tracer: Tracer | None = None
-_tracer_init_failed: bool = False
 
 
 def get_tracer() -> Tracer:
     """Get the package tracer from GlobalTracerProvider.
 
-    Returns the cached tracer instance, creating it on first call.
+    Returns the thread-safe cached tracer instance from the factory.
     Uses the global tracer provider configured by the application.
 
     Returns a NoOpTracer if OTel is not properly configured or initialization
@@ -76,33 +75,7 @@ def get_tracer() -> Tracer:
         ...     # Span is active here
         ...     pass
     """
-    global _tracer, _tracer_init_failed  # noqa: PLW0603
-
-    if _tracer is not None:
-        return _tracer
-
-    if _tracer_init_failed:
-        # Already failed once, return NoOp without retrying
-        return trace.NoOpTracer()
-
-    try:
-        _tracer = trace.get_tracer(TRACER_NAME)
-        return _tracer
-    except RecursionError:
-        # OTel global state corrupted (common in test environments)
-        _tracer_init_failed = True
-        return trace.NoOpTracer()
-    except Exception:
-        # Other OTel initialization failures
-        _tracer_init_failed = True
-        return trace.NoOpTracer()
-
-
-def _reset_tracer() -> None:
-    """Reset tracer state for test isolation."""
-    global _tracer, _tracer_init_failed  # noqa: PLW0603
-    _tracer = None
-    _tracer_init_failed = False
+    return _factory_get_tracer(TRACER_NAME)
 
 
 # =============================================================================

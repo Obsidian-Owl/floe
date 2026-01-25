@@ -16,10 +16,38 @@ package installed. Tests will FAIL (not skip) if K8s is unavailable.
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
+
+
+def _extract_json_from_output(output: str) -> dict[str, Any]:
+    """Extract JSON object from CLI output, handling prefix text.
+
+    Uses regex to find the outermost JSON object, handling cases where
+    CLI output contains text before the JSON.
+
+    Args:
+        output: Raw CLI output that may contain JSON.
+
+    Returns:
+        Parsed JSON as a dictionary.
+
+    Raises:
+        pytest.fail: If no valid JSON object is found.
+    """
+    # Find JSON object - match balanced braces
+    match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", output, re.DOTALL)
+    if not match:
+        pytest.fail(f"No JSON object found in output:\n{output[:500]}")
+    try:
+        return json.loads(match.group())
+    except json.JSONDecodeError as e:
+        pytest.fail(f"Invalid JSON in output: {e}\n{output[:500]}")
 
 
 def _kubernetes_available() -> bool:
@@ -97,22 +125,9 @@ class TestRbacAuditK8sIntegration:
 
         # If successful, output should contain valid JSON
         if result.exit_code == 0:
-            import json
-
-            # Extract JSON from output (output includes info messages on stderr)
-            # Find the JSON object/array in the output
-            output = result.output
-            json_start = output.find("{")
-            if json_start == -1:
-                pytest.fail(f"No JSON found in output: {output}")
-            json_str = output[json_start:]
-
-            try:
-                data = json.loads(json_str)
-                assert "namespaces" in data  # Note: plural
-                assert "findings" in data
-            except json.JSONDecodeError:
-                pytest.fail(f"Invalid JSON output: {result.output}")
+            data = _extract_json_from_output(result.output)
+            assert "namespaces" in data  # Note: plural
+            assert "findings" in data
 
     @pytest.mark.requirement("FR-025")
     @pytest.mark.integration
@@ -142,14 +157,7 @@ class TestRbacAuditK8sIntegration:
         )
 
         if result.exit_code == 0:
-            import json
-
-            # Extract JSON from output
-            output = result.output
-            json_start = output.find("{")
-            json_str = output[json_start:] if json_start != -1 else output
-
-            data = json.loads(json_str)
+            data = _extract_json_from_output(result.output)
             assert isinstance(data["findings"], list)
             # finding_count not in output; use len(findings) instead
             assert isinstance(len(data["findings"]), int)
@@ -204,14 +212,7 @@ class TestRbacDiffK8sIntegration:
         assert result.exit_code in (0, 1), f"Unexpected exit code: {result.output}"
 
         if result.exit_code == 0:
-            import json
-
-            # Extract JSON from output
-            output = result.output
-            json_start = output.find("{")
-            json_str = output[json_start:] if json_start != -1 else output
-
-            data = json.loads(json_str)
+            data = _extract_json_from_output(result.output)
             assert "diffs" in data  # Note: plural
             assert "added_count" in data
             assert "removed_count" in data
@@ -266,14 +267,7 @@ rules:
         )
 
         if result.exit_code == 0:
-            import json
-
-            # Extract JSON from output
-            output = result.output
-            json_start = output.find("{")
-            json_str = output[json_start:] if json_start != -1 else output
-
-            data = json.loads(json_str)
+            data = _extract_json_from_output(result.output)
             # Output uses 'diffs' list with 'change_type' field
             # Keys are 'resource_kind' and 'resource_name' (not 'kind'/'name')
             added_diffs = [d for d in data["diffs"] if d.get("change_type") == "added"]

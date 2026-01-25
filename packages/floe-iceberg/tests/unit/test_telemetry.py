@@ -240,9 +240,9 @@ class TestTracedDecorator:
 
         tracer = get_tracer()
 
-        # Verify tracer is from opentelemetry
-        assert tracer is not None
+        # Verify tracer is from opentelemetry and has expected API
         assert hasattr(tracer, "start_as_current_span")
+        assert hasattr(tracer, "start_span")
 
     @pytest.mark.requirement("FR-041")
     def test_traced_preserves_function_metadata(self, mock_tracer: MagicMock) -> None:

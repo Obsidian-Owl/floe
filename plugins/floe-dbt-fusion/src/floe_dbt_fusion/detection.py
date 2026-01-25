@@ -140,32 +140,6 @@ def detect_fusion_binary(binary_name: str | None = None) -> Path | None:
     return None
 
 
-def _is_fusion_binary(binary_path: Path) -> bool:
-    """Check if a binary is any Fusion CLI variant (not dbt-core).
-
-    Fusion outputs 'dbt-fusion X.X.X' while dbt-core outputs 'Core X.X.X'.
-
-    Args:
-        binary_path: Path to the binary to check.
-
-    Returns:
-        True if the binary is Fusion, False otherwise.
-    """
-    try:
-        result = subprocess.run(
-            [str(binary_path), "--version"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        output = result.stdout.strip().lower()
-        # Fusion identifies as "dbt-fusion" or "dbt-sa-cli"
-        return "fusion" in output or "dbt-sa-cli" in output
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
-
-
 def _is_full_fusion_cli(binary_path: Path) -> bool:
     """Check if a binary is the FULL Fusion CLI with compile/run/test support.
 
@@ -175,7 +149,9 @@ def _is_full_fusion_cli(binary_path: Path) -> bool:
     The standalone analyzer (dbt-sa-cli from source) only supports:
     - parse, deps, list (limited commands)
 
-    This function distinguishes between them by checking for 'compile' in --help.
+    This function uses a single subprocess call to check both:
+    1. Whether it identifies as Fusion (contains "fusion" or "dbt-sa-cli")
+    2. Whether 'compile' command is available in help output
 
     Args:
         binary_path: Path to the binary to check.
@@ -184,11 +160,7 @@ def _is_full_fusion_cli(binary_path: Path) -> bool:
         True if the binary is the full Fusion CLI, False otherwise.
     """
     try:
-        # First check if it's a Fusion binary at all
-        if not _is_fusion_binary(binary_path):
-            return False
-
-        # Check if 'compile' command is available in help output
+        # Single subprocess call to check both identity and capabilities
         result = subprocess.run(
             [str(binary_path), "--help"],
             capture_output=True,
@@ -197,8 +169,14 @@ def _is_full_fusion_cli(binary_path: Path) -> bool:
             check=False,
         )
         help_output = result.stdout.lower()
-        # Official Fusion CLI has 'compile' command listed in help
-        return "compile" in help_output
+
+        # Must identify as Fusion (not dbt-core which outputs 'core')
+        is_fusion = "fusion" in help_output or "dbt-sa-cli" in help_output
+
+        # Must have compile command (full CLI, not standalone analyzer)
+        has_compile = "compile" in help_output
+
+        return is_fusion and has_compile
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
 

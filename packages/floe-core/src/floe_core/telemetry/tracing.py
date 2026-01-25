@@ -26,13 +26,20 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast, overload
 
-from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode, Tracer
+
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
+from floe_core.telemetry.tracer_factory import (
+    reset_tracer,  # Re-exported for test isolation
+)
+from floe_core.telemetry.tracer_factory import set_tracer as _factory_set_tracer
+
+# Re-export reset_tracer for convenience
+__all__ = ["traced", "create_span", "get_tracer", "set_tracer", "reset_tracer"]
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -47,49 +54,22 @@ logger = logging.getLogger(__name__)
 P = ParamSpec("P")
 R = TypeVar("R")
 
-# Module-level tracer instance (can be overridden for testing)
-_tracer: Tracer | None = None
-_tracer_lock = threading.Lock()
-_tracer_init_failed: bool = False
+# Tracer name for this module
+_TRACER_NAME = "floe_core.telemetry"
 
 
 def get_tracer() -> Tracer:
     """Get the tracer instance for floe telemetry.
 
-    Returns the module-level tracer, creating it if necessary.
+    Returns the thread-safe tracer from the factory, creating it if necessary.
     This indirection allows tests to inject a test tracer.
-    Thread-safe via double-checked locking pattern.
 
     Returns a NoOpTracer if OTel initialization fails (e.g., corrupted state).
 
     Returns:
         Tracer instance for creating spans.
     """
-    global _tracer, _tracer_init_failed
-
-    if _tracer is not None:
-        return _tracer
-
-    if _tracer_init_failed:
-        return trace.NoOpTracer()
-
-    with _tracer_lock:
-        # Double-check after acquiring lock
-        if _tracer is not None:
-            return _tracer
-
-        if _tracer_init_failed:
-            return trace.NoOpTracer()
-
-        try:
-            _tracer = trace.get_tracer("floe_core.telemetry")
-            return _tracer
-        except RecursionError:
-            _tracer_init_failed = True
-            return trace.NoOpTracer()
-        except Exception:
-            _tracer_init_failed = True
-            return trace.NoOpTracer()
+    return _factory_get_tracer(_TRACER_NAME)
 
 
 def set_tracer(tracer: Tracer | None) -> None:
@@ -98,8 +78,7 @@ def set_tracer(tracer: Tracer | None) -> None:
     Args:
         tracer: Tracer instance to use, or None to reset.
     """
-    global _tracer
-    _tracer = tracer
+    _factory_set_tracer(_TRACER_NAME, tracer)
 
 
 @overload

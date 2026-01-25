@@ -85,7 +85,13 @@ from floe_core.telemetry.propagation import (
 from floe_core.telemetry.provider import ProviderState, TelemetryProvider
 
 # Tracing utilities
-from floe_core.telemetry.tracing import create_span, get_tracer, set_tracer, traced
+from floe_core.telemetry.tracing import (
+    create_span,
+    get_tracer,
+    reset_tracer,
+    set_tracer,
+    traced,
+)
 
 __all__: list[str] = [
     # Configuration models
@@ -133,4 +139,5 @@ __all__: list[str] = [
     "create_span",
     "get_tracer",
     "set_tracer",
+    "reset_tracer",
 ]

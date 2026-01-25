@@ -20,6 +20,7 @@ See Also:
 
 from __future__ import annotations
 
+import heapq
 import re
 from datetime import datetime, timezone
 from enum import Enum
@@ -699,10 +700,11 @@ class CacheIndex(BaseModel):
 
         Only returns entries for immutable tags (mutable tags are already
         subject to TTL expiry).
+
+        Uses heapq.nsmallest for O(n log k) performance instead of O(n log n) sort.
         """
         immutable_entries = [e for e in self.entries.values() if e.is_immutable]
-        sorted_entries = sorted(immutable_entries, key=lambda e: e.last_accessed)
-        return sorted_entries[:count]
+        return heapq.nsmallest(count, immutable_entries, key=lambda e: e.last_accessed)
 
     def get_expired_entries(self) -> list[CacheEntry]:
         """Get all expired cache entries."""

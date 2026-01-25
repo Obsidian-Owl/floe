@@ -39,7 +39,7 @@ class TestIcebergTableManagerInit:
             storage_plugin=mock_storage_plugin,
         )
 
-        assert manager is not None
+        # Verify plugins are correctly assigned
         assert manager._catalog_plugin is mock_catalog_plugin
         assert manager._storage_plugin is mock_storage_plugin
 
