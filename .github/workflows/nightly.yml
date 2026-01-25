@@ -64,15 +64,20 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-action@stable
 
-      - name: Build dbt-fusion from source (EXPERIMENTAL)
+      - name: Build dbt-fusion from source (pinned commit)
+        env:
+          # Pinned commit for reproducibility - update deliberately like a dependency
+          # To update: git ls-remote https://github.com/dbt-labs/dbt-fusion.git refs/heads/main
+          # Last updated: 2026-01-25
+          DBT_FUSION_COMMIT: 091f521e4c45c95097e0a9ef65f61bb45aae194e
         run: |
-          git clone --depth 1 https://github.com/dbt-labs/dbt-fusion.git /tmp/dbt-fusion
+          git clone https://github.com/dbt-labs/dbt-fusion.git /tmp/dbt-fusion
           cd /tmp/dbt-fusion
+          git checkout ${DBT_FUSION_COMMIT}
           cargo build --release --package dbt-sa-cli
           sudo cp target/release/dbt-sa-cli /usr/local/bin/
           sudo chmod +x /usr/local/bin/dbt-sa-cli
-          dbt-sa-cli --version || echo "dbt-sa-cli installed"
-        continue-on-error: true
+          dbt-sa-cli --version || echo "dbt-sa-cli installed (version check may fail)"
 
       - name: Setup Kind cluster and deploy services
         run: CLUSTER_NAME=floe-nightly ./testing/k8s/setup-cluster.sh

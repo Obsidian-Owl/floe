@@ -27,10 +27,16 @@ RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/re
     && mv kubectl /usr/local/bin/
 
 # =============================================================================
-# dbt-fusion (EXPERIMENTAL) - Build from source
+# dbt-fusion - Build from source (pinned commit)
 # =============================================================================
-# dbt-fusion has no published releases yet, so we build from source
-# This is experimental and may break if upstream changes
+# dbt-fusion has no published releases yet, so we build from source.
+# We pin to a specific commit for reproducibility and stability.
+#
+# To update the pin:
+#   1. Check latest main: git ls-remote https://github.com/dbt-labs/dbt-fusion.git refs/heads/main
+#   2. Update DBT_FUSION_COMMIT below
+#   3. Test locally: docker build -t floe-test-runner:latest -f testing/Dockerfile .
+#   4. Commit the change
 
 # Install build dependencies for Rust
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -45,12 +51,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && . /root/.cargo/env \
     && rustup default stable
 
-# Clone and build dbt-fusion
-# Pin to specific commit for reproducibility
-ARG DBT_FUSION_COMMIT=main
+# Clone and build dbt-fusion (pinned to specific commit)
+# Last updated: 2026-01-25
+ARG DBT_FUSION_COMMIT=091f521e4c45c95097e0a9ef65f61bb45aae194e
 # hadolint ignore=DL3059
 RUN . /root/.cargo/env \
-    && git clone --depth 1 https://github.com/dbt-labs/dbt-fusion.git /tmp/dbt-fusion \
+    && git clone https://github.com/dbt-labs/dbt-fusion.git /tmp/dbt-fusion \
     && cd /tmp/dbt-fusion \
     && git checkout ${DBT_FUSION_COMMIT} \
     && cargo build --release --package dbt-sa-cli \
@@ -58,9 +64,9 @@ RUN . /root/.cargo/env \
     && chmod +x /usr/local/bin/dbt-sa-cli \
     && rm -rf /tmp/dbt-fusion /root/.cargo/registry
 
-# Verify installation (version check may fail on pre-release)
+# Verify installation
 # hadolint ignore=DL3059
-RUN dbt-sa-cli --version || echo "dbt-sa-cli installed (version check may fail)"
+RUN dbt-sa-cli --version || echo "dbt-sa-cli installed (version check may fail on pre-release)"
 
 # Set working directory
 WORKDIR /app
