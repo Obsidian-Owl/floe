@@ -160,6 +160,48 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ],
         }
 
+    def generate_platform_egress_rules(self) -> list[dict[str, Any]]:
+        """Generate platform service egress rules (built-in).
+
+        Jobs need to communicate with platform services:
+        - Polaris catalog: TCP 8181
+        - OTel Collector: TCP 4317 (gRPC), 4318 (HTTP)
+        - MinIO storage: TCP 9000
+
+        Returns:
+            List of egress rules for platform services.
+        """
+        platform_namespace_selector = {
+            "namespaceSelector": {
+                "matchLabels": {
+                    "kubernetes.io/metadata.name": "floe-platform",
+                },
+            },
+        }
+
+        return [
+            # Polaris catalog (REST API)
+            {
+                "to": [platform_namespace_selector],
+                "ports": [{"port": 8181, "protocol": "TCP"}],
+            },
+            # OTel Collector (gRPC for traces/metrics)
+            {
+                "to": [platform_namespace_selector],
+                "ports": [{"port": 4317, "protocol": "TCP"}],
+            },
+            # OTel Collector (HTTP for traces/metrics)
+            {
+                "to": [platform_namespace_selector],
+                "ports": [{"port": 4318, "protocol": "TCP"}],
+            },
+            # MinIO storage (S3-compatible API)
+            {
+                "to": [platform_namespace_selector],
+                "ports": [{"port": 9000, "protocol": "TCP"}],
+            },
+        ]
+
     def generate_pod_security_context(self, config: Any) -> dict[str, Any]:
         """Generate pod-level securityContext.
 
