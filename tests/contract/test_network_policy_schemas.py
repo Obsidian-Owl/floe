@@ -36,9 +36,8 @@ class TestPortRuleSchema:
     @pytest.mark.requirement("FR-001")
     def test_port_rule_port_bounds(self) -> None:
         """Contract: Port must be in valid range."""
-        from pydantic import ValidationError
-
         from floe_core.network import PortRule
+        from pydantic import ValidationError
 
         PortRule(port=1)
         PortRule(port=65535)
@@ -74,9 +73,8 @@ class TestEgressRuleSchema:
     @pytest.mark.requirement("FR-001")
     def test_egress_rule_requires_ports(self) -> None:
         """Contract: EgressRule requires ports."""
-        from pydantic import ValidationError
-
         from floe_core.network import EgressRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             EgressRule(to_namespace="kube-system")
@@ -84,9 +82,8 @@ class TestEgressRuleSchema:
     @pytest.mark.requirement("FR-001")
     def test_egress_rule_mutual_exclusion(self) -> None:
         """Contract: to_namespace and to_cidr are mutually exclusive."""
-        from pydantic import ValidationError
-
         from floe_core.network import EgressRule, PortRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             EgressRule(
@@ -144,9 +141,8 @@ class TestNetworkPolicyConfigSchema:
     @pytest.mark.requirement("FR-001")
     def test_network_policy_config_name_pattern(self) -> None:
         """Contract: Name must match floe-* pattern."""
-        from pydantic import ValidationError
-
         from floe_core.network import NetworkPolicyConfig
+        from pydantic import ValidationError
 
         NetworkPolicyConfig(name="floe-jobs-deny", namespace="floe-jobs", policy_types=["Egress"])
 

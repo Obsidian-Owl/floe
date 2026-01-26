@@ -67,10 +67,11 @@ class TestSecurityConfigNetworkPoliciesExtension:
     def test_security_config_frozen(self) -> None:
         """Contract: SecurityConfig is immutable (frozen=True)."""
         from floe_core.schemas.security import SecurityConfig
+        from pydantic import ValidationError
 
         config = SecurityConfig()
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             config.namespace_isolation = "permissive"
 
 
@@ -81,18 +82,18 @@ class TestNetworkPoliciesConfigSchema:
     def test_network_policies_config_is_frozen(self) -> None:
         """Contract: NetworkPoliciesConfig is immutable."""
         from floe_core.network import NetworkPoliciesConfig
+        from pydantic import ValidationError
 
         config = NetworkPoliciesConfig()
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             config.enabled = False
 
     @pytest.mark.requirement("FR-001")
     def test_network_policies_config_forbids_extra(self) -> None:
         """Contract: NetworkPoliciesConfig rejects unknown fields."""
-        from pydantic import ValidationError
-
         from floe_core.network import NetworkPoliciesConfig
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             NetworkPoliciesConfig(unknown_field="value")
@@ -126,9 +127,8 @@ class TestEgressAllowRuleSchema:
     @pytest.mark.requirement("FR-033")
     def test_egress_allow_rule_requires_name_and_port(self) -> None:
         """Contract: EgressAllowRule requires name and port."""
-        from pydantic import ValidationError
-
         from floe_core.network import EgressAllowRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             EgressAllowRule(to_cidr="0.0.0.0/0")
@@ -136,9 +136,8 @@ class TestEgressAllowRuleSchema:
     @pytest.mark.requirement("FR-033")
     def test_egress_allow_rule_mutual_exclusion(self) -> None:
         """Contract: to_namespace and to_cidr are mutually exclusive."""
-        from pydantic import ValidationError
-
         from floe_core.network import EgressAllowRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             EgressAllowRule(name="invalid", to_namespace="vault", to_cidr="0.0.0.0/0", port=443)
@@ -149,9 +148,8 @@ class TestEgressAllowRuleSchema:
     @pytest.mark.requirement("FR-033")
     def test_egress_allow_rule_port_bounds(self) -> None:
         """Contract: Port must be 1-65535."""
-        from pydantic import ValidationError
-
         from floe_core.network import EgressAllowRule
+        from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             EgressAllowRule(name="invalid", to_cidr="0.0.0.0/0", port=0)
@@ -162,9 +160,8 @@ class TestEgressAllowRuleSchema:
     @pytest.mark.requirement("FR-033")
     def test_egress_allow_rule_cidr_pattern(self) -> None:
         """Contract: to_cidr must be valid CIDR notation."""
-        from pydantic import ValidationError
-
         from floe_core.network import EgressAllowRule
+        from pydantic import ValidationError
 
         EgressAllowRule(name="valid", to_cidr="10.0.0.0/8", port=443)
         EgressAllowRule(name="valid", to_cidr="0.0.0.0/0", port=443)

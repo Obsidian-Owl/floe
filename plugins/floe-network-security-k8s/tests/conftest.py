@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def plugin() -> "K8sNetworkSecurityPlugin":
+def plugin() -> K8sNetworkSecurityPlugin:
     """Create a K8sNetworkSecurityPlugin instance for testing."""
     from floe_network_security_k8s import K8sNetworkSecurityPlugin
 

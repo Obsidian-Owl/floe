@@ -11,7 +11,6 @@ Contract: specs/7c-network-pod-security/contracts/network-security-plugin-interf
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any
 
 import pytest
 
