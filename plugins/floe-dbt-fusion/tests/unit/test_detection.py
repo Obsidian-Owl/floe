@@ -285,26 +285,36 @@ class TestGetAvailableAdapters:
 
     @pytest.mark.requirement("FR-021")
     def test_get_available_adapters_returns_list(self) -> None:
-        """get_available_adapters() returns list of supported adapters."""
+        """get_available_adapters() returns list of supported adapters.
+
+        The official Fusion CLI supports: snowflake, postgres, bigquery,
+        redshift, trino, datafusion, spark, databricks, salesforce.
+        DuckDB is NOT supported by the official CLI.
+        """
         from floe_dbt_fusion.detection import get_available_adapters
 
         adapters = get_available_adapters()
 
         assert isinstance(adapters, list)
-        assert "duckdb" in adapters
         assert "snowflake" in adapters
+        assert "postgres" in adapters
+        assert "bigquery" in adapters
 
     @pytest.mark.requirement("FR-021")
     def test_get_available_adapters_does_not_include_unsupported(self) -> None:
-        """get_available_adapters() does not include unsupported adapters."""
+        """get_available_adapters() does not include unsupported adapters.
+
+        DuckDB and other adapters not in SUPPORTED_RUST_ADAPTERS are excluded.
+        """
         from floe_dbt_fusion.detection import get_available_adapters
 
         adapters = get_available_adapters()
 
-        assert "bigquery" not in adapters
-        assert "postgres" not in adapters
-        assert "redshift" not in adapters
-        assert "databricks" not in adapters
+        # These are NOT supported by the official Fusion CLI
+        assert "duckdb" not in adapters
+        assert "mysql" not in adapters
+        assert "sqlite" not in adapters
+        assert "oracle" not in adapters
 
 
 # ---------------------------------------------------------------------------
@@ -364,23 +374,32 @@ class TestDetectFusion:
         mock_result.stderr = ""
 
         with (
+            patch.object(Path, "exists", return_value=False),
             patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli"),
             patch("subprocess.run", return_value=mock_result),
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
         ):
             info = detect_fusion()
 
             assert info.available is True
             assert info.binary_path == Path("/usr/local/bin/dbt-sa-cli")
             assert info.version == "0.1.0"
-            assert "duckdb" in info.adapters_available
+            # DuckDB is NOT supported by official Fusion CLI
             assert "snowflake" in info.adapters_available
+            assert "postgres" in info.adapters_available
 
     @pytest.mark.requirement("FR-020")
     def test_detect_fusion_not_found(self) -> None:
         """detect_fusion() returns unavailable info when Fusion not found."""
         from floe_dbt_fusion.detection import detect_fusion
 
-        with patch("shutil.which", return_value=None):
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("shutil.which", return_value=None),
+        ):
             info = detect_fusion()
 
             assert info.available is False
@@ -398,8 +417,13 @@ class TestDetectFusion:
         mock_result.stderr = "Error"
 
         with (
+            patch.object(Path, "exists", return_value=False),
             patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli"),
             patch("subprocess.run", return_value=mock_result),
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
         ):
             info = detect_fusion()
 
