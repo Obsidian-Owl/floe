@@ -37,8 +37,8 @@ class TestSecurityConfigNetworkPoliciesExtension:
         assert config.default_deny is True
         assert config.allow_external_https is True
         assert config.ingress_controller_namespace == "ingress-nginx"
-        assert config.jobs_egress_allow == []
-        assert config.platform_egress_allow == []
+        assert config.jobs_egress_allow == ()
+        assert config.platform_egress_allow == ()
 
     @pytest.mark.requirement("FR-001")
     def test_security_config_network_policies_default_factory(self) -> None:

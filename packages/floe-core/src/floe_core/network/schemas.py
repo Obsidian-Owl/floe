@@ -31,7 +31,7 @@ class EgressRule(BaseModel):
 
     to_namespace: str | None = Field(default=None, description="Destination namespace selector")
     to_cidr: str | None = Field(default=None, description="Destination CIDR block")
-    ports: list[PortRule] = Field(..., min_length=1, description="Allowed ports")
+    ports: tuple[PortRule, ...] = Field(..., min_length=1, description="Allowed ports")
 
     @model_validator(mode="after")
     def validate_target(self) -> Self:
@@ -51,8 +51,8 @@ class IngressRule(BaseModel):
     from_pod_labels: dict[str, str] = Field(
         default_factory=dict, description="Source pod label selector"
     )
-    ports: list[PortRule] = Field(
-        default_factory=list, description="Allowed ports (empty = all ports)"
+    ports: tuple[PortRule, ...] = Field(
+        default_factory=tuple, description="Allowed ports (empty = all ports)"
     )
 
 
@@ -68,13 +68,15 @@ class NetworkPolicyConfig(BaseModel):
     pod_selector: dict[str, str] = Field(
         default_factory=dict, description="Empty = all pods in namespace"
     )
-    policy_types: list[Literal["Ingress", "Egress"]] = Field(
+    policy_types: tuple[Literal["Ingress", "Egress"], ...] = Field(
         ..., min_length=1, description="Policy types to enforce"
     )
-    ingress_rules: list[IngressRule] = Field(
-        default_factory=list, description="Ingress allow rules"
+    ingress_rules: tuple[IngressRule, ...] = Field(
+        default_factory=tuple, description="Ingress allow rules"
     )
-    egress_rules: list[EgressRule] = Field(default_factory=list, description="Egress allow rules")
+    egress_rules: tuple[EgressRule, ...] = Field(
+        default_factory=tuple, description="Egress allow rules"
+    )
 
     def to_k8s_manifest(self) -> dict[str, Any]:
         """Generate K8s NetworkPolicy manifest."""
@@ -196,9 +198,9 @@ class NetworkPoliciesConfig(BaseModel):
     ingress_controller_namespace: str = Field(
         default="ingress-nginx", description="Namespace where ingress controller is deployed"
     )
-    jobs_egress_allow: list[EgressAllowRule] = Field(
-        default_factory=list, description="Additional egress rules for floe-jobs namespace"
+    jobs_egress_allow: tuple[EgressAllowRule, ...] = Field(
+        default_factory=tuple, description="Additional egress rules for floe-jobs namespace"
     )
-    platform_egress_allow: list[EgressAllowRule] = Field(
-        default_factory=list, description="Additional egress rules for floe-platform namespace"
+    platform_egress_allow: tuple[EgressAllowRule, ...] = Field(
+        default_factory=tuple, description="Additional egress rules for floe-platform namespace"
     )
