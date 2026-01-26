@@ -65,19 +65,18 @@ def load_dbt_plugin(plugin_name: str) -> DBTPlugin:
     Raises:
         ValueError: If plugin not found in registry.
     """
+    from floe_core.plugin_errors import PluginNotFoundError
     from floe_core.plugin_registry import PluginRegistry
     from floe_core.plugin_types import PluginType
 
     registry = PluginRegistry()
-    plugins = registry.discover_plugins(PluginType.DBT)
-
-    for plugin in plugins:
-        if plugin.name == plugin_name:
-            return plugin
-
-    available = [p.name for p in plugins]
-    msg = f"Unknown plugin: {plugin_name}. Available: {available}"
-    raise ValueError(msg)
+    registry.discover_all()  # Discover plugins from entry points
+    try:
+        return registry.get(PluginType.DBT, plugin_name)
+    except PluginNotFoundError:
+        available = [p.name for p in registry.list(PluginType.DBT)]
+        msg = f"Unknown plugin: {plugin_name}. Available: {available}"
+        raise ValueError(msg) from None
 
 
 class DBTResource(ConfigurableResource):

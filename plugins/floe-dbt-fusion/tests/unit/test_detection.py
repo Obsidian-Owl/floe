@@ -29,32 +29,56 @@ class TestDetectFusionBinary:
     """Tests for detect_fusion_binary() function."""
 
     @pytest.mark.requirement("FR-020")
-    def test_detect_fusion_binary_found_in_path(self, mock_fusion_binary_exists: MagicMock) -> None:
+    def test_detect_fusion_binary_found_in_path(self) -> None:
         """detect_fusion_binary() returns path when binary is in PATH."""
         from floe_dbt_fusion.detection import detect_fusion_binary
 
-        result = detect_fusion_binary()
+        # Mock both standard path checks (returns False) and shutil.which
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli") as mock_which,
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
+        ):
+            result = detect_fusion_binary()
 
-        assert result is not None
-        assert result == Path("/usr/local/bin/dbt-sa-cli")
-        mock_fusion_binary_exists.assert_called_once_with("dbt-sa-cli")
+            assert result is not None
+            assert result == Path("/usr/local/bin/dbt-sa-cli")
+            # First call is for "dbt" (first in FUSION_BINARY_NAMES)
+            mock_which.assert_called()
 
     @pytest.mark.requirement("FR-020")
-    def test_detect_fusion_binary_not_found(self, mock_fusion_binary_not_found: MagicMock) -> None:
+    def test_detect_fusion_binary_not_found(self) -> None:
         """detect_fusion_binary() returns None when binary not in PATH."""
         from floe_dbt_fusion.detection import detect_fusion_binary
 
-        result = detect_fusion_binary()
+        # Mock both standard path checks and shutil.which to return nothing
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("shutil.which", return_value=None) as mock_which,
+        ):
+            result = detect_fusion_binary()
 
-        assert result is None
-        mock_fusion_binary_not_found.assert_called_once_with("dbt-sa-cli")
+            assert result is None
+            # Should have checked all binary names
+            mock_which.assert_called()
 
     @pytest.mark.requirement("FR-020")
     def test_detect_fusion_binary_custom_binary_name(self) -> None:
         """detect_fusion_binary() uses custom binary name when provided."""
         from floe_dbt_fusion.detection import detect_fusion_binary
 
-        with patch("shutil.which", return_value="/custom/path/fusion") as mock_which:
+        # Mock standard path checks and shutil.which
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("shutil.which", return_value="/custom/path/fusion") as mock_which,
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
+        ):
             result = detect_fusion_binary(binary_name="fusion")
 
             assert result == Path("/custom/path/fusion")
@@ -67,10 +91,15 @@ class TestDetectFusionBinary:
 
         # Mock shutil.which to return None (not in PATH)
         # Mock Path.exists to return True for a standard path
+        # Mock _is_full_fusion_cli to return True (validates as full CLI)
         with (
             patch("shutil.which", return_value=None),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "is_file", return_value=True),
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
         ):
             result = detect_fusion_binary()
 
@@ -166,12 +195,17 @@ class TestCheckAdapterAvailable:
 
     @pytest.mark.requirement("FR-021")
     def test_check_adapter_available_duckdb(self) -> None:
-        """check_adapter_available() returns True for DuckDB."""
+        """check_adapter_available() returns False for DuckDB.
+
+        Note: DuckDB is NOT supported by the official Fusion CLI (dbt-fusion 2.0.0+).
+        DuckDB support was only in the standalone dbt-sa-cli analyzer, not the full CLI.
+        """
         from floe_dbt_fusion.detection import check_adapter_available
 
         result = check_adapter_available("duckdb")
 
-        assert result is True
+        # DuckDB is not in SUPPORTED_RUST_ADAPTERS for official Fusion CLI
+        assert result is False
 
     @pytest.mark.requirement("FR-021")
     def test_check_adapter_available_snowflake(self) -> None:
@@ -183,50 +217,63 @@ class TestCheckAdapterAvailable:
         assert result is True
 
     @pytest.mark.requirement("FR-021")
-    def test_check_adapter_unavailable_bigquery(self) -> None:
-        """check_adapter_available() returns False for BigQuery."""
+    def test_check_adapter_available_bigquery(self) -> None:
+        """check_adapter_available() returns True for BigQuery.
+
+        BigQuery is supported by the official Fusion CLI (dbt-fusion 2.0.0+).
+        """
         from floe_dbt_fusion.detection import check_adapter_available
 
         result = check_adapter_available("bigquery")
 
-        assert result is False
+        assert result is True
 
     @pytest.mark.requirement("FR-021")
-    def test_check_adapter_unavailable_postgres(self) -> None:
-        """check_adapter_available() returns False for PostgreSQL."""
+    def test_check_adapter_available_postgres(self) -> None:
+        """check_adapter_available() returns True for PostgreSQL.
+
+        PostgreSQL is supported by the official Fusion CLI (dbt-fusion 2.0.0+).
+        """
         from floe_dbt_fusion.detection import check_adapter_available
 
         result = check_adapter_available("postgres")
 
-        assert result is False
+        assert result is True
 
     @pytest.mark.requirement("FR-021")
-    def test_check_adapter_unavailable_redshift(self) -> None:
-        """check_adapter_available() returns False for Redshift."""
+    def test_check_adapter_available_redshift(self) -> None:
+        """check_adapter_available() returns True for Redshift.
+
+        Redshift is supported by the official Fusion CLI (dbt-fusion 2.0.0+).
+        """
         from floe_dbt_fusion.detection import check_adapter_available
 
         result = check_adapter_available("redshift")
 
-        assert result is False
+        assert result is True
 
     @pytest.mark.requirement("FR-021")
-    def test_check_adapter_unavailable_databricks(self) -> None:
-        """check_adapter_available() returns False for Databricks."""
+    def test_check_adapter_available_databricks(self) -> None:
+        """check_adapter_available() returns True for Databricks.
+
+        Databricks is supported by the official Fusion CLI (dbt-fusion 2.0.0+).
+        """
         from floe_dbt_fusion.detection import check_adapter_available
 
         result = check_adapter_available("databricks")
 
-        assert result is False
+        assert result is True
 
     @pytest.mark.requirement("FR-021")
     def test_check_adapter_case_insensitive(self) -> None:
         """check_adapter_available() is case-insensitive."""
         from floe_dbt_fusion.detection import check_adapter_available
 
-        assert check_adapter_available("DuckDB") is True
-        assert check_adapter_available("DUCKDB") is True
+        # Test with adapters that ARE supported (not DuckDB)
         assert check_adapter_available("Snowflake") is True
         assert check_adapter_available("SNOWFLAKE") is True
+        assert check_adapter_available("Postgres") is True
+        assert check_adapter_available("POSTGRES") is True
 
     @pytest.mark.requirement("FR-021")
     def test_check_adapter_unknown_returns_false(self) -> None:
@@ -243,26 +290,36 @@ class TestGetAvailableAdapters:
 
     @pytest.mark.requirement("FR-021")
     def test_get_available_adapters_returns_list(self) -> None:
-        """get_available_adapters() returns list of supported adapters."""
+        """get_available_adapters() returns list of supported adapters.
+
+        The official Fusion CLI supports: snowflake, postgres, bigquery,
+        redshift, trino, datafusion, spark, databricks, salesforce.
+        DuckDB is NOT supported by the official CLI.
+        """
         from floe_dbt_fusion.detection import get_available_adapters
 
         adapters = get_available_adapters()
 
         assert isinstance(adapters, list)
-        assert "duckdb" in adapters
         assert "snowflake" in adapters
+        assert "postgres" in adapters
+        assert "bigquery" in adapters
 
     @pytest.mark.requirement("FR-021")
     def test_get_available_adapters_does_not_include_unsupported(self) -> None:
-        """get_available_adapters() does not include unsupported adapters."""
+        """get_available_adapters() does not include unsupported adapters.
+
+        DuckDB and other adapters not in SUPPORTED_RUST_ADAPTERS are excluded.
+        """
         from floe_dbt_fusion.detection import get_available_adapters
 
         adapters = get_available_adapters()
 
-        assert "bigquery" not in adapters
-        assert "postgres" not in adapters
-        assert "redshift" not in adapters
-        assert "databricks" not in adapters
+        # These are NOT supported by the official Fusion CLI
+        assert "duckdb" not in adapters
+        assert "mysql" not in adapters
+        assert "sqlite" not in adapters
+        assert "oracle" not in adapters
 
 
 # ---------------------------------------------------------------------------
@@ -322,23 +379,32 @@ class TestDetectFusion:
         mock_result.stderr = ""
 
         with (
+            patch.object(Path, "exists", return_value=False),
             patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli"),
             patch("subprocess.run", return_value=mock_result),
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
         ):
             info = detect_fusion()
 
             assert info.available is True
             assert info.binary_path == Path("/usr/local/bin/dbt-sa-cli")
             assert info.version == "0.1.0"
-            assert "duckdb" in info.adapters_available
+            # DuckDB is NOT supported by official Fusion CLI
             assert "snowflake" in info.adapters_available
+            assert "postgres" in info.adapters_available
 
     @pytest.mark.requirement("FR-020")
     def test_detect_fusion_not_found(self) -> None:
         """detect_fusion() returns unavailable info when Fusion not found."""
         from floe_dbt_fusion.detection import detect_fusion
 
-        with patch("shutil.which", return_value=None):
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("shutil.which", return_value=None),
+        ):
             info = detect_fusion()
 
             assert info.available is False
@@ -356,8 +422,13 @@ class TestDetectFusion:
         mock_result.stderr = "Error"
 
         with (
+            patch.object(Path, "exists", return_value=False),
             patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli"),
             patch("subprocess.run", return_value=mock_result),
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
         ):
             info = detect_fusion()
 
@@ -365,3 +436,162 @@ class TestDetectFusion:
             assert info.available is True
             assert info.binary_path == Path("/usr/local/bin/dbt-sa-cli")
             assert info.version is None  # Version unknown but binary exists
+
+
+# ---------------------------------------------------------------------------
+# _is_full_fusion_cli Exception Handling Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsFullFusionCliExceptionHandling:
+    """Tests for _is_full_fusion_cli() exception handling paths."""
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_timeout_returns_false(self) -> None:
+        """_is_full_fusion_cli() returns False on subprocess timeout."""
+        import subprocess
+
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd=["dbt", "--help"],
+                timeout=10,
+            )
+
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_os_error_returns_false(self) -> None:
+        """_is_full_fusion_cli() returns False on OSError (file not found, permission denied)."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = OSError("Permission denied")
+
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_file_not_found_returns_false(self) -> None:
+        """_is_full_fusion_cli() returns False when binary doesn't exist."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        with patch("subprocess.run") as mock_run:
+            # FileNotFoundError is a subclass of OSError
+            mock_run.side_effect = FileNotFoundError("No such file or directory")
+
+            result = _is_full_fusion_cli(Path("/nonexistent/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_returns_true_for_fusion(self) -> None:
+        """_is_full_fusion_cli() returns True when binary is full Fusion CLI."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "dbt fusion CLI\n\nCommands:\n  compile  Compile project\n  run"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is True
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_returns_false_for_dbt_core(self) -> None:
+        """_is_full_fusion_cli() returns False for dbt-core (not Fusion)."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        # dbt-core output contains "core" not "fusion"
+        mock_result.stdout = "dbt core CLI\n\nCommands:\n  compile  Compile project\n  run"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_returns_false_for_standalone_analyzer(self) -> None:
+        """_is_full_fusion_cli() returns False for standalone analyzer without compile."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        # Standalone analyzer has "fusion" but no "compile" command
+        mock_result.stdout = (
+            "dbt-sa-cli fusion analyzer\n\nCommands:\n  parse  Parse project\n  list"
+        )
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt-sa-cli"))
+
+            assert result is False
+
+
+class TestGetFusionVersionExceptionHandling:
+    """Tests for get_fusion_version() exception handling paths."""
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_timeout_returns_none(self) -> None:
+        """get_fusion_version() returns None on subprocess timeout."""
+        import subprocess
+
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd=["dbt", "--version"],
+                timeout=10,
+            )
+
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_os_error_returns_none(self) -> None:
+        """get_fusion_version() returns None on OSError."""
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = OSError("Permission denied")
+
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_long_output_returns_none(self) -> None:
+        """get_fusion_version() returns None for excessively long output (ReDoS protection)."""
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        # Output longer than 256 characters should be rejected for security
+        mock_result.stdout = "dbt-fusion " + "x" * 300
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_no_match_returns_none(self) -> None:
+        """get_fusion_version() returns None when no version pattern matches."""
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "dbt-fusion no-version-here"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None

@@ -50,6 +50,8 @@ help: ## Show this help message
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit + Cognee)"
+	@echo "  make install-fusion  Install official dbt Fusion CLI from dbt Labs"
+	@echo "  make check-fusion    Check if dbt Fusion CLI is installed"
 	@echo ""
 	@echo "Use 'make <target>' to run a command."
 
@@ -116,6 +118,27 @@ check: lint typecheck test ## Run all CI checks (lint + typecheck + test)
 .PHONY: setup-hooks
 setup-hooks: ## Install chained git hooks (bd + pre-commit)
 	@./scripts/setup-hooks.sh
+
+.PHONY: install-fusion
+install-fusion: ## Install official dbt Fusion CLI from dbt Labs
+	@echo "Installing official dbt Fusion CLI..."
+	@curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+	@echo "dbt Fusion CLI installed to ~/.local/bin/dbt"
+	@echo "Ensure ~/.local/bin is in your PATH"
+
+.PHONY: check-fusion
+check-fusion: ## Check if dbt Fusion CLI is installed and show version
+	@if command -v dbt >/dev/null 2>&1 && dbt --version 2>&1 | grep -q "fusion"; then \
+		echo "dbt Fusion CLI found:"; \
+		dbt --version; \
+	elif test -x "$$HOME/.local/bin/dbt"; then \
+		echo "dbt Fusion CLI found at ~/.local/bin/dbt:"; \
+		$$HOME/.local/bin/dbt --version; \
+	else \
+		echo "dbt Fusion CLI not found"; \
+		echo "Run 'make install-fusion' to install"; \
+		exit 1; \
+	fi
 
 .PHONY: fmt
 fmt: ## Format code with ruff

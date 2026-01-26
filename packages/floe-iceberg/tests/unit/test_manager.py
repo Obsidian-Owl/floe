@@ -39,7 +39,7 @@ class TestIcebergTableManagerInit:
             storage_plugin=mock_storage_plugin,
         )
 
-        assert manager is not None
+        # Verify plugins are correctly assigned
         assert manager._catalog_plugin is mock_catalog_plugin
         assert manager._storage_plugin is mock_storage_plugin
 
@@ -3173,6 +3173,9 @@ class TestCompactTableBinPack:
         mock_storage_plugin: MockStoragePlugin,
     ) -> None:
         """Test compact_table emits OTel span with compaction metrics."""
+        # Reset the cached tracer so it picks up the new provider
+        # (the factory caches tracers by name on first use)
+        from floe_core.telemetry.tracer_factory import reset_tracer
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -3180,7 +3183,6 @@ class TestCompactTableBinPack:
             InMemorySpanExporter,
         )
 
-        import floe_iceberg.telemetry as telemetry_module
         from floe_iceberg import IcebergTableManager
         from floe_iceberg.models import (
             CompactionStrategy,
@@ -3191,9 +3193,7 @@ class TestCompactTableBinPack:
             TableSchema,
         )
 
-        # Reset the cached tracer so it picks up the new provider
-        # (the telemetry module caches _tracer on first use)
-        telemetry_module._tracer = None
+        reset_tracer()
 
         # Set up in-memory span exporter for testing
         exporter = InMemorySpanExporter()

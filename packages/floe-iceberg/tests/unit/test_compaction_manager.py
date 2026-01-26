@@ -264,8 +264,9 @@ class TestExecuteCompaction:
 
         result = execute_compaction(mock_table, strategy)
 
-        assert result is not None
+        # Verify result has expected attributes from CompactionResult
         assert hasattr(result, "files_rewritten")
+        assert hasattr(result, "bytes_rewritten")
 
     @pytest.mark.requirement("FR-016")
     def test_execute_compaction_with_sort_strategy(self) -> None:
@@ -283,8 +284,9 @@ class TestExecuteCompaction:
 
         result = execute_compaction(mock_table, strategy)
 
-        assert result is not None
+        # Verify result has expected attributes from CompactionResult
         assert hasattr(result, "files_rewritten")
+        assert hasattr(result, "bytes_rewritten")
 
     @pytest.mark.requirement("FR-016")
     def test_execute_compaction_sort_without_columns_rejected_by_pydantic(self) -> None:
@@ -357,10 +359,12 @@ class TestBinPackCompactionExecutor:
             target_file_size_bytes=128 * 1024 * 1024  # 128MB target
         )
 
-        # Execute should complete without error
+        # Execute should complete without error and return a valid result
         result = executor.execute(mock_table, strategy)
 
-        assert result is not None
+        # Verify result has expected structure
+        assert isinstance(result.files_rewritten, int)
+        assert isinstance(result.bytes_rewritten, int)
 
     @pytest.mark.requirement("FR-016")
     def test_bin_pack_executor_handles_empty_table(self) -> None:

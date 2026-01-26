@@ -99,7 +99,7 @@ class DBTCorePlugin(DBTPlugin):
     @property
     def floe_api_version(self) -> str:
         """Return compatible floe API version."""
-        return "1.0.0"
+        return "1.0"
 
     def compile_project(
         self,
@@ -583,7 +583,9 @@ class DBTCorePlugin(DBTPlugin):
         }
 
         if DBT_AVAILABLE and get_installed_version:
-            metadata["dbt_version"] = str(get_installed_version())
+            version_str = str(get_installed_version())
+            # Strip leading '=' from dbt version string (e.g., "=1.9.0" -> "1.9.0")
+            metadata["dbt_version"] = version_str.lstrip("=")
 
         return metadata
 

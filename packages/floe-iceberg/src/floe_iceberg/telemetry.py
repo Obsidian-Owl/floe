@@ -29,7 +29,7 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, overload
 
-from opentelemetry import trace
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry.trace import Status, StatusCode, Tracer
 
 if TYPE_CHECKING:
@@ -51,17 +51,18 @@ Used to identify spans created by this package in distributed traces.
 
 
 # =============================================================================
-# Tracer Singleton
+# Tracer Access
 # =============================================================================
-
-_tracer: Tracer | None = None
 
 
 def get_tracer() -> Tracer:
     """Get the package tracer from GlobalTracerProvider.
 
-    Returns the cached tracer instance, creating it on first call.
+    Returns the thread-safe cached tracer instance from the factory.
     Uses the global tracer provider configured by the application.
+
+    Returns a NoOpTracer if OTel is not properly configured or initialization
+    fails (e.g., due to corrupted global state from test fixtures).
 
     Returns:
         OpenTelemetry Tracer instance for floe-iceberg.
@@ -72,10 +73,7 @@ def get_tracer() -> Tracer:
         ...     # Span is active here
         ...     pass
     """
-    global _tracer  # noqa: PLW0603
-    if _tracer is None:
-        _tracer = trace.get_tracer(TRACER_NAME)
-    return _tracer
+    return _factory_get_tracer(TRACER_NAME)
 
 
 # =============================================================================

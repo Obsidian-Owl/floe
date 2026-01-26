@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "floe-core>=0.1.0",
     "dbt-core>=1.6,<2.0",
+    "dbt-duckdb>=1.7.0",  # Required for integration tests
     "sqlfluff>=2.0",
     "pydantic>=2.0",
     "structlog>=23.0",

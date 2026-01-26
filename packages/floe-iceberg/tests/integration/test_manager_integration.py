@@ -103,9 +103,9 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
         # Create table
         table = manager.create_table(table_config)
 
-        # Verify table was created
-        assert table is not None
+        # Verify table was created and is accessible
         assert manager.table_exists(table_config.identifier)
+        assert table.name() == table_config.table_name
 
         # Verify schema
         schema = table.schema()
@@ -153,14 +153,14 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
 
         # Create table first time
         table1 = manager.create_table(table_config)
-        assert table1 is not None
+        assert table1.name() == table_config.table_name
 
         # Create same table again with if_not_exists=True (should not raise)
         table2 = manager.create_table(table_config, if_not_exists=True)
-        assert table2 is not None
 
         # Verify both point to the same table (idempotence check)
-        assert table1.identifier == table2.identifier
+        assert table1.name() == table2.name()
+        assert manager.table_exists(table_config.identifier)
 
     # =========================================================================
     # T098: write_data with real S3

@@ -21,6 +21,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
@@ -43,8 +44,9 @@ ATTR_WAREHOUSE = "catalog.warehouse"
 def get_tracer() -> trace.Tracer:
     """Get the OpenTelemetry tracer for catalog operations.
 
-    Returns a tracer instance configured for the Polaris catalog plugin.
-    If no tracer provider is configured, returns a no-op tracer.
+    Returns a thread-safe tracer instance from the factory configured for
+    the Polaris catalog plugin. If no tracer provider is configured or
+    initialization fails, returns a no-op tracer.
 
     Returns:
         OpenTelemetry Tracer instance.
@@ -54,7 +56,7 @@ def get_tracer() -> trace.Tracer:
         >>> with tracer.start_as_current_span("my_operation"):
         ...     pass
     """
-    return trace.get_tracer(TRACER_NAME)
+    return _factory_get_tracer(TRACER_NAME)
 
 
 @contextmanager

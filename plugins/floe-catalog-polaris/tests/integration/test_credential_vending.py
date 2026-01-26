@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from floe_core import NotFoundError
+from floe_core.plugin_errors import CatalogUnavailableError
 from pydantic import SecretStr
 from pyiceberg.schema import Schema
 from pyiceberg.types import LongType, NestedField, StringType
@@ -471,7 +472,7 @@ class TestCredentialVending(IntegrationTestBase):
         # Note: intentionally NOT calling plugin.connect()
 
         # Act & Assert
-        with pytest.raises(RuntimeError, match="not connected"):
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             plugin.vend_credentials(
                 table_path="some_namespace.some_table",
                 operations=["READ"],

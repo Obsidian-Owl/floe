@@ -20,6 +20,7 @@ See Also:
 
 from __future__ import annotations
 
+import heapq
 import re
 from datetime import datetime, timezone
 from enum import Enum
@@ -279,12 +280,14 @@ class RegistryConfig(BaseModel):
     uri: str = Field(
         ...,
         min_length=1,
-        pattern=r"^oci://[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9](/[a-zA-Z0-9._-]+)*$",
+        # Allow hostname with optional port (e.g., localhost:30500)
+        pattern=r"^oci://[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9](:[0-9]+)?(/[a-zA-Z0-9._-]+)*$",
         description="OCI registry URI (e.g., oci://harbor.example.com/namespace)",
         examples=[
             "oci://harbor.example.com/floe-platform",
             "oci://123456789.dkr.ecr.us-east-1.amazonaws.com/floe",
             "oci://myregistry.azurecr.io/floe",
+            "oci://localhost:5000/floe",
         ],
     )
     auth: RegistryAuth = Field(
@@ -697,10 +700,11 @@ class CacheIndex(BaseModel):
 
         Only returns entries for immutable tags (mutable tags are already
         subject to TTL expiry).
+
+        Uses heapq.nsmallest for O(n log k) performance instead of O(n log n) sort.
         """
         immutable_entries = [e for e in self.entries.values() if e.is_immutable]
-        sorted_entries = sorted(immutable_entries, key=lambda e: e.last_accessed)
-        return sorted_entries[:count]
+        return heapq.nsmallest(count, immutable_entries, key=lambda e: e.last_accessed)
 
     def get_expired_entries(self) -> list[CacheEntry]:
         """Get all expired cache entries."""

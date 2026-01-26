@@ -39,18 +39,38 @@ if TYPE_CHECKING:
     pass
 
 # Standard installation paths to check for Fusion binary
+# The official Fusion CLI is installed as 'dbt' (with 'dbtf' alias)
 STANDARD_FUSION_PATHS: list[Path] = [
+    Path.home() / ".local/bin/dbt",  # Official install location
+    Path("/usr/local/bin/dbt"),
+    Path("/opt/dbt-fusion/bin/dbt"),
+    # Legacy dbt-sa-cli paths (development builds)
+    Path.home() / ".cargo/bin/dbt-sa-cli",
     Path("/usr/local/bin/dbt-sa-cli"),
-    Path("/opt/dbt-fusion/bin/dbt-sa-cli"),
-    Path.home() / ".local/bin/dbt-sa-cli",
-    Path.home() / ".dbt-fusion/bin/dbt-sa-cli",
 ]
 
-# Default binary name for Fusion CLI
-DEFAULT_BINARY_NAME = "dbt-sa-cli"
+# Binary names to search for (in priority order)
+# Official Fusion uses 'dbt', development builds use 'dbt-sa-cli'
+FUSION_BINARY_NAMES: list[str] = ["dbt", "dbtf", "dbt-sa-cli"]
 
-# Adapters with Rust implementations in dbt Fusion
-SUPPORTED_RUST_ADAPTERS: list[str] = ["duckdb", "snowflake"]
+# Default binary name for Fusion CLI (official release)
+DEFAULT_BINARY_NAME = "dbt"
+
+# Adapters with Rust implementations in dbt Fusion (official CLI)
+# As of dbt-fusion 2.0.0-preview, supported adapters are:
+# redshift, snowflake, postgres, bigquery, trino, datafusion, spark, databricks, salesforce
+# Note: DuckDB is NOT supported in official Fusion CLI (only in dbt-sa-cli standalone analyzer)
+SUPPORTED_RUST_ADAPTERS: list[str] = [
+    "snowflake",
+    "postgres",
+    "bigquery",
+    "redshift",
+    "trino",
+    "datafusion",
+    "spark",
+    "databricks",
+    "salesforce",
+]
 
 # Minimum required Fusion CLI version (NFR-004)
 MIN_FUSION_VERSION = "1.0.0"
@@ -73,15 +93,21 @@ class FusionDetectionInfo:
     adapters_available: list[str] = field(default_factory=list)
 
 
-def detect_fusion_binary(binary_name: str = DEFAULT_BINARY_NAME) -> Path | None:
+def detect_fusion_binary(binary_name: str | None = None) -> Path | None:
     """Detect Fusion CLI binary in PATH or standard installation paths.
 
     Searches for the Fusion CLI binary in the following order:
-    1. System PATH (using shutil.which)
-    2. Standard installation paths (STANDARD_FUSION_PATHS)
+    1. Check standard installation paths FIRST (official CLI locations)
+    2. Then check system PATH for known Fusion binary names
+    3. Only returns binaries that support the 'compile' command
+
+    The official Fusion CLI (dbt/dbtf) supports: compile, run, test, build.
+    The standalone analyzer (dbt-sa-cli) only supports: parse, deps, list.
+    We need the official CLI for full dbt functionality.
 
     Args:
-        binary_name: Name of the binary to search for. Defaults to "dbt-sa-cli".
+        binary_name: Specific binary name to search for. If None, searches
+            for all known Fusion binary names in priority order.
 
     Returns:
         Path to the Fusion CLI binary if found, None otherwise.
@@ -94,17 +120,65 @@ def detect_fusion_binary(binary_name: str = DEFAULT_BINARY_NAME) -> Path | None:
         >>> if binary_path:
         ...     print(f"Found Fusion at {binary_path}")
     """
-    # First check PATH
-    path_result = shutil.which(binary_name)
-    if path_result:
-        return Path(path_result)
-
-    # Then check standard paths
+    # Check standard paths FIRST (prefer official install locations)
     for standard_path in STANDARD_FUSION_PATHS:
         if standard_path.exists() and standard_path.is_file():
-            return standard_path
+            if _is_full_fusion_cli(standard_path):
+                return standard_path
+
+    # Determine which binary names to search for
+    names_to_check = [binary_name] if binary_name else FUSION_BINARY_NAMES
+
+    # Then check PATH for each binary name
+    for name in names_to_check:
+        path_result = shutil.which(name)
+        if path_result:
+            # Verify it's the full Fusion CLI (not dbt-core or standalone analyzer)
+            if _is_full_fusion_cli(Path(path_result)):
+                return Path(path_result)
 
     return None
+
+
+def _is_full_fusion_cli(binary_path: Path) -> bool:
+    """Check if a binary is the FULL Fusion CLI with compile/run/test support.
+
+    The official Fusion CLI (dbt/dbtf from dbt Labs CDN) supports:
+    - compile, run, test, build (full dbt commands)
+
+    The standalone analyzer (dbt-sa-cli from source) only supports:
+    - parse, deps, list (limited commands)
+
+    This function uses a single subprocess call to check both:
+    1. Whether it identifies as Fusion (contains "fusion" or "dbt-sa-cli")
+    2. Whether 'compile' command is available in help output
+
+    Args:
+        binary_path: Path to the binary to check.
+
+    Returns:
+        True if the binary is the full Fusion CLI, False otherwise.
+    """
+    try:
+        # Single subprocess call to check both identity and capabilities
+        result = subprocess.run(
+            [str(binary_path), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        help_output = result.stdout.lower()
+
+        # Must identify as Fusion (not dbt-core which outputs 'core')
+        is_fusion = "fusion" in help_output or "dbt-sa-cli" in help_output
+
+        # Must have compile command (full CLI, not standalone analyzer)
+        has_compile = "compile" in help_output
+
+        return is_fusion and has_compile
+    except (subprocess.TimeoutExpired, OSError):
+        return False
 
 
 def get_fusion_version(binary_path: Path) -> str | None:
@@ -138,7 +212,10 @@ def get_fusion_version(binary_path: Path) -> str | None:
         if result.returncode != 0:
             return None
 
-        # Parse version from output like "dbt-sa-cli 0.1.0" or "dbt-sa-cli version 0.1.0"
+        # Parse version from output like:
+        # - "dbt-fusion 2.0.0-preview.101"
+        # - "dbt-sa-cli 0.1.0"
+        # - "dbt-sa-cli version 0.1.0"
         output = result.stdout.strip()
 
         # Security: Limit input length to prevent ReDoS attacks (version output is short)
@@ -146,9 +223,9 @@ def get_fusion_version(binary_path: Path) -> str | None:
             return None
 
         # Use explicit quantifier limits to prevent polynomial backtracking
-        # Pattern: optional "version ", then semver with optional prerelease suffix
+        # Pattern: semver with optional prerelease suffix (e.g., 2.0.0-preview.101)
         version_match = re.search(
-            r"(?:version\s{1,10})?(\d{1,10}\.\d{1,10}\.\d{1,10}(?:-\w{1,20})?)",
+            r"(\d{1,10}\.\d{1,10}\.\d{1,10}(?:-[\w.]{1,30})?)",
             output,
         )
         if version_match:
@@ -250,6 +327,7 @@ def detect_fusion() -> FusionDetectionInfo:
 
 __all__ = [
     "STANDARD_FUSION_PATHS",
+    "FUSION_BINARY_NAMES",
     "DEFAULT_BINARY_NAME",
     "SUPPORTED_RUST_ADAPTERS",
     "MIN_FUSION_VERSION",

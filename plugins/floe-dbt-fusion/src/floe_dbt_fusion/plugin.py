@@ -222,7 +222,7 @@ class DBTFusionPlugin(DBTPlugin):
     ) -> Path:
         """Compile dbt project using Fusion CLI.
 
-        Invokes `dbt-sa-cli compile` via subprocess to compile the
+        Invokes `dbt compile` via subprocess to compile the
         dbt project and generate manifest.json.
 
         Args:
@@ -420,7 +420,8 @@ class DBTFusionPlugin(DBTPlugin):
             FR-019: Built-in static analysis
         """
         # Fusion static analysis command
-        cmd_args = ["lint", "--format", "json"]
+        # Note: lint command in dbt-fusion preview may have limited functionality
+        cmd_args = ["lint"]
         if fix:
             cmd_args.append("--fix")
 
@@ -431,6 +432,10 @@ class DBTFusionPlugin(DBTPlugin):
             *cmd_args,
             "--project-dir",
             str(project_dir),
+            "--profiles-dir",
+            str(profiles_dir),
+            "--target",
+            target,
         ]
 
         # PERF-002: Add timeout to prevent hanging subprocess (2 min for linting)
@@ -457,30 +462,39 @@ class DBTFusionPlugin(DBTPlugin):
         files_checked = 0
         files_fixed = 0
 
-        if result.returncode == 0 and result.stdout:
-            try:
-                output = json.loads(result.stdout)
-                raw_violations = output.get("violations", [])
-                files_checked = output.get("files_analyzed", 0)
-                files_fixed = output.get("files_fixed", 0) if fix else 0
+        # Parse text output from Fusion lint
+        # Fusion lint outputs verdict/progress info, not JSON
+        output = result.stdout + result.stderr
+        log.debug("fusion_lint_output", output=output[:500], returncode=result.returncode)
 
-                # Convert raw violations to LintViolation models
-                for v in raw_violations:
-                    violations.append(
-                        LintViolation(
-                            file_path=v.get("file", ""),
-                            line=max(1, v.get("line", 1)),
-                            column=v.get("column", 0),
-                            code=v.get("rule", "UNKNOWN"),
-                            message=v.get("message", ""),
-                            severity=v.get("severity", "warning"),
-                        )
+        if result.returncode == 0:
+            # Count SQL files mentioned in output
+            import re
+
+            sql_files = re.findall(r"[\w/]+\.sql", output)
+            files_checked = len(set(sql_files))
+
+            # Parse warnings from output (format: "file.sql:line:col: warning message")
+            warning_pattern = re.compile(r"([^:\s]+\.sql):(\d+):(\d+):\s*(\w+):\s*(.*)")
+            for match in warning_pattern.finditer(output):
+                file_path, line, col, severity, message = match.groups()
+                violations.append(
+                    LintViolation(
+                        file_path=file_path,
+                        line=max(1, int(line)),
+                        column=int(col),
+                        code="LINT",
+                        message=message.strip(),
+                        severity=severity.lower(),
                     )
-            except json.JSONDecodeError:
-                pass
+                )
+
+            if fix:
+                # Count "fixed" mentions in output
+                files_fixed = output.lower().count("fixed")
 
         return LintResult(
-            success=len(violations) == 0,
+            success=result.returncode == 0 and len(violations) == 0,
             violations=violations,
             files_checked=files_checked,
             files_fixed=files_fixed,

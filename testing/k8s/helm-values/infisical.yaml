@@ -1,0 +1,46 @@
+# Infisical self-hosted for Kind cluster testing
+# Chart: infisical/infisical-standalone
+#
+# WARNING: Test-only configuration - NOT for production
+#
+# Usage:
+#   helm repo add infisical https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+#   helm install infisical infisical/infisical-standalone -f testing/k8s/helm-values/infisical.yaml
+
+infisical:
+  replicaCount: 1
+  image:
+    tag: "latest"
+
+  # Environment variables for Infisical
+  env:
+    # Site URL for callbacks
+    SITE_URL: "http://localhost:8083"
+    # Telemetry disabled for testing
+    TELEMETRY_ENABLED: "false"
+
+ingress:
+  enabled: false  # Use NodePort for Kind
+
+# Use in-cluster PostgreSQL
+postgresql:
+  enabled: true
+  auth:
+    username: infisical
+    password: test-password-123
+    database: infisicalDB
+  persistence:
+    enabled: false  # No persistence for Kind testing
+
+# Use in-cluster Redis
+redis:
+  enabled: true
+  auth:
+    password: test-redis-password
+  persistence:
+    enabled: false  # No persistence for Kind testing
+
+# Service configuration
+service:
+  type: NodePort
+  nodePort: 30083

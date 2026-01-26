@@ -1,6 +1,7 @@
 """Pytest configuration for floe-secrets-infisical integration tests.
 
 This module provides fixtures specific to integration tests with real Infisical.
+Tests require Infisical running in the Kind cluster (port 8083).
 """
 
 from __future__ import annotations
@@ -17,6 +18,22 @@ if TYPE_CHECKING:
 
     from floe_secrets_infisical.config import InfisicalSecretsConfig
     from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Set default environment variables for Kind cluster Infisical.
+
+    Note: Infisical requires initial setup via UI before Universal Auth
+    credentials can be created. These defaults assume the setup has been
+    completed and credentials have been generated.
+    """
+    # Default to Kind cluster Infisical instance
+    os.environ.setdefault("INFISICAL_SITE_URL", "http://localhost:8083")
+    # Test credentials - must be created during initial Infisical setup
+    # These are placeholders; actual values depend on Infisical project setup
+    os.environ.setdefault("INFISICAL_CLIENT_ID", "test-client-id")
+    os.environ.setdefault("INFISICAL_CLIENT_SECRET", "test-client-secret")
+    os.environ.setdefault("INFISICAL_PROJECT_ID", "test-project")
 
 
 # Environment variable names for Infisical credentials

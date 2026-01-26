@@ -225,14 +225,17 @@ class TestValidateTokenForRealmTracing:
             plugin.shutdown()
 
 
-class TestTracingWithoutOTel:
-    """Tests for graceful fallback when OTel is not available."""
+class TestTracingWithNoOpTracer:
+    """Tests for graceful operation with NoOpTracer (when OTel not configured).
+
+    Note: The SafeTracerFactory always returns a tracer (NoOpTracer if OTel init fails).
+    These tests verify functionality works regardless of tracing configuration.
+    """
 
     @pytest.mark.requirement("OB-005")
-    def test_authenticate_without_otel(self) -> None:
-        """Test that authenticate works without OTel installed."""
+    def test_authenticate_works_with_noop_tracer(self) -> None:
+        """Test that authenticate works with NoOpTracer (no tracing configured)."""
         from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
-        from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -248,22 +251,20 @@ class TestTracingWithoutOTel:
             with patch.object(plugin._client, "post") as mock_post:
                 mock_response = MagicMock()
                 mock_response.status_code = 200
-                mock_response.json.return_value = {"access_token": "no-otel-token"}
+                mock_response.json.return_value = {"access_token": "test-token"}
                 mock_post.return_value = mock_response
 
-                # Simulate OTel not available
-                with patch.object(plugin_module, "_get_tracer", return_value=None):
-                    token = plugin.authenticate({})
+                # No need to patch _get_tracer - the real factory handles this gracefully
+                token = plugin.authenticate({})
 
-                    assert token == "no-otel-token"
+                assert token == "test-token"
         finally:
             plugin.shutdown()
 
     @pytest.mark.requirement("OB-005")
-    def test_validate_token_without_otel(self) -> None:
-        """Test that validate_token works without OTel installed."""
+    def test_validate_token_works_with_noop_tracer(self) -> None:
+        """Test that validate_token works with NoOpTracer (no tracing configured)."""
         from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
-        from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -284,10 +285,10 @@ class TestTracingWithoutOTel:
             with patch.object(
                 plugin._token_validator, "validate", return_value=mock_validator_result
             ):
-                with patch.object(plugin_module, "_get_tracer", return_value=None):
-                    result = plugin.validate_token("test-token")
+                # No need to patch _get_tracer - the real factory handles this gracefully
+                result = plugin.validate_token("test-token")
 
-                    assert result.valid is False
-                    assert result.error == "Test error"
+                assert result.valid is False
+                assert result.error == "Test error"
         finally:
             plugin.shutdown()

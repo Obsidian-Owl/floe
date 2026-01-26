@@ -26,12 +26,26 @@ RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/re
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/
 
+# =============================================================================
+# dbt Fusion CLI - Install from official distribution
+# =============================================================================
+# Install the official dbt Fusion CLI from dbt Labs CDN.
+# The official CLI supports: compile, run, test, build (full dbt compatibility).
+#
+# See: https://docs.getdbt.com/docs/fusion/install-fusion-cli
+
+# hadolint ignore=DL3059
+RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update \
+    && ln -sf /root/.local/bin/dbt /usr/local/bin/dbt \
+    && dbt --version
+
 # Set working directory
 WORKDIR /app
 
 # Copy workspace files
 COPY pyproject.toml uv.lock ./
 COPY packages/ ./packages/
+COPY plugins/ ./plugins/
 COPY testing/ ./testing/
 COPY tests/ ./tests/
 

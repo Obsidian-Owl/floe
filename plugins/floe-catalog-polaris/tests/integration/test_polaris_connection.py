@@ -18,6 +18,7 @@ import os
 from typing import TYPE_CHECKING
 
 import pytest
+from floe_core.plugin_errors import CatalogUnavailableError
 from pydantic import SecretStr
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
@@ -381,13 +382,13 @@ class TestPolarisConnectionEdgeCases(IntegrationTestBase):
         plugin = PolarisCatalogPlugin(config=config)
 
         # Operations should fail before connect
-        with pytest.raises(RuntimeError, match="not connected"):
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             plugin.list_namespaces()
 
-        with pytest.raises(RuntimeError, match="not connected"):
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             plugin.create_namespace("test")
 
-        with pytest.raises(RuntimeError, match="not connected"):
+        with pytest.raises(CatalogUnavailableError, match="not connected"):
             plugin.list_tables("test")
 
     @pytest.mark.requirement("FR-006")

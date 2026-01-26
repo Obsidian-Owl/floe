@@ -34,14 +34,15 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
+
 if TYPE_CHECKING:
     from opentelemetry.metrics import Counter, Histogram, Meter
     from opentelemetry.trace import Span, Tracer
 
 logger = structlog.get_logger(__name__)
 
-# Module-level singletons
-_tracer: Tracer | None = None
+# Module-level singletons for metrics (tracer uses factory)
 _meter: Meter | None = None
 _validation_duration_histogram: Histogram | None = None
 _validation_errors_counter: Counter | None = None
@@ -54,8 +55,10 @@ OTEL_SERVICE_VERSION = "0.1.0"
 def get_tracer() -> Tracer:
     """Get or create the floe-core OpenTelemetry tracer.
 
-    Returns a configured tracer for distributed tracing. The tracer is
-    lazily initialized on first call and reused for subsequent calls.
+    Returns a thread-safe tracer from the factory for distributed tracing.
+    The tracer is lazily initialized on first call and reused for subsequent calls.
+
+    Returns a NoOpTracer if OTel initialization fails (e.g., corrupted state).
 
     Returns:
         OpenTelemetry Tracer instance for floe-core.
@@ -66,18 +69,7 @@ def get_tracer() -> Tracer:
         ...     span.set_attribute("my.attribute", "value")
         ...     # ... operation logic
     """
-    global _tracer
-
-    if _tracer is None:
-        from opentelemetry import trace
-
-        _tracer = trace.get_tracer(
-            instrumenting_module_name=OTEL_SERVICE_NAME,
-            instrumenting_library_version=OTEL_SERVICE_VERSION,
-        )
-        logger.debug("observability.tracer_initialized", service=OTEL_SERVICE_NAME)
-
-    return _tracer
+    return _factory_get_tracer(OTEL_SERVICE_NAME)
 
 
 def get_meter() -> Meter:
@@ -257,8 +249,10 @@ def reset_for_testing() -> None:
         >>> from floe_core.observability import reset_for_testing
         >>> reset_for_testing()
     """
-    global _tracer, _meter, _validation_duration_histogram, _validation_errors_counter
-    _tracer = None
+    from floe_core.telemetry.tracer_factory import reset_tracer
+
+    global _meter, _validation_duration_histogram, _validation_errors_counter
+    reset_tracer()  # Reset tracer via factory
     _meter = None
     _validation_duration_histogram = None
     _validation_errors_counter = None

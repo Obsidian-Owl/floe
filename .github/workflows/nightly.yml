@@ -38,6 +38,8 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || inputs.run_integration == true }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -57,22 +59,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Create Kind cluster
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3  # v1.12.0
-        with:
-          cluster_name: floe-nightly
-          config: testing/k8s/kind-config.yaml
-
-      - name: Deploy test services
+      - name: Install dbt Fusion CLI
         run: |
-          kubectl apply -f testing/k8s/services/namespace.yaml
-          kubectl apply -f testing/k8s/services/
+          # Install official dbt Fusion CLI from dbt Labs
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          ~/.local/bin/dbt --version
 
-      - name: Wait for services to be ready
-        run: |
-          echo "Waiting for all pods to be ready..."
-          kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s || true
-          kubectl get pods -n floe-test
+      - name: Setup Kind cluster and deploy services
+        run: CLUSTER_NAME=floe-nightly ./testing/k8s/setup-cluster.sh
+        env:
+          SKIP_MONITORING: "true"
 
       - name: Run integration tests
         run: ./testing/ci/test-integration.sh
@@ -81,11 +78,7 @@ jobs:
 
       - name: Collect logs on failure
         if: failure()
-        run: |
-          echo "=== Pod Status ===" >&2
-          kubectl get pods -n floe-test -o wide
-          echo "=== Recent Events ===" >&2
-          kubectl get events -n floe-test --sort-by='.lastTimestamp' | tail -20
+        run: ./testing/ci/collect-logs.sh floe-test
 
       - name: Cleanup Kind cluster
         if: always()
@@ -98,6 +91,8 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || inputs.run_audit == true }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -118,11 +113,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run vulnerability audit
-        run: |
-          echo "Checking for known vulnerabilities..."
-          # uv-secure natively parses uv.lock files and ignores local packages
-          # --no-check-uv-tool: CI manages its own uv version
-          uv run uv-secure --no-check-uv-tool .
+        uses: ./.github/actions/uv-security-audit
 
       - name: Check for stale dependencies
         run: |
@@ -137,6 +128,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [integration-tests, dependency-audit]
     if: failure()
+    permissions:
+      issues: write
 
     steps:
       - name: Create issue on failure

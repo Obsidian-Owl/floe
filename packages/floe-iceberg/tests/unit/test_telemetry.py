@@ -240,9 +240,9 @@ class TestTracedDecorator:
 
         tracer = get_tracer()
 
-        # Verify tracer is from opentelemetry
-        assert tracer is not None
+        # Verify tracer is from opentelemetry and has expected API
         assert hasattr(tracer, "start_as_current_span")
+        assert hasattr(tracer, "start_span")
 
     @pytest.mark.requirement("FR-041")
     def test_traced_preserves_function_metadata(self, mock_tracer: MagicMock) -> None:
@@ -296,11 +296,11 @@ class TestTracerConfiguration:
     @pytest.mark.requirement("FR-041")
     def test_get_tracer_returns_tracer_with_correct_name(self) -> None:
         """Test get_tracer returns tracer from trace.get_tracer with correct name."""
-        with patch("floe_iceberg.telemetry.trace.get_tracer") as mock_get_tracer:
-            # Reset the cached tracer
-            import floe_iceberg.telemetry
+        from floe_core.telemetry.tracer_factory import reset_tracer
 
-            floe_iceberg.telemetry._tracer = None
+        with patch("floe_core.telemetry.tracer_factory.trace.get_tracer") as mock_get_tracer:
+            # Reset the cached tracer via factory
+            reset_tracer()
 
             mock_tracer = MagicMock()
             mock_get_tracer.return_value = mock_tracer

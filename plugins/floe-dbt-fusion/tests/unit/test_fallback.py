@@ -76,13 +76,14 @@ class TestFallbackPluginCreation:
         from floe_dbt_fusion.fallback import create_fallback_plugin
 
         # Mock the check to return unavailable adapter
+        # Note: patch where the function is USED (fallback), not where it's DEFINED (detection)
         with (
             patch(
-                "floe_dbt_fusion.detection.check_adapter_available",
+                "floe_dbt_fusion.fallback.check_adapter_available",
                 return_value=False,
             ),
             patch(
-                "floe_dbt_fusion.errors.check_fallback_available",
+                "floe_dbt_fusion.fallback.check_fallback_available",
                 return_value=True,
             ),
         ):
@@ -114,14 +115,18 @@ class TestFallbackPluginCreation:
 
     @pytest.mark.requirement("FR-021")
     def test_create_fallback_plugin_returns_none_for_supported_adapter(self) -> None:
-        """create_fallback_plugin returns None for supported Rust adapters."""
+        """create_fallback_plugin returns None for supported Rust adapters.
+
+        Note: snowflake is supported by the official Fusion CLI, not duckdb.
+        """
         from floe_dbt_fusion.fallback import create_fallback_plugin
 
+        # Snowflake IS a supported adapter in SUPPORTED_RUST_ADAPTERS
         with patch(
-            "floe_dbt_fusion.detection.check_adapter_available",
+            "floe_dbt_fusion.fallback.check_adapter_available",
             return_value=True,
         ):
-            result = create_fallback_plugin("duckdb")
+            result = create_fallback_plugin("snowflake")
 
             # No fallback needed for supported adapters
             assert result is None
@@ -279,17 +284,25 @@ class TestAutomaticFallbackSelection:
     @pytest.mark.requirement("FR-020")
     @pytest.mark.requirement("FR-021")
     def test_get_best_plugin_returns_fusion_when_available(self) -> None:
-        """get_best_plugin() returns DBTFusionPlugin when binary and adapter available."""
+        """get_best_plugin() returns DBTFusionPlugin when binary and adapter available.
+
+        Note: Use snowflake as test adapter since it IS supported by Fusion CLI.
+        """
         from floe_dbt_fusion.fallback import get_best_plugin
 
         with (
+            patch.object(Path, "exists", return_value=False),
             patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli"),
             patch(
-                "floe_dbt_fusion.detection.check_adapter_available",
+                "floe_dbt_fusion.fallback.check_adapter_available",
                 return_value=True,
             ),
+            patch(
+                "floe_dbt_fusion.fallback.detect_fusion_binary",
+                return_value=Path("/usr/local/bin/dbt-sa-cli"),
+            ),
         ):
-            plugin = get_best_plugin(adapter="duckdb")
+            plugin = get_best_plugin(adapter="snowflake")
 
             assert plugin.name == "fusion"
 
@@ -314,21 +327,25 @@ class TestAutomaticFallbackSelection:
     @pytest.mark.requirement("FR-020")
     @pytest.mark.requirement("FR-021")
     def test_get_best_plugin_falls_back_when_adapter_unavailable(self) -> None:
-        """get_best_plugin() falls back to core when adapter not supported."""
+        """get_best_plugin() falls back to core when adapter not supported.
+
+        Note: Use an unsupported adapter like 'mysql' to trigger fallback.
+        """
         from floe_dbt_fusion.fallback import get_best_plugin
 
         with (
+            patch.object(Path, "exists", return_value=False),
             patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli"),
             patch(
-                "floe_dbt_fusion.detection.check_adapter_available",
+                "floe_dbt_fusion.fallback.check_adapter_available",
                 return_value=False,
             ),
             patch(
-                "floe_dbt_fusion.errors.check_fallback_available",
+                "floe_dbt_fusion.fallback.check_fallback_available",
                 return_value=True,
             ),
         ):
-            plugin = get_best_plugin(adapter="bigquery")
+            plugin = get_best_plugin(adapter="mysql")
 
             assert plugin.name == "core"
 
@@ -475,15 +492,22 @@ class TestFallbackEdgeCases:
 
     @pytest.mark.requirement("FR-021")
     def test_multiple_adapters_checked_for_availability(self) -> None:
-        """Multiple adapters can be checked for availability."""
+        """Multiple adapters can be checked for availability.
+
+        The official Fusion CLI supports: snowflake, postgres, bigquery,
+        redshift, trino, datafusion, spark, databricks, salesforce.
+        DuckDB is NOT supported by the official CLI.
+        """
         from floe_dbt_fusion.detection import check_adapter_available
 
-        # Supported adapters
-        assert check_adapter_available("duckdb") is True
+        # Supported adapters (in SUPPORTED_RUST_ADAPTERS)
         assert check_adapter_available("snowflake") is True
+        assert check_adapter_available("postgres") is True
+        assert check_adapter_available("bigquery") is True
+        assert check_adapter_available("databricks") is True
 
-        # Unsupported adapters
-        assert check_adapter_available("bigquery") is False
-        assert check_adapter_available("postgres") is False
-        assert check_adapter_available("redshift") is False
-        assert check_adapter_available("databricks") is False
+        # Unsupported adapters (NOT in SUPPORTED_RUST_ADAPTERS)
+        assert check_adapter_available("duckdb") is False
+        assert check_adapter_available("mysql") is False
+        assert check_adapter_available("sqlite") is False
+        assert check_adapter_available("oracle") is False

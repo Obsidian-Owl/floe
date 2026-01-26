@@ -112,12 +112,22 @@ spec:
           command: ['sh', '-c']
           args:
             - |
-              echo "Waiting for PostgreSQL dagster database..."
-              until pg_isready -h postgres -p 5432 -U floe -d dagster; do
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready -h postgres -p 5432 -U floe; do
                 echo "PostgreSQL not ready, waiting..."
                 sleep 2
               done
+              echo "PostgreSQL is accepting connections"
+
+              echo "Waiting for dagster database to be created..."
+              until psql -h postgres -U floe -d dagster -c "SELECT 1" > /dev/null 2>&1; do
+                echo "Dagster database not ready (init-databases.sh may not have run yet)..."
+                sleep 2
+              done
               echo "PostgreSQL dagster database is ready!"
+          env:
+            - name: PGPASSWORD
+              value: floe_test_password
           resources:
             requests:
               cpu: 10m
@@ -198,12 +208,22 @@ spec:
           command: ['sh', '-c']
           args:
             - |
-              echo "Waiting for PostgreSQL dagster database..."
-              until pg_isready -h postgres -p 5432 -U floe -d dagster; do
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready -h postgres -p 5432 -U floe; do
                 echo "PostgreSQL not ready, waiting..."
                 sleep 2
               done
+              echo "PostgreSQL is accepting connections"
+
+              echo "Waiting for dagster database to be created..."
+              until psql -h postgres -U floe -d dagster -c "SELECT 1" > /dev/null 2>&1; do
+                echo "Dagster database not ready (init-databases.sh may not have run yet)..."
+                sleep 2
+              done
               echo "PostgreSQL dagster database is ready!"
+          env:
+            - name: PGPASSWORD
+              value: floe_test_password
           resources:
             requests:
               cpu: 10m

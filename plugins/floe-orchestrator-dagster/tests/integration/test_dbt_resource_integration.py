@@ -16,14 +16,29 @@ Note:
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
+
+# Import types at module level for Dagster decorator resolution
+# (needed because `from __future__ import annotations` defers type hints)
+from dagster import Output
 from testing.base_classes.integration_test_base import IntegrationTestBase
+
+from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
 if TYPE_CHECKING:
     pass
+
+
+def _generate_unique_project_name(prefix: str = "test_project") -> str:
+    """Generate unique project name to prevent test pollution.
+
+    Uses UUID suffix to ensure isolation between parallel test runs.
+    """
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 # Check if dbt-core is available
@@ -61,13 +76,16 @@ class TestDBTResourceWithDagster(IntegrationTestBase):
         - dbt_project.yml (project configuration)
         - profiles.yml (DuckDB target)
         - models/example.sql (simple model)
+
+        Uses unique project name to prevent test pollution.
         """
-        project_dir = tmp_path / "test_dbt_project"
+        project_name = _generate_unique_project_name()
+        project_dir = tmp_path / project_name
         project_dir.mkdir(parents=True)
 
         # Create dbt_project.yml
-        dbt_project = """\
-name: test_project
+        dbt_project = f"""\
+name: {project_name}
 version: "1.0.0"
 config-version: 2
 profile: test_profile
@@ -222,7 +240,8 @@ test_profile:
         manifest = resource.get_manifest()
 
         assert "metadata" in manifest
-        assert manifest["metadata"]["project_name"] == "test_project"
+        # Project name has unique suffix for test isolation
+        assert manifest["metadata"]["project_name"].startswith("test_project")
         assert "nodes" in manifest
 
     @pytest.mark.integration
@@ -303,12 +322,16 @@ class TestDBTResourceWithDagsterAsset(IntegrationTestBase):
 
     @pytest.fixture
     def temp_dbt_project(self, tmp_path: Path) -> Path:
-        """Create a minimal temporary dbt project for testing."""
-        project_dir = tmp_path / "test_dbt_project"
+        """Create a minimal temporary dbt project for testing.
+
+        Uses unique project name to prevent test pollution.
+        """
+        project_name = _generate_unique_project_name()
+        project_dir = tmp_path / project_name
         project_dir.mkdir(parents=True)
 
-        dbt_project = """\
-name: test_project
+        dbt_project = f"""\
+name: {project_name}
 version: "1.0.0"
 config-version: 2
 profile: test_profile
@@ -436,12 +459,13 @@ test_profile:
 
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
-        # Create project with tests
-        project_dir = tmp_path / "test_dbt_project_with_tests"
+        # Create project with tests (using unique name for isolation)
+        project_name = _generate_unique_project_name("test_with_tests")
+        project_dir = tmp_path / project_name
         project_dir.mkdir(parents=True)
 
-        dbt_project = """\
-name: test_project
+        dbt_project = f"""\
+name: {project_name}
 version: "1.0.0"
 config-version: 2
 profile: test_profile

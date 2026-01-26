@@ -35,9 +35,17 @@ from floe_core.rbac.audit import (
 )
 from floe_core.rbac.result import GenerationResult
 from floe_core.schemas.rbac import RoleRule
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 
-# OpenTelemetry tracer for RBAC manifest generation
-tracer = trace.get_tracer(__name__)
+
+def _get_tracer() -> trace.Tracer:
+    """Get the tracer, initializing lazily with fallback to NoOp.
+
+    Returns a thread-safe tracer from the factory. Falls back to NoOpTracer
+    if OTel is not properly configured or initialization fails.
+    """
+    return _factory_get_tracer(__name__)
+
 
 if TYPE_CHECKING:
     from floe_core.plugins.rbac import RBACPlugin
@@ -434,7 +442,7 @@ class RBACManifestGenerator:
             >>> result.service_accounts
             1
         """
-        with tracer.start_as_current_span(
+        with _get_tracer().start_as_current_span(
             "rbac_manifest_generator.generate",
             attributes={
                 "rbac.enabled": security_config.rbac.enabled,
@@ -516,7 +524,7 @@ class RBACManifestGenerator:
         }
 
         # Validate all manifests before writing (FR-051)
-        with tracer.start_as_current_span(
+        with _get_tracer().start_as_current_span(
             "rbac_manifest_generator.validate",
             attributes={"rbac.manifest_count": sum(len(v) for v in all_manifests.values())},
         ):
@@ -544,7 +552,7 @@ class RBACManifestGenerator:
             )
 
         try:
-            with tracer.start_as_current_span(
+            with _get_tracer().start_as_current_span(
                 "rbac_manifest_generator.write_manifests",
                 attributes={
                     "rbac.output_dir": str(self.output_dir),

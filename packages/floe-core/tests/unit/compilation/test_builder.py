@@ -339,3 +339,186 @@ class TestGetGitCommit:
         if result is not None:
             assert len(result) == 40
             assert all(c in "0123456789abcdef" for c in result)
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_get_git_commit_returns_none_when_git_fails(self) -> None:
+        """Test that get_git_commit returns None when git command fails."""
+        from unittest.mock import patch
+
+        from floe_core.compilation.builder import get_git_commit
+
+        # Mock subprocess to simulate git failure
+        with patch("subprocess.run", side_effect=FileNotFoundError("git not found")):
+            result = get_git_commit()
+            assert result is None
+
+
+class TestComputeSourceHashEdgeCases:
+    """Tests for compute_source_hash edge cases."""
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_compute_source_hash_with_manifest_path(self, tmp_path: Path) -> None:
+        """Test compute_source_hash includes manifest content in hash."""
+        from floe_core.compilation.builder import compute_source_hash
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("manifest content")
+
+        hash_value = compute_source_hash(manifest_path=manifest_path)
+        assert hash_value.startswith("sha256:")
+        assert len(hash_value) == 71  # sha256: + 64 hex chars
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_compute_source_hash_with_both_paths(self, tmp_path: Path) -> None:
+        """Test compute_source_hash includes both files in hash."""
+        from floe_core.compilation.builder import compute_source_hash
+
+        spec_path = tmp_path / "floe.yaml"
+        manifest_path = tmp_path / "manifest.yaml"
+        spec_path.write_text("spec content")
+        manifest_path.write_text("manifest content")
+
+        hash_both = compute_source_hash(spec_path=spec_path, manifest_path=manifest_path)
+        hash_spec_only = compute_source_hash(spec_path=spec_path)
+        hash_manifest_only = compute_source_hash(manifest_path=manifest_path)
+
+        # All three should be different
+        assert hash_both != hash_spec_only
+        assert hash_both != hash_manifest_only
+        assert hash_spec_only != hash_manifest_only
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_compute_source_hash_with_no_paths(self) -> None:
+        """Test compute_source_hash with no paths returns empty hash."""
+        from floe_core.compilation.builder import compute_source_hash
+
+        hash_value = compute_source_hash()
+        assert hash_value.startswith("sha256:")
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_compute_source_hash_with_nonexistent_path(self, tmp_path: Path) -> None:
+        """Test compute_source_hash handles nonexistent paths."""
+        from floe_core.compilation.builder import compute_source_hash
+
+        nonexistent = tmp_path / "nonexistent.yaml"
+        hash_value = compute_source_hash(spec_path=nonexistent)
+        # Should return hash of empty content since file doesn't exist
+        assert hash_value.startswith("sha256:")
+
+
+class TestBuildArtifactsEdgeCases:
+    """Tests for build_artifacts edge cases."""
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_build_artifacts_with_source_paths(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+        tmp_path: Path,
+    ) -> None:
+        """Test build_artifacts computes source_hash when paths provided."""
+        from floe_core.compilation.builder import build_artifacts
+
+        spec_path = tmp_path / "floe.yaml"
+        manifest_path = tmp_path / "manifest.yaml"
+        spec_path.write_text("spec content")
+        manifest_path.write_text("manifest content")
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+            spec_path=spec_path,
+            manifest_path=manifest_path,
+        )
+
+        assert artifacts.metadata.source_hash.startswith("sha256:")
+        assert len(artifacts.metadata.source_hash) == 71
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_build_artifacts_has_observability_config(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+    ) -> None:
+        """Test that built artifacts include observability config."""
+        from floe_core.compilation.builder import build_artifacts
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+        )
+
+        assert artifacts.observability is not None
+        assert artifacts.observability.telemetry.enabled is True
+        assert artifacts.observability.lineage is True
+
+    @pytest.mark.requirement("2B-FR-001")
+    def test_build_artifacts_has_identity(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+    ) -> None:
+        """Test that built artifacts include product identity."""
+        from floe_core.compilation.builder import build_artifacts
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+        )
+
+        assert artifacts.identity is not None
+        assert "test_pipeline" in artifacts.identity.product_id
+        assert artifacts.identity.domain == "default"
+
+    @pytest.mark.requirement("3B-FR-001")
+    def test_build_artifacts_with_enforcement_result(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+    ) -> None:
+        """Test build_artifacts includes enforcement_result when provided."""
+        from floe_core.compilation.builder import build_artifacts
+        from floe_core.schemas.compiled_artifacts import EnforcementResultSummary
+
+        enforcement_result = EnforcementResultSummary(
+            passed=True,
+            error_count=0,
+            warning_count=0,
+            policy_types_checked=["coverage", "naming"],
+            models_validated=5,
+            enforcement_level="strict",
+        )
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+            enforcement_result=enforcement_result,
+        )
+
+        assert artifacts.enforcement_result is not None
+        assert artifacts.enforcement_result.passed is True
+        assert artifacts.enforcement_result.error_count == 0
