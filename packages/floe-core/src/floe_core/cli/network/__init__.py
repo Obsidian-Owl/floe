@@ -23,6 +23,12 @@ from __future__ import annotations
 
 import click
 
+from floe_core.cli.network.audit import audit_command
+from floe_core.cli.network.check_cni import check_cni_command
+from floe_core.cli.network.diff import diff_command
+from floe_core.cli.network.generate import generate_command
+from floe_core.cli.network.validate import validate_command
+
 
 @click.group(
     name="network",
@@ -37,12 +43,12 @@ def network() -> None:
     pass
 
 
-# Subcommands will be registered in T069-T078
-# network.add_command(generate_command)
-# network.add_command(validate_command)
-# network.add_command(audit_command)
-# network.add_command(diff_command)
-# network.add_command(check_cni_command)
+# Register subcommands (T069-T078)
+network.add_command(generate_command)
+network.add_command(validate_command)
+network.add_command(audit_command)
+network.add_command(diff_command)
+network.add_command(check_cni_command)
 
 
 __all__: list[str] = ["network"]
