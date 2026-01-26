@@ -215,3 +215,25 @@ def sanitize_path_for_log(path: str | Path) -> str:
     if len(path_str) > _MAX_LOG_PATH_LENGTH:
         path_str = path_str[: _MAX_LOG_PATH_LENGTH - 3] + "..."
     return path_str
+
+
+def sanitize_k8s_api_error(exc: Exception) -> str:
+    """Sanitize Kubernetes API exception for safe logging.
+
+    Extracts only the safe fields (status code and reason) from K8s
+    ApiException, avoiding sensitive data in body or headers.
+
+    Args:
+        exc: Exception from kubernetes client (ApiException expected).
+
+    Returns:
+        Sanitized error message safe for logging.
+    """
+    status = getattr(exc, "status", None)
+    reason = getattr(exc, "reason", None)
+
+    if status is not None and reason is not None:
+        return f"{reason} (HTTP {status})"
+    if reason is not None:
+        return str(reason)
+    return type(exc).__name__

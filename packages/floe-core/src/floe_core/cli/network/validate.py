@@ -39,6 +39,9 @@ def _load_manifest_file(file_path: Path) -> list[dict[str, Any]]:
 
     Returns:
         List of non-empty resource dictionaries from the file.
+
+    Raises:
+        ValueError: If manifest contains invalid K8s resource structure.
     """
     if not file_path.exists():
         return []
@@ -48,7 +51,20 @@ def _load_manifest_file(file_path: Path) -> list[dict[str, Any]]:
         return []
 
     docs = list(yaml.safe_load_all(content))
-    return [d for d in docs if d]
+    validated_docs = []
+    for doc in docs:
+        if doc is not None:
+            # Validate required K8s manifest structure
+            if not isinstance(doc, dict):
+                raise ValueError(
+                    f"Invalid manifest in {file_path}: expected dict, got {type(doc).__name__}"
+                )
+            if "apiVersion" not in doc:
+                raise ValueError(f"Missing apiVersion in {file_path}")
+            if "kind" not in doc:
+                raise ValueError(f"Missing kind in {file_path}")
+            validated_docs.append(doc)
+    return validated_docs
 
 
 def _validate_network_policy_schema(manifest: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -201,10 +217,18 @@ Examples:
     default=False,
     help="Fail on warnings (not just errors).",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    hidden=True,
+    help="Show verbose error messages with tracebacks.",
+)
 def validate_command(
     manifest_dir: Path,
     config: Path | None,
     strict: bool,
+    debug: bool,
 ) -> None:
     """Validate NetworkPolicy manifests against schema and CNI capabilities.
 
@@ -278,13 +302,21 @@ def validate_command(
             )
 
     except FileNotFoundError as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
             f"File not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
     except Exception as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
-            f"Validation failed: {type(e).__name__}",
+            f"Validation failed: {e}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, Literal
 
+from floe_core.network.schemas import _validate_namespace
 from floe_core.plugins import NetworkSecurityPlugin
 
 if TYPE_CHECKING:
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
 
 PSSLevel = Literal["privileged", "baseline", "restricted"]
 NetworkProtocol = Literal["TCP", "UDP"]
+
+_VALID_PSS_LEVELS: frozenset[str] = frozenset({"privileged", "baseline", "restricted"})
 
 
 class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
@@ -143,6 +146,7 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             List of NetworkPolicy manifests (ingress-deny, egress-deny).
         """
+        _validate_namespace(namespace)
         return [
             {
                 "apiVersion": "networking.k8s.io/v1",
@@ -243,6 +247,7 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Ingress rule allowing traffic from ingress controller.
         """
+        _validate_namespace(namespace)
         return {
             "from": [
                 {
@@ -301,6 +306,7 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Ingress rule allowing intra-namespace traffic.
         """
+        _validate_namespace(namespace)
         return {
             "from": [
                 {
@@ -309,7 +315,11 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ],
         }
 
-    def generate_k8s_api_egress_rule(self, k8s_api_cidr: str | None = None) -> dict[str, Any]:
+    def generate_k8s_api_egress_rule(
+        self,
+        k8s_api_cidr: str | None = None,
+        strict_mode: bool = True,
+    ) -> dict[str, Any]:
         """Generate egress rule for Kubernetes API access.
 
         Platform services may need to communicate with the K8s API server
@@ -317,11 +327,15 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
 
         Args:
             k8s_api_cidr: Explicit CIDR for K8s API server. If None, auto-detects
-                from KUBERNETES_SERVICE_HOST env var, falling back to 0.0.0.0/0
-                with a warning logged.
+                from KUBERNETES_SERVICE_HOST env var.
+            strict_mode: If True (default), raise ValueError when CIDR cannot be
+                determined. If False, fall back to 0.0.0.0/0 with warning.
 
         Returns:
             Egress rule allowing traffic to K8s API (port 443/6443).
+
+        Raises:
+            ValueError: If strict_mode=True and CIDR cannot be determined.
         """
         import logging
         import os
@@ -331,11 +345,16 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             k8s_service_host = os.environ.get("KUBERNETES_SERVICE_HOST")
             if k8s_service_host:
                 cidr = f"{k8s_service_host}/32"
+            elif strict_mode:
+                raise ValueError(
+                    "K8s API CIDR not specified and KUBERNETES_SERVICE_HOST not set. "
+                    "Either set k8s_api_cidr explicitly, run in-cluster, or use "
+                    "strict_mode=False to allow permissive 0.0.0.0/0 fallback."
+                )
             else:
                 logging.warning(
-                    "K8s API CIDR not specified and KUBERNETES_SERVICE_HOST not set. "
-                    "Using 0.0.0.0/0 which allows egress to ANY destination. "
-                    "Set k8s_api_cidr explicitly in production."
+                    "K8s API CIDR not specified (strict_mode=False). "
+                    "Using 0.0.0.0/0 which allows egress to ANY destination."
                 )
                 cidr = "0.0.0.0/0"
 
@@ -380,6 +399,8 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
                             "10.0.0.0/8",
                             "172.16.0.0/12",
                             "192.168.0.0/16",
+                            "169.254.0.0/16",
+                            "127.0.0.0/8",
                         ],
                     },
                 },
@@ -534,7 +555,21 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
 
         Returns:
             Dictionary of PSS labels for namespace metadata.
+
+        Raises:
+            ValueError: If an invalid PSS level is provided.
         """
+        for lvl_name, lvl_value in [
+            ("level", level),
+            ("audit_level", audit_level),
+            ("warn_level", warn_level),
+        ]:
+            if lvl_value is not None and lvl_value not in _VALID_PSS_LEVELS:
+                raise ValueError(
+                    f"Invalid PSS {lvl_name}: '{lvl_value}'. "
+                    f"Must be one of: {', '.join(sorted(_VALID_PSS_LEVELS))}"
+                )
+
         if audit_level is None:
             audit_level = level
         if warn_level is None:
@@ -637,8 +672,12 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         return {
             "allowPrivilegeEscalation": False,
             "readOnlyRootFilesystem": True,
+            "runAsNonRoot": True,
             "capabilities": {
                 "drop": ["ALL"],
+            },
+            "seccompProfile": {
+                "type": "RuntimeDefault",
             },
         }
 

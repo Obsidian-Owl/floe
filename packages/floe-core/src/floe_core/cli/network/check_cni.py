@@ -304,11 +304,19 @@ Examples:
     help="Output format.",
     metavar="TEXT",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    hidden=True,
+    help="Show verbose error messages with tracebacks.",
+)
 def check_cni_command(
     kubeconfig: Path | None,
     context: str | None,
     verbose: bool,
     output_format: str,
+    debug: bool,
 ) -> None:
     """Verify CNI plugin supports NetworkPolicies.
 
@@ -355,6 +363,10 @@ def check_cni_command(
     except SystemExit:
         raise
     except Exception as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
             f"CNI check failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,

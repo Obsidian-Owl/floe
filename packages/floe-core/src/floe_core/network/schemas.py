@@ -8,11 +8,63 @@ Contract: specs/7c-network-pod-security/data-model.md
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
+
+_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+_MAX_NAMESPACE_LENGTH = 63
+
+
+def _validate_namespace(namespace: str) -> str:
+    """Validate Kubernetes namespace name (RFC 1123 DNS label)."""
+    if len(namespace) > _MAX_NAMESPACE_LENGTH:
+        raise ValueError(f"Namespace too long: {len(namespace)} > {_MAX_NAMESPACE_LENGTH}")
+    if not _NAMESPACE_PATTERN.match(namespace):
+        raise ValueError(f"Invalid namespace: {namespace}")
+    return namespace
+
+
+def _validate_label_key(key: str) -> str:
+    """Validate Kubernetes label key."""
+    if not key:
+        raise ValueError("Label key cannot be empty")
+    if len(key) > 253:
+        raise ValueError(f"Label key too long: {len(key)} > 253")
+    if key.startswith("-") or key.endswith("-"):
+        raise ValueError(f"Invalid label key: {key}")
+    return key
+
+
+def _validate_label_value(value: str) -> str:
+    """Validate Kubernetes label value."""
+    if len(value) > 63:
+        raise ValueError(f"Label value too long: {len(value)} > 63")
+    if value and not re.match(r"^[a-zA-Z0-9]([-a-zA-Z0-9_.]*[a-zA-Z0-9])?$", value):
+        raise ValueError(f"Invalid label value: {value}")
+    return value
+
+
+def _validate_cidr_format(cidr: str) -> str:
+    """Validate CIDR notation using ipaddress module.
+
+    Args:
+        cidr: CIDR notation string (e.g., "10.0.0.0/8")
+
+    Returns:
+        The validated CIDR string
+
+    Raises:
+        ValueError: If CIDR is invalid.
+    """
+    try:
+        ipaddress.ip_network(cidr, strict=False)
+    except ValueError as e:
+        raise ValueError(f"Invalid CIDR: {cidr}") from e
+    return cidr
 
 
 class PortRule(BaseModel):
@@ -32,6 +84,22 @@ class EgressRule(BaseModel):
     to_namespace: str | None = Field(default=None, description="Destination namespace selector")
     to_cidr: str | None = Field(default=None, description="Destination CIDR block")
     ports: tuple[PortRule, ...] = Field(..., min_length=1, description="Allowed ports")
+
+    @field_validator("to_namespace", mode="after")
+    @classmethod
+    def validate_to_namespace(cls, v: str | None) -> str | None:
+        """Validate namespace format if provided."""
+        if v is not None:
+            return _validate_namespace(v)
+        return v
+
+    @field_validator("to_cidr", mode="after")
+    @classmethod
+    def validate_to_cidr(cls, v: str | None) -> str | None:
+        """Validate CIDR format if provided."""
+        if v is not None:
+            return _validate_cidr_format(v)
+        return v
 
     @model_validator(mode="after")
     def validate_target(self) -> Self:
@@ -55,6 +123,21 @@ class IngressRule(BaseModel):
         default_factory=tuple, description="Allowed ports (empty = all ports)"
     )
 
+    @field_validator("from_namespace", mode="after")
+    @classmethod
+    def validate_from_namespace(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _validate_namespace(v)
+        return v
+
+    @field_validator("from_pod_labels", mode="after")
+    @classmethod
+    def validate_from_pod_labels(cls, v: dict[str, str]) -> dict[str, str]:
+        for key, value in v.items():
+            _validate_label_key(key)
+            _validate_label_value(value)
+        return v
+
 
 class NetworkPolicyConfig(BaseModel):
     """Configuration for generating a single K8s NetworkPolicy."""
@@ -77,6 +160,19 @@ class NetworkPolicyConfig(BaseModel):
     egress_rules: tuple[EgressRule, ...] = Field(
         default_factory=tuple, description="Egress allow rules"
     )
+
+    @field_validator("namespace", mode="after")
+    @classmethod
+    def validate_namespace(cls, v: str) -> str:
+        return _validate_namespace(v)
+
+    @field_validator("pod_selector", mode="after")
+    @classmethod
+    def validate_pod_selector(cls, v: dict[str, str]) -> dict[str, str]:
+        for key, value in v.items():
+            _validate_label_key(key)
+            _validate_label_value(value)
+        return v
 
     def to_k8s_manifest(self) -> dict[str, Any]:
         """Generate K8s NetworkPolicy manifest."""
@@ -153,9 +249,6 @@ class NetworkPolicyConfig(BaseModel):
         return k8s_rule
 
 
-CIDR_PATTERN = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$")
-
-
 class EgressAllowRule(BaseModel):
     """Single egress allowlist entry for manifest.yaml configuration."""
 
@@ -171,15 +264,21 @@ class EgressAllowRule(BaseModel):
     port: int = Field(..., ge=1, le=65535, description="Target port")
     protocol: Literal["TCP", "UDP"] = Field(default="TCP", description="Protocol")
 
+    @field_validator("to_namespace", mode="after")
+    @classmethod
+    def validate_to_namespace(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _validate_namespace(v)
+        return v
+
     @model_validator(mode="after")
     def validate_target(self) -> Self:
         """Ensure exactly one of to_namespace or to_cidr is set."""
         if (self.to_namespace is None) == (self.to_cidr is None):
             msg = "Exactly one of to_namespace or to_cidr must be set"
             raise ValueError(msg)
-        if self.to_cidr is not None and not CIDR_PATTERN.match(self.to_cidr):
-            msg = f"Invalid CIDR notation: {self.to_cidr}"
-            raise ValueError(msg)
+        if self.to_cidr is not None:
+            _validate_cidr_format(self.to_cidr)
         return self
 
 
@@ -204,3 +303,8 @@ class NetworkPoliciesConfig(BaseModel):
     platform_egress_allow: tuple[EgressAllowRule, ...] = Field(
         default_factory=tuple, description="Additional egress rules for floe-platform namespace"
     )
+
+    @field_validator("ingress_controller_namespace", mode="after")
+    @classmethod
+    def validate_ingress_controller_namespace(cls, v: str) -> str:
+        return _validate_namespace(v)

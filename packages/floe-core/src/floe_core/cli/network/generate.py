@@ -25,6 +25,7 @@ from pathlib import Path
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success
+from floe_core.network.schemas import _validate_namespace
 
 
 @click.command(
@@ -76,11 +77,19 @@ Examples:
     help="Generate for specific namespace only.",
     metavar="TEXT",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    hidden=True,
+    help="Show verbose error messages with tracebacks.",
+)
 def generate_command(
     config: Path | None,
     output: Path | None,
     dry_run: bool,
     namespace: str | None,
+    debug: bool,
 ) -> None:
     """Generate NetworkPolicy manifests from configuration.
 
@@ -107,6 +116,10 @@ def generate_command(
     info(f"Output directory: {output_dir}")
 
     if namespace is not None:
+        try:
+            _validate_namespace(namespace)
+        except ValueError as e:
+            error_exit(str(e), exit_code=ExitCode.USAGE_ERROR)
         info(f"Generating for namespace: {namespace}")
 
     if dry_run:
@@ -184,11 +197,19 @@ def generate_command(
             success("Network policy generation complete.")
 
     except FileNotFoundError as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
             f"Configuration file not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
     except Exception as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
             f"Network policy generation failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,

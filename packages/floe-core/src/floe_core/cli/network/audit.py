@@ -28,10 +28,12 @@ from floe_core.cli.utils import (
     ExitCode,
     error_exit,
     info,
+    sanitize_k8s_api_error,
     sanitize_path_for_log,
     success,
     warning,
 )
+from floe_core.network.schemas import _validate_namespace
 
 if TYPE_CHECKING:
     pass
@@ -88,12 +90,20 @@ Examples:
     help="Kubernetes context to use.",
     metavar="TEXT",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    hidden=True,
+    help="Show verbose error messages with tracebacks.",
+)
 def audit_command(
     namespace: tuple[str, ...],
     all_namespaces: bool,
     output_format: str,
     kubeconfig: Path | None,
     context: str | None,
+    debug: bool,
 ) -> None:
     """Audit cluster NetworkPolicy state.
 
@@ -122,6 +132,10 @@ def audit_command(
         report = _perform_audit(networking_api, namespaces_to_audit)
         _output_report(report, output_format)
     except Exception as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(f"Network audit failed: {type(e).__name__}", exit_code=ExitCode.GENERAL_ERROR)
 
 
@@ -140,6 +154,12 @@ def _validate_audit_inputs(namespace: tuple[str, ...], all_namespaces: bool) -> 
             "Must specify --namespace or --all-namespaces",
             exit_code=ExitCode.USAGE_ERROR,
         )
+
+    for ns in namespace:
+        try:
+            _validate_namespace(ns)
+        except ValueError as e:
+            error_exit(str(e), exit_code=ExitCode.USAGE_ERROR)
 
 
 def _resolve_namespaces(
@@ -249,7 +269,7 @@ def _perform_audit(
             namespaces = [ns.metadata.name for ns in ns_list.items]
         except ApiException as e:
             error_exit(
-                f"Failed to list namespaces: {type(e).__name__}",
+                f"Failed to list namespaces: {sanitize_k8s_api_error(e)}",
                 exit_code=ExitCode.NETWORK_ERROR,
             )
 
@@ -279,7 +299,7 @@ def _perform_audit(
                 )
             else:
                 error_exit(
-                    f"Failed to audit namespace {ns}: {type(e).__name__}",
+                    f"Failed to audit namespace {ns}: {sanitize_k8s_api_error(e)}",
                     exit_code=ExitCode.NETWORK_ERROR,
                 )
 

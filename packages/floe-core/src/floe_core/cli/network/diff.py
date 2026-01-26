@@ -28,6 +28,7 @@ from floe_core.cli.utils import (
     ExitCode,
     error_exit,
     info,
+    sanitize_k8s_api_error,
     sanitize_path_for_log,
     success,
     warning,
@@ -94,6 +95,9 @@ def _parse_manifest_file(file_path: Path) -> list[dict[str, Any]]:
 
     Returns:
         List of non-empty resource dictionaries from the file.
+
+    Raises:
+        ValueError: If manifest contains invalid K8s resource structure.
     """
     import yaml
 
@@ -105,7 +109,20 @@ def _parse_manifest_file(file_path: Path) -> list[dict[str, Any]]:
         return []
 
     docs = list(yaml.safe_load_all(content))
-    return [doc for doc in docs if doc]
+    validated_docs = []
+    for doc in docs:
+        if doc is not None:
+            # Validate required K8s manifest structure
+            if not isinstance(doc, dict):
+                raise ValueError(
+                    f"Invalid manifest in {file_path}: expected dict, got {type(doc).__name__}"
+                )
+            if "apiVersion" not in doc:
+                raise ValueError(f"Missing apiVersion in {file_path}")
+            if "kind" not in doc:
+                raise ValueError(f"Missing kind in {file_path}")
+            validated_docs.append(doc)
+    return validated_docs
 
 
 def _load_expected_policies(manifest_dir: Path) -> dict[str, dict[str, Any]]:
@@ -166,7 +183,7 @@ def _get_deployed_policies(
 
     except ApiException as e:
         error_exit(
-            f"Failed to fetch NetworkPolicies from cluster: {e.reason}",
+            f"Failed to fetch NetworkPolicies from cluster: {sanitize_k8s_api_error(e)}",
             exit_code=ExitCode.NETWORK_ERROR,
         )
 
@@ -492,12 +509,20 @@ Examples:
     help="Output format (text or json).",
     metavar="TEXT",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    hidden=True,
+    help="Show verbose error messages with tracebacks.",
+)
 def diff_command(
     manifest_dir: Path,
     namespace: tuple[str, ...],
     kubeconfig: Path | None,
     context: str | None,
     output_format: str,
+    debug: bool,
 ) -> None:
     """Compare expected vs deployed NetworkPolicies.
 
@@ -550,11 +575,19 @@ def diff_command(
             _output_diff_as_text(diff_result)
 
     except FileNotFoundError as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
             f"Manifest file not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
     except Exception as e:
+        if debug:
+            import traceback
+
+            traceback.print_exc()
         error_exit(
             f"Network diff failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,

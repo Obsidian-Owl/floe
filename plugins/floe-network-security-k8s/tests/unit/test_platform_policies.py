@@ -381,7 +381,7 @@ class TestPlatformEgressRules:
         plugin = K8sNetworkSecurityPlugin()
 
         if hasattr(plugin, "generate_k8s_api_egress_rule"):
-            rule = plugin.generate_k8s_api_egress_rule()
+            rule = plugin.generate_k8s_api_egress_rule(strict_mode=False)
 
             # Should allow port 443 (HTTPS) or 6443 (K8s API)
             ports = [p.get("port") for p in rule.get("ports", [])]
