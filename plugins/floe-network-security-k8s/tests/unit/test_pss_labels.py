@@ -29,11 +29,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="restricted")
-            assert isinstance(labels, dict)
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="restricted")
+        assert isinstance(labels, dict)
 
     @pytest.mark.requirement("FR-050")
     def test_generate_pss_labels_has_enforce_key(self) -> None:
@@ -42,11 +39,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="restricted")
-            assert "pod-security.kubernetes.io/enforce" in labels
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="restricted")
+        assert "pod-security.kubernetes.io/enforce" in labels
 
     @pytest.mark.requirement("FR-050")
     def test_generate_pss_labels_has_audit_key(self) -> None:
@@ -55,11 +49,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="restricted")
-            assert "pod-security.kubernetes.io/audit" in labels
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="restricted")
+        assert "pod-security.kubernetes.io/audit" in labels
 
     @pytest.mark.requirement("FR-050")
     def test_generate_pss_labels_has_warn_key(self) -> None:
@@ -68,11 +59,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="restricted")
-            assert "pod-security.kubernetes.io/warn" in labels
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="restricted")
+        assert "pod-security.kubernetes.io/warn" in labels
 
     @pytest.mark.requirement("FR-050")
     def test_pss_labels_restricted_level(self) -> None:
@@ -81,11 +69,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="restricted")
-            assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="restricted")
+        assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
 
     @pytest.mark.requirement("FR-051")
     def test_pss_labels_baseline_level(self) -> None:
@@ -94,11 +79,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="baseline")
-            assert labels["pod-security.kubernetes.io/enforce"] == "baseline"
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="baseline")
+        assert labels["pod-security.kubernetes.io/enforce"] == "baseline"
 
     @pytest.mark.requirement("FR-052")
     def test_pss_labels_privileged_level(self) -> None:
@@ -107,11 +89,8 @@ class TestPSSLabelGeneration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_pss_labels"):
-            labels = plugin.generate_pss_labels(level="privileged")
-            assert labels["pod-security.kubernetes.io/enforce"] == "privileged"
-        else:
-            pytest.skip("generate_pss_labels not yet implemented (T039)")
+        labels = plugin.generate_pss_labels(level="privileged")
+        assert labels["pod-security.kubernetes.io/enforce"] == "privileged"
 
 
 class TestPSSLevelConfiguration:
@@ -129,11 +108,8 @@ class TestPSSLevelConfiguration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "get_namespace_pss_level"):
-            level = plugin.get_namespace_pss_level("floe-jobs")
-            assert level == "restricted"
-        else:
-            pytest.skip("get_namespace_pss_level not yet implemented (T040)")
+        level = plugin.get_namespace_pss_level("floe-jobs")
+        assert level == "restricted"
 
     @pytest.mark.requirement("FR-053")
     def test_platform_namespace_default_level(self) -> None:
@@ -142,11 +118,8 @@ class TestPSSLevelConfiguration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "get_namespace_pss_level"):
-            level = plugin.get_namespace_pss_level("floe-platform")
-            assert level == "baseline"
-        else:
-            pytest.skip("get_namespace_pss_level not yet implemented (T040)")
+        level = plugin.get_namespace_pss_level("floe-platform")
+        assert level == "baseline"
 
     @pytest.mark.requirement("FR-053")
     def test_unknown_namespace_default_level(self) -> None:
@@ -155,12 +128,9 @@ class TestPSSLevelConfiguration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "get_namespace_pss_level"):
-            level = plugin.get_namespace_pss_level("some-other-namespace")
-            # Unknown namespaces should be restricted by default (secure default)
-            assert level == "restricted"
-        else:
-            pytest.skip("get_namespace_pss_level not yet implemented (T040)")
+        level = plugin.get_namespace_pss_level("some-other-namespace")
+        # Unknown namespaces should be restricted by default (secure default)
+        assert level == "restricted"
 
     @pytest.mark.requirement("FR-054")
     def test_configurable_pss_level(self) -> None:
@@ -169,15 +139,12 @@ class TestPSSLevelConfiguration:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "get_namespace_pss_level"):
-            # With override
-            level = plugin.get_namespace_pss_level(
-                "floe-jobs",
-                override_levels={"floe-jobs": "baseline"},
-            )
-            assert level == "baseline"
-        else:
-            pytest.skip("get_namespace_pss_level not yet implemented (T040)")
+        # With override
+        level = plugin.get_namespace_pss_level(
+            "floe-jobs",
+            override_levels={"floe-jobs": "baseline"},
+        )
+        assert level == "baseline"
 
 
 class TestNamespacePSSManifest:
@@ -193,18 +160,15 @@ class TestNamespacePSSManifest:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_namespace_manifest"):
-            manifest = plugin.generate_namespace_manifest(
-                name="floe-jobs",
-                pss_level="restricted",
-            )
+        manifest = plugin.generate_namespace_manifest(
+            name="floe-jobs",
+            pss_level="restricted",
+        )
 
-            assert manifest["apiVersion"] == "v1"
-            assert manifest["kind"] == "Namespace"
-            assert manifest["metadata"]["name"] == "floe-jobs"
-            assert "labels" in manifest["metadata"]
-        else:
-            pytest.skip("generate_namespace_manifest not yet implemented (T041)")
+        assert manifest["apiVersion"] == "v1"
+        assert manifest["kind"] == "Namespace"
+        assert manifest["metadata"]["name"] == "floe-jobs"
+        assert "labels" in manifest["metadata"]
 
     @pytest.mark.requirement("FR-054")
     def test_namespace_manifest_has_pss_labels(self) -> None:
@@ -213,17 +177,14 @@ class TestNamespacePSSManifest:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_namespace_manifest"):
-            manifest = plugin.generate_namespace_manifest(
-                name="floe-jobs",
-                pss_level="restricted",
-            )
+        manifest = plugin.generate_namespace_manifest(
+            name="floe-jobs",
+            pss_level="restricted",
+        )
 
-            labels = manifest["metadata"]["labels"]
-            assert "pod-security.kubernetes.io/enforce" in labels
-            assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
-        else:
-            pytest.skip("generate_namespace_manifest not yet implemented (T041)")
+        labels = manifest["metadata"]["labels"]
+        assert "pod-security.kubernetes.io/enforce" in labels
+        assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
 
     @pytest.mark.requirement("FR-054")
     def test_namespace_manifest_has_managed_by_label(self) -> None:
@@ -232,16 +193,13 @@ class TestNamespacePSSManifest:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_namespace_manifest"):
-            manifest = plugin.generate_namespace_manifest(
-                name="floe-jobs",
-                pss_level="restricted",
-            )
+        manifest = plugin.generate_namespace_manifest(
+            name="floe-jobs",
+            pss_level="restricted",
+        )
 
-            labels = manifest["metadata"]["labels"]
-            assert labels.get("app.kubernetes.io/managed-by") == "floe"
-        else:
-            pytest.skip("generate_namespace_manifest not yet implemented (T041)")
+        labels = manifest["metadata"]["labels"]
+        assert labels.get("app.kubernetes.io/managed-by") == "floe"
 
     @pytest.mark.requirement("FR-054")
     def test_namespace_manifest_audit_warn_same_as_enforce(self) -> None:
@@ -250,17 +208,14 @@ class TestNamespacePSSManifest:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_namespace_manifest"):
-            manifest = plugin.generate_namespace_manifest(
-                name="floe-jobs",
-                pss_level="restricted",
-            )
+        manifest = plugin.generate_namespace_manifest(
+            name="floe-jobs",
+            pss_level="restricted",
+        )
 
-            labels = manifest["metadata"]["labels"]
-            enforce_level = labels.get("pod-security.kubernetes.io/enforce")
-            audit_level = labels.get("pod-security.kubernetes.io/audit")
-            warn_level = labels.get("pod-security.kubernetes.io/warn")
+        labels = manifest["metadata"]["labels"]
+        enforce_level = labels.get("pod-security.kubernetes.io/enforce")
+        audit_level = labels.get("pod-security.kubernetes.io/audit")
+        warn_level = labels.get("pod-security.kubernetes.io/warn")
 
-            assert enforce_level == audit_level == warn_level == "restricted"
-        else:
-            pytest.skip("generate_namespace_manifest not yet implemented (T041)")
+        assert enforce_level == audit_level == warn_level == "restricted"

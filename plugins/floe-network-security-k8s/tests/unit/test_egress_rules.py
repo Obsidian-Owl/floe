@@ -147,17 +147,11 @@ class TestPlatformServiceEgressRules:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        # Check if method exists - implementation will be in T026
-        if hasattr(plugin, "generate_platform_egress_rules"):
-            rules = plugin.generate_platform_egress_rules()
+        rules = plugin.generate_platform_egress_rules()
 
-            # Find Polaris rule (port 8181)
-            polaris_found = any(
-                any(p.get("port") == 8181 for p in r.get("ports", [])) for r in rules
-            )
-            assert polaris_found, "Platform egress must include Polaris (8181)"
-        else:
-            pytest.skip("generate_platform_egress_rules not yet implemented (T026)")
+        # Find Polaris rule (port 8181)
+        polaris_found = any(any(p.get("port") == 8181 for p in r.get("ports", [])) for r in rules)
+        assert polaris_found, "Platform egress must include Polaris (8181)"
 
     @pytest.mark.requirement("FR-031")
     def test_generate_otel_grpc_egress_rule(self) -> None:
@@ -166,16 +160,11 @@ class TestPlatformServiceEgressRules:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_platform_egress_rules"):
-            rules = plugin.generate_platform_egress_rules()
+        rules = plugin.generate_platform_egress_rules()
 
-            # Find OTel gRPC rule (port 4317)
-            otel_grpc_found = any(
-                any(p.get("port") == 4317 for p in r.get("ports", [])) for r in rules
-            )
-            assert otel_grpc_found, "Platform egress must include OTel gRPC (4317)"
-        else:
-            pytest.skip("generate_platform_egress_rules not yet implemented (T026)")
+        # Find OTel gRPC rule (port 4317)
+        otel_grpc_found = any(any(p.get("port") == 4317 for p in r.get("ports", [])) for r in rules)
+        assert otel_grpc_found, "Platform egress must include OTel gRPC (4317)"
 
     @pytest.mark.requirement("FR-031")
     def test_generate_otel_http_egress_rule(self) -> None:
@@ -184,16 +173,11 @@ class TestPlatformServiceEgressRules:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_platform_egress_rules"):
-            rules = plugin.generate_platform_egress_rules()
+        rules = plugin.generate_platform_egress_rules()
 
-            # Find OTel HTTP rule (port 4318)
-            otel_http_found = any(
-                any(p.get("port") == 4318 for p in r.get("ports", [])) for r in rules
-            )
-            assert otel_http_found, "Platform egress must include OTel HTTP (4318)"
-        else:
-            pytest.skip("generate_platform_egress_rules not yet implemented (T026)")
+        # Find OTel HTTP rule (port 4318)
+        otel_http_found = any(any(p.get("port") == 4318 for p in r.get("ports", [])) for r in rules)
+        assert otel_http_found, "Platform egress must include OTel HTTP (4318)"
 
     @pytest.mark.requirement("FR-032")
     def test_generate_minio_egress_rule(self) -> None:
@@ -202,14 +186,11 @@ class TestPlatformServiceEgressRules:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_platform_egress_rules"):
-            rules = plugin.generate_platform_egress_rules()
+        rules = plugin.generate_platform_egress_rules()
 
-            # Find MinIO rule (port 9000)
-            minio_found = any(any(p.get("port") == 9000 for p in r.get("ports", [])) for r in rules)
-            assert minio_found, "Platform egress must include MinIO (9000)"
-        else:
-            pytest.skip("generate_platform_egress_rules not yet implemented (T026)")
+        # Find MinIO rule (port 9000)
+        minio_found = any(any(p.get("port") == 9000 for p in r.get("ports", [])) for r in rules)
+        assert minio_found, "Platform egress must include MinIO (9000)"
 
     @pytest.mark.requirement("FR-033")
     def test_platform_egress_targets_floe_platform_namespace(self) -> None:
@@ -218,21 +199,18 @@ class TestPlatformServiceEgressRules:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_platform_egress_rules"):
-            rules = plugin.generate_platform_egress_rules()
+        rules = plugin.generate_platform_egress_rules()
 
-            # All rules should target floe-platform namespace
-            for rule in rules:
-                if "to" in rule:
-                    for to_entry in rule["to"]:
-                        if "namespaceSelector" in to_entry:
-                            match_labels = to_entry["namespaceSelector"].get("matchLabels", {})
-                            namespace = match_labels.get("kubernetes.io/metadata.name")
-                            assert namespace == "floe-platform", (
-                                f"Platform egress should target floe-platform, got {namespace}"
-                            )
-        else:
-            pytest.skip("generate_platform_egress_rules not yet implemented (T026)")
+        # All rules should target floe-platform namespace
+        for rule in rules:
+            if "to" in rule:
+                for to_entry in rule["to"]:
+                    if "namespaceSelector" in to_entry:
+                        match_labels = to_entry["namespaceSelector"].get("matchLabels", {})
+                        namespace = match_labels.get("kubernetes.io/metadata.name")
+                        assert namespace == "floe-platform", (
+                            f"Platform egress should target floe-platform, got {namespace}"
+                        )
 
     @pytest.mark.requirement("FR-031")
     def test_platform_egress_uses_tcp_protocol(self) -> None:
@@ -241,14 +219,11 @@ class TestPlatformServiceEgressRules:
 
         plugin = K8sNetworkSecurityPlugin()
 
-        if hasattr(plugin, "generate_platform_egress_rules"):
-            rules = plugin.generate_platform_egress_rules()
+        rules = plugin.generate_platform_egress_rules()
 
-            for rule in rules:
-                for port_entry in rule.get("ports", []):
-                    # Platform services use TCP
-                    assert port_entry.get("protocol") == "TCP", (
-                        f"Platform egress should use TCP, got {port_entry.get('protocol')}"
-                    )
-        else:
-            pytest.skip("generate_platform_egress_rules not yet implemented (T026)")
+        for rule in rules:
+            for port_entry in rule.get("ports", []):
+                # Platform services use TCP
+                assert port_entry.get("protocol") == "TCP", (
+                    f"Platform egress should use TCP, got {port_entry.get('protocol')}"
+                )
