@@ -9,12 +9,11 @@ Requirement: FR-001
 from __future__ import annotations
 
 import inspect
-from typing import Any
 
 import pytest
-
 from floe_core.plugin_metadata import PluginMetadata
 from floe_core.plugins import NetworkSecurityPlugin
+
 from floe_network_security_k8s import K8sNetworkSecurityPlugin
 
 

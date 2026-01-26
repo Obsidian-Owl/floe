@@ -14,9 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-
 from floe_core.network import (
-    NetworkSecurityPluginNotFoundError,
     discover_network_security_plugins,
     get_network_security_plugin,
 )
@@ -24,7 +22,7 @@ from floe_core.network.generator import NETWORK_SECURITY_ENTRY_POINT_GROUP
 from floe_core.plugins import NetworkSecurityPlugin
 
 if TYPE_CHECKING:
-    from floe_network_security_k8s import K8sNetworkSecurityPlugin
+    pass
 
 
 class TestEntryPointRegistration:
@@ -76,7 +74,7 @@ class TestEntryPointRegistration:
 
         assert k8s_ep is not None, "K8s entry point not found"
         assert "floe_network_security_k8s" in k8s_ep.value, (
-            f"Entry point value '{k8s_ep.value}' should reference 'floe_network_security_k8s' module"
+            f"Entry point '{k8s_ep.value}' should reference 'floe_network_security_k8s'"
         )
         assert "K8sNetworkSecurityPlugin" in k8s_ep.value, (
             f"Entry point value '{k8s_ep.value}' should reference 'K8sNetworkSecurityPlugin' class"
@@ -274,4 +272,4 @@ class TestGetPlugin:
             "get_network_security_plugin should return new instances, not cached"
         )
         # But same type
-        assert type(plugin1) == type(plugin2)
+        assert type(plugin1) is type(plugin2)

@@ -14,7 +14,6 @@ Performance targets:
 from __future__ import annotations
 
 import time
-from typing import Any
 
 import pytest
 
@@ -78,7 +77,7 @@ class TestPolicyGenerationPerformance:
         assert len(policies_1) == len(policies_2), "Policy count should be consistent"
 
         # Verify policies are deterministic
-        for p1, p2 in zip(policies_1, policies_2):
+        for p1, p2 in zip(policies_1, policies_2, strict=True):
             assert p1 == p2, "Policies should be deterministic"
 
 

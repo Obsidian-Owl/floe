@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 
@@ -713,7 +712,7 @@ class TestCheckCniCommand(IntegrationTestBase):
                 capture_output=True,
                 text=True,
             )
-            # May fail if cluster not available (returncode 1-7), but command should parse kubeconfig
+            # May fail if cluster unavailable (1-7), but should parse kubeconfig
             assert result.returncode in (0, 1, 7), f"Unexpected error: {result.stderr}"
         finally:
             Path(kubeconfig_path).unlink()
