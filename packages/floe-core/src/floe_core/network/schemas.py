@@ -9,9 +9,10 @@ Contract: specs/7c-network-pod-security/data-model.md
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, Self
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing_extensions import Self
 
 
 class PortRule(BaseModel):
