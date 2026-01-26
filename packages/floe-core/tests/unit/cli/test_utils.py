@@ -287,6 +287,219 @@ class TestValidateDirectoryWritable:
         assert tmp_path.exists()
 
 
+class TestSanitizePathForLog:
+    """Tests for the sanitize_path_for_log() function."""
+
+    @pytest.mark.requirement("FR-005")
+    def test_normal_path_unchanged(self) -> None:
+        """Test normal path without special characters is unchanged."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        path = "/home/user/project/file.txt"
+        result = sanitize_path_for_log(path)
+
+        assert result == path
+
+    @pytest.mark.requirement("FR-005")
+    def test_removes_newlines(self) -> None:
+        """Test newlines are removed from path."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        path = "/home/user\nproject/file.txt"
+        result = sanitize_path_for_log(path)
+
+        assert "\n" not in result
+        assert result == "/home/userproject/file.txt"
+
+    @pytest.mark.requirement("FR-005")
+    def test_removes_carriage_returns(self) -> None:
+        """Test carriage returns are removed from path."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        path = "/home/user\rproject/file.txt"
+        result = sanitize_path_for_log(path)
+
+        assert "\r" not in result
+        assert result == "/home/userproject/file.txt"
+
+    @pytest.mark.requirement("FR-005")
+    def test_removes_non_printable_chars(self) -> None:
+        """Test non-printable characters are removed."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        # Include control characters (non-printable)
+        path = "/home/user\x00\x01\x02project/file.txt"
+        result = sanitize_path_for_log(path)
+
+        assert "\x00" not in result
+        assert "\x01" not in result
+        assert "\x02" not in result
+        assert result == "/home/userproject/file.txt"
+
+    @pytest.mark.requirement("FR-005")
+    def test_preserves_spaces(self) -> None:
+        """Test spaces are preserved in path."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        path = "/home/user/my project/file name.txt"
+        result = sanitize_path_for_log(path)
+
+        assert result == path
+        assert " " in result
+
+    @pytest.mark.requirement("FR-005")
+    def test_truncates_long_paths(self) -> None:
+        """Test paths longer than 500 chars are truncated."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        # Create a path longer than 500 characters
+        long_path = "/home/user/" + "a" * 500 + "/file.txt"
+        result = sanitize_path_for_log(long_path)
+
+        assert len(result) == 500
+        assert result.endswith("...")
+
+    @pytest.mark.requirement("FR-005")
+    def test_adds_ellipsis_when_truncated(self) -> None:
+        """Test ellipsis is added when path is truncated."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        # Create a path longer than 500 characters
+        long_path = "/home/user/" + "x" * 500 + "/file.txt"
+        result = sanitize_path_for_log(long_path)
+
+        assert result.endswith("...")
+        assert len(result) == 500
+
+    @pytest.mark.requirement("FR-005")
+    def test_handles_path_object(self) -> None:
+        """Test function handles Path objects."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        path_obj = Path("/home/user/project/file.txt")
+        result = sanitize_path_for_log(path_obj)
+
+        assert result == "/home/user/project/file.txt"
+        assert isinstance(result, str)
+
+    @pytest.mark.requirement("FR-005")
+    def test_handles_string_path(self) -> None:
+        """Test function handles string paths."""
+        from floe_core.cli.utils import sanitize_path_for_log
+
+        path_str = "/home/user/project/file.txt"
+        result = sanitize_path_for_log(path_str)
+
+        assert result == path_str
+        assert isinstance(result, str)
+
+
+class TestSanitizeK8sApiError:
+    """Tests for the sanitize_k8s_api_error() function."""
+
+    @pytest.mark.requirement("FR-005")
+    def test_extracts_status_and_reason(self) -> None:
+        """Test extraction of status and reason from exception."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        # Create a mock exception with status and reason
+        class MockK8sException(Exception):
+            def __init__(self) -> None:
+                self.status = 403
+                self.reason = "Forbidden"
+
+        exc = MockK8sException()
+        result = sanitize_k8s_api_error(exc)
+
+        assert result == "Forbidden (HTTP 403)"
+
+    @pytest.mark.requirement("FR-005")
+    def test_reason_only_when_no_status(self) -> None:
+        """Test reason is returned when status is None."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        class MockK8sException(Exception):
+            def __init__(self) -> None:
+                self.status = None
+                self.reason = "Forbidden"
+
+        exc = MockK8sException()
+        result = sanitize_k8s_api_error(exc)
+
+        assert result == "Forbidden"
+
+    @pytest.mark.requirement("FR-005")
+    def test_type_name_fallback(self) -> None:
+        """Test exception type name is used as fallback."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        class CustomException(Exception):
+            pass
+
+        exc = CustomException()
+        result = sanitize_k8s_api_error(exc)
+
+        assert result == "CustomException"
+
+    @pytest.mark.requirement("FR-005")
+    def test_handles_403_forbidden(self) -> None:
+        """Test handling of 403 Forbidden error."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        class MockK8sException(Exception):
+            def __init__(self) -> None:
+                self.status = 403
+                self.reason = "Forbidden"
+
+        exc = MockK8sException()
+        result = sanitize_k8s_api_error(exc)
+
+        assert "403" in result
+        assert "Forbidden" in result
+
+    @pytest.mark.requirement("FR-005")
+    def test_handles_404_not_found(self) -> None:
+        """Test handling of 404 Not Found error."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        class MockK8sException(Exception):
+            def __init__(self) -> None:
+                self.status = 404
+                self.reason = "Not Found"
+
+        exc = MockK8sException()
+        result = sanitize_k8s_api_error(exc)
+
+        assert "404" in result
+        assert "Not Found" in result
+
+    @pytest.mark.requirement("FR-005")
+    def test_handles_500_server_error(self) -> None:
+        """Test handling of 500 Server Error."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        class MockK8sException(Exception):
+            def __init__(self) -> None:
+                self.status = 500
+                self.reason = "Internal Server Error"
+
+        exc = MockK8sException()
+        result = sanitize_k8s_api_error(exc)
+
+        assert "500" in result
+        assert "Internal Server Error" in result
+
+    @pytest.mark.requirement("FR-005")
+    def test_handles_generic_exception(self) -> None:
+        """Test handling of generic exception without status/reason."""
+        from floe_core.cli.utils import sanitize_k8s_api_error
+
+        exc = ValueError("Some error")
+        result = sanitize_k8s_api_error(exc)
+
+        assert result == "ValueError"
+
+
 __all__: list[str] = [
     "TestExitCodeEnum",
     "TestErrorFunction",
@@ -296,4 +509,6 @@ __all__: list[str] = [
     "TestInfoFunction",
     "TestValidateFileExists",
     "TestValidateDirectoryWritable",
+    "TestSanitizePathForLog",
+    "TestSanitizeK8sApiError",
 ]
