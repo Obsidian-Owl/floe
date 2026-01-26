@@ -227,3 +227,92 @@ class TestPlatformServiceEgressRules:
                 assert port_entry.get("protocol") == "TCP", (
                     f"Platform egress should use TCP, got {port_entry.get('protocol')}"
                 )
+
+
+class TestCustomEgressRuleNegativePaths:
+    """Negative path tests for custom egress rule generation (L-002)."""
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_missing_cidr_and_namespace_raises(self) -> None:
+        """Test that custom egress without cidr or namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Either cidr or namespace must be provided"):
+            plugin.generate_custom_egress_rule()
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_invalid_cidr_raises(self) -> None:
+        """Test that invalid CIDR raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid CIDR"):
+            plugin.generate_custom_egress_rule(cidr="not-a-cidr")
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_invalid_cidr_format_raises(self) -> None:
+        """Test that malformed CIDR raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid CIDR"):
+            plugin.generate_custom_egress_rule(cidr="256.256.256.256/32")
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_port_zero_raises(self) -> None:
+        """Test that port 0 raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Port .* out of range"):
+            plugin.generate_custom_egress_rule(cidr="10.0.0.0/8", port=0)
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_port_too_high_raises(self) -> None:
+        """Test that port > 65535 raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Port .* out of range"):
+            plugin.generate_custom_egress_rule(cidr="10.0.0.0/8", port=65536)
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_negative_port_raises(self) -> None:
+        """Test that negative port raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Port .* out of range"):
+            plugin.generate_custom_egress_rule(cidr="10.0.0.0/8", port=-1)
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_invalid_namespace_raises(self) -> None:
+        """Test that invalid namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_custom_egress_rule(namespace="Invalid_Namespace")
+
+
+class TestCustomEgressRulesMultiPortNegativePaths:
+    """Negative path tests for custom multi-port egress rule generation."""
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_rules_missing_cidr_and_namespace_raises(self) -> None:
+        """Test that custom multi-port egress without cidr or namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Either cidr or namespace must be provided"):
+            plugin.generate_custom_egress_rules(ports=[80, 443])
+
+    @pytest.mark.requirement("FR-033")
+    def test_custom_egress_rules_invalid_port_in_list_raises(self) -> None:
+        """Test that invalid port in list raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Port .* out of range"):
+            plugin.generate_custom_egress_rules(cidr="10.0.0.0/8", ports=[80, 0, 443])

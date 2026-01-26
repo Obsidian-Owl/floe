@@ -232,3 +232,88 @@ class TestWritableVolumesIntegration:
         mount_names = {vm["name"] for vm in volume_mounts}
 
         assert volume_names == mount_names
+
+
+class TestWritableVolumesNegativePaths:
+    """Negative path tests for writable volume generation (L-002)."""
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_proc_raises(self) -> None:
+        """Test that /proc mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/proc"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_sys_raises(self) -> None:
+        """Test that /sys mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/sys"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_dev_raises(self) -> None:
+        """Test that /dev mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/dev"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_etc_raises(self) -> None:
+        """Test that /etc mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/etc"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_var_run_raises(self) -> None:
+        """Test that /var/run mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/var/run"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_docker_socket_raises(self) -> None:
+        """Test that docker socket mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/var/run/docker.sock"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_run_raises(self) -> None:
+        """Test that /run mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/run"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_root_raises(self) -> None:
+        """Test that root filesystem mount raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/"])
+
+    @pytest.mark.requirement("FR-062")
+    def test_blocked_path_in_list_raises(self) -> None:
+        """Test that blocked path in list with valid paths raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Mount path blocked"):
+            plugin.generate_writable_volumes(["/tmp", "/proc", "/home/floe"])

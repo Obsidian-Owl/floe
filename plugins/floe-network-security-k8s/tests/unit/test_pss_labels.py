@@ -219,3 +219,61 @@ class TestNamespacePSSManifest:
         warn_level = labels.get("pod-security.kubernetes.io/warn")
 
         assert enforce_level == audit_level == warn_level == "restricted"
+
+
+class TestPSSNegativePaths:
+    """Negative path tests for PSS label generation (L-002)."""
+
+    @pytest.mark.requirement("FR-050")
+    def test_invalid_pss_level_raises_value_error(self) -> None:
+        """Test that invalid PSS level raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid PSS"):
+            plugin.generate_pss_labels(level="invalid")  # type: ignore[arg-type]
+
+    @pytest.mark.requirement("FR-050")
+    def test_empty_pss_level_raises_value_error(self) -> None:
+        """Test that empty string PSS level raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid PSS"):
+            plugin.generate_pss_labels(level="")  # type: ignore[arg-type]
+
+    @pytest.mark.requirement("FR-050")
+    def test_uppercase_pss_level_raises_value_error(self) -> None:
+        """Test that uppercase PSS level raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid PSS"):
+            plugin.generate_pss_labels(level="RESTRICTED")  # type: ignore[arg-type]
+
+    @pytest.mark.requirement("FR-050")
+    def test_invalid_audit_level_raises_value_error(self) -> None:
+        """Test that invalid audit_level raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid PSS"):
+            plugin.generate_pss_labels(level="restricted", audit_level="bad")  # type: ignore[arg-type]
+
+    @pytest.mark.requirement("FR-050")
+    def test_invalid_warn_level_raises_value_error(self) -> None:
+        """Test that invalid warn_level raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid PSS"):
+            plugin.generate_pss_labels(level="restricted", warn_level="wrong")  # type: ignore[arg-type]
+
+    @pytest.mark.requirement("FR-054")
+    def test_namespace_manifest_invalid_pss_level_raises(self) -> None:
+        """Test that generate_namespace_manifest with invalid PSS level raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid PSS"):
+            plugin.generate_namespace_manifest(name="test-ns", pss_level="invalid")  # type: ignore[arg-type]

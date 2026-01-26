@@ -172,3 +172,71 @@ class TestDefaultDenyPolicyGeneration:
             name = policy["metadata"]["name"]
             # Name should be descriptive
             assert "deny" in name.lower() or "default" in name.lower()
+
+
+class TestDefaultDenyNegativePaths:
+    """Negative path tests for default-deny policy generation (L-002)."""
+
+    @pytest.mark.requirement("FR-010")
+    def test_empty_namespace_raises_value_error(self) -> None:
+        """Test that empty namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("")
+
+    @pytest.mark.requirement("FR-010")
+    def test_namespace_with_uppercase_raises_value_error(self) -> None:
+        """Test that namespace with uppercase letters raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("Floe-Jobs")
+
+    @pytest.mark.requirement("FR-010")
+    def test_namespace_with_underscore_raises_value_error(self) -> None:
+        """Test that namespace with underscores raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("floe_jobs")
+
+    @pytest.mark.requirement("FR-010")
+    def test_namespace_starting_with_dash_raises_value_error(self) -> None:
+        """Test that namespace starting with dash raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("-floe-jobs")
+
+    @pytest.mark.requirement("FR-010")
+    def test_namespace_ending_with_dash_raises_value_error(self) -> None:
+        """Test that namespace ending with dash raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("floe-jobs-")
+
+    @pytest.mark.requirement("FR-010")
+    def test_namespace_too_long_raises_value_error(self) -> None:
+        """Test that namespace longer than 63 chars raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        long_namespace = "a" * 64
+        with pytest.raises(ValueError, match="Namespace too long"):
+            plugin.generate_default_deny_policies(long_namespace)
+
+    @pytest.mark.requirement("FR-010")
+    def test_namespace_with_special_chars_raises_value_error(self) -> None:
+        """Test that namespace with special characters raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("floe@jobs")

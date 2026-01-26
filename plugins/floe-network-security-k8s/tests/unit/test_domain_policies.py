@@ -495,3 +495,61 @@ class TestDomainIngressRules:
         # Both should allow intra-namespace communication
         assert sales_rule["from"][0].get("podSelector") == {}
         assert marketing_rule["from"][0].get("podSelector") == {}
+
+
+class TestDomainPoliciesNegativePaths:
+    """Negative path tests for domain namespace policies (L-002)."""
+
+    @pytest.mark.requirement("FR-060")
+    def test_domain_default_deny_empty_namespace_raises(self) -> None:
+        """Test that empty namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("")
+
+    @pytest.mark.requirement("FR-060")
+    def test_domain_default_deny_invalid_namespace_raises(self) -> None:
+        """Test that invalid namespace format raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_default_deny_policies("Invalid_Domain")
+
+    @pytest.mark.requirement("FR-063")
+    def test_ingress_controller_invalid_namespace_raises(self) -> None:
+        """Test that invalid ingress controller namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_ingress_controller_rule(namespace="INVALID")
+
+    @pytest.mark.requirement("FR-063")
+    def test_intra_namespace_invalid_namespace_raises(self) -> None:
+        """Test that invalid namespace for intra-namespace rule raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_intra_namespace_rule("bad namespace!")
+
+    @pytest.mark.requirement("FR-063")
+    def test_ingress_controller_empty_namespace_raises(self) -> None:
+        """Test that empty ingress controller namespace raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_ingress_controller_rule(namespace="")
+
+    @pytest.mark.requirement("FR-063")
+    def test_intra_namespace_empty_namespace_raises(self) -> None:
+        """Test that empty namespace for intra-namespace rule raises ValueError."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            plugin.generate_intra_namespace_rule("")
