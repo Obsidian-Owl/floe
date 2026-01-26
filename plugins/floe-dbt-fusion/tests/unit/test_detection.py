@@ -436,3 +436,162 @@ class TestDetectFusion:
             assert info.available is True
             assert info.binary_path == Path("/usr/local/bin/dbt-sa-cli")
             assert info.version is None  # Version unknown but binary exists
+
+
+# ---------------------------------------------------------------------------
+# _is_full_fusion_cli Exception Handling Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsFullFusionCliExceptionHandling:
+    """Tests for _is_full_fusion_cli() exception handling paths."""
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_timeout_returns_false(self) -> None:
+        """_is_full_fusion_cli() returns False on subprocess timeout."""
+        import subprocess
+
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd=["dbt", "--help"],
+                timeout=10,
+            )
+
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_os_error_returns_false(self) -> None:
+        """_is_full_fusion_cli() returns False on OSError (file not found, permission denied)."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = OSError("Permission denied")
+
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_file_not_found_returns_false(self) -> None:
+        """_is_full_fusion_cli() returns False when binary doesn't exist."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        with patch("subprocess.run") as mock_run:
+            # FileNotFoundError is a subclass of OSError
+            mock_run.side_effect = FileNotFoundError("No such file or directory")
+
+            result = _is_full_fusion_cli(Path("/nonexistent/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_returns_true_for_fusion(self) -> None:
+        """_is_full_fusion_cli() returns True when binary is full Fusion CLI."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "dbt fusion CLI\n\nCommands:\n  compile  Compile project\n  run"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is True
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_returns_false_for_dbt_core(self) -> None:
+        """_is_full_fusion_cli() returns False for dbt-core (not Fusion)."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        # dbt-core output contains "core" not "fusion"
+        mock_result.stdout = "dbt core CLI\n\nCommands:\n  compile  Compile project\n  run"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
+
+            assert result is False
+
+    @pytest.mark.requirement("FR-020")
+    def test_is_full_fusion_cli_returns_false_for_standalone_analyzer(self) -> None:
+        """_is_full_fusion_cli() returns False for standalone analyzer without compile."""
+        from floe_dbt_fusion.detection import _is_full_fusion_cli
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        # Standalone analyzer has "fusion" but no "compile" command
+        mock_result.stdout = (
+            "dbt-sa-cli fusion analyzer\n\nCommands:\n  parse  Parse project\n  list"
+        )
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = _is_full_fusion_cli(Path("/usr/local/bin/dbt-sa-cli"))
+
+            assert result is False
+
+
+class TestGetFusionVersionExceptionHandling:
+    """Tests for get_fusion_version() exception handling paths."""
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_timeout_returns_none(self) -> None:
+        """get_fusion_version() returns None on subprocess timeout."""
+        import subprocess
+
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd=["dbt", "--version"],
+                timeout=10,
+            )
+
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_os_error_returns_none(self) -> None:
+        """get_fusion_version() returns None on OSError."""
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = OSError("Permission denied")
+
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_long_output_returns_none(self) -> None:
+        """get_fusion_version() returns None for excessively long output (ReDoS protection)."""
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        # Output longer than 256 characters should be rejected for security
+        mock_result.stdout = "dbt-fusion " + "x" * 300
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None
+
+    @pytest.mark.requirement("FR-020")
+    def test_get_fusion_version_no_match_returns_none(self) -> None:
+        """get_fusion_version() returns None when no version pattern matches."""
+        from floe_dbt_fusion.detection import get_fusion_version
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "dbt-fusion no-version-here"
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = get_fusion_version(Path("/usr/local/bin/dbt"))
+
+            assert result is None

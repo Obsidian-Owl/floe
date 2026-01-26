@@ -799,3 +799,99 @@ def mock_dbt_plugin() -> MagicMock:
     }
 
     return mock_plugin
+
+
+# ---------------------------------------------------------------------------
+# Tests for load_dbt_plugin function (error path coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadDbtPlugin:
+    """Unit tests for load_dbt_plugin function error handling."""
+
+    @pytest.mark.requirement("FR-030")
+    def test_load_dbt_plugin_raises_value_error_for_unknown_plugin(self) -> None:
+        """Test load_dbt_plugin raises ValueError for unknown plugin name.
+
+        This tests the error path in load_dbt_plugin lines 76-79 where
+        PluginNotFoundError is caught and re-raised as ValueError with
+        available plugins listed.
+        """
+        from unittest.mock import PropertyMock
+
+        from floe_core.plugin_errors import PluginNotFoundError
+        from floe_core.plugin_types import PluginType
+
+        from floe_orchestrator_dagster.resources.dbt_resource import load_dbt_plugin
+
+        # Create mock registry that raises PluginNotFoundError
+        mock_registry = MagicMock()
+        mock_registry.get.side_effect = PluginNotFoundError(
+            PluginType.DBT,  # positional: plugin_type
+            "nonexistent",  # positional: name
+        )
+
+        # Create mock plugin info for available plugins list
+        mock_core_plugin = MagicMock()
+        type(mock_core_plugin).name = PropertyMock(return_value="core")
+        mock_fusion_plugin = MagicMock()
+        type(mock_fusion_plugin).name = PropertyMock(return_value="fusion")
+        mock_registry.list.return_value = [mock_core_plugin, mock_fusion_plugin]
+
+        with patch(
+            "floe_core.plugin_registry.PluginRegistry",
+            return_value=mock_registry,
+        ):
+            with pytest.raises(ValueError, match="Unknown plugin: nonexistent"):
+                load_dbt_plugin("nonexistent")
+
+    @pytest.mark.requirement("FR-030")
+    def test_load_dbt_plugin_includes_available_plugins_in_error(self) -> None:
+        """Test load_dbt_plugin error message includes list of available plugins."""
+        from unittest.mock import PropertyMock
+
+        from floe_core.plugin_errors import PluginNotFoundError
+        from floe_core.plugin_types import PluginType
+
+        from floe_orchestrator_dagster.resources.dbt_resource import load_dbt_plugin
+
+        mock_registry = MagicMock()
+        mock_registry.get.side_effect = PluginNotFoundError(
+            PluginType.DBT,  # positional: plugin_type
+            "unknown",  # positional: name
+        )
+
+        # Mock available plugins
+        mock_plugin = MagicMock()
+        type(mock_plugin).name = PropertyMock(return_value="available-plugin")
+        mock_registry.list.return_value = [mock_plugin]
+
+        with patch(
+            "floe_core.plugin_registry.PluginRegistry",
+            return_value=mock_registry,
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                load_dbt_plugin("unknown")
+
+            error_message = str(exc_info.value)
+            assert "Available:" in error_message
+            assert "available-plugin" in error_message
+
+    @pytest.mark.requirement("FR-030")
+    def test_load_dbt_plugin_success(self) -> None:
+        """Test load_dbt_plugin returns plugin on success."""
+        from floe_orchestrator_dagster.resources.dbt_resource import load_dbt_plugin
+
+        mock_plugin = MagicMock()
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+
+        with patch(
+            "floe_core.plugin_registry.PluginRegistry",
+            return_value=mock_registry,
+        ):
+            result = load_dbt_plugin("core")
+
+            assert result is mock_plugin
+            mock_registry.discover_all.assert_called_once()
+            mock_registry.get.assert_called_once()

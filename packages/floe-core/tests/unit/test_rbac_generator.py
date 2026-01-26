@@ -16,6 +16,32 @@ from typing import Any
 import pytest
 
 
+class TestGetTracer:
+    """Unit tests for _get_tracer helper function in generator module."""
+
+    @pytest.mark.requirement("FR-050")
+    def test_get_tracer_returns_tracer(self) -> None:
+        """Test _get_tracer returns a valid tracer for tracing generation."""
+        from floe_core.rbac.generator import _get_tracer
+
+        tracer = _get_tracer()
+
+        assert tracer is not None
+        # Verify it has the start_as_current_span method
+        assert hasattr(tracer, "start_as_current_span")
+
+    @pytest.mark.requirement("FR-050")
+    def test_get_tracer_can_start_span(self) -> None:
+        """Test _get_tracer returns a tracer that can create spans."""
+        from floe_core.rbac.generator import _get_tracer
+
+        tracer = _get_tracer()
+
+        # Should be able to create a span without error
+        with tracer.start_as_current_span("test_span") as span:
+            assert span is not None
+
+
 class TestValidateManifest:
     """Unit tests for validate_manifest function."""
 
