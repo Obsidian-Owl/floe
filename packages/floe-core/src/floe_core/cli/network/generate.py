@@ -185,12 +185,12 @@ def generate_command(
 
     except FileNotFoundError as e:
         error_exit(
-            f"Configuration file not found: {e}",
+            f"Configuration file not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
     except Exception as e:
         error_exit(
-            f"Network policy generation failed: {e}",
+            f"Network policy generation failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 

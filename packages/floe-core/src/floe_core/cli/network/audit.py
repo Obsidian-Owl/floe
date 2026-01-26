@@ -24,7 +24,14 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+from floe_core.cli.utils import (
+    ExitCode,
+    error_exit,
+    info,
+    sanitize_path_for_log,
+    success,
+    warning,
+)
 
 if TYPE_CHECKING:
     pass
@@ -106,7 +113,7 @@ def audit_command(
 
     info(f"Auditing NetworkPolicies in {len(namespaces_to_audit)} namespace(s)")
     if kubeconfig:
-        info(f"Using kubeconfig: {kubeconfig}")
+        info(f"Using kubeconfig: {sanitize_path_for_log(kubeconfig)}")
     if context:
         info(f"Using context: {context}")
 
@@ -115,7 +122,7 @@ def audit_command(
         report = _perform_audit(networking_api, namespaces_to_audit)
         _output_report(report, output_format)
     except Exception as e:
-        error_exit(f"Network audit failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
+        error_exit(f"Network audit failed: {type(e).__name__}", exit_code=ExitCode.GENERAL_ERROR)
 
 
 def _validate_audit_inputs(namespace: tuple[str, ...], all_namespaces: bool) -> None:
@@ -208,7 +215,7 @@ def _load_kubeconfig(
             k8s_config.load_kube_config(context=context)
     except Exception as e:
         error_exit(
-            f"Failed to load kubeconfig: {e}",
+            f"Failed to load kubeconfig: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 
@@ -242,7 +249,7 @@ def _perform_audit(
             namespaces = [ns.metadata.name for ns in ns_list.items]
         except ApiException as e:
             error_exit(
-                f"Failed to list namespaces: {e}",
+                f"Failed to list namespaces: {type(e).__name__}",
                 exit_code=ExitCode.NETWORK_ERROR,
             )
 
@@ -272,7 +279,7 @@ def _perform_audit(
                 )
             else:
                 error_exit(
-                    f"Failed to audit namespace {ns}: {e}",
+                    f"Failed to audit namespace {ns}: {type(e).__name__}",
                     exit_code=ExitCode.NETWORK_ERROR,
                 )
 

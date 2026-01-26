@@ -27,6 +27,10 @@ __all__ = [
     "discover_network_security_plugins",
     "get_network_security_plugin",
     "NetworkSecurityPluginNotFoundError",
+    "NetworkSecurityError",
+    "CIDRValidationError",
+    "PortValidationError",
+    "NamespaceValidationError",
 ]
 
 
@@ -73,6 +77,16 @@ def __getattr__(name: str) -> Any:
         from floe_core.network.generator import NetworkSecurityPluginNotFoundError
 
         return NetworkSecurityPluginNotFoundError
+
+    if name in {
+        "NetworkSecurityError",
+        "CIDRValidationError",
+        "PortValidationError",
+        "NamespaceValidationError",
+    }:
+        from floe_core.network import exceptions
+
+        return getattr(exceptions, name)
 
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

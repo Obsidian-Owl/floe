@@ -35,7 +35,14 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from floe_core.cli.utils import ExitCode, error, error_exit, info, success
+from floe_core.cli.utils import (
+    ExitCode,
+    error,
+    error_exit,
+    info,
+    sanitize_path_for_log,
+    success,
+)
 
 if TYPE_CHECKING:
     from kubernetes.client import AppsV1Api, CoreV1Api
@@ -124,7 +131,7 @@ def _load_kubernetes_client(
 
     except Exception as e:
         error_exit(
-            f"Failed to connect to Kubernetes cluster: {e}",
+            f"Failed to connect to Kubernetes cluster: {type(e).__name__}",
             exit_code=ExitCode.NETWORK_ERROR,
         )
 
@@ -201,10 +208,10 @@ def _detect_cni(core_api: CoreV1Api, apps_api: AppsV1Api, verbose: bool = False)
                 info(f"Found ConfigMaps: {', '.join(cm_names) if cm_names else 'none'}")
         except Exception as e:
             if verbose:
-                error(f"Could not list ConfigMaps: {e}")
+                error(f"Could not list ConfigMaps: {type(e).__name__}")
 
     except Exception as e:
-        error(f"Error detecting CNI: {e}")
+        error(f"Error detecting CNI: {type(e).__name__}")
 
     return result
 
@@ -350,7 +357,7 @@ def check_cni_command(
         raise
     except Exception as e:
         error_exit(
-            f"CNI check failed: {e}",
+            f"CNI check failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 

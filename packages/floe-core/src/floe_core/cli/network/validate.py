@@ -279,12 +279,12 @@ def validate_command(
 
     except FileNotFoundError as e:
         error_exit(
-            f"File not found: {e}",
+            f"File not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
     except Exception as e:
         error_exit(
-            f"Validation failed: {e}",
+            f"Validation failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 

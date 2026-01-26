@@ -225,13 +225,32 @@ class NetworkPolicyManifestGenerator:
         for namespace, policies in policies_by_namespace.items():
             for i, policy in enumerate(policies):
                 policy_name = policy.get("metadata", {}).get("name", f"policy-{i}")
-                filename = f"{namespace}-{policy_name}.yaml"
+                safe_namespace = self._sanitize_filename_component(namespace)
+                safe_policy_name = self._sanitize_filename_component(policy_name)
+                filename = f"{safe_namespace}-{safe_policy_name}.yaml"
                 filepath = output_dir / filename
+
+                resolved_filepath = filepath.resolve()
+                resolved_output_dir = output_dir.resolve()
+                if not resolved_filepath.is_relative_to(resolved_output_dir):
+                    raise ValueError(f"Path traversal detected: {filepath} escapes {output_dir}")
 
                 with filepath.open("w") as f:
                     yaml.dump(policy, f, default_flow_style=False, sort_keys=False)
 
         self._write_summary(result, output_dir)
+
+    def _sanitize_filename_component(self, component: str) -> str:
+        """Sanitize a string for safe use in filenames (prevents path traversal)."""
+        import re
+
+        sanitized = component.replace("/", "-").replace("\\", "-").replace("..", "-")
+        sanitized = re.sub(r"[^a-zA-Z0-9._-]", "-", sanitized)
+        sanitized = re.sub(r"-+", "-", sanitized).strip("-")
+        max_component_length = 100
+        if len(sanitized) > max_component_length:
+            sanitized = sanitized[:max_component_length]
+        return sanitized or "unknown"
 
     def _write_summary(
         self,

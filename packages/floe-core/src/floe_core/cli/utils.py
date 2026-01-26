@@ -200,3 +200,18 @@ def validate_directory_writable(path: Path, description: str = "Directory") -> N
             exit_code=ExitCode.GENERAL_ERROR,
             path=str(path),
         )
+
+
+_LOG_INJECTION_CHARS = "\n\r"
+_MAX_LOG_PATH_LENGTH = 500
+
+
+def sanitize_path_for_log(path: str | Path) -> str:
+    """Sanitize a file path for safe logging (prevents log injection attacks)."""
+    path_str = str(path)
+    for char in _LOG_INJECTION_CHARS:
+        path_str = path_str.replace(char, "")
+    path_str = "".join(c for c in path_str if c.isprintable() or c == " ")
+    if len(path_str) > _MAX_LOG_PATH_LENGTH:
+        path_str = path_str[: _MAX_LOG_PATH_LENGTH - 3] + "..."
+    return path_str

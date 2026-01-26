@@ -306,22 +306,44 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ],
         }
 
-    def generate_k8s_api_egress_rule(self) -> dict[str, Any]:
+    def generate_k8s_api_egress_rule(self, k8s_api_cidr: str | None = None) -> dict[str, Any]:
         """Generate egress rule for Kubernetes API access.
 
         Platform services may need to communicate with the K8s API server
         for service discovery, leader election, etc.
 
+        Args:
+            k8s_api_cidr: Explicit CIDR for K8s API server. If None, auto-detects
+                from KUBERNETES_SERVICE_HOST env var, falling back to 0.0.0.0/0
+                with a warning logged.
+
         Returns:
             Egress rule allowing traffic to K8s API (port 443/6443).
         """
+        import logging
+        import os
+
+        cidr = k8s_api_cidr
+        if cidr is None:
+            k8s_service_host = os.environ.get("KUBERNETES_SERVICE_HOST")
+            if k8s_service_host:
+                cidr = f"{k8s_service_host}/32"
+            else:
+                logging.warning(
+                    "K8s API CIDR not specified and KUBERNETES_SERVICE_HOST not set. "
+                    "Using 0.0.0.0/0 which allows egress to ANY destination. "
+                    "Set k8s_api_cidr explicitly in production."
+                )
+                cidr = "0.0.0.0/0"
+
+        if cidr != "0.0.0.0/0":
+            self._validate_cidr(cidr)
+
         return {
             "to": [
                 {
-                    # K8s API is typically exposed via a service in default namespace
-                    # or directly to the API server IP
                     "ipBlock": {
-                        "cidr": "0.0.0.0/0",  # K8s API endpoint (restrict in prod)
+                        "cidr": cidr,
                     },
                 },
             ],
@@ -391,10 +413,17 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             Egress rule dictionary for NetworkPolicy.
 
         Raises:
-            ValueError: If neither cidr nor namespace is provided.
+            ValueError: If neither cidr nor namespace is provided, or if
+                cidr/namespace/port values are invalid.
         """
         if cidr is None and namespace is None:
             raise ValueError("Either cidr or namespace must be provided")
+
+        self._validate_port(port)
+        if cidr is not None:
+            self._validate_cidr(cidr)
+        if namespace is not None:
+            self._validate_namespace(namespace)
 
         rule: dict[str, Any] = {
             "to": [],
@@ -438,13 +467,21 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             Egress rule dictionary with multiple ports.
 
         Raises:
-            ValueError: If neither cidr nor namespace is provided.
+            ValueError: If neither cidr nor namespace is provided, or if
+                cidr/namespace/port values are invalid.
         """
         if cidr is None and namespace is None:
             raise ValueError("Either cidr or namespace must be provided")
 
         if ports is None:
             ports = [443]
+
+        for port in ports:
+            self._validate_port(port)
+        if cidr is not None:
+            self._validate_cidr(cidr)
+        if namespace is not None:
+            self._validate_namespace(namespace)
 
         rule: dict[str, Any] = {
             "to": [],
@@ -655,5 +692,27 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         clean_path = re.sub(r"[^a-z0-9-]", "-", clean_path.lower())
         # Remove consecutive dashes and trim
         clean_path = re.sub(r"-+", "-", clean_path).strip("-")
-        # Prefix with 'writable-' for clarity
         return f"writable-{clean_path}" if clean_path else "writable-root"
+
+    def _validate_cidr(self, cidr: str) -> None:
+        """Validate CIDR notation. Raises ValueError if invalid."""
+        import ipaddress
+
+        try:
+            ipaddress.ip_network(cidr, strict=False)
+        except ValueError as e:
+            raise ValueError(f"Invalid CIDR: {cidr}") from e
+
+    def _validate_port(self, port: int) -> None:
+        """Validate port is in valid range (1-65535). Raises ValueError if invalid."""
+        if not 1 <= port <= 65535:
+            raise ValueError(f"Port {port} out of range (1-65535)")
+
+    def _validate_namespace(self, namespace: str) -> None:
+        """Validate Kubernetes namespace name. Raises ValueError if invalid."""
+        k8s_namespace_pattern = r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        if not re.match(k8s_namespace_pattern, namespace):
+            raise ValueError(f"Invalid namespace: {namespace}")
+        max_namespace_length = 63
+        if len(namespace) > max_namespace_length:
+            raise ValueError(f"Namespace too long: {len(namespace)} > {max_namespace_length}")

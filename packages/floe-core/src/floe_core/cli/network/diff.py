@@ -24,7 +24,14 @@ from typing import Any
 
 import click
 
-from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+from floe_core.cli.utils import (
+    ExitCode,
+    error_exit,
+    info,
+    sanitize_path_for_log,
+    success,
+    warning,
+)
 
 # =============================================================================
 # Extracted Helper Functions
@@ -510,11 +517,11 @@ def diff_command(
     # Determine namespaces to compare
     namespaces_to_compare: list[str] = list(namespace) if namespace else ["default"]
 
-    info(f"Comparing manifests in: {validated_manifest_dir}")
+    info(f"Comparing manifests in: {sanitize_path_for_log(validated_manifest_dir)}")
     info(f"Against namespaces: {', '.join(namespaces_to_compare)}")
 
     if kubeconfig:
-        info(f"Using kubeconfig: {kubeconfig}")
+        info(f"Using kubeconfig: {sanitize_path_for_log(kubeconfig)}")
 
     if context:
         info(f"Using context: {context}")
@@ -544,12 +551,12 @@ def diff_command(
 
     except FileNotFoundError as e:
         error_exit(
-            f"Manifest file not found: {e}",
+            f"Manifest file not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
     except Exception as e:
         error_exit(
-            f"Network diff failed: {e}",
+            f"Network diff failed: {type(e).__name__}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
 
