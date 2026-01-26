@@ -85,7 +85,8 @@ specs/7c-network-pod-security/
 ```text
 # Core schemas and generator (floe-core)
 packages/floe-core/src/floe_core/
-├── security.py                    # EXTEND: Add NetworkPoliciesConfig to SecurityConfig
+├── schemas/
+│   └── security.py                # EXTEND: Add NetworkPoliciesConfig to SecurityConfig
 ├── network/                       # NEW module
 │   ├── __init__.py
 │   ├── schemas.py                 # NetworkPolicyConfig, EgressRule, IngressRule, PortRule
@@ -110,10 +111,10 @@ plugins/floe-network-security-k8s/
 │       └── test_network_policy_deployment.py
 └── pyproject.toml
 
-# CLI commands (floe-cli)
-packages/floe-cli/src/floe_cli/commands/
-└── network/                       # NEW command group
-    ├── __init__.py
+# CLI commands (in floe-core, follows rbac pattern)
+packages/floe-core/src/floe_core/cli/
+└── network/                       # NEW command group (same pattern as rbac/)
+    ├── __init__.py                # Command group registration
     ├── generate.py                # floe network generate
     ├── validate.py                # floe network validate
     ├── audit.py                   # floe network audit
@@ -151,8 +152,10 @@ target/network/
 | Entry Point | Location | Wired Into |
 |-------------|----------|------------|
 | `floe.network_security` | `plugins/floe-network-security-k8s/pyproject.toml` | Plugin registry discovery |
-| `floe network` | `packages/floe-cli/src/floe_cli/commands/network/__init__.py` | CLI command group |
-| `SecurityConfig.network_policies` | `packages/floe-core/src/floe_core/security.py` | Manifest parser |
+| `floe network` | `packages/floe-core/src/floe_core/cli/network/__init__.py` | CLI command group |
+| CLI main.py | `packages/floe-core/src/floe_core/cli/main.py` | `cli.add_command(network)` |
+| `SecurityConfig.network_policies` | `packages/floe-core/src/floe_core/schemas/security.py` | Manifest parser |
+| NetworkSecurityPlugin export | `packages/floe-core/src/floe_core/plugins/__init__.py` | `__all__` list |
 
 ### Dependencies
 

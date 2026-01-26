@@ -17,8 +17,10 @@
 
 - **Core schemas**: `packages/floe-core/src/floe_core/`
 - **Plugin**: `plugins/floe-network-security-k8s/src/floe_network_security_k8s/`
-- **CLI**: `packages/floe-cli/src/floe_cli/commands/network/`
-- **Tests**: `tests/contract/`, `plugins/floe-network-security-k8s/tests/`
+- **CLI**: `packages/floe-core/src/floe_core/cli/network/` (follows rbac pattern)
+- **CLI Tests**: `packages/floe-core/tests/unit/cli/`
+- **Contract Tests**: `tests/contract/`
+- **Plugin Tests**: `plugins/floe-network-security-k8s/tests/`
 
 ---
 
@@ -28,7 +30,7 @@
 
 - [ ] T001 Create plugin package structure at `plugins/floe-network-security-k8s/` with pyproject.toml
 - [ ] T002 [P] Create network module directory at `packages/floe-core/src/floe_core/network/`
-- [ ] T003 [P] Create CLI command group directory at `packages/floe-cli/src/floe_cli/commands/network/`
+- [ ] T003 [P] Create CLI command group directory at `packages/floe-core/src/floe_core/cli/network/` (follows rbac pattern)
 - [ ] T004 [P] Add entry point for `floe.network_security` in plugin pyproject.toml
 
 ---
@@ -52,7 +54,7 @@
 - [ ] T010 Create NetworkPolicyConfig schema with to_k8s_manifest() method in `packages/floe-core/src/floe_core/network/schemas.py`
 - [ ] T011 [P] Create EgressAllowRule schema in `packages/floe-core/src/floe_core/network/schemas.py`
 - [ ] T012 Create NetworkPoliciesConfig schema in `packages/floe-core/src/floe_core/network/schemas.py`
-- [ ] T013 Extend SecurityConfig with network_policies field in `packages/floe-core/src/floe_core/security.py`
+- [ ] T013 Extend SecurityConfig with network_policies field in `packages/floe-core/src/floe_core/schemas/security.py`
 
 ### Plugin ABC
 
@@ -67,7 +69,8 @@
 
 ### Module Exports
 
-- [ ] T019 Export all schemas and ABC in `packages/floe-core/src/floe_core/network/__init__.py`
+- [ ] T019 Export all schemas in `packages/floe-core/src/floe_core/network/__init__.py`
+- [ ] T019a Export NetworkSecurityPlugin from `packages/floe-core/src/floe_core/plugins/__init__.py` (add to __all__)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -254,23 +257,23 @@
 
 ### Tests for User Story 8
 
-- [ ] T065 [P] [US8] Unit test for audit command in `packages/floe-cli/tests/unit/test_network_audit.py`
-- [ ] T066 [P] [US8] Unit test for validate command in `packages/floe-cli/tests/unit/test_network_validate.py`
-- [ ] T067 [P] [US8] Unit test for diff command in `packages/floe-cli/tests/unit/test_network_diff.py`
-- [ ] T068 [P] [US8] Unit test for check-cni command in `packages/floe-cli/tests/unit/test_network_check_cni.py`
+- [ ] T065 [P] [US8] Unit test for audit command in `packages/floe-core/tests/unit/cli/test_network_audit.py`
+- [ ] T066 [P] [US8] Unit test for validate command in `packages/floe-core/tests/unit/cli/test_network_validate.py`
+- [ ] T067 [P] [US8] Unit test for diff command in `packages/floe-core/tests/unit/cli/test_network_diff.py`
+- [ ] T068 [P] [US8] Unit test for check-cni command in `packages/floe-core/tests/unit/cli/test_network_check_cni.py`
 
 ### Implementation for User Story 8
 
-- [ ] T069 [US8] Create `floe network generate` command in `packages/floe-cli/src/floe_cli/commands/network/generate.py`
-- [ ] T070 [US8] Create `floe network validate` command with kubectl --dry-run=server in `packages/floe-cli/src/floe_cli/commands/network/validate.py`
+- [ ] T069 [US8] Create `floe network generate` command in `packages/floe-core/src/floe_core/cli/network/generate.py`
+- [ ] T070 [US8] Create `floe network validate` command with kubectl --dry-run=server in `packages/floe-core/src/floe_core/cli/network/validate.py`
 - [ ] T071 [US8] Implement validate.py to check manifests against cluster CNI capabilities
-- [ ] T072 [US8] Create `floe network audit` command in `packages/floe-cli/src/floe_cli/commands/network/audit.py`
+- [ ] T072 [US8] Create `floe network audit` command in `packages/floe-core/src/floe_core/cli/network/audit.py`
 - [ ] T073 [US8] Implement audit.py to report all NetworkPolicies and warn on missing default-deny
-- [ ] T074 [US8] Create `floe network diff` command in `packages/floe-cli/src/floe_cli/commands/network/diff.py`
+- [ ] T074 [US8] Create `floe network diff` command in `packages/floe-core/src/floe_core/cli/network/diff.py`
 - [ ] T075 [US8] Implement diff.py to show expected vs deployed policy differences
-- [ ] T076 [US8] Create `floe network check-cni` command in `packages/floe-cli/src/floe_cli/commands/network/check_cni.py`
+- [ ] T076 [US8] Create `floe network check-cni` command in `packages/floe-core/src/floe_core/cli/network/check_cni.py`
 - [ ] T077 [US8] Implement check_cni.py to verify CNI plugin supports NetworkPolicies
-- [ ] T078 [US8] Register network command group in CLI main.py
+- [ ] T078 [US8] Register network command group in `packages/floe-core/src/floe_core/cli/main.py` (add_command pattern)
 
 **Checkpoint**: CLI commands available for audit, validate, diff, check-cni
 
@@ -303,13 +306,23 @@
 
 ## Phase 12: Polish & Cross-Cutting Concerns
 
-**Purpose**: Final validation and documentation
+**Purpose**: Final validation, integration wiring verification, and documentation
 
-- [ ] T086 [P] Update quickstart.md with actual CLI output examples
-- [ ] T087 [P] Run full integration test suite in Kind cluster
-- [ ] T088 [P] Verify all requirement traceability markers present
-- [ ] T089 Run `floe network audit` on demo deployment for validation
-- [ ] T090 Final code cleanup and docstring review
+### Integration Wiring Verification (CRITICAL - No Orphaned Code)
+
+- [ ] T086 Verify `from floe_core.network import *` works (schemas exported)
+- [ ] T087 Verify `from floe_core.plugins import NetworkSecurityPlugin` works (ABC exported)
+- [ ] T088 Verify `floe network --help` shows all commands (CLI wired)
+- [ ] T089 Verify entry point discovery: `python -c "from importlib.metadata import entry_points; print([e for e in entry_points(group='floe.network_security')])"`
+- [ ] T090 [P] Run full integration test suite in Kind cluster
+
+### Documentation and Cleanup
+
+- [ ] T091 [P] Update quickstart.md with actual CLI output examples
+- [ ] T092 [P] Verify all requirement traceability markers present
+- [ ] T093 Run `floe network audit` on demo deployment for validation
+- [ ] T094 Final code cleanup and docstring review
+- [ ] T095 [P] Verify no orphaned test files (all tests discoverable via pytest)
 
 ---
 
