@@ -89,8 +89,19 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         """Convert an IngressRule to K8s manifest format."""
         k8s_rule: dict[str, Any] = {}
 
-        if rule.from_sources:
-            k8s_rule["from"] = rule.from_sources
+        from_entries: list[dict[str, Any]] = []
+        if rule.from_namespace:
+            from_entries.append(
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {"kubernetes.io/metadata.name": rule.from_namespace}
+                    }
+                }
+            )
+        if rule.from_pod_labels:
+            from_entries.append({"podSelector": {"matchLabels": rule.from_pod_labels}})
+        if from_entries:
+            k8s_rule["from"] = from_entries
 
         if rule.ports:
             k8s_rule["ports"] = [{"port": p.port, "protocol": p.protocol} for p in rule.ports]
@@ -101,8 +112,19 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         """Convert an EgressRule to K8s manifest format."""
         k8s_rule: dict[str, Any] = {}
 
-        if rule.to_destinations:
-            k8s_rule["to"] = rule.to_destinations
+        to_entries: list[dict[str, Any]] = []
+        if rule.to_namespace:
+            to_entries.append(
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {"kubernetes.io/metadata.name": rule.to_namespace}
+                    }
+                }
+            )
+        if rule.to_cidr:
+            to_entries.append({"ipBlock": {"cidr": rule.to_cidr}})
+        if to_entries:
+            k8s_rule["to"] = to_entries
 
         if rule.ports:
             k8s_rule["ports"] = [{"port": p.port, "protocol": p.protocol} for p in rule.ports]

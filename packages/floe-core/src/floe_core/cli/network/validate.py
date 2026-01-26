@@ -100,7 +100,7 @@ def _validate_network_policy_schema(manifest: dict[str, Any]) -> tuple[bool, lis
     elif not isinstance(spec, dict):
         errors.append("spec must be a dictionary")
     else:
-        if not spec.get("podSelector"):
+        if "podSelector" not in spec:
             errors.append("Missing required field: spec.podSelector")
 
     return len(errors) == 0, errors

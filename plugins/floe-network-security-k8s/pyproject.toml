@@ -72,11 +72,12 @@ select = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "../../"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "requirement(id): Mark test with requirement ID for traceability",
     "integration: Mark test as integration test requiring real services",
+    "e2e: Mark test as end-to-end test",
 ]
