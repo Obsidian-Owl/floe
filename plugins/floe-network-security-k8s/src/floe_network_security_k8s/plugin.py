@@ -342,6 +342,210 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ],
         }
 
+    # =========================================================================
+    # Custom Egress Rules (T033 - User-configurable egress)
+    # =========================================================================
+
+    def generate_custom_egress_rule(
+        self,
+        cidr: str | None = None,
+        namespace: str | None = None,
+        port: int = 443,
+        protocol: str = "TCP",
+    ) -> dict[str, Any]:
+        """Generate a custom egress rule for platform configuration.
+
+        Platform operators can define custom egress rules for:
+        - External services via CIDR blocks
+        - Other Kubernetes namespaces
+
+        Args:
+            cidr: CIDR block for IP-based egress (e.g., "10.0.0.0/8").
+            namespace: Target namespace for namespace-based egress.
+            port: Destination port (default: 443).
+            protocol: Protocol, TCP or UDP (default: TCP).
+
+        Returns:
+            Egress rule dictionary for NetworkPolicy.
+
+        Raises:
+            ValueError: If neither cidr nor namespace is provided.
+        """
+        if cidr is None and namespace is None:
+            raise ValueError("Either cidr or namespace must be provided")
+
+        rule: dict[str, Any] = {
+            "to": [],
+            "ports": [{"port": port, "protocol": protocol}],
+        }
+
+        if cidr is not None:
+            rule["to"].append({"ipBlock": {"cidr": cidr}})
+        elif namespace is not None:
+            rule["to"].append(
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {
+                            "kubernetes.io/metadata.name": namespace,
+                        },
+                    },
+                }
+            )
+
+        return rule
+
+    def generate_custom_egress_rules(
+        self,
+        cidr: str | None = None,
+        namespace: str | None = None,
+        ports: list[int] | None = None,
+        protocol: str = "TCP",
+    ) -> dict[str, Any]:
+        """Generate a custom egress rule with multiple ports.
+
+        Convenience method for creating egress rules that allow multiple ports
+        to the same destination.
+
+        Args:
+            cidr: CIDR block for IP-based egress (e.g., "10.0.0.0/8").
+            namespace: Target namespace for namespace-based egress.
+            ports: List of destination ports.
+            protocol: Protocol, TCP or UDP (default: TCP).
+
+        Returns:
+            Egress rule dictionary with multiple ports.
+
+        Raises:
+            ValueError: If neither cidr nor namespace is provided.
+        """
+        if cidr is None and namespace is None:
+            raise ValueError("Either cidr or namespace must be provided")
+
+        if ports is None:
+            ports = [443]
+
+        rule: dict[str, Any] = {
+            "to": [],
+            "ports": [{"port": p, "protocol": protocol} for p in ports],
+        }
+
+        if cidr is not None:
+            rule["to"].append({"ipBlock": {"cidr": cidr}})
+        elif namespace is not None:
+            rule["to"].append(
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {
+                            "kubernetes.io/metadata.name": namespace,
+                        },
+                    },
+                }
+            )
+
+        return rule
+
+    # =========================================================================
+    # Pod Security Standards (Phase 5 - US3)
+    # =========================================================================
+
+    # Default PSS levels per namespace
+    _DEFAULT_PSS_LEVELS: dict[str, str] = {
+        "floe-jobs": "restricted",
+        "floe-platform": "baseline",
+    }
+
+    def generate_pss_labels(
+        self,
+        level: str = "restricted",
+        audit_level: str | None = None,
+        warn_level: str | None = None,
+    ) -> dict[str, str]:
+        """Generate Pod Security Standards namespace labels.
+
+        PSS is enforced via namespace labels that the Pod Security Admission
+        controller reads to determine which security profile to enforce.
+
+        Args:
+            level: Enforcement level (privileged, baseline, restricted).
+            audit_level: Audit logging level (defaults to same as level).
+            warn_level: Warning level (defaults to same as level).
+
+        Returns:
+            Dictionary of PSS labels for namespace metadata.
+        """
+        if audit_level is None:
+            audit_level = level
+        if warn_level is None:
+            warn_level = level
+
+        return {
+            "pod-security.kubernetes.io/enforce": level,
+            "pod-security.kubernetes.io/audit": audit_level,
+            "pod-security.kubernetes.io/warn": warn_level,
+        }
+
+    def get_namespace_pss_level(
+        self,
+        namespace: str,
+        override_levels: dict[str, str] | None = None,
+    ) -> str:
+        """Get the PSS level for a namespace.
+
+        Returns the appropriate PSS level for a namespace, with support
+        for configuration overrides.
+
+        Args:
+            namespace: Kubernetes namespace name.
+            override_levels: Optional dict mapping namespace -> level overrides.
+
+        Returns:
+            PSS level string (privileged, baseline, restricted).
+        """
+        # Check for override first
+        if override_levels and namespace in override_levels:
+            return override_levels[namespace]
+
+        # Return default level, or "restricted" as secure default
+        return self._DEFAULT_PSS_LEVELS.get(namespace, "restricted")
+
+    def generate_namespace_manifest(
+        self,
+        name: str,
+        pss_level: str = "restricted",
+        additional_labels: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Generate a Kubernetes Namespace manifest with PSS labels.
+
+        Creates a complete Namespace manifest with Pod Security Standards
+        labels for enforcement, audit, and warning modes.
+
+        Args:
+            name: Namespace name.
+            pss_level: PSS enforcement level (privileged, baseline, restricted).
+            additional_labels: Optional additional labels to include.
+
+        Returns:
+            Dictionary representing K8s Namespace YAML.
+        """
+        # Start with PSS labels
+        labels = self.generate_pss_labels(level=pss_level)
+
+        # Add managed-by label
+        labels["app.kubernetes.io/managed-by"] = "floe"
+
+        # Merge additional labels
+        if additional_labels:
+            labels.update(additional_labels)
+
+        return {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+                "name": name,
+                "labels": labels,
+            },
+        }
+
     def generate_pod_security_context(self, config: Any) -> dict[str, Any]:
         """Generate pod-level securityContext.
 

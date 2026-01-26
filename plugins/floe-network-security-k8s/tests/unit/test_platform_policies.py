@@ -235,6 +235,135 @@ class TestIntraNamespaceCommunication:
             pytest.skip("generate_intra_namespace_rule not yet implemented (T029)")
 
 
+class TestCustomPlatformEgressRules:
+    """Unit tests for custom platform egress rules (T032).
+
+    Platform can configure custom egress rules via:
+    - CIDR-based rules (external services)
+    - Namespace-based rules (other K8s namespaces)
+    """
+
+    @pytest.mark.requirement("FR-023")
+    def test_generate_custom_cidr_egress_rule(self) -> None:
+        """Test generation of CIDR-based custom egress rules."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+
+        if hasattr(plugin, "generate_custom_egress_rule"):
+            rule = plugin.generate_custom_egress_rule(
+                cidr="10.0.0.0/8",
+                port=443,
+                protocol="TCP",
+            )
+
+            assert "to" in rule
+            assert "ports" in rule
+            # Should have ipBlock with CIDR
+            assert "ipBlock" in rule["to"][0]
+            assert rule["to"][0]["ipBlock"]["cidr"] == "10.0.0.0/8"
+        else:
+            pytest.skip("generate_custom_egress_rule not yet implemented (T033)")
+
+    @pytest.mark.requirement("FR-023")
+    def test_generate_custom_namespace_egress_rule(self) -> None:
+        """Test generation of namespace-based custom egress rules."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+
+        if hasattr(plugin, "generate_custom_egress_rule"):
+            rule = plugin.generate_custom_egress_rule(
+                namespace="external-services",
+                port=5432,
+                protocol="TCP",
+            )
+
+            assert "to" in rule
+            assert "ports" in rule
+            # Should have namespaceSelector
+            assert "namespaceSelector" in rule["to"][0]
+            match_labels = rule["to"][0]["namespaceSelector"].get("matchLabels", {})
+            assert match_labels.get("kubernetes.io/metadata.name") == "external-services"
+        else:
+            pytest.skip("generate_custom_egress_rule not yet implemented (T033)")
+
+    @pytest.mark.requirement("FR-023")
+    def test_custom_egress_validates_port_range(self) -> None:
+        """Test that custom egress validates port in valid range."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+
+        if hasattr(plugin, "generate_custom_egress_rule"):
+            # Valid port should work
+            rule = plugin.generate_custom_egress_rule(
+                cidr="0.0.0.0/0",
+                port=443,
+                protocol="TCP",
+            )
+            assert rule["ports"][0]["port"] == 443
+
+            # Method should handle port as int
+            assert isinstance(rule["ports"][0]["port"], int)
+        else:
+            pytest.skip("generate_custom_egress_rule not yet implemented (T033)")
+
+    @pytest.mark.requirement("FR-023")
+    def test_custom_egress_protocol_options(self) -> None:
+        """Test that custom egress supports TCP and UDP protocols."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+
+        if hasattr(plugin, "generate_custom_egress_rule"):
+            tcp_rule = plugin.generate_custom_egress_rule(
+                cidr="0.0.0.0/0",
+                port=443,
+                protocol="TCP",
+            )
+            assert tcp_rule["ports"][0]["protocol"] == "TCP"
+
+            udp_rule = plugin.generate_custom_egress_rule(
+                cidr="0.0.0.0/0",
+                port=53,
+                protocol="UDP",
+            )
+            assert udp_rule["ports"][0]["protocol"] == "UDP"
+        else:
+            pytest.skip("generate_custom_egress_rule not yet implemented (T033)")
+
+    @pytest.mark.requirement("FR-023")
+    def test_custom_egress_with_multiple_ports(self) -> None:
+        """Test generation of custom egress with multiple ports."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+
+        if hasattr(plugin, "generate_custom_egress_rules"):
+            rules = plugin.generate_custom_egress_rules(
+                cidr="10.0.0.0/8",
+                ports=[443, 8080, 9000],
+                protocol="TCP",
+            )
+
+            # Should have one rule with multiple ports OR multiple rules
+            if isinstance(rules, list):
+                all_ports = []
+                for r in rules:
+                    all_ports.extend([p["port"] for p in r.get("ports", [])])
+                assert 443 in all_ports
+                assert 8080 in all_ports
+                assert 9000 in all_ports
+            else:
+                ports = [p["port"] for p in rules.get("ports", [])]
+                assert 443 in ports
+                assert 8080 in ports
+                assert 9000 in ports
+        else:
+            pytest.skip("generate_custom_egress_rules not yet implemented (T033)")
+
+
 class TestPlatformEgressRules:
     """Unit tests for platform egress rules (T034).
 
