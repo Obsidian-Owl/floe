@@ -91,10 +91,15 @@ class TestDetectFusionBinary:
 
         # Mock shutil.which to return None (not in PATH)
         # Mock Path.exists to return True for a standard path
+        # Mock _is_full_fusion_cli to return True (validates as full CLI)
         with (
             patch("shutil.which", return_value=None),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "is_file", return_value=True),
+            patch(
+                "floe_dbt_fusion.detection._is_full_fusion_cli",
+                return_value=True,
+            ),
         ):
             result = detect_fusion_binary()
 
