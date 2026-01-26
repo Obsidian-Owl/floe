@@ -30,7 +30,7 @@ class NetworkSecurityPluginNotFoundError(Exception):
     pass
 
 
-def discover_network_security_plugins() -> dict[str, type["NetworkSecurityPlugin"]]:
+def discover_network_security_plugins() -> dict[str, type[NetworkSecurityPlugin]]:
     """Discover all network security plugins from entry points.
 
     Scans the floe.network_security entry point group and loads all discovered
@@ -81,7 +81,7 @@ def discover_network_security_plugins() -> dict[str, type["NetworkSecurityPlugin
     return discovered
 
 
-def get_network_security_plugin(name: str | None = None) -> "NetworkSecurityPlugin":
+def get_network_security_plugin(name: str | None = None) -> NetworkSecurityPlugin:
     """Get a network security plugin instance by name.
 
     If no name is specified and only one plugin is available, returns that plugin.
@@ -106,8 +106,8 @@ def get_network_security_plugin(name: str | None = None) -> "NetworkSecurityPlug
 
     if not plugins:
         msg = (
-            f"No network security plugins found. "
-            f"Ensure a plugin is installed with entry point group '{NETWORK_SECURITY_ENTRY_POINT_GROUP}'"
+            f"No network security plugins found. Ensure a plugin is installed "
+            f"with entry point group '{NETWORK_SECURITY_ENTRY_POINT_GROUP}'"
         )
         raise NetworkSecurityPluginNotFoundError(msg)
 
@@ -145,7 +145,7 @@ class NetworkPolicyManifestGenerator:
         self._plugin = plugin
 
     @classmethod
-    def from_entry_point(cls, plugin_name: str | None = None) -> "NetworkPolicyManifestGenerator":
+    def from_entry_point(cls, plugin_name: str | None = None) -> NetworkPolicyManifestGenerator:
         """Create generator with plugin discovered from entry points.
 
         Args:
