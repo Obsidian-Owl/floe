@@ -32,9 +32,9 @@ from typing import TYPE_CHECKING, Any
 from floe_core.audit import AuditLogger, AuditOperation
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.secrets import SecretsPlugin
+from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 
 from floe_secrets_infisical.config import InfisicalSecretsConfig
-from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from floe_secrets_infisical.errors import (
     InfisicalAccessDeniedError,
     InfisicalAuthError,
@@ -917,7 +917,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         return None
 
 
-def _get_span_status_error() -> "StatusCode":
+def _get_span_status_error() -> StatusCode:
     """Get OpenTelemetry error status code.
 
     Returns:

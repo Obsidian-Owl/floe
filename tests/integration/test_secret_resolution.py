@@ -159,8 +159,7 @@ class TestSecretReferenceResolutionContract:
             # (it's used at runtime for resolution, not in the profile)
             # Note: We check the suffix only, not the full syntax (which contains 'env_var')
             assert source.value not in env_var_suffix, (
-                f"Source '{source.value}' should not appear in env var name "
-                f"'{env_var_suffix}'"
+                f"Source '{source.value}' should not appear in env var name '{env_var_suffix}'"
             )
 
 
