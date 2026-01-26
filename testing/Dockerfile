@@ -36,11 +36,8 @@ RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/re
 
 # hadolint ignore=DL3059
 RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update \
-    && ln -sf /root/.local/bin/dbt /usr/local/bin/dbt
-
-# Verify installation
-# hadolint ignore=DL3059
-RUN dbt --version
+    && ln -sf /root/.local/bin/dbt /usr/local/bin/dbt \
+    && dbt --version
 
 # Set working directory
 WORKDIR /app

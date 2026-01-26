@@ -177,7 +177,7 @@ def _is_full_fusion_cli(binary_path: Path) -> bool:
         has_compile = "compile" in help_output
 
         return is_fusion and has_compile
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError):
         return False
 
 

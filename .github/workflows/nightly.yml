@@ -30,10 +30,6 @@ env:
   PYTHON_VERSION_DEFAULT: "3.10"
   UV_CACHE_DIR: /tmp/.uv-cache
 
-permissions:
-  contents: read
-  issues: write
-
 jobs:
   # ============================================================
   # Integration Tests (K8s-native with Kind)
@@ -42,6 +38,8 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || inputs.run_integration == true }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -93,6 +91,8 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || inputs.run_audit == true }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -128,6 +128,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [integration-tests, dependency-audit]
     if: failure()
+    permissions:
+      issues: write
 
     steps:
       - name: Create issue on failure
