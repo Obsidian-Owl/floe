@@ -46,6 +46,8 @@ dependencies = [
     # Include dbt plugins for development (Epic 5A)
     "floe-dbt-core",
     "floe-dbt-fusion",
+    # Network security plugin for Kubernetes NetworkPolicy generation (Epic 7C)
+    "floe-network-security-k8s",
 ]
 
 [tool.uv]
@@ -69,6 +71,7 @@ floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editable = true }
 floe-dbt-core = { path = "plugins/floe-dbt-core", editable = true }
 floe-dbt-fusion = { path = "plugins/floe-dbt-fusion", editable = true }
+floe-network-security-k8s = { path = "plugins/floe-network-security-k8s", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -84,6 +87,7 @@ pythonpath = [
     "plugins/floe-orchestrator-dagster/src",
     "plugins/floe-dbt-core/src",
     "plugins/floe-dbt-fusion/src",
+    "plugins/floe-network-security-k8s/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]

@@ -39,6 +39,7 @@ from floe_core.cli.data import (
     test_command,
     validate_command,
 )
+from floe_core.cli.network import network
 from floe_core.cli.platform import platform
 from floe_core.cli.rbac import rbac
 
@@ -85,6 +86,7 @@ def cli(ctx: click.Context) -> None:
 # Register command groups
 cli.add_command(platform)
 cli.add_command(rbac)
+cli.add_command(network)
 cli.add_command(artifact)
 
 # Register Data Team stub commands (root level)

@@ -1,7 +1,8 @@
-"""Security configuration schemas for K8s RBAC Plugin System.
+"""Security configuration schemas for K8s RBAC and Network Security Plugin Systems.
 
 This module defines the Pydantic models for the security section of manifest.yaml,
-including RBAC configuration and Pod Security Standards settings.
+including RBAC configuration, Pod Security Standards settings, and NetworkPolicy
+configuration.
 
 Example:
     >>> from floe_core.schemas.security import SecurityConfig
@@ -11,12 +12,14 @@ Example:
     ...     namespace_isolation="strict"
     ... )
 
-Contract: See specs/7b-k8s-rbac/contracts/security-config-schema.md
+Contract:
+    - specs/7b-k8s-rbac/contracts/security-config-schema.md
+    - specs/7c-network-pod-security/contracts/security-config-extension.md
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -82,20 +85,23 @@ class PodSecurityLevelConfig(BaseModel):
 
 
 class SecurityConfig(BaseModel):
-    """Security section of manifest.yaml.
+    """Security section of manifest.yaml (v1.1.0).
 
     This is the top-level configuration for security settings including
-    RBAC, Pod Security Standards, and namespace isolation.
+    RBAC, Pod Security Standards, NetworkPolicies, and namespace isolation.
 
     Attributes:
         rbac: RBAC configuration settings.
         pod_security: Pod Security Standard configuration.
+        network_policies: NetworkPolicy generation configuration (Epic 7C).
         namespace_isolation: Namespace isolation mode - 'strict' enforces
             full isolation, 'permissive' allows some cross-namespace access.
 
     Example:
         >>> config = SecurityConfig()
         >>> config.rbac.enabled
+        True
+        >>> config.network_policies.enabled
         True
         >>> config.namespace_isolation
         'strict'
@@ -111,7 +117,18 @@ class SecurityConfig(BaseModel):
         default_factory=PodSecurityLevelConfig,
         description="Pod Security Standard configuration",
     )
+    network_policies: Any = Field(
+        default_factory=lambda: _get_network_policies_config()(),
+        description="NetworkPolicy generation configuration (Epic 7C). Type: NetworkPoliciesConfig",
+    )
     namespace_isolation: Literal["strict", "permissive"] = Field(
         default="strict",
         description="Namespace isolation mode",
     )
+
+
+def _get_network_policies_config() -> type:
+    """Lazy import of NetworkPoliciesConfig to avoid circular imports."""
+    from floe_core.network.schemas import NetworkPoliciesConfig
+
+    return NetworkPoliciesConfig

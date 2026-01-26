@@ -89,6 +89,9 @@ from floe_core.plugins.lifecycle import (
 from floe_core.plugins.lineage import LineageBackendPlugin
 from floe_core.plugins.loader import PluginLoader
 
+# Network Security plugin (Epic 7C)
+from floe_core.plugins.network_security import NetworkSecurityPlugin
+
 # Orchestrator plugin
 from floe_core.plugins.orchestrator import (
     Dataset,
@@ -148,6 +151,8 @@ __all__ = [
     "IngestionResult",
     # Lineage
     "LineageBackendPlugin",
+    # Network Security (Epic 7C)
+    "NetworkSecurityPlugin",
     # Orchestrator
     "Dataset",
     "OrchestratorPlugin",
