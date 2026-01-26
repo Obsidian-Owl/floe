@@ -59,7 +59,7 @@ class TestCheckCniCommandOptions:
         with patch("floe_core.cli.network.check_cni._load_kubernetes_client") as mock_load:
             mock_load.side_effect = SystemExit(ExitCode.NETWORK_ERROR)
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 check_cni_command,
                 ["--kubeconfig", str(kubeconfig)],
             )
@@ -75,7 +75,7 @@ class TestCheckCniCommandOptions:
         with patch("floe_core.cli.network.check_cni._load_kubernetes_client") as mock_load:
             mock_load.side_effect = SystemExit(ExitCode.NETWORK_ERROR)
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 check_cni_command,
                 ["--context", "prod-cluster"],
             )
@@ -468,7 +468,7 @@ class TestFormatOutput:
         mock_apps_api.list_namespaced_daemon_set.return_value = mock_daemonset_list_calico
         mock_core_api.list_namespaced_config_map.return_value = MagicMock(items=[])
 
-        result = _detect_cni(mock_core_api, mock_apps_api, verbose=True)
+        _detect_cni(mock_core_api, mock_apps_api, verbose=True)
 
         captured = capsys.readouterr()
         assert "Found DaemonSets:" in captured.err

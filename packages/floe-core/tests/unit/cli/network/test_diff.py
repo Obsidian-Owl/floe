@@ -591,7 +591,7 @@ class TestGetDeployedPolicies:
         with patch("kubernetes.client") as mock_client:
             mock_client.NetworkingV1Api.return_value = mock_networking_api
 
-            result = _get_deployed_policies(["floe-jobs", "floe-platform"])
+            _get_deployed_policies(["floe-jobs", "floe-platform"])
 
             assert mock_networking_api.list_namespaced_network_policy.call_count == 2
 

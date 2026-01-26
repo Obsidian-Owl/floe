@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -249,7 +249,7 @@ class TestGenerateStubManifests:
             mock_discover.return_value = {}
             mock_load.return_value = MagicMock()
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -282,7 +282,7 @@ class TestGenerateStubManifests:
             mock_discover.return_value = {}
             mock_load.return_value = MagicMock()
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -321,7 +321,7 @@ class TestGenerateStubManifests:
             mock_discover.return_value = {}
             mock_load.return_value = MagicMock()
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -505,7 +505,7 @@ class TestGenerateWithPlugin:
             mock_discover.return_value = {"test-plugin": mock_plugin_class}
             mock_gen_class.return_value = mock_generator
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -560,7 +560,7 @@ class TestGenerateWithPlugin:
             mock_discover.return_value = {"test-plugin": mock_plugin_class}
             mock_gen_class.return_value = mock_generator
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -817,7 +817,7 @@ class TestDryRunMode:
             mock_discover.return_value = {"test-plugin": mock_plugin_class}
             mock_gen_class.return_value = mock_generator
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -887,7 +887,7 @@ class TestOutputDirectory:
             mock_discover.return_value = {}
             mock_load.return_value = MagicMock()
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
@@ -920,7 +920,7 @@ class TestOutputDirectory:
             mock_discover.return_value = {}
             mock_load.return_value = MagicMock()
 
-            result = cli_runner.invoke(
+            cli_runner.invoke(
                 generate_command,
                 [
                     "--config",
