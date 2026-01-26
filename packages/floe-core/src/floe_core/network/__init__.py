@@ -15,25 +15,23 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
-    # Core generator (T050)
     "NetworkPolicyManifestGenerator",
-    # Result types (T017)
     "NetworkPolicyGenerationResult",
-    # Schemas (T008-T012)
     "PortRule",
     "EgressRule",
     "IngressRule",
     "EgressAllowRule",
     "NetworkPolicyConfig",
     "NetworkPoliciesConfig",
-    # Audit (T018)
     "NetworkPolicyAuditEvent",
+    "discover_network_security_plugins",
+    "get_network_security_plugin",
+    "NetworkSecurityPluginNotFoundError",
 ]
 
 
 def __getattr__(name: str) -> Any:
     """Lazy import of network components."""
-    # Schemas - T008-T012
     if name in {
         "PortRule",
         "EgressRule",
@@ -45,20 +43,36 @@ def __getattr__(name: str) -> Any:
         from floe_core.network import schemas
 
         return getattr(schemas, name)
-    # Generator - T050
+
     if name == "NetworkPolicyManifestGenerator":
         from floe_core.network.generator import NetworkPolicyManifestGenerator
 
         return NetworkPolicyManifestGenerator
-    # Result - T017
+
     if name == "NetworkPolicyGenerationResult":
         from floe_core.network.result import NetworkPolicyGenerationResult
 
         return NetworkPolicyGenerationResult
-    # Audit - T018
+
     if name == "NetworkPolicyAuditEvent":
         from floe_core.network.audit import NetworkPolicyAuditEvent
 
         return NetworkPolicyAuditEvent
+
+    if name == "discover_network_security_plugins":
+        from floe_core.network.generator import discover_network_security_plugins
+
+        return discover_network_security_plugins
+
+    if name == "get_network_security_plugin":
+        from floe_core.network.generator import get_network_security_plugin
+
+        return get_network_security_plugin
+
+    if name == "NetworkSecurityPluginNotFoundError":
+        from floe_core.network.generator import NetworkSecurityPluginNotFoundError
+
+        return NetworkSecurityPluginNotFoundError
+
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

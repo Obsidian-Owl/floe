@@ -1,21 +1,137 @@
 """NetworkPolicy manifest generator for Kubernetes.
 
-Task: T050
+Task: T050, T055
 Phase: 7 - Manifest Generator (US5)
 Requirement: FR-070, FR-071, FR-072, FR-073
 """
 
 from __future__ import annotations
 
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
 import yaml
 
 from floe_core.network.result import NetworkPolicyGenerationResult
 
 if TYPE_CHECKING:
     from floe_core.plugins import NetworkSecurityPlugin
+
+logger = structlog.get_logger(__name__)
+
+NETWORK_SECURITY_ENTRY_POINT_GROUP = "floe.network_security"
+
+
+class NetworkSecurityPluginNotFoundError(Exception):
+    """Raised when no network security plugin is found or specified plugin not available."""
+
+    pass
+
+
+def discover_network_security_plugins() -> dict[str, type["NetworkSecurityPlugin"]]:
+    """Discover all network security plugins from entry points.
+
+    Scans the floe.network_security entry point group and loads all discovered
+    plugin classes.
+
+    Returns:
+        Dict mapping plugin name to plugin class.
+
+    Example:
+        >>> plugins = discover_network_security_plugins()
+        >>> print(plugins.keys())
+        dict_keys(['k8s'])
+    """
+    discovered: dict[str, type[NetworkSecurityPlugin]] = {}
+
+    try:
+        eps = entry_points(group=NETWORK_SECURITY_ENTRY_POINT_GROUP)
+    except Exception as e:
+        logger.error(
+            "discover_plugins.failed",
+            group=NETWORK_SECURITY_ENTRY_POINT_GROUP,
+            error=str(e),
+        )
+        return discovered
+
+    for ep in eps:
+        try:
+            plugin_class = ep.load()
+            discovered[ep.name] = plugin_class
+            logger.debug(
+                "discover_plugins.found",
+                name=ep.name,
+                plugin_class=plugin_class.__name__,
+            )
+        except Exception as e:
+            logger.warning(
+                "discover_plugins.load_failed",
+                name=ep.name,
+                error=str(e),
+            )
+
+    logger.info(
+        "discover_plugins.completed",
+        count=len(discovered),
+        plugins=list(discovered.keys()),
+    )
+
+    return discovered
+
+
+def get_network_security_plugin(name: str | None = None) -> "NetworkSecurityPlugin":
+    """Get a network security plugin instance by name.
+
+    If no name is specified and only one plugin is available, returns that plugin.
+    If multiple plugins are available and no name is specified, raises an error.
+
+    Args:
+        name: Optional plugin name. If None, uses the only available plugin
+              or raises if multiple are available.
+
+    Returns:
+        Instantiated NetworkSecurityPlugin.
+
+    Raises:
+        NetworkSecurityPluginNotFoundError: If no plugins found or specified
+            plugin not available.
+
+    Example:
+        >>> plugin = get_network_security_plugin("k8s")
+        >>> policies = plugin.generate_default_deny_policies("floe-jobs")
+    """
+    plugins = discover_network_security_plugins()
+
+    if not plugins:
+        msg = (
+            f"No network security plugins found. "
+            f"Ensure a plugin is installed with entry point group '{NETWORK_SECURITY_ENTRY_POINT_GROUP}'"
+        )
+        raise NetworkSecurityPluginNotFoundError(msg)
+
+    if name is None:
+        if len(plugins) == 1:
+            name = next(iter(plugins.keys()))
+            logger.debug("get_plugin.auto_selected", name=name)
+        else:
+            msg = (
+                f"Multiple network security plugins available: {list(plugins.keys())}. "
+                f"Specify which plugin to use."
+            )
+            raise NetworkSecurityPluginNotFoundError(msg)
+
+    if name not in plugins:
+        msg = f"Network security plugin '{name}' not found. Available: {list(plugins.keys())}"
+        raise NetworkSecurityPluginNotFoundError(msg)
+
+    plugin_class = plugins[name]
+    plugin_instance = plugin_class()
+
+    logger.info("get_plugin.instantiated", name=name, plugin_class=plugin_class.__name__)
+
+    return plugin_instance
 
 
 class NetworkPolicyManifestGenerator:
@@ -27,6 +143,22 @@ class NetworkPolicyManifestGenerator:
 
     def __init__(self, plugin: NetworkSecurityPlugin) -> None:
         self._plugin = plugin
+
+    @classmethod
+    def from_entry_point(cls, plugin_name: str | None = None) -> "NetworkPolicyManifestGenerator":
+        """Create generator with plugin discovered from entry points.
+
+        Args:
+            plugin_name: Optional plugin name. If None, auto-selects if only one available.
+
+        Returns:
+            Configured NetworkPolicyManifestGenerator instance.
+
+        Raises:
+            NetworkSecurityPluginNotFoundError: If no plugins found.
+        """
+        plugin = get_network_security_plugin(plugin_name)
+        return cls(plugin=plugin)
 
     def generate(self, namespaces: list[str]) -> NetworkPolicyGenerationResult:
         """Generate NetworkPolicy manifests for the given namespaces.
