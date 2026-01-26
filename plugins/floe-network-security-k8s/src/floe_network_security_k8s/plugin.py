@@ -202,6 +202,146 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             },
         ]
 
+    # =========================================================================
+    # Platform Ingress Rules (US2 - Platform Namespace Policies)
+    # =========================================================================
+
+    def generate_ingress_controller_rule(self, namespace: str = "ingress-nginx") -> dict[str, Any]:
+        """Generate ingress rule from ingress controller namespace.
+
+        Platform services need to receive traffic from the ingress controller
+        for external access.
+
+        Args:
+            namespace: Ingress controller namespace (default: ingress-nginx).
+
+        Returns:
+            Ingress rule allowing traffic from ingress controller.
+        """
+        return {
+            "from": [
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {
+                            "kubernetes.io/metadata.name": namespace,
+                        },
+                    },
+                },
+            ],
+            "ports": [
+                {"port": 80, "protocol": "TCP"},
+                {"port": 443, "protocol": "TCP"},
+                {"port": 8080, "protocol": "TCP"},
+            ],
+        }
+
+    def generate_jobs_ingress_rule(self) -> dict[str, Any]:
+        """Generate ingress rule from floe-jobs namespace.
+
+        Platform services need to receive traffic from job pods:
+        - Polaris catalog queries
+        - OTel telemetry
+        - MinIO storage access
+
+        Returns:
+            Ingress rule allowing traffic from floe-jobs.
+        """
+        return {
+            "from": [
+                {
+                    "namespaceSelector": {
+                        "matchLabels": {
+                            "kubernetes.io/metadata.name": "floe-jobs",
+                        },
+                    },
+                },
+            ],
+            "ports": [
+                {"port": 8181, "protocol": "TCP"},  # Polaris
+                {"port": 4317, "protocol": "TCP"},  # OTel gRPC
+                {"port": 4318, "protocol": "TCP"},  # OTel HTTP
+                {"port": 9000, "protocol": "TCP"},  # MinIO
+            ],
+        }
+
+    def generate_intra_namespace_rule(self, namespace: str) -> dict[str, Any]:
+        """Generate intra-namespace communication rule.
+
+        Allows pods within the same namespace to communicate with each other.
+        Uses empty podSelector to match all pods in the namespace.
+
+        Args:
+            namespace: Target namespace (used for documentation only).
+
+        Returns:
+            Ingress rule allowing intra-namespace traffic.
+        """
+        return {
+            "from": [
+                {
+                    "podSelector": {},  # Match all pods in same namespace
+                },
+            ],
+        }
+
+    def generate_k8s_api_egress_rule(self) -> dict[str, Any]:
+        """Generate egress rule for Kubernetes API access.
+
+        Platform services may need to communicate with the K8s API server
+        for service discovery, leader election, etc.
+
+        Returns:
+            Egress rule allowing traffic to K8s API (port 443/6443).
+        """
+        return {
+            "to": [
+                {
+                    # K8s API is typically exposed via a service in default namespace
+                    # or directly to the API server IP
+                    "ipBlock": {
+                        "cidr": "0.0.0.0/0",  # K8s API endpoint (restrict in prod)
+                    },
+                },
+            ],
+            "ports": [
+                {"port": 443, "protocol": "TCP"},
+                {"port": 6443, "protocol": "TCP"},
+            ],
+        }
+
+    def generate_external_https_egress_rule(self, enabled: bool = True) -> dict[str, Any] | None:
+        """Generate egress rule for external HTTPS access.
+
+        Platform services may need to access external APIs (e.g., cloud services).
+        This is configurable and can be disabled for stricter environments.
+
+        Args:
+            enabled: Whether external HTTPS is allowed.
+
+        Returns:
+            Egress rule for external HTTPS, or None if disabled.
+        """
+        if not enabled:
+            return None
+
+        return {
+            "to": [
+                {
+                    "ipBlock": {
+                        "cidr": "0.0.0.0/0",
+                        "except": [
+                            "10.0.0.0/8",
+                            "172.16.0.0/12",
+                            "192.168.0.0/16",
+                        ],
+                    },
+                },
+            ],
+            "ports": [
+                {"port": 443, "protocol": "TCP"},
+            ],
+        }
+
     def generate_pod_security_context(self, config: Any) -> dict[str, Any]:
         """Generate pod-level securityContext.
 
