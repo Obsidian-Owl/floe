@@ -628,27 +628,17 @@ class TestGetDeployedPolicies:
 
         Validates that permission errors cause failures.
         """
+        from kubernetes.client import ApiException
+
         from floe_core.cli.network.diff import _get_deployed_policies
 
-        # Create a proper exception class
-        class ApiException(Exception):
-            def __init__(self, status: int, reason: str) -> None:
-                self.status = status
-                self.reason = reason
-                super().__init__(f"{status}: {reason}")
-
-        # Create the exception instance
-        api_exception = ApiException(403, "Forbidden")
+        # Create an actual ApiException with 403 status
+        api_exception = ApiException(status=403, reason="Forbidden")
 
         mock_networking_api.list_namespaced_network_policy.side_effect = api_exception
 
-        # Patch both the client module and the ApiException import
-        with (
-            patch("kubernetes.client") as mock_client,
-            patch("kubernetes.client.ApiException", ApiException),
-        ):
+        with patch("kubernetes.client") as mock_client:
             mock_client.NetworkingV1Api.return_value = mock_networking_api
-            mock_client.ApiException = ApiException
 
             with pytest.raises(SystemExit):
                 _get_deployed_policies(["default"])
