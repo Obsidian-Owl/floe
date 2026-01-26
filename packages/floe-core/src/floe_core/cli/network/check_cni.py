@@ -40,7 +40,6 @@ from floe_core.cli.utils import (
     error,
     error_exit,
     info,
-    sanitize_path_for_log,
     success,
 )
 

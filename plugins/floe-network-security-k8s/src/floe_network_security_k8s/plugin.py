@@ -7,12 +7,15 @@ the NetworkSecurityPlugin ABC from floe-core.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from floe_core.plugins import NetworkSecurityPlugin
 
 if TYPE_CHECKING:
     from floe_core.network.schemas import NetworkPolicyConfig
+
+PSSLevel = Literal["privileged", "baseline", "restricted"]
+NetworkProtocol = Literal["TCP", "UDP"]
 
 
 class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
@@ -395,7 +398,7 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         cidr: str | None = None,
         namespace: str | None = None,
         port: int = 443,
-        protocol: str = "TCP",
+        protocol: NetworkProtocol = "TCP",
     ) -> dict[str, Any]:
         """Generate a custom egress rule for platform configuration.
 
@@ -450,7 +453,7 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         cidr: str | None = None,
         namespace: str | None = None,
         ports: list[int] | None = None,
-        protocol: str = "TCP",
+        protocol: NetworkProtocol = "TCP",
     ) -> dict[str, Any]:
         """Generate a custom egress rule with multiple ports.
 
@@ -508,16 +511,16 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
     # =========================================================================
 
     # Default PSS levels per namespace
-    _DEFAULT_PSS_LEVELS: dict[str, str] = {
+    _DEFAULT_PSS_LEVELS: dict[str, PSSLevel] = {
         "floe-jobs": "restricted",
         "floe-platform": "baseline",
     }
 
     def generate_pss_labels(
         self,
-        level: str = "restricted",
-        audit_level: str | None = None,
-        warn_level: str | None = None,
+        level: PSSLevel = "restricted",
+        audit_level: PSSLevel | None = None,
+        warn_level: PSSLevel | None = None,
     ) -> dict[str, str]:
         """Generate Pod Security Standards namespace labels.
 
@@ -546,8 +549,8 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
     def get_namespace_pss_level(
         self,
         namespace: str,
-        override_levels: dict[str, str] | None = None,
-    ) -> str:
+        override_levels: dict[str, PSSLevel] | None = None,
+    ) -> PSSLevel:
         """Get the PSS level for a namespace.
 
         Returns the appropriate PSS level for a namespace, with support
@@ -560,17 +563,15 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             PSS level string (privileged, baseline, restricted).
         """
-        # Check for override first
         if override_levels and namespace in override_levels:
             return override_levels[namespace]
 
-        # Return default level, or "restricted" as secure default
         return self._DEFAULT_PSS_LEVELS.get(namespace, "restricted")
 
     def generate_namespace_manifest(
         self,
         name: str,
-        pss_level: str = "restricted",
+        pss_level: PSSLevel = "restricted",
         additional_labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Generate a Kubernetes Namespace manifest with PSS labels.
@@ -641,6 +642,19 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             },
         }
 
+    _BLOCKED_MOUNT_PATHS: frozenset[str] = frozenset(
+        {
+            "/proc",
+            "/sys",
+            "/dev",
+            "/etc",
+            "/var/run",
+            "/var/run/docker.sock",
+            "/run",
+            "/",
+        }
+    )
+
     def generate_writable_volumes(
         self, writable_paths: list[str]
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -651,12 +665,19 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
 
         Returns:
             Tuple of (volumes, volumeMounts).
+
+        Raises:
+            ValueError: If a path is in the blocked mount paths list.
         """
+        for path in writable_paths:
+            normalized = path.rstrip("/")
+            if normalized in self._BLOCKED_MOUNT_PATHS or path in self._BLOCKED_MOUNT_PATHS:
+                raise ValueError(f"Mount path blocked for security: {path}")
+
         volumes: list[dict[str, Any]] = []
         volume_mounts: list[dict[str, Any]] = []
 
         for path in writable_paths:
-            # Generate a safe volume name from the path
             volume_name = self._path_to_volume_name(path)
 
             volumes.append(
