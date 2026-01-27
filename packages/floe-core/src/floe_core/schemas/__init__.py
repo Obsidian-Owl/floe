@@ -106,6 +106,30 @@ from floe_core.schemas.governance import (
     QualityGatesConfig,
 )
 
+# Quality schemas
+from floe_core.schemas.quality_config import (
+    CalculationParameters,
+    Dimension,
+    DimensionWeights,
+    GateTier,
+    OverrideConfig,
+    QualityConfig,
+    QualityGates,
+    QualityThresholds,
+    SeverityLevel,
+)
+from floe_core.schemas.quality_score import (
+    QualityCheck,
+    QualityCheckResult,
+    QualityScore,
+    QualitySuite,
+    QualitySuiteResult,
+)
+from floe_core.schemas.quality_validation import (
+    GateResult,
+    ValidationResult,
+)
+
 # Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
     FIELD_MERGE_STRATEGIES,
@@ -424,4 +448,21 @@ __all__: list[str] = [
     "SigningAuditEvent",
     "VerificationAuditEvent",
     "VerificationBundle",
+    # Quality schemas
+    "CalculationParameters",
+    "Dimension",
+    "DimensionWeights",
+    "GateTier",
+    "GateResult",
+    "OverrideConfig",
+    "QualityCheck",
+    "QualityCheckResult",
+    "QualityConfig",
+    "QualityGates",
+    "QualityScore",
+    "QualitySuite",
+    "QualitySuiteResult",
+    "QualityThresholds",
+    "SeverityLevel",
+    "ValidationResult",
 ]

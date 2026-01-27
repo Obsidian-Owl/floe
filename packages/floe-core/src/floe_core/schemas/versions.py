@@ -25,13 +25,14 @@ from __future__ import annotations
 # Increment MAJOR for breaking changes (remove fields, change types)
 # Increment MINOR for backward-compatible additions (new optional fields)
 # Increment PATCH for documentation/metadata only changes
-COMPILED_ARTIFACTS_VERSION: str = "0.3.0"
+COMPILED_ARTIFACTS_VERSION: str = "0.4.0"
 
 # Version history (for documentation and compatibility checks)
 COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
     "0.1.0": "Initial version (metadata, identity, mode, observability)",
     "0.2.0": "Add plugins, transforms, dbt_profiles, governance (Epic 2B)",
     "0.3.0": "Add enforcement_result summary (Epic 3B)",
+    "0.4.0": "Add quality_config to CompiledArtifacts, quality_checks/quality_tier to ResolvedModel",
 }
 
 
@@ -45,7 +46,7 @@ def get_compiled_artifacts_version() -> str:
         >>> from floe_core.schemas.versions import get_compiled_artifacts_version
         >>> version = get_compiled_artifacts_version()
         >>> version
-        '0.3.0'
+        '0.4.0'
     """
     return COMPILED_ARTIFACTS_VERSION
 

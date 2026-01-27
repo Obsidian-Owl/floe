@@ -25,6 +25,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.schemas.data_contract import DataContract
+from floe_core.schemas.quality_config import QualityConfig
+from floe_core.schemas.quality_score import QualityCheck
 from floe_core.schemas.telemetry import TelemetryConfig
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
@@ -225,30 +227,7 @@ class ResolvedPlugins(BaseModel):
 
 
 class ResolvedModel(BaseModel):
-    """A transform model with resolved compute target.
-
-    Represents a single dbt model after compilation, with the compute
-    target resolved (never None - uses platform default if not specified).
-
-    Attributes:
-        name: Model name (dbt model identifier)
-        compute: Resolved compute target (never None)
-        tags: dbt tags for selection
-        depends_on: Explicit dependencies (model names)
-
-    Example:
-        >>> model = ResolvedModel(
-        ...     name="stg_customers",
-        ...     compute="duckdb",
-        ...     tags=["staging", "customers"],
-        ...     depends_on=["raw_customers"]
-        ... )
-        >>> model.compute
-        'duckdb'
-
-    See Also:
-        - data-model.md: ResolvedModel entity specification
-    """
+    """A transform model with resolved compute target and quality configuration."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -273,6 +252,14 @@ class ResolvedModel(BaseModel):
         default=None,
         description="Explicit dependencies (model names)",
         examples=[["raw_customers", "raw_orders"]],
+    )
+    quality_checks: list[QualityCheck] | None = Field(
+        default=None,
+        description="Quality checks for this model",
+    )
+    quality_tier: Literal["bronze", "silver", "gold"] | None = Field(
+        default=None,
+        description="Quality tier for this model",
     )
 
 
@@ -503,10 +490,10 @@ class CompiledArtifacts(BaseModel):
     - OTLP Collector endpoint (Layer 2 - ENFORCED)
     - Backend plugin selection (Layer 3 - PLUGGABLE)
 
-    Contract Version: 0.3.0 (see docstring header for version history)
+    Contract Version: 0.4.0 (see docstring header for version history)
 
     Attributes:
-        version: Schema version (semver) - default 0.3.0
+        version: Schema version (semver) - default 0.4.0
         metadata: Compilation metadata
         identity: Product identity from catalog
         mode: Deployment mode (simple, centralized, mesh)
@@ -630,6 +617,11 @@ class CompiledArtifacts(BaseModel):
     data_contracts: list[DataContract] = Field(
         default_factory=list,
         description="Validated data contracts with schema hash and validation metadata (v0.3.0+)",
+    )
+
+    quality_config: QualityConfig | None = Field(
+        default=None,
+        description="Resolved quality configuration",
     )
 
     def to_json_file(self, path: Path) -> None:
