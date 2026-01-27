@@ -913,3 +913,184 @@ class TestKeyBasedOfflineVerification:
 
             assert result.status == "valid"
             assert result.rekor_verified is False
+
+
+class TestCertificateGracePeriod:
+    """Tests for certificate rotation grace period (FR-012).
+
+    Task: T080
+    Requirements: FR-012, 8B-FR-009
+    """
+
+    @pytest.fixture
+    def policy_with_grace_period(self, github_actions_issuer: TrustedIssuer) -> VerificationPolicy:
+        """Create policy with 7-day grace period."""
+        return VerificationPolicy(
+            enabled=True,
+            enforcement="enforce",
+            trusted_issuers=[github_actions_issuer],
+            grace_period_days=7,
+        )
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_is_certificate_expired_error_detects_expiration(
+        self, policy_with_grace_period: VerificationPolicy
+    ) -> None:
+        """Test _is_certificate_expired_error detects expiration-related errors."""
+        client = VerificationClient(policy_with_grace_period)
+
+        expired_errors = [
+            Exception("certificate expired at 2026-01-15"),
+            Exception("invalid signing cert: expired at time of signing"),
+            Exception("Certificate not valid after 2026-01-15"),
+            Exception("cert validity period exceeded"),
+        ]
+        for error in expired_errors:
+            assert client._is_certificate_expired_error(error) is True
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_is_certificate_expired_error_ignores_other_errors(
+        self, policy_with_grace_period: VerificationPolicy
+    ) -> None:
+        """Test _is_certificate_expired_error ignores non-expiration errors."""
+        client = VerificationClient(policy_with_grace_period)
+
+        other_errors = [
+            Exception("signature mismatch"),
+            Exception("untrusted issuer"),
+            Exception("bundle parse error"),
+            Exception("network timeout"),
+        ]
+        for error in other_errors:
+            assert client._is_certificate_expired_error(error) is False
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_get_certificate_expiration_extracts_from_bundle(
+        self, policy_with_grace_period: VerificationPolicy
+    ) -> None:
+        """Test _get_certificate_expiration extracts expiry from bundle."""
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        client = VerificationClient(policy_with_grace_period)
+
+        mock_bundle = MagicMock()
+        mock_cert = MagicMock()
+        mock_cert.not_valid_after_utc = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_bundle.signing_certificate = mock_cert
+
+        expiry = client._get_certificate_expiration(mock_bundle)
+        assert expiry == datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_get_certificate_expiration_returns_none_on_error(
+        self, policy_with_grace_period: VerificationPolicy
+    ) -> None:
+        """Test _get_certificate_expiration returns None if extraction fails."""
+        from unittest.mock import MagicMock
+
+        client = VerificationClient(policy_with_grace_period)
+
+        mock_bundle = MagicMock()
+        mock_bundle.signing_certificate = None
+
+        expiry = client._get_certificate_expiration(mock_bundle)
+        assert expiry is None
+
+    @requires_sigstore
+    @pytest.mark.requirement("8B-FR-012")
+    def test_verify_accepts_expired_cert_within_grace_period(
+        self,
+        policy_with_grace_period: VerificationPolicy,
+        valid_signature_metadata: SignatureMetadata,
+    ) -> None:
+        """Test that expired certificate is accepted if within grace period."""
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        client = VerificationClient(policy_with_grace_period)
+
+        expired_at = datetime.now(timezone.utc) - timedelta(days=3)
+
+        mock_bundle = MagicMock()
+        mock_cert = MagicMock()
+        mock_cert.not_valid_after_utc = expired_at
+        mock_bundle.signing_certificate = mock_cert
+        mock_bundle.to_json.return_value = '{"verificationMaterial": {"tlogEntries": [{}]}}'
+
+        with (
+            patch("sigstore.models.Bundle.from_json", return_value=mock_bundle),
+            patch("sigstore.verify.Verifier.production") as mock_verifier_cls,
+        ):
+            mock_verifier = MagicMock()
+            mock_verifier.verify_artifact.side_effect = Exception(
+                "invalid signing cert: expired at time of signing"
+            )
+            mock_verifier_cls.return_value = mock_verifier
+
+            result = client._verify_keyless(
+                content=b"test-content",
+                metadata=valid_signature_metadata,
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+        assert result.status == "valid"
+        assert result.within_grace_period is True
+        assert result.certificate_expired_at == expired_at
+
+    @requires_sigstore
+    @pytest.mark.requirement("8B-FR-012")
+    def test_verify_rejects_expired_cert_outside_grace_period(
+        self,
+        policy_with_grace_period: VerificationPolicy,
+        valid_signature_metadata: SignatureMetadata,
+    ) -> None:
+        """Test that expired certificate is rejected if outside grace period."""
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock, patch
+
+        client = VerificationClient(policy_with_grace_period)
+
+        expired_at = datetime.now(timezone.utc) - timedelta(days=30)
+
+        mock_bundle = MagicMock()
+        mock_cert = MagicMock()
+        mock_cert.not_valid_after_utc = expired_at
+        mock_bundle.signing_certificate = mock_cert
+
+        with (
+            patch("sigstore.models.Bundle.from_json", return_value=mock_bundle),
+            patch("sigstore.verify.Verifier.production") as mock_verifier_cls,
+        ):
+            mock_verifier = MagicMock()
+            mock_verifier.verify_artifact.side_effect = Exception(
+                "invalid signing cert: expired at time of signing"
+            )
+            mock_verifier_cls.return_value = mock_verifier
+
+            result = client._verify_keyless(
+                content=b"test-content",
+                metadata=valid_signature_metadata,
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+        assert result.status == "invalid"
+        assert result.within_grace_period is False
+        assert result.failure_reason is not None
+        assert "expired" in result.failure_reason.lower()
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_verification_result_includes_grace_period_fields(self) -> None:
+        """Test VerificationResult has certificate_expired_at and within_grace_period."""
+        from datetime import datetime, timezone
+
+        result = VerificationResult(
+            status="valid",
+            verified_at=datetime.now(timezone.utc),
+            certificate_expired_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+            within_grace_period=True,
+        )
+
+        assert result.certificate_expired_at is not None
+        assert result.within_grace_period is True
+        assert result.is_valid is True
