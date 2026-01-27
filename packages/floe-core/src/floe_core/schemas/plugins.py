@@ -17,6 +17,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from floe_core.schemas.quality_config import QualityConfig
 from floe_core.schemas.secrets import SECRET_NAME_PATTERN
 
 # Known plugin types per category (built-in registry)
@@ -33,7 +34,7 @@ PLUGIN_REGISTRY: dict[str, list[str]] = {
     "lineage_backend": ["marquez", "atlan", "openmetadata"],
     "identity": ["k8s-rbac", "custom"],
     "dbt": ["core", "fusion"],
-    "quality": ["great-expectations", "soda", "dbt-expectations"],
+    "quality": ["great_expectations", "soda", "dbt_expectations"],
 }
 """Registry of known plugin types per category.
 
@@ -299,10 +300,10 @@ class PluginsConfig(BaseModel):
         description="dbt execution runtime (core, fusion). Defaults to 'core'.",
     )
 
-    # Data quality
-    quality: PluginSelection | None = Field(
+    # Data quality (uses QualityConfig instead of PluginSelection for richer configuration)
+    quality: QualityConfig | None = Field(
         default=None,
-        description="Data quality (great-expectations, soda, dbt-expectations)",
+        description="Data quality configuration (great_expectations, soda, dbt_expectations)",
     )
 
 

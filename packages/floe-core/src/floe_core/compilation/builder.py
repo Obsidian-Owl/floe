@@ -32,13 +32,14 @@ from floe_core.schemas.compiled_artifacts import (
 )
 from floe_core.schemas.floe_spec import FloeSpec
 from floe_core.schemas.manifest import PlatformManifest
+from floe_core.schemas.quality_config import QualityConfig
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 # Package version - should match pyproject.toml
 FLOE_VERSION = "0.3.0"
 
 # Contract version - see compiled_artifacts.py version history
-CONTRACT_VERSION = "0.3.0"
+CONTRACT_VERSION = "0.4.0"
 
 
 def build_artifacts(
@@ -51,6 +52,7 @@ def build_artifacts(
     spec_path: Path | None = None,
     manifest_path: Path | None = None,
     enforcement_result: EnforcementResultSummary | None = None,
+    quality_config: QualityConfig | None = None,
 ) -> CompiledArtifacts:
     """Build CompiledArtifacts from resolved configuration.
 
@@ -60,9 +62,10 @@ def build_artifacts(
     - Product identity from FloeSpec
     - Resolved plugins and transforms
     - Generated dbt profiles
-    - Enforcement result summary (optional, Epic 3B)
+    - Enforcement result summary (optional, v0.3.0+)
+    - Quality configuration (optional, v0.4.0+)
 
-    Task: T063
+    Task: T063, T039
     Requirements: FR-024, FR-025, FR-026 (Pipeline Integration)
 
     Args:
@@ -74,6 +77,7 @@ def build_artifacts(
         spec_path: Optional path to spec file (for source hash).
         manifest_path: Optional path to manifest file (for source hash).
         enforcement_result: Optional enforcement result summary (v0.3.0+).
+        quality_config: Optional quality configuration (v0.4.0+).
 
     Returns:
         Complete CompiledArtifacts ready for output.
@@ -81,7 +85,7 @@ def build_artifacts(
     Example:
         >>> artifacts = build_artifacts(spec, manifest, plugins, transforms, profiles)
         >>> artifacts.version
-        '0.3.0'
+        '0.4.0'
         >>> artifacts.metadata.product_name
         'my-pipeline'
     """
@@ -133,6 +137,7 @@ def build_artifacts(
         transforms=transforms,
         dbt_profiles=dbt_profiles,
         enforcement_result=enforcement_result,
+        quality_config=quality_config,
     )
 
 
