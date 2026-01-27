@@ -5,13 +5,14 @@ All exceptions inherit from OCIError, the base exception class.
 
 Exception Hierarchy:
     OCIError (base)
-    ├── AuthenticationError       # Registry authentication failed
-    ├── ArtifactNotFoundError     # Requested artifact/tag not found
+    ├── AuthenticationError        # Registry authentication failed
+    ├── ArtifactNotFoundError      # Requested artifact/tag not found
     ├── ImmutabilityViolationError # Attempt to overwrite immutable tag
-    ├── CircuitBreakerOpenError   # Circuit breaker is open, failing fast
-    ├── RegistryUnavailableError  # Registry not reachable
-    ├── DigestMismatchError       # Content digest verification failed
-    └── CacheError                # Local cache operation failed
+    ├── CircuitBreakerOpenError    # Circuit breaker is open, failing fast
+    ├── RegistryUnavailableError   # Registry not reachable
+    ├── DigestMismatchError        # Content digest verification failed
+    ├── CacheError                 # Local cache operation failed
+    └── SignatureVerificationError # Artifact signature verification failed
 
 Exit Codes (per spec):
     0 - Success
@@ -20,6 +21,7 @@ Exit Codes (per spec):
     3 - Artifact not found (ArtifactNotFoundError)
     4 - Immutability violation (ImmutabilityViolationError)
     5 - Network/connectivity error (RegistryUnavailableError, CircuitBreakerOpenError)
+    6 - Signature verification failed (SignatureVerificationError)
 
 Example:
     >>> from floe_core.oci.errors import ArtifactNotFoundError
@@ -345,4 +347,47 @@ class CacheError(OCIError):
         msg = f"Cache operation '{operation}' failed: {reason}"
         if path:
             msg += f" (path: {path})"
+        super().__init__(msg)
+
+
+class SignatureVerificationError(OCIError):
+    """Raised when artifact signature verification fails.
+
+    This error indicates that an artifact's cryptographic signature could not
+    be verified. This may mean the artifact is unsigned, the signature is
+    invalid, or the signer is not in the trusted issuers list.
+
+    Attributes:
+        artifact_ref: The artifact reference that failed verification.
+        reason: Description of why verification failed.
+        expected_signer: Expected signer identity (from trusted_issuers).
+        actual_signer: Actual signer identity found in signature.
+        exit_code: CLI exit code (6).
+
+    Example:
+        >>> raise SignatureVerificationError(
+        ...     "oci://harbor.example.com/floe:v1.0.0",
+        ...     "Signer not in trusted issuers",
+        ...     expected_signer="repo:acme/floe:ref:refs/heads/main",
+        ...     actual_signer="repo:unknown/repo:ref:refs/heads/main"
+        ... )
+    """
+
+    exit_code: int = 6
+
+    def __init__(
+        self,
+        artifact_ref: str,
+        reason: str,
+        expected_signer: str | None = None,
+        actual_signer: str | None = None,
+    ) -> None:
+        self.artifact_ref = artifact_ref
+        self.reason = reason
+        self.expected_signer = expected_signer
+        self.actual_signer = actual_signer
+
+        msg = f"Signature verification failed for {artifact_ref}: {reason}"
+        if expected_signer and actual_signer:
+            msg += f". Expected: {expected_signer}, Actual: {actual_signer}"
         super().__init__(msg)

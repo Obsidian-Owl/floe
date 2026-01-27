@@ -225,6 +225,21 @@ from floe_core.schemas.security import (
     SecurityConfig,
 )
 
+# Signing schemas (Epic 8B)
+from floe_core.schemas.signing import (
+    AttestationManifest,
+    EnvironmentPolicy,
+    SignatureMetadata,
+    SigningAuditEvent,
+    SigningConfig,
+    Subject,
+    TrustedIssuer,
+    VerificationAuditEvent,
+    VerificationBundle,
+    VerificationPolicy,
+    VerificationResult,
+)
+
 # Telemetry configuration schemas (12B-ARCH-001: Circular dependency resolution)
 from floe_core.schemas.telemetry import (
     BatchSpanProcessorConfig,
@@ -397,4 +412,16 @@ __all__: list[str] = [
     "DiffChangeType",
     "ResourceDiff",
     "RBACDiffResult",
+    # Signing schemas (Epic 8B)
+    "SigningConfig",
+    "TrustedIssuer",
+    "EnvironmentPolicy",
+    "VerificationPolicy",
+    "SignatureMetadata",
+    "VerificationResult",
+    "Subject",
+    "AttestationManifest",
+    "SigningAuditEvent",
+    "VerificationAuditEvent",
+    "VerificationBundle",
 ]
