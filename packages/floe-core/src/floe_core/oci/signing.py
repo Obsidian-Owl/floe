@@ -450,7 +450,7 @@ class SigningClient:
                     raise SigningError(f"cosign sign-blob failed: {result.stderr}")
 
                 if bundle_file.exists():
-                    bundle_data = json.loads(bundle_file.read_text())
+                    bundle_data: dict[str, Any] = json.loads(bundle_file.read_text())
                     return bundle_data
 
                 if signature_file.exists():
@@ -675,7 +675,8 @@ def sign_artifact(
         SignatureMetadata with signature bundle and metadata
     """
     client = SigningClient(config)
-    return client.sign(content, artifact_ref)
+    result: SignatureMetadata = client.sign(content, artifact_ref)
+    return result
 
 
 __all__ = [

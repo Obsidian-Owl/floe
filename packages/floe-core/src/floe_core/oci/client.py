@@ -674,7 +674,7 @@ class OCIClient:
                 artifact_ref = f"{self._uri_parser.build_target_ref(tag)}@{digest}"
 
                 signing_client = SigningClient(config)
-                metadata = signing_client.sign(content, artifact_ref)
+                metadata: SignatureMetadata = signing_client.sign(content, artifact_ref)
 
                 self._update_artifact_annotations(tag, metadata.to_annotations())
 

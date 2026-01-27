@@ -130,7 +130,7 @@ def generate_sbom(
                 timeout=300,
             )
 
-            sbom = json.loads(result.stdout)
+            sbom: dict[str, Any] = json.loads(result.stdout)
             span.set_attribute("floe.sbom.package_count", len(sbom.get("packages", [])))
             logger.info(
                 "SBOM generated: %s (%d packages)",

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -113,7 +113,7 @@ def _inspect_artifact(
     registry_config: RegistryConfig,
     registry: str,
     tag: str,
-) -> dict:
+) -> dict[str, Any]:
     """Fetch artifact metadata from registry."""
     from floe_core.oci import OCIClient
 
@@ -134,7 +134,7 @@ def _inspect_artifact(
         error_exit(f"Inspection failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
 
-def _get_sbom_info(registry: str, tag: str) -> dict | None:
+def _get_sbom_info(registry: str, tag: str) -> dict[str, Any] | None:
     """Retrieve SBOM information from artifact."""
     from floe_core.oci.attestation import (
         AttestationError,
@@ -171,7 +171,7 @@ def _get_sbom_info(registry: str, tag: str) -> dict | None:
         return {"error": str(e)}
 
 
-def _get_signature_info(registry: str, tag: str) -> dict | None:
+def _get_signature_info(registry: str, tag: str) -> dict[str, Any] | None:
     """Retrieve signature information from artifact."""
     # Get signature details from annotations
     # This is a simplified version - full implementation would verify
@@ -200,7 +200,7 @@ def _get_signature_info(registry: str, tag: str) -> dict | None:
 
 
 def _print_formatted(
-    info: dict,
+    info: dict[str, Any],
     show_sbom: bool,
     show_signatures: bool,
 ) -> None:

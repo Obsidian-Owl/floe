@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -176,7 +176,7 @@ def _generate_sbom(
     project: str,
     output: str | None,
     output_format: str,
-) -> dict:
+) -> dict[str, Any]:
     """Generate SBOM for project directory."""
     from floe_core.oci.attestation import (
         SBOMGenerationError,
