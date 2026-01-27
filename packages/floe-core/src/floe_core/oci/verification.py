@@ -85,6 +85,38 @@ def _normalize_issuer(issuer_url: str) -> str:
     return urlunparse((scheme, netloc, path, "", "", ""))
 
 
+MAX_BUNDLE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB limit for Sigstore bundles
+
+
+def _decode_bundle_with_size_limit(bundle_b64: str, max_size: int = MAX_BUNDLE_SIZE_BYTES) -> str:
+    """Decode base64 bundle with size limit to prevent memory exhaustion.
+
+    Args:
+        bundle_b64: Base64-encoded bundle string
+        max_size: Maximum allowed decoded size in bytes
+
+    Returns:
+        Decoded UTF-8 string
+
+    Raises:
+        ValueError: If bundle exceeds size limit or is malformed
+    """
+    try:
+        bundle_bytes = base64.b64decode(bundle_b64)
+    except Exception as e:
+        raise ValueError(f"Invalid base64 encoding: {e}") from e
+
+    if len(bundle_bytes) > max_size:
+        raise ValueError(
+            f"Bundle size ({len(bundle_bytes)} bytes) exceeds limit ({max_size} bytes)"
+        )
+
+    try:
+        return bundle_bytes.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise ValueError(f"Bundle is not valid UTF-8: {e}") from e
+
+
 class VerificationError(Exception):
     """Base exception for verification operations."""
 
@@ -319,8 +351,15 @@ class VerificationClient:
 
         with tracer.start_as_current_span("floe.oci.verify.bundle"):
             try:
-                bundle_json = base64.b64decode(metadata.bundle).decode("utf-8")
+                bundle_json = _decode_bundle_with_size_limit(metadata.bundle)
                 bundle = Bundle.from_json(bundle_json)
+            except ValueError as e:
+                logger.error("Failed to decode Sigstore bundle: %s", e)
+                return VerificationResult(
+                    status="invalid",
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason=f"Invalid Sigstore bundle: {e}",
+                )
             except Exception as e:
                 logger.error("Failed to parse Sigstore bundle: %s", e)
                 return VerificationResult(
@@ -456,10 +495,18 @@ class VerificationClient:
             span.set_attribute("floe.verification.key_ref", public_key_ref[:50])
 
             try:
-                bundle_json = base64.b64decode(metadata.bundle).decode("utf-8")
+                bundle_json = _decode_bundle_with_size_limit(metadata.bundle)
                 bundle_data = json.loads(bundle_json)
-            except Exception as e:
-                logger.error("Failed to parse signature bundle: %s", e)
+            except json.JSONDecodeError as e:
+                logger.error("Failed to parse signature bundle JSON: %s", e)
+                return VerificationResult(
+                    status="invalid",
+                    signer_identity=metadata.subject,
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason=f"Invalid signature bundle JSON: {e}",
+                )
+            except ValueError as e:
+                logger.error("Failed to decode signature bundle: %s", e)
                 return VerificationResult(
                     status="invalid",
                     signer_identity=metadata.subject,
@@ -873,7 +920,7 @@ def export_verification_bundle(
     """
     from floe_core.schemas.signing import VerificationBundle
 
-    bundle_json = base64.b64decode(metadata.bundle).decode("utf-8")
+    bundle_json = _decode_bundle_with_size_limit(metadata.bundle)
     sigstore_bundle = json.loads(bundle_json)
 
     certificate_chain: list[str] = []
@@ -897,6 +944,45 @@ def export_verification_bundle(
     )
 
 
+def load_verification_policy_from_manifest(manifest_path: Path) -> VerificationPolicy | None:
+    """Load verification policy from manifest.yaml file.
+
+    This function extracts the verification policy configuration from a
+    manifest.yaml file. It handles missing files, invalid YAML, and
+    missing verification sections gracefully.
+
+    Args:
+        manifest_path: Path to manifest.yaml file
+
+    Returns:
+        VerificationPolicy if found and valid, None if not configured
+
+    Raises:
+        yaml.YAMLError: If YAML parsing fails
+        pydantic.ValidationError: If verification policy data is invalid
+    """
+    import yaml
+
+    from floe_core.schemas.signing import VerificationPolicy
+
+    if not manifest_path.exists():
+        return None
+
+    with manifest_path.open() as f:
+        manifest_data = yaml.safe_load(f)
+
+    if manifest_data is None:
+        return None
+
+    artifacts_config = manifest_data.get("artifacts", {})
+    verification_data = artifacts_config.get("verification")
+
+    if verification_data is None:
+        return None
+
+    return VerificationPolicy.model_validate(verification_data)
+
+
 __all__ = [
     "VerificationClient",
     "VerificationError",
@@ -906,4 +992,5 @@ __all__ = [
     "check_cosign_available",
     "verify_artifact",
     "export_verification_bundle",
+    "load_verification_policy_from_manifest",
 ]

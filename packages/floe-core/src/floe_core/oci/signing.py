@@ -63,9 +63,30 @@ ANNOTATION_SIGNED_AT = "dev.floe.signature.signed-at"
 ANNOTATION_REKOR_INDEX = "dev.floe.signature.rekor-index"
 ANNOTATION_CERT_FINGERPRINT = "dev.floe.signature.cert-fingerprint"
 
+
+def _get_env_int(name: str, default: int, min_val: int, max_val: int) -> int:
+    """Get bounded integer from environment variable with validation."""
+    try:
+        value = int(os.environ.get(name, str(default)))
+        return max(min_val, min(value, max_val))
+    except ValueError:
+        logger.warning("Invalid integer in %s, using default %d", name, default)
+        return default
+
+
+def _get_env_float(name: str, default: float, min_val: float, max_val: float) -> float:
+    """Get bounded float from environment variable with validation."""
+    try:
+        value = float(os.environ.get(name, str(default)))
+        return max(min_val, min(value, max_val))
+    except ValueError:
+        logger.warning("Invalid float in %s, using default %f", name, default)
+        return default
+
+
 # OIDC token retry configuration
 # Max retries for transient OIDC token failures (network issues, temporary unavailability)
-OIDC_MAX_RETRIES = int(os.environ.get("FLOE_OIDC_TOKEN_MAX_RETRIES", "3"))
+OIDC_MAX_RETRIES = _get_env_int("FLOE_OIDC_TOKEN_MAX_RETRIES", default=3, min_val=1, max_val=10)
 OIDC_RETRY_BASE_DELAY = 0.5  # Base delay in seconds for exponential backoff
 OIDC_RETRY_MAX_DELAY = 8.0  # Maximum delay cap in seconds
 OIDC_RETRY_JITTER = 0.1  # Random jitter added to delay (0-0.1s)
@@ -206,7 +227,12 @@ def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Ite
         ConcurrentSigningError: If lock cannot be acquired within timeout
     """
     if timeout_seconds is None:
-        timeout_seconds = float(os.environ.get("FLOE_SIGNING_LOCK_TIMEOUT", DEFAULT_LOCK_TIMEOUT))
+        timeout_seconds = _get_env_float(
+            "FLOE_SIGNING_LOCK_TIMEOUT",
+            default=DEFAULT_LOCK_TIMEOUT,
+            min_val=1.0,
+            max_val=300.0,
+        )
 
     lock_path = _artifact_lock_path(artifact_ref)
     lock_path.touch(exist_ok=True)
@@ -512,8 +538,8 @@ class SigningClient:
             if key_path.exists():
                 key_content = key_path.read_bytes()
                 return hashlib.sha256(key_content).hexdigest()[:16]
-        except Exception:
-            pass
+        except OSError as e:
+            logger.debug("Failed to compute key fingerprint for %s: %s", key_ref, e)
 
         return ""
 

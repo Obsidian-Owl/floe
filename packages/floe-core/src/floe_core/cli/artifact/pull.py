@@ -176,30 +176,15 @@ def _load_verification_policy(manifest_path: Path) -> VerificationPolicy | None:
     from pydantic import ValidationError
 
     from floe_core.cli.utils import sanitize_error
-    from floe_core.schemas.signing import VerificationPolicy
+    from floe_core.oci.verification import load_verification_policy_from_manifest
 
     try:
-        with manifest_path.open() as f:
-            manifest_data = yaml.safe_load(f)
-    except FileNotFoundError:
-        return None
+        return load_verification_policy_from_manifest(manifest_path)
     except yaml.YAMLError as e:
         error_exit(
             f"Invalid YAML in manifest: {sanitize_error(e)}",
             exit_code=ExitCode.VALIDATION_ERROR,
         )
-
-    if manifest_data is None:
-        return None
-
-    artifacts_config = manifest_data.get("artifacts", {})
-    verification_data = artifacts_config.get("verification")
-
-    if verification_data is None:
-        return None
-
-    try:
-        return VerificationPolicy.model_validate(verification_data)
     except ValidationError as e:
         error_exit(
             f"Invalid verification policy in manifest: {sanitize_error(e)}",
