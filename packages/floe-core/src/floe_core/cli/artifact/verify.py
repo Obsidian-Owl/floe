@@ -66,8 +66,8 @@ Examples:
         --subject "repo:acme/floe:ref:refs/heads/main" \\
         --export-bundle bundle.json
 
-    # Verify using offline bundle (air-gapped environment)
-    $ floe artifact verify --bundle bundle.json
+    # Inspect offline bundle info (does NOT perform cryptographic verification)
+    $ floe artifact verify --bundle-info bundle.json
 """,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -130,10 +130,11 @@ Examples:
     help="Export verification bundle to file for offline/air-gapped verification (FR-015).",
 )
 @click.option(
-    "--bundle",
+    "--bundle-info",
+    "bundle_info",
     type=click.Path(exists=True, dir_okay=False, readable=True),
     default=None,
-    help="Use offline verification bundle instead of live verification (FR-015).",
+    help="Inspect offline bundle info (DOES NOT perform cryptographic verification).",
 )
 def verify_command(
     registry: str,
@@ -145,11 +146,11 @@ def verify_command(
     enforcement: str,
     require_rekor: bool,
     export_bundle: str | None,
-    bundle: str | None,
+    bundle_info: str | None,
 ) -> None:
     """Verify an artifact signature in OCI registry."""
-    if bundle:
-        _verify_from_bundle(bundle, enforcement)
+    if bundle_info:
+        _display_bundle_info(bundle_info)
         return
 
     is_key_based = key is not None
@@ -254,17 +255,19 @@ def _build_key_based_verification_policy(
             source=SecretSource.ENV,
             name="verify-key",
         )
-    elif os.path.exists(key_ref):
-        resolved_path = str(Path(key_ref).resolve())
-        os.environ["FLOE_VERIFY_KEY"] = resolved_path
+    else:
+        from floe_core.cli.utils import validate_key_path
+
+        validated_path = validate_key_path(key_ref)
+        if not validated_path.exists():
+            error_exit(
+                f"Public key file not found: {key_ref}",
+                exit_code=ExitCode.VALIDATION_ERROR,
+            )
+        os.environ["FLOE_VERIFY_KEY"] = str(validated_path)
         public_key_ref = SecretReference(
             source=SecretSource.ENV,
             name="verify-key",
-        )
-    else:
-        error_exit(
-            f"Public key file not found: {key_ref}",
-            exit_code=ExitCode.VALIDATION_ERROR,
         )
 
     return VerificationPolicy(
@@ -346,8 +349,7 @@ def _verify_artifact(
         _handle_verify_error(e)
 
 
-def _verify_from_bundle(bundle_path: str, enforcement: str) -> None:
-    """Verify using offline bundle (FR-015)."""
+def _display_bundle_info(bundle_path: str) -> None:
     import json
 
     from floe_core.schemas.signing import VerificationBundle
@@ -358,14 +360,17 @@ def _verify_from_bundle(bundle_path: str, enforcement: str) -> None:
 
         bundle = VerificationBundle.model_validate(bundle_data)
 
-        info(f"Verifying from offline bundle: {bundle_path}")
+        warning("NOTICE: This displays bundle info only - NO cryptographic verification performed")
+        info(f"Bundle path: {bundle_path}")
         click.echo(f"  Artifact digest: {bundle.artifact_digest}")
         click.echo(f"  Bundle version: {bundle.version}")
         click.echo(f"  Created at: {bundle.created_at.isoformat()}")
         click.echo(f"  Has Rekor entry: {bundle.rekor_entry is not None}")
         click.echo(f"  Certificate chain entries: {len(bundle.certificate_chain)}")
 
-        success("Bundle loaded successfully (offline verification available)")
+        info(
+            "Bundle parsed successfully (for verification, use --key or --issuer with live registry)"
+        )
 
     except json.JSONDecodeError as e:
         error_exit(f"Invalid bundle JSON: {e}", exit_code=ExitCode.VALIDATION_ERROR)

@@ -248,11 +248,14 @@ def _predicate_type_short(predicate_type: str) -> str:
 
 def retrieve_attestations(
     artifact_ref: str,
+    *,
+    private_infrastructure: bool = False,
 ) -> list[AttestationManifest]:
     """Retrieve attestations attached to an OCI artifact.
 
     Args:
         artifact_ref: Full OCI artifact reference
+        private_infrastructure: If True, relaxes verification for air-gapped environments
 
     Returns:
         List of AttestationManifest objects
@@ -263,19 +266,25 @@ def retrieve_attestations(
     """
     with tracer.start_as_current_span("floe.oci.attestation.retrieve") as span:
         span.set_attribute("floe.artifact.ref", artifact_ref)
+        span.set_attribute("floe.attestation.private_infrastructure", private_infrastructure)
 
         if not check_cosign_available():
             raise CosignNotFoundError()
 
+        cmd = ["cosign", "verify-attestation"]
+
+        if private_infrastructure:
+            logger.warning(
+                "Using relaxed attestation verification (private_infrastructure=True). "
+                "Transparency log and SCT verification disabled."
+            )
+            cmd.extend(["--insecure-ignore-tlog", "--insecure-ignore-sct"])
+
+        cmd.append(artifact_ref)
+
         try:
             result = subprocess.run(
-                [
-                    "cosign",
-                    "verify-attestation",
-                    "--insecure-ignore-tlog",
-                    "--insecure-ignore-sct",
-                    artifact_ref,
-                ],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=60,

@@ -47,6 +47,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import urlparse, urlunparse
 
 from opentelemetry import trace
 
@@ -55,6 +56,7 @@ from floe_core.schemas.signing import (
     SignatureMetadata,
     TrustedIssuer,
     VerificationAuditEvent,
+    VerificationBundle,
     VerificationPolicy,
     VerificationResult,
 )
@@ -66,6 +68,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
+
+
+def _normalize_issuer(issuer_url: str) -> str:
+    parsed = urlparse(issuer_url)
+
+    scheme = parsed.scheme.lower()
+    netloc = parsed.netloc.lower()
+
+    if scheme == "https" and netloc.endswith(":443"):
+        netloc = netloc[:-4]
+    elif scheme == "http" and netloc.endswith(":80"):
+        netloc = netloc[:-3]
+
+    path = parsed.path.rstrip("/") or ""
+
+    return urlunparse((scheme, netloc, path, "", "", ""))
 
 
 class VerificationError(Exception):
@@ -582,20 +600,20 @@ class VerificationClient:
             Matching TrustedIssuer or None if no match
         """
         for trusted in self.policy.trusted_issuers:
-            # Check issuer matches (normalize trailing slashes)
             if metadata.issuer:
-                trusted_issuer = str(trusted.issuer).rstrip("/")
-                actual_issuer = metadata.issuer.rstrip("/")
-                if trusted_issuer != actual_issuer:
+                if _normalize_issuer(str(trusted.issuer)) != _normalize_issuer(metadata.issuer):
                     continue
 
-            # Check subject matches (exact or regex)
             if trusted.subject:
                 if trusted.subject == metadata.subject:
                     return trusted
             elif trusted.subject_regex:
-                if re.match(trusted.subject_regex, metadata.subject):
-                    return trusted
+                try:
+                    if re.match(trusted.subject_regex, metadata.subject):
+                        return trusted
+                except re.error:
+                    logger.warning("Invalid regex in trusted issuer: %s", trusted.subject_regex)
+                    continue
 
         return None
 

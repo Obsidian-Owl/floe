@@ -168,20 +168,22 @@ def _build_key_based_signing_config(key_ref: str) -> SigningConfig:
                 name="signing-key",
             ),
         )
-    elif os.path.exists(key_ref):
-        resolved_path = str(Path(key_ref).resolve())
-        os.environ["FLOE_SIGNING_KEY"] = resolved_path
+    else:
+        from floe_core.cli.utils import validate_key_path
+
+        validated_path = validate_key_path(key_ref)
+        if not validated_path.exists():
+            error_exit(
+                f"Key file not found: {key_ref}",
+                exit_code=ExitCode.VALIDATION_ERROR,
+            )
+        os.environ["FLOE_SIGNING_KEY"] = str(validated_path)
         return SigningConfig(
             mode="key-based",
             private_key_ref=SecretReference(
                 source=SecretSource.ENV,
                 name="signing-key",
             ),
-        )
-    else:
-        error_exit(
-            f"Key file not found: {key_ref}",
-            exit_code=ExitCode.VALIDATION_ERROR,
         )
 
 

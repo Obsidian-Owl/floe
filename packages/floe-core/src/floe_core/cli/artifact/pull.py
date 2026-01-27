@@ -116,8 +116,11 @@ def pull_command(
     artifacts_json = _pull_from_registry(registry_config, registry, tag, environment)
 
     if output:
-        _write_output(artifacts_json, Path(output))
-        success(f"Pulled artifact saved to: {output}")
+        from floe_core.cli.utils import validate_output_path
+
+        validated_output = validate_output_path(output)
+        _write_output(artifacts_json, validated_output)
+        success(f"Pulled artifact saved to: {validated_output}")
     else:
         click.echo(artifacts_json)
 
@@ -171,28 +174,39 @@ def _build_registry_config(registry_uri: str, manifest_path: str | None) -> Regi
 
 
 def _load_verification_policy(manifest_path: Path) -> VerificationPolicy | None:
-    """Load verification policy from manifest.yaml."""
     import yaml
+    from pydantic import ValidationError
 
+    from floe_core.cli.utils import sanitize_error
     from floe_core.schemas.signing import VerificationPolicy
 
     try:
         with manifest_path.open() as f:
             manifest_data = yaml.safe_load(f)
-
-        if manifest_data is None:
-            return None
-
-        artifacts_config = manifest_data.get("artifacts", {})
-        verification_data = artifacts_config.get("verification")
-
-        if verification_data is None:
-            return None
-
-        return VerificationPolicy.model_validate(verification_data)
-
-    except Exception:
+    except FileNotFoundError:
         return None
+    except yaml.YAMLError as e:
+        error_exit(
+            f"Invalid YAML in manifest: {sanitize_error(e)}",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+    if manifest_data is None:
+        return None
+
+    artifacts_config = manifest_data.get("artifacts", {})
+    verification_data = artifacts_config.get("verification")
+
+    if verification_data is None:
+        return None
+
+    try:
+        return VerificationPolicy.model_validate(verification_data)
+    except ValidationError as e:
+        error_exit(
+            f"Invalid verification policy in manifest: {sanitize_error(e)}",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
 
 
 def _handle_pull_error(e: Exception) -> NoReturn:

@@ -15,10 +15,11 @@ See Also:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 from floe_core.schemas.secrets import SecretReference
 
@@ -99,7 +100,7 @@ class TrustedIssuer(BaseModel):
     Attributes:
         issuer: OIDC issuer URL (e.g., https://token.actions.githubusercontent.com)
         subject: Exact certificate subject to match
-        subject_regex: Regex pattern for subject matching
+        subject_regex: Regex pattern for subject matching (validated for ReDoS safety)
 
     Example:
         >>> issuer = TrustedIssuer(
@@ -117,12 +118,30 @@ class TrustedIssuer(BaseModel):
     )
     subject_regex: str | None = Field(
         default=None,
-        description="Regex pattern for subject matching",
+        max_length=1000,
+        description="Regex pattern for subject matching (validated for ReDoS safety)",
     )
+
+    @field_validator("subject_regex")
+    @classmethod
+    def validate_subject_regex_safety(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+
+        from floe_core.enforcement.patterns import InvalidPatternError, _check_redos_safety
+
+        try:
+            _check_redos_safety(v)
+            re.compile(v)
+        except InvalidPatternError as e:
+            raise ValueError(f"Unsafe regex pattern: {e.reason}") from e
+        except re.error as e:
+            raise ValueError(f"Invalid regex syntax: {e}") from e
+
+        return v
 
     @model_validator(mode="after")
     def validate_subject(self) -> TrustedIssuer:
-        """Validate that exactly one of subject or subject_regex is provided."""
         if not self.subject and not self.subject_regex:
             raise ValueError("Either subject or subject_regex required")
         if self.subject and self.subject_regex:
@@ -198,7 +217,7 @@ class VerificationPolicy(BaseModel):
 
     enabled: bool = Field(default=True, description="Enable signature verification")
     enforcement: Literal["enforce", "warn", "off"] = Field(
-        default="warn",
+        default="enforce",
         description="Enforcement level: enforce (fatal), warn (log), off (skip)",
     )
     trusted_issuers: list[TrustedIssuer] = Field(
@@ -224,6 +243,10 @@ class VerificationPolicy(BaseModel):
     grace_period_days: Annotated[int, Field(ge=0, le=90)] = Field(
         default=7,
         description="Days to accept expired certs during rotation (FR-012)",
+    )
+    private_infrastructure: bool = Field(
+        default=False,
+        description="Allow relaxed attestation verification for private infrastructure without public transparency logs",
     )
 
     @model_validator(mode="after")
@@ -299,28 +322,55 @@ class SignatureMetadata(BaseModel):
 
     @classmethod
     def from_annotations(cls, annotations: dict[str, str]) -> SignatureMetadata | None:
-        """Parse from OCI annotations, returns None if not signed."""
+        """Parse from OCI annotations.
+
+        Returns None for unsigned artifacts (no bundle annotation).
+        Raises ValueError for malformed signed artifacts.
+        """
         bundle = annotations.get("dev.floe.signature.bundle")
         if not bundle:
             return None
 
-        mode_str = annotations.get("dev.floe.signature.mode", "keyless")
+        mode_str = annotations.get("dev.floe.signature.mode")
+        if mode_str is None:
+            raise ValueError("Signed artifact missing 'dev.floe.signature.mode' annotation")
         if mode_str not in ("keyless", "key-based"):
-            mode_str = "keyless"
+            raise ValueError(f"Invalid signature mode: {mode_str}")
+
+        subject = annotations.get("dev.floe.signature.subject")
+        if not subject:
+            raise ValueError("Signed artifact missing 'dev.floe.signature.subject' annotation")
+
+        signed_at_str = annotations.get("dev.floe.signature.signed-at")
+        if not signed_at_str:
+            raise ValueError("Signed artifact missing 'dev.floe.signature.signed-at' annotation")
+        try:
+            signed_at = datetime.fromisoformat(signed_at_str)
+        except ValueError as e:
+            raise ValueError(f"Invalid signed-at timestamp: {signed_at_str}") from e
+
+        cert_fingerprint = annotations.get("dev.floe.signature.cert-fingerprint")
+        if not cert_fingerprint:
+            raise ValueError(
+                "Signed artifact missing 'dev.floe.signature.cert-fingerprint' annotation"
+            )
 
         rekor_index_str = annotations.get("dev.floe.signature.rekor-index")
-        rekor_index = int(rekor_index_str) if rekor_index_str else None
+        rekor_index: int | None = None
+        if rekor_index_str:
+            try:
+                rekor_index = int(rekor_index_str)
+            except ValueError as e:
+                raise ValueError(f"Invalid rekor-index: {rekor_index_str}") from e
 
         return cls(
             bundle=bundle,
             mode=mode_str,  # type: ignore[arg-type]
             issuer=annotations.get("dev.floe.signature.issuer"),
-            subject=annotations.get("dev.floe.signature.subject", ""),
-            signed_at=datetime.fromisoformat(
-                annotations.get("dev.floe.signature.signed-at", "1970-01-01T00:00:00")
-            ),
+            subject=subject,
+            signed_at=signed_at,
             rekor_log_index=rekor_index,
-            certificate_fingerprint=annotations.get("dev.floe.signature.cert-fingerprint", ""),
+            certificate_fingerprint=cert_fingerprint,
         )
 
 
