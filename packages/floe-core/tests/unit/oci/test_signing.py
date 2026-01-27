@@ -17,7 +17,6 @@ import base64
 import json
 import os
 import threading
-import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
