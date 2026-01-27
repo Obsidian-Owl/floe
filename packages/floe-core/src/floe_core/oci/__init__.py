@@ -154,6 +154,25 @@ from floe_core.oci.verification import (
     verify_artifact,
 )
 
+# Attestation (Epic 8B)
+from floe_core.oci.attestation import (
+    IN_TOTO_STATEMENT_TYPE,
+    SPDX_PREDICATE_TYPE,
+    AttestationAttachError,
+    AttestationError,
+    CosignNotFoundError,
+    SBOMGenerationError,
+    SyftNotFoundError,
+    attach_attestation,
+    check_cosign_available,
+    check_syft_available,
+    create_in_toto_statement,
+    generate_sbom,
+    generate_sbom_for_python_project,
+    retrieve_attestations,
+    retrieve_sbom,
+)
+
 __all__: list[str] = [
     # Error hierarchy
     "OCIError",
