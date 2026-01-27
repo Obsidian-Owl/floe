@@ -584,3 +584,256 @@ class TestVerificationTracingE2E(IntegrationTestBase):
         calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert "floe.artifact.ref" in calls
         assert "floe.verification.enforcement" in calls
+
+
+class TestCertificateRotationGracePeriodE2E(IntegrationTestBase):
+    """E2E tests for certificate rotation grace period.
+
+    Tests that verification policies support grace periods for
+    certificate rotation scenarios.
+
+    Task: T074
+    Requirements: FR-012
+    """
+
+    required_services = [("oci-registry", 5000)]
+    namespace = "floe-test"
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_grace_period_policy_configuration(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        oci_registry_host: str,
+    ) -> None:
+        """Test verification policy supports grace period configuration.
+
+        FR-012: Support certificate rotation with configurable grace period
+
+        Verifies:
+        - grace_period_days can be configured in policy
+        - Policy accepts the configuration without error
+        """
+        import yaml
+
+        from floe_core.oci.client import OCIClient
+
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts = _create_verifiable_artifacts(unique_id)
+
+        # Create manifest with grace period configuration
+        cache_path = tmp_path / "oci-cache"
+        cache_path.mkdir(exist_ok=True)
+
+        manifest_data = {
+            "artifacts": {
+                "registry": {
+                    "uri": f"oci://{oci_registry_host}/floe-test",
+                    "auth": {"type": "anonymous"},
+                    "tls_verify": False,
+                    "cache": {"enabled": True, "path": str(cache_path)},
+                    "verification": {
+                        "enabled": True,
+                        "enforcement": "warn",
+                        "grace_period_days": 30,  # 30-day grace period
+                        "trusted_issuers": [
+                            {
+                                "issuer": "https://token.actions.githubusercontent.com",
+                                "subject": "repo:test/repo:ref:refs/heads/main",
+                            }
+                        ],
+                    },
+                }
+            }
+        }
+        manifest_path = tmp_path / "manifest-grace.yaml"
+        manifest_path.write_text(yaml.safe_dump(manifest_data))
+
+        # Push and pull should work with grace period configured
+        client = OCIClient.from_manifest(manifest_path)
+        client.push(artifacts, tag=test_artifact_tag)
+
+        pulled = client.pull(tag=test_artifact_tag)
+        assert pulled.metadata.product_name == artifacts.metadata.product_name
+
+    @pytest.mark.requirement("8B-FR-012")
+    def test_verification_client_grace_period_handling(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        test_manifest_path: Path,
+    ) -> None:
+        """Test VerificationClient handles grace period correctly.
+
+        Verifies:
+        - VerificationClient accepts grace_period_days in policy
+        - Verification proceeds with grace period configured
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.verification import VerificationClient
+        from floe_core.schemas.signing import TrustedIssuer, VerificationPolicy
+
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts = _create_verifiable_artifacts(unique_id)
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts.to_json_file(artifacts_path)
+
+        client = OCIClient.from_manifest(test_manifest_path)
+        client.push(artifacts, tag=test_artifact_tag)
+
+        # Create policy with grace period
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="warn",
+            grace_period_days=30,
+            trusted_issuers=[
+                TrustedIssuer(
+                    issuer=HttpUrl("https://token.actions.githubusercontent.com"),
+                    subject="repo:test/repo:ref:refs/heads/main",
+                )
+            ],
+        )
+
+        verification_client = VerificationClient(policy)
+        content = artifacts_path.read_bytes()
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+
+        # Verification should proceed (even for unsigned, in warn mode)
+        result = verification_client.verify(
+            content=content,
+            metadata=None,
+            artifact_ref=artifact_ref,
+        )
+
+        # Result should indicate verification status
+        assert result is not None
+        assert result.verified_at is not None
+
+
+class TestOfflineVerificationBundleE2E(IntegrationTestBase):
+    """E2E tests for offline verification bundle export/import.
+
+    Tests that verification bundles can be exported for offline use
+    in air-gapped environments.
+
+    Task: T075
+    Requirements: FR-015
+    """
+
+    required_services = [("oci-registry", 5000)]
+    namespace = "floe-test"
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_verification_result_contains_bundle_info(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        test_manifest_path: Path,
+    ) -> None:
+        """Test verification result contains bundle information.
+
+        FR-015: Support offline verification bundles
+
+        Verifies:
+        - VerificationResult contains fields for bundle export
+        - Bundle information can be serialized
+        """
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.verification import VerificationClient
+        from floe_core.schemas.signing import TrustedIssuer, VerificationPolicy
+
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts = _create_verifiable_artifacts(unique_id)
+        artifacts_path = tmp_path / "compiled_artifacts.json"
+        artifacts.to_json_file(artifacts_path)
+
+        client = OCIClient.from_manifest(test_manifest_path)
+        client.push(artifacts, tag=test_artifact_tag)
+
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="warn",
+            trusted_issuers=[
+                TrustedIssuer(
+                    issuer=HttpUrl("https://token.actions.githubusercontent.com"),
+                    subject="repo:test/repo:ref:refs/heads/main",
+                )
+            ],
+        )
+
+        verification_client = VerificationClient(policy)
+        content = artifacts_path.read_bytes()
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+
+        result = verification_client.verify(
+            content=content,
+            metadata=None,
+            artifact_ref=artifact_ref,
+        )
+
+        # Result should be serializable for bundle export
+        result_dict = result.model_dump()
+        assert "status" in result_dict
+        assert "verified_at" in result_dict
+
+        # Should be JSON serializable
+        import json
+
+        json_str = json.dumps(result_dict, default=str)
+        assert len(json_str) > 0
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_policy_supports_offline_mode(
+        self,
+        tmp_path: Path,
+        test_artifact_tag: str,
+        oci_registry_host: str,
+    ) -> None:
+        """Test verification policy supports offline verification mode.
+
+        Verifies:
+        - Policy can be configured for offline verification
+        - Offline mode configuration is accepted
+        """
+        import yaml
+
+        from floe_core.oci.client import OCIClient
+
+        unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
+        artifacts = _create_verifiable_artifacts(unique_id)
+
+        # Create manifest with offline verification enabled
+        cache_path = tmp_path / "oci-cache"
+        cache_path.mkdir(exist_ok=True)
+
+        manifest_data = {
+            "artifacts": {
+                "registry": {
+                    "uri": f"oci://{oci_registry_host}/floe-test",
+                    "auth": {"type": "anonymous"},
+                    "tls_verify": False,
+                    "cache": {"enabled": True, "path": str(cache_path)},
+                    "verification": {
+                        "enabled": True,
+                        "enforcement": "warn",
+                        # offline_verification: true indicates air-gapped env
+                        "offline_verification": True,
+                        "trusted_issuers": [
+                            {
+                                "issuer": "https://token.actions.githubusercontent.com",
+                                "subject": "repo:test/repo:ref:refs/heads/main",
+                            }
+                        ],
+                    },
+                }
+            }
+        }
+        manifest_path = tmp_path / "manifest-offline.yaml"
+        manifest_path.write_text(yaml.safe_dump(manifest_data))
+
+        # Push and pull should work with offline mode configured
+        client = OCIClient.from_manifest(manifest_path)
+        client.push(artifacts, tag=test_artifact_tag)
+
+        pulled = client.pull(tag=test_artifact_tag)
+        assert pulled.metadata.product_name == artifacts.metadata.product_name
