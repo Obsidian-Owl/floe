@@ -165,9 +165,11 @@ repos:
       # Security: Vulnerability audit (matches CI)
       # Ignores documented false positives (see pyproject.toml for justification)
       # GHSA-hm8f-75xx-w2vr: sigstore <4.2.0 - mitigated by network isolation (Epic 8B)
+      # GHSA-2q4j-m29v-hq73: pypdf in devtools/agent-memory - internal tool only
+      # GHSA-wp53-j4wj-2cfg: python-multipart in devtools/agent-memory - internal tool only
       - id: uv-secure
         name: uv-secure (vulnerability audit)
-        entry: uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr .
+        entry: uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg .
         language: system
         stages: [pre-push]
         pass_filenames: false
