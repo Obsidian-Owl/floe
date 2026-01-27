@@ -305,7 +305,12 @@ class TestVerificationWithSigstore:
         ):
             mock_verifier = MagicMock()
             mock_verifier_cls.production.return_value = mock_verifier
-            mock_bundle_cls.from_json.return_value = MagicMock()
+
+            mock_bundle = MagicMock()
+            mock_bundle.to_json.return_value = json.dumps(
+                {"verificationMaterial": {"tlogEntries": [{"logIndex": "12345"}]}}
+            )
+            mock_bundle_cls.from_json.return_value = mock_bundle
 
             client = VerificationClient(enforce_policy)
             result = client.verify(
@@ -324,7 +329,7 @@ class TestVerificationWithSigstore:
         valid_signature_metadata: SignatureMetadata,
     ) -> None:
         """verify() raises SignatureVerificationError when signature is invalid and enforce."""
-        from sigstore.verify import VerificationError as SigstoreVerificationError
+        from sigstore.errors import VerificationError as SigstoreVerificationError
 
         with (
             patch("sigstore.verify.Verifier") as mock_verifier_cls,
@@ -353,16 +358,30 @@ class TestVerificationWithSigstore:
         untrusted_signature_metadata: SignatureMetadata,
     ) -> None:
         """verify() raises SignatureVerificationError for untrusted signer."""
-        client = VerificationClient(enforce_policy)
+        with (
+            patch("sigstore.verify.Verifier") as mock_verifier_cls,
+            patch("sigstore.models.Bundle") as mock_bundle_cls,
+            patch("sigstore.verify.policy.Identity"),
+        ):
+            mock_verifier = MagicMock()
+            mock_verifier_cls.production.return_value = mock_verifier
 
-        with pytest.raises(SignatureVerificationError) as exc_info:
-            client.verify(
-                content=b"artifact",
-                metadata=untrusted_signature_metadata,
-                artifact_ref="oci://registry/repo:v1.0.0",
+            mock_bundle = MagicMock()
+            mock_bundle.to_json.return_value = json.dumps(
+                {"verificationMaterial": {"tlogEntries": [{"logIndex": "99999"}]}}
             )
+            mock_bundle_cls.from_json.return_value = mock_bundle
 
-        assert "not in trusted issuers" in str(exc_info.value)
+            client = VerificationClient(enforce_policy)
+
+            with pytest.raises(SignatureVerificationError) as exc_info:
+                client.verify(
+                    content=b"artifact",
+                    metadata=untrusted_signature_metadata,
+                    artifact_ref="oci://registry/repo:v1.0.0",
+                )
+
+            assert "not in trusted issuers" in str(exc_info.value)
 
 
 class TestRekorVerification:

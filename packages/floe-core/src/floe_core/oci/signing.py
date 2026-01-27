@@ -197,26 +197,21 @@ class SigningClient:
         Returns:
             SignatureMetadata with bundle and identity information
         """
-        from sigstore.models import Bundle, ClientTrustConfig
+        from sigstore.models import Bundle
         from sigstore.sign import SigningContext
 
-        # Get or refresh OIDC token
         with _trace_span("floe.oci.sign.oidc_token"):
             identity = self._get_identity_token()
             span = trace.get_current_span()
             span.set_attribute("floe.signing.issuer", str(identity.federated_issuer))
 
-        # Create signing context with production trust config
-        trust_config = ClientTrustConfig.production()
-        context = SigningContext.from_trust_config(trust_config)
+        context = SigningContext.production()
 
-        # Sign the artifact
         with _trace_span("floe.oci.sign.fulcio"):
             with context.signer(identity, cache=True) as signer:
                 with _trace_span("floe.oci.sign.rekor"):
                     bundle: Bundle = signer.sign_artifact(content)
 
-        # Extract metadata from bundle
         return self._bundle_to_metadata(bundle, identity)
 
     def _sign_key_based(self, content: bytes, artifact_ref: str) -> SignatureMetadata:
@@ -432,12 +427,11 @@ class SigningClient:
         # Fall back to interactive OAuth flow
         # This requires browser interaction, typically for local development
         try:
-            from sigstore.models import ClientTrustConfig
             from sigstore.oidc import Issuer
 
             logger.info("No ambient credentials, initiating interactive OAuth flow")
-            trust_config = ClientTrustConfig.production()
-            issuer = Issuer(trust_config.signing_config.get_oidc_url())
+            # sigstore 3.x: Use Issuer.production() instead of ClientTrustConfig
+            issuer = Issuer.production()
             return issuer.identity_token()
         except IdentityError as e:
             raise OIDCTokenError(
