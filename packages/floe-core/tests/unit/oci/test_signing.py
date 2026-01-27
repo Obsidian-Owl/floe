@@ -130,13 +130,14 @@ class TestSigningClient:
                 return_value=mock_identity_token,
             ),
             patch("sigstore.sign.SigningContext") as mock_context_cls,
+            patch("sigstore.models.ClientTrustConfig"),
         ):
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
             mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
-            mock_context_cls.production.return_value = mock_context
+            mock_context_cls.from_trust_config.return_value = mock_context
 
             client = SigningClient(keyless_config)
             metadata = client.sign(b"artifact content", "oci://registry/repo:v1.0.0")
@@ -190,6 +191,7 @@ class TestOIDCTokenAcquisition:
         with (
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
         ):
             mock_token = MagicMock()
             mock_token.federated_issuer = "https://accounts.google.com"
@@ -197,12 +199,17 @@ class TestOIDCTokenAcquisition:
 
             mock_issuer = MagicMock()
             mock_issuer.identity_token.return_value = mock_token
-            mock_issuer_cls.production.return_value = mock_issuer
+            mock_issuer_cls.return_value = mock_issuer
+
+            mock_signing_config = MagicMock()
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
             token = client._get_identity_token()
 
             assert token == mock_token
+            mock_issuer_cls.assert_called_once_with("https://oauth2.sigstore.dev/auth")
 
     def test_oidc_token_error_on_failure(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token raises OIDCTokenError on complete failure."""
@@ -211,10 +218,15 @@ class TestOIDCTokenAcquisition:
         with (
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
         ):
             mock_issuer = MagicMock()
             mock_issuer.identity_token.side_effect = IdentityError("Token expired")
-            mock_issuer_cls.production.return_value = mock_issuer
+            mock_issuer_cls.return_value = mock_issuer
+
+            mock_signing_config = MagicMock()
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
 
@@ -333,13 +345,14 @@ class TestSignArtifactConvenienceFunction:
                 return_value=mock_identity_token,
             ),
             patch("sigstore.sign.SigningContext") as mock_context_cls,
+            patch("sigstore.models.ClientTrustConfig"),
         ):
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
             mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
-            mock_context_cls.production.return_value = mock_context
+            mock_context_cls.from_trust_config.return_value = mock_context
 
             metadata = sign_artifact(b"content", "oci://registry/repo:v1.0.0", keyless_config)
 
@@ -411,13 +424,14 @@ class TestOpenTelemetrySpans:
                 return_value=mock_identity_token,
             ),
             patch("sigstore.sign.SigningContext") as mock_context_cls,
+            patch("sigstore.models.ClientTrustConfig"),
         ):
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
             mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
-            mock_context_cls.production.return_value = mock_context
+            mock_context_cls.from_trust_config.return_value = mock_context
 
             client = SigningClient(keyless_config)
             client.sign(b"artifact content", "oci://registry/repo:v1.0.0")
@@ -448,13 +462,14 @@ class TestOpenTelemetrySpans:
                 return_value=mock_identity_token,
             ),
             patch("sigstore.sign.SigningContext") as mock_context_cls,
+            patch("sigstore.models.ClientTrustConfig"),
         ):
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
             mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
-            mock_context_cls.production.return_value = mock_context
+            mock_context_cls.from_trust_config.return_value = mock_context
 
             client = SigningClient(keyless_config)
             client.sign(b"content", "oci://registry/repo:v1.0.0")
@@ -809,6 +824,7 @@ class TestConcurrentSigning:
                 return_value=mock_identity_token,
             ),
             patch("sigstore.sign.SigningContext") as mock_context_cls,
+            patch("sigstore.models.ClientTrustConfig"),
             patch("floe_core.oci.signing.signing_lock") as mock_lock,
         ):
             mock_context = MagicMock()
@@ -816,7 +832,7 @@ class TestConcurrentSigning:
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
             mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
-            mock_context_cls.production.return_value = mock_context
+            mock_context_cls.from_trust_config.return_value = mock_context
 
             mock_lock.return_value.__enter__ = MagicMock()
             mock_lock.return_value.__exit__ = MagicMock(return_value=False)
@@ -852,11 +868,16 @@ class TestOIDCTokenRetry:
         with (
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
             patch("time.sleep") as mock_sleep,
         ):
             mock_issuer = MagicMock()
             mock_issuer.identity_token.side_effect = failing_then_success
-            mock_issuer_cls.production.return_value = mock_issuer
+            mock_issuer_cls.return_value = mock_issuer
+
+            mock_signing_config = MagicMock()
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
             token = client._get_identity_token()
@@ -872,11 +893,16 @@ class TestOIDCTokenRetry:
         with (
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
             patch("time.sleep"),
         ):
             mock_issuer = MagicMock()
             mock_issuer.identity_token.side_effect = IdentityError("Persistent failure")
-            mock_issuer_cls.production.return_value = mock_issuer
+            mock_issuer_cls.return_value = mock_issuer
+
+            mock_signing_config = MagicMock()
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
 
@@ -897,12 +923,17 @@ class TestOIDCTokenRetry:
         with (
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
             patch("time.sleep", side_effect=capture_sleep),
             patch("random.uniform", return_value=0.05),
         ):
             mock_issuer = MagicMock()
             mock_issuer.identity_token.side_effect = IdentityError("Failure")
-            mock_issuer_cls.production.return_value = mock_issuer
+            mock_issuer_cls.return_value = mock_issuer
+
+            mock_signing_config = MagicMock()
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
 

@@ -348,6 +348,7 @@ class SigningClient:
         Returns:
             SignatureMetadata with bundle and identity information
         """
+        from sigstore.models import ClientTrustConfig
         from sigstore.sign import SigningContext
 
         with _trace_span("floe.oci.sign.oidc_token"):
@@ -355,7 +356,8 @@ class SigningClient:
             span = trace.get_current_span()
             span.set_attribute("floe.signing.issuer", str(identity.federated_issuer))
 
-        context = SigningContext.production()
+        trust_config = ClientTrustConfig.production()
+        context = SigningContext.from_trust_config(trust_config)
 
         with _trace_span("floe.oci.sign.fulcio"):
             with context.signer(identity, cache=True) as signer:
@@ -628,7 +630,10 @@ class SigningClient:
             raise
 
         logger.info("No ambient credentials, initiating interactive OAuth flow")
-        issuer = Issuer.production()
+        from sigstore.models import ClientTrustConfig
+
+        oidc_url = ClientTrustConfig.production().signing_config.get_oidc_url()
+        issuer = Issuer(oidc_url)
         return issuer.identity_token()
 
     def _bundle_to_metadata(self, bundle: Bundle, identity: IdentityToken) -> SignatureMetadata:
