@@ -31,6 +31,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import shutil
 import subprocess
 import tempfile
@@ -61,6 +62,13 @@ ANNOTATION_SUBJECT = "dev.floe.signature.subject"
 ANNOTATION_SIGNED_AT = "dev.floe.signature.signed-at"
 ANNOTATION_REKOR_INDEX = "dev.floe.signature.rekor-index"
 ANNOTATION_CERT_FINGERPRINT = "dev.floe.signature.cert-fingerprint"
+
+# OIDC token retry configuration
+# Max retries for transient OIDC token failures (network issues, temporary unavailability)
+OIDC_MAX_RETRIES = int(os.environ.get("FLOE_OIDC_TOKEN_MAX_RETRIES", "3"))
+OIDC_RETRY_BASE_DELAY = 0.5  # Base delay in seconds for exponential backoff
+OIDC_RETRY_MAX_DELAY = 8.0  # Maximum delay cap in seconds
+OIDC_RETRY_JITTER = 0.1  # Random jitter added to delay (0-0.1s)
 
 
 @contextmanager
@@ -497,15 +505,57 @@ class SigningClient:
         (GitHub Actions, GitLab CI, etc.). Falls back to interactive
         OAuth flow if no ambient credentials are available.
 
+        Implements exponential backoff retry for transient failures.
+        Configure via FLOE_OIDC_TOKEN_MAX_RETRIES (default: 3).
+
         Returns:
             sigstore.oidc.IdentityToken
 
         Raises:
-            OIDCTokenError: If token cannot be acquired
+            OIDCTokenError: If token cannot be acquired after all retries
         """
         from sigstore.oidc import IdentityError, IdentityToken, detect_credential
 
-        # Try ambient credential detection first (CI/CD environments)
+        last_error: IdentityError | None = None
+
+        for attempt in range(OIDC_MAX_RETRIES):
+            try:
+                token = self._attempt_token_acquisition()
+                if token is not None:
+                    return token
+            except IdentityError as e:
+                last_error = e
+                if attempt < OIDC_MAX_RETRIES - 1:
+                    delay = min(
+                        OIDC_RETRY_BASE_DELAY * (2**attempt) + random.uniform(0, OIDC_RETRY_JITTER),
+                        OIDC_RETRY_MAX_DELAY,
+                    )
+                    logger.warning(
+                        "OIDC token acquisition failed (attempt %d/%d): %s. Retrying in %.2fs",
+                        attempt + 1,
+                        OIDC_MAX_RETRIES,
+                        e,
+                        delay,
+                    )
+                    time.sleep(delay)
+
+        issuer_str = str(self.config.oidc_issuer) if self.config.oidc_issuer else None
+        raise OIDCTokenError(
+            f"Failed after {OIDC_MAX_RETRIES} attempts: {last_error}",
+            issuer=issuer_str,
+        )
+
+    def _attempt_token_acquisition(self) -> IdentityToken | None:
+        """Single attempt to acquire OIDC token.
+
+        Returns:
+            IdentityToken if successful, None if ambient detection found nothing
+
+        Raises:
+            IdentityError: On token acquisition failure
+        """
+        from sigstore.oidc import IdentityError, IdentityToken, Issuer, detect_credential
+
         try:
             credential = detect_credential()
             if credential is not None:
@@ -513,20 +563,11 @@ class SigningClient:
                 return IdentityToken(credential)
         except IdentityError as e:
             logger.warning("Ambient credential detection failed: %s", e)
+            raise
 
-        # Fall back to interactive OAuth flow
-        # This requires browser interaction, typically for local development
-        try:
-            from sigstore.oidc import Issuer
-
-            logger.info("No ambient credentials, initiating interactive OAuth flow")
-            # sigstore 3.x: Use Issuer.production() instead of ClientTrustConfig
-            issuer = Issuer.production()
-            return issuer.identity_token()
-        except IdentityError as e:
-            raise OIDCTokenError(
-                str(e), issuer=str(self.config.oidc_issuer) if self.config.oidc_issuer else None
-            ) from e
+        logger.info("No ambient credentials, initiating interactive OAuth flow")
+        issuer = Issuer.production()
+        return issuer.identity_token()
 
     def _bundle_to_metadata(self, bundle: Bundle, identity: IdentityToken) -> SignatureMetadata:
         """Convert Sigstore bundle to SignatureMetadata.
