@@ -86,6 +86,13 @@ def _normalize_issuer(issuer_url: str) -> str:
 
 
 MAX_BUNDLE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB limit for Sigstore bundles
+MAX_SUBJECT_LENGTH = 1024  # Max subject length for regex matching (ReDoS protection)
+
+# Security: Allowed key file extensions
+_ALLOWED_KEY_EXTENSIONS = frozenset({".key", ".pem", ".pub", ".crt", ".cert"})
+
+# Security: Regex pattern for validating key reference names
+_VALID_KEY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _decode_bundle_with_size_limit(bundle_b64: str, max_size: int = MAX_BUNDLE_SIZE_BYTES) -> str:
@@ -101,6 +108,13 @@ def _decode_bundle_with_size_limit(bundle_b64: str, max_size: int = MAX_BUNDLE_S
     Raises:
         ValueError: If bundle exceeds size limit or is malformed
     """
+    estimated_decoded_size = len(bundle_b64) * 3 // 4
+    if estimated_decoded_size > max_size:
+        raise ValueError(
+            f"Bundle size (estimated {estimated_decoded_size} bytes) "
+            f"exceeds limit ({max_size} bytes)"
+        )
+
     try:
         bundle_bytes = base64.b64decode(bundle_b64)
     except Exception as e:
@@ -543,7 +557,14 @@ class VerificationClient:
         key_ref = self.policy.public_key_ref
 
         if key_ref.source.value == "file":
-            key_path = Path(key_ref.name)
+            key_path = Path(key_ref.name).resolve()
+            if key_path.suffix.lower() not in _ALLOWED_KEY_EXTENSIONS:
+                logger.error(
+                    "Invalid key file extension: %s. Allowed: %s",
+                    key_path.suffix,
+                    ", ".join(sorted(_ALLOWED_KEY_EXTENSIONS)),
+                )
+                return None
             if not key_path.exists():
                 logger.error("Public key file not found: %s", key_path)
                 return None
@@ -552,6 +573,13 @@ class VerificationClient:
         if key_ref.source.value == "env":
             import os
 
+            if not _VALID_KEY_NAME_PATTERN.match(key_ref.name):
+                logger.error(
+                    "Invalid key name format: %s. "
+                    "Must contain only alphanumeric, hyphens, underscores.",
+                    key_ref.name,
+                )
+                return None
             env_var_name = f"FLOE_{key_ref.name.upper().replace('-', '_')}"
             env_value = os.environ.get(env_var_name)
             if not env_value:
@@ -654,6 +682,13 @@ class VerificationClient:
                 if trusted.subject == metadata.subject:
                     return trusted
             elif trusted.subject_regex:
+                if len(metadata.subject) > MAX_SUBJECT_LENGTH:
+                    logger.warning(
+                        "Subject too long for regex matching (%d > %d), skipping",
+                        len(metadata.subject),
+                        MAX_SUBJECT_LENGTH,
+                    )
+                    continue
                 try:
                     if re.match(trusted.subject_regex, metadata.subject):
                         return trusted

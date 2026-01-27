@@ -688,13 +688,17 @@ class TestConcurrentSigning:
         artifact_ref = "oci://registry/repo:v1.0.0"
         execution_order: list[str] = []
         lock = threading.Lock()
+        t1_acquired = threading.Event()
+        t1_release = threading.Event()
 
         def worker(worker_id: str) -> None:
             with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
                 with signing_lock(artifact_ref, timeout_seconds=5.0):
                     with lock:
                         execution_order.append(f"{worker_id}_start")
-                    time.sleep(0.1)
+                    if worker_id == "t1":
+                        t1_acquired.set()  # Signal that t1 has lock
+                        t1_release.wait(timeout=5.0)  # Wait for signal to release
                     with lock:
                         execution_order.append(f"{worker_id}_end")
 
@@ -702,8 +706,9 @@ class TestConcurrentSigning:
         t2 = threading.Thread(target=worker, args=("t2",))
 
         t1.start()
-        time.sleep(0.02)
+        t1_acquired.wait(timeout=5.0)  # Wait for t1 to acquire lock
         t2.start()
+        t1_release.set()  # Allow t1 to complete
 
         t1.join(timeout=10)
         t2.join(timeout=10)

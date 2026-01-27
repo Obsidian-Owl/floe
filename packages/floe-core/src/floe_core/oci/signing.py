@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
 import subprocess
 import tempfile
@@ -46,6 +47,12 @@ from opentelemetry import trace
 
 from floe_core.oci.errors import ConcurrentSigningError
 from floe_core.schemas.signing import SignatureMetadata, SigningConfig
+
+# Security: Allowed key file extensions to prevent arbitrary file access
+_ALLOWED_KEY_EXTENSIONS = frozenset({".key", ".pem", ".pub", ".crt", ".cert"})
+
+# Security: Regex pattern for validating key reference names (used in env var construction)
+_VALID_KEY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 if TYPE_CHECKING:
     from sigstore.models import Bundle
@@ -399,14 +406,24 @@ class SigningClient:
         key_ref = self.config.private_key_ref
 
         if key_ref.source.value == "file":
-            key_path = Path(key_ref.name)
+            key_path = Path(key_ref.name).resolve()
+            if key_path.suffix.lower() not in _ALLOWED_KEY_EXTENSIONS:
+                raise KeyLoadError(
+                    f"Invalid key file extension: {key_path.suffix}. "
+                    f"Allowed: {', '.join(sorted(_ALLOWED_KEY_EXTENSIONS))}",
+                    key_ref.name,
+                )
             if not key_path.exists():
                 raise KeyLoadError(f"Key file not found: {key_path}", key_ref.name)
             return str(key_path)
 
         if key_ref.source.value == "env":
-            import os
-
+            if not _VALID_KEY_NAME_PATTERN.match(key_ref.name):
+                raise KeyLoadError(
+                    f"Invalid key name format: {key_ref.name}. "
+                    "Must contain only alphanumeric characters, hyphens, and underscores.",
+                    key_ref.name,
+                )
             env_var_name = f"FLOE_{key_ref.name.upper().replace('-', '_')}"
             env_value = os.environ.get(env_var_name)
             if not env_value:
@@ -674,7 +691,6 @@ class SigningClient:
         raw_bytes = cert_data.get("rawBytes")
 
         if raw_bytes:
-            # Decode base64 certificate and compute SHA256
             try:
                 cert_der = base64.b64decode(raw_bytes)
                 fingerprint = hashlib.sha256(cert_der).hexdigest()
