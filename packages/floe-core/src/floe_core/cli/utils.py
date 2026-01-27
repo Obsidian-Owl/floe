@@ -301,10 +301,12 @@ def validate_key_path(
         )
 
     if allowed_dirs is None:
+        import tempfile
+
         allowed_dirs = [
             Path.cwd(),
             Path.home() / ".floe",
-            Path("/tmp"),
+            Path(tempfile.gettempdir()) / "floe",
             Path("/etc/floe/keys"),
         ]
 
@@ -312,7 +314,7 @@ def validate_key_path(
 
     if not is_allowed:
         error_exit(
-            "Key path must be within allowed directories (cwd, ~/.floe, /tmp, /etc/floe/keys)",
+            "Key path must be within allowed directories (cwd, ~/.floe, $TMPDIR/floe, /etc/floe/keys)",
             exit_code=ExitCode.VALIDATION_ERROR,
             path=sanitize_path_for_log(resolved),
         )
