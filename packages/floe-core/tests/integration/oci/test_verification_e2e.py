@@ -695,7 +695,7 @@ class TestCertificateRotationGracePeriodE2E(IntegrationTestBase):
         artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         # Verification should proceed (even for unsigned, in warn mode)
-        verification_client.verify(
+        result = verification_client.verify(
             content=content,
             metadata=None,
             artifact_ref=artifact_ref,
@@ -761,7 +761,7 @@ class TestOfflineVerificationBundleE2E(IntegrationTestBase):
         content = artifacts_path.read_bytes()
         artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
-        verification_client.verify(
+        result = verification_client.verify(
             content=content,
             metadata=None,
             artifact_ref=artifact_ref,

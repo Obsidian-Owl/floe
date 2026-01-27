@@ -149,7 +149,7 @@ class TestGenerateSBOM:
             stderr="",
         )
 
-        generate_sbom(tmp_path)
+        result = generate_sbom(tmp_path)
 
         assert result["spdxVersion"] == "SPDX-2.3"
         assert len(result["packages"]) == 2
@@ -250,7 +250,7 @@ class TestGenerateSBOM:
             stderr="",
         )
 
-        generate_sbom_for_python_project(tmp_path)
+        result = generate_sbom_for_python_project(tmp_path)
 
         assert result["spdxVersion"] == "SPDX-2.3"
         call_args = mock_run.call_args
