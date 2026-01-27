@@ -355,6 +355,176 @@ class TestAnnotationConstants:
         assert ANNOTATION_CERT_FINGERPRINT.startswith("dev.floe.signature.")
 
 
+class TestOpenTelemetrySpans:
+    """Tests for OpenTelemetry span emission (T088, SC-007).
+
+    Verify that signing operations emit the documented OTel spans.
+
+    Note: These tests patch the module-level tracer to capture spans.
+    This is necessary because signing.py uses trace.get_tracer() at import time.
+    """
+
+    @pytest.fixture
+    def captured_spans(self):
+        """Capture spans by patching the signing module's tracer."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+        from opentelemetry.sdk.trace.sampling import ALWAYS_ON
+
+        import floe_core.oci.signing as signing_module
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider(sampler=ALWAYS_ON)
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        test_tracer = provider.get_tracer("test.signing")
+
+        # Patch the module-level tracer
+        original_tracer = signing_module.tracer
+        signing_module.tracer = test_tracer
+
+        yield exporter
+
+        # Restore original tracer
+        signing_module.tracer = original_tracer
+        exporter.clear()
+
+    @requires_sigstore
+    def test_keyless_sign_emits_span_hierarchy(
+        self,
+        captured_spans,
+        keyless_config: SigningConfig,
+        mock_identity_token: MagicMock,
+        mock_sigstore_bundle: MagicMock,
+    ) -> None:
+        """Keyless signing emits floe.oci.sign span with child spans."""
+        with (
+            patch(
+                "floe_core.oci.signing.SigningClient._get_identity_token",
+                return_value=mock_identity_token,
+            ),
+            patch("sigstore.sign.SigningContext") as mock_context_cls,
+        ):
+            mock_context = MagicMock()
+            mock_signer = MagicMock()
+            mock_signer.sign_artifact.return_value = mock_sigstore_bundle
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
+            mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
+            mock_context_cls.production.return_value = mock_context
+
+            client = SigningClient(keyless_config)
+            client.sign(b"artifact content", "oci://registry/repo:v1.0.0")
+
+        spans = captured_spans.get_finished_spans()
+        span_names = [span.name for span in spans]
+
+        # Verify root span exists
+        assert "floe.oci.sign" in span_names
+
+        # Verify child spans for keyless signing flow
+        assert "floe.oci.sign.oidc_token" in span_names
+        assert "floe.oci.sign.fulcio" in span_names
+        assert "floe.oci.sign.rekor" in span_names
+
+    @requires_sigstore
+    def test_sign_span_has_required_attributes(
+        self,
+        captured_spans,
+        keyless_config: SigningConfig,
+        mock_identity_token: MagicMock,
+        mock_sigstore_bundle: MagicMock,
+    ) -> None:
+        """floe.oci.sign span has documented attributes."""
+        with (
+            patch(
+                "floe_core.oci.signing.SigningClient._get_identity_token",
+                return_value=mock_identity_token,
+            ),
+            patch("sigstore.sign.SigningContext") as mock_context_cls,
+        ):
+            mock_context = MagicMock()
+            mock_signer = MagicMock()
+            mock_signer.sign_artifact.return_value = mock_sigstore_bundle
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
+            mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
+            mock_context_cls.production.return_value = mock_context
+
+            client = SigningClient(keyless_config)
+            client.sign(b"content", "oci://registry/repo:v1.0.0")
+
+        spans = captured_spans.get_finished_spans()
+        sign_span = next((s for s in spans if s.name == "floe.oci.sign"), None)
+
+        assert sign_span is not None
+        attrs = dict(sign_span.attributes)
+
+        # Verify documented attributes per research.md
+        assert "floe.artifact.ref" in attrs
+        assert attrs["floe.artifact.ref"] == "oci://registry/repo:v1.0.0"
+        assert "floe.signing.mode" in attrs
+        assert attrs["floe.signing.mode"] == "keyless"
+
+    def test_key_based_sign_emits_span(self, captured_spans) -> None:
+        """Key-based signing emits floe.oci.sign.key_based span."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        config = SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="test-key"),
+        )
+        mock_bundle = {"base64Signature": "dGVzdC1zaWc="}
+
+        with (
+            patch("floe_core.oci.signing.check_cosign_available", return_value=True),
+            patch.object(SigningClient, "_cosign_sign_blob", return_value=mock_bundle),
+            patch.object(SigningClient, "_resolve_key_reference", return_value="/path/to/key"),
+        ):
+            client = SigningClient(config)
+            client.sign(b"content", "oci://registry/repo:v1.0.0")
+
+        spans = captured_spans.get_finished_spans()
+        span_names = [span.name for span in spans]
+
+        assert "floe.oci.sign" in span_names
+        assert "floe.oci.sign.key_based" in span_names
+
+    def test_key_based_span_has_key_ref_attribute(self, captured_spans) -> None:
+        """Key-based signing records floe.signing.key_ref attribute on inner span.
+
+        Note: The key_ref attribute is set on the active span via
+        trace.get_current_span() inside _key_bundle_to_metadata, which
+        runs within the floe.oci.sign.key_based span context.
+        """
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        config = SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="test-key"),
+        )
+        mock_bundle = {"base64Signature": "dGVzdC1zaWc="}
+
+        with (
+            patch("floe_core.oci.signing.check_cosign_available", return_value=True),
+            patch.object(SigningClient, "_cosign_sign_blob", return_value=mock_bundle),
+            patch.object(SigningClient, "_resolve_key_reference", return_value="/path/to/key"),
+        ):
+            client = SigningClient(config)
+            client.sign(b"content", "oci://registry/repo:v1.0.0")
+
+        spans = captured_spans.get_finished_spans()
+
+        # The key_ref attribute is set on the key_based span, not the root span
+        # This is because _key_bundle_to_metadata uses trace.get_current_span()
+        key_based_span = next((s for s in spans if s.name == "floe.oci.sign.key_based"), None)
+
+        assert key_based_span is not None
+        attrs = dict(key_based_span.attributes)
+        assert "floe.signing.key_ref" in attrs
+        assert attrs["floe.signing.key_ref"] == "/path/to/key"
+
+
 class TestKeyBasedSigning:
     """Tests for key-based signing (T066, T067)."""
 

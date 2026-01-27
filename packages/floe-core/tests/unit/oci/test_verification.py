@@ -1384,3 +1384,202 @@ class TestVerificationBundleExport:
 
         with pytest.raises(pydantic.ValidationError):
             bundle.artifact_digest = "sha256:tampered"  # type: ignore[misc]
+
+
+class TestVerificationOpenTelemetrySpans:
+    """Tests for verification OpenTelemetry span emission (T088, SC-007).
+
+    Verify that verification operations emit the documented OTel spans.
+    """
+
+    @pytest.fixture
+    def captured_spans(self):
+        """Capture spans by patching the verification module's tracer."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+        from opentelemetry.sdk.trace.sampling import ALWAYS_ON
+
+        import floe_core.oci.verification as verification_module
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider(sampler=ALWAYS_ON)
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        test_tracer = provider.get_tracer("test.verification")
+
+        # Patch the module-level tracer
+        original_tracer = verification_module.tracer
+        verification_module.tracer = test_tracer
+
+        yield exporter
+
+        # Restore original tracer
+        verification_module.tracer = original_tracer
+        exporter.clear()
+
+    @pytest.fixture
+    def sample_policy(self) -> VerificationPolicy:
+        """Create a sample verification policy."""
+        return VerificationPolicy(
+            enabled=True,
+            enforcement="enforce",
+            trusted_issuers=[
+                TrustedIssuer(
+                    issuer=HttpUrl("https://token.actions.githubusercontent.com"),
+                    subject="repo:acme/floe:ref:refs/heads/main",
+                )
+            ],
+        )
+
+    @pytest.fixture
+    def sample_metadata(self) -> SignatureMetadata:
+        """Create sample signature metadata."""
+        return SignatureMetadata(
+            bundle="dGVzdC1idW5kbGU=",
+            mode="keyless",
+            issuer="https://token.actions.githubusercontent.com",
+            subject="repo:acme/floe:ref:refs/heads/main",
+            signed_at=datetime(2026, 1, 27, 10, 0, 0, tzinfo=timezone.utc),
+            rekor_log_index=12345678,
+            certificate_fingerprint="a" * 64,
+        )
+
+    @pytest.fixture
+    def mock_verification_result(self) -> VerificationResult:
+        """Create a mock successful verification result."""
+        return VerificationResult(
+            status="valid",
+            signer_identity="repo:acme/floe:ref:refs/heads/main",
+            issuer="https://token.actions.githubusercontent.com",
+            verified_at=datetime.now(timezone.utc),
+            rekor_verified=True,
+            certificate_chain=[],
+            failure_reason=None,
+        )
+
+    @requires_sigstore
+    @pytest.mark.requirement("SC-007")
+    def test_verify_emits_root_span(
+        self,
+        captured_spans,
+        sample_policy: VerificationPolicy,
+        sample_metadata: SignatureMetadata,
+        mock_verification_result: VerificationResult,
+    ) -> None:
+        """Verification emits floe.oci.verify root span."""
+        with patch.object(
+            VerificationClient, "_verify_keyless", return_value=mock_verification_result
+        ):
+            client = VerificationClient(sample_policy)
+            client.verify(
+                content=b"test content",
+                artifact_ref="oci://registry/repo:v1.0.0",
+                metadata=sample_metadata,
+            )
+
+        spans = captured_spans.get_finished_spans()
+        span_names = [span.name for span in spans]
+
+        assert "floe.oci.verify" in span_names
+
+    @requires_sigstore
+    @pytest.mark.requirement("SC-007")
+    def test_verify_span_has_required_attributes(
+        self,
+        captured_spans,
+        sample_policy: VerificationPolicy,
+        sample_metadata: SignatureMetadata,
+        mock_verification_result: VerificationResult,
+    ) -> None:
+        """floe.oci.verify span has documented attributes."""
+        with patch.object(
+            VerificationClient, "_verify_keyless", return_value=mock_verification_result
+        ):
+            client = VerificationClient(sample_policy)
+            client.verify(
+                content=b"test content",
+                artifact_ref="oci://registry/repo:v1.0.0",
+                metadata=sample_metadata,
+            )
+
+        spans = captured_spans.get_finished_spans()
+        verify_span = next((s for s in spans if s.name == "floe.oci.verify"), None)
+
+        assert verify_span is not None
+        attrs = dict(verify_span.attributes)
+
+        # Verify documented attributes per research.md
+        assert "floe.artifact.ref" in attrs
+        assert attrs["floe.artifact.ref"] == "oci://registry/repo:v1.0.0"
+        assert "floe.verification.enforcement" in attrs
+        assert attrs["floe.verification.enforcement"] == "enforce"
+        assert "floe.verification.status" in attrs
+
+    @requires_sigstore
+    @pytest.mark.requirement("SC-007")
+    def test_verify_sets_status_attribute(
+        self,
+        captured_spans,
+        sample_policy: VerificationPolicy,
+        sample_metadata: SignatureMetadata,
+        mock_verification_result: VerificationResult,
+    ) -> None:
+        """Verification sets status attribute on completion."""
+        with patch.object(
+            VerificationClient, "_verify_keyless", return_value=mock_verification_result
+        ):
+            client = VerificationClient(sample_policy)
+            client.verify(
+                content=b"test content",
+                artifact_ref="oci://registry/repo:v1.0.0",
+                metadata=sample_metadata,
+            )
+
+        spans = captured_spans.get_finished_spans()
+        verify_span = next((s for s in spans if s.name == "floe.oci.verify"), None)
+
+        assert verify_span is not None
+        attrs = dict(verify_span.attributes)
+
+        # Verify status is recorded
+        assert "floe.verification.status" in attrs
+        assert attrs["floe.verification.status"] == "valid"
+
+    @pytest.mark.requirement("SC-007")
+    def test_verify_with_environment_sets_attribute(
+        self,
+        captured_spans,
+        sample_metadata: SignatureMetadata,
+        mock_verification_result: VerificationResult,
+    ) -> None:
+        """Verification with environment sets floe.verification.environment attribute."""
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="warn",
+            trusted_issuers=[
+                TrustedIssuer(
+                    issuer=HttpUrl("https://token.actions.githubusercontent.com"),
+                    subject="repo:acme/floe:ref:refs/heads/main",
+                )
+            ],
+        )
+
+        with patch.object(
+            VerificationClient, "_verify_keyless", return_value=mock_verification_result
+        ):
+            client = VerificationClient(policy, environment="staging")
+            client.verify(
+                content=b"test content",
+                artifact_ref="oci://registry/repo:v1.0.0",
+                metadata=sample_metadata,
+            )
+
+        spans = captured_spans.get_finished_spans()
+        verify_span = next((s for s in spans if s.name == "floe.oci.verify"), None)
+
+        assert verify_span is not None
+        attrs = dict(verify_span.attributes)
+        assert "floe.verification.environment" in attrs
+        assert attrs["floe.verification.environment"] == "staging"
