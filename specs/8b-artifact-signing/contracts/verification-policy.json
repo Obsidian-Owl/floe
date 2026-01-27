@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/verification-policy.json",
+  "title": "VerificationPolicy",
+  "description": "Policy for verifying artifact signatures",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable/disable signature verification"
+    },
+    "enforcement": {
+      "type": "string",
+      "enum": ["enforce", "warn", "off"],
+      "default": "warn",
+      "description": "Verification enforcement level"
+    },
+    "trusted_issuers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/TrustedIssuer" },
+      "description": "List of trusted OIDC issuers"
+    },
+    "require_rekor": {
+      "type": "boolean",
+      "default": true,
+      "description": "Require transparency log entry"
+    },
+    "require_sbom": {
+      "type": "boolean",
+      "default": false,
+      "description": "Require SBOM attestation"
+    },
+    "public_key_ref": {
+      "$ref": "#/$defs/SecretReference",
+      "description": "Reference to public key for key-based verification"
+    },
+    "environments": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/EnvironmentPolicy" },
+      "description": "Per-environment policy overrides"
+    }
+  },
+  "required": ["enabled"],
+  "additionalProperties": false,
+  "$defs": {
+    "TrustedIssuer": {
+      "type": "object",
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "format": "uri",
+          "description": "OIDC issuer URL"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Expected certificate subject (exact match)"
+        },
+        "subject_regex": {
+          "type": "string",
+          "description": "Regex pattern for subject matching"
+        }
+      },
+      "required": ["issuer"],
+      "oneOf": [
+        { "required": ["subject"] },
+        { "required": ["subject_regex"] }
+      ],
+      "additionalProperties": false
+    },
+    "EnvironmentPolicy": {
+      "type": "object",
+      "properties": {
+        "enforcement": {
+          "type": "string",
+          "enum": ["enforce", "warn", "off"],
+          "description": "Override enforcement level for this environment"
+        },
+        "require_sbom": {
+          "type": "boolean",
+          "description": "Override SBOM requirement for this environment"
+        }
+      },
+      "required": ["enforcement"],
+      "additionalProperties": false
+    },
+    "SecretReference": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["env", "file", "k8s-secret", "vault"],
+          "description": "Secret storage backend"
+        },
+        "name": {
+          "type": "string",
+          "description": "Secret identifier"
+        }
+      },
+      "required": ["source", "name"],
+      "additionalProperties": false
+    }
+  }
+}

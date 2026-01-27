@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://floe.dev/schemas/signing-config.json",
+  "title": "SigningConfig",
+  "description": "Configuration for artifact signing operations",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["keyless", "key-based"],
+      "description": "Signing method to use"
+    },
+    "oidc_issuer": {
+      "type": "string",
+      "format": "uri",
+      "description": "OIDC provider URL (required for keyless mode)"
+    },
+    "rekor_url": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://rekor.sigstore.io",
+      "description": "Rekor transparency log URL"
+    },
+    "fulcio_url": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://fulcio.sigstore.dev",
+      "description": "Fulcio CA URL"
+    },
+    "private_key_ref": {
+      "$ref": "#/$defs/SecretReference",
+      "description": "Reference to private key (required for key-based mode)"
+    }
+  },
+  "required": ["mode"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mode": { "const": "keyless" } }
+      },
+      "then": {
+        "required": ["oidc_issuer"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "key-based" } }
+      },
+      "then": {
+        "required": ["private_key_ref"]
+      }
+    }
+  ],
+  "$defs": {
+    "SecretReference": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["env", "file", "k8s-secret", "vault"],
+          "description": "Secret storage backend"
+        },
+        "name": {
+          "type": "string",
+          "description": "Secret identifier"
+        }
+      },
+      "required": ["source", "name"],
+      "additionalProperties": false
+    }
+  }
+}
