@@ -43,6 +43,8 @@ dependencies = [
     "jinja2>=3.0,<4.0",  # Jinja2 for HTML export; pin upper bound (12B-PRE-PR)
     # Data contract validation (Epic 3C) - ODCS v3 parsing, linting, validation
     "datacontract-cli>=0.10.0,<1.0",  # Hard dependency per spec; pin upper bound (3C-T001)
+    # Artifact signing (Epic 8B) - Sigstore Python SDK for keyless signing
+    "sigstore>=4.2.0",  # Keyless signing via Sigstore; GHSA-hm8f-75xx-w2vr fix
 ]
 
 [project.optional-dependencies]
@@ -87,6 +89,10 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
+
+[tool.uv]
+# sigstore requires betterproto which only has pre-release versions (8B-T001)
+prerelease = "allow"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -5,13 +5,15 @@ All exceptions inherit from OCIError, the base exception class.
 
 Exception Hierarchy:
     OCIError (base)
-    ├── AuthenticationError       # Registry authentication failed
-    ├── ArtifactNotFoundError     # Requested artifact/tag not found
+    ├── AuthenticationError        # Registry authentication failed
+    ├── ArtifactNotFoundError      # Requested artifact/tag not found
     ├── ImmutabilityViolationError # Attempt to overwrite immutable tag
-    ├── CircuitBreakerOpenError   # Circuit breaker is open, failing fast
-    ├── RegistryUnavailableError  # Registry not reachable
-    ├── DigestMismatchError       # Content digest verification failed
-    └── CacheError                # Local cache operation failed
+    ├── CircuitBreakerOpenError    # Circuit breaker is open, failing fast
+    ├── RegistryUnavailableError   # Registry not reachable
+    ├── DigestMismatchError        # Content digest verification failed
+    ├── CacheError                 # Local cache operation failed
+    ├── SignatureVerificationError # Artifact signature verification failed
+    └── ConcurrentSigningError     # Another process is signing the artifact
 
 Exit Codes (per spec):
     0 - Success
@@ -20,6 +22,8 @@ Exit Codes (per spec):
     3 - Artifact not found (ArtifactNotFoundError)
     4 - Immutability violation (ImmutabilityViolationError)
     5 - Network/connectivity error (RegistryUnavailableError, CircuitBreakerOpenError)
+    6 - Signature verification failed (SignatureVerificationError)
+    7 - Concurrent signing lock failed (ConcurrentSigningError)
 
 Example:
     >>> from floe_core.oci.errors import ArtifactNotFoundError
@@ -345,4 +349,102 @@ class CacheError(OCIError):
         msg = f"Cache operation '{operation}' failed: {reason}"
         if path:
             msg += f" (path: {path})"
+        super().__init__(msg)
+
+
+class SignatureVerificationError(OCIError):
+    """Raised when artifact signature verification fails.
+
+    This error indicates that an artifact's cryptographic signature could not
+    be verified. This may mean the artifact is unsigned, the signature is
+    invalid, or the signer is not in the trusted issuers list.
+
+    Attributes:
+        artifact_ref: The artifact reference that failed verification.
+        reason: Description of why verification failed.
+        expected_signer: Expected signer identity (from trusted_issuers).
+        actual_signer: Actual signer identity found in signature.
+        exit_code: CLI exit code (6).
+
+    Remediation:
+        - If unsigned: Run 'floe artifact sign <ref>' to sign the artifact
+        - If signer mismatch: Update trusted_issuers in verification config
+        - If expired: Re-sign the artifact with 'floe artifact sign --force'
+
+    Example:
+        >>> raise SignatureVerificationError(
+        ...     "oci://harbor.example.com/floe:v1.0.0",
+        ...     "Signer not in trusted issuers",
+        ...     expected_signer="repo:acme/floe:ref:refs/heads/main",
+        ...     actual_signer="repo:unknown/repo:ref:refs/heads/main"
+        ... )
+    """
+
+    exit_code: int = 6
+
+    def __init__(
+        self,
+        artifact_ref: str,
+        reason: str,
+        expected_signer: str | None = None,
+        actual_signer: str | None = None,
+    ) -> None:
+        self.artifact_ref = artifact_ref
+        self.reason = reason
+        self.expected_signer = expected_signer
+        self.actual_signer = actual_signer
+
+        msg = f"Signature verification failed for {artifact_ref}: {reason}"
+        if expected_signer and actual_signer:
+            msg += f". Expected: {expected_signer}, Actual: {actual_signer}"
+
+        msg += "\n\nRemediation:\n"
+        if "unsigned" in reason.lower() or "no signature" in reason.lower():
+            msg += f"  - Sign the artifact: floe artifact sign {artifact_ref}\n"
+        elif "signer" in reason.lower() or "issuer" in reason.lower():
+            msg += "  - Update trusted_issuers in verification config to include actual signer\n"
+            msg += f"  - Or re-sign with authorized identity: floe artifact sign {artifact_ref}\n"
+        elif "expired" in reason.lower():
+            msg += f"  - Re-sign the artifact: floe artifact sign --force {artifact_ref}\n"
+        else:
+            msg += f"  - Re-sign the artifact: floe artifact sign {artifact_ref}\n"
+            msg += "  - Verify network connectivity to Rekor transparency log\n"
+
+        super().__init__(msg)
+
+
+class ConcurrentSigningError(OCIError):
+    """Raised when concurrent signing lock cannot be acquired.
+
+    This error indicates that another process is currently signing the same
+    artifact. Signing operations are serialized per-artifact to prevent race
+    conditions when updating OCI annotations.
+
+    Attributes:
+        artifact_ref: The artifact reference that is locked.
+        timeout_seconds: How long we waited before giving up.
+        exit_code: CLI exit code (7).
+
+    Remediation:
+        Wait for the other signing process to complete, or increase the
+        lock timeout via FLOE_SIGNING_LOCK_TIMEOUT environment variable.
+
+    Example:
+        >>> raise ConcurrentSigningError(
+        ...     "oci://harbor.example.com/floe:v1.0.0",
+        ...     timeout_seconds=30.0
+        ... )
+    """
+
+    exit_code: int = 7
+
+    def __init__(self, artifact_ref: str, timeout_seconds: float) -> None:
+        self.artifact_ref = artifact_ref
+        self.timeout_seconds = timeout_seconds
+
+        msg = (
+            f"Could not acquire signing lock for {artifact_ref} "
+            f"(timeout: {timeout_seconds}s). Another process may be signing this artifact. "
+            f"Retry later or increase FLOE_SIGNING_LOCK_TIMEOUT."
+        )
         super().__init__(msg)

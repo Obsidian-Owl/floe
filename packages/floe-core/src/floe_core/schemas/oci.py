@@ -30,6 +30,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from floe_core.schemas.secrets import SecretReference
+from floe_core.schemas.signing import SigningConfig, VerificationPolicy
 
 # =============================================================================
 # Utility Functions
@@ -305,6 +306,14 @@ class RegistryConfig(BaseModel):
     resilience: ResilienceConfig = Field(
         default_factory=ResilienceConfig,
         description="Retry and circuit breaker configuration",
+    )
+    signing: SigningConfig | None = Field(
+        default=None,
+        description="Artifact signing configuration (Epic 8B)",
+    )
+    verification: VerificationPolicy | None = Field(
+        default=None,
+        description="Artifact verification policy (Epic 8B)",
     )
 
     @field_validator("uri")

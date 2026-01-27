@@ -37,8 +37,9 @@ class TestExitCodeEnum:
         assert ExitCode.FILE_NOT_FOUND == 3
         assert ExitCode.PERMISSION_ERROR == 4
         assert ExitCode.VALIDATION_ERROR == 5
-        assert ExitCode.COMPILATION_ERROR == 6
-        assert ExitCode.NETWORK_ERROR == 7
+        assert ExitCode.SIGNATURE_ERROR == 6  # Added in Epic 8B
+        assert ExitCode.COMPILATION_ERROR == 7
+        assert ExitCode.NETWORK_ERROR == 8
 
     @pytest.mark.requirement("FR-005")
     def test_exit_code_is_int_enum(self) -> None:

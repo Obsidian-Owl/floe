@@ -142,6 +142,71 @@ floe uses a four-layer architecture. Respect layer boundaries:
 - **Iceberg** owns storage format - Use PyIceberg for table operations
 - **CompiledArtifacts** is the sole contract between packages
 
+### CLI Command Registration
+
+The floe CLI uses [Click](https://click.palletsprojects.com/) with a hierarchical command structure. Follow this pattern when adding new commands:
+
+**Directory Structure:**
+```
+packages/floe-core/src/floe_core/cli/
+├── main.py                 # Root CLI, registers all groups
+├── utils.py                # Shared utilities (ExitCode, info, error_exit)
+├── <group>/                # Command group directory
+│   ├── __init__.py         # Group definition, registers commands
+│   └── <command>.py        # Individual command implementation
+```
+
+**Step 1: Create the command** (`cli/<group>/<command>.py`):
+```python
+import click
+
+@click.command(
+    name="mycommand",
+    help="""\b
+Short description.
+
+Detailed help text with examples:
+    $ floe mygroup mycommand --option value
+""",
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+@click.option("--option", "-o", type=str, help="Option description.")
+def mycommand(option: str | None) -> None:
+    """Command implementation."""
+    pass
+```
+
+**Step 2: Create/update the group** (`cli/<group>/__init__.py`):
+```python
+import click
+from floe_core.cli.<group>.mycommand import mycommand
+
+@click.group(name="mygroup", help="Group description.")
+def mygroup() -> None:
+    pass
+
+mygroup.add_command(mycommand)
+
+__all__ = ["mygroup"]
+```
+
+**Step 3: Register the group** (`cli/main.py`):
+```python
+from floe_core.cli.<group> import mygroup
+
+cli.add_command(mygroup)
+```
+
+**Help Text Requirements:**
+- Use `\b` to preserve formatting in Click help strings
+- Include at least 2 practical examples
+- Document environment variables that affect the command
+- List exit codes for commands that have non-zero exits
+
+**Reference implementations:**
+- Group: `cli/artifact/__init__.py`
+- Command: `cli/artifact/sign.py`, `cli/artifact/verify.py`
+
 See [CLAUDE.md](CLAUDE.md) for complete development guidelines.
 
 ## Commit Messages

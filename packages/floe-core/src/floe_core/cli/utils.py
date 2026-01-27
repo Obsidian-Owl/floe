@@ -53,10 +53,13 @@ class ExitCode(IntEnum):
     VALIDATION_ERROR = 5
     """Input validation failed."""
 
-    COMPILATION_ERROR = 6
+    SIGNATURE_ERROR = 6
+    """Signature verification failed (Epic 8B)."""
+
+    COMPILATION_ERROR = 7
     """Compilation or processing failed."""
 
-    NETWORK_ERROR = 7
+    NETWORK_ERROR = 8
     """Network or remote service error."""
 
 
@@ -204,6 +207,179 @@ def validate_directory_writable(path: Path, description: str = "Directory") -> N
 
 _LOG_INJECTION_CHARS = "\n\r"
 _MAX_LOG_PATH_LENGTH = 500
+_MAX_ERROR_LENGTH = 200
+
+# Allowed key file extensions for security validation
+_ALLOWED_KEY_EXTENSIONS = frozenset({".pem", ".pub", ".key", ".crt", ""})
+
+
+def sanitize_error(error: str | Exception, max_length: int = _MAX_ERROR_LENGTH) -> str:
+    """Sanitize error message for safe user display.
+
+    Removes potentially sensitive information from error messages:
+    - File paths beyond first component
+    - Stack trace details
+    - Internal module paths
+    - Control characters
+    - Credential-like patterns
+
+    Args:
+        error: Error message string or Exception object.
+        max_length: Maximum length of returned message.
+
+    Returns:
+        Sanitized error message safe for display to users.
+
+    Example:
+        >>> sanitize_error("/home/user/.secrets/key.pem not found")
+        'File not found: key.pem'
+    """
+    import re
+
+    msg = str(error)
+
+    msg = "".join(c for c in msg if c.isprintable() or c in " \t")
+    msg = re.sub(r"(/[a-zA-Z0-9_\-./]+)/([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)", r"[PATH]/\2", msg)
+    msg = re.sub(
+        r"(token|key|secret|password|credential|auth)[=:\s]+[^\s,;)]+",
+        r"\1=[REDACTED]",
+        msg,
+        flags=re.IGNORECASE,
+    )
+    msg = re.sub(r"\b\d{12}\b", "[ACCOUNT_ID]", msg)
+
+    if len(msg) > max_length:
+        msg = msg[: max_length - 3] + "..."
+
+    return msg
+
+
+def validate_key_path(
+    key_path: str | Path,
+    allowed_dirs: list[Path] | None = None,
+) -> Path:
+    """Validate key file path against path traversal attacks.
+
+    Ensures the key file:
+    1. Resolves to an absolute path without traversal
+    2. Is within allowed directories (cwd, home/.floe, /tmp, or custom)
+    3. Has an allowed extension (.pem, .pub, .key, .crt)
+    4. Does not contain suspicious path segments
+
+    Args:
+        key_path: User-provided key file path.
+        allowed_dirs: Optional list of allowed parent directories.
+                      Defaults to [cwd, ~/.floe, /tmp].
+
+    Returns:
+        Validated absolute path to the key file.
+
+    Raises:
+        SystemExit with VALIDATION_ERROR if path is unsafe.
+
+    Example:
+        >>> validate_key_path("./keys/signing.key")
+        PosixPath('/current/dir/keys/signing.key')
+        >>> validate_key_path("../../etc/passwd")
+        # Raises SystemExit
+    """
+    path = Path(key_path)
+
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError) as e:
+        error_exit(
+            f"Cannot resolve key path: {sanitize_error(e)}",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+    if ".." in str(key_path):
+        error_exit(
+            "Key path cannot contain '..' (path traversal not allowed)",
+            exit_code=ExitCode.VALIDATION_ERROR,
+            path=sanitize_path_for_log(key_path),
+        )
+
+    if allowed_dirs is None:
+        import tempfile
+
+        allowed_dirs = [
+            Path.cwd(),
+            Path.home() / ".floe",
+            Path(tempfile.gettempdir()) / "floe",
+            Path("/etc/floe/keys"),
+        ]
+
+    is_allowed = any(_is_path_within(resolved, allowed_dir) for allowed_dir in allowed_dirs)
+
+    if not is_allowed:
+        error_exit(
+            "Key path must be within allowed directories "
+            "(cwd, ~/.floe, $TMPDIR/floe, /etc/floe/keys)",
+            exit_code=ExitCode.VALIDATION_ERROR,
+            path=sanitize_path_for_log(resolved),
+        )
+
+    suffix = resolved.suffix.lower()
+    if suffix not in _ALLOWED_KEY_EXTENSIONS:
+        error_exit(
+            f"Key file has invalid extension '{suffix}'. Allowed: .pem, .pub, .key, .crt",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+    return resolved
+
+
+def _is_path_within(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def validate_output_path(output_path: str | Path) -> Path:
+    """Validate output file path against path traversal attacks.
+
+    Ensures the output path:
+    1. Is within the current working directory
+    2. Does not contain path traversal segments
+    3. Parent directory can be created
+
+    Args:
+        output_path: User-provided output file path.
+
+    Returns:
+        Validated absolute path for output file.
+
+    Raises:
+        SystemExit with VALIDATION_ERROR if path is unsafe.
+    """
+    path = Path(output_path)
+
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError) as e:
+        error_exit(
+            f"Cannot resolve output path: {sanitize_error(e)}",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+    if ".." in str(output_path):
+        error_exit(
+            "Output path cannot contain '..' (path traversal not allowed)",
+            exit_code=ExitCode.VALIDATION_ERROR,
+            path=sanitize_path_for_log(output_path),
+        )
+
+    if not _is_path_within(resolved, Path.cwd()):
+        error_exit(
+            "Output path must be within current working directory",
+            exit_code=ExitCode.VALIDATION_ERROR,
+            path=sanitize_path_for_log(resolved),
+        )
+
+    return resolved
 
 
 def sanitize_path_for_log(path: str | Path) -> str:

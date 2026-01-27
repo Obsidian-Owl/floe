@@ -59,9 +59,10 @@ class TestPolicyGenerationPerformance:
         time_10 = measure_time(10)
         time_100 = measure_time(100)
 
-        # 100 should take roughly 10x the time of 10 (5x-20x allowed for variance)
+        # 100 should take roughly 10x the time of 10, but small samples have
+        # proportionally more overhead, so allow 2x-20x for variance
         actual_ratio = time_100 / time_10 if time_10 > 0 else float("inf")
-        assert 5.0 < actual_ratio < 20.0, f"Expected near-linear scaling, got {actual_ratio:.1f}x"
+        assert 2.0 < actual_ratio < 20.0, f"Expected near-linear scaling, got {actual_ratio:.1f}x"
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")

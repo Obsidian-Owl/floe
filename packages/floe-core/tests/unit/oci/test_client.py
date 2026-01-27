@@ -23,6 +23,14 @@ import pytest
 
 from floe_core.oci.client import MUTABLE_TAG_PATTERNS, SEMVER_PATTERN, OCIClient
 from floe_core.oci.errors import ArtifactNotFoundError, ImmutabilityViolationError
+from floe_core.oci.signing import (
+    ANNOTATION_BUNDLE,
+    ANNOTATION_CERT_FINGERPRINT,
+    ANNOTATION_MODE,
+    ANNOTATION_SIGNED_AT,
+    ANNOTATION_SUBJECT,
+    SigningClient,
+)
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -34,6 +42,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryConfig
+from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
@@ -1601,3 +1610,150 @@ class TestOCIClientInspect:
 
         assert span_created, "Expected OTel span to be created"
         assert span_attributes.get("oci.tag") == "v1.0.0"
+
+
+class TestOCIClientSigningAnnotations:
+    """Tests for signature metadata storage in OCI annotations.
+
+    Task: T077
+    Requirements: FR-011, 8B-FR-003
+    """
+
+    @pytest.mark.requirement("8B-FR-003")
+    def test_sign_stores_metadata_in_annotations(
+        self,
+        oci_client: OCIClient,
+        sample_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that sign() stores SignatureMetadata in OCI annotations.
+
+        Verifies:
+        - SignatureMetadata.to_annotations() is called
+        - _update_artifact_annotations receives the annotation dict
+        - All signature annotation keys are present
+
+        FR-003: Signature metadata MUST be stored as OCI annotations.
+        """
+        from pydantic import HttpUrl
+
+        # Create mock signing config
+        signing_config = SigningConfig(
+            mode="keyless",
+            oidc_issuer=HttpUrl("https://token.actions.githubusercontent.com"),
+        )
+
+        # Create mock SignatureMetadata that will be returned by SigningClient.sign()
+        mock_metadata = SignatureMetadata(
+            bundle="dGVzdC1idW5kbGU=",
+            mode="keyless",
+            issuer="https://token.actions.githubusercontent.com",
+            subject="repo:acme/floe:ref:refs/heads/main",
+            signed_at=datetime(2026, 1, 27, 10, 0, 0, tzinfo=timezone.utc),
+            rekor_log_index=12345678,
+            certificate_fingerprint="abcd1234" * 8,
+        )
+
+        # Track what annotations were passed to _update_artifact_annotations
+        captured_annotations: dict[str, str] | None = None
+
+        def capture_annotations(tag: str, annotations: dict[str, str]) -> None:
+            nonlocal captured_annotations
+            captured_annotations = annotations
+
+        # Mock dependencies
+        with (
+            patch.object(
+                oci_client, "_fetch_from_registry", return_value=(b"test-content", "sha256:abc123")
+            ),
+            patch.object(SigningClient, "sign", return_value=mock_metadata),
+            patch.object(
+                oci_client, "_update_artifact_annotations", side_effect=capture_annotations
+            ),
+        ):
+            metadata = oci_client.sign("v1.0.0", signing_config=signing_config)
+
+        # Verify metadata returned
+        assert metadata == mock_metadata
+
+        # Verify _update_artifact_annotations was called with correct annotations
+        assert captured_annotations is not None, "_update_artifact_annotations was not called"
+
+        # Verify all required annotation keys are present
+        assert ANNOTATION_BUNDLE in captured_annotations
+        assert ANNOTATION_MODE in captured_annotations
+        assert ANNOTATION_SUBJECT in captured_annotations
+        assert ANNOTATION_SIGNED_AT in captured_annotations
+        assert ANNOTATION_CERT_FINGERPRINT in captured_annotations
+
+        # Verify annotation values match metadata
+        assert captured_annotations[ANNOTATION_BUNDLE] == "dGVzdC1idW5kbGU="
+        assert captured_annotations[ANNOTATION_MODE] == "keyless"
+        assert captured_annotations[ANNOTATION_SUBJECT] == "repo:acme/floe:ref:refs/heads/main"
+
+    @pytest.mark.requirement("8B-FR-003")
+    def test_sign_merges_with_existing_annotations(
+        self,
+        oci_client: OCIClient,
+    ) -> None:
+        """Test that sign() merges signature annotations with existing ones.
+
+        Verifies:
+        - Existing annotations are preserved
+        - Signature annotations are added
+        - No existing annotations are overwritten (unless they conflict)
+
+        FR-003: Signature annotations MUST be merged with existing artifact annotations.
+        """
+        from pydantic import HttpUrl
+
+        signing_config = SigningConfig(
+            mode="keyless",
+            oidc_issuer=HttpUrl("https://token.actions.githubusercontent.com"),
+        )
+
+        mock_metadata = SignatureMetadata(
+            bundle="dGVzdC1idW5kbGU=",
+            mode="keyless",
+            subject="test-subject",
+            signed_at=datetime(2026, 1, 27, 10, 0, 0, tzinfo=timezone.utc),
+            certificate_fingerprint="abcd1234" * 8,
+        )
+
+        # Track the actual call to _push_internal to verify merged annotations
+        push_calls: list[dict[str, str]] = []
+
+        def capture_push(artifacts: Any, tag: str, annotations: dict[str, str], span: Any) -> str:
+            push_calls.append(annotations)
+            return "sha256:result"
+
+        # Mock existing manifest with some annotations
+        mock_manifest = MagicMock()
+        mock_manifest.annotations = {
+            "io.floe.product.name": "test-product",
+            "io.floe.product.version": "1.0.0",
+        }
+
+        with (
+            patch.object(
+                oci_client, "_fetch_from_registry", return_value=(b"test-content", "sha256:abc123")
+            ),
+            patch.object(SigningClient, "sign", return_value=mock_metadata),
+            patch.object(oci_client, "_inspect_internal", return_value=mock_manifest),
+            patch.object(oci_client, "_deserialize_artifacts", return_value=MagicMock()),
+            patch.object(oci_client, "_push_internal", side_effect=capture_push),
+        ):
+            oci_client.sign("v1.0.0", signing_config=signing_config)
+
+        # Verify push was called with merged annotations
+        assert len(push_calls) == 1
+        merged = push_calls[0]
+
+        # Original annotations preserved
+        assert merged.get("io.floe.product.name") == "test-product"
+        assert merged.get("io.floe.product.version") == "1.0.0"
+
+        # Signature annotations added
+        assert ANNOTATION_BUNDLE in merged
+        assert ANNOTATION_MODE in merged
+        assert merged[ANNOTATION_BUNDLE] == "dGVzdC1idW5kbGU="
+        assert merged[ANNOTATION_MODE] == "keyless"

@@ -82,10 +82,23 @@ Examples:
     required=True,
     help="Tag for the artifact (e.g., v1.0.0, latest-dev).",
 )
+@click.option(
+    "--sign/--no-sign",
+    default=False,
+    help="Sign the artifact after push using keyless (OIDC) signing.",
+)
+@click.option(
+    "--oidc-issuer",
+    type=str,
+    default="https://token.actions.githubusercontent.com",
+    help="OIDC issuer URL for signing (only used with --sign).",
+)
 def push_command(
     artifact: str,
     registry: str,
     tag: str,
+    sign: bool,
+    oidc_issuer: str,
 ) -> None:
     """Push CompiledArtifacts to OCI registry.
 
@@ -94,7 +107,6 @@ def push_command(
         registry: OCI registry URI.
         tag: Tag for the artifact.
     """
-    # Validate artifact file exists
     artifact_path = Path(artifact)
     if not artifact_path.exists():
         error_exit(
@@ -102,14 +114,12 @@ def push_command(
             exit_code=ExitCode.FILE_NOT_FOUND,
         )
 
-    # Load and validate the artifact
     artifacts = _load_artifacts(artifact_path)
-
-    # Build registry configuration
     registry_config = _build_registry_config(registry)
-
-    # Create OCI client and push
     _push_to_registry(artifacts, registry_config, registry, tag)
+
+    if sign:
+        _sign_artifact(registry_config, registry, tag, oidc_issuer)
 
 
 def _load_artifacts(artifact_path: Path) -> CompiledArtifacts:
@@ -249,6 +259,32 @@ def _build_registry_config(registry_uri: str) -> RegistryConfig:
         uri=registry_uri,
         auth=auth,
     )
+
+
+def _sign_artifact(
+    registry_config: RegistryConfig,
+    registry: str,
+    tag: str,
+    oidc_issuer: str,
+) -> None:
+    """Sign artifact after push using keyless signing."""
+    from pydantic import HttpUrl
+
+    from floe_core.oci import OCIClient
+    from floe_core.schemas.signing import SigningConfig
+
+    signing_config = SigningConfig(
+        mode="keyless",
+        oidc_issuer=HttpUrl(oidc_issuer),
+    )
+
+    try:
+        client = OCIClient.from_registry_config(registry_config)
+        info(f"Signing {registry}:{tag}...")
+        metadata = client.sign(tag=tag, signing_config=signing_config)
+        success(f"Signed artifact (Rekor index: {metadata.rekor_log_index})")
+    except Exception as e:
+        error_exit(f"Signing failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
 
 __all__: list[str] = ["push_command"]

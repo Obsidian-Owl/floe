@@ -51,6 +51,9 @@ dependencies = [
 ]
 
 [tool.uv]
+# Enable prereleases for sigstore dependencies (betterproto, sigstore-protobuf-specs)
+prerelease = "allow"
+
 # Supply chain protection: 3-day cooldown for new package versions
 # Set UV_EXCLUDE_NEWER dynamically in CI/scripts (uv 0.5.x only supports dates, not durations)
 # Example: UV_EXCLUDE_NEWER=$(date -v-3d +%Y-%m-%d) uv lock

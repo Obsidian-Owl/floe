@@ -68,6 +68,7 @@ from floe_core.oci.errors import (
     ImmutabilityViolationError,
     OCIError,
     RegistryUnavailableError,
+    SignatureVerificationError,
 )
 from floe_core.oci.layers import (
     MUTABLE_TAG_PATTERNS,
@@ -97,6 +98,7 @@ from floe_core.schemas.oci import (
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -131,6 +133,7 @@ class OCIClient:
         retry_policy: RetryPolicy | None = None,
         metrics: OCIMetrics | None = None,
         secrets_plugin: SecretsPlugin | None = None,
+        environment: str | None = None,
     ) -> None:
         """Initialize OCIClient with dependency injection.
 
@@ -148,9 +151,13 @@ class OCIClient:
                 If None, uses module-level singleton.
             secrets_plugin: Optional SecretsPlugin for credential resolution.
                 Required if auth_provider is None and auth type is basic/token.
+            environment: Optional environment name for policy enforcement.
+                Used to look up environment-specific verification policies.
+                Can be overridden per-operation (e.g., pull(environment=...)).
         """
         self._config = registry_config
         self._secrets_plugin = secrets_plugin
+        self._environment = environment
 
         # Dependency injection with lazy defaults
         self._auth_provider = auth_provider
@@ -230,6 +237,11 @@ class OCIClient:
         if self._metrics is None:
             self._metrics = get_oci_metrics()
         return self._metrics
+
+    @property
+    def environment(self) -> str | None:
+        """Get the configured environment for policy enforcement."""
+        return self._environment
 
     @property
     def pull_operations(self) -> PullOperations:
@@ -609,11 +621,100 @@ class OCIClient:
         """
         return self._uri_parser.build_target_ref(tag)
 
+    def sign(
+        self,
+        tag: str,
+        *,
+        signing_config: SigningConfig | None = None,
+    ) -> SignatureMetadata:
+        """Sign an artifact in the registry.
+
+        Signs the artifact at the specified tag and updates its annotations
+        with the signature metadata.
+
+        Args:
+            tag: Tag of artifact to sign (e.g., "v1.0.0").
+            signing_config: Optional signing configuration. If not provided,
+                uses the config from registry config or raises an error.
+
+        Returns:
+            SignatureMetadata with signature bundle and identity information.
+
+        Raises:
+            SigningError: If signing fails.
+            OIDCTokenError: If OIDC token cannot be acquired (keyless mode).
+            ArtifactNotFoundError: If tag does not exist.
+        """
+        import time
+
+        from floe_core.oci.metrics import OCIMetrics
+        from floe_core.oci.signing import SigningClient
+
+        config = signing_config or self._config.signing
+        if config is None:
+            raise OCIError(
+                "Signing configuration required. Provide signing_config parameter "
+                "or configure artifacts.signing in manifest.yaml"
+            )
+
+        log = logger.bind(registry=self._registry_host, tag=tag, signing_mode=config.mode)
+        log.info("sign_started")
+        start_time = time.monotonic()
+
+        span_attributes: dict[str, Any] = {
+            "oci.registry": self._registry_host,
+            "oci.tag": tag,
+            "oci.operation": "sign",
+            "floe.signing.mode": config.mode,
+        }
+
+        with self.metrics.create_span(OCIMetrics.SPAN_PUSH, span_attributes) as span:
+            try:
+                content, digest = self._fetch_from_registry(tag)
+                artifact_ref = f"{self._uri_parser.build_target_ref(tag)}@{digest}"
+
+                signing_client = SigningClient(config)
+                metadata: SignatureMetadata = signing_client.sign(content, artifact_ref)
+
+                self._update_artifact_annotations(tag, metadata.to_annotations())
+
+                duration = time.monotonic() - start_time
+                log.info("sign_completed", duration=duration, rekor_index=metadata.rekor_log_index)
+                span.set_attribute("floe.signing.rekor_index", metadata.rekor_log_index or 0)
+                self._record_operation_metrics("sign", start_time, success=True)
+                return metadata
+            except Exception as e:
+                self._record_operation_metrics("sign", start_time, success=False)
+                log.error("sign_failed", error=str(e))
+                raise
+
+    def _update_artifact_annotations(
+        self,
+        tag: str,
+        new_annotations: dict[str, str],
+    ) -> None:
+        """Update annotations on an existing artifact.
+
+        This re-pushes the artifact with merged annotations.
+
+        Args:
+            tag: Tag of artifact to update.
+            new_annotations: Annotations to add/update.
+        """
+        content, _digest = self._fetch_from_registry(tag)
+        artifacts = self._deserialize_artifacts(content)
+
+        existing_manifest = self._inspect_internal(tag)
+        merged_annotations = {**(existing_manifest.annotations or {}), **new_annotations}
+
+        self._push_internal(artifacts, tag, merged_annotations, span=None)
+
     def pull(
         self,
         tag: str,
         *,
         verify_digest: bool = True,
+        environment: str | None = None,
     ) -> CompiledArtifacts:
         """Pull CompiledArtifacts from the registry.
 
@@ -624,6 +725,10 @@ class OCIClient:
             tag: Tag to pull (e.g., "v1.0.0", "latest-dev").
             verify_digest: Whether to verify digest after download (reserved for
                 future use; currently always verifies via manifest comparison).
+            environment: Optional environment name for policy enforcement.
+                Overrides the client's default environment. Used to look up
+                environment-specific verification policies (e.g., "production"
+                may enforce stricter signature requirements than "development").
 
         Returns:
             Deserialized CompiledArtifacts.
@@ -632,6 +737,8 @@ class OCIClient:
             ArtifactNotFoundError: If tag does not exist.
             AuthenticationError: If authentication fails.
             RegistryUnavailableError: If registry is unavailable after retries.
+            SignatureVerificationError: If verification policy is enabled with
+                enforcement=enforce and signature verification fails.
 
         Example:
             >>> artifacts = client.pull(tag="v1.0.0")
@@ -651,14 +758,17 @@ class OCIClient:
             "oci.operation": "pull",
         }
 
+        env = environment or self._environment
+
         with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
             try:
-                return self._pull_internal(tag, span, log, start_time)
+                return self._pull_internal(tag, span, log, start_time, env)
             except (
                 ArtifactNotFoundError,
                 CircuitBreakerOpenError,
                 AuthenticationError,
                 RegistryUnavailableError,
+                SignatureVerificationError,
             ):
                 self._record_operation_metrics("pull", start_time, success=False)
                 raise
@@ -673,17 +783,23 @@ class OCIClient:
         span: Any,
         log: Any,
         start_time: float,
+        environment: str | None = None,
     ) -> CompiledArtifacts:
-        """Internal pull logic with cache check, fetch, and deserialization.
+        """Internal pull logic with cache check, fetch, verification, and deserialization.
 
         Args:
             tag: Tag to pull.
             span: OTel tracing span.
             log: Bound logger.
             start_time: Monotonic time for metrics.
+            environment: Optional environment for policy lookup.
 
         Returns:
             Deserialized CompiledArtifacts.
+
+        Raises:
+            SignatureVerificationError: If verification is enabled with enforcement=enforce
+                and signature verification fails.
         """
 
         # Check cache first
@@ -695,6 +811,9 @@ class OCIClient:
 
         # Fetch from registry
         content, digest = self._fetch_from_registry(tag)
+
+        # Verify signature BEFORE deserialization (FR-009, FR-010)
+        self._verify_signature_if_enabled(content, digest, tag, log, environment)
 
         # Deserialize
         artifacts = self._deserialize_artifacts(content)
@@ -772,6 +891,73 @@ class OCIClient:
         if "manifest unknown" in error_str or "not found" in error_str:
             raise ArtifactNotFoundError(tag=tag, registry=self._config.uri) from error
         raise error
+
+    def _verify_signature_if_enabled(
+        self,
+        content: bytes,
+        digest: str,
+        tag: str,
+        log: Any,
+        environment: str | None = None,
+    ) -> None:
+        """Verify artifact signature if verification policy is enabled.
+
+        This method is called AFTER fetch but BEFORE deserialization to ensure
+        untrusted artifacts are never processed (security requirement FR-009).
+
+        Args:
+            content: Raw artifact bytes to verify.
+            digest: Content SHA256 digest.
+            tag: Tag being pulled (for error messages).
+            log: Bound logger.
+            environment: Optional environment for policy lookup.
+
+        Raises:
+            SignatureVerificationError: If enforcement=enforce and verification fails.
+        """
+        policy = self._config.verification
+        if policy is None or not policy.enabled:
+            return
+
+        enforcement = (
+            policy.get_enforcement_for_env(environment) if environment else policy.enforcement
+        )
+        if enforcement == "off":
+            return
+
+        from floe_core.oci.verification import VerificationClient
+        from floe_core.schemas.signing import SignatureMetadata
+
+        artifact_ref = f"{self._config.uri}:{tag}"
+        verification_client = VerificationClient(policy)
+
+        try:
+            manifest_data = self._fetch_manifest_data(tag)
+            annotations = manifest_data.get("annotations", {})
+        except Exception as e:
+            log.warning("verification_skip_manifest_fetch_failed", error=str(e))
+            if enforcement == "enforce":
+                raise SignatureVerificationError(
+                    artifact_ref=artifact_ref,
+                    reason=f"Failed to fetch manifest for verification: {e}",
+                ) from e
+            return
+
+        signature_metadata = SignatureMetadata.from_annotations(annotations)
+
+        result = verification_client.verify(
+            content=content,
+            metadata=signature_metadata,
+            artifact_ref=artifact_ref,
+            artifact_digest=digest,
+        )
+
+        log.info(
+            "verification_result",
+            status=result.status,
+            signer=result.signer_identity,
+            enforcement=enforcement,
+        )
 
     def _deserialize_artifacts(self, content: bytes) -> CompiledArtifacts:
         """Deserialize content to CompiledArtifacts.

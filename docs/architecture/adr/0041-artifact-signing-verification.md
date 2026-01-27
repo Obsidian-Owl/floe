@@ -720,3 +720,100 @@ jobs:
 - [Rekor Transparency Log](https://docs.sigstore.dev/logging/overview/)
 - [SLSA Provenance](https://slsa.dev/spec/v0.1/requirements)
 - [Supply Chain Levels for Software Artifacts (SLSA)](https://slsa.dev/)
+
+---
+
+## Implementation Notes (Epic 8B)
+
+*Added during implementation - January 2026*
+
+### Architecture Decisions Made During Implementation
+
+**1. sigstore-python as Primary SDK**
+
+The implementation uses `sigstore-python` library (v3.x) as the primary signing mechanism instead of shelling out to cosign CLI:
+
+- **Rationale**: Better error handling, type safety, native Python integration
+- **Deviation**: Original ADR showed cosign CLI commands; implementation wraps sigstore-python
+- **Fallback**: cosign CLI is used for key-based signing with KMS (awskms://, gcpkms://) due to better KMS integration in cosign
+
+**2. Signature Storage in OCI Annotations**
+
+Signatures are stored as OCI manifest annotations rather than separate `.sig` artifacts:
+
+```python
+# Annotation keys (packages/floe-core/src/floe_core/oci/signing.py)
+ANNOTATION_BUNDLE = "dev.floe.signature.bundle"       # Base64-encoded Sigstore bundle
+ANNOTATION_MODE = "dev.floe.signature.mode"           # "keyless" or "key-based"
+ANNOTATION_ISSUER = "dev.floe.signature.issuer"       # OIDC issuer URL
+ANNOTATION_SUBJECT = "dev.floe.signature.subject"     # Signer identity
+ANNOTATION_SIGNED_AT = "dev.floe.signature.signed-at" # ISO8601 timestamp
+ANNOTATION_REKOR_INDEX = "dev.floe.signature.rekor-index"
+ANNOTATION_CERT_FINGERPRINT = "dev.floe.signature.cert-fingerprint"
+```
+
+- **Rationale**: Atomic push (signature travels with manifest), simpler garbage collection
+- **Trade-off**: Limited to ~1MB bundle size (sufficient for most signatures)
+
+**3. Concurrent Signing Lock**
+
+File-based locking prevents race conditions when multiple processes sign the same artifact:
+
+```python
+# Uses fcntl.flock() with timeout (default: 30s)
+# Lock files: $TMPDIR/floe/signing-locks/signing-<hash>.lock
+# Configure via: FLOE_SIGNING_LOCK_TIMEOUT environment variable
+```
+
+- **Rationale**: OCI annotation updates are not atomic; concurrent updates cause data loss
+- **Scope**: Per-artifact lock (different artifacts can be signed concurrently)
+
+**4. OIDC Token Retry with Exponential Backoff**
+
+Token acquisition retries on transient failures:
+
+```python
+# Configuration (packages/floe-core/src/floe_core/oci/signing.py)
+OIDC_MAX_RETRIES = int(os.environ.get("FLOE_OIDC_TOKEN_MAX_RETRIES", "3"))
+OIDC_RETRY_BASE_DELAY = 0.5  # seconds, doubles each retry
+OIDC_RETRY_MAX_DELAY = 8.0   # cap
+```
+
+- **Rationale**: CI/CD OIDC endpoints can have transient failures
+- **Pattern**: Standard exponential backoff with jitter
+
+### Performance Characteristics
+
+| Operation | Typical Latency | Notes |
+|-----------|-----------------|-------|
+| Keyless sign | 2-4 seconds | Includes Fulcio cert + Rekor log |
+| Key-based sign | 0.5-1 second | Local operation, no network |
+| Keyless verify | 1-2 seconds | Online Rekor check |
+| Offline verify | 0.3-0.5 seconds | Bundle verification only |
+| Lock acquisition | < 100ms | Unless contention |
+
+### Module Structure
+
+```
+packages/floe-core/src/floe_core/oci/
+├── signing.py       # SigningClient, keyless/key-based signing
+├── verification.py  # VerificationClient, trust policies
+├── errors.py        # SignatureVerificationError, ConcurrentSigningError
+└── schemas/
+    └── signing.py   # SigningConfig, SignatureMetadata, VerificationResult
+```
+
+### Key Files for Future Maintainers
+
+- **Signing implementation**: `packages/floe-core/src/floe_core/oci/signing.py`
+- **Verification implementation**: `packages/floe-core/src/floe_core/oci/verification.py`
+- **Schema contracts**: `packages/floe-core/src/floe_core/schemas/signing.py`
+- **Research notes**: `specs/8b-artifact-signing/research.md` (OTel spans, sigstore patterns)
+- **Test coverage**: `packages/floe-core/tests/unit/oci/test_signing.py`, `test_verification.py`
+
+### Lessons Learned
+
+1. **sigstore-python API changes**: v3.x significantly differs from v2.x; use `SigningContext.production()` not `ClientTrustConfig`
+2. **Certificate expiry grace period**: Short-lived Fulcio certs (10 min) need grace period handling for verification
+3. **Rekor optional for air-gapped**: `require_rekor_entry: false` enables offline verification with bundled proofs
+4. **Error message quality**: Users need actionable remediation steps, not just failure reasons

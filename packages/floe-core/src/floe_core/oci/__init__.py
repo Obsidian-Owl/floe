@@ -48,6 +48,25 @@ See Also:
 
 from __future__ import annotations
 
+# Attestation (Epic 8B)
+from floe_core.oci.attestation import (
+    IN_TOTO_STATEMENT_TYPE,
+    SPDX_PREDICATE_TYPE,
+    AttestationAttachError,
+    AttestationError,
+    CosignNotFoundError,
+    SBOMGenerationError,
+    SyftNotFoundError,
+    attach_attestation,
+    check_cosign_available,
+    check_syft_available,
+    create_in_toto_statement,
+    generate_sbom,
+    generate_sbom_for_python_project,
+    retrieve_attestations,
+    retrieve_sbom,
+)
+
 # Authentication providers (T007)
 from floe_core.oci.auth import (
     AnonymousAuthProvider,
@@ -123,6 +142,30 @@ from floe_core.oci.resilience import (
     with_resilience,
 )
 
+# Signing (Epic 8B)
+from floe_core.oci.signing import (
+    ANNOTATION_BUNDLE,
+    ANNOTATION_CERT_FINGERPRINT,
+    ANNOTATION_ISSUER,
+    ANNOTATION_MODE,
+    ANNOTATION_REKOR_INDEX,
+    ANNOTATION_SIGNED_AT,
+    ANNOTATION_SUBJECT,
+    OIDCTokenError,
+    SigningClient,
+    SigningError,
+    sign_artifact,
+)
+
+# Verification (Epic 8B)
+from floe_core.oci.verification import (
+    PolicyViolationError,
+    VerificationClient,
+    VerificationError,
+    load_verification_policy_from_manifest,
+    verify_artifact,
+)
+
 # Configuration schemas (from floe_core.schemas.oci)
 from floe_core.schemas.oci import (
     ArtifactManifest,
@@ -192,4 +235,38 @@ __all__: list[str] = [
     "CacheConfig",
     "ArtifactManifest",
     "ArtifactTag",
+    # Signing (Epic 8B)
+    "SigningClient",
+    "SigningError",
+    "OIDCTokenError",
+    "sign_artifact",
+    "ANNOTATION_BUNDLE",
+    "ANNOTATION_MODE",
+    "ANNOTATION_ISSUER",
+    "ANNOTATION_SUBJECT",
+    "ANNOTATION_SIGNED_AT",
+    "ANNOTATION_REKOR_INDEX",
+    "ANNOTATION_CERT_FINGERPRINT",
+    # Verification (Epic 8B)
+    "VerificationClient",
+    "VerificationError",
+    "PolicyViolationError",
+    "load_verification_policy_from_manifest",
+    "verify_artifact",
+    # Attestation (Epic 8B)
+    "IN_TOTO_STATEMENT_TYPE",
+    "SPDX_PREDICATE_TYPE",
+    "AttestationAttachError",
+    "AttestationError",
+    "CosignNotFoundError",
+    "SBOMGenerationError",
+    "SyftNotFoundError",
+    "attach_attestation",
+    "check_cosign_available",
+    "check_syft_available",
+    "create_in_toto_statement",
+    "generate_sbom",
+    "generate_sbom_for_python_project",
+    "retrieve_attestations",
+    "retrieve_sbom",
 ]
