@@ -97,6 +97,7 @@ from floe_core.schemas.oci import (
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -608,6 +609,94 @@ class OCIClient:
             Full OCI reference (e.g., harbor.example.com/namespace/repo:tag).
         """
         return self._uri_parser.build_target_ref(tag)
+
+    def sign(
+        self,
+        tag: str,
+        *,
+        signing_config: SigningConfig | None = None,
+    ) -> SignatureMetadata:
+        """Sign an artifact in the registry.
+
+        Signs the artifact at the specified tag and updates its annotations
+        with the signature metadata.
+
+        Args:
+            tag: Tag of artifact to sign (e.g., "v1.0.0").
+            signing_config: Optional signing configuration. If not provided,
+                uses the config from registry config or raises an error.
+
+        Returns:
+            SignatureMetadata with signature bundle and identity information.
+
+        Raises:
+            SigningError: If signing fails.
+            OIDCTokenError: If OIDC token cannot be acquired (keyless mode).
+            ArtifactNotFoundError: If tag does not exist.
+        """
+        import time
+
+        from floe_core.oci.metrics import OCIMetrics
+        from floe_core.oci.signing import SigningClient
+
+        config = signing_config or self._config.signing
+        if config is None:
+            raise OCIError(
+                "Signing configuration required. Provide signing_config parameter "
+                "or configure artifacts.signing in manifest.yaml"
+            )
+
+        log = logger.bind(registry=self._registry_host, tag=tag, signing_mode=config.mode)
+        log.info("sign_started")
+        start_time = time.monotonic()
+
+        span_attributes: dict[str, Any] = {
+            "oci.registry": self._registry_host,
+            "oci.tag": tag,
+            "oci.operation": "sign",
+            "floe.signing.mode": config.mode,
+        }
+
+        with self.metrics.create_span(OCIMetrics.SPAN_PUSH, span_attributes) as span:
+            try:
+                content, digest = self._fetch_from_registry(tag)
+                artifact_ref = f"{self._uri_parser.build_target_ref(tag)}@{digest}"
+
+                signing_client = SigningClient(config)
+                metadata = signing_client.sign(content, artifact_ref)
+
+                self._update_artifact_annotations(tag, metadata.to_annotations())
+
+                duration = time.monotonic() - start_time
+                log.info("sign_completed", duration=duration, rekor_index=metadata.rekor_log_index)
+                span.set_attribute("floe.signing.rekor_index", metadata.rekor_log_index or 0)
+                self._record_operation_metrics("sign", start_time, success=True)
+                return metadata
+            except Exception as e:
+                self._record_operation_metrics("sign", start_time, success=False)
+                log.error("sign_failed", error=str(e))
+                raise
+
+    def _update_artifact_annotations(
+        self,
+        tag: str,
+        new_annotations: dict[str, str],
+    ) -> None:
+        """Update annotations on an existing artifact.
+
+        This re-pushes the artifact with merged annotations.
+
+        Args:
+            tag: Tag of artifact to update.
+            new_annotations: Annotations to add/update.
+        """
+        content, _digest = self._fetch_from_registry(tag)
+        artifacts = self._deserialize_artifacts(content)
+
+        existing_manifest = self._inspect_internal(tag)
+        merged_annotations = {**(existing_manifest.annotations or {}), **new_annotations}
+
+        self._push_internal(artifacts, tag, merged_annotations, span=None)
 
     def pull(
         self,

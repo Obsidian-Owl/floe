@@ -131,6 +131,21 @@ from floe_core.schemas.oci import (
     RegistryConfig,
 )
 
+# Signing (Epic 8B)
+from floe_core.oci.signing import (
+    ANNOTATION_BUNDLE,
+    ANNOTATION_CERT_FINGERPRINT,
+    ANNOTATION_ISSUER,
+    ANNOTATION_MODE,
+    ANNOTATION_REKOR_INDEX,
+    ANNOTATION_SIGNED_AT,
+    ANNOTATION_SUBJECT,
+    OIDCTokenError,
+    SigningClient,
+    SigningError,
+    sign_artifact,
+)
+
 __all__: list[str] = [
     # Error hierarchy
     "OCIError",
@@ -192,4 +207,16 @@ __all__: list[str] = [
     "CacheConfig",
     "ArtifactManifest",
     "ArtifactTag",
+    # Signing (Epic 8B)
+    "SigningClient",
+    "SigningError",
+    "OIDCTokenError",
+    "sign_artifact",
+    "ANNOTATION_BUNDLE",
+    "ANNOTATION_MODE",
+    "ANNOTATION_ISSUER",
+    "ANNOTATION_SUBJECT",
+    "ANNOTATION_SIGNED_AT",
+    "ANNOTATION_REKOR_INDEX",
+    "ANNOTATION_CERT_FINGERPRINT",
 ]
