@@ -1094,3 +1094,143 @@ class TestCertificateGracePeriod:
         assert result.certificate_expired_at is not None
         assert result.within_grace_period is True
         assert result.is_valid is True
+
+
+class TestAuditLogFormat:
+    """Tests for audit log format validation (FR-013).
+
+    Task: T083
+    Requirements: FR-013, 8B-FR-013
+    """
+
+    @pytest.mark.requirement("8B-FR-013")
+    def test_verification_audit_event_has_required_fields(self) -> None:
+        """VerificationAuditEvent has all required fields for audit trail."""
+        from datetime import datetime, timezone
+
+        from floe_core.schemas.signing import VerificationAuditEvent
+
+        event = VerificationAuditEvent(
+            artifact_ref="oci://registry/repo:v1.0.0",
+            artifact_digest="sha256:abc123def456",
+            policy_enforcement="enforce",
+            expected_issuers=["https://token.actions.githubusercontent.com"],
+            actual_issuer="https://token.actions.githubusercontent.com",
+            actual_subject="repo:acme/floe:ref:refs/heads/main",
+            signature_status="valid",
+            rekor_verified=True,
+            timestamp=datetime.now(timezone.utc),
+            trace_id="0af7651916cd43dd8448eb211c80319c",
+            span_id="b7ad6b7169203331",
+            success=True,
+        )
+
+        assert event.event_type == "verification"
+        assert event.artifact_ref == "oci://registry/repo:v1.0.0"
+        assert event.trace_id == "0af7651916cd43dd8448eb211c80319c"
+        assert event.span_id == "b7ad6b7169203331"
+
+    @pytest.mark.requirement("8B-FR-013")
+    def test_signing_audit_event_has_required_fields(self) -> None:
+        """SigningAuditEvent has all required fields for audit trail."""
+        from datetime import datetime, timezone
+
+        from floe_core.schemas.signing import SigningAuditEvent
+
+        event = SigningAuditEvent(
+            artifact_ref="oci://registry/repo:v1.0.0",
+            artifact_digest="sha256:abc123def456",
+            signing_mode="keyless",
+            signer_identity="repo:acme/floe:ref:refs/heads/main",
+            issuer="https://token.actions.githubusercontent.com",
+            rekor_log_index=12345678,
+            timestamp=datetime.now(timezone.utc),
+            trace_id="0af7651916cd43dd8448eb211c80319c",
+            span_id="b7ad6b7169203331",
+            success=True,
+        )
+
+        assert event.event_type == "signing"
+        assert event.signing_mode == "keyless"
+        assert event.rekor_log_index == 12345678
+        assert event.trace_id == "0af7651916cd43dd8448eb211c80319c"
+
+    @pytest.mark.requirement("8B-FR-013")
+    def test_audit_event_serializes_to_json(self) -> None:
+        """Audit events serialize to valid JSON for log aggregation."""
+        from datetime import datetime, timezone
+
+        from floe_core.schemas.signing import VerificationAuditEvent
+
+        event = VerificationAuditEvent(
+            artifact_ref="oci://registry/repo:v1.0.0",
+            artifact_digest="sha256:abc123def456",
+            policy_enforcement="enforce",
+            expected_issuers=["https://github.com"],
+            signature_status="valid",
+            rekor_verified=True,
+            timestamp=datetime(2026, 1, 27, 10, 0, 0, tzinfo=timezone.utc),
+            trace_id="0af7651916cd43dd8448eb211c80319c",
+            span_id="b7ad6b7169203331",
+            success=True,
+        )
+
+        import json
+
+        json_str = event.model_dump_json()
+        parsed = json.loads(json_str)
+
+        assert parsed["event_type"] == "verification"
+        assert parsed["artifact_ref"] == "oci://registry/repo:v1.0.0"
+        assert parsed["trace_id"] == "0af7651916cd43dd8448eb211c80319c"
+        assert "2026-01-27" in parsed["timestamp"]
+
+    @pytest.mark.requirement("8B-FR-013")
+    def test_audit_event_includes_failure_reason(self) -> None:
+        """Failed verification audit includes failure reason."""
+        from datetime import datetime, timezone
+
+        from floe_core.schemas.signing import VerificationAuditEvent
+
+        event = VerificationAuditEvent(
+            artifact_ref="oci://registry/repo:v1.0.0",
+            artifact_digest="sha256:abc123def456",
+            policy_enforcement="enforce",
+            expected_issuers=["https://trusted.issuer.com"],
+            actual_issuer="https://untrusted.issuer.com",
+            signature_status="invalid",
+            rekor_verified=False,
+            timestamp=datetime.now(timezone.utc),
+            trace_id="0af7651916cd43dd8448eb211c80319c",
+            span_id="b7ad6b7169203331",
+            success=False,
+            failure_reason="Signer not in trusted issuers list",
+        )
+
+        assert event.success is False
+        assert event.failure_reason == "Signer not in trusted issuers list"
+
+    @pytest.mark.requirement("8B-FR-013")
+    def test_audit_events_are_immutable(self) -> None:
+        """Audit events should be frozen (immutable) for integrity."""
+        from datetime import datetime, timezone
+
+        import pydantic
+
+        from floe_core.schemas.signing import VerificationAuditEvent
+
+        event = VerificationAuditEvent(
+            artifact_ref="oci://registry/repo:v1.0.0",
+            artifact_digest="sha256:abc123def456",
+            policy_enforcement="enforce",
+            expected_issuers=[],
+            signature_status="valid",
+            rekor_verified=True,
+            timestamp=datetime.now(timezone.utc),
+            trace_id="0af7651916cd43dd8448eb211c80319c",
+            span_id="b7ad6b7169203331",
+            success=True,
+        )
+
+        with pytest.raises(pydantic.ValidationError):
+            event.success = False  # type: ignore[misc]
