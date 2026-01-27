@@ -194,10 +194,12 @@ def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Ite
     start_time = time.monotonic()
     lock_fd = os.open(str(lock_path), os.O_RDWR)
 
+    lock_acquired = False
     try:
         while True:
             try:
                 fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_acquired = True
                 logger.debug("Acquired signing lock for %s at %s", artifact_ref, lock_path)
                 break
             except OSError as e:
@@ -206,7 +208,6 @@ def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Ite
 
                 elapsed = time.monotonic() - start_time
                 if elapsed >= timeout_seconds:
-                    os.close(lock_fd)
                     raise ConcurrentSigningError(artifact_ref, timeout_seconds)
 
                 time.sleep(LOCK_RETRY_INTERVAL)
@@ -214,10 +215,9 @@ def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Ite
         yield
 
     finally:
-        try:
+        if lock_acquired:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        finally:
-            os.close(lock_fd)
+        os.close(lock_fd)
 
 
 class SigningClient:

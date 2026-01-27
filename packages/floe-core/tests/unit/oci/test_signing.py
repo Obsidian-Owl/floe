@@ -15,7 +15,11 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import sys
+import tempfile
+import threading
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
@@ -34,6 +38,7 @@ requires_sigstore = pytest.mark.skipif(
     not SIGSTORE_AVAILABLE, reason="sigstore library not installed"
 )
 
+from floe_core.oci.errors import ConcurrentSigningError
 from floe_core.oci.signing import (
     ANNOTATION_BUNDLE,
     ANNOTATION_CERT_FINGERPRINT,
@@ -42,6 +47,8 @@ from floe_core.oci.signing import (
     ANNOTATION_REKOR_INDEX,
     ANNOTATION_SIGNED_AT,
     ANNOTATION_SUBJECT,
+    OIDC_MAX_RETRIES,
+    OIDC_RETRY_BASE_DELAY,
     CosignNotAvailableError,
     KeyLoadError,
     OIDCTokenError,
@@ -49,6 +56,7 @@ from floe_core.oci.signing import (
     SigningError,
     check_cosign_available,
     sign_artifact,
+    signing_lock,
 )
 from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 
@@ -662,3 +670,288 @@ class TestKeyBasedSigning:
 
             with pytest.raises(SigningError, match="cosign sign-blob failed"):
                 client._cosign_sign_blob(b"content", str(tmp_path / "key"))
+
+
+class TestConcurrentSigning:
+    """Tests for concurrent signing behavior (T091, FLO-1828).
+
+    Validates file-based locking for serializing signing operations.
+    """
+
+    def test_signing_lock_acquires_and_releases(self, tmp_path: Any) -> None:
+        """signing_lock context manager acquires and releases lock."""
+        artifact_ref = "oci://registry/repo:v1.0.0"
+
+        with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
+            with signing_lock(artifact_ref):
+                lock_files = list(tmp_path.glob("signing-*.lock"))
+                assert len(lock_files) == 1
+
+    def test_signing_lock_serializes_concurrent_access(self, tmp_path: Any) -> None:
+        """signing_lock serializes concurrent signing to same artifact."""
+        artifact_ref = "oci://registry/repo:v1.0.0"
+        execution_order: list[str] = []
+        lock = threading.Lock()
+
+        def worker(worker_id: str) -> None:
+            with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
+                with signing_lock(artifact_ref, timeout_seconds=5.0):
+                    with lock:
+                        execution_order.append(f"{worker_id}_start")
+                    time.sleep(0.1)
+                    with lock:
+                        execution_order.append(f"{worker_id}_end")
+
+        t1 = threading.Thread(target=worker, args=("t1",))
+        t2 = threading.Thread(target=worker, args=("t2",))
+
+        t1.start()
+        time.sleep(0.02)
+        t2.start()
+
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        # Verify serialization: one thread fully completes before the other starts
+        assert len(execution_order) == 4
+        # First thread starts and ends before second thread starts
+        first_end_idx = execution_order.index("t1_end")
+        second_start_idx = execution_order.index("t2_start")
+        assert first_end_idx < second_start_idx
+
+    def test_signing_lock_allows_different_artifacts(self, tmp_path: Any) -> None:
+        """signing_lock allows concurrent access to different artifacts."""
+        artifact1 = "oci://registry/repo:v1.0.0"
+        artifact2 = "oci://registry/repo:v2.0.0"
+        acquired: list[str] = []
+        released = threading.Event()
+        both_acquired = threading.Event()
+
+        def worker(artifact_ref: str, worker_id: str) -> None:
+            with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
+                with signing_lock(artifact_ref, timeout_seconds=5.0):
+                    acquired.append(worker_id)
+                    if len(acquired) == 2:
+                        both_acquired.set()
+                    released.wait(timeout=5.0)
+
+        t1 = threading.Thread(target=worker, args=(artifact1, "t1"))
+        t2 = threading.Thread(target=worker, args=(artifact2, "t2"))
+
+        t1.start()
+        t2.start()
+
+        # Both should acquire locks for different artifacts
+        both_acquired.wait(timeout=5.0)
+        assert len(acquired) == 2, "Both threads should acquire locks simultaneously"
+
+        released.set()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+    def test_signing_lock_timeout_raises_error(self, tmp_path: Any) -> None:
+        """signing_lock raises ConcurrentSigningError on timeout."""
+        artifact_ref = "oci://registry/repo:v1.0.0"
+        lock_acquired = threading.Event()
+        test_complete = threading.Event()
+        error_raised: ConcurrentSigningError | None = None
+
+        def holder() -> None:
+            with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
+                with signing_lock(artifact_ref, timeout_seconds=10.0):
+                    lock_acquired.set()
+                    test_complete.wait(timeout=10.0)
+
+        holder_thread = threading.Thread(target=holder)
+        holder_thread.start()
+        lock_acquired.wait(timeout=5.0)
+
+        try:
+            with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
+                try:
+                    with signing_lock(artifact_ref, timeout_seconds=0.2):
+                        pass
+                except ConcurrentSigningError as e:
+                    error_raised = e
+        finally:
+            test_complete.set()
+            holder_thread.join(timeout=5)
+
+        assert error_raised is not None, "ConcurrentSigningError should have been raised"
+        assert "v1.0.0" in str(error_raised)
+        assert error_raised.timeout_seconds == 0.2
+
+    def test_signing_lock_releases_on_exception(self, tmp_path: Any) -> None:
+        """signing_lock releases lock even when exception occurs."""
+        artifact_ref = "oci://registry/repo:v1.0.0"
+
+        with patch("floe_core.oci.signing._get_lock_dir", return_value=tmp_path):
+            try:
+                with signing_lock(artifact_ref):
+                    raise ValueError("Test exception")
+            except ValueError:
+                pass
+
+            # Lock should be released - can acquire again immediately
+            with signing_lock(artifact_ref, timeout_seconds=0.5):
+                pass
+
+    def test_sign_method_uses_signing_lock(
+        self,
+        keyless_config: SigningConfig,
+        mock_identity_token: MagicMock,
+        mock_sigstore_bundle: MagicMock,
+    ) -> None:
+        """SigningClient.sign() uses signing_lock for serialization."""
+        with (
+            patch(
+                "floe_core.oci.signing.SigningClient._get_identity_token",
+                return_value=mock_identity_token,
+            ),
+            patch("sigstore.sign.SigningContext") as mock_context_cls,
+            patch("floe_core.oci.signing.signing_lock") as mock_lock,
+        ):
+            mock_context = MagicMock()
+            mock_signer = MagicMock()
+            mock_signer.sign_artifact.return_value = mock_sigstore_bundle
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
+            mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
+            mock_context_cls.production.return_value = mock_context
+
+            mock_lock.return_value.__enter__ = MagicMock()
+            mock_lock.return_value.__exit__ = MagicMock(return_value=False)
+
+            client = SigningClient(keyless_config)
+            client.sign(b"content", "oci://registry/repo:v1.0.0")
+
+            mock_lock.assert_called_once_with("oci://registry/repo:v1.0.0", None)
+
+
+@requires_sigstore
+class TestOIDCTokenRetry:
+    """Tests for OIDC token retry with exponential backoff (T092, FLO-1829).
+
+    Validates retry behavior for transient OIDC token acquisition failures.
+    """
+
+    def test_oidc_retry_on_transient_failure(self, keyless_config: SigningConfig) -> None:
+        """_get_identity_token retries on transient IdentityError."""
+        from sigstore.oidc import IdentityError
+
+        call_count = 0
+        mock_token = MagicMock()
+        mock_token.federated_issuer = "https://accounts.google.com"
+
+        def failing_then_success() -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise IdentityError("Transient failure")
+            return mock_token
+
+        with (
+            patch("sigstore.oidc.detect_credential", return_value=None),
+            patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("time.sleep") as mock_sleep,
+        ):
+            mock_issuer = MagicMock()
+            mock_issuer.identity_token.side_effect = failing_then_success
+            mock_issuer_cls.production.return_value = mock_issuer
+
+            client = SigningClient(keyless_config)
+            token = client._get_identity_token()
+
+            assert token == mock_token
+            assert call_count == 3
+            assert mock_sleep.call_count == 2
+
+    def test_oidc_retry_respects_max_retries(self, keyless_config: SigningConfig) -> None:
+        """_get_identity_token raises after max retries exhausted."""
+        from sigstore.oidc import IdentityError
+
+        with (
+            patch("sigstore.oidc.detect_credential", return_value=None),
+            patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("time.sleep"),
+        ):
+            mock_issuer = MagicMock()
+            mock_issuer.identity_token.side_effect = IdentityError("Persistent failure")
+            mock_issuer_cls.production.return_value = mock_issuer
+
+            client = SigningClient(keyless_config)
+
+            with pytest.raises(OIDCTokenError) as exc_info:
+                client._get_identity_token()
+
+            assert f"Failed after {OIDC_MAX_RETRIES} attempts" in str(exc_info.value)
+
+    def test_oidc_retry_uses_exponential_backoff(self, keyless_config: SigningConfig) -> None:
+        """_get_identity_token uses exponential backoff between retries."""
+        from sigstore.oidc import IdentityError
+
+        sleep_delays: list[float] = []
+
+        def capture_sleep(delay: float) -> None:
+            sleep_delays.append(delay)
+
+        with (
+            patch("sigstore.oidc.detect_credential", return_value=None),
+            patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("time.sleep", side_effect=capture_sleep),
+            patch("random.uniform", return_value=0.05),
+        ):
+            mock_issuer = MagicMock()
+            mock_issuer.identity_token.side_effect = IdentityError("Failure")
+            mock_issuer_cls.production.return_value = mock_issuer
+
+            client = SigningClient(keyless_config)
+
+            with pytest.raises(OIDCTokenError):
+                client._get_identity_token()
+
+            # Verify exponential backoff pattern: base_delay * 2^attempt + jitter
+            assert len(sleep_delays) == OIDC_MAX_RETRIES - 1
+            # First retry: 0.5 * 2^0 + 0.05 = 0.55
+            assert abs(sleep_delays[0] - (OIDC_RETRY_BASE_DELAY * 1 + 0.05)) < 0.01
+            # Second retry: 0.5 * 2^1 + 0.05 = 1.05
+            assert abs(sleep_delays[1] - (OIDC_RETRY_BASE_DELAY * 2 + 0.05)) < 0.01
+
+    def test_oidc_no_retry_on_immediate_success(self, keyless_config: SigningConfig) -> None:
+        """_get_identity_token does not retry on immediate success."""
+        mock_token = MagicMock()
+
+        with (
+            patch("sigstore.oidc.detect_credential", return_value="ambient-cred"),
+            patch("sigstore.oidc.IdentityToken", return_value=mock_token),
+            patch("time.sleep") as mock_sleep,
+        ):
+            client = SigningClient(keyless_config)
+            token = client._get_identity_token()
+
+            assert token == mock_token
+            mock_sleep.assert_not_called()
+
+    def test_oidc_ambient_credential_failure_retries(self, keyless_config: SigningConfig) -> None:
+        """_get_identity_token retries when ambient credential detection fails."""
+        from sigstore.oidc import IdentityError
+
+        call_count = 0
+        mock_token = MagicMock()
+
+        def detect_with_retry() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise IdentityError("Service unavailable")
+            return "ambient-token"
+
+        with (
+            patch("sigstore.oidc.detect_credential", side_effect=detect_with_retry),
+            patch("sigstore.oidc.IdentityToken", return_value=mock_token),
+            patch("time.sleep"),
+        ):
+            client = SigningClient(keyless_config)
+            token = client._get_identity_token()
+
+            assert token == mock_token
+            assert call_count == 2
