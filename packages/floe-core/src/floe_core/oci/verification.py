@@ -838,6 +838,48 @@ def verify_artifact(
     return client.verify(content, metadata, artifact_ref)
 
 
+def export_verification_bundle(
+    artifact_digest: str,
+    metadata: SignatureMetadata,
+) -> "VerificationBundle":
+    """Export offline verification bundle for air-gapped environments (FR-015).
+
+    Creates a self-contained bundle with all materials needed to verify
+    a signature without network access to Sigstore/Rekor.
+
+    Args:
+        artifact_digest: SHA256 digest of the signed artifact
+        metadata: Signature metadata containing the Sigstore bundle
+
+    Returns:
+        VerificationBundle with sigstore bundle, cert chain, and Rekor entry
+    """
+    from floe_core.schemas.signing import VerificationBundle
+
+    bundle_json = base64.b64decode(metadata.bundle).decode("utf-8")
+    sigstore_bundle = json.loads(bundle_json)
+
+    certificate_chain: list[str] = []
+    verification_material = sigstore_bundle.get("verificationMaterial", {})
+    cert_data = verification_material.get("certificate", {})
+    if cert_data.get("rawBytes"):
+        certificate_chain.append(cert_data["rawBytes"])
+
+    rekor_entry: dict[str, object] | None = None
+    tlog_entries = verification_material.get("tlogEntries", [])
+    if tlog_entries:
+        rekor_entry = tlog_entries[0]
+
+    return VerificationBundle(
+        version="1.0",
+        artifact_digest=artifact_digest,
+        sigstore_bundle=sigstore_bundle,
+        certificate_chain=certificate_chain,
+        rekor_entry=rekor_entry,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
 __all__ = [
     "VerificationClient",
     "VerificationError",
@@ -846,4 +888,5 @@ __all__ = [
     "KeyVerificationError",
     "check_cosign_available",
     "verify_artifact",
+    "export_verification_bundle",
 ]
