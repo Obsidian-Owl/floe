@@ -44,7 +44,7 @@ dependencies = [
     # Data contract validation (Epic 3C) - ODCS v3 parsing, linting, validation
     "datacontract-cli>=0.10.0,<1.0",  # Hard dependency per spec; pin upper bound (3C-T001)
     # Artifact signing (Epic 8B) - Sigstore Python SDK for keyless signing
-    "sigstore>=3.0.0,<4.0",  # Keyless signing via Sigstore; pin upper bound (8B-T001)
+    "sigstore>=4.2.0",  # Keyless signing via Sigstore; GHSA-hm8f-75xx-w2vr fix
 ]
 
 [project.optional-dependencies]
