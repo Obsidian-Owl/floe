@@ -28,8 +28,12 @@ import base64
 import hashlib
 import json
 import logging
+import shutil
+import subprocess
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
 from opentelemetry import trace
@@ -100,6 +104,34 @@ class OIDCTokenError(SigningError):
         if issuer:
             msg += f" (issuer: {issuer})"
         super().__init__(msg)
+
+
+class CosignNotAvailableError(SigningError):
+    """Raised when cosign CLI is not available for key-based signing."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "cosign CLI not found. Key-based signing requires cosign. "
+            "Install with: brew install cosign (macOS) or "
+            "https://github.com/sigstore/cosign#installation"
+        )
+
+
+class KeyLoadError(SigningError):
+    """Raised when private key cannot be loaded."""
+
+    def __init__(self, reason: str, key_ref: str | None = None) -> None:
+        self.reason = reason
+        self.key_ref = key_ref
+        msg = f"Failed to load private key: {reason}"
+        if key_ref:
+            msg += f" (ref: {key_ref})"
+        super().__init__(msg)
+
+
+def check_cosign_available() -> bool:
+    """Check if cosign CLI is available on PATH."""
+    return shutil.which("cosign") is not None
 
 
 class SigningClient:
@@ -190,23 +222,188 @@ class SigningClient:
     def _sign_key_based(self, content: bytes, artifact_ref: str) -> SignatureMetadata:
         """Sign using key-based mode (private key or KMS).
 
-        This is a placeholder for Phase 7 (User Story 5).
-        Key-based signing may use cosign CLI for KMS support.
+        Uses cosign CLI for signing with local key files or KMS references.
+        No transparency log entry is created (air-gapped mode).
 
         Args:
             content: Artifact bytes to sign
             artifact_ref: OCI reference for logging
 
         Returns:
-            SignatureMetadata with bundle
+            SignatureMetadata with signature bundle
 
         Raises:
-            NotImplementedError: Key-based signing not yet implemented
+            CosignNotAvailableError: If cosign CLI is not installed
+            KeyLoadError: If private key cannot be loaded
+            SigningError: If signing operation fails
         """
-        # TODO: T060 - Implement key-based signing
-        raise NotImplementedError(
-            "Key-based signing will be implemented in Phase 7 (T060). Use keyless mode for now."
+        if not check_cosign_available():
+            raise CosignNotAvailableError()
+
+        key_ref = self._resolve_key_reference()
+
+        with _trace_span("floe.oci.sign.key_based"):
+            signature_bundle = self._cosign_sign_blob(content, key_ref)
+            return self._key_signature_to_metadata(signature_bundle, key_ref)
+
+    def _resolve_key_reference(self) -> str:
+        """Resolve the key reference from config.
+
+        Returns:
+            Key path or KMS URI for cosign
+
+        Raises:
+            KeyLoadError: If key reference cannot be resolved
+        """
+        if self.config.private_key_ref is None:
+            raise KeyLoadError("No private_key_ref configured for key-based signing")
+
+        key_ref = self.config.private_key_ref
+
+        if key_ref.source.value == "file":
+            key_path = Path(key_ref.name)
+            if not key_path.exists():
+                raise KeyLoadError(f"Key file not found: {key_path}", key_ref.name)
+            return str(key_path)
+
+        if key_ref.source.value == "env":
+            import os
+
+            env_var_name = f"FLOE_{key_ref.name.upper().replace('-', '_')}"
+            env_value = os.environ.get(env_var_name)
+            if not env_value:
+                raise KeyLoadError(f"Environment variable not set: {env_var_name}", key_ref.name)
+            return env_value
+
+        if key_ref.source.value == "kubernetes":
+            raise KeyLoadError(
+                "Kubernetes secret references not yet supported for key-based signing. "
+                "Use file or KMS key reference.",
+                key_ref.name,
+            )
+
+        raise KeyLoadError(f"Unsupported key source: {key_ref.source.value}", key_ref.name)
+
+    def _cosign_sign_blob(self, content: bytes, key_ref: str) -> dict[str, Any]:
+        """Sign content using cosign CLI.
+
+        Args:
+            content: Bytes to sign
+            key_ref: Key path or KMS URI
+
+        Returns:
+            Signature bundle as dict
+
+        Raises:
+            SigningError: If cosign signing fails
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            content_file = tmpdir_path / "content.bin"
+            signature_file = tmpdir_path / "signature.sig"
+            bundle_file = tmpdir_path / "bundle.json"
+
+            content_file.write_bytes(content)
+
+            is_kms = key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://"))
+
+            cmd = [
+                "cosign",
+                "sign-blob",
+                "--key",
+                key_ref,
+                "--output-signature",
+                str(signature_file),
+                "--output-bundle",
+                str(bundle_file),
+                "--tlog-upload=false",
+                str(content_file),
+            ]
+
+            if not is_kms:
+                cmd.insert(3, "--yes")
+
+            logger.debug("Running cosign sign-blob: %s", " ".join(cmd[:5]) + " ...")
+
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+
+                if result.returncode != 0:
+                    raise SigningError(f"cosign sign-blob failed: {result.stderr}")
+
+                if bundle_file.exists():
+                    bundle_data = json.loads(bundle_file.read_text())
+                    return bundle_data
+
+                if signature_file.exists():
+                    signature_b64 = signature_file.read_text().strip()
+                    return {"base64Signature": signature_b64, "keyRef": key_ref}
+
+                raise SigningError("cosign did not produce signature output")
+
+            except subprocess.TimeoutExpired as e:
+                raise SigningError("cosign sign-blob timed out after 60 seconds") from e
+            except json.JSONDecodeError as e:
+                raise SigningError(f"Invalid JSON output from cosign: {e}") from e
+
+    def _key_signature_to_metadata(self, bundle: dict[str, Any], key_ref: str) -> SignatureMetadata:
+        """Convert cosign key-based signature to SignatureMetadata.
+
+        Args:
+            bundle: Signature bundle from cosign
+            key_ref: Key reference used for signing
+
+        Returns:
+            SignatureMetadata for OCI annotations
+        """
+        bundle_json = json.dumps(bundle)
+        bundle_b64 = base64.b64encode(bundle_json.encode("utf-8")).decode("ascii")
+
+        key_fingerprint = self._compute_key_fingerprint(key_ref)
+
+        span = trace.get_current_span()
+        span.set_attribute("floe.signing.key_ref", key_ref[:50] if len(key_ref) > 50 else key_ref)
+
+        return SignatureMetadata(
+            bundle=bundle_b64,
+            mode="key-based",
+            issuer=None,
+            subject=key_ref,
+            signed_at=datetime.now(timezone.utc),
+            rekor_log_index=None,
+            certificate_fingerprint=key_fingerprint,
         )
+
+    def _compute_key_fingerprint(self, key_ref: str) -> str:
+        """Compute fingerprint for key reference.
+
+        For KMS keys, returns a hash of the key URI.
+        For file keys, returns hash of the public key if extractable.
+
+        Args:
+            key_ref: Key path or KMS URI
+
+        Returns:
+            Fingerprint string (may be empty if not computable)
+        """
+        if key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://")):
+            return hashlib.sha256(key_ref.encode()).hexdigest()[:16]
+
+        try:
+            key_path = Path(key_ref)
+            if key_path.exists():
+                key_content = key_path.read_bytes()
+                return hashlib.sha256(key_content).hexdigest()[:16]
+        except Exception:
+            pass
+
+        return ""
 
     def _get_identity_token(self) -> IdentityToken:
         """Get OIDC identity token for keyless signing.
@@ -342,6 +539,9 @@ __all__ = [
     "SigningClient",
     "SigningError",
     "OIDCTokenError",
+    "CosignNotAvailableError",
+    "KeyLoadError",
+    "check_cosign_available",
     "sign_artifact",
     # Annotation keys
     "ANNOTATION_BUNDLE",

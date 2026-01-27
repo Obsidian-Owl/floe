@@ -36,9 +36,12 @@ requires_sigstore = pytest.mark.skipif(
 
 from floe_core.oci.errors import SignatureVerificationError
 from floe_core.oci.verification import (
+    CosignNotAvailableError,
+    KeyVerificationError,
     PolicyViolationError,
     VerificationClient,
     VerificationError,
+    check_cosign_available,
     verify_artifact,
 )
 from floe_core.schemas.signing import (
@@ -591,3 +594,303 @@ class TestRequireSBOMEnforcement:
         result = client._verify_sbom_present("oci://registry/repo:v1.0.0", mock_span)
 
         assert result is None
+
+
+class TestKeyBasedVerification:
+    """Tests for key-based verification (T067, T068)."""
+
+    @pytest.fixture
+    def key_based_signature_metadata(self, tmp_path) -> SignatureMetadata:
+        """Create key-based signature metadata."""
+        bundle_data = {"base64Signature": base64.b64encode(b"test-signature").decode()}
+        return SignatureMetadata(
+            bundle=base64.b64encode(json.dumps(bundle_data).encode()).decode(),
+            mode="key-based",
+            issuer=None,
+            subject="/path/to/key",
+            signed_at=datetime.now(timezone.utc),
+            rekor_log_index=None,
+            certificate_fingerprint="a" * 16,
+        )
+
+    @pytest.fixture
+    def key_based_policy(self, tmp_path) -> VerificationPolicy:
+        """Create verification policy for key-based verification."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        key_file = tmp_path / "cosign.pub"
+        key_file.write_text("-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----")
+
+        import os
+
+        os.environ["FLOE_TEST_PUB_KEY"] = str(key_file)
+
+        return VerificationPolicy(
+            enabled=True,
+            enforcement="enforce",
+            trusted_issuers=[],
+            require_rekor=False,
+            public_key_ref=SecretReference(source=SecretSource.ENV, name="test-pub-key"),
+        )
+
+    def test_check_cosign_available_returns_bool(self) -> None:
+        """check_cosign_available() returns boolean."""
+        result = check_cosign_available()
+        assert isinstance(result, bool)
+
+    def test_cosign_not_available_error_message(self) -> None:
+        """CosignNotAvailableError has helpful message."""
+        error = CosignNotAvailableError()
+        assert "cosign CLI not found" in str(error)
+
+    def test_key_verification_error_message(self) -> None:
+        """KeyVerificationError includes reason and key reference."""
+        error = KeyVerificationError("Signature mismatch", key_ref="/path/to/key.pub")
+        assert "Signature mismatch" in str(error)
+        assert "/path/to/key.pub" in str(error)
+
+    def test_verify_routes_to_key_based(
+        self,
+        key_based_policy: VerificationPolicy,
+        key_based_signature_metadata: SignatureMetadata,
+    ) -> None:
+        """verify() routes to _verify_key_based for key-based signatures."""
+        with (
+            patch("floe_core.oci.verification.check_cosign_available", return_value=True),
+            patch.object(
+                VerificationClient, "_cosign_verify_blob", return_value=True
+            ) as mock_verify,
+        ):
+            client = VerificationClient(key_based_policy)
+            result = client.verify(
+                content=b"artifact content",
+                metadata=key_based_signature_metadata,
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+            mock_verify.assert_called_once()
+            assert result.status == "valid"
+            assert result.rekor_verified is False
+
+    def test_verify_key_based_without_cosign(
+        self,
+        key_based_policy: VerificationPolicy,
+        key_based_signature_metadata: SignatureMetadata,
+    ) -> None:
+        """Key-based verification returns invalid when cosign not available."""
+        with patch("floe_core.oci.verification.check_cosign_available", return_value=False):
+            client = VerificationClient(key_based_policy)
+            result = client._verify_key_based(
+                content=b"content",
+                metadata=key_based_signature_metadata,
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+            assert result.status == "invalid"
+            assert "cosign CLI not available" in (result.failure_reason or "")
+
+    def test_verify_policy_requires_issuers_or_key(self) -> None:
+        """VerificationPolicy requires trusted_issuers or public_key_ref when enabled."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="trusted_issuers or public_key_ref"):
+            VerificationPolicy(
+                enabled=True,
+                enforcement="enforce",
+                trusted_issuers=[],
+                public_key_ref=None,
+            )
+
+    def test_resolve_public_key_ref_env(self, key_based_policy: VerificationPolicy) -> None:
+        """_resolve_public_key_ref resolves environment variable."""
+        client = VerificationClient(key_based_policy)
+        key_ref = client._resolve_public_key_ref()
+
+        assert key_ref is not None
+        assert "cosign.pub" in key_ref
+
+    def test_resolve_public_key_ref_missing_env(self) -> None:
+        """_resolve_public_key_ref returns None for missing env var."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        policy = VerificationPolicy(
+            enabled=True,
+            trusted_issuers=[],
+            public_key_ref=SecretReference(source=SecretSource.ENV, name="nonexistent-var"),
+        )
+        client = VerificationClient(policy)
+
+        assert client._resolve_public_key_ref() is None
+
+    def test_cosign_verify_blob_success(
+        self, key_based_policy: VerificationPolicy, tmp_path
+    ) -> None:
+        """_cosign_verify_blob returns True on success."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+            client = VerificationClient(key_based_policy)
+            result = client._cosign_verify_blob(
+                content=b"test content",
+                bundle_data={"base64Signature": "dGVzdC1zaWc="},
+                public_key_ref=str(tmp_path / "key.pub"),
+            )
+
+            assert result is True
+            mock_run.assert_called_once()
+
+    def test_cosign_verify_blob_failure(
+        self, key_based_policy: VerificationPolicy, tmp_path
+    ) -> None:
+        """_cosign_verify_blob returns False on verification failure."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stderr="verification failed")
+
+            client = VerificationClient(key_based_policy)
+            result = client._cosign_verify_blob(
+                content=b"test content",
+                bundle_data={"base64Signature": "dGVzdC1zaWc="},
+                public_key_ref=str(tmp_path / "key.pub"),
+            )
+
+            assert result is False
+
+    def test_cosign_verify_blob_timeout(
+        self, key_based_policy: VerificationPolicy, tmp_path
+    ) -> None:
+        """_cosign_verify_blob handles timeout."""
+        import subprocess
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="cosign", timeout=60)
+
+            client = VerificationClient(key_based_policy)
+            result = client._cosign_verify_blob(
+                content=b"test content",
+                bundle_data={"base64Signature": "dGVzdC1zaWc="},
+                public_key_ref=str(tmp_path / "key.pub"),
+            )
+
+            assert result is False
+
+
+@requires_sigstore
+class TestOfflineVerification:
+    """Tests for offline verification without Rekor (T063, T068)."""
+
+    def test_offline_verifier_when_rekor_not_required(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> None:
+        """Verifier uses offline mode when require_rekor=False."""
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="enforce",
+            trusted_issuers=[github_actions_issuer],
+            require_rekor=False,
+        )
+
+        with patch("sigstore.verify.Verifier") as mock_verifier_cls:
+            client = VerificationClient(policy)
+            client._verifier = None
+
+            with (
+                patch("sigstore.models.Bundle"),
+                patch("sigstore.verify.policy.Identity"),
+            ):
+                mock_verifier_cls.production.return_value = MagicMock()
+                bundle_data = {"verificationMaterial": {"tlogEntries": []}}
+                metadata = SignatureMetadata(
+                    bundle=base64.b64encode(json.dumps(bundle_data).encode()).decode(),
+                    mode="keyless",
+                    issuer="https://token.actions.githubusercontent.com",
+                    subject="repo:acme/floe:ref:refs/heads/main",
+                    signed_at=datetime.now(timezone.utc),
+                    rekor_log_index=None,
+                    certificate_fingerprint="a" * 64,
+                )
+
+                try:
+                    client._verify_keyless(b"content", metadata, "oci://registry/repo:v1.0.0")
+                except Exception:
+                    pass
+
+                mock_verifier_cls.production.assert_called_with(offline=True)
+
+    def test_online_verifier_when_rekor_required(self, enforce_policy: VerificationPolicy) -> None:
+        """Verifier uses online mode when require_rekor=True."""
+        with patch("sigstore.verify.Verifier") as mock_verifier_cls:
+            client = VerificationClient(enforce_policy)
+            client._verifier = None
+
+            with (
+                patch("sigstore.models.Bundle"),
+                patch("sigstore.verify.policy.Identity"),
+            ):
+                mock_verifier_cls.production.return_value = MagicMock()
+                bundle_data = {"verificationMaterial": {"tlogEntries": [{"logIndex": "123"}]}}
+                metadata = SignatureMetadata(
+                    bundle=base64.b64encode(json.dumps(bundle_data).encode()).decode(),
+                    mode="keyless",
+                    issuer="https://token.actions.githubusercontent.com",
+                    subject="repo:acme/floe:ref:refs/heads/main",
+                    signed_at=datetime.now(timezone.utc),
+                    rekor_log_index=123,
+                    certificate_fingerprint="a" * 64,
+                )
+
+                try:
+                    client._verify_keyless(b"content", metadata, "oci://registry/repo:v1.0.0")
+                except Exception:
+                    pass
+
+                mock_verifier_cls.production.assert_called_with(offline=False)
+
+
+class TestKeyBasedOfflineVerification:
+    """Tests for key-based verification (always offline)."""
+
+    @pytest.fixture
+    def key_based_signature_metadata(self) -> SignatureMetadata:
+        """Create key-based signature metadata."""
+        bundle_data = {"base64Signature": base64.b64encode(b"test-signature").decode()}
+        return SignatureMetadata(
+            bundle=base64.b64encode(json.dumps(bundle_data).encode()).decode(),
+            mode="key-based",
+            issuer=None,
+            subject="/path/to/key",
+            signed_at=datetime.now(timezone.utc),
+            rekor_log_index=None,
+            certificate_fingerprint="a" * 16,
+        )
+
+    def test_key_based_verification_always_offline(
+        self, key_based_signature_metadata: SignatureMetadata
+    ) -> None:
+        """Key-based verification doesn't require Rekor."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="enforce",
+            trusted_issuers=[],
+            require_rekor=True,
+            public_key_ref=SecretReference(source=SecretSource.ENV, name="test-key"),
+        )
+
+        import os
+
+        os.environ["FLOE_TEST_KEY"] = "/path/to/key.pub"
+
+        with (
+            patch("floe_core.oci.verification.check_cosign_available", return_value=True),
+            patch.object(VerificationClient, "_cosign_verify_blob", return_value=True),
+        ):
+            client = VerificationClient(policy)
+            result = client._verify_key_based(
+                content=b"content",
+                metadata=key_based_signature_metadata,
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+            assert result.status == "valid"
+            assert result.rekor_verified is False

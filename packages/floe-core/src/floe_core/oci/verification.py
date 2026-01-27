@@ -4,11 +4,13 @@ Implements:
     - FR-009: Verification policy configuration
     - FR-010: Identity policy matching (issuer + subject)
     - FR-011: Rekor transparency log verification
+    - FR-015: Key-based verification for air-gapped environments
     - SC-007: OpenTelemetry tracing for verification operations
     - FR-013: Audit logging for verification attempts
 
 This module provides signature verification for OCI artifacts using sigstore-python.
-It supports keyless verification (OIDC-based) with identity policy matching.
+It supports keyless verification (OIDC-based) with identity policy matching, and
+key-based verification for air-gapped environments using cosign CLI.
 
 Example:
     >>> from floe_core.oci.verification import VerificationClient
@@ -39,7 +41,11 @@ import base64
 import json
 import logging
 import re
+import shutil
+import subprocess
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from opentelemetry import trace
@@ -85,6 +91,34 @@ class PolicyViolationError(VerificationError):
         self.actual_issuer = actual_issuer
         self.actual_subject = actual_subject
         super().__init__(reason)
+
+
+class CosignNotAvailableError(VerificationError):
+    """Raised when cosign CLI is not available for key-based verification."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "cosign CLI not found. Key-based verification requires cosign. "
+            "Install with: brew install cosign (macOS) or "
+            "https://github.com/sigstore/cosign#installation"
+        )
+
+
+class KeyVerificationError(VerificationError):
+    """Raised when key-based signature verification fails."""
+
+    def __init__(self, reason: str, key_ref: str | None = None) -> None:
+        self.reason = reason
+        self.key_ref = key_ref
+        msg = f"Key-based verification failed: {reason}"
+        if key_ref:
+            msg += f" (key: {key_ref})"
+        super().__init__(msg)
+
+
+def check_cosign_available() -> bool:
+    """Check if cosign CLI is available on PATH."""
+    return shutil.which("cosign") is not None
 
 
 class VerificationClient:
@@ -229,7 +263,30 @@ class VerificationClient:
         metadata: SignatureMetadata,
         artifact_ref: str,
     ) -> VerificationResult:
-        """Verify signature using sigstore-python.
+        """Verify signature using appropriate method based on signing mode.
+
+        Routes to keyless (sigstore-python) or key-based (cosign CLI) verification
+        based on the signature metadata mode.
+
+        Args:
+            content: Artifact bytes
+            metadata: Signature metadata with bundle
+            artifact_ref: Artifact reference for logging
+
+        Returns:
+            VerificationResult with verification status
+        """
+        if metadata.mode == "key-based":
+            return self._verify_key_based(content, metadata, artifact_ref)
+        return self._verify_keyless(content, metadata, artifact_ref)
+
+    def _verify_keyless(
+        self,
+        content: bytes,
+        metadata: SignatureMetadata,
+        artifact_ref: str,
+    ) -> VerificationResult:
+        """Verify keyless (OIDC) signature using sigstore-python.
 
         Args:
             content: Artifact bytes
@@ -243,7 +300,6 @@ class VerificationClient:
         from sigstore.verify import Verifier
         from sigstore.verify.policy import Identity
 
-        # Parse the Sigstore bundle from metadata
         with tracer.start_as_current_span("floe.oci.verify.bundle"):
             try:
                 bundle_json = base64.b64decode(metadata.bundle).decode("utf-8")
@@ -256,12 +312,11 @@ class VerificationClient:
                     failure_reason=f"Invalid Sigstore bundle: {e}",
                 )
 
-        # Get or create verifier
         if self._verifier is None:
-            self._verifier = Verifier.production()
+            offline = not self.policy.require_rekor
+            self._verifier = Verifier.production(offline=offline)
         verifier = self._verifier
 
-        # Match against trusted issuers
         with tracer.start_as_current_span("floe.oci.verify.policy"):
             matched_issuer = self._match_trusted_issuer(metadata)
             if matched_issuer is None:
@@ -273,26 +328,25 @@ class VerificationClient:
                     failure_reason="Signer not in trusted issuers list",
                 )
 
-            # Create identity policy for verification
             identity = Identity(
                 identity=matched_issuer.subject or matched_issuer.subject_regex or "",
                 issuer=str(matched_issuer.issuer),
             )
 
-        # Verify with Rekor if required
-        with tracer.start_as_current_span("floe.oci.verify.rekor"):
+        span_name = (
+            "floe.oci.verify.rekor" if self.policy.require_rekor else "floe.oci.verify.offline"
+        )
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute("floe.verification.offline", not self.policy.require_rekor)
             try:
-                # sigstore-python's verify_artifact raises on failure
                 verifier.verify_artifact(  # type: ignore[union-attr]
                     input_=content,
                     bundle=bundle,
                     policy=identity,
                 )
 
-                # Verification succeeded
                 rekor_verified = self._check_rekor_entry(bundle)
 
-                # Check Rekor requirement
                 if self.policy.require_rekor and not rekor_verified:
                     return VerificationResult(
                         status="invalid",
@@ -320,6 +374,179 @@ class VerificationClient:
                     verified_at=datetime.now(timezone.utc),
                     failure_reason=str(e),
                 )
+
+    def _verify_key_based(
+        self,
+        content: bytes,
+        metadata: SignatureMetadata,
+        artifact_ref: str,
+    ) -> VerificationResult:
+        """Verify key-based signature using cosign CLI.
+
+        Used for air-gapped environments where signatures are created with
+        private keys instead of OIDC identity.
+
+        Args:
+            content: Artifact bytes
+            metadata: Signature metadata with signature bundle
+            artifact_ref: Artifact reference for logging
+
+        Returns:
+            VerificationResult with verification status
+        """
+        with tracer.start_as_current_span("floe.oci.verify.key_based") as span:
+            if not check_cosign_available():
+                return VerificationResult(
+                    status="invalid",
+                    signer_identity=metadata.subject,
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason="cosign CLI not available for key-based verification",
+                )
+
+            public_key_ref = self._resolve_public_key_ref()
+            if public_key_ref is None:
+                return VerificationResult(
+                    status="invalid",
+                    signer_identity=metadata.subject,
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason="No public_key_ref configured for key-based verification",
+                )
+
+            span.set_attribute("floe.verification.key_ref", public_key_ref[:50])
+
+            try:
+                bundle_json = base64.b64decode(metadata.bundle).decode("utf-8")
+                bundle_data = json.loads(bundle_json)
+            except Exception as e:
+                logger.error("Failed to parse signature bundle: %s", e)
+                return VerificationResult(
+                    status="invalid",
+                    signer_identity=metadata.subject,
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason=f"Invalid signature bundle: {e}",
+                )
+
+            verification_success = self._cosign_verify_blob(content, bundle_data, public_key_ref)
+
+            if verification_success:
+                return VerificationResult(
+                    status="valid",
+                    signer_identity=metadata.subject,
+                    verified_at=datetime.now(timezone.utc),
+                    rekor_verified=False,
+                )
+            else:
+                return VerificationResult(
+                    status="invalid",
+                    signer_identity=metadata.subject,
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason="Signature verification failed",
+                )
+
+    def _resolve_public_key_ref(self) -> str | None:
+        """Resolve public key reference from policy configuration.
+
+        Returns:
+            Public key path or KMS URI, or None if not configured
+        """
+        if self.policy.public_key_ref is None:
+            return None
+
+        key_ref = self.policy.public_key_ref
+
+        if key_ref.source.value == "file":
+            key_path = Path(key_ref.name)
+            if not key_path.exists():
+                logger.error("Public key file not found: %s", key_path)
+                return None
+            return str(key_path)
+
+        if key_ref.source.value == "env":
+            import os
+
+            env_var_name = f"FLOE_{key_ref.name.upper().replace('-', '_')}"
+            env_value = os.environ.get(env_var_name)
+            if not env_value:
+                logger.error("Environment variable not set: %s", env_var_name)
+                return None
+            return env_value
+
+        if key_ref.source.value == "kubernetes":
+            logger.error("Kubernetes secret references not yet supported for verification")
+            return None
+
+        logger.error("Unsupported key source: %s", key_ref.source.value)
+        return None
+
+    def _cosign_verify_blob(
+        self,
+        content: bytes,
+        bundle_data: dict[str, Any],
+        public_key_ref: str,
+    ) -> bool:
+        """Verify signature using cosign verify-blob CLI.
+
+        Args:
+            content: Original content bytes
+            bundle_data: Signature bundle from signing
+            public_key_ref: Public key path or KMS URI
+
+        Returns:
+            True if verification succeeded, False otherwise
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            content_file = tmpdir_path / "content.bin"
+            signature_file = tmpdir_path / "signature.sig"
+
+            content_file.write_bytes(content)
+
+            signature_b64 = bundle_data.get("base64Signature")
+            if signature_b64 is None:
+                sig_content = bundle_data.get("dsseEnvelope", {}).get("signature")
+                if sig_content:
+                    signature_b64 = sig_content
+
+            if signature_b64 is None:
+                logger.error("No signature found in bundle")
+                return False
+
+            signature_file.write_text(signature_b64)
+
+            cmd = [
+                "cosign",
+                "verify-blob",
+                "--key",
+                public_key_ref,
+                "--signature",
+                str(signature_file),
+                str(content_file),
+            ]
+
+            logger.debug("Running cosign verify-blob: %s", " ".join(cmd[:5]) + " ...")
+
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+
+                if result.returncode == 0:
+                    logger.debug("Key-based signature verification succeeded")
+                    return True
+                else:
+                    logger.error("cosign verify-blob failed: %s", result.stderr)
+                    return False
+
+            except subprocess.TimeoutExpired:
+                logger.error("cosign verify-blob timed out after 60 seconds")
+                return False
+            except Exception as e:
+                logger.error("cosign verify-blob error: %s", e)
+                return False
 
     def _match_trusted_issuer(self, metadata: SignatureMetadata) -> TrustedIssuer | None:
         """Match signature against trusted issuers.
@@ -552,5 +779,8 @@ __all__ = [
     "VerificationClient",
     "VerificationError",
     "PolicyViolationError",
+    "CosignNotAvailableError",
+    "KeyVerificationError",
+    "check_cosign_available",
     "verify_artifact",
 ]

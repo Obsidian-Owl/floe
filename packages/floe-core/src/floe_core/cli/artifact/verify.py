@@ -24,15 +24,19 @@ from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
 Verify artifact signature (FR-009).
 
 Verifies the signature on an artifact at the specified tag against
-configured trusted issuers. Requires at least one --issuer/--subject
+configured trusted issuers (keyless) or public key (key-based).
+
+For keyless verification, requires at least one --issuer/--subject
 pair to specify who is allowed to have signed the artifact.
+
+For key-based verification, requires --key to specify the public key.
 
 Exit codes:
   0: Verification passed (signature valid, signer trusted)
   6: Verification failed (unsigned, invalid, or untrusted signer)
 
 Examples:
-    # Verify with GitHub Actions signer
+    # Verify keyless signature with GitHub Actions signer
     $ floe artifact verify -r oci://harbor.example.com/floe -t v1.0.0 \\
         --issuer https://token.actions.githubusercontent.com \\
         --subject "repo:acme/floe:ref:refs/heads/main"
@@ -41,6 +45,14 @@ Examples:
     $ floe artifact verify -r oci://harbor.example.com/floe -t v1.0.0 \\
         --issuer https://token.actions.githubusercontent.com \\
         --subject-regex "repo:acme/.*:ref:refs/heads/main"
+
+    # Verify key-based signature with public key
+    $ floe artifact verify -r oci://harbor.example.com/floe -t v1.0.0 \\
+        --key /path/to/cosign.pub
+
+    # Verify key-based signature with KMS
+    $ floe artifact verify -r oci://harbor.example.com/floe -t v1.0.0 \\
+        --key awskms://alias/my-signing-key
 
     # Warn-only mode (don't fail on invalid signature)
     $ floe artifact verify -r oci://harbor.example.com/floe -t v1.0.0 \\
@@ -68,21 +80,28 @@ Examples:
     "--issuer",
     "-i",
     type=str,
-    required=True,
-    help="OIDC issuer URL to trust (e.g., https://token.actions.githubusercontent.com).",
+    default=None,
+    help="OIDC issuer URL to trust (for keyless verification).",
 )
 @click.option(
     "--subject",
     "-s",
     type=str,
     default=None,
-    help="Exact certificate subject to match.",
+    help="Exact certificate subject to match (for keyless verification).",
 )
 @click.option(
     "--subject-regex",
     type=str,
     default=None,
-    help="Regex pattern for subject matching.",
+    help="Regex pattern for subject matching (for keyless verification).",
+)
+@click.option(
+    "--key",
+    "-k",
+    type=str,
+    default=None,
+    help="Public key path or KMS URI for key-based verification.",
 )
 @click.option(
     "--enforcement",
@@ -93,37 +112,62 @@ Examples:
 @click.option(
     "--require-rekor/--no-require-rekor",
     default=True,
-    help="Require Rekor transparency log entry [default: True].",
+    help="Require Rekor transparency log entry [default: True for keyless, False for key-based].",
 )
 def verify_command(
     registry: str,
     tag: str,
-    issuer: str,
+    issuer: str | None,
     subject: str | None,
     subject_regex: str | None,
+    key: str | None,
     enforcement: str,
     require_rekor: bool,
 ) -> None:
     """Verify an artifact signature in OCI registry."""
-    if not subject and not subject_regex:
+    is_key_based = key is not None
+    is_keyless = issuer is not None
+
+    if not is_key_based and not is_keyless:
         error_exit(
-            "Either --subject or --subject-regex is required.",
+            "Either --issuer (keyless) or --key (key-based) is required.",
             exit_code=ExitCode.VALIDATION_ERROR,
         )
 
-    if subject and subject_regex:
+    if is_key_based and is_keyless:
         error_exit(
-            "--subject and --subject-regex are mutually exclusive.",
+            "--key and --issuer are mutually exclusive.",
             exit_code=ExitCode.VALIDATION_ERROR,
         )
 
-    policy = _build_verification_policy(
-        issuer=issuer,
-        subject=subject,
-        subject_regex=subject_regex,
-        enforcement=enforcement,
-        require_rekor=require_rekor,
-    )
+    if is_keyless:
+        if not subject and not subject_regex:
+            error_exit(
+                "Either --subject or --subject-regex is required for keyless verification.",
+                exit_code=ExitCode.VALIDATION_ERROR,
+            )
+
+        if subject and subject_regex:
+            error_exit(
+                "--subject and --subject-regex are mutually exclusive.",
+                exit_code=ExitCode.VALIDATION_ERROR,
+            )
+
+        policy = _build_verification_policy(
+            issuer=issuer,
+            subject=subject,
+            subject_regex=subject_regex,
+            enforcement=enforcement,
+            require_rekor=require_rekor,
+        )
+    else:
+        assert key is not None  # Guarded by is_key_based check above
+        policy = _build_key_based_verification_policy(
+            key_ref=key,
+            enforcement=enforcement,
+            require_rekor=False,
+        )
+
     registry_config = _build_registry_config(registry, policy)
     _verify_artifact(registry_config, registry, tag)
 
@@ -135,7 +179,7 @@ def _build_verification_policy(
     enforcement: str,
     require_rekor: bool,
 ):
-    """Build VerificationPolicy from CLI options."""
+    """Build VerificationPolicy for keyless verification from CLI options."""
     from pydantic import HttpUrl
 
     from floe_core.schemas.signing import TrustedIssuer, VerificationPolicy
@@ -151,6 +195,57 @@ def _build_verification_policy(
         enforcement=enforcement,  # type: ignore[arg-type]
         trusted_issuers=[trusted_issuer],
         require_rekor=require_rekor,
+    )
+
+
+def _build_key_based_verification_policy(
+    key_ref: str,
+    enforcement: str,
+    require_rekor: bool,
+):
+    """Build VerificationPolicy for key-based verification from CLI options."""
+    import os
+    from pathlib import Path
+
+    from floe_core.oci.verification import check_cosign_available
+    from floe_core.schemas.secrets import SecretReference, SecretSource
+    from floe_core.schemas.signing import VerificationPolicy
+
+    if not check_cosign_available():
+        error_exit(
+            "cosign CLI not found. Key-based verification requires cosign. "
+            "Install with: brew install cosign (macOS) or "
+            "https://github.com/sigstore/cosign#installation",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
+
+    is_kms = key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://"))
+
+    if is_kms:
+        os.environ["FLOE_VERIFY_KEY"] = key_ref
+        public_key_ref = SecretReference(
+            source=SecretSource.ENV,
+            name="verify-key",
+        )
+    elif os.path.exists(key_ref):
+        resolved_path = str(Path(key_ref).resolve())
+        os.environ["FLOE_VERIFY_KEY"] = resolved_path
+        public_key_ref = SecretReference(
+            source=SecretSource.ENV,
+            name="verify-key",
+        )
+    else:
+        error_exit(
+            f"Public key file not found: {key_ref}",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+    return VerificationPolicy(
+        enabled=True,
+        enforcement=enforcement,  # type: ignore[arg-type]
+        trusted_issuers=[],
+        require_rekor=require_rekor,
+        public_key_ref=public_key_ref,
     )
 
 

@@ -42,9 +42,12 @@ from floe_core.oci.signing import (
     ANNOTATION_REKOR_INDEX,
     ANNOTATION_SIGNED_AT,
     ANNOTATION_SUBJECT,
+    CosignNotAvailableError,
+    KeyLoadError,
     OIDCTokenError,
     SigningClient,
     SigningError,
+    check_cosign_available,
     sign_artifact,
 )
 from floe_core.schemas.signing import SignatureMetadata, SigningConfig
@@ -141,18 +144,20 @@ class TestSigningClient:
             assert metadata.rekor_log_index == 12345678
             assert metadata.bundle  # Base64-encoded bundle
 
-    def test_sign_key_based_not_implemented(self) -> None:
-        """SigningClient.sign() raises NotImplementedError for key-based mode."""
+    def test_sign_key_based_requires_cosign(self) -> None:
+        """SigningClient.sign() raises CosignNotAvailableError when cosign not installed."""
+        from floe_core.oci.signing import CosignNotAvailableError
         from floe_core.schemas.secrets import SecretReference, SecretSource
 
         config = SigningConfig(
             mode="key-based",
-            private_key_ref=SecretReference(source=SecretSource.ENV, name="key"),
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="test-key"),
         )
         client = SigningClient(config)
 
-        with pytest.raises(NotImplementedError, match="Key-based signing"):
-            client.sign(b"content", "oci://registry/repo:v1.0.0")
+        with patch("floe_core.oci.signing.check_cosign_available", return_value=False):
+            with pytest.raises(CosignNotAvailableError):
+                client.sign(b"content", "oci://registry/repo:v1.0.0")
 
 
 @requires_sigstore
@@ -360,3 +365,142 @@ class TestAnnotationConstants:
         assert ANNOTATION_SIGNED_AT.startswith("dev.floe.signature.")
         assert ANNOTATION_REKOR_INDEX.startswith("dev.floe.signature.")
         assert ANNOTATION_CERT_FINGERPRINT.startswith("dev.floe.signature.")
+
+
+class TestKeyBasedSigning:
+    """Tests for key-based signing (T066, T067)."""
+
+    @pytest.fixture
+    def key_based_config(self, tmp_path) -> SigningConfig:
+        """Create key-based signing config with temporary key file."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        key_file = tmp_path / "cosign.key"
+        key_file.write_text("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----")
+
+        import os
+
+        os.environ["FLOE_TEST_KEY"] = str(key_file)
+
+        return SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="test-key"),
+        )
+
+    def test_check_cosign_available_returns_bool(self) -> None:
+        """check_cosign_available() returns boolean."""
+        result = check_cosign_available()
+        assert isinstance(result, bool)
+
+    def test_cosign_not_available_error_message(self) -> None:
+        """CosignNotAvailableError has helpful message."""
+        error = CosignNotAvailableError()
+        assert "cosign CLI not found" in str(error)
+        assert "brew install" in str(error) or "installation" in str(error).lower()
+
+    def test_key_load_error_with_reason(self) -> None:
+        """KeyLoadError includes reason and key reference."""
+        error = KeyLoadError("File not found", key_ref="/path/to/key")
+        assert "File not found" in str(error)
+        assert "/path/to/key" in str(error)
+
+    def test_resolve_key_reference_env_var(self, key_based_config: SigningConfig) -> None:
+        """_resolve_key_reference resolves environment variable."""
+        client = SigningClient(key_based_config)
+        key_ref = client._resolve_key_reference()
+
+        assert key_ref is not None
+        assert "cosign.key" in key_ref
+
+    def test_resolve_key_reference_missing_env_var(self) -> None:
+        """_resolve_key_reference raises for missing env var."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        config = SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="nonexistent-var"),
+        )
+        client = SigningClient(config)
+
+        with pytest.raises(KeyLoadError, match="Environment variable not set"):
+            client._resolve_key_reference()
+
+    def test_signing_config_requires_key_ref_for_key_based(self) -> None:
+        """SigningConfig validation requires private_key_ref for key-based mode."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="private_key_ref required"):
+            SigningConfig(mode="key-based", private_key_ref=None)
+
+    def test_sign_key_based_with_cosign_mock(self, key_based_config: SigningConfig) -> None:
+        """Key-based signing calls cosign CLI and returns metadata."""
+        mock_bundle = {"base64Signature": "dGVzdC1zaWc=", "keyRef": "/path/to/key"}
+
+        with (
+            patch("floe_core.oci.signing.check_cosign_available", return_value=True),
+            patch.object(
+                SigningClient, "_cosign_sign_blob", return_value=mock_bundle
+            ) as mock_cosign,
+        ):
+            client = SigningClient(key_based_config)
+            metadata = client.sign(b"artifact content", "oci://registry/repo:v1.0.0")
+
+            mock_cosign.assert_called_once()
+            assert metadata.mode == "key-based"
+            assert metadata.rekor_log_index is None
+            assert metadata.bundle is not None
+
+    def test_key_signature_metadata_has_fingerprint(self, key_based_config: SigningConfig) -> None:
+        """Key-based signature metadata includes key fingerprint."""
+        mock_bundle = {"base64Signature": "dGVzdC1zaWc="}
+
+        with (
+            patch("floe_core.oci.signing.check_cosign_available", return_value=True),
+            patch.object(SigningClient, "_cosign_sign_blob", return_value=mock_bundle),
+        ):
+            client = SigningClient(key_based_config)
+            metadata = client.sign(b"content", "oci://registry/repo:v1.0.0")
+
+            assert metadata.certificate_fingerprint is not None
+
+    def test_compute_key_fingerprint_for_kms(self) -> None:
+        """_compute_key_fingerprint hashes KMS URIs."""
+        from floe_core.schemas.secrets import SecretReference, SecretSource
+
+        config = SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="test"),
+        )
+        client = SigningClient(config)
+
+        fingerprint = client._compute_key_fingerprint("awskms://alias/my-key")
+        assert len(fingerprint) == 16
+        assert all(c in "0123456789abcdef" for c in fingerprint)
+
+    def test_cosign_sign_blob_timeout(self, key_based_config: SigningConfig, tmp_path) -> None:
+        """_cosign_sign_blob handles timeout."""
+        import subprocess
+
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("floe_core.oci.signing.check_cosign_available", return_value=True),
+        ):
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="cosign", timeout=60)
+
+            client = SigningClient(key_based_config)
+
+            with pytest.raises(SigningError, match="timed out"):
+                client._cosign_sign_blob(b"content", str(tmp_path / "key"))
+
+    def test_cosign_sign_blob_failure(self, key_based_config: SigningConfig, tmp_path) -> None:
+        """_cosign_sign_blob handles cosign failure."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("floe_core.oci.signing.check_cosign_available", return_value=True),
+        ):
+            mock_run.return_value = MagicMock(returncode=1, stderr="error: key not found")
+
+            client = SigningClient(key_based_config)
+
+            with pytest.raises(SigningError, match="cosign sign-blob failed"):
+                client._cosign_sign_blob(b"content", str(tmp_path / "key"))

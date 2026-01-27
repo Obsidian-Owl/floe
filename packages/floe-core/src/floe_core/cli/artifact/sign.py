@@ -57,9 +57,13 @@ Examples:
     # Explicit keyless mode
     $ floe artifact sign -r oci://harbor.example.com/floe -t v1.0.0 --keyless
 
-    # Key-based signing (not yet implemented)
+    # Key-based signing with local key
     $ floe artifact sign -r oci://harbor.example.com/floe -t v1.0.0 \\
         --key /path/to/cosign.key
+
+    # Key-based signing with KMS
+    $ floe artifact sign -r oci://harbor.example.com/floe -t v1.0.0 \\
+        --key awskms://alias/my-signing-key
 """,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -85,8 +89,9 @@ Examples:
 @click.option(
     "--key",
     "-k",
-    type=click.Path(exists=True, dir_okay=False),
-    help="Path to private key for key-based signing (not yet supported).",
+    type=str,
+    default=None,
+    help="Private key path or KMS URI for key-based signing (e.g., /path/to/cosign.key, awskms://...).",
 )
 @click.option(
     "--oidc-issuer",
@@ -102,19 +107,23 @@ def sign_command(
     oidc_issuer: str,
 ) -> None:
     """Sign an artifact in OCI registry."""
-    if key is not None:
+    if key is not None and keyless:
         error_exit(
-            "Key-based signing not yet implemented. Use --keyless mode.",
+            "--key and --keyless are mutually exclusive.",
             exit_code=ExitCode.VALIDATION_ERROR,
         )
 
-    signing_config = _build_signing_config(keyless, oidc_issuer)
+    if key is not None:
+        signing_config = _build_key_based_signing_config(key)
+    else:
+        signing_config = _build_signing_config(keyless, oidc_issuer)
+
     registry_config = _build_registry_config(registry)
     _sign_artifact(registry_config, registry, tag, signing_config)
 
 
 def _build_signing_config(keyless: bool, oidc_issuer: str) -> SigningConfig:
-    """Build SigningConfig from CLI options."""
+    """Build SigningConfig for keyless mode from CLI options."""
     from pydantic import HttpUrl
 
     from floe_core.schemas.signing import SigningConfig
@@ -127,6 +136,51 @@ def _build_signing_config(keyless: bool, oidc_issuer: str) -> SigningConfig:
     else:
         error_exit(
             "Key-based signing requires --key option.",
+            exit_code=ExitCode.VALIDATION_ERROR,
+        )
+
+
+def _build_key_based_signing_config(key_ref: str) -> SigningConfig:
+    """Build SigningConfig for key-based signing from CLI options."""
+    import os
+    from pathlib import Path
+
+    from floe_core.oci.signing import check_cosign_available
+    from floe_core.schemas.secrets import SecretReference, SecretSource
+    from floe_core.schemas.signing import SigningConfig
+
+    if not check_cosign_available():
+        error_exit(
+            "cosign CLI not found. Key-based signing requires cosign. "
+            "Install with: brew install cosign (macOS) or "
+            "https://github.com/sigstore/cosign#installation",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
+
+    is_kms = key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://"))
+
+    if is_kms:
+        os.environ["FLOE_SIGNING_KEY"] = key_ref
+        return SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(
+                source=SecretSource.ENV,
+                name="signing-key",
+            ),
+        )
+    elif os.path.exists(key_ref):
+        resolved_path = str(Path(key_ref).resolve())
+        os.environ["FLOE_SIGNING_KEY"] = resolved_path
+        return SigningConfig(
+            mode="key-based",
+            private_key_ref=SecretReference(
+                source=SecretSource.ENV,
+                name="signing-key",
+            ),
+        )
+    else:
+        error_exit(
+            f"Key file not found: {key_ref}",
             exit_code=ExitCode.VALIDATION_ERROR,
         )
 
@@ -160,12 +214,20 @@ def _sign_artifact(
 
     try:
         client = OCIClient.from_registry_config(registry_config)
-        info(f"Signing {registry}:{tag}...")
+        mode_label = "keyless" if signing_config.mode == "keyless" else "key-based"
+        info(f"Signing {registry}:{tag} ({mode_label})...")
         metadata = client.sign(tag=tag, signing_config=signing_config)
-        success(f"Signed artifact (Rekor index: {metadata.rekor_log_index})")
+
+        if metadata.rekor_log_index is not None:
+            success(f"Signed artifact (Rekor index: {metadata.rekor_log_index})")
+        else:
+            success("Signed artifact (offline, no Rekor entry)")
+
         click.echo(f"Signer: {metadata.subject}")
         if metadata.issuer:
             click.echo(f"Issuer: {metadata.issuer}")
+        if metadata.certificate_fingerprint:
+            click.echo(f"Key fingerprint: {metadata.certificate_fingerprint}")
     except Exception as e:
         _handle_sign_error(e)
 

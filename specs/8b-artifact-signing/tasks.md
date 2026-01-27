@@ -176,18 +176,18 @@ Based on plan.md structure:
 
 ### Implementation for User Story 5
 
-- [ ] T060 [US5] Extend SigningClient with key-based signing support in packages/floe-core/src/floe_core/oci/signing.py
-- [ ] T061 [US5] Implement private key file loading and KMS key reference support in packages/floe-core/src/floe_core/oci/signing.py
-- [ ] T062 [US5] Extend VerificationClient with key-based verification (public key) in packages/floe-core/src/floe_core/oci/verification.py
-- [ ] T063 [US5] Implement offline verification without Rekor in packages/floe-core/src/floe_core/oci/verification.py
-- [ ] T064 [US5] Add --key flag to `floe artifact sign` command in packages/floe-core/src/floe_core/cli/artifact/sign.py
-- [ ] T065 [US5] Add --key flag to `floe artifact verify` command in packages/floe-core/src/floe_core/cli/artifact/verify.py
+- [x] T060 [US5] Extend SigningClient with key-based signing support in packages/floe-core/src/floe_core/oci/signing.py
+- [x] T061 [US5] Implement private key file loading and KMS key reference support in packages/floe-core/src/floe_core/oci/signing.py
+- [x] T062 [US5] Extend VerificationClient with key-based verification (public key) in packages/floe-core/src/floe_core/oci/verification.py
+- [x] T063 [US5] Implement offline verification without Rekor in packages/floe-core/src/floe_core/oci/verification.py
+- [x] T064 [US5] Add --key flag to `floe artifact sign` command in packages/floe-core/src/floe_core/cli/artifact/sign.py
+- [x] T065 [US5] Add --key flag to `floe artifact verify` command in packages/floe-core/src/floe_core/cli/artifact/verify.py
 
 ### Unit Tests for User Story 5
 
-- [ ] T066 [P] [US5] Create unit tests for key-based signing with mock keys in packages/floe-core/tests/unit/oci/test_signing.py
-- [ ] T067 [P] [US5] Create unit tests for key-based verification in packages/floe-core/tests/unit/oci/test_verification.py
-- [ ] T068 [P] [US5] Create unit tests for offline verification (no Rekor) in packages/floe-core/tests/unit/oci/test_verification.py
+- [x] T066 [P] [US5] Create unit tests for key-based signing with mock keys in packages/floe-core/tests/unit/oci/test_signing.py
+- [x] T067 [P] [US5] Create unit tests for key-based verification in packages/floe-core/tests/unit/oci/test_verification.py
+- [x] T068 [P] [US5] Create unit tests for offline verification (no Rekor) in packages/floe-core/tests/unit/oci/test_verification.py
 
 **Checkpoint**: Key-based signing and offline verification functional
 
