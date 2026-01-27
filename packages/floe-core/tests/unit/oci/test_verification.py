@@ -1234,3 +1234,153 @@ class TestAuditLogFormat:
 
         with pytest.raises(pydantic.ValidationError):
             event.success = False  # type: ignore[misc]
+
+
+class TestVerificationBundleExport:
+    """Tests for offline verification bundle creation (FR-015).
+
+    Task: T086
+    Requirements: FR-015, 8B-FR-015
+    """
+
+    @pytest.fixture
+    def sample_signature_metadata(self) -> SignatureMetadata:
+        """Create sample SignatureMetadata with realistic Sigstore bundle."""
+        import base64
+        import json
+
+        bundle_dict = {
+            "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+            "verificationMaterial": {
+                "certificate": {"rawBytes": "LS0tLS1CRUdJTi..."},
+                "tlogEntries": [
+                    {
+                        "logIndex": "12345678",
+                        "logId": {"keyId": "abc123"},
+                        "kindVersion": {"kind": "hashedrekord", "version": "0.0.1"},
+                        "integratedTime": "1706345678",
+                        "inclusionPromise": {"signedEntryTimestamp": "abc..."},
+                    }
+                ],
+            },
+            "messageSignature": {
+                "messageDigest": {"algorithm": "SHA2_256", "digest": "abc123..."},
+                "signature": "MEUCIQDx...",
+            },
+        }
+        bundle_json = json.dumps(bundle_dict)
+        bundle_b64 = base64.b64encode(bundle_json.encode()).decode()
+
+        return SignatureMetadata(
+            bundle=bundle_b64,
+            mode="keyless",
+            issuer="https://token.actions.githubusercontent.com",
+            subject="repo:acme/floe:ref:refs/heads/main",
+            signed_at=datetime.now(timezone.utc),
+            certificate_fingerprint="abcd1234" * 8,
+            rekor_log_index=12345678,
+        )
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_export_bundle_creates_valid_bundle(
+        self, sample_signature_metadata: SignatureMetadata
+    ) -> None:
+        """export_verification_bundle creates valid VerificationBundle."""
+        from floe_core.oci.verification import export_verification_bundle
+        from floe_core.schemas.signing import VerificationBundle
+
+        bundle = export_verification_bundle(
+            artifact_digest="sha256:abc123def456",
+            metadata=sample_signature_metadata,
+        )
+
+        assert isinstance(bundle, VerificationBundle)
+        assert bundle.version == "1.0"
+        assert bundle.artifact_digest == "sha256:abc123def456"
+        assert bundle.sigstore_bundle is not None
+        assert "verificationMaterial" in bundle.sigstore_bundle
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_export_bundle_extracts_certificate_chain(
+        self, sample_signature_metadata: SignatureMetadata
+    ) -> None:
+        """export_verification_bundle extracts certificate from bundle."""
+        from floe_core.oci.verification import export_verification_bundle
+
+        bundle = export_verification_bundle(
+            artifact_digest="sha256:abc123def456",
+            metadata=sample_signature_metadata,
+        )
+
+        assert len(bundle.certificate_chain) == 1
+        assert bundle.certificate_chain[0] == "LS0tLS1CRUdJTi..."
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_export_bundle_extracts_rekor_entry(
+        self, sample_signature_metadata: SignatureMetadata
+    ) -> None:
+        """export_verification_bundle extracts Rekor entry from bundle."""
+        from floe_core.oci.verification import export_verification_bundle
+
+        bundle = export_verification_bundle(
+            artifact_digest="sha256:abc123def456",
+            metadata=sample_signature_metadata,
+        )
+
+        assert bundle.rekor_entry is not None
+        assert bundle.rekor_entry.get("logIndex") == "12345678"
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_export_bundle_sets_created_at(
+        self, sample_signature_metadata: SignatureMetadata
+    ) -> None:
+        """export_verification_bundle sets creation timestamp."""
+        from floe_core.oci.verification import export_verification_bundle
+
+        before = datetime.now(timezone.utc)
+        bundle = export_verification_bundle(
+            artifact_digest="sha256:abc123def456",
+            metadata=sample_signature_metadata,
+        )
+        after = datetime.now(timezone.utc)
+
+        assert before <= bundle.created_at <= after
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_verification_bundle_serializes_to_json(
+        self, sample_signature_metadata: SignatureMetadata
+    ) -> None:
+        """VerificationBundle can be serialized to JSON for export."""
+        import json
+
+        from floe_core.oci.verification import export_verification_bundle
+
+        bundle = export_verification_bundle(
+            artifact_digest="sha256:abc123def456",
+            metadata=sample_signature_metadata,
+        )
+
+        json_str = bundle.model_dump_json()
+        parsed = json.loads(json_str)
+
+        assert parsed["version"] == "1.0"
+        assert parsed["artifact_digest"] == "sha256:abc123def456"
+        assert "sigstore_bundle" in parsed
+        assert "certificate_chain" in parsed
+
+    @pytest.mark.requirement("8B-FR-015")
+    def test_verification_bundle_is_immutable(
+        self, sample_signature_metadata: SignatureMetadata
+    ) -> None:
+        """VerificationBundle should be frozen for integrity."""
+        import pydantic
+
+        from floe_core.oci.verification import export_verification_bundle
+
+        bundle = export_verification_bundle(
+            artifact_digest="sha256:abc123def456",
+            metadata=sample_signature_metadata,
+        )
+
+        with pytest.raises(pydantic.ValidationError):
+            bundle.artifact_digest = "sha256:tampered"  # type: ignore[misc]
