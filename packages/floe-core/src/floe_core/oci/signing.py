@@ -108,7 +108,13 @@ class SigningError(Exception):
 
 
 class OIDCTokenError(SigningError):
-    """Raised when OIDC token acquisition fails."""
+    """Raised when OIDC token acquisition fails.
+
+    Remediation:
+        - In CI/CD: Ensure OIDC is enabled (GitHub Actions: permissions.id-token: write)
+        - Locally: Run 'floe sign' to trigger interactive OAuth flow
+        - Check network connectivity to OIDC issuer
+    """
 
     def __init__(self, reason: str, issuer: str | None = None) -> None:
         self.reason = reason
@@ -116,6 +122,10 @@ class OIDCTokenError(SigningError):
         msg = f"Failed to acquire OIDC token: {reason}"
         if issuer:
             msg += f" (issuer: {issuer})"
+        msg += "\n\nRemediation:\n"
+        msg += "  - In CI/CD: Ensure OIDC is enabled (GitHub: permissions.id-token: write)\n"
+        msg += "  - Locally: 'floe sign' triggers interactive OAuth\n"
+        msg += "  - Check network connectivity to OIDC issuer"
         super().__init__(msg)
 
 
@@ -131,7 +141,13 @@ class CosignNotAvailableError(SigningError):
 
 
 class KeyLoadError(SigningError):
-    """Raised when private key cannot be loaded."""
+    """Raised when private key cannot be loaded.
+
+    Remediation:
+        - Verify key file exists and is readable
+        - For KMS: Check IAM permissions and key ARN
+        - For env var: Ensure FLOE_SIGNING_KEY_REF is set correctly
+    """
 
     def __init__(self, reason: str, key_ref: str | None = None) -> None:
         self.reason = reason
@@ -139,6 +155,10 @@ class KeyLoadError(SigningError):
         msg = f"Failed to load private key: {reason}"
         if key_ref:
             msg += f" (ref: {key_ref})"
+        msg += "\n\nRemediation:\n"
+        msg += "  - Verify key file exists and is readable\n"
+        msg += "  - For KMS: Check IAM permissions and key ARN\n"
+        msg += "  - For env var: Ensure the referenced variable is set"
         super().__init__(msg)
 
 

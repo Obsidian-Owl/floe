@@ -366,6 +366,11 @@ class SignatureVerificationError(OCIError):
         actual_signer: Actual signer identity found in signature.
         exit_code: CLI exit code (6).
 
+    Remediation:
+        - If unsigned: Run 'floe artifact sign <ref>' to sign the artifact
+        - If signer mismatch: Update trusted_issuers in verification config
+        - If expired: Re-sign the artifact with 'floe artifact sign --force'
+
     Example:
         >>> raise SignatureVerificationError(
         ...     "oci://harbor.example.com/floe:v1.0.0",
@@ -392,6 +397,19 @@ class SignatureVerificationError(OCIError):
         msg = f"Signature verification failed for {artifact_ref}: {reason}"
         if expected_signer and actual_signer:
             msg += f". Expected: {expected_signer}, Actual: {actual_signer}"
+
+        msg += "\n\nRemediation:\n"
+        if "unsigned" in reason.lower() or "no signature" in reason.lower():
+            msg += f"  - Sign the artifact: floe artifact sign {artifact_ref}\n"
+        elif "signer" in reason.lower() or "issuer" in reason.lower():
+            msg += "  - Update trusted_issuers in verification config to include actual signer\n"
+            msg += f"  - Or re-sign with authorized identity: floe artifact sign {artifact_ref}\n"
+        elif "expired" in reason.lower():
+            msg += f"  - Re-sign the artifact: floe artifact sign --force {artifact_ref}\n"
+        else:
+            msg += f"  - Re-sign the artifact: floe artifact sign {artifact_ref}\n"
+            msg += "  - Verify network connectivity to Rekor transparency log\n"
+
         super().__init__(msg)
 
 
