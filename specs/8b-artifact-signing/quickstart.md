@@ -1,9 +1,13 @@
 # Quickstart: Artifact Signing
 
+> **Note**: This document covers both the Python API (implemented in Epic 8B) and
+> CLI commands (to be implemented in future epics). Python API examples work now;
+> CLI commands show the planned interface.
+
 ## Prerequisites
 
-- floe CLI installed
-- cosign CLI >= 2.0.0 (`brew install cosign` or [install guide](https://docs.sigstore.dev/cosign/installation/))
+- floe-core package installed (`pip install floe-core`)
+- cosign CLI >= 2.0.0 (`brew install cosign` or [install guide](https://docs.sigstore.dev/cosign/installation/)) - required for key-based signing with KMS
 - For SBOM generation: syft CLI (`brew install syft`)
 - For keyless signing: Running in CI/CD with OIDC (GitHub Actions, GitLab CI)
 
@@ -51,7 +55,10 @@ artifacts:
       name: /etc/floe/cosign.pub
 ```
 
-## 2. Sign Artifacts
+## 2. Sign Artifacts (CLI - Planned)
+
+> **Note**: These CLI commands are planned for future implementation. See
+> "Python API" section below for currently available functionality.
 
 ### Push and Sign (One Step)
 
@@ -87,7 +94,89 @@ floe artifact sign \
   --key cosign.key
 ```
 
-## 3. Verify Artifacts
+## Python API (Available Now)
+
+### Signing with Python
+
+```python
+from floe_core.oci.signing import SigningClient, sign_artifact
+from floe_core.schemas.signing import SigningConfig
+
+# Keyless signing (in CI/CD with OIDC)
+config = SigningConfig(
+    mode="keyless",
+    oidc_issuer="https://token.actions.githubusercontent.com"
+)
+
+client = SigningClient(config)
+metadata = client.sign(
+    content=b"artifact content bytes",
+    artifact_ref="oci://harbor.example.com/floe-platform:v1.0.0"
+)
+
+print(f"Signed by: {metadata.subject}")
+print(f"Issuer: {metadata.issuer}")
+print(f"Rekor index: {metadata.rekor_log_index}")
+
+# Or use convenience function
+metadata = sign_artifact(
+    content=b"artifact content bytes",
+    artifact_ref="oci://harbor.example.com/floe-platform:v1.0.0",
+    config=config
+)
+```
+
+### Verification with Python
+
+```python
+from floe_core.oci.verification import VerificationClient
+from floe_core.schemas.signing import VerificationPolicy, TrustedIssuer
+
+policy = VerificationPolicy(
+    enabled=True,
+    enforcement="enforce",
+    trusted_issuers=[
+        TrustedIssuer(
+            issuer="https://token.actions.githubusercontent.com",
+            subject="repo:myorg/floe-platform:ref:refs/heads/main"
+        )
+    ]
+)
+
+client = VerificationClient(policy)
+result = client.verify(
+    content=b"artifact content bytes",
+    artifact_ref="oci://harbor.example.com/floe-platform:v1.0.0",
+    signature_metadata=metadata  # From signing or pulled from OCI annotations
+)
+
+if result.verified:
+    print(f"Verified! Signer: {result.signer_identity}")
+else:
+    print(f"Verification failed: {result.failure_reason}")
+```
+
+### Key-Based Signing
+
+```python
+from floe_core.schemas.secrets import SecretReference, SecretSource
+
+# Configure with key file reference
+config = SigningConfig(
+    mode="key-based",
+    private_key_ref=SecretReference(
+        source=SecretSource.ENV,
+        name="COSIGN_PRIVATE_KEY"  # Env var containing key path
+    )
+)
+
+client = SigningClient(config)
+metadata = client.sign(content, artifact_ref)
+```
+
+## 3. Verify Artifacts (CLI - Planned)
+
+> **Note**: These CLI commands are planned for future implementation.
 
 ### Automatic Verification on Pull
 
