@@ -46,7 +46,7 @@
 - [ ] T008 [P] Create QualityThresholds model (min_score, warn_score) in packages/floe-core/src/floe_core/schemas/quality_config.py
 - [ ] T009 [P] Create GateTier model (min_test_coverage, required_tests, min_score, overridable) in packages/floe-core/src/floe_core/schemas/quality_config.py
 - [ ] T010 Create QualityGates model (bronze, silver, gold tiers) with defaults in packages/floe-core/src/floe_core/schemas/quality_config.py
-- [ ] T011 Create QualityConfig model with provider, quality_gates, dimension_weights, calculation, thresholds in packages/floe-core/src/floe_core/schemas/quality_config.py
+- [ ] T011 Create QualityConfig model with provider, quality_gates, dimension_weights, calculation, thresholds, check_timeout_seconds (default 300s per FR-032), enabled in packages/floe-core/src/floe_core/schemas/quality_config.py
 
 ### Quality Check and Result Models
 
@@ -87,6 +87,7 @@
 - [ ] T031 [P] Create unit tests for QualityConfig, QualityGates, GateTier models in packages/floe-core/tests/unit/test_quality_config.py
 - [ ] T032 [P] Create unit tests for QualityCheck, QualitySuiteResult, QualityScore models in packages/floe-core/tests/unit/test_quality_score.py
 - [ ] T033 [P] Create unit tests for ValidationResult and GateResult models in packages/floe-core/tests/unit/test_quality_validation.py
+- [ ] T033a [P] Create unit test for empty table behavior (not_null passes with 0 records checked) per Edge Case 4 in packages/floe-core/tests/unit/test_quality_edge_cases.py
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -128,8 +129,9 @@
 ### Implementation for User Story 2
 
 - [ ] T042 [US2] Add quality_checks[] parsing to model schema in packages/floe-core/src/floe_core/schemas/floe_spec.py
-- [ ] T043 [US2] Implement dbt generic test mapping (not_null, unique, accepted_values, relationships) to QualityCheck format in packages/floe-core/src/floe_core/compiler/dbt_test_mapper.py
+- [ ] T043 [US2] Implement dbt generic test mapping (not_null, unique, accepted_values, relationships) to QualityCheck format, supporting FR-018 reference without duplication in packages/floe-core/src/floe_core/compiler/dbt_test_mapper.py
 - [ ] T044 [US2] Add custom expectation support (expect_column_values_to_be_between, etc.) in packages/floe-core/src/floe_core/compiler/dbt_test_mapper.py
+- [ ] T044a [US2] Implement check deduplication logic: when same check defined in both dbt schema.yml and floe.yaml, deduplicate by signature with dbt definition taking precedence (Edge Case 6) in packages/floe-core/src/floe_core/compiler/dbt_test_mapper.py
 - [ ] T045 [US2] Validate quality check column references at compile-time (FLOE-DQ105) in packages/floe-core/src/floe_core/validation/quality_validation.py
 - [ ] T046 [US2] Include quality checks in ResolvedModel during compilation in packages/floe-core/src/floe_core/compiler/quality_compiler.py
 
@@ -149,6 +151,7 @@
 - [ ] T048 [P] [US3] Create unit test for DBTExpectationsPlugin.run_checks() in plugins/floe-quality-dbt/tests/unit/test_plugin.py
 - [ ] T049 [P] [US3] Create unit test for FLOE-DQ102 error on check failures in plugins/floe-quality-gx/tests/unit/test_plugin.py
 - [ ] T050 [P] [US3] Create unit test for FLOE-DQ106 timeout handling in plugins/floe-quality-gx/tests/unit/test_plugin.py
+- [ ] T050a [P] [US3] Create unit test for fail_fast behavior (stops on first failure, returns partial results) in plugins/floe-quality-gx/tests/unit/test_plugin.py
 
 ### Implementation for User Story 3 - Great Expectations Plugin
 
@@ -171,8 +174,12 @@
 
 ### Shared Runtime Infrastructure
 
-- [ ] T064 [US3] Implement health_check() for both plugins returning HealthStatus in plugins/floe-quality-gx/src/floe_quality_gx/plugin.py and plugins/floe-quality-dbt/src/floe_quality_dbt/plugin.py
-- [ ] T065 [US3] Implement supports_dialect() for DuckDB, PostgreSQL, Snowflake in both plugins
+- [ ] T064 [US3] Implement health_check() returning HealthStatus (FR-009) in plugins/floe-quality-gx/src/floe_quality_gx/plugin.py
+- [ ] T064a [P] [US3] Implement health_check() returning HealthStatus (FR-009) in plugins/floe-quality-dbt/src/floe_quality_dbt/plugin.py
+- [ ] T064b [US3] Implement get_config_schema() returning plugin-specific Pydantic config model (FR-010) in plugins/floe-quality-gx/src/floe_quality_gx/plugin.py
+- [ ] T064c [P] [US3] Implement get_config_schema() returning plugin-specific Pydantic config model (FR-010) in plugins/floe-quality-dbt/src/floe_quality_dbt/plugin.py
+- [ ] T065 [US3] Implement supports_dialect() for DuckDB, PostgreSQL, Snowflake in plugins/floe-quality-gx/src/floe_quality_gx/plugin.py
+- [ ] T065a [P] [US3] Implement supports_dialect() for DuckDB, PostgreSQL, Snowflake in plugins/floe-quality-dbt/src/floe_quality_dbt/plugin.py
 
 **Checkpoint**: User Story 3 complete - quality checks execute at runtime
 
@@ -261,15 +268,17 @@
 
 ### Contract Tests
 
-- [ ] T095 Create contract test for QualityPlugin ABC compliance (discovery, metadata, health_check) in tests/contract/test_quality_plugin_contract.py
-- [ ] T096 [P] Create contract test for CompiledArtifacts v0.4.0 schema stability in tests/contract/test_compiled_artifacts_quality.py
-- [ ] T097 [P] Create contract test for floe-core → plugin quality config passing in tests/contract/test_quality_config_contract.py
+- [ ] T095 Create contract test for QualityPlugin ABC compliance (discovery, metadata, health_check) with @pytest.mark.requirement("FR-039") in tests/contract/test_quality_plugin_contract.py
+- [ ] T096 [P] Create contract test for CompiledArtifacts v0.4.0 schema stability with @pytest.mark.requirement("FR-023", "FR-024") in tests/contract/test_compiled_artifacts_quality.py
+- [ ] T097 [P] Create contract test for floe-core → plugin quality config passing with @pytest.mark.requirement("FR-011", "FR-026") in tests/contract/test_quality_config_contract.py
 
 ### Integration Tests
 
 - [ ] T098 Create integration test for GreatExpectationsPlugin with DuckDB in plugins/floe-quality-gx/tests/integration/test_gx_duckdb.py
 - [ ] T099 [P] Create integration test for DBTExpectationsPlugin with dbt-core in plugins/floe-quality-dbt/tests/integration/test_dbt_integration.py
 - [ ] T100 Create integration test for unified quality score (dbt + plugin checks) in tests/integration/test_unified_scoring.py
+- [ ] T100a Create integration test for job failure when quality score < min_score (FR-030) in tests/integration/test_quality_job_failure.py
+- [ ] T100b [P] Create performance test validating 100+ checks execute without degradation (SC-010, target <100ms score calculation) in tests/integration/test_quality_performance.py
 
 **Checkpoint**: All contract and integration tests passing
 

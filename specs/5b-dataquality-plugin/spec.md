@@ -113,6 +113,7 @@ As an Operations Team member, I want quality check failures to emit OpenLineage 
 - What happens when dbt tests and plugin quality checks are both defined? Both execute; dbt tests via DBTPlugin.test_models(), plugin checks via QualityPlugin.run_checks(). Results are aggregated into a unified quality score.
 - What happens when the same check is defined in both dbt and floe.yaml? Deduplicated by check signature; dbt definition takes precedence.
 - What happens when a Product tries to override a locked Enterprise setting? Compilation fails with FLOE-DQ107 listing the locked setting and which level locked it.
+- What happens when fail_fast is enabled on a QualitySuite? Execution stops on first check failure, remaining checks are skipped, and partial results are returned with clear indication of early termination.
 
 ## Requirements *(mandatory)*
 
@@ -212,7 +213,7 @@ As an Operations Team member, I want quality check failures to emit OpenLineage 
 
 - **SC-001**: Platform teams can configure a quality provider and quality gates in under 5 configuration lines.
 - **SC-002**: Data engineers can define quality checks for a model using the same syntax as dbt tests.
-- **SC-003**: Quality checks execute within 2x the time of equivalent dbt test execution.
+- **SC-003**: Quality checks execute within 2x the time of equivalent dbt test execution (baseline: single dbt generic test ~0.5-2s, so plugin check target <4s per check).
 - **SC-004**: Quality score calculation completes in under 100ms for up to 1000 individual check results.
 - **SC-005**: 100% of quality check failures result in OpenLineage FAIL events when lineage backend is configured.
 - **SC-006**: Plugin discovery and loading completes in under 2 seconds.
