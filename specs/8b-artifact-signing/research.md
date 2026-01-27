@@ -312,45 +312,80 @@ cosign attest --predicate sbom.spdx.json --type spdx <artifact-ref>
 
 ## OpenTelemetry Trace Specification (SC-007)
 
+This section documents all OpenTelemetry spans emitted by the artifact signing and verification implementation.
+
 ### Span Naming Convention
 
-All spans follow the pattern: `floe.oci.{operation}`
+All spans follow the pattern: `floe.oci.{operation}[.{sub-operation}]`
 
-| Operation | Span Name | Description |
-|-----------|-----------|-------------|
-| Signing | `floe.oci.sign` | Root span for signing operation |
-| OIDC token | `floe.oci.sign.oidc_token` | OIDC token acquisition |
-| Fulcio cert | `floe.oci.sign.fulcio` | Certificate issuance |
-| Rekor log | `floe.oci.sign.rekor` | Transparency log entry |
-| Verification | `floe.oci.verify` | Root span for verification |
-| Policy check | `floe.oci.verify.policy` | Policy evaluation |
-| Bundle parse | `floe.oci.verify.bundle` | Sigstore bundle parsing |
+### Signing Spans
+
+| Span Name | Location | Description |
+|-----------|----------|-------------|
+| `floe.oci.sign` | signing.py:166 | Root span for signing operation |
+| `floe.oci.sign.oidc_token` | signing.py:203 | OIDC token acquisition (keyless) |
+| `floe.oci.sign.fulcio` | signing.py:210 | Certificate issuance from Fulcio CA |
+| `floe.oci.sign.rekor` | signing.py:212 | Transparency log entry creation |
+| `floe.oci.sign.key_based` | signing.py:240 | Key-based signing operation |
+
+### Verification Spans
+
+| Span Name | Location | Description |
+|-----------|----------|-------------|
+| `floe.oci.verify` | verification.py:204 | Root span for verification operation |
+| `floe.oci.verify.bundle` | verification.py:303 | Sigstore bundle parsing |
+| `floe.oci.verify.policy` | verification.py:320 | Policy evaluation against trusted issuers |
+| `floe.oci.verify.rekor` | verification.py:339 | Online verification via Rekor transparency log |
+| `floe.oci.verify.offline` | verification.py:339 | Offline verification using bundle materials |
+| `floe.oci.verify.key_based` | verification.py:421 | Key-based signature verification |
+
+### Attestation Spans
+
+| Span Name | Location | Description |
+|-----------|----------|-------------|
+| `floe.oci.sbom.generate` | attestation.py:114 | SBOM generation via syft |
+| `floe.oci.attestation.attach` | attestation.py:188 | Attach attestation to artifact |
+| `floe.oci.attestation.retrieve` | attestation.py:264 | Retrieve attestations from artifact |
 
 ### Span Attributes
 
-**Common attributes (all spans):**
+**Signing attributes (on `floe.oci.sign`):**
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `floe.artifact.ref` | string | Full OCI artifact reference |
-| `floe.artifact.digest` | string | SHA256 digest |
 | `floe.signing.mode` | string | "keyless" or "key-based" |
+| `floe.signing.issuer` | string | OIDC issuer URL (keyless only) |
+| `floe.signing.subject` | string | Certificate subject identity |
+| `floe.signing.rekor_index` | int | Rekor transparency log index |
+| `floe.signing.key_ref` | string | Key reference (key-based only, truncated to 50 chars) |
 
-**Signing-specific:**
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `floe.signing.issuer` | string | OIDC issuer URL |
-| `floe.signing.subject` | string | Certificate subject |
-| `floe.signing.rekor_index` | int | Rekor log index |
-
-**Verification-specific:**
+**Verification attributes (on `floe.oci.verify`):**
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `floe.verification.enforcement` | string | "enforce", "warn", "off" |
-| `floe.verification.status` | string | SignatureStatus value |
-| `floe.verification.environment` | string | Environment name if set |
+| `floe.artifact.ref` | string | Full OCI artifact reference |
+| `floe.verification.enforcement` | string | "enforce", "warn", or "off" |
+| `floe.verification.status` | string | SignatureStatus enum value |
+| `floe.verification.environment` | string | Environment name (if set) |
+| `floe.verification.offline` | bool | True if verifying without Rekor |
+| `floe.verification.grace_period` | bool | True if within cert rotation grace period |
+| `floe.verification.cert_expired_at` | string | ISO timestamp when cert expired (if applicable) |
+| `floe.verification.require_sbom` | bool | True if SBOM verification required |
+| `floe.verification.sbom_present` | bool | True if SBOM attestation found |
+| `floe.verification.key_ref` | string | Public key reference (key-based only, truncated) |
+
+**Attestation attributes:**
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `floe.artifact.ref` | string | Full OCI artifact reference |
+| `floe.sbom.project_path` | string | Path to project for SBOM generation |
+| `floe.sbom.format` | string | SBOM format (e.g., "spdx-json") |
+| `floe.sbom.package_count` | int | Number of packages in generated SBOM |
+| `floe.attestation.predicate_type` | string | In-toto predicate type |
+| `floe.attestation.keyless` | bool | True if attestation signed keyless |
+| `floe.attestation.count` | int | Number of attestations retrieved |
 
 ### Error Recording
 
@@ -359,17 +394,38 @@ Errors are recorded with:
 - `otel.status_description = <error message>`
 - Exception recorded via `span.record_exception()`
 
-### Example Trace
+### Example Traces
 
+**Keyless signing trace:**
 ```
 floe.oci.sign (3.2s)
 ├── floe.oci.sign.oidc_token (0.5s)
 ├── floe.oci.sign.fulcio (1.2s)
-├── floe.oci.sign.rekor (1.0s)
-└── floe.oci.client.push_annotations (0.5s)
+└── floe.oci.sign.rekor (1.0s)
+```
 
+**Verification trace (online):**
+```
 floe.oci.verify (1.1s)
 ├── floe.oci.verify.bundle (0.1s)
 ├── floe.oci.verify.policy (0.2s)
 └── floe.oci.verify.rekor (0.8s)
+```
+
+**Verification trace (offline with grace period):**
+```
+floe.oci.verify (0.4s)
+├── floe.oci.verify.bundle (0.1s)
+├── floe.oci.verify.policy (0.2s)
+└── floe.oci.verify.offline (0.1s)
+    └── [attributes: grace_period=true, cert_expired_at=2026-01-20T...]
+```
+
+**SBOM attestation trace:**
+```
+floe.oci.sbom.generate (2.5s)
+    └── [attributes: format=spdx-json, package_count=142]
+
+floe.oci.attestation.attach (1.8s)
+    └── [attributes: predicate_type=https://spdx.dev/Document, keyless=true]
 ```
