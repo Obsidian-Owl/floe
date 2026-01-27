@@ -103,13 +103,9 @@ fi
 echo "Running integration tests..."
 
 # Run integration tests
-# Use --import-mode=importlib to avoid conftest.py module name collisions
-# when running tests from multiple package directories (e.g., tests/conftest.py
-# vs plugins/*/tests/conftest.py would both become 'tests.conftest')
 # shellcheck disable=SC2086
 uv run pytest \
     ${INTEGRATION_TEST_PATHS} \
-    --import-mode=importlib \
     -v \
     --tb=short \
     -x \
