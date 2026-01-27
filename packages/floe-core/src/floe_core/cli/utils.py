@@ -53,10 +53,13 @@ class ExitCode(IntEnum):
     VALIDATION_ERROR = 5
     """Input validation failed."""
 
-    COMPILATION_ERROR = 6
+    SIGNATURE_ERROR = 6
+    """Signature verification failed (Epic 8B)."""
+
+    COMPILATION_ERROR = 7
     """Compilation or processing failed."""
 
-    NETWORK_ERROR = 7
+    NETWORK_ERROR = 8
     """Network or remote service error."""
 
 

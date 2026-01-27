@@ -17,6 +17,7 @@ import click
 
 from floe_core.cli.artifact.push import push_command
 from floe_core.cli.artifact.sign import sign_command
+from floe_core.cli.artifact.verify import verify_command
 
 
 @click.group(
@@ -35,6 +36,7 @@ def artifact() -> None:
 # Register subcommands
 artifact.add_command(push_command)
 artifact.add_command(sign_command)
+artifact.add_command(verify_command)
 
 
 __all__: list[str] = ["artifact"]

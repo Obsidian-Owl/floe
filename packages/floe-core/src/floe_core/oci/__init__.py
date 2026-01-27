@@ -146,6 +146,14 @@ from floe_core.oci.signing import (
     sign_artifact,
 )
 
+# Verification (Epic 8B)
+from floe_core.oci.verification import (
+    PolicyViolationError,
+    VerificationClient,
+    VerificationError,
+    verify_artifact,
+)
+
 __all__: list[str] = [
     # Error hierarchy
     "OCIError",
@@ -219,4 +227,9 @@ __all__: list[str] = [
     "ANNOTATION_SIGNED_AT",
     "ANNOTATION_REKOR_INDEX",
     "ANNOTATION_CERT_FINGERPRINT",
+    # Verification (Epic 8B)
+    "VerificationClient",
+    "VerificationError",
+    "PolicyViolationError",
+    "verify_artifact",
 ]

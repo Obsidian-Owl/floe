@@ -68,6 +68,7 @@ from floe_core.oci.errors import (
     ImmutabilityViolationError,
     OCIError,
     RegistryUnavailableError,
+    SignatureVerificationError,
 )
 from floe_core.oci.layers import (
     MUTABLE_TAG_PATTERNS,
@@ -97,7 +98,7 @@ from floe_core.schemas.oci import (
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-    from floe_core.schemas.signing import SignatureMetadata, SigningConfig
+    from floe_core.schemas.signing import SignatureMetadata, SigningConfig, VerificationPolicy
 
 logger = structlog.get_logger(__name__)
 
@@ -721,6 +722,8 @@ class OCIClient:
             ArtifactNotFoundError: If tag does not exist.
             AuthenticationError: If authentication fails.
             RegistryUnavailableError: If registry is unavailable after retries.
+            SignatureVerificationError: If verification policy is enabled with
+                enforcement=enforce and signature verification fails.
 
         Example:
             >>> artifacts = client.pull(tag="v1.0.0")
@@ -748,6 +751,7 @@ class OCIClient:
                 CircuitBreakerOpenError,
                 AuthenticationError,
                 RegistryUnavailableError,
+                SignatureVerificationError,
             ):
                 self._record_operation_metrics("pull", start_time, success=False)
                 raise
@@ -763,7 +767,7 @@ class OCIClient:
         log: Any,
         start_time: float,
     ) -> CompiledArtifacts:
-        """Internal pull logic with cache check, fetch, and deserialization.
+        """Internal pull logic with cache check, fetch, verification, and deserialization.
 
         Args:
             tag: Tag to pull.
@@ -773,6 +777,10 @@ class OCIClient:
 
         Returns:
             Deserialized CompiledArtifacts.
+
+        Raises:
+            SignatureVerificationError: If verification is enabled with enforcement=enforce
+                and signature verification fails.
         """
 
         # Check cache first
@@ -784,6 +792,9 @@ class OCIClient:
 
         # Fetch from registry
         content, digest = self._fetch_from_registry(tag)
+
+        # Verify signature BEFORE deserialization (FR-009, FR-010)
+        self._verify_signature_if_enabled(content, digest, tag, log)
 
         # Deserialize
         artifacts = self._deserialize_artifacts(content)
@@ -861,6 +872,65 @@ class OCIClient:
         if "manifest unknown" in error_str or "not found" in error_str:
             raise ArtifactNotFoundError(tag=tag, registry=self._config.uri) from error
         raise error
+
+    def _verify_signature_if_enabled(
+        self,
+        content: bytes,
+        digest: str,
+        tag: str,
+        log: Any,
+    ) -> None:
+        """Verify artifact signature if verification policy is enabled.
+
+        This method is called AFTER fetch but BEFORE deserialization to ensure
+        untrusted artifacts are never processed (security requirement FR-009).
+
+        Args:
+            content: Raw artifact bytes to verify.
+            digest: Content SHA256 digest.
+            tag: Tag being pulled (for error messages).
+            log: Bound logger.
+
+        Raises:
+            SignatureVerificationError: If enforcement=enforce and verification fails.
+        """
+        policy = self._config.verification
+        if policy is None or not policy.enabled or policy.enforcement == "off":
+            return
+
+        from floe_core.oci.verification import VerificationClient
+        from floe_core.schemas.signing import SignatureMetadata
+
+        artifact_ref = f"{self._config.uri}:{tag}"
+        verification_client = VerificationClient(policy)
+
+        try:
+            manifest_data = self._fetch_manifest_data(tag)
+            annotations = manifest_data.get("annotations", {})
+        except Exception as e:
+            log.warning("verification_skip_manifest_fetch_failed", error=str(e))
+            if policy.enforcement == "enforce":
+                raise SignatureVerificationError(
+                    artifact_ref=artifact_ref,
+                    reason=f"Failed to fetch manifest for verification: {e}",
+                ) from e
+            return
+
+        signature_metadata = SignatureMetadata.from_annotations(annotations)
+
+        result = verification_client.verify(
+            content=content,
+            metadata=signature_metadata,
+            artifact_ref=artifact_ref,
+            artifact_digest=digest,
+        )
+
+        log.info(
+            "verification_result",
+            status=result.status,
+            signer=result.signer_identity,
+            enforcement=policy.enforcement,
+        )
 
     def _deserialize_artifacts(self, content: bytes) -> CompiledArtifacts:
         """Deserialize content to CompiledArtifacts.
