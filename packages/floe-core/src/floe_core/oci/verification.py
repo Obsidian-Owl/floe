@@ -366,6 +366,30 @@ class VerificationClient:
                 )
 
             except Exception as e:
+                # FR-012: Check if failure is due to expired cert within grace period
+                if self._is_certificate_expired_error(e):
+                    cert_expiry = self._get_certificate_expiration(bundle)
+                    if cert_expiry and self.policy.is_within_grace_period(cert_expiry):
+                        logger.warning(
+                            "Certificate expired but within grace period: %s (expires: %s)",
+                            artifact_ref,
+                            cert_expiry.isoformat(),
+                        )
+                        span.set_attribute("floe.verification.grace_period", True)
+                        span.set_attribute(
+                            "floe.verification.cert_expired_at", cert_expiry.isoformat()
+                        )
+                        rekor_verified = self._check_rekor_entry(bundle)
+                        return VerificationResult(
+                            status="valid",
+                            signer_identity=metadata.subject,
+                            issuer=metadata.issuer,
+                            verified_at=datetime.now(timezone.utc),
+                            rekor_verified=rekor_verified,
+                            certificate_expired_at=cert_expiry,
+                            within_grace_period=True,
+                        )
+
                 logger.error("Signature verification failed: %s", e)
                 return VerificationResult(
                     status="invalid",
@@ -591,6 +615,45 @@ class VerificationClient:
             return len(tlog_entries) > 0
         except Exception:
             return False
+
+    def _get_certificate_expiration(self, bundle: Bundle) -> datetime | None:
+        """Extract certificate expiration time from Sigstore bundle.
+
+        Used for grace period calculations during certificate rotation (FR-012).
+
+        Args:
+            bundle: Sigstore bundle containing signing certificate
+
+        Returns:
+            Certificate not_valid_after timestamp, or None if cannot be extracted
+        """
+        try:
+            # sigstore.models.Bundle exposes signing_certificate property
+            cert = bundle.signing_certificate
+            if cert is not None:
+                return cert.not_valid_after_utc
+        except Exception as e:
+            logger.debug("Could not extract certificate expiration: %s", e)
+        return None
+
+    def _is_certificate_expired_error(self, error: Exception) -> bool:
+        """Check if verification error is due to certificate expiration.
+
+        Args:
+            error: Exception from verification
+
+        Returns:
+            True if error indicates certificate expiration
+        """
+        error_msg = str(error).lower()
+        expiration_indicators = [
+            "expired",
+            "not valid after",
+            "certificate validity",
+            "cert validity",
+            "invalid signing cert",
+        ]
+        return any(indicator in error_msg for indicator in expiration_indicators)
 
     def _verify_sbom_present(
         self,

@@ -350,6 +350,12 @@ class VerificationResult(BaseModel):
         default_factory=list, description="Certificate chain (PEM)"
     )
     failure_reason: str | None = Field(default=None, description="Reason if verification failed")
+    certificate_expired_at: datetime | None = Field(
+        default=None, description="Certificate expiration time (FR-012 grace period)"
+    )
+    within_grace_period: bool = Field(
+        default=False, description="True if expired cert accepted via grace period (FR-012)"
+    )
 
     @property
     def is_valid(self) -> bool:
