@@ -25,12 +25,16 @@ See Also:
 from __future__ import annotations
 
 import base64
+import errno
+import fcntl
 import hashlib
 import json
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Iterator
 
 from opentelemetry import trace
 
+from floe_core.oci.errors import ConcurrentSigningError
 from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 
 if TYPE_CHECKING:
@@ -134,6 +139,79 @@ def check_cosign_available() -> bool:
     return shutil.which("cosign") is not None
 
 
+# Default lock timeout in seconds (configurable via FLOE_SIGNING_LOCK_TIMEOUT)
+DEFAULT_LOCK_TIMEOUT = 30.0
+
+# Lock retry interval in seconds
+LOCK_RETRY_INTERVAL = 0.1
+
+
+def _get_lock_dir() -> Path:
+    """Get the directory for signing lock files."""
+    lock_dir = Path(tempfile.gettempdir()) / "floe" / "signing-locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    return lock_dir
+
+
+def _artifact_lock_path(artifact_ref: str) -> Path:
+    """Generate a unique lock file path for an artifact reference."""
+    ref_hash = hashlib.sha256(artifact_ref.encode()).hexdigest()[:16]
+    return _get_lock_dir() / f"signing-{ref_hash}.lock"
+
+
+@contextmanager
+def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Iterator[None]:
+    """Context manager for serializing concurrent signing operations.
+
+    Uses file-based locking to ensure only one process can sign a given
+    artifact at a time. This prevents race conditions when updating
+    OCI manifest annotations.
+
+    Args:
+        artifact_ref: The artifact reference being signed
+        timeout_seconds: How long to wait for the lock (default: 30s)
+
+    Yields:
+        None when lock is acquired
+
+    Raises:
+        ConcurrentSigningError: If lock cannot be acquired within timeout
+    """
+    if timeout_seconds is None:
+        timeout_seconds = float(os.environ.get("FLOE_SIGNING_LOCK_TIMEOUT", DEFAULT_LOCK_TIMEOUT))
+
+    lock_path = _artifact_lock_path(artifact_ref)
+    lock_path.touch(exist_ok=True)
+
+    start_time = time.monotonic()
+    lock_fd = os.open(str(lock_path), os.O_RDWR)
+
+    try:
+        while True:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                logger.debug("Acquired signing lock for %s at %s", artifact_ref, lock_path)
+                break
+            except OSError as e:
+                if e.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    raise
+
+                elapsed = time.monotonic() - start_time
+                if elapsed >= timeout_seconds:
+                    os.close(lock_fd)
+                    raise ConcurrentSigningError(artifact_ref, timeout_seconds)
+
+                time.sleep(LOCK_RETRY_INTERVAL)
+
+        yield
+
+    finally:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
+
+
 class SigningClient:
     """Client for signing artifacts using Sigstore.
 
@@ -164,12 +242,22 @@ class SigningClient:
         self._identity_token: IdentityToken | None = None
 
     @_with_span("floe.oci.sign")
-    def sign(self, content: bytes, artifact_ref: str) -> SignatureMetadata:
+    def sign(
+        self,
+        content: bytes,
+        artifact_ref: str,
+        lock_timeout: float | None = None,
+    ) -> SignatureMetadata:
         """Sign artifact content and return metadata.
+
+        Signing operations are serialized per-artifact using file-based locking
+        to prevent race conditions when multiple processes attempt to sign the
+        same artifact concurrently.
 
         Args:
             content: Raw artifact bytes to sign
             artifact_ref: Full OCI artifact reference (for logging/tracing)
+            lock_timeout: Optional override for lock timeout (default: 30s)
 
         Returns:
             SignatureMetadata containing the Sigstore bundle and metadata
@@ -177,15 +265,17 @@ class SigningClient:
         Raises:
             SigningError: If signing fails
             OIDCTokenError: If OIDC token cannot be acquired (keyless mode)
+            ConcurrentSigningError: If lock cannot be acquired within timeout
         """
         span = trace.get_current_span()
         span.set_attribute("floe.artifact.ref", artifact_ref)
         span.set_attribute("floe.signing.mode", self.config.mode)
 
-        if self.config.mode == "keyless":
-            return self._sign_keyless(content, artifact_ref)
-        else:
-            return self._sign_key_based(content, artifact_ref)
+        with signing_lock(artifact_ref, lock_timeout):
+            if self.config.mode == "keyless":
+                return self._sign_keyless(content, artifact_ref)
+            else:
+                return self._sign_key_based(content, artifact_ref)
 
     def _sign_keyless(self, content: bytes, artifact_ref: str) -> SignatureMetadata:
         """Sign using keyless (OIDC) mode with sigstore-python.

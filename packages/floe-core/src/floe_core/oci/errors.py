@@ -12,7 +12,8 @@ Exception Hierarchy:
     ├── RegistryUnavailableError   # Registry not reachable
     ├── DigestMismatchError        # Content digest verification failed
     ├── CacheError                 # Local cache operation failed
-    └── SignatureVerificationError # Artifact signature verification failed
+    ├── SignatureVerificationError # Artifact signature verification failed
+    └── ConcurrentSigningError     # Another process is signing the artifact
 
 Exit Codes (per spec):
     0 - Success
@@ -22,6 +23,7 @@ Exit Codes (per spec):
     4 - Immutability violation (ImmutabilityViolationError)
     5 - Network/connectivity error (RegistryUnavailableError, CircuitBreakerOpenError)
     6 - Signature verification failed (SignatureVerificationError)
+    7 - Concurrent signing lock failed (ConcurrentSigningError)
 
 Example:
     >>> from floe_core.oci.errors import ArtifactNotFoundError
@@ -390,4 +392,41 @@ class SignatureVerificationError(OCIError):
         msg = f"Signature verification failed for {artifact_ref}: {reason}"
         if expected_signer and actual_signer:
             msg += f". Expected: {expected_signer}, Actual: {actual_signer}"
+        super().__init__(msg)
+
+
+class ConcurrentSigningError(OCIError):
+    """Raised when concurrent signing lock cannot be acquired.
+
+    This error indicates that another process is currently signing the same
+    artifact. Signing operations are serialized per-artifact to prevent race
+    conditions when updating OCI annotations.
+
+    Attributes:
+        artifact_ref: The artifact reference that is locked.
+        timeout_seconds: How long we waited before giving up.
+        exit_code: CLI exit code (7).
+
+    Remediation:
+        Wait for the other signing process to complete, or increase the
+        lock timeout via FLOE_SIGNING_LOCK_TIMEOUT environment variable.
+
+    Example:
+        >>> raise ConcurrentSigningError(
+        ...     "oci://harbor.example.com/floe:v1.0.0",
+        ...     timeout_seconds=30.0
+        ... )
+    """
+
+    exit_code: int = 7
+
+    def __init__(self, artifact_ref: str, timeout_seconds: float) -> None:
+        self.artifact_ref = artifact_ref
+        self.timeout_seconds = timeout_seconds
+
+        msg = (
+            f"Could not acquire signing lock for {artifact_ref} "
+            f"(timeout: {timeout_seconds}s). Another process may be signing this artifact. "
+            f"Retry later or increase FLOE_SIGNING_LOCK_TIMEOUT."
+        )
         super().__init__(msg)
