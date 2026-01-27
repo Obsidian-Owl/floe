@@ -162,6 +162,7 @@ from floe_core.oci.verification import (
     PolicyViolationError,
     VerificationClient,
     VerificationError,
+    load_verification_policy_from_manifest,
     verify_artifact,
 )
 
@@ -250,6 +251,7 @@ __all__: list[str] = [
     "VerificationClient",
     "VerificationError",
     "PolicyViolationError",
+    "load_verification_policy_from_manifest",
     "verify_artifact",
     # Attestation (Epic 8B)
     "IN_TOTO_STATEMENT_TYPE",
