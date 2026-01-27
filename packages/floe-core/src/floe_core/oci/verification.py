@@ -40,7 +40,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from opentelemetry import trace
 
@@ -135,6 +135,13 @@ class VerificationClient:
         return self.policy.enforcement
 
     @property
+    def require_sbom(self) -> bool:
+        """Get effective SBOM requirement for current environment."""
+        if self.environment:
+            return self.policy.get_require_sbom_for_env(self.environment)
+        return self.policy.require_sbom
+
+    @property
     def is_enabled(self) -> bool:
         """Check if verification is enabled."""
         return self.policy.enabled and self.enforcement != "off"
@@ -174,6 +181,11 @@ class VerificationClient:
             try:
                 result = self._verify_signature(content, metadata, artifact_ref)
                 span.set_attribute("floe.verification.status", result.status)
+
+                if result.is_valid and self.require_sbom:
+                    sbom_result = self._verify_sbom_present(artifact_ref, span)
+                    if sbom_result is not None:
+                        result = sbom_result
 
                 # Log audit event
                 self._log_audit_event(
@@ -352,6 +364,50 @@ class VerificationClient:
             return len(tlog_entries) > 0
         except Exception:
             return False
+
+    def _verify_sbom_present(
+        self,
+        artifact_ref: str,
+        span: Any,
+    ) -> VerificationResult | None:
+        """Verify that artifact has SBOM attestation if required.
+
+        Args:
+            artifact_ref: Artifact reference to check
+            span: OTel span for tracing
+
+        Returns:
+            VerificationResult with failure if SBOM missing, None if SBOM present
+        """
+        from floe_core.oci.attestation import retrieve_sbom
+
+        span.set_attribute("floe.verification.require_sbom", True)
+
+        try:
+            sbom = retrieve_sbom(artifact_ref)
+            if sbom is None:
+                span.set_attribute("floe.verification.sbom_present", False)
+                logger.warning(
+                    "SBOM attestation required but not found: %s",
+                    artifact_ref,
+                )
+                return VerificationResult(
+                    status="invalid",
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason="SBOM attestation required but not found",
+                )
+
+            span.set_attribute("floe.verification.sbom_present", True)
+            logger.debug("SBOM attestation verified: %s", artifact_ref)
+            return None
+
+        except Exception as e:
+            logger.error("Failed to retrieve SBOM attestation: %s", e)
+            return VerificationResult(
+                status="invalid",
+                verified_at=datetime.now(timezone.utc),
+                failure_reason=f"Failed to verify SBOM attestation: {e}",
+            )
 
     def _handle_unsigned(
         self,

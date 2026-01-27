@@ -445,3 +445,149 @@ class TestEnvironmentPolicyOverride:
 
         assert dev_client.enforcement == "off"
         assert prod_client.enforcement == "enforce"
+
+
+class TestRequireSBOMEnforcement:
+    """Tests for require_sbom enforcement during verification (T058)."""
+
+    def test_require_sbom_property_default(self, github_actions_issuer: TrustedIssuer) -> None:
+        """Default require_sbom is False."""
+        policy = VerificationPolicy(
+            enabled=True,
+            trusted_issuers=[github_actions_issuer],
+        )
+        client = VerificationClient(policy)
+        assert client.require_sbom is False
+
+    def test_require_sbom_property_enabled(self, github_actions_issuer: TrustedIssuer) -> None:
+        """require_sbom property returns policy value."""
+        policy = VerificationPolicy(
+            enabled=True,
+            require_sbom=True,
+            trusted_issuers=[github_actions_issuer],
+        )
+        client = VerificationClient(policy)
+        assert client.require_sbom is True
+
+    def test_require_sbom_environment_override(self, github_actions_issuer: TrustedIssuer) -> None:
+        """Environment-specific require_sbom overrides default."""
+        from floe_core.schemas.signing import EnvironmentPolicy
+
+        policy = VerificationPolicy(
+            enabled=True,
+            require_sbom=False,
+            trusted_issuers=[github_actions_issuer],
+            environments={
+                "prod": EnvironmentPolicy(enforcement="enforce", require_sbom=True),
+                "dev": EnvironmentPolicy(enforcement="warn", require_sbom=False),
+            },
+        )
+
+        prod_client = VerificationClient(policy, environment="prod")
+        dev_client = VerificationClient(policy, environment="dev")
+        staging_client = VerificationClient(policy, environment="staging")
+
+        assert prod_client.require_sbom is True
+        assert dev_client.require_sbom is False
+        assert staging_client.require_sbom is False
+
+    @patch("floe_core.oci.verification.VerificationClient._verify_sbom_present")
+    def test_sbom_verification_called_when_required(
+        self,
+        mock_verify_sbom: MagicMock,
+        github_actions_issuer: TrustedIssuer,
+    ) -> None:
+        """_verify_sbom_present is called when require_sbom=True and signature valid."""
+        mock_verify_sbom.return_value = None
+
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="warn",
+            require_sbom=True,
+            trusted_issuers=[github_actions_issuer],
+        )
+        client = VerificationClient(policy)
+
+        with patch.object(client, "_verify_signature") as mock_sig:
+            mock_sig.return_value = VerificationResult(
+                status="valid",
+                signer_identity="test@example.com",
+                verified_at=datetime.now(timezone.utc),
+            )
+            client.verify(
+                content=b"test",
+                metadata=MagicMock(),
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+        mock_verify_sbom.assert_called_once()
+
+    @patch("floe_core.oci.verification.VerificationClient._verify_sbom_present")
+    def test_sbom_verification_skipped_when_not_required(
+        self,
+        mock_verify_sbom: MagicMock,
+        github_actions_issuer: TrustedIssuer,
+    ) -> None:
+        """_verify_sbom_present is NOT called when require_sbom=False."""
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="warn",
+            require_sbom=False,
+            trusted_issuers=[github_actions_issuer],
+        )
+        client = VerificationClient(policy)
+
+        with patch.object(client, "_verify_signature") as mock_sig:
+            mock_sig.return_value = VerificationResult(
+                status="valid",
+                signer_identity="test@example.com",
+                verified_at=datetime.now(timezone.utc),
+            )
+            client.verify(
+                content=b"test",
+                metadata=MagicMock(),
+                artifact_ref="oci://registry/repo:v1.0.0",
+            )
+
+        mock_verify_sbom.assert_not_called()
+
+    @patch("floe_core.oci.attestation.retrieve_sbom")
+    def test_sbom_missing_returns_invalid_result(
+        self, mock_retrieve: MagicMock, github_actions_issuer: TrustedIssuer
+    ) -> None:
+        """Missing SBOM returns invalid result when required."""
+        mock_retrieve.return_value = None
+
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement="warn",
+            require_sbom=True,
+            trusted_issuers=[github_actions_issuer],
+        )
+        client = VerificationClient(policy)
+
+        mock_span = MagicMock()
+        result = client._verify_sbom_present("oci://registry/repo:v1.0.0", mock_span)
+
+        assert result is not None
+        assert result.status == "invalid"
+        assert "SBOM" in (result.failure_reason or "")
+
+    @patch("floe_core.oci.attestation.retrieve_sbom")
+    def test_sbom_present_returns_none(
+        self, mock_retrieve: MagicMock, github_actions_issuer: TrustedIssuer
+    ) -> None:
+        """Present SBOM returns None (no failure)."""
+        mock_retrieve.return_value = {"spdxVersion": "SPDX-2.3"}
+
+        policy = VerificationPolicy(
+            enabled=True,
+            require_sbom=True,
+            trusted_issuers=[github_actions_issuer],
+        )
+        client = VerificationClient(policy)
+
+        mock_span = MagicMock()
+        result = client._verify_sbom_present("oci://registry/repo:v1.0.0", mock_span)
+
+        assert result is None

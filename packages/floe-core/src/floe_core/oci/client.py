@@ -133,6 +133,7 @@ class OCIClient:
         retry_policy: RetryPolicy | None = None,
         metrics: OCIMetrics | None = None,
         secrets_plugin: SecretsPlugin | None = None,
+        environment: str | None = None,
     ) -> None:
         """Initialize OCIClient with dependency injection.
 
@@ -150,9 +151,13 @@ class OCIClient:
                 If None, uses module-level singleton.
             secrets_plugin: Optional SecretsPlugin for credential resolution.
                 Required if auth_provider is None and auth type is basic/token.
+            environment: Optional environment name for policy enforcement.
+                Used to look up environment-specific verification policies.
+                Can be overridden per-operation (e.g., pull(environment=...)).
         """
         self._config = registry_config
         self._secrets_plugin = secrets_plugin
+        self._environment = environment
 
         # Dependency injection with lazy defaults
         self._auth_provider = auth_provider
@@ -232,6 +237,11 @@ class OCIClient:
         if self._metrics is None:
             self._metrics = get_oci_metrics()
         return self._metrics
+
+    @property
+    def environment(self) -> str | None:
+        """Get the configured environment for policy enforcement."""
+        return self._environment
 
     @property
     def pull_operations(self) -> PullOperations:
@@ -704,6 +714,7 @@ class OCIClient:
         tag: str,
         *,
         verify_digest: bool = True,
+        environment: str | None = None,
     ) -> CompiledArtifacts:
         """Pull CompiledArtifacts from the registry.
 
@@ -714,6 +725,10 @@ class OCIClient:
             tag: Tag to pull (e.g., "v1.0.0", "latest-dev").
             verify_digest: Whether to verify digest after download (reserved for
                 future use; currently always verifies via manifest comparison).
+            environment: Optional environment name for policy enforcement.
+                Overrides the client's default environment. Used to look up
+                environment-specific verification policies (e.g., "production"
+                may enforce stricter signature requirements than "development").
 
         Returns:
             Deserialized CompiledArtifacts.
@@ -743,9 +758,11 @@ class OCIClient:
             "oci.operation": "pull",
         }
 
+        env = environment or self._environment
+
         with self.metrics.create_span(OCIMetrics.SPAN_PULL, span_attributes) as span:
             try:
-                return self._pull_internal(tag, span, log, start_time)
+                return self._pull_internal(tag, span, log, start_time, env)
             except (
                 ArtifactNotFoundError,
                 CircuitBreakerOpenError,
@@ -766,6 +783,7 @@ class OCIClient:
         span: Any,
         log: Any,
         start_time: float,
+        environment: str | None = None,
     ) -> CompiledArtifacts:
         """Internal pull logic with cache check, fetch, verification, and deserialization.
 
@@ -774,6 +792,7 @@ class OCIClient:
             span: OTel tracing span.
             log: Bound logger.
             start_time: Monotonic time for metrics.
+            environment: Optional environment for policy lookup.
 
         Returns:
             Deserialized CompiledArtifacts.
@@ -794,7 +813,7 @@ class OCIClient:
         content, digest = self._fetch_from_registry(tag)
 
         # Verify signature BEFORE deserialization (FR-009, FR-010)
-        self._verify_signature_if_enabled(content, digest, tag, log)
+        self._verify_signature_if_enabled(content, digest, tag, log, environment)
 
         # Deserialize
         artifacts = self._deserialize_artifacts(content)
@@ -879,6 +898,7 @@ class OCIClient:
         digest: str,
         tag: str,
         log: Any,
+        environment: str | None = None,
     ) -> None:
         """Verify artifact signature if verification policy is enabled.
 
@@ -890,12 +910,19 @@ class OCIClient:
             digest: Content SHA256 digest.
             tag: Tag being pulled (for error messages).
             log: Bound logger.
+            environment: Optional environment for policy lookup.
 
         Raises:
             SignatureVerificationError: If enforcement=enforce and verification fails.
         """
         policy = self._config.verification
-        if policy is None or not policy.enabled or policy.enforcement == "off":
+        if policy is None or not policy.enabled:
+            return
+
+        enforcement = (
+            policy.get_enforcement_for_env(environment) if environment else policy.enforcement
+        )
+        if enforcement == "off":
             return
 
         from floe_core.oci.verification import VerificationClient
@@ -909,7 +936,7 @@ class OCIClient:
             annotations = manifest_data.get("annotations", {})
         except Exception as e:
             log.warning("verification_skip_manifest_fetch_failed", error=str(e))
-            if policy.enforcement == "enforce":
+            if enforcement == "enforce":
                 raise SignatureVerificationError(
                     artifact_ref=artifact_ref,
                     reason=f"Failed to fetch manifest for verification: {e}",
@@ -929,7 +956,7 @@ class OCIClient:
             "verification_result",
             status=result.status,
             signer=result.signer_identity,
-            enforcement=policy.enforcement,
+            enforcement=enforcement,
         )
 
     def _deserialize_artifacts(self, content: bytes) -> CompiledArtifacts:
