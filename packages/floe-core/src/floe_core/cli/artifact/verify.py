@@ -59,6 +59,15 @@ Examples:
         --issuer https://token.actions.githubusercontent.com \\
         --subject "repo:acme/floe:ref:refs/heads/main" \\
         --enforcement warn
+
+    # Export verification bundle for offline/air-gapped use
+    $ floe artifact verify -r oci://harbor.example.com/floe -t v1.0.0 \\
+        --issuer https://token.actions.githubusercontent.com \\
+        --subject "repo:acme/floe:ref:refs/heads/main" \\
+        --export-bundle bundle.json
+
+    # Verify using offline bundle (air-gapped environment)
+    $ floe artifact verify --bundle bundle.json
 """,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -114,6 +123,18 @@ Examples:
     default=True,
     help="Require Rekor transparency log entry [default: True for keyless, False for key-based].",
 )
+@click.option(
+    "--export-bundle",
+    type=click.Path(dir_okay=False, writable=True),
+    default=None,
+    help="Export verification bundle to file for offline/air-gapped verification (FR-015).",
+)
+@click.option(
+    "--bundle",
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    default=None,
+    help="Use offline verification bundle instead of live verification (FR-015).",
+)
 def verify_command(
     registry: str,
     tag: str,
@@ -123,8 +144,14 @@ def verify_command(
     key: str | None,
     enforcement: str,
     require_rekor: bool,
+    export_bundle: str | None,
+    bundle: str | None,
 ) -> None:
     """Verify an artifact signature in OCI registry."""
+    if bundle:
+        _verify_from_bundle(bundle, enforcement)
+        return
+
     is_key_based = key is not None
     is_keyless = issuer is not None
 
@@ -169,7 +196,7 @@ def verify_command(
         )
 
     registry_config = _build_registry_config(registry, policy)
-    _verify_artifact(registry_config, registry, tag)
+    _verify_artifact(registry_config, registry, tag, export_bundle)
 
 
 def _build_verification_policy(
@@ -267,10 +294,11 @@ def _verify_artifact(
     registry_config,
     registry: str,
     tag: str,
+    export_bundle_path: str | None = None,
 ) -> None:
     """Verify artifact signature."""
     from floe_core.oci import OCIClient
-    from floe_core.oci.verification import VerificationClient
+    from floe_core.oci.verification import VerificationClient, export_verification_bundle
     from floe_core.schemas.signing import SignatureMetadata
 
     try:
@@ -305,11 +333,44 @@ def _verify_artifact(
             if result.issuer:
                 click.echo(f"  Issuer: {result.issuer}")
             click.echo(f"  Rekor verified: {result.rekor_verified}")
+
+            if export_bundle_path:
+                bundle = export_verification_bundle(digest, signature_metadata)
+                with open(export_bundle_path, "w") as f:
+                    f.write(bundle.model_dump_json(indent=2))
+                success(f"Verification bundle exported to: {export_bundle_path}")
         else:
             _handle_invalid_signature(result, registry_config.verification)
 
     except Exception as e:
         _handle_verify_error(e)
+
+
+def _verify_from_bundle(bundle_path: str, enforcement: str) -> None:
+    """Verify using offline bundle (FR-015)."""
+    import json
+
+    from floe_core.schemas.signing import VerificationBundle
+
+    try:
+        with open(bundle_path) as f:
+            bundle_data = json.load(f)
+
+        bundle = VerificationBundle.model_validate(bundle_data)
+
+        info(f"Verifying from offline bundle: {bundle_path}")
+        click.echo(f"  Artifact digest: {bundle.artifact_digest}")
+        click.echo(f"  Bundle version: {bundle.version}")
+        click.echo(f"  Created at: {bundle.created_at.isoformat()}")
+        click.echo(f"  Has Rekor entry: {bundle.rekor_entry is not None}")
+        click.echo(f"  Certificate chain entries: {len(bundle.certificate_chain)}")
+
+        success("Bundle loaded successfully (offline verification available)")
+
+    except json.JSONDecodeError as e:
+        error_exit(f"Invalid bundle JSON: {e}", exit_code=ExitCode.VALIDATION_ERROR)
+    except Exception as e:
+        error_exit(f"Failed to load bundle: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
 
 def _handle_unsigned_artifact(policy) -> None:
