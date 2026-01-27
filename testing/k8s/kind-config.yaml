@@ -13,7 +13,8 @@
 ---
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: floe-test
+# Note: cluster name is passed via --name flag in setup-cluster.sh
+# Do NOT hardcode name here - it breaks CLUSTER_NAME env var override
 
 nodes:
   - role: control-plane

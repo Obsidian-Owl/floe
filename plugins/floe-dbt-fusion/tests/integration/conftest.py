@@ -31,11 +31,17 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
+@pytest.fixture(autouse=False)
 def require_fusion() -> None:
-    """Fail test if Fusion CLI not available.
+    """Fixture that fails test if Fusion CLI not available.
 
     Tests FAIL (not skip) when infrastructure missing per testing standards.
     Checks for official Fusion CLI (dbt/dbtf) or legacy dbt-sa-cli.
+
+    Usage:
+        def test_something(require_fusion):
+            # Test will fail if Fusion CLI not installed
+            ...
     """
     from floe_dbt_fusion.detection import detect_fusion_binary
 

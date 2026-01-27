@@ -90,7 +90,7 @@ create_cluster() {
         # Create artifact directory if it doesn't exist
         mkdir -p /tmp/floe-test-artifacts
 
-        kind create cluster --config "${SCRIPT_DIR}/kind-config.yaml" --wait "${TIMEOUT}s"
+        kind create cluster --name "${CLUSTER_NAME}" --config "${SCRIPT_DIR}/kind-config.yaml" --wait "${TIMEOUT}s"
         log_info "Cluster created successfully"
     fi
 

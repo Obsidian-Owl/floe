@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
-from conftest import require_fusion
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 # ---------------------------------------------------------------------------
@@ -30,10 +29,10 @@ class TestFusionCLIIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-017")
     def test_fusion_plugin_compile_project(
         self,
+        require_fusion: None,
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin compiles project using real Fusion CLI."""
-        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -53,9 +52,8 @@ class TestFusionCLIIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-018")
-    def test_fusion_plugin_supports_parallel_execution(self) -> None:
+    def test_fusion_plugin_supports_parallel_execution(self, require_fusion: None) -> None:
         """DBTFusionPlugin correctly reports parallel execution support."""
-        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -68,6 +66,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-019")
     def test_fusion_plugin_lint_project(
         self,
+        require_fusion: None,
         temp_dbt_project_with_lint_issues: Path,
     ) -> None:
         """DBTFusionPlugin lints project using Fusion static analysis.
@@ -75,7 +74,6 @@ class TestFusionCLIIntegration(IntegrationTestBase):
         Note: The lint command in dbt-fusion preview has known issues.
         This test verifies the plugin handles lint correctly (returns a result).
         """
-        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -100,10 +98,10 @@ class TestFusionCLIIntegration(IntegrationTestBase):
     @pytest.mark.requirement("FR-020")
     def test_fusion_plugin_get_manifest(
         self,
+        require_fusion: None,
         temp_dbt_project_for_fusion: Path,
     ) -> None:
         """DBTFusionPlugin retrieves manifest after compilation."""
-        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -128,9 +126,8 @@ class TestFusionCLIIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-020")
-    def test_fusion_plugin_get_runtime_metadata(self) -> None:
+    def test_fusion_plugin_get_runtime_metadata(self, require_fusion: None) -> None:
         """DBTFusionPlugin returns runtime metadata."""
-        require_fusion()
 
         from floe_dbt_fusion import DBTFusionPlugin
 
@@ -155,9 +152,8 @@ class TestFusionDetectionIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-020")
-    def test_detect_fusion_binary(self) -> None:
+    def test_detect_fusion_binary(self, require_fusion: None) -> None:
         """detect_fusion_binary() finds real Fusion CLI."""
-        require_fusion()
 
         from floe_dbt_fusion import detect_fusion_binary
 
@@ -170,9 +166,8 @@ class TestFusionDetectionIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-020")
-    def test_get_fusion_version(self) -> None:
+    def test_get_fusion_version(self, require_fusion: None) -> None:
         """get_fusion_version() parses real Fusion CLI version."""
-        require_fusion()
 
         from floe_dbt_fusion import detect_fusion_binary, get_fusion_version
 
@@ -188,9 +183,8 @@ class TestFusionDetectionIntegration(IntegrationTestBase):
     @pytest.mark.integration
     @pytest.mark.requirement("FR-020")
     @pytest.mark.requirement("FR-021")
-    def test_detect_fusion(self) -> None:
+    def test_detect_fusion(self, require_fusion: None) -> None:
         """detect_fusion() returns complete detection info."""
-        require_fusion()
 
         from floe_dbt_fusion import detect_fusion
 
@@ -218,9 +212,8 @@ class TestFallbackIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-021")
-    def test_get_best_plugin_returns_fusion_for_snowflake(self) -> None:
+    def test_get_best_plugin_returns_fusion_for_snowflake(self, require_fusion: None) -> None:
         """get_best_plugin() returns Fusion for supported adapter."""
-        require_fusion()
 
         from floe_dbt_fusion import get_best_plugin
 
