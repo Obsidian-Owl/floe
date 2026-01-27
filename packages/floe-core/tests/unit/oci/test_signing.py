@@ -16,8 +16,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import sys
-import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -38,8 +36,8 @@ requires_sigstore = pytest.mark.skipif(
     not SIGSTORE_AVAILABLE, reason="sigstore library not installed"
 )
 
-from floe_core.oci.errors import ConcurrentSigningError
-from floe_core.oci.signing import (
+from floe_core.oci.errors import ConcurrentSigningError  # noqa: E402
+from floe_core.oci.signing import (  # noqa: E402
     ANNOTATION_BUNDLE,
     ANNOTATION_CERT_FINGERPRINT,
     ANNOTATION_ISSUER,
@@ -58,10 +56,10 @@ from floe_core.oci.signing import (
     sign_artifact,
     signing_lock,
 )
-from floe_core.schemas.signing import SignatureMetadata, SigningConfig
+from floe_core.schemas.signing import SignatureMetadata, SigningConfig  # noqa: E402
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    pass
 
 
 @pytest.fixture
@@ -543,8 +541,6 @@ class TestKeyBasedSigning:
 
         key_file = tmp_path / "cosign.key"
         key_file.write_text("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----")
-
-        import os
 
         os.environ["FLOE_TEST_KEY"] = str(key_file)
 

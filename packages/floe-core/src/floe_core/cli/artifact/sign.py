@@ -34,7 +34,7 @@ from floe_core.cli.utils import ExitCode, error_exit, info, success
 
 if TYPE_CHECKING:
     from floe_core.schemas.oci import RegistryConfig
-    from floe_core.schemas.signing import SignatureMetadata, SigningConfig
+    from floe_core.schemas.signing import SigningConfig
 
 
 @click.command(
@@ -143,7 +143,6 @@ def _build_signing_config(keyless: bool, oidc_issuer: str) -> SigningConfig:
 def _build_key_based_signing_config(key_ref: str) -> SigningConfig:
     """Build SigningConfig for key-based signing from CLI options."""
     import os
-    from pathlib import Path
 
     from floe_core.oci.signing import check_cosign_available
     from floe_core.schemas.secrets import SecretReference, SecretSource

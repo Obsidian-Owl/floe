@@ -11,11 +11,15 @@ signatures on OCI artifacts against trusted issuers.
 from __future__ import annotations
 
 import os
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+
+if TYPE_CHECKING:
+    from floe_core.schemas.oci import RegistryConfig
+    from floe_core.schemas.signing import VerificationPolicy, VerificationResult
 
 
 @click.command(
@@ -169,6 +173,7 @@ def verify_command(
         )
 
     if is_keyless:
+        assert issuer is not None  # Guaranteed by is_keyless check
         if not subject and not subject_regex:
             error_exit(
                 "Either --subject or --subject-regex is required for keyless verification.",
@@ -206,7 +211,7 @@ def _build_verification_policy(
     subject_regex: str | None,
     enforcement: str,
     require_rekor: bool,
-):
+) -> VerificationPolicy:
     """Build VerificationPolicy for keyless verification from CLI options."""
     from pydantic import HttpUrl
 
@@ -230,10 +235,9 @@ def _build_key_based_verification_policy(
     key_ref: str,
     enforcement: str,
     require_rekor: bool,
-):
+) -> VerificationPolicy:
     """Build VerificationPolicy for key-based verification from CLI options."""
     import os
-    from pathlib import Path
 
     from floe_core.oci.verification import check_cosign_available
     from floe_core.schemas.secrets import SecretReference, SecretSource
@@ -294,7 +298,7 @@ def _handle_verify_error(e: Exception) -> NoReturn:
 
 
 def _verify_artifact(
-    registry_config,
+    registry_config: RegistryConfig,
     registry: str,
     tag: str,
     export_bundle_path: str | None = None,
@@ -308,20 +312,23 @@ def _verify_artifact(
         client = OCIClient.from_registry_config(registry_config)
         info(f"Verifying {registry}:{tag}...")
 
+        policy = registry_config.verification
+        assert policy is not None, "Verification policy required for verify command"
+
         manifest = client.inspect(tag)
         if not manifest.annotations:
-            _handle_unsigned_artifact(registry_config.verification)
+            _handle_unsigned_artifact(policy)
             return
 
         signature_metadata = SignatureMetadata.from_annotations(manifest.annotations)
         if signature_metadata is None:
-            _handle_unsigned_artifact(registry_config.verification)
+            _handle_unsigned_artifact(policy)
             return
 
         artifact_ref = f"{registry}:{tag}"
         content, digest = client._fetch_from_registry(tag)  # noqa: SLF001 - internal access needed
 
-        verification_client = VerificationClient(registry_config.verification)
+        verification_client = VerificationClient(policy)
         result = verification_client.verify(
             content=content,
             metadata=signature_metadata,
@@ -343,7 +350,7 @@ def _verify_artifact(
                     f.write(bundle.model_dump_json(indent=2))
                 success(f"Verification bundle exported to: {export_bundle_path}")
         else:
-            _handle_invalid_signature(result, registry_config.verification)
+            _handle_invalid_signature(result, policy)
 
     except Exception as e:
         _handle_verify_error(e)
@@ -368,9 +375,7 @@ def _display_bundle_info(bundle_path: str) -> None:
         click.echo(f"  Has Rekor entry: {bundle.rekor_entry is not None}")
         click.echo(f"  Certificate chain entries: {len(bundle.certificate_chain)}")
 
-        info(
-            "Bundle parsed successfully (for verification, use --key or --issuer with live registry)"
-        )
+        info("Bundle parsed successfully (use --key or --issuer with live registry)")
 
     except json.JSONDecodeError as e:
         error_exit(f"Invalid bundle JSON: {e}", exit_code=ExitCode.VALIDATION_ERROR)
@@ -378,7 +383,7 @@ def _display_bundle_info(bundle_path: str) -> None:
         error_exit(f"Failed to load bundle: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
 
-def _handle_unsigned_artifact(policy) -> None:
+def _handle_unsigned_artifact(policy: VerificationPolicy) -> None:
     """Handle unsigned artifact based on enforcement level."""
     if policy.enforcement == "enforce":
         error_exit("Artifact is not signed", exit_code=ExitCode.SIGNATURE_ERROR)
@@ -388,7 +393,7 @@ def _handle_unsigned_artifact(policy) -> None:
         info("Artifact is not signed (enforcement=off)")
 
 
-def _handle_invalid_signature(result, policy) -> None:
+def _handle_invalid_signature(result: VerificationResult, policy: VerificationPolicy) -> None:
     """Handle invalid signature based on enforcement level."""
     msg = f"Signature invalid: {result.failure_reason}"
     if policy.enforcement == "enforce":
@@ -399,7 +404,9 @@ def _handle_invalid_signature(result, policy) -> None:
         info(f"{msg} (enforcement=off)")
 
 
-def _build_registry_config(registry_uri: str, verification_policy):
+def _build_registry_config(
+    registry_uri: str, verification_policy: VerificationPolicy
+) -> RegistryConfig:
     """Build RegistryConfig from URI and environment."""
     from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
     from floe_core.schemas.secrets import SecretReference, SecretSource

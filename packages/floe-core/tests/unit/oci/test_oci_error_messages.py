@@ -5,8 +5,6 @@ Validates that error messages are actionable with remediation steps.
 
 from __future__ import annotations
 
-import pytest
-
 from floe_core.oci.errors import ConcurrentSigningError, SignatureVerificationError
 from floe_core.oci.signing import (
     CosignNotAvailableError,

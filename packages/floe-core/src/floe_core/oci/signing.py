@@ -36,10 +36,11 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Callable
 
 from opentelemetry import trace
 
@@ -49,7 +50,6 @@ from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 if TYPE_CHECKING:
     from sigstore.models import Bundle
     from sigstore.oidc import IdentityToken
-    from sigstore.sign import Signer
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -82,7 +82,7 @@ def _trace_span(name: str) -> Iterator[None]:
         yield
 
 
-def _with_span(name: str):
+def _with_span(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator for adding OpenTelemetry tracing to methods.
 
     Args:
@@ -90,9 +90,9 @@ def _with_span(name: str):
     """
     import functools
 
-    def decorator(func):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             with tracer.start_as_current_span(name):
                 return func(*args, **kwargs)
 
@@ -228,7 +228,7 @@ def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Ite
 
                 elapsed = time.monotonic() - start_time
                 if elapsed >= timeout_seconds:
-                    raise ConcurrentSigningError(artifact_ref, timeout_seconds)
+                    raise ConcurrentSigningError(artifact_ref, timeout_seconds) from e
 
                 time.sleep(LOCK_RETRY_INTERVAL)
 
@@ -315,7 +315,6 @@ class SigningClient:
         Returns:
             SignatureMetadata with bundle and identity information
         """
-        from sigstore.models import Bundle
         from sigstore.sign import SigningContext
 
         with _trace_span("floe.oci.sign.oidc_token"):
@@ -534,7 +533,7 @@ class SigningClient:
         Raises:
             OIDCTokenError: If token cannot be acquired after all retries
         """
-        from sigstore.oidc import IdentityError, IdentityToken, detect_credential
+        from sigstore.oidc import IdentityError
 
         last_error: IdentityError | None = None
 
@@ -599,7 +598,6 @@ class SigningClient:
         Returns:
             SignatureMetadata for OCI annotation storage
         """
-        from sigstore.models import Bundle
 
         # Serialize bundle to JSON and base64 encode
         bundle_json = bundle.to_json()

@@ -93,7 +93,7 @@ Examples:
     type=str,
     default=None,
     envvar="FLOE_ENVIRONMENT",
-    help="Environment name for verification policy lookup (e.g., production, staging, development).",
+    help="Environment name for verification policy lookup (e.g., production, staging).",
 )
 @click.option(
     "--manifest",
@@ -110,7 +110,6 @@ def pull_command(
     manifest: str | None,
 ) -> None:
     """Pull CompiledArtifacts from OCI registry."""
-    from floe_core.schemas.oci import RegistryConfig
 
     registry_config = _build_registry_config(registry, manifest)
     artifacts_json = _pull_from_registry(registry_config, registry, tag, environment)
@@ -129,7 +128,6 @@ def _build_registry_config(registry_uri: str, manifest_path: str | None) -> Regi
     """Build RegistryConfig from URI, manifest, and environment."""
     from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
     from floe_core.schemas.secrets import SecretReference, SecretSource
-    from floe_core.schemas.signing import VerificationPolicy
 
     verification_policy = None
     if manifest_path:

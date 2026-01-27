@@ -17,7 +17,6 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,17 +33,15 @@ requires_sigstore = pytest.mark.skipif(
     not SIGSTORE_AVAILABLE, reason="sigstore library not installed"
 )
 
-from floe_core.oci.errors import SignatureVerificationError
-from floe_core.oci.verification import (
+from floe_core.oci.errors import SignatureVerificationError  # noqa: E402
+from floe_core.oci.verification import (  # noqa: E402
     CosignNotAvailableError,
     KeyVerificationError,
-    PolicyViolationError,
     VerificationClient,
-    VerificationError,
     check_cosign_available,
     verify_artifact,
 )
-from floe_core.schemas.signing import (
+from floe_core.schemas.signing import (  # noqa: E402
     SignatureMetadata,
     TrustedIssuer,
     VerificationPolicy,

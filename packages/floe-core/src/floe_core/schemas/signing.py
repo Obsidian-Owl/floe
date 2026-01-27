@@ -246,7 +246,7 @@ class VerificationPolicy(BaseModel):
     )
     private_infrastructure: bool = Field(
         default=False,
-        description="Allow relaxed attestation verification for private infrastructure without public transparency logs",
+        description="Allow relaxed attestation verification for private infrastructure",
     )
 
     @model_validator(mode="after")

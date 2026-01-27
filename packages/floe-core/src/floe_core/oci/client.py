@@ -98,7 +98,7 @@ from floe_core.schemas.oci import (
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-    from floe_core.schemas.signing import SignatureMetadata, SigningConfig, VerificationPolicy
+    from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 
 logger = structlog.get_logger(__name__)
 

@@ -64,7 +64,6 @@ from floe_core.schemas.signing import (
 if TYPE_CHECKING:
     from sigstore.models import Bundle
     from sigstore.verify import Verifier
-    from sigstore.verify.policy import VerificationPolicy as SigstorePolicy
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -357,7 +356,7 @@ class VerificationClient:
         with tracer.start_as_current_span(span_name) as span:
             span.set_attribute("floe.verification.offline", not self.policy.require_rekor)
             try:
-                verifier.verify_artifact(  # type: ignore[union-attr]
+                verifier.verify_artifact(
                     input_=content,
                     bundle=bundle,
                     policy=identity,
@@ -859,7 +858,7 @@ def verify_artifact(
 def export_verification_bundle(
     artifact_digest: str,
     metadata: SignatureMetadata,
-) -> "VerificationBundle":
+) -> VerificationBundle:
     """Export offline verification bundle for air-gapped environments (FR-015).
 
     Creates a self-contained bundle with all materials needed to verify

@@ -23,6 +23,14 @@ import pytest
 
 from floe_core.oci.client import MUTABLE_TAG_PATTERNS, SEMVER_PATTERN, OCIClient
 from floe_core.oci.errors import ArtifactNotFoundError, ImmutabilityViolationError
+from floe_core.oci.signing import (
+    ANNOTATION_BUNDLE,
+    ANNOTATION_CERT_FINGERPRINT,
+    ANNOTATION_MODE,
+    ANNOTATION_SIGNED_AT,
+    ANNOTATION_SUBJECT,
+    SigningClient,
+)
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -32,14 +40,6 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
-)
-from floe_core.oci.signing import (
-    ANNOTATION_BUNDLE,
-    ANNOTATION_CERT_FINGERPRINT,
-    ANNOTATION_MODE,
-    ANNOTATION_SIGNED_AT,
-    ANNOTATION_SUBJECT,
-    SigningClient,
 )
 from floe_core.schemas.oci import AuthType, CacheConfig, RegistryAuth, RegistryConfig
 from floe_core.schemas.signing import SignatureMetadata, SigningConfig

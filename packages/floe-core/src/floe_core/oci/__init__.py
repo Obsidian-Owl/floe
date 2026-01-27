@@ -48,6 +48,25 @@ See Also:
 
 from __future__ import annotations
 
+# Attestation (Epic 8B)
+from floe_core.oci.attestation import (
+    IN_TOTO_STATEMENT_TYPE,
+    SPDX_PREDICATE_TYPE,
+    AttestationAttachError,
+    AttestationError,
+    CosignNotFoundError,
+    SBOMGenerationError,
+    SyftNotFoundError,
+    attach_attestation,
+    check_cosign_available,
+    check_syft_available,
+    create_in_toto_statement,
+    generate_sbom,
+    generate_sbom_for_python_project,
+    retrieve_attestations,
+    retrieve_sbom,
+)
+
 # Authentication providers (T007)
 from floe_core.oci.auth import (
     AnonymousAuthProvider,
@@ -123,14 +142,6 @@ from floe_core.oci.resilience import (
     with_resilience,
 )
 
-# Configuration schemas (from floe_core.schemas.oci)
-from floe_core.schemas.oci import (
-    ArtifactManifest,
-    ArtifactTag,
-    CacheConfig,
-    RegistryConfig,
-)
-
 # Signing (Epic 8B)
 from floe_core.oci.signing import (
     ANNOTATION_BUNDLE,
@@ -154,23 +165,12 @@ from floe_core.oci.verification import (
     verify_artifact,
 )
 
-# Attestation (Epic 8B)
-from floe_core.oci.attestation import (
-    IN_TOTO_STATEMENT_TYPE,
-    SPDX_PREDICATE_TYPE,
-    AttestationAttachError,
-    AttestationError,
-    CosignNotFoundError,
-    SBOMGenerationError,
-    SyftNotFoundError,
-    attach_attestation,
-    check_cosign_available,
-    check_syft_available,
-    create_in_toto_statement,
-    generate_sbom,
-    generate_sbom_for_python_project,
-    retrieve_attestations,
-    retrieve_sbom,
+# Configuration schemas (from floe_core.schemas.oci)
+from floe_core.schemas.oci import (
+    ArtifactManifest,
+    ArtifactTag,
+    CacheConfig,
+    RegistryConfig,
 )
 
 __all__: list[str] = [
@@ -251,4 +251,20 @@ __all__: list[str] = [
     "VerificationError",
     "PolicyViolationError",
     "verify_artifact",
+    # Attestation (Epic 8B)
+    "IN_TOTO_STATEMENT_TYPE",
+    "SPDX_PREDICATE_TYPE",
+    "AttestationAttachError",
+    "AttestationError",
+    "CosignNotFoundError",
+    "SBOMGenerationError",
+    "SyftNotFoundError",
+    "attach_attestation",
+    "check_cosign_available",
+    "check_syft_available",
+    "create_in_toto_statement",
+    "generate_sbom",
+    "generate_sbom_for_python_project",
+    "retrieve_attestations",
+    "retrieve_sbom",
 ]

@@ -30,16 +30,14 @@ See Also:
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from testing.base_classes.integration_test_base import IntegrationTestBase
-
 from pydantic import HttpUrl
+from testing.base_classes.integration_test_base import IntegrationTestBase
 
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
@@ -189,7 +187,6 @@ class TestVerificationDuringPullE2E(IntegrationTestBase):
         import yaml
 
         from floe_core.oci.client import OCIClient
-        from floe_core.schemas.signing import TrustedIssuer
 
         unique_id = test_artifact_tag.replace("test-", "").split("-")[0]
         artifacts = _create_verifiable_artifacts(unique_id)
@@ -345,7 +342,7 @@ class TestVerificationDuringPullE2E(IntegrationTestBase):
 
         # Time the verification operation
         start_time = time.monotonic()
-        result = verification_client.verify(
+        verification_client.verify(
             content=content,
             metadata=None,  # Unsigned artifact
             artifact_ref=artifact_ref,
@@ -531,7 +528,6 @@ class TestVerificationTracingE2E(IntegrationTestBase):
         - verify() creates trace span
         - Span has required attributes
         """
-        from unittest.mock import MagicMock, patch
 
         from floe_core.oci.client import OCIClient
         from floe_core.oci.verification import VerificationClient
@@ -699,7 +695,7 @@ class TestCertificateRotationGracePeriodE2E(IntegrationTestBase):
         artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         # Verification should proceed (even for unsigned, in warn mode)
-        result = verification_client.verify(
+        verification_client.verify(
             content=content,
             metadata=None,
             artifact_ref=artifact_ref,
@@ -765,7 +761,7 @@ class TestOfflineVerificationBundleE2E(IntegrationTestBase):
         content = artifacts_path.read_bytes()
         artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
-        result = verification_client.verify(
+        verification_client.verify(
             content=content,
             metadata=None,
             artifact_ref=artifact_ref,

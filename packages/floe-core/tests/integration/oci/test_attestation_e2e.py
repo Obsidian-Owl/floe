@@ -31,8 +31,6 @@ See Also:
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -284,7 +282,6 @@ class TestAttestationAttachmentE2E(IntegrationTestBase):
         - Attestation uses SPDX predicate type
         """
         from floe_core.oci.attestation import (
-            CosignNotFoundError,
             attach_attestation,
             check_cosign_available,
             check_syft_available,
@@ -424,7 +421,6 @@ class TestAttestationTracingE2E(IntegrationTestBase):
         - generate_sbom() creates trace span
         - Span has project_path and format attributes
         """
-        from unittest.mock import MagicMock, patch
 
         from floe_core.oci.attestation import check_syft_available, generate_sbom
 

@@ -33,10 +33,9 @@ from floe_core.oci.attestation import (
     retrieve_attestations,
     retrieve_sbom,
 )
-from floe_core.schemas.signing import AttestationManifest, Subject
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    pass
 
 
 @pytest.fixture
@@ -150,7 +149,7 @@ class TestGenerateSBOM:
             stderr="",
         )
 
-        result = generate_sbom(tmp_path)
+        generate_sbom(tmp_path)
 
         assert result["spdxVersion"] == "SPDX-2.3"
         assert len(result["packages"]) == 2
@@ -174,7 +173,7 @@ class TestGenerateSBOM:
             stderr="",
         )
 
-        result = generate_sbom(tmp_path, output_format="cyclonedx-json")
+        generate_sbom(tmp_path, output_format="cyclonedx-json")
 
         call_args = mock_run.call_args
         assert "cyclonedx-json" in call_args[0][0]
@@ -251,7 +250,7 @@ class TestGenerateSBOM:
             stderr="",
         )
 
-        result = generate_sbom_for_python_project(tmp_path)
+        generate_sbom_for_python_project(tmp_path)
 
         assert result["spdxVersion"] == "SPDX-2.3"
         call_args = mock_run.call_args

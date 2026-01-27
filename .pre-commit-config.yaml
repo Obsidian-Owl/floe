@@ -164,9 +164,10 @@ repos:
 
       # Security: Vulnerability audit (matches CI)
       # Ignores documented false positives (see pyproject.toml for justification)
+      # GHSA-hm8f-75xx-w2vr: sigstore <4.2.0 - mitigated by network isolation (Epic 8B)
       - id: uv-secure
         name: uv-secure (vulnerability audit)
-        entry: uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7 .
+        entry: uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr .
         language: system
         stages: [pre-push]
         pass_filenames: false
