@@ -48,6 +48,9 @@ dependencies = [
     "floe-dbt-fusion",
     # Network security plugin for Kubernetes NetworkPolicy generation (Epic 7C)
     "floe-network-security-k8s",
+    # Data quality plugins (Epic 5B)
+    "floe-quality-gx",
+    "floe-quality-dbt",
 ]
 
 [tool.uv]
@@ -75,6 +78,8 @@ floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editab
 floe-dbt-core = { path = "plugins/floe-dbt-core", editable = true }
 floe-dbt-fusion = { path = "plugins/floe-dbt-fusion", editable = true }
 floe-network-security-k8s = { path = "plugins/floe-network-security-k8s", editable = true }
+floe-quality-gx = { path = "plugins/floe-quality-gx", editable = true }
+floe-quality-dbt = { path = "plugins/floe-quality-dbt", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -91,6 +96,8 @@ pythonpath = [
     "plugins/floe-dbt-core/src",
     "plugins/floe-dbt-fusion/src",
     "plugins/floe-network-security-k8s/src",
+    "plugins/floe-quality-gx/src",
+    "plugins/floe-quality-dbt/src",
     ".",  # Enable import of 'testing' module from project root
 ]
 python_files = ["test_*.py"]

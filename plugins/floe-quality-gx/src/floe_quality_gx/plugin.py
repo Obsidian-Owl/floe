@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.quality import (
     GateResult,
     OpenLineageEmitter,
@@ -15,6 +16,9 @@ from floe_core.plugins.quality import (
     ValidationResult,
 )
 from floe_core.schemas.quality_config import Dimension, QualityConfig, QualityGates
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 SUPPORTED_DIALECTS = {"duckdb", "postgresql", "snowflake"}
 
@@ -117,3 +121,27 @@ class GreatExpectationsPlugin(QualityPlugin):
 
     def get_lineage_emitter(self) -> OpenLineageEmitter | None:
         return None
+
+    def health_check(self) -> HealthStatus:
+        """Check plugin health (FR-009).
+
+        Returns HEALTHY if Great Expectations can be imported.
+        """
+        try:
+            import great_expectations  # noqa: F401
+
+            return HealthStatus(
+                state=HealthState.HEALTHY,
+                message="Great Expectations is available",
+                details={"gx_available": True},
+            )
+        except ImportError:
+            return HealthStatus(
+                state=HealthState.UNHEALTHY,
+                message="Great Expectations is not installed",
+                details={"gx_available": False},
+            )
+
+    def get_config_schema(self) -> type[BaseModel]:
+        """Return QualityConfig as the configuration schema (FR-010)."""
+        return QualityConfig
