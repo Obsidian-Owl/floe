@@ -9,6 +9,7 @@ See Also:
     - Epic 6B: OpenLineage Integration
 """
 
+from floe_core.lineage.events import EventBuilder, to_openlineage_event
 from floe_core.lineage.protocols import LineageExtractor, LineageTransport
 from floe_core.lineage.types import (
     LineageDataset,
@@ -26,4 +27,6 @@ __all__ = [
     "RunState",
     "LineageExtractor",
     "LineageTransport",
+    "EventBuilder",
+    "to_openlineage_event",
 ]
