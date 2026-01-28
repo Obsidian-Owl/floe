@@ -18,7 +18,7 @@ plugins:
     provider: great_expectations      # required: great_expectations or dbt_expectations
     enabled: true                     # default: true
     check_timeout_seconds: 300        # default: 300
-    
+
     # Layer 1: Global Dimension Weights (must sum to 1.0)
     dimension_weights:
       completeness: 0.25
@@ -26,7 +26,7 @@ plugins:
       validity: 0.20
       consistency: 0.15
       timeliness: 0.15
-      
+
     # Layer 3: Score Calculation Parameters
     calculation:
       baseline_score: 70              # starting score before checks
@@ -36,12 +36,12 @@ plugins:
         critical: 3.0
         warning: 1.0
         info: 0.5
-        
+
     # Global Thresholds
     thresholds:
       min_score: 70                   # score below this blocks deployment/run
       warn_score: 85                  # score below this emits warnings
-      
+
     # Quality Gate Policies
     quality_gates:
       bronze:
