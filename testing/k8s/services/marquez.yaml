@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: marquez
-  namespace: floe-system
+  namespace: floe-test
   labels:
     app: marquez
     component: lineage
@@ -30,6 +30,8 @@ spec:
               containerPort: 5001
               protocol: TCP
           env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx384m -Xms256m"
             - name: MARQUEZ_PORT
               value: "5000"
             - name: MARQUEZ_ADMIN_PORT
@@ -57,32 +59,32 @@ spec:
             httpGet:
               path: /api/v1/namespaces
               port: 5000
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 3
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /api/v1/namespaces
               port: 5000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 5
           resources:
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 300m
+              memory: 768Mi
             requests:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 100m
+              memory: 384Mi
 ---
 # Marquez Service
 apiVersion: v1
 kind: Service
 metadata:
   name: marquez
-  namespace: floe-system
+  namespace: floe-test
   labels:
     app: marquez
     component: lineage
@@ -105,7 +107,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: marquez-postgres
-  namespace: floe-system
+  namespace: floe-test
   labels:
     app: marquez-postgres
     component: lineage
@@ -170,11 +172,11 @@ spec:
             failureThreshold: 3
           resources:
             limits:
-              cpu: 500m
-              memory: 512Mi
-            requests:
-              cpu: 250m
+              cpu: 200m
               memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
       volumes:
         - name: postgres-data
           emptyDir: {}
@@ -184,7 +186,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: marquez-postgres
-  namespace: floe-system
+  namespace: floe-test
   labels:
     app: marquez-postgres
     component: lineage
@@ -203,7 +205,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: marquez-config
-  namespace: floe-system
+  namespace: floe-test
   labels:
     app: marquez
     component: lineage
