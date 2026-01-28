@@ -47,6 +47,13 @@ from testing.fixtures.catalog import (
     generate_unique_namespace as generate_unique_catalog_namespace,
 )
 
+# Lineage fixtures
+from testing.fixtures.lineage import (
+    mock_lineage_backend,
+    mock_lineage_emitter,
+    sample_lineage_event,
+)
+
 # Phase 6 exports - Service fixtures
 from testing.fixtures.dagster import (
     DagsterConfig,
@@ -136,6 +143,10 @@ from testing.fixtures.services import (
 )
 
 __all__ = [
+    # Lineage fixtures
+    "mock_lineage_backend",
+    "mock_lineage_emitter",
+    "sample_lineage_event",
     # Catalog plugin fixtures
     "CatalogConnectionError",
     "CatalogTestConfig",

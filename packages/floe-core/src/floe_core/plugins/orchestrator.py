@@ -19,10 +19,13 @@ Example:
 
 from __future__ import annotations
 
+import warnings
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
+from floe_core.lineage import LineageDataset, LineageEmitter, RunState
 from floe_core.plugin_metadata import PluginMetadata
 
 if TYPE_CHECKING:
@@ -102,12 +105,13 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=lambda: [])
 
 
+# Deprecated: Use LineageDataset from floe_core.lineage instead
 @dataclass
 class Dataset:
     """OpenLineage dataset representation.
 
-    Used for lineage event emission to track data flow between
-    inputs and outputs of orchestrated jobs.
+    .. deprecated::
+        Use :class:`floe_core.lineage.LineageDataset` instead.
 
     Attributes:
         namespace: Dataset namespace (e.g., "floe-prod").
@@ -125,6 +129,14 @@ class Dataset:
     namespace: str
     name: str
     facets: dict[str, Any] = field(default_factory=lambda: {})
+
+    def __post_init__(self) -> None:
+        """Emit deprecation warning on instantiation."""
+        warnings.warn(
+            "Dataset is deprecated, use LineageDataset from floe_core.lineage instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 @dataclass
@@ -316,33 +328,56 @@ class OrchestratorPlugin(PluginMetadata):
     @abstractmethod
     def emit_lineage_event(
         self,
-        event_type: str,
-        job: str,
-        inputs: list[Dataset],
-        outputs: list[Dataset],
-    ) -> None:
-        """Emit OpenLineage event for data lineage tracking.
+        event_type: RunState,
+        job_name: str,
+        job_namespace: str | None = None,
+        run_id: UUID | None = None,
+        inputs: list[LineageDataset] | None = None,
+        outputs: list[LineageDataset] | None = None,
+        run_facets: dict[str, Any] | None = None,
+        job_facets: dict[str, Any] | None = None,
+        producer: str | None = None,
+    ) -> UUID:
+        """Emit an OpenLineage event for data lineage tracking.
 
         Sends a lineage event to the configured lineage backend
         (Marquez, Atlan, etc.) for tracking data flow.
 
         Args:
-            event_type: One of "START", "COMPLETE", or "FAIL".
-            job: Job name (e.g., "dbt_run_customers").
-            inputs: List of input datasets consumed by the job.
-            outputs: List of output datasets produced by the job.
+            event_type: Run state (START, COMPLETE, FAIL, etc.).
+            job_name: Job name (e.g., "dbt_run_customers").
+            job_namespace: Job namespace. Defaults to plugin-specific namespace.
+            run_id: Unique run identifier. Auto-generated if None.
+            inputs: Input datasets consumed by the job.
+            outputs: Output datasets produced by the job.
+            run_facets: Additional OpenLineage run facets.
+            job_facets: Additional OpenLineage job facets.
+            producer: Producer identifier. Defaults to "floe".
+
+        Returns:
+            The run UUID for this event (generated or provided).
 
         Example:
-            >>> inputs = [Dataset(namespace="floe", name="raw.customers")]
-            >>> outputs = [Dataset(namespace="floe", name="staging.stg_customers")]
-            >>> plugin.emit_lineage_event(
-            ...     event_type="COMPLETE",
-            ...     job="dbt_run_stg_customers",
+            >>> from floe_core.lineage import RunState, LineageDataset
+            >>> inputs = [LineageDataset(namespace="floe", name="raw.customers")]
+            >>> outputs = [LineageDataset(namespace="floe", name="staging.stg_customers")]
+            >>> run_id = plugin.emit_lineage_event(
+            ...     event_type=RunState.COMPLETE,
+            ...     job_name="dbt_run_stg_customers",
             ...     inputs=inputs,
-            ...     outputs=outputs
+            ...     outputs=outputs,
             ... )
         """
         ...
+
+    def get_lineage_emitter(self) -> LineageEmitter | None:
+        """Get the unified lineage emitter for this plugin.
+
+        Returns:
+            LineageEmitter instance, or None if not configured.
+            Implementations should override to provide a real emitter.
+        """
+        return None
 
     @abstractmethod
     def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
