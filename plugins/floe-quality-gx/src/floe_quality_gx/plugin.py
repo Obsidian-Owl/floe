@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from floe_core.plugin_metadata import HealthState, HealthStatus
@@ -23,6 +24,22 @@ from floe_core.validation import (
     validate_coverage,
     validate_required_tests,
 )
+
+try:
+    from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
+
+    _HAS_OTEL = True
+except ImportError:
+    _HAS_OTEL = False
+
+
+def _quality_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
+    """Return an OTel span context manager, or nullcontext if unavailable."""
+    if not _HAS_OTEL:
+        return nullcontext()
+    span = _factory_get_tracer(__name__).start_as_current_span(name, attributes=attributes)
+    return span
+
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -128,29 +145,37 @@ class GreatExpectationsPlugin(QualityPlugin):
         Returns:
             QualitySuiteResult with check outcomes.
         """
-        # Create a minimal suite from the parameters
-        opts = options or {}
-        suite = QualitySuite(
-            model_name=data_source,
-            checks=[],
-            timeout_seconds=opts.get("timeout_seconds", 300),
-            fail_fast=opts.get("fail_fast", False),
-        )
+        with _quality_span(
+            "floe.quality.run_checks",
+            {
+                "quality.provider": "great_expectations",
+                "quality.suite_name": suite_name,
+                "quality.data_source": data_source,
+            },
+        ):
+            # Create a minimal suite from the parameters
+            opts = options or {}
+            suite = QualitySuite(
+                model_name=data_source,
+                checks=[],
+                timeout_seconds=opts.get("timeout_seconds", 300),
+                fail_fast=opts.get("fail_fast", False),
+            )
 
-        # Delegate to run_suite with empty connection config
-        # In practice, the caller should use run_suite directly
-        connection_config: dict[str, Any] = opts.get("connection_config", {"dialect": "duckdb"})
-        result = self.run_suite(suite, connection_config)
+            # Delegate to run_suite with empty connection config
+            # In practice, the caller should use run_suite directly
+            connection_config: dict[str, Any] = opts.get("connection_config", {"dialect": "duckdb"})
+            result = self.run_suite(suite, connection_config)
 
-        # Override suite_name to match the requested name
-        return QualitySuiteResult(
-            suite_name=suite_name,
-            model_name=result.model_name,
-            passed=result.passed,
-            checks=result.checks,
-            execution_time_ms=result.execution_time_ms,
-            summary=result.summary,
-        )
+            # Override suite_name to match the requested name
+            return QualitySuiteResult(
+                suite_name=suite_name,
+                model_name=result.model_name,
+                passed=result.passed,
+                checks=result.checks,
+                execution_time_ms=result.execution_time_ms,
+                summary=result.summary,
+            )
 
     def run_suite(
         self,
@@ -169,40 +194,48 @@ class GreatExpectationsPlugin(QualityPlugin):
         Raises:
             QualityTimeoutError: If execution exceeds suite.timeout_seconds.
         """
-        # Handle empty checks case
-        if not suite.checks:
-            return QualitySuiteResult(
-                suite_name=f"{suite.model_name}_suite",
-                model_name=suite.model_name,
-                passed=True,
-                checks=[],
-                summary={"total": 0, "passed": 0, "failed": 0},
-            )
+        with _quality_span(
+            "floe.quality.run_suite",
+            {
+                "quality.provider": "great_expectations",
+                "quality.suite_name": suite.model_name,
+                "quality.checks_count": len(suite.checks),
+            },
+        ):
+            # Handle empty checks case
+            if not suite.checks:
+                return QualitySuiteResult(
+                    suite_name=f"{suite.model_name}_suite",
+                    model_name=suite.model_name,
+                    passed=True,
+                    checks=[],
+                    summary={"total": 0, "passed": 0, "failed": 0},
+                )
 
-        try:
-            from floe_quality_gx.executor import (
-                create_dataframe_from_connection,
-                run_validation_with_timeout,
-            )
+            try:
+                from floe_quality_gx.executor import (
+                    create_dataframe_from_connection,
+                    run_validation_with_timeout,
+                )
 
-            # Load data from connection config
-            dataframe = create_dataframe_from_connection(connection_config, suite.model_name)
+                # Load data from connection config
+                dataframe = create_dataframe_from_connection(connection_config, suite.model_name)
 
-            # Run validation with timeout
-            return run_validation_with_timeout(
-                suite=suite,
-                dataframe=dataframe,
-                timeout_seconds=suite.timeout_seconds,
-            )
-        except ImportError:
-            # GX not available, return empty result
-            return QualitySuiteResult(
-                suite_name=f"{suite.model_name}_suite",
-                model_name=suite.model_name,
-                passed=True,
-                checks=[],
-                summary={"total": 0, "passed": 0, "failed": 0},
-            )
+                # Run validation with timeout
+                return run_validation_with_timeout(
+                    suite=suite,
+                    dataframe=dataframe,
+                    timeout_seconds=suite.timeout_seconds,
+                )
+            except ImportError:
+                # GX not available, return empty result
+                return QualitySuiteResult(
+                    suite_name=f"{suite.model_name}_suite",
+                    model_name=suite.model_name,
+                    passed=True,
+                    checks=[],
+                    summary={"total": 0, "passed": 0, "failed": 0},
+                )
 
     def validate_expectations(
         self,
@@ -218,25 +251,33 @@ class GreatExpectationsPlugin(QualityPlugin):
         Returns:
             List of QualityCheckResult for each expectation.
         """
-        if not expectations:
-            return []
+        with _quality_span(
+            "floe.quality.validate_expectations",
+            {
+                "quality.provider": "great_expectations",
+                "quality.check_count": len(expectations),
+                "quality.data_source": data_source,
+            },
+        ):
+            if not expectations:
+                return []
 
-        # Convert expectations to QualityChecks
-        checks = []
-        for i, exp in enumerate(expectations):
-            check = QualityCheck(
-                name=exp.get("name", f"check_{i}"),
-                type=exp.get("type", "custom"),
-                column=exp.get("column"),
-                dimension=Dimension(exp.get("dimension", "validity")),
-            )
-            checks.append(check)
+            # Convert expectations to QualityChecks
+            checks = []
+            for i, exp in enumerate(expectations):
+                check = QualityCheck(
+                    name=exp.get("name", f"check_{i}"),
+                    type=exp.get("type", "custom"),
+                    column=exp.get("column"),
+                    dimension=Dimension(exp.get("dimension", "validity")),
+                )
+                checks.append(check)
 
-        # Create suite and run
-        suite = QualitySuite(model_name=data_source, checks=checks)
-        result = self.run_suite(suite, {"dialect": "duckdb"})
+            # Create suite and run
+            suite = QualitySuite(model_name=data_source, checks=checks)
+            result = self.run_suite(suite, {"dialect": "duckdb"})
 
-        return list(result.checks)
+            return list(result.checks)
 
     def calculate_quality_score(
         self,
