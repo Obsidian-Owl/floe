@@ -11,6 +11,7 @@ Design Decisions:
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import time
@@ -24,6 +25,8 @@ from floe_core.schemas.quality_score import (
     QualitySuite,
     QualitySuiteResult,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -61,14 +64,18 @@ def _map_check_to_gx_expectation(check: QualityCheck) -> Any:
     gx_class_name = CHECK_TYPE_TO_GX_EXPECTATION.get(check.type)
 
     if gx_class_name is None:
-        # Try to use the type directly as a GX expectation name
-        gx_class_name = check.type
+        msg = (
+            f"Unsupported check type: {check.type!r}. "
+            f"Allowed types: {sorted(CHECK_TYPE_TO_GX_EXPECTATION)}"
+        )
+        raise ValueError(msg)
 
-    # Get the expectation class from gx.expectations
+    # Look up expectation class from the whitelisted name.
+    # Only CHECK_TYPE_TO_GX_EXPECTATION values are reachable here.
     try:
         expectation_class = getattr(gx.expectations, gx_class_name)
     except AttributeError as e:
-        msg = f"Unsupported check type: {check.type} (GX expectation: {gx_class_name})"
+        msg = f"GX expectation class not found: {gx_class_name} (check type: {check.type!r})"
         raise ValueError(msg) from e
 
     # Build kwargs for the expectation
@@ -76,7 +83,14 @@ def _map_check_to_gx_expectation(check: QualityCheck) -> Any:
     if check.column:
         kwargs["column"] = check.column
 
-    # Add parameters from check definition
+    # Validate parameter keys before passing to GX constructors.
+    # Only allow simple snake_case identifiers to prevent injection
+    # of unexpected constructor arguments.
+    _SAFE_PARAM_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
+    for key in check.parameters:
+        if not isinstance(key, str) or not _SAFE_PARAM_KEY.match(key):
+            msg = f"Invalid parameter key {key!r} in check {check.name!r}"
+            raise ValueError(msg)
     kwargs.update(check.parameters)
 
     return expectation_class(**kwargs)
@@ -106,10 +120,11 @@ def _convert_gx_result_to_check_result(
     error_message = None
     if not passed:
         unexpected_percent = result_details.get("unexpected_percent", 0)
-        error_message = f"Check failed: {unexpected_percent:.2f}% of values failed validation"
-        if "partial_unexpected_list" in result_details:
-            samples = result_details["partial_unexpected_list"][:5]
-            error_message += f". Sample failures: {samples}"
+        sample_count = len(result_details.get("partial_unexpected_list", []))
+        error_message = (
+            f"Check failed: {unexpected_percent:.2f}% of values failed validation"
+            f" ({sample_count} sample failures available in details)"
+        )
 
     return QualityCheckResult(
         check_name=check.name,
@@ -143,6 +158,7 @@ def run_validation_with_timeout(
     """
     result_holder: list[ExpectationSuiteValidationResult | None] = [None]
     exception_holder: list[Exception | None] = [None]
+    cancel_event = threading.Event()
     start_time = time.time()
 
     def _run_validation() -> None:
@@ -181,7 +197,11 @@ def run_validation_with_timeout(
         except Exception as e:
             exception_holder[0] = e
 
-    # Run validation in a thread with timeout
+    # Run validation in a thread with timeout.
+    # Note: Python threads cannot be forcibly killed. The cancel_event
+    # signals cooperative cancellation; GX itself does not check it,
+    # so the thread may outlive the timeout.  We log a warning so
+    # operators know an orphaned thread exists.
     thread = threading.Thread(target=_run_validation, daemon=True)
     thread.start()
     thread.join(timeout=timeout_seconds)
@@ -189,7 +209,12 @@ def run_validation_with_timeout(
     execution_time_ms = (time.time() - start_time) * 1000
 
     if thread.is_alive():
-        # Timeout occurred
+        cancel_event.set()
+        logger.warning(
+            "GX validation for %s timed out after %ds; daemon thread may still be running",
+            suite.model_name,
+            timeout_seconds,
+        )
         pending_checks = [c.name for c in suite.checks if c.enabled]
         raise QualityTimeoutError(
             model_name=suite.model_name,
@@ -278,10 +303,15 @@ def create_dataframe_from_connection(
             msg = f"Invalid table name: {table_name!r}"
             raise ValueError(msg)
 
+        # Defense-in-depth: quote the identifier even after regex validation.
+        # DuckDB has no parameterized identifiers or quote_ident(), so we
+        # escape double-quotes manually per SQL standard (see ADR/security).
+        quoted_name = '"' + table_name.replace('"', '""') + '"'
+
         path = connection_config.get("path", ":memory:")
         conn = duckdb.connect(path)
         try:
-            return conn.execute(f"SELECT * FROM {table_name}").fetchdf()  # nosec B608 - validated above
+            return conn.execute(f"SELECT * FROM {quoted_name}").fetchdf()  # nosec B608 - regex + quoted
         except duckdb.CatalogException:
             # Table doesn't exist, return empty DataFrame
             return pd.DataFrame()

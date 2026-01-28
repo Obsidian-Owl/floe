@@ -11,6 +11,7 @@ Design Decisions:
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -23,6 +24,8 @@ from floe_core.schemas.quality_score import (
     QualitySuite,
     QualitySuiteResult,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -146,6 +149,7 @@ def run_dbt_tests_with_timeout(
     """
     result_holder: list[dict[str, Any] | None] = [None]
     exception_holder: list[Exception | None] = [None]
+    cancel_event = threading.Event()
     start_time = time.time()
 
     def _run_tests() -> None:
@@ -180,16 +184,20 @@ def run_dbt_tests_with_timeout(
             }
 
             if res.result is not None and hasattr(res.result, "results"):
-                # res.result is RunExecutionResult for test command
+                # res.result is RunExecutionResult for test command.
+                # Use getattr with defaults for resilience against
+                # dbt version differences in result object shapes.
                 for test_result in res.result.results:
+                    node = getattr(test_result, "node", None)
+                    status = getattr(test_result, "status", None)
                     test_info = {
-                        "unique_id": test_result.node.unique_id,
-                        "name": test_result.node.name,
-                        "status": str(test_result.status.value),
-                        "execution_time": test_result.execution_time,
-                        "failures": test_result.failures,
-                        "message": test_result.message,
-                        "compiled_code": getattr(test_result.node, "compiled_code", None),
+                        "unique_id": getattr(node, "unique_id", "") if node else "",
+                        "name": getattr(node, "name", "") if node else "",
+                        "status": str(status.value) if status else "error",
+                        "execution_time": getattr(test_result, "execution_time", 0),
+                        "failures": getattr(test_result, "failures", 0),
+                        "message": getattr(test_result, "message", None),
+                        "compiled_code": getattr(node, "compiled_code", None) if node else None,
                     }
                     results["tests"].append(test_info)
 
@@ -197,7 +205,8 @@ def run_dbt_tests_with_timeout(
         except Exception as e:
             exception_holder[0] = e
 
-    # Run tests in a thread with timeout
+    # Run tests in a thread with timeout.
+    # See GX executor for rationale on daemon threads + cancel_event.
     thread = threading.Thread(target=_run_tests, daemon=True)
     thread.start()
     thread.join(timeout=timeout_seconds)
@@ -205,7 +214,12 @@ def run_dbt_tests_with_timeout(
     execution_time_ms = (time.time() - start_time) * 1000
 
     if thread.is_alive():
-        # Timeout occurred
+        cancel_event.set()
+        logger.warning(
+            "dbt tests for %s timed out after %ds; daemon thread may still be running",
+            suite.model_name,
+            timeout_seconds,
+        )
         pending_checks = [c.name for c in suite.checks]
         raise QualityTimeoutError(
             model_name=suite.model_name,

@@ -85,7 +85,8 @@ class OpenLineageQualityEmitter:
         """
         self.backend_url = backend_url
         self.namespace = namespace
-        self.timeout_seconds = timeout_seconds
+        # Clamp timeout to a safe range to prevent resource exhaustion.
+        self.timeout_seconds = max(1, min(timeout_seconds, 30))
 
     def emit_fail_event(
         self,

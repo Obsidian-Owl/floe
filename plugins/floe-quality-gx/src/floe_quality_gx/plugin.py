@@ -283,15 +283,9 @@ class GreatExpectationsPlugin(QualityPlugin):
         results: QualitySuiteResult,
         config: QualityConfig,
     ) -> QualityScore:
-        passed = sum(1 for c in results.checks if c.passed)
-        failed = len(results.checks) - passed
-        return QualityScore(
-            overall=100.0 if failed == 0 else 0.0,
-            dimension_scores=dict.fromkeys(Dimension, 100.0),
-            checks_passed=passed,
-            checks_failed=failed,
-            model_name=results.model_name,
-        )
+        from floe_core.scoring import calculate_quality_score
+
+        return calculate_quality_score(results, config)
 
     def list_suites(self) -> list[str]:
         return []
