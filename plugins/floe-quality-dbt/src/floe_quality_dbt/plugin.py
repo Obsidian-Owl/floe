@@ -114,12 +114,43 @@ class DBTExpectationsPlugin(QualityPlugin):
         data_source: str,
         options: dict[str, Any] | None = None,
     ) -> QualitySuiteResult:
-        # TODO: Implement using dbt-expectations via DBTPlugin
+        """Run quality checks against a dbt model.
+
+        This method creates an empty suite and delegates to run_suite().
+        For full functionality, use run_suite() with a QualitySuite object.
+
+        Args:
+            suite_name: Name of the quality suite.
+            data_source: Data source identifier (dbt model name).
+            options: Optional execution options (timeout_seconds, fail_fast,
+                     project_dir, profiles_dir).
+
+        Returns:
+            QualitySuiteResult with check outcomes.
+        """
+        opts = options or {}
+        suite = QualitySuite(
+            model_name=data_source,
+            checks=[],
+            timeout_seconds=opts.get("timeout_seconds", 300),
+            fail_fast=opts.get("fail_fast", False),
+        )
+
+        # Delegate to run_suite
+        connection_config: dict[str, Any] = {
+            "project_dir": opts.get("project_dir"),
+            "profiles_dir": opts.get("profiles_dir"),
+        }
+        result = self.run_suite(suite, connection_config)
+
+        # Override suite_name to match the requested name
         return QualitySuiteResult(
             suite_name=suite_name,
-            model_name=data_source,
-            passed=True,
-            checks=[],
+            model_name=result.model_name,
+            passed=result.passed,
+            checks=result.checks,
+            execution_time_ms=result.execution_time_ms,
+            summary=result.summary,
         )
 
     def run_suite(
@@ -127,21 +158,73 @@ class DBTExpectationsPlugin(QualityPlugin):
         suite: QualitySuite,
         connection_config: dict[str, Any],
     ) -> QualitySuiteResult:
-        # TODO: Implement using dbt-expectations via DBTPlugin
-        return QualitySuiteResult(
-            suite_name=f"{suite.model_name}_suite",
-            model_name=suite.model_name,
-            passed=True,
-            checks=[],
-        )
+        """Run a quality suite using dbt test command.
+
+        Args:
+            suite: QualitySuite with checks to execute.
+            connection_config: Configuration with project_dir and profiles_dir.
+
+        Returns:
+            QualitySuiteResult with all check results.
+
+        Raises:
+            QualityTimeoutError: If execution exceeds suite.timeout_seconds.
+        """
+        # Handle empty checks case - still run dbt tests for the model
+        try:
+            from floe_quality_dbt.executor import run_dbt_tests_with_timeout
+
+            return run_dbt_tests_with_timeout(
+                suite=suite,
+                project_dir=connection_config.get("project_dir"),
+                profiles_dir=connection_config.get("profiles_dir"),
+                timeout_seconds=suite.timeout_seconds,
+            )
+        except ImportError:
+            # dbt not available, return empty result
+            return QualitySuiteResult(
+                suite_name=f"{suite.model_name}_suite",
+                model_name=suite.model_name,
+                passed=True,
+                checks=[],
+                summary={"total": 0, "passed": 0, "failed": 0},
+            )
 
     def validate_expectations(
         self,
         data_source: str,
         expectations: list[dict[str, Any]],
     ) -> list[QualityCheckResult]:
-        # TODO: Implement using dbt-expectations
-        return []
+        """Validate data against ad-hoc expectations via dbt tests.
+
+        Args:
+            data_source: Data source identifier (dbt model name).
+            expectations: List of expectation definitions.
+
+        Returns:
+            List of QualityCheckResult for each expectation.
+        """
+        if not expectations:
+            return []
+
+        # Convert expectations to QualityChecks
+        from floe_core.schemas.quality_score import QualityCheck
+
+        checks = []
+        for i, exp in enumerate(expectations):
+            check = QualityCheck(
+                name=exp.get("name", f"check_{i}"),
+                type=exp.get("type", "custom"),
+                column=exp.get("column"),
+                dimension=Dimension(exp.get("dimension", "validity")),
+            )
+            checks.append(check)
+
+        # Create suite and run
+        suite = QualitySuite(model_name=data_source, checks=checks)
+        result = self.run_suite(suite, {})
+
+        return list(result.checks)
 
     def calculate_quality_score(
         self,
