@@ -6,6 +6,11 @@ configuration types including quality, governance, and plugins.
 
 from __future__ import annotations
 
+from floe_core.validation.quality_gates import (
+    validate_coverage,
+    validate_override,
+    validate_required_tests,
+)
 from floe_core.validation.quality_validation import (
     get_available_quality_providers,
     validate_check_column_references,
@@ -15,5 +20,8 @@ from floe_core.validation.quality_validation import (
 __all__ = [
     "get_available_quality_providers",
     "validate_check_column_references",
+    "validate_coverage",
+    "validate_override",
     "validate_quality_provider",
+    "validate_required_tests",
 ]
