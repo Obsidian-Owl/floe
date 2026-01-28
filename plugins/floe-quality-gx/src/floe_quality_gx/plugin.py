@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.quality import (
@@ -15,7 +15,13 @@ from floe_core.plugins.quality import (
     QualitySuiteResult,
     ValidationResult,
 )
+from floe_core.quality_errors import QualityCoverageError, QualityMissingTestsError
 from floe_core.schemas.quality_config import Dimension, QualityConfig, QualityGates
+from floe_core.validation import (
+    calculate_coverage,
+    validate_coverage,
+    validate_required_tests,
+)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -55,12 +61,51 @@ class GreatExpectationsPlugin(QualityPlugin):
         models: list[dict[str, Any]],
         gates: QualityGates,
     ) -> GateResult:
-        # TODO: Implement gate validation
+        all_violations: list[str] = []
+        all_missing_tests: list[str] = []
+        min_coverage = 100.0
+        min_tier: Literal["bronze", "silver", "gold"] = "gold"
+
+        for model in models:
+            coverage_result = calculate_coverage(model)
+            tier = coverage_result.tier
+            if tier not in ("bronze", "silver", "gold"):
+                tier = "bronze"
+
+            try:
+                validate_coverage(
+                    model_name=coverage_result.model_name,
+                    tier=tier,
+                    actual_coverage=coverage_result.coverage_percentage,
+                    gates=gates,
+                )
+            except QualityCoverageError as e:
+                all_violations.append(str(e))
+                if coverage_result.coverage_percentage < min_coverage:
+                    min_coverage = coverage_result.coverage_percentage
+                    min_tier = cast(Literal["bronze", "silver", "gold"], tier)
+
+            try:
+                validate_required_tests(
+                    model_name=coverage_result.model_name,
+                    tier=tier,
+                    actual_tests=coverage_result.test_types_present,
+                    gates=gates,
+                )
+            except QualityMissingTestsError as e:
+                all_violations.append(str(e))
+                all_missing_tests.extend(e.missing_tests)
+
+        gate_tier = getattr(gates, min_tier, gates.bronze)
+        required_coverage = gate_tier.min_test_coverage
+
         return GateResult(
-            passed=True,
-            tier="bronze",
-            coverage_actual=0.0,
-            coverage_required=0.0,
+            passed=len(all_violations) == 0,
+            tier=min_tier,
+            coverage_actual=min_coverage,
+            coverage_required=required_coverage,
+            missing_tests=list(set(all_missing_tests)),
+            violations=all_violations,
         )
 
     def run_checks(
