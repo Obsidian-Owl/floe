@@ -406,7 +406,7 @@ class ColumnLineageFacetBuilder:
         """
         fields: dict[str, Any] = {}
 
-        for col_name, col_def in model_columns.items():
+        for col_name, _col_def in model_columns.items():
             # Find upstream columns with matching name (IDENTITY transformation)
             input_fields = [
                 {

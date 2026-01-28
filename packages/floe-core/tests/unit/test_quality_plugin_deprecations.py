@@ -11,19 +11,17 @@ Requirements Covered:
 
 from __future__ import annotations
 
-import warnings
 from typing import Any
 
 import pytest
 
 from floe_core.plugins.quality import OpenLineageEmitter, QualityPlugin
-from floe_core.schemas.quality_config import Dimension, QualityConfig, SeverityLevel
+from floe_core.schemas.quality_config import Dimension, SeverityLevel
 from floe_core.schemas.quality_score import (
     QualityCheckResult,
     QualitySuite,
     QualitySuiteResult,
 )
-from floe_core.schemas.quality_validation import ValidationResult
 
 
 class MockQualityPlugin(QualityPlugin):

@@ -210,4 +210,4 @@ metadata:
 data:
   postgres_db: marquez
   postgres_user: marquez
-  postgres_password: marquez
+  postgres_password: marquez  # pragma: allowlist secret

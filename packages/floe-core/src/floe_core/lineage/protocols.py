@@ -55,7 +55,7 @@ class LineageExtractor(Protocol):
 
     Example:
         >>> class DagsterExtractor:
-        ...     def extract(self, context: Any) -> tuple[list[LineageDataset], list[LineageDataset]]:
+        ...     def extract(self, context: Any) -> tuple[list, list]:
         ...         # Extract inputs and outputs from Dagster context
         ...         inputs = [LineageDataset(namespace="prod", name="input_table")]
         ...         outputs = [LineageDataset(namespace="prod", name="output_table")]

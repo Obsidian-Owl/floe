@@ -238,7 +238,7 @@ class HttpLineageTransport:
                     headers=headers,
                     method="POST",
                 )
-                urllib.request.urlopen(req, timeout=self._timeout)  # noqa: S310
+                urllib.request.urlopen(req, timeout=self._timeout)  # noqa: S310  # nosec B310
         except Exception:
             logger.exception(
                 "Failed to post lineage event",
@@ -266,7 +266,7 @@ class HttpLineageTransport:
                     headers=headers,
                     method="POST",
                 )
-                urllib.request.urlopen(req, timeout=self._timeout)  # noqa: S310
+                urllib.request.urlopen(req, timeout=self._timeout)  # noqa: S310  # nosec B310
             except Exception:
                 logger.exception(
                     "Failed to post lineage event (threaded)",

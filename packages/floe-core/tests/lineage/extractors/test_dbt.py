@@ -260,7 +260,7 @@ class TestDbtLineageExtractor:
         assert "model.project.fct_orders" in all_lineage
 
         # Each should have (inputs, outputs) tuple
-        for node_uid, (inputs, outputs) in all_lineage.items():
+        for _node_uid, (inputs, outputs) in all_lineage.items():
             assert isinstance(inputs, list)
             assert isinstance(outputs, list)
             assert len(outputs) == 1  # Each model produces 1 output

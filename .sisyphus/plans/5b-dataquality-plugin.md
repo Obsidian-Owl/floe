@@ -3,14 +3,14 @@
 ## TL;DR
 
 > **Quick Summary**: Implement the data quality plugin interface with Great Expectations and dbt-expectations reference implementations, enabling compile-time validation, runtime quality checks, and quality scoring with OpenLineage emission.
-> 
+>
 > **Deliverables**:
 > - Extended QualityPlugin ABC in `floe_core/plugins/quality.py`
 > - Quality schemas in `floe_core/schemas/quality_*.py`
 > - `floe-quality-gx` plugin package (Great Expectations)
 > - `floe-quality-dbt` plugin package (dbt-expectations)
 > - Contract tests and integration tests
-> 
+>
 > **Estimated Effort**: Large (106 tasks across 10 phases)
 > **Parallel Execution**: YES - 5 waves
 > **Critical Path**: Phase 2 (Foundation) -> Phase 3-5 (MVP) -> Phase 6-8 (P2/P3) -> Phase 9-10 (Polish)

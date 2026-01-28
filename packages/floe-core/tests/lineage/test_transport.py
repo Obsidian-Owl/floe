@@ -181,7 +181,7 @@ class TestHttpLineageTransport:
         transport = HttpLineageTransport(
             url="http://example.com/lineage",
             timeout=10.0,
-            api_key="secret-key",
+            api_key="secret-key",  # pragma: allowlist secret
         )
         assert transport._url == "http://example.com/lineage"
         assert transport._timeout == 10.0

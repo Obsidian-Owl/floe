@@ -6,10 +6,7 @@ and Iceberg snapshot enrichment for OpenLineage integration.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
-from pydantic import ValidationError
 
 from floe_core.lineage.catalog_integration import (
     CatalogDatasetResolver,

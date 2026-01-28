@@ -19,7 +19,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from floe_core.lineage.backends.marquez import MarquezLineageBackendPlugin
 from floe_core.lineage.emitter import LineageEmitter
 from floe_core.lineage.events import EventBuilder

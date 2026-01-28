@@ -203,7 +203,12 @@ class TestCreateEmitter:
     def test_http_config_with_options(self) -> None:
         """HTTP config passes timeout and api_key."""
         emitter = create_emitter(
-            {"type": "http", "url": "http://localhost:5000", "timeout": 10.0, "api_key": "secret"}
+            {
+                "type": "http",
+                "url": "http://localhost:5000",
+                "timeout": 10.0,
+                "api_key": "secret",
+            }  # pragma: allowlist secret
         )
         transport = emitter.transport
         assert isinstance(transport, HttpLineageTransport)

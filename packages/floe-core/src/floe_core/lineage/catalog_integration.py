@@ -21,7 +21,7 @@ from floe_core.lineage.facets import IcebergSnapshotFacetBuilder
 from floe_core.lineage.types import LineageDataset
 
 if TYPE_CHECKING:
-    from floe_core.plugins.catalog import CatalogPlugin
+    pass
 
 
 class NamespaceStrategy(ABC):
@@ -319,7 +319,7 @@ class CatalogDatasetResolver:
             'staging'
         """
         if self.catalog_plugin is not None:
-            return self.catalog_plugin.name
+            return str(self.catalog_plugin.name)
         return self.default_namespace
 
     def resolve_dataset(

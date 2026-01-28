@@ -16,8 +16,8 @@ from floe_core.lineage.facets import (
     IcebergSnapshotFacetBuilder,
     ParentRunFacetBuilder,
     QualityFacetBuilder,
-    SQLJobFacetBuilder,
     SchemaFacetBuilder,
+    SQLJobFacetBuilder,
     StatisticsFacetBuilder,
     TraceCorrelationFacetBuilder,
 )

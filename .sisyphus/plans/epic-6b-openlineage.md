@@ -3,7 +3,7 @@
 ## TL;DR
 
 > **Quick Summary**: Build a portable, non-blocking OpenLineage lineage subsystem in floe-core with catalog-aware dataset identity, unified emission across orchestrator/quality plugins, dbt manifest extraction, and Marquez backend support. Fix 6 architectural issues in existing plugin ABCs.
-> 
+>
 > **Deliverables**:
 > - Core lineage module (`floe_core/lineage/`) with emitter, events, facets, transport, extractors
 > - Upgraded `OrchestratorPlugin.emit_lineage_event()` ABC (portable across Dagster/Airflow/Prefect)
@@ -14,7 +14,7 @@
 > - Marquez backend plugin implementation
 > - `ResolvedPlugins` schema update (v0.5.0) with `lineage_backend`
 > - Full test suite (unit, contract, integration)
-> 
+>
 > **Estimated Effort**: Large (15 tasks, ~8-10 days with parallelization)
 > **Parallel Execution**: YES — 5 waves
 > **Critical Path**: Task 1 → Task 3 → Task 5 → Task 8 → Task 12 → Task 15

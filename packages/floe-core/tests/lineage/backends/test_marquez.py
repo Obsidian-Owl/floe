@@ -49,7 +49,7 @@ def test_transport_config_structure() -> None:
     """
     plugin = MarquezLineageBackendPlugin(
         url="http://marquez:5000",
-        api_key="test-key",
+        api_key="test-key",  # pragma: allowlist secret
     )
     config = plugin.get_transport_config()
 
@@ -205,7 +205,7 @@ def test_validate_connection_with_api_key() -> None:
     """
     plugin = MarquezLineageBackendPlugin(
         url="http://localhost:5000",
-        api_key="test-key",
+        api_key="test-key",  # pragma: allowlist secret
     )
 
     mock_response = MagicMock()

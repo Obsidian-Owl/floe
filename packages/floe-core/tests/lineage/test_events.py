@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from floe_core.lineage import LineageDataset, LineageJob, RunState
+from floe_core.lineage import LineageDataset, RunState
 from floe_core.lineage.events import EventBuilder, to_openlineage_event
 
 

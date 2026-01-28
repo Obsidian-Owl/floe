@@ -35,7 +35,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
     Example:
         >>> plugin = MarquezLineageBackendPlugin(
         ...     url="http://marquez:5000",
-        ...     api_key="secret-key"
+        ...     api_key="secret-key"  # pragma: allowlist secret
         ... )
         >>> config = plugin.get_transport_config()
         >>> config["url"]
@@ -181,7 +181,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 "enabled": True,
                 "auth": {
                     "username": "marquez",
-                    "password": "marquez",
+                    "password": "marquez",  # pragma: allowlist secret
                     "database": "marquez",
                 },
                 "primary": {
@@ -226,7 +226,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             if self._api_key:
                 req.add_header("Authorization", f"Bearer {self._api_key}")
 
-            with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
-                return response.status == 200
+            with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310  # nosec B310
+                return bool(response.status == 200)
         except Exception:
             return False

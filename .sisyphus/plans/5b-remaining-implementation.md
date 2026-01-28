@@ -3,7 +3,7 @@
 ## TL;DR
 
 > **Quick Summary**: Complete ALL remaining Data Quality Plugin tasks - runtime execution (run_checks), quality scoring (dimension weights, influence capping), OpenLineage integration, contract tests, integration tests, and polish. NO deferrals.
-> 
+>
 > **Deliverables**:
 > - Fully functional run_checks/run_suite in both GX and dbt plugins
 > - Quality scoring module with proper weighted calculation
@@ -12,7 +12,7 @@
 > - Integration tests with DuckDB
 > - Performance tests for 100+ checks
 > - Documentation updates
-> 
+>
 > **Estimated Effort**: Large (40+ tasks across 5 phases)
 > **Parallel Execution**: YES - 4 waves
 > **Critical Path**: US3 Runtime → US5 Scoring → US6 Lineage → Tests → Polish

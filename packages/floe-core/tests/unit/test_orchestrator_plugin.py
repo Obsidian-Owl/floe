@@ -1,4 +1,4 @@
-"""Tests for OrchestratorPlugin ABC upgrades (emit_lineage_event, get_lineage_emitter, Dataset deprecation)."""
+"""Tests for OrchestratorPlugin ABC upgrades."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from floe_core.lineage import LineageDataset, LineageEmitter, RunState
+from floe_core.lineage import LineageDataset, RunState
 from floe_core.plugins.orchestrator import (
     Dataset,
     OrchestratorPlugin,
