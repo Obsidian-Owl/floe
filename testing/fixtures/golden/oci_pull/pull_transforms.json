@@ -9,13 +9,17 @@
         "name": "stg_golden_customers",
         "compute": "duckdb",
         "tags": null,
-        "depends_on": null
+        "depends_on": null,
+        "quality_checks": null,
+        "quality_tier": null
       },
       {
         "name": "fct_golden_orders",
         "compute": "duckdb",
         "tags": null,
-        "depends_on": null
+        "depends_on": null,
+        "quality_checks": null,
+        "quality_tier": null
       }
     ],
     "default_compute": "duckdb"
