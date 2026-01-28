@@ -37,6 +37,10 @@ from floe_core.compilation.errors import (
     CompilationError,
     CompilationException,
 )
+from floe_core.compilation.quality_inheritance import (
+    merge_gate_tiers,
+    resolve_quality_inheritance,
+)
 from floe_core.compilation.stages import CompilationStage
 
 __all__ = [
@@ -46,6 +50,9 @@ __all__ = [
     "format_env_var_placeholder",
     "generate_dbt_profiles",
     "get_compute_plugin",
+    # Quality inheritance
+    "merge_gate_tiers",
+    "resolve_quality_inheritance",
     # Errors
     "CompilationError",
     "CompilationException",

@@ -66,9 +66,9 @@ class CompilationError(BaseModel):
     code: str = Field(
         ...,
         min_length=1,
-        pattern=r"^E\d{3}$",
-        description="Error code (E001-E999)",
-        examples=["E001", "E002", "E101"],
+        pattern=r"^(E\d{3}|FLOE-DQ\d{3})$",
+        description="Error code (E001-E999 or FLOE-DQ101-FLOE-DQ999)",
+        examples=["E001", "E002", "E101", "FLOE-DQ103", "FLOE-DQ104"],
     )
     message: str = Field(
         ...,
