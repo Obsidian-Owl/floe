@@ -106,30 +106,6 @@ from floe_core.schemas.governance import (
     QualityGatesConfig,
 )
 
-# Quality schemas
-from floe_core.schemas.quality_config import (
-    CalculationParameters,
-    Dimension,
-    DimensionWeights,
-    GateTier,
-    OverrideConfig,
-    QualityConfig,
-    QualityGates,
-    QualityThresholds,
-    SeverityLevel,
-)
-from floe_core.schemas.quality_score import (
-    QualityCheck,
-    QualityCheckResult,
-    QualityScore,
-    QualitySuite,
-    QualitySuiteResult,
-)
-from floe_core.schemas.quality_validation import (
-    GateResult,
-    ValidationResult,
-)
-
 # Inheritance models (T006, T033, T034, T035)
 from floe_core.schemas.inheritance import (
     FIELD_MERGE_STRATEGIES,
@@ -193,6 +169,30 @@ from floe_core.schemas.plugins import (
     get_available_plugins,
     validate_domain_plugin_whitelist,
     validate_plugin_selection,
+)
+
+# Quality schemas
+from floe_core.schemas.quality_config import (
+    CalculationParameters,
+    Dimension,
+    DimensionWeights,
+    GateTier,
+    OverrideConfig,
+    QualityConfig,
+    QualityGates,
+    QualityThresholds,
+    SeverityLevel,
+)
+from floe_core.schemas.quality_score import (
+    QualityCheck,
+    QualityCheckResult,
+    QualityScore,
+    QualitySuite,
+    QualitySuiteResult,
+)
+from floe_core.schemas.quality_validation import (
+    GateResult,
+    ValidationResult,
 )
 
 # RBAC resource schemas (Epic 7B)

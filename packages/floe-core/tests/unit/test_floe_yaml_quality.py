@@ -29,7 +29,6 @@ from floe_core.validation.quality_validation import (
     validate_check_column_references,
 )
 
-
 # =============================================================================
 # T040-T041: FloeSpec quality_checks parsing
 # =============================================================================

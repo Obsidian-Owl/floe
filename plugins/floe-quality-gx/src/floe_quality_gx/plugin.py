@@ -7,7 +7,6 @@ from typing import Any
 from floe_core.plugins.quality import (
     GateResult,
     OpenLineageEmitter,
-    QualityCheck,
     QualityCheckResult,
     QualityPlugin,
     QualityScore,
@@ -15,7 +14,7 @@ from floe_core.plugins.quality import (
     QualitySuiteResult,
     ValidationResult,
 )
-from floe_core.schemas.quality_config import Dimension, QualityConfig, QualityGates, SeverityLevel
+from floe_core.schemas.quality_config import Dimension, QualityConfig, QualityGates
 
 SUPPORTED_DIALECTS = {"duckdb", "postgresql", "snowflake"}
 
@@ -104,7 +103,7 @@ class GreatExpectationsPlugin(QualityPlugin):
         failed = len(results.checks) - passed
         return QualityScore(
             overall=100.0 if failed == 0 else 0.0,
-            dimension_scores={d: 100.0 for d in Dimension},
+            dimension_scores=dict.fromkeys(Dimension, 100.0),
             checks_passed=passed,
             checks_failed=failed,
             model_name=results.model_name,
