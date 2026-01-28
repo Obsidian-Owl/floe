@@ -1,7 +1,7 @@
 {
   "name": "pull_not_found_error",
   "function_name": "",
-  "captured_at": "2026-01-22T02:36:07.296908+00:00",
+  "captured_at": "2026-01-28T08:57:39.728487+00:00",
   "checksum": "a7823adbd8382832",
   "output": {
     "error_type": "ArtifactNotFoundError",

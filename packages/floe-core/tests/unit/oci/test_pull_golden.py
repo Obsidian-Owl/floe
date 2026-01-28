@@ -77,12 +77,32 @@ def _save_golden_fixture(
 
 
 def _normalize_for_comparison(data: Any) -> Any:
-    """Remove timestamp fields that change between runs."""
+    """Remove fields that change between runs or across version bumps.
+
+    Strips timestamps (non-deterministic) and version strings (change on
+    every schema bump) so that golden tests verify *structure and behavior*
+    rather than pinning exact version numbers.
+
+    Normalised fields:
+        - ``compiled_at``, ``captured_at``, ``timestamp``, ``generated_at`` — timestamps
+        - ``version``, ``floe_version`` — schema / build version strings
+    """
+    # Fields that are expected to change across version bumps or runs
+    _VOLATILE_KEYS = frozenset(
+        {
+            "compiled_at",
+            "captured_at",
+            "timestamp",
+            "generated_at",
+            "version",
+            "floe_version",
+        }
+    )
+
     if isinstance(data, dict):
         result: dict[str, Any] = {}
         for key, value in data.items():
-            # Skip timestamp fields that change between runs
-            if key in ("compiled_at", "captured_at", "timestamp", "generated_at"):
+            if key in _VOLATILE_KEYS:
                 continue
             result[key] = _normalize_for_comparison(value)
         return result

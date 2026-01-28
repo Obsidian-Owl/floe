@@ -1,8 +1,8 @@
 {
   "name": "pull_plugins_config",
   "function_name": "",
-  "captured_at": "2026-01-22T02:36:07.291679+00:00",
-  "checksum": "5dba3db50a8d8c0e",
+  "captured_at": "2026-01-28T08:57:39.717846+00:00",
+  "checksum": "8e24706edf348ce9",
   "output": {
     "plugins": {
       "compute": {
@@ -18,7 +18,8 @@
       "catalog": null,
       "storage": null,
       "ingestion": null,
-      "semantic": null
+      "semantic": null,
+      "lineage_backend": null
     },
     "dbt_profiles": {
       "golden_profile": {
