@@ -13,7 +13,7 @@ Implements:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -224,10 +224,11 @@ def merge_manifests(
     # Import here to avoid circular imports
     from floe_core.schemas.manifest import PlatformManifest
     from floe_core.schemas.plugins import PluginsConfig, PluginSelection
+    from floe_core.schemas.quality_config import QualityConfig
 
     # Start with parent's values, override with child's non-None values
     # For plugins, merge at the category level (child overrides parent categories)
-    merged_plugins_data: dict[str, PluginSelection | None] = {}
+    merged_plugins_data: dict[str, PluginSelection | QualityConfig | None] = {}
 
     # Copy parent plugin selections
     if parent.plugins is not None:
@@ -271,7 +272,7 @@ def merge_manifests(
 
     # Filter out None values before creating PluginsConfig
     merged_plugins_filtered = {k: v for k, v in merged_plugins_data.items() if v is not None}
-    merged_plugins = PluginsConfig(**merged_plugins_filtered)
+    merged_plugins = PluginsConfig(**cast(dict[str, Any], merged_plugins_filtered))
 
     # For governance, FORBID strategy means child cannot WEAKEN parent's policies.
     # If parent has governance, it's preserved (child can't override).

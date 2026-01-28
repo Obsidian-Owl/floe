@@ -226,7 +226,7 @@ class QualitySuite(BaseModel):
         ...     model_name="dim_customers",
         ...     checks=[
         ...         QualityCheck(name="id_not_null", type="not_null", ...),
-        ...         QualityCheck(name="email_valid", type="expect_column_values_to_match_regex", ...),
+        ...         QualityCheck(name="email_valid", type="regex_match", ...),
         ...     ],
         ...     timeout_seconds=300,
         ... )

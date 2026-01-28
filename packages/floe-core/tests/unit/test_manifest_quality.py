@@ -8,6 +8,7 @@ Tests:
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from floe_core.quality_errors import QualityProviderNotFoundError
 from floe_core.schemas.plugins import PLUGIN_REGISTRY, PluginsConfig
@@ -129,7 +130,7 @@ class TestPluginsConfigQuality:
         quality = QualityConfig(provider="great_expectations")
         config = PluginsConfig(quality=quality)
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             config.quality = None  # type: ignore[misc]
 
 

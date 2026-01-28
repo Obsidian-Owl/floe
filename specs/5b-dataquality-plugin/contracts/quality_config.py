@@ -94,11 +94,7 @@ class DimensionWeights(BaseModel):
     def weights_must_sum_to_one(self) -> Self:
         """Validate that all weights sum to 1.0."""
         total = (
-            self.completeness
-            + self.accuracy
-            + self.validity
-            + self.consistency
-            + self.timeliness
+            self.completeness + self.accuracy + self.validity + self.consistency + self.timeliness
         )
         if not math.isclose(total, 1.0, rel_tol=1e-9):
             msg = f"Dimension weights must sum to 1.0, got {total}"
@@ -247,9 +243,7 @@ class OverrideConfig(BaseModel):
 
     value: Any = Field(..., description="The setting value")
     overridable: bool = Field(default=True, description="Can lower levels modify this")
-    locked_by: str | None = Field(
-        default=None, description="Which level locked this setting"
-    )
+    locked_by: str | None = Field(default=None, description="Which level locked this setting")
 
 
 class QualityConfig(BaseModel):
