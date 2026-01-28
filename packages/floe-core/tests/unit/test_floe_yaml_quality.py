@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from floe_core.compiler.dbt_test_mapper import (
+from floe_core.compilation.dbt_test_mapper import (
     DBT_TEST_DIMENSION_MAP,
     DEFAULT_DBT_TEST_SEVERITY,
     deduplicate_checks,
