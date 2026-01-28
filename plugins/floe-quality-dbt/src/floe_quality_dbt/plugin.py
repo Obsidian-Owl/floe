@@ -30,11 +30,11 @@ try:
     _HAS_OTEL = True
 except ImportError:
     _HAS_OTEL = False
+    _factory_get_tracer = None  # type: ignore[assignment]
 
 
 def _quality_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
-    """Return an OTel span context manager, or nullcontext if unavailable."""
-    if not _HAS_OTEL:
+    if not _HAS_OTEL or _factory_get_tracer is None:
         return nullcontext()
     return _factory_get_tracer(__name__).start_as_current_span(name, attributes=attributes)
 
