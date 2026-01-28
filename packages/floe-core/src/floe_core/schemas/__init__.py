@@ -171,6 +171,30 @@ from floe_core.schemas.plugins import (
     validate_plugin_selection,
 )
 
+# Quality schemas
+from floe_core.schemas.quality_config import (
+    CalculationParameters,
+    Dimension,
+    DimensionWeights,
+    GateTier,
+    OverrideConfig,
+    QualityConfig,
+    QualityGates,
+    QualityThresholds,
+    SeverityLevel,
+)
+from floe_core.schemas.quality_score import (
+    QualityCheck,
+    QualityCheckResult,
+    QualityScore,
+    QualitySuite,
+    QualitySuiteResult,
+)
+from floe_core.schemas.quality_validation import (
+    GateResult,
+    ValidationResult,
+)
+
 # RBAC resource schemas (Epic 7B)
 from floe_core.schemas.rbac import (
     NamespaceConfig,
@@ -424,4 +448,21 @@ __all__: list[str] = [
     "SigningAuditEvent",
     "VerificationAuditEvent",
     "VerificationBundle",
+    # Quality schemas
+    "CalculationParameters",
+    "Dimension",
+    "DimensionWeights",
+    "GateTier",
+    "GateResult",
+    "OverrideConfig",
+    "QualityCheck",
+    "QualityCheckResult",
+    "QualityConfig",
+    "QualityGates",
+    "QualityScore",
+    "QualitySuite",
+    "QualitySuiteResult",
+    "QualityThresholds",
+    "SeverityLevel",
+    "ValidationResult",
 ]

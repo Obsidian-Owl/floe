@@ -199,14 +199,18 @@ def compile_pipeline(
                 duration_ms=round(duration_ms, 2),
             )
 
-        # Stage 2: VALIDATE - Schema validation (done during LOAD via Pydantic)
+        # Stage 2: VALIDATE - Schema validation and quality provider validation
         stage_start = time.perf_counter()
         with create_span(
             "compile.validate",
             attributes={"compile.stage": CompilationStage.VALIDATE.value},
         ):
             log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
-            # Validation happens automatically in Pydantic models
+            if manifest.plugins.quality is not None:
+                from floe_core.validation.quality_validation import validate_quality_provider
+
+                validate_quality_provider(manifest.plugins.quality.provider)
+                log.debug("quality_provider_validated", provider=manifest.plugins.quality.provider)
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
                 "compilation_stage_complete",
@@ -292,6 +296,7 @@ def compile_pipeline(
             attributes={"compile.stage": CompilationStage.GENERATE.value},
         ) as generate_span:
             log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)
+            quality_config = resolved_manifest.plugins.quality
             artifacts = build_artifacts(
                 spec=spec,
                 manifest=resolved_manifest,
@@ -300,6 +305,7 @@ def compile_pipeline(
                 dbt_profiles=dbt_profiles,
                 spec_path=spec_path,
                 manifest_path=manifest_path,
+                quality_config=quality_config,
             )
             generate_span.set_attribute("compile.artifacts_version", artifacts.version)
             duration_ms = (time.perf_counter() - stage_start) * 1000

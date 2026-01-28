@@ -4,10 +4,10 @@
   "captured_at": "2026-01-22T02:36:07.289929+00:00",
   "checksum": "33893f9c73d27719",
   "output": {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "metadata": {
       "compiled_at": "2026-01-15 10:30:00+00:00",
-      "floe_version": "0.3.0",
+      "floe_version": "0.4.0",
       "source_hash": "sha256:golden123abc",
       "product_name": "golden-product",
       "product_version": "1.0.0"

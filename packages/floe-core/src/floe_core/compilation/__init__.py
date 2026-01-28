@@ -32,10 +32,23 @@ from floe_core.compilation.dbt_profiles import (
     generate_dbt_profiles,
     get_compute_plugin,
 )
+from floe_core.compilation.dbt_test_mapper import (
+    deduplicate_checks,
+    map_dbt_test_to_check,
+    merge_model_checks,
+)
 from floe_core.compilation.errors import (
     ERROR_CODES,
     CompilationError,
     CompilationException,
+)
+from floe_core.compilation.quality_compiler import (
+    raise_if_quality_violations,
+    validate_quality_gates_for_models,
+)
+from floe_core.compilation.quality_inheritance import (
+    merge_gate_tiers,
+    resolve_quality_inheritance,
 )
 from floe_core.compilation.stages import CompilationStage
 
@@ -46,6 +59,16 @@ __all__ = [
     "format_env_var_placeholder",
     "generate_dbt_profiles",
     "get_compute_plugin",
+    # Quality compilation
+    "raise_if_quality_violations",
+    "validate_quality_gates_for_models",
+    # Quality inheritance
+    "merge_gate_tiers",
+    "resolve_quality_inheritance",
+    # dbt test mapper
+    "deduplicate_checks",
+    "map_dbt_test_to_check",
+    "merge_model_checks",
     # Errors
     "CompilationError",
     "CompilationException",

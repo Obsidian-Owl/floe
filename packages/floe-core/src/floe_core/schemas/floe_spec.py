@@ -32,6 +32,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from floe_core.schemas.quality_score import QualityCheck
+
 # Validation patterns
 FLOE_NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
 """Pattern for FloeSpec names: DNS-compatible, starts with letter (C001)."""
@@ -150,20 +152,23 @@ class TransformSpec(BaseModel):
     """Configuration for a single dbt model/transform.
 
     Defines a transform within a data product, specifying the model name,
-    optional compute target override, tags, and dependencies.
+    optional compute target override, tags, dependencies, and quality checks.
 
     Attributes:
         name: Model name (must exist in dbt project, matches dbt naming)
         compute: Optional compute target override (None = platform default)
         tags: Optional list of dbt tags for selection
         depends_on: Optional list of explicit dependencies (model names)
+        tier: Optional quality tier (bronze, silver, gold)
+        quality_checks: Optional list of quality checks for this model
 
     Example:
         >>> transform = TransformSpec(
         ...     name="stg_customers",
         ...     compute="duckdb",
         ...     tags=["staging", "customers"],
-        ...     depends_on=["raw_customers"]
+        ...     depends_on=["raw_customers"],
+        ...     tier="silver",
         ... )
         >>> transform.name
         'stg_customers'
@@ -179,13 +184,15 @@ class TransformSpec(BaseModel):
     model_config = ConfigDict(
         frozen=True,
         extra="forbid",
+        populate_by_name=True,
         json_schema_extra={
             "examples": [
                 {
                     "name": "stg_customers",
                     "compute": "duckdb",
                     "tags": ["staging", "customers"],
-                    "depends_on": ["raw_customers"],
+                    "dependsOn": ["raw_customers"],
+                    "tier": "silver",
                 }
             ]
         },
@@ -218,6 +225,19 @@ class TransformSpec(BaseModel):
             alias="dependsOn",
             description="Explicit dependencies (model names)",
             examples=[["raw_customers", "raw_orders"]],
+        ),
+    ]
+    tier: Literal["bronze", "silver", "gold"] | None = Field(
+        default=None,
+        description="Quality tier for this model (bronze, silver, gold)",
+        examples=["gold"],
+    )
+    quality_checks: Annotated[
+        list[QualityCheck] | None,
+        Field(
+            default=None,
+            alias="qualityChecks",
+            description="Quality checks to run for this model",
         ),
     ]
 

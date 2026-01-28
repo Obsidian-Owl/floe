@@ -1,0 +1,35 @@
+"""Validation modules for floe-core.
+
+This package contains compile-time validation functions for various
+configuration types including quality, governance, and plugins.
+"""
+
+from __future__ import annotations
+
+from floe_core.validation.coverage_calculator import (
+    CoverageResult,
+    calculate_coverage,
+    detect_test_types,
+)
+from floe_core.validation.quality_gates import (
+    validate_coverage,
+    validate_override,
+    validate_required_tests,
+)
+from floe_core.validation.quality_validation import (
+    get_available_quality_providers,
+    validate_check_column_references,
+    validate_quality_provider,
+)
+
+__all__ = [
+    "CoverageResult",
+    "calculate_coverage",
+    "detect_test_types",
+    "get_available_quality_providers",
+    "validate_check_column_references",
+    "validate_coverage",
+    "validate_override",
+    "validate_quality_provider",
+    "validate_required_tests",
+]

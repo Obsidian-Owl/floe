@@ -4,10 +4,10 @@
   "captured_at": "2026-01-22T02:36:07.287717+00:00",
   "checksum": "c7044a1c66fc4f2c",
   "output": {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "metadata": {
       "compiled_at": "2026-01-15 10:30:00+00:00",
-      "floe_version": "0.3.0",
+      "floe_version": "0.4.0",
       "source_hash": "sha256:golden123abc",
       "product_name": "golden-product",
       "product_version": "1.0.0"
@@ -78,17 +78,22 @@
           "name": "stg_golden_customers",
           "compute": "duckdb",
           "tags": null,
-          "depends_on": null
+          "depends_on": null,
+          "quality_checks": null,
+          "quality_tier": null
         },
         {
           "name": "fct_golden_orders",
           "compute": "duckdb",
           "tags": null,
-          "depends_on": null
+          "depends_on": null,
+          "quality_checks": null,
+          "quality_tier": null
         }
       ],
       "default_compute": "duckdb"
     },
+    "quality_config": null,
     "data_contracts": [],
     "dbt_profiles": {
       "golden_profile": {
