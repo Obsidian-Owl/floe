@@ -118,7 +118,7 @@ class TestValidPluginSelection:
             lineage_backend={"type": "marquez"},
             identity={"type": "k8s-rbac"},
             dbt={"type": "local"},
-            quality={"type": "great-expectations"},
+            quality={"provider": "great_expectations"},
         )
 
         assert plugins.compute is not None
