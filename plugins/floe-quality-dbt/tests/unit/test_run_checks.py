@@ -24,14 +24,6 @@ if TYPE_CHECKING:
     from floe_quality_dbt import DBTExpectationsPlugin
 
 
-@pytest.fixture
-def dbt_plugin():
-    """Provide a DBTExpectationsPlugin instance for testing."""
-    from floe_quality_dbt import DBTExpectationsPlugin
-
-    return DBTExpectationsPlugin()
-
-
 class TestRunChecksBasicExecution:
     """Tests for run_checks() basic execution (T048)."""
 

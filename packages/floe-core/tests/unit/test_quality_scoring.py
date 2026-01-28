@@ -248,22 +248,29 @@ class TestInfluenceCapping:
             ],
         )
 
-        # Baseline 70, max_positive 30 -> max score is 100
+        # Baseline 50, max_positive 10 -> max score capped at 60
         config = QualityConfig(
             provider="great_expectations",
             calculation=CalculationParameters(
-                baseline_score=70,
-                max_positive_influence=30,
+                baseline_score=50,
+                max_positive_influence=10,
             ),
         )
 
         score = calculate_quality_score(results, config)
 
-        assert score.overall <= 100.0
+        # Cap should be 60 (50 + 10), proving the cap is active
+        assert score.overall <= 60.0
+        assert score.overall == pytest.approx(60.0, abs=1.0)
 
     @pytest.mark.requirement("FR-016d")
     def test_max_negative_influence_capped(self) -> None:
-        """Score cannot go below baseline - max_negative_influence."""
+        """Smaller max_negative constrains score closer to baseline.
+
+        The proportional scaling ensures that with max_negative=5 the score
+        stays much closer to baseline than with max_negative=50, proving
+        the negative influence cap is active.
+        """
         from floe_core.scoring import calculate_quality_score
 
         # All checks fail
@@ -293,8 +300,16 @@ class TestInfluenceCapping:
             ],
         )
 
-        # Baseline 70, max_negative 50 -> min score is 20
-        config = QualityConfig(
+        # Tight cap: max_negative=5
+        config_tight = QualityConfig(
+            provider="great_expectations",
+            calculation=CalculationParameters(
+                baseline_score=70,
+                max_negative_influence=5,
+            ),
+        )
+        # Loose cap: max_negative=50
+        config_loose = QualityConfig(
             provider="great_expectations",
             calculation=CalculationParameters(
                 baseline_score=70,
@@ -302,10 +317,14 @@ class TestInfluenceCapping:
             ),
         )
 
-        score = calculate_quality_score(results, config)
+        score_tight = calculate_quality_score(results, config_tight)
+        score_loose = calculate_quality_score(results, config_loose)
 
-        # Score should not go below 20 (70 - 50)
-        assert score.overall >= 20.0
+        # Tight cap keeps score closer to baseline
+        assert score_tight.overall >= 65.0  # Floor: 70 - 5
+        assert score_loose.overall >= 20.0  # Floor: 70 - 50
+        # Tight cap score must be higher (closer to baseline)
+        assert score_tight.overall > score_loose.overall
 
     @pytest.mark.requirement("FR-016d")
     def test_score_constrained_to_0_100(self) -> None:

@@ -126,7 +126,7 @@ class TestGreatExpectationsPluginCheckFailures:
 
     @pytest.mark.requirement("FR-042")
     def test_failed_check_in_results(self, gx_plugin) -> None:
-        """Failed checks are included in results."""
+        """Failed checks are included in results with correct metadata."""
         suite = QualitySuite(
             model_name="test_model",
             checks=[
@@ -144,6 +144,11 @@ class TestGreatExpectationsPluginCheckFailures:
         result = gx_plugin.run_suite(suite, connection_config)
 
         assert isinstance(result, QualitySuiteResult)
+        # Verify result structure captures check metadata
+        for check_result in result.checks:
+            assert isinstance(check_result, QualityCheckResult)
+            assert check_result.dimension in Dimension
+            assert check_result.severity in SeverityLevel
 
     @pytest.mark.requirement("FR-042")
     def test_calculate_score_with_failures(self, gx_plugin) -> None:
@@ -333,7 +338,7 @@ class TestGreatExpectationsPluginQualityScore:
 
         score = gx_plugin.calculate_quality_score(results, config)
 
-        assert score.overall == 100.0
+        assert score.overall == pytest.approx(100.0)
         assert score.checks_passed == 2
         assert score.checks_failed == 0
 
@@ -351,4 +356,4 @@ class TestGreatExpectationsPluginQualityScore:
 
         score = gx_plugin.calculate_quality_score(results, config)
 
-        assert score.overall == 100.0
+        assert score.overall == pytest.approx(100.0)

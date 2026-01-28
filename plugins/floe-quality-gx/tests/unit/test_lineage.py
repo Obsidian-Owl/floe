@@ -23,9 +23,10 @@ class TestOpenLineageFailEvent:
     @pytest.mark.requirement("FR-006")
     def test_lineage_emitter_emit_fail_event(self, gx_plugin: GreatExpectationsPlugin) -> None:
         """OpenLineageEmitter emits FAIL event with check results."""
+        from unittest.mock import patch
+
         from floe_quality_gx.lineage import OpenLineageQualityEmitter
 
-        # Create a mock emitter
         emitter = OpenLineageQualityEmitter(backend_url="http://localhost:5000")
 
         failed_checks = [
@@ -38,12 +39,25 @@ class TestOpenLineageFailEvent:
             ),
         ]
 
-        # Should not raise
-        emitter.emit_fail_event(
-            job_name="quality_check_job",
-            dataset_name="staging.customers",
-            check_results=failed_checks,
-        )
+        with patch.object(emitter, "_send_event") as mock_send:
+            emitter.emit_fail_event(
+                job_name="quality_check_job",
+                dataset_name="staging.customers",
+                check_results=failed_checks,
+            )
+
+            mock_send.assert_called_once()
+            event = mock_send.call_args[0][0]
+            assert event["eventType"] == "FAIL"
+            assert event["job"]["name"] == "quality_check_job"
+            assert len(event["inputs"]) == 1
+            assert event["inputs"][0]["name"] == "staging.customers"
+            facets = event["inputs"][0]["facets"]
+            assert "dataQuality" in facets
+            assertions = facets["dataQuality"]["assertions"]
+            assert len(assertions) == 1
+            assert assertions[0]["assertion"] == "email_not_null"
+            assert assertions[0]["success"] is False
 
     @pytest.mark.requirement("FR-006")
     def test_lineage_emitter_formats_facet(self, gx_plugin: GreatExpectationsPlugin) -> None:
@@ -69,12 +83,14 @@ class TestOpenLineageFailEvent:
 
     @pytest.mark.requirement("FR-006")
     def test_lineage_emitter_multiple_failures(self, gx_plugin: GreatExpectationsPlugin) -> None:
-        """OpenLineageEmitter handles multiple failed checks."""
+        """OpenLineageEmitter filters to only failed checks in event."""
+        from unittest.mock import patch
+
         from floe_quality_gx.lineage import OpenLineageQualityEmitter
 
         emitter = OpenLineageQualityEmitter(backend_url="http://localhost:5000")
 
-        failed_checks = [
+        check_results = [
             QualityCheckResult(
                 check_name="check1",
                 passed=False,
@@ -95,12 +111,20 @@ class TestOpenLineageFailEvent:
             ),
         ]
 
-        # Should not raise
-        emitter.emit_fail_event(
-            job_name="quality_check_job",
-            dataset_name="staging.orders",
-            check_results=failed_checks,
-        )
+        with patch.object(emitter, "_send_event") as mock_send:
+            emitter.emit_fail_event(
+                job_name="quality_check_job",
+                dataset_name="staging.orders",
+                check_results=check_results,
+            )
+
+            mock_send.assert_called_once()
+            event = mock_send.call_args[0][0]
+            # Only failed checks should be in the event (check3 passed, excluded)
+            assertions = event["inputs"][0]["facets"]["dataQuality"]["assertions"]
+            assert len(assertions) == 2
+            assertion_names = {a["assertion"] for a in assertions}
+            assert assertion_names == {"check1", "check2"}
 
 
 class TestGracefulDegradation:
@@ -173,7 +197,9 @@ class TestQualityFacet:
         facet = create_quality_facet(check_results)
 
         assertion = facet["dataQuality"]["assertions"][0]
-        assert "dimension" in assertion or "completeness" in str(assertion).lower()
+        assert assertion["dimension"] == "completeness"
+        assert assertion["assertion"] == "completeness_check"
+        assert assertion["success"] is False
 
     @pytest.mark.requirement("FR-006")
     def test_facet_includes_severity(self, gx_plugin: GreatExpectationsPlugin) -> None:
@@ -192,4 +218,5 @@ class TestQualityFacet:
         facet = create_quality_facet(check_results)
 
         assertion = facet["dataQuality"]["assertions"][0]
-        assert "severity" in assertion or "critical" in str(assertion).lower()
+        assert assertion["severity"] == "critical"
+        assert assertion["dimension"] == "accuracy"

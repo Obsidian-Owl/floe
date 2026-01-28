@@ -181,12 +181,27 @@ class TestQualityConfigContract:
         assert isinstance(result, GateResult)
 
 
+class TestEntryPointDiscovery:
+    """Tests for plugin entry-point discovery."""
+
+    @pytest.mark.requirement("FR-039")
+    def test_quality_entry_points_resolve(self) -> None:
+        """Both quality plugins are discoverable via entry_points."""
+        from importlib.metadata import entry_points
+
+        eps = entry_points(group="floe.quality")
+        ep_names = {ep.name for ep in eps}
+
+        assert "great_expectations" in ep_names
+        assert "dbt_expectations" in ep_names
+
+
 class TestPluginMethodContracts:
     """Tests for quality plugin method contracts."""
 
     @pytest.mark.requirement("FR-004")
-    def test_run_checks_returns_suite_result(self) -> None:
-        """run_checks() returns QualitySuiteResult."""
+    def test_gx_run_checks_returns_suite_result(self) -> None:
+        """GX run_checks() returns QualitySuiteResult."""
         from floe_quality_gx import GreatExpectationsPlugin
 
         plugin = GreatExpectationsPlugin()
@@ -203,34 +218,84 @@ class TestPluginMethodContracts:
         assert hasattr(result, "passed")
         assert hasattr(result, "checks")
 
+    @pytest.mark.requirement("FR-004")
+    def test_dbt_run_checks_returns_suite_result(self) -> None:
+        """dbt run_checks() returns QualitySuiteResult."""
+        from floe_quality_dbt import DBTExpectationsPlugin
+
+        plugin = DBTExpectationsPlugin()
+
+        result = plugin.run_checks(
+            suite_name="test_suite",
+            data_source="test_data",
+            options=None,
+        )
+
+        assert isinstance(result, QualitySuiteResult)
+        assert result.suite_name == "test_suite"
+        assert hasattr(result, "model_name")
+        assert hasattr(result, "passed")
+        assert hasattr(result, "checks")
+
     @pytest.mark.requirement("FR-007")
-    def test_supports_dialect_contract(self) -> None:
-        """supports_dialect() returns bool."""
+    def test_gx_supports_dialect_contract(self) -> None:
+        """GX supports_dialect() returns bool."""
         from floe_quality_gx import GreatExpectationsPlugin
 
         plugin = GreatExpectationsPlugin()
 
-        # Should return bool for any dialect
+        assert isinstance(plugin.supports_dialect("duckdb"), bool)
+        assert isinstance(plugin.supports_dialect("unknown"), bool)
+
+    @pytest.mark.requirement("FR-007")
+    def test_dbt_supports_dialect_contract(self) -> None:
+        """dbt supports_dialect() returns bool."""
+        from floe_quality_dbt import DBTExpectationsPlugin
+
+        plugin = DBTExpectationsPlugin()
+
         assert isinstance(plugin.supports_dialect("duckdb"), bool)
         assert isinstance(plugin.supports_dialect("unknown"), bool)
 
     @pytest.mark.requirement("FR-006")
-    def test_get_lineage_emitter_contract(self) -> None:
-        """get_lineage_emitter() returns emitter or None."""
+    def test_gx_get_lineage_emitter_contract(self) -> None:
+        """GX get_lineage_emitter() returns emitter or None."""
         from floe_quality_gx import GreatExpectationsPlugin
 
         plugin = GreatExpectationsPlugin()
 
-        # Should return None or an emitter (currently returns None)
+        emitter = plugin.get_lineage_emitter()
+        assert emitter is None or hasattr(emitter, "emit_fail_event")
+
+    @pytest.mark.requirement("FR-006")
+    def test_dbt_get_lineage_emitter_contract(self) -> None:
+        """dbt get_lineage_emitter() returns emitter or None."""
+        from floe_quality_dbt import DBTExpectationsPlugin
+
+        plugin = DBTExpectationsPlugin()
+
         emitter = plugin.get_lineage_emitter()
         assert emitter is None or hasattr(emitter, "emit_fail_event")
 
     @pytest.mark.requirement("FR-007")
-    def test_list_suites_contract(self) -> None:
-        """list_suites() returns list of strings."""
+    def test_gx_list_suites_contract(self) -> None:
+        """GX list_suites() returns list of strings."""
         from floe_quality_gx import GreatExpectationsPlugin
 
         plugin = GreatExpectationsPlugin()
+
+        suites = plugin.list_suites()
+
+        assert isinstance(suites, list)
+        for suite in suites:
+            assert isinstance(suite, str)
+
+    @pytest.mark.requirement("FR-007")
+    def test_dbt_list_suites_contract(self) -> None:
+        """dbt list_suites() returns list of strings."""
+        from floe_quality_dbt import DBTExpectationsPlugin
+
+        plugin = DBTExpectationsPlugin()
 
         suites = plugin.list_suites()
 

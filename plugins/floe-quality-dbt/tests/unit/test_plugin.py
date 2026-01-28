@@ -22,14 +22,6 @@ from floe_core.schemas.quality_score import (
 )
 
 
-@pytest.fixture
-def dbt_plugin():
-    """Provide a DBTExpectationsPlugin instance for testing."""
-    from floe_quality_dbt import DBTExpectationsPlugin
-
-    return DBTExpectationsPlugin()
-
-
 class TestDBTExpectationsPluginMetadata:
     """Tests for plugin metadata properties."""
 
@@ -210,7 +202,7 @@ class TestDBTExpectationsPluginQualityScore:
 
         score = dbt_plugin.calculate_quality_score(results, config)
 
-        assert score.overall == 100.0
+        assert score.overall == pytest.approx(100.0)
         assert score.checks_passed == 1
         assert score.checks_failed == 0
 

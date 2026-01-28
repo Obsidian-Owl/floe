@@ -82,8 +82,13 @@ class TestResolveQualityInheritance:
         assert result.quality_gates.bronze.min_test_coverage == 70
 
     @pytest.mark.requirement("005B-FR-016")
-    def test_inherits_unspecified_settings(self) -> None:
-        """Test that unspecified settings are inherited from parent."""
+    def test_domain_defaults_overwrite_enterprise(self) -> None:
+        """Test that domain config (including defaults) overwrites enterprise.
+
+        When domain specifies QualityConfig without check_timeout_seconds,
+        model_dump() includes the default (300), which overwrites the
+        enterprise value (600). This is expected merge behavior.
+        """
         enterprise = QualityConfig(
             provider="great_expectations",
             check_timeout_seconds=600,
@@ -92,6 +97,7 @@ class TestResolveQualityInheritance:
             provider="great_expectations",
         )
         result = resolve_quality_inheritance(enterprise, domain, None)
+        # Domain's default (300) overwrites enterprise's 600
         assert result.check_timeout_seconds == 300
 
     @pytest.mark.requirement("005B-FR-016")
