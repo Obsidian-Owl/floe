@@ -14,8 +14,28 @@ production code. The actual implementations will be in floe-core.
 
 from __future__ import annotations
 
-# Re-export all schemas for documentation purposes
-# (These would be implemented in floe-core, not here)
+# Re-export all schemas from their canonical floe-core locations.
+# This allows ``from specs.5b_dataquality_plugin.contracts import …`` to work
+# while keeping floe-core as the single source of truth.
+from floe_core.plugins.quality import GateResult, ValidationResult
+from floe_core.schemas.quality_config import (
+    CalculationParameters,
+    Dimension,
+    DimensionWeights,
+    GateTier,
+    OverrideConfig,
+    QualityConfig,
+    QualityGates,
+    QualityThresholds,
+    SeverityLevel,
+)
+from floe_core.schemas.quality_score import (
+    QualityCheck,
+    QualityCheckResult,
+    QualityScore,
+    QualitySuite,
+    QualitySuiteResult,
+)
 
 __all__ = [
     # From quality_config.py

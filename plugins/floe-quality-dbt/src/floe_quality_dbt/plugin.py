@@ -3,26 +3,17 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any
 
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.quality import (
-    GateResult,
     OpenLineageEmitter,
     QualityCheckResult,
     QualityPlugin,
-    QualityScore,
     QualitySuite,
     QualitySuiteResult,
-    ValidationResult,
 )
-from floe_core.quality_errors import QualityCoverageError, QualityMissingTestsError
-from floe_core.schemas.quality_config import Dimension, QualityConfig, QualityGates
-from floe_core.validation import (
-    calculate_coverage,
-    validate_coverage,
-    validate_required_tests,
-)
+from floe_core.schemas.quality_config import Dimension, QualityConfig
 
 try:
     from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
@@ -63,66 +54,6 @@ class DBTExpectationsPlugin(QualityPlugin):
     @property
     def description(self) -> str:
         return "dbt-expectations data quality plugin for the floe data platform"
-
-    def validate_config(self, config: QualityConfig) -> ValidationResult:
-        if config.provider != self.name:
-            return ValidationResult(
-                success=False,
-                errors=[f"Provider mismatch: expected '{self.name}', got '{config.provider}'"],
-            )
-        return ValidationResult(success=True)
-
-    def validate_quality_gates(
-        self,
-        models: list[dict[str, Any]],
-        gates: QualityGates,
-    ) -> GateResult:
-        all_violations: list[str] = []
-        all_missing_tests: list[str] = []
-        min_coverage = 100.0
-        min_tier: Literal["bronze", "silver", "gold"] = "gold"
-
-        for model in models:
-            coverage_result = calculate_coverage(model)
-            tier = coverage_result.tier
-            if tier not in ("bronze", "silver", "gold"):
-                tier = "bronze"
-
-            try:
-                validate_coverage(
-                    model_name=coverage_result.model_name,
-                    tier=tier,
-                    actual_coverage=coverage_result.coverage_percentage,
-                    gates=gates,
-                )
-            except QualityCoverageError as e:
-                all_violations.append(str(e))
-                if coverage_result.coverage_percentage < min_coverage:
-                    min_coverage = coverage_result.coverage_percentage
-                    min_tier = cast(Literal["bronze", "silver", "gold"], tier)
-
-            try:
-                validate_required_tests(
-                    model_name=coverage_result.model_name,
-                    tier=tier,
-                    actual_tests=coverage_result.test_types_present,
-                    gates=gates,
-                )
-            except QualityMissingTestsError as e:
-                all_violations.append(str(e))
-                all_missing_tests.extend(e.missing_tests)
-
-        gate_tier = getattr(gates, min_tier, gates.bronze)
-        required_coverage = gate_tier.min_test_coverage
-
-        return GateResult(
-            passed=len(all_violations) == 0,
-            tier=min_tier,
-            coverage_actual=min_coverage,
-            coverage_required=required_coverage,
-            missing_tests=list(set(all_missing_tests)),
-            violations=all_violations,
-        )
 
     def run_checks(
         self,
@@ -264,15 +195,6 @@ class DBTExpectationsPlugin(QualityPlugin):
             result = self.run_suite(suite, {})
 
             return list(result.checks)
-
-    def calculate_quality_score(
-        self,
-        results: QualitySuiteResult,
-        config: QualityConfig,
-    ) -> QualityScore:
-        from floe_core.scoring import calculate_quality_score
-
-        return calculate_quality_score(results, config)
 
     def list_suites(self) -> list[str]:
         return []

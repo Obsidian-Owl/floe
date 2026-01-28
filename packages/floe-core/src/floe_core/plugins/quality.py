@@ -26,9 +26,10 @@ See Also:
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
 
 from floe_core.plugin_metadata import PluginMetadata
+from floe_core.quality_errors import QualityCoverageError, QualityMissingTestsError
 from floe_core.schemas.quality_config import QualityConfig, QualityGates
 from floe_core.schemas.quality_score import (
     QualityCheck,
@@ -38,6 +39,11 @@ from floe_core.schemas.quality_score import (
     QualitySuiteResult,
 )
 from floe_core.schemas.quality_validation import GateResult, ValidationResult
+from floe_core.validation import (
+    calculate_coverage,
+    validate_coverage,
+    validate_required_tests,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -108,31 +114,25 @@ class QualityPlugin(PluginMetadata):
     # Compile-Time Methods (FR-002, FR-003)
     # =========================================================================
 
-    @abstractmethod
     def validate_config(self, config: QualityConfig) -> ValidationResult:
         """Validate quality configuration at compile-time.
 
-        Called by the compiler to verify that the quality configuration
-        is valid for this plugin. Should validate provider-specific settings.
+        Default implementation checks that ``config.provider`` matches
+        ``self.name``.  Subclasses may override for additional validation.
 
         Args:
             config: The quality configuration to validate.
 
         Returns:
             ValidationResult indicating success/failure with errors/warnings.
-
-        Raises:
-            ValueError: If config is fundamentally invalid.
-
-        Example:
-            >>> result = plugin.validate_config(config)
-            >>> if not result.success:
-            ...     for error in result.errors:
-            ...         print(f"Error: {error}")
         """
-        ...
+        if config.provider != self.name:
+            return ValidationResult(
+                success=False,
+                errors=[f"Provider mismatch: expected '{self.name}', got '{config.provider}'"],
+            )
+        return ValidationResult(success=True)
 
-    @abstractmethod
     def validate_quality_gates(
         self,
         models: list[dict[str, Any]],
@@ -140,8 +140,8 @@ class QualityPlugin(PluginMetadata):
     ) -> GateResult:
         """Validate models against quality gate requirements.
 
-        Called by the compiler to enforce coverage thresholds and
-        required test types for the specified tier.
+        Default implementation enforces coverage thresholds and required
+        test types per tier using ``floe_core.validation`` helpers.
 
         Args:
             models: List of model definitions with their quality checks.
@@ -149,15 +149,53 @@ class QualityPlugin(PluginMetadata):
 
         Returns:
             GateResult indicating pass/fail with coverage metrics and violations.
-
-        Example:
-            >>> result = plugin.validate_quality_gates(models, gates)
-            >>> if not result.passed:
-            ...     print(f"Coverage: {result.coverage_actual}% < {result.coverage_required}%")
-            ...     for missing in result.missing_tests:
-            ...         print(f"Missing test type: {missing}")
         """
-        ...
+        all_violations: list[str] = []
+        all_missing_tests: list[str] = []
+        min_coverage = 100.0
+        min_tier: Literal["bronze", "silver", "gold"] = "gold"
+
+        for model in models:
+            coverage_result = calculate_coverage(model)
+            tier = coverage_result.tier
+            if tier not in ("bronze", "silver", "gold"):
+                tier = "bronze"
+
+            try:
+                validate_coverage(
+                    model_name=coverage_result.model_name,
+                    tier=tier,
+                    actual_coverage=coverage_result.coverage_percentage,
+                    gates=gates,
+                )
+            except QualityCoverageError as e:
+                all_violations.append(str(e))
+                if coverage_result.coverage_percentage < min_coverage:
+                    min_coverage = coverage_result.coverage_percentage
+                    min_tier = cast(Literal["bronze", "silver", "gold"], tier)
+
+            try:
+                validate_required_tests(
+                    model_name=coverage_result.model_name,
+                    tier=tier,
+                    actual_tests=coverage_result.test_types_present,
+                    gates=gates,
+                )
+            except QualityMissingTestsError as e:
+                all_violations.append(str(e))
+                all_missing_tests.extend(e.missing_tests)
+
+        gate_tier = getattr(gates, min_tier, gates.bronze)
+        required_coverage = gate_tier.min_test_coverage
+
+        return GateResult(
+            passed=len(all_violations) == 0,
+            tier=min_tier,
+            coverage_actual=min_coverage,
+            coverage_required=required_coverage,
+            missing_tests=list(set(all_missing_tests)),
+            violations=all_violations,
+        )
 
     # =========================================================================
     # Runtime Methods (FR-004, existing methods enhanced)
@@ -263,7 +301,6 @@ class QualityPlugin(PluginMetadata):
     # Scoring Methods (FR-005)
     # =========================================================================
 
-    @abstractmethod
     def calculate_quality_score(
         self,
         results: QualitySuiteResult,
@@ -271,10 +308,8 @@ class QualityPlugin(PluginMetadata):
     ) -> QualityScore:
         """Calculate unified quality score from check results.
 
-        Applies the three-layer scoring model:
-        1. Dimension weights (completeness, accuracy, validity, consistency, timeliness)
-        2. Check-level severity (critical, warning, info)
-        3. Calculation parameters (baseline, influence caps)
+        Default implementation delegates to the platform three-layer
+        scoring model in ``floe_core.scoring``.
 
         Args:
             results: Quality suite execution results.
@@ -282,14 +317,10 @@ class QualityPlugin(PluginMetadata):
 
         Returns:
             QualityScore with overall score and per-dimension breakdown.
-
-        Example:
-            >>> score = plugin.calculate_quality_score(results, config)
-            >>> print(f"Overall: {score.overall}")
-            >>> for dim, value in score.dimension_scores.items():
-            ...     print(f"  {dim.value}: {value}")
         """
-        ...
+        from floe_core.scoring import calculate_quality_score
+
+        return calculate_quality_score(results, config)
 
     # =========================================================================
     # Metadata Methods (FR-007)
