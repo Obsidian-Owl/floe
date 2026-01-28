@@ -202,8 +202,9 @@ def to_openlineage_event(event: LineageEvent) -> dict[str, Any]:
         True
     """
     return {
+        "schemaURL": "https://openlineage.io/spec/2-0-2/OpenLineage.json",
         "eventType": event.event_type.value,
-        "eventTime": event.event_time.isoformat() + "Z",
+        "eventTime": event.event_time.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         "run": {
             "runId": str(event.run.run_id),
             "facets": event.run.facets,

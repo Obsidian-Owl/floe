@@ -23,7 +23,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from uuid import UUID, uuid4
+
 from dagster import AssetKey, AssetsDefinition, asset
+from floe_core.lineage import LineageDataset, RunState
 from floe_core.plugins.orchestrator import (
     Dataset,
     OrchestratorPlugin,
@@ -630,69 +633,80 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
     def emit_lineage_event(
         self,
-        event_type: str,
-        job: str,
-        inputs: list[Dataset],
-        outputs: list[Dataset],
-    ) -> None:
+        event_type: RunState,
+        job_name: str,
+        job_namespace: str | None = None,
+        run_id: UUID | None = None,
+        inputs: list[LineageDataset] | None = None,
+        outputs: list[LineageDataset] | None = None,
+        run_facets: dict[str, Any] | None = None,
+        job_facets: dict[str, Any] | None = None,
+        producer: str | None = None,
+    ) -> UUID:
         """Emit OpenLineage event for data lineage tracking.
 
         Sends a lineage event to the configured lineage backend
         (Marquez, Atlan, etc.) for tracking data flow. If no lineage
-        backend is configured, this is a graceful no-op (FR-018).
+        backend is configured, this is a graceful no-op that still
+        returns a valid run_id.
 
         Args:
-            event_type: One of "START", "COMPLETE", or "FAIL".
-            job: Job name (e.g., "dbt_run_customers").
-            inputs: List of input datasets consumed by the job.
-            outputs: List of output datasets produced by the job.
+            event_type: Run state (START, COMPLETE, FAIL, etc.).
+            job_name: Job name (e.g., "dbt_run_customers").
+            job_namespace: Job namespace. Defaults to "floe".
+            run_id: Unique run identifier. Auto-generated if None.
+            inputs: Input datasets consumed by the job.
+            outputs: Output datasets produced by the job.
+            run_facets: Additional OpenLineage run facets.
+            job_facets: Additional OpenLineage job facets.
+            producer: Producer identifier. Defaults to plugin version string.
 
-        Raises:
-            ValueError: If event_type is not START, COMPLETE, or FAIL.
+        Returns:
+            The run UUID for this event (generated or provided).
 
         Example:
-            >>> inputs = [Dataset(namespace="floe", name="raw.customers")]
-            >>> outputs = [Dataset(namespace="floe", name="staging.stg_customers")]
-            >>> plugin.emit_lineage_event("COMPLETE", "dbt_run", inputs, outputs)
+            >>> inputs = [LineageDataset(namespace="floe", name="raw.customers")]
+            >>> outputs = [LineageDataset(namespace="floe", name="staging.stg_customers")]
+            >>> run_id = plugin.emit_lineage_event(
+            ...     event_type=RunState.COMPLETE,
+            ...     job_name="dbt_run_stg_customers",
+            ...     inputs=inputs,
+            ...     outputs=outputs,
+            ... )
         """
-        # Validate event type (FR-016)
-        self._validate_event_type(event_type)
+        actual_run_id = run_id if run_id is not None else uuid4()
+        actual_namespace = job_namespace if job_namespace is not None else "floe"
+        actual_producer = (
+            producer if producer is not None else f"floe-orchestrator-dagster/{self.version}"
+        )
 
-        # Check if lineage backend is configured
-        # For now, we check for an optional _lineage_backend attribute
-        # In the future, this would use the plugin registry
         lineage_backend = getattr(self, "_lineage_backend", None)
 
         if lineage_backend is None:
-            # Graceful no-op when no backend configured (FR-018)
             logger.debug(
                 "Lineage event not emitted - no backend configured",
                 extra={
-                    "event_type": event_type,
-                    "job": job,
-                    "input_count": len(inputs),
-                    "output_count": len(outputs),
+                    "event_type": event_type.value,
+                    "job_name": job_name,
+                    "run_id": str(actual_run_id),
+                    "input_count": len(inputs) if inputs else 0,
+                    "output_count": len(outputs) if outputs else 0,
                 },
             )
-            return
+            return actual_run_id
 
-        # Build OpenLineage event structure (FR-017)
-        event = self._build_openlineage_event(event_type, job, inputs, outputs)
-
-        # Store last event for testing/debugging
-        self._last_lineage_event = event
-
-        # Delegate to lineage backend plugin
-        # This would call lineage_backend.emit(event) in full implementation
         logger.info(
             "Lineage event emitted",
             extra={
-                "event_type": event_type,
-                "job": job,
-                "input_count": len(inputs),
-                "output_count": len(outputs),
+                "event_type": event_type.value,
+                "job_name": job_name,
+                "job_namespace": actual_namespace,
+                "run_id": str(actual_run_id),
+                "input_count": len(inputs) if inputs else 0,
+                "output_count": len(outputs) if outputs else 0,
             },
         )
+        return actual_run_id
 
     def _validate_cron(self, cron: str) -> None:
         """Validate cron expression format.

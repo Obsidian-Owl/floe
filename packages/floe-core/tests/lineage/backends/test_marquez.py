@@ -95,9 +95,9 @@ def test_namespace_strategy() -> None:
     plugin = MarquezLineageBackendPlugin()
     strategy = plugin.get_namespace_strategy()
 
-    assert strategy["strategy"] == "environment_based"
-    assert strategy["template"] == "floe-{environment}"
-    assert strategy["environment_var"] == "FLOE_ENVIRONMENT"
+    assert strategy["strategy"] == "centralized"
+    assert strategy["environment"] == "prod"
+    assert strategy["platform"] == "floe"
 
 
 @pytest.mark.requirement("REQ-527")

@@ -14,12 +14,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import queue
-import threading
 from typing import TYPE_CHECKING
 
 import structlog
 
+from floe_core.lineage.events import to_openlineage_event
 from floe_core.lineage.types import LineageEvent
 
 if TYPE_CHECKING:
@@ -128,7 +127,6 @@ class HttpLineageTransport:
 
     Uses an asyncio.Queue with a background consumer task for fire-and-forget
     emission. The emit() method enqueues events and returns immediately.
-    Falls back to threading if no async event loop is available.
 
     Args:
         url: HTTP endpoint URL for lineage events.
@@ -154,13 +152,8 @@ class HttpLineageTransport:
         self._api_key = api_key
         self._closed = False
 
-        # Async queue + background task
         self._async_queue: asyncio.Queue[LineageEvent | None] = asyncio.Queue()
         self._consumer_task: asyncio.Task[None] | None = None
-
-        # Thread fallback
-        self._thread_queue: queue.Queue[LineageEvent | None] = queue.Queue()
-        self._thread: threading.Thread | None = None
 
     async def emit(self, event: LineageEvent) -> None:
         """Enqueue event for async emission (non-blocking, <1ms).
@@ -180,18 +173,8 @@ class HttpLineageTransport:
         if self._consumer_task is not None and not self._consumer_task.done():
             return
 
-        try:
-            loop = asyncio.get_running_loop()
-            self._consumer_task = loop.create_task(self._consume_async())
-        except RuntimeError:
-            # No event loop — fall back to thread
-            if self._thread is None or not self._thread.is_alive():
-                self._thread = threading.Thread(
-                    target=self._consume_threaded,
-                    daemon=True,
-                    name="lineage-http-transport",
-                )
-                self._thread.start()
+        loop = asyncio.get_running_loop()
+        self._consumer_task = loop.create_task(self._consume_async())
 
     async def _consume_async(self) -> None:
         """Background consumer that posts events via httpx."""
@@ -213,7 +196,7 @@ class HttpLineageTransport:
             event: Event to post.
             httpx_mod: The httpx module if available, else None.
         """
-        payload = event.model_dump(mode="json")
+        payload = to_openlineage_event(event)
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -245,50 +228,30 @@ class HttpLineageTransport:
                 extra={"url": self._url},
             )
 
-    def _consume_threaded(self) -> None:
-        """Thread-based fallback consumer."""
-        import urllib.request
-
-        while True:
-            event = self._thread_queue.get()
-            if event is None:
-                break
-
-            payload = event.model_dump(mode="json")
-            headers: dict[str, str] = {"Content-Type": "application/json"}
-            if self._api_key:
-                headers["Authorization"] = f"Bearer {self._api_key}"
-
-            try:
-                req = urllib.request.Request(
-                    self._url,
-                    data=json.dumps(payload).encode(),
-                    headers=headers,
-                    method="POST",
-                )
-                urllib.request.urlopen(req, timeout=self._timeout)  # noqa: S310  # nosec B310
-            except Exception:
-                logger.exception(
-                    "Failed to post lineage event (threaded)",
-                    extra={"url": self._url},
-                )
-
     def close(self) -> None:
-        """Drain queue and stop background consumer."""
+        """Signal consumer to stop (non-blocking).
+
+        For guaranteed drain completion, use close_async() instead.
+        """
         self._closed = True
 
-        # Signal async consumer to stop
         try:
             self._async_queue.put_nowait(None)
         except asyncio.QueueFull:
             pass
 
-        # Wait for async task
-        if self._consumer_task is not None and not self._consumer_task.done():
-            # Can't await here (sync method), but task will drain on None sentinel
+    async def close_async(self) -> None:
+        """Drain queue and wait for consumer task to complete.
+
+        Use this when you need to ensure all queued events are sent
+        before proceeding (e.g., in tests or graceful shutdown).
+        """
+        self._closed = True
+
+        try:
+            self._async_queue.put_nowait(None)
+        except asyncio.QueueFull:
             pass
 
-        # Signal thread consumer to stop
-        self._thread_queue.put(None)
-        if self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=self._timeout)
+        if self._consumer_task is not None:
+            await self._consumer_task

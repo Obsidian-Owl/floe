@@ -114,25 +114,25 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
     def get_namespace_strategy(self) -> dict[str, Any]:
         """Define namespace strategy for lineage events.
 
-        Uses environment-based namespaces to organize lineage data
-        by deployment environment (dev, staging, prod).
+        Uses centralized namespaces to organize lineage data
+        by deployment environment and platform.
 
         Returns:
             Dictionary with namespace strategy configuration:
-                - strategy: "environment_based"
-                - template: "floe-{environment}"
-                - environment_var: "FLOE_ENVIRONMENT"
+                - strategy: "centralized" (uses environment.platform format)
+                - environment: deployment environment (e.g., "prod")
+                - platform: platform identifier (e.g., "floe")
 
         Example:
             >>> plugin = MarquezLineageBackendPlugin()
             >>> strategy = plugin.get_namespace_strategy()
-            >>> strategy["template"]
-            'floe-{environment}'
+            >>> strategy["strategy"]
+            'centralized'
         """
         return {
-            "strategy": "environment_based",
-            "template": "floe-{environment}",
-            "environment_var": "FLOE_ENVIRONMENT",
+            "strategy": "centralized",
+            "environment": "prod",
+            "platform": "floe",
         }
 
     def get_helm_values(self) -> dict[str, Any]:

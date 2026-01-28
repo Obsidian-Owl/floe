@@ -16,6 +16,7 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
 import subprocess
@@ -27,6 +28,7 @@ from uuid import uuid4
 
 import pytest
 
+from floe_core.lineage.emitter import LineageEmitter, create_emitter
 from floe_core.lineage.events import EventBuilder, to_openlineage_event
 from floe_core.lineage.facets import SchemaFacetBuilder
 from floe_core.lineage.types import LineageDataset
@@ -317,3 +319,57 @@ class TestMarquezLineageIntegration:
         """
         result = _get_json(marquez_port, "/api/v1/namespaces")
         assert "namespaces" in result
+
+    def test_emitter_with_http_transport(self, marquez_port: int) -> None:
+        """Test LineageEmitter with real HttpLineageTransport to Marquez.
+
+        Validates the full transport path: LineageEmitter → HttpLineageTransport → Marquez.
+        This test ensures the wire format conversion works end-to-end.
+
+        Covers: REQ-525 (HTTP transport), REQ-526 (fire-and-forget)
+        """
+
+        async def _run_emitter_test() -> None:
+            ns = f"floe-transport-test-{uuid4().hex[:8]}"
+            url = f"http://localhost:{marquez_port}/api/v1/lineage"
+
+            emitter = create_emitter(
+                transport_config={"type": "http", "url": url, "timeout": 10.0},
+                default_namespace=ns,
+                producer="floe-integration-test",
+            )
+
+            run_id = await emitter.emit_start(
+                job_name="transport_test_job",
+                inputs=[LineageDataset(namespace=ns, name="raw.source_table")],
+                outputs=[LineageDataset(namespace=ns, name="staging.target_table")],
+            )
+
+            await emitter.emit_complete(
+                run_id=run_id,
+                job_name="transport_test_job",
+                outputs=[LineageDataset(namespace=ns, name="staging.target_table")],
+            )
+
+            from floe_core.lineage.transport import HttpLineageTransport
+
+            transport = emitter.transport
+            if isinstance(transport, HttpLineageTransport):
+                await transport.close_async()
+            else:
+                emitter.close()
+
+            await asyncio.sleep(0.5)
+
+            jobs = _get_json(marquez_port, f"/api/v1/namespaces/{ns}/jobs")
+            job_names = [j["name"] for j in jobs["jobs"]]
+            assert "transport_test_job" in job_names, f"Job not found. Jobs: {job_names}"
+
+            runs = _get_json(
+                marquez_port,
+                f"/api/v1/namespaces/{ns}/jobs/transport_test_job/runs",
+            )
+            assert len(runs["runs"]) > 0
+            assert runs["runs"][0]["state"] == "COMPLETED"
+
+        asyncio.run(_run_emitter_test())
