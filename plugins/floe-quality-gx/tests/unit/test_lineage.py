@@ -8,7 +8,6 @@ Tests for US6 - OpenLineage event emission:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
 
 import pytest
 from floe_core.schemas.quality_config import Dimension, SeverityLevel

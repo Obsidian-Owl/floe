@@ -10,7 +10,6 @@ Tests for US3 - Runtime quality check execution:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 from floe_core.quality_errors import QualityTimeoutError

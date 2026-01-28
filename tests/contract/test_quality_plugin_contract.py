@@ -8,8 +8,6 @@ Tests:
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from floe_core.plugin_metadata import HealthStatus
 from floe_core.plugins.quality import (
@@ -101,9 +99,8 @@ class TestQualityPluginABCCompliance:
     @pytest.mark.requirement("FR-010")
     def test_gx_plugin_config_schema_contract(self) -> None:
         """GreatExpectationsPlugin.get_config_schema() returns Pydantic model."""
-        from pydantic import BaseModel
-
         from floe_quality_gx import GreatExpectationsPlugin
+        from pydantic import BaseModel
 
         plugin = GreatExpectationsPlugin()
         schema = plugin.get_config_schema()
@@ -114,9 +111,8 @@ class TestQualityPluginABCCompliance:
     @pytest.mark.requirement("FR-010")
     def test_dbt_plugin_config_schema_contract(self) -> None:
         """DBTExpectationsPlugin.get_config_schema() returns Pydantic model."""
-        from pydantic import BaseModel
-
         from floe_quality_dbt import DBTExpectationsPlugin
+        from pydantic import BaseModel
 
         plugin = DBTExpectationsPlugin()
         schema = plugin.get_config_schema()

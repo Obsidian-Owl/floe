@@ -10,10 +10,10 @@ Tests for US5 - Quality Score Calculation:
 from __future__ import annotations
 
 import pytest
+
 from floe_core.schemas.quality_config import (
     CalculationParameters,
     Dimension,
-    DimensionWeights,
     QualityConfig,
     QualityThresholds,
     SeverityLevel,

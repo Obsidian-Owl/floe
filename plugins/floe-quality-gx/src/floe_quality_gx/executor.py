@@ -274,7 +274,7 @@ def create_dataframe_from_connection(
         path = connection_config.get("path", ":memory:")
         conn = duckdb.connect(path)
         try:
-            return conn.execute(f"SELECT * FROM {table_name}").fetchdf()
+            return conn.execute(f"SELECT * FROM {table_name}").fetchdf()  # nosec B608 - table_name is from internal config, not user input
         except duckdb.CatalogException:
             # Table doesn't exist, return empty DataFrame
             return pd.DataFrame()
