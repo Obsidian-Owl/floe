@@ -1,197 +1,173 @@
-# Data Quality Plugin Quickstart
+# Data Quality Quickstart
 
-**Epic**: 5B | **Status**: Planning Complete
+The floe Data Quality Plugin system provides automated, tiered validation for your data products. By combining compile-time gate enforcement with runtime quality scoring, floe ensures that only high-quality data reaches your consumers.
 
 ## Overview
 
-The Data Quality Plugin provides compile-time validation and runtime quality checks for floe data products. It supports a three-tier scoring model (dimensions → severity → calculation parameters) with inheritance control (Enterprise → Domain → Product).
+floe supports a two-tier configuration model:
+1.  **Platform Team** defines the `manifest.yaml` with plugin providers and quality gate policies.
+2.  **Data Team** defines the `floe.yaml` with specific quality checks and selects a quality tier.
 
-## Quick Setup
+Quality is enforced through three tiers:
+-   **Bronze**: Basic schema validation (connectivity, null checks).
+-   **Silver**: Standard business rules and coverage requirements (80%+ coverage).
+-   **Gold**: Critical data contracts with 100% test coverage and strict thresholds.
 
-### 1. Configure Quality Provider (Platform Team)
+## Working Examples by Tier
 
-In `manifest.yaml`:
+### 1. Bronze Tier: Basic Connectivity
+
+The Bronze tier focuses on ensuring the pipeline is connected and basic fields are present.
 
 ```yaml
+# floe.yaml
+name: raw_sales
+version: "0.1.0"
+quality_tier: bronze
+
+transforms:
+  - type: dbt
+    name: stg_sales
+    quality:
+      checks:
+        - name: sale_id_not_null
+          type: not_null
+          column: sale_id
+          dimension: completeness
+          severity: critical
+        - name: transaction_date_present
+          type: not_null
+          column: transaction_date
+          dimension: completeness
+          severity: critical
+```
+
+### 2. Silver Tier: Standard Business Rules
+
+The Silver tier adds requirements for uniqueness and data freshness.
+
+```yaml
+# floe.yaml
+name: int_sales
+version: "0.1.0"
+quality_tier: silver
+
+transforms:
+  - type: dbt
+    name: int_sales
+    quality:
+      checks:
+        - name: sale_id_unique
+          type: unique
+          column: sale_id
+          dimension: consistency
+          severity: critical
+        - name: amount_positive
+          type: expect_column_values_to_be_between
+          column: amount
+          parameters:
+            min_value: 0
+          dimension: accuracy
+          severity: warning
+        - name: recent_data
+          type: expect_row_values_to_be_recent
+          column: updated_at
+          parameters:
+            max_age_hours: 24
+          dimension: timeliness
+          severity: critical
+```
+
+### 3. Gold Tier: Data Contracts
+
+Gold tier requires 100% test coverage and strict validation of business logic.
+
+```yaml
+# floe.yaml
+name: fct_sales
+version: "0.1.0"
+quality_tier: gold
+
+transforms:
+  - type: dbt
+    name: fct_sales
+    quality:
+      checks:
+        - name: currency_code_valid
+          type: accepted_values
+          column: currency_code
+          parameters:
+            values: ['USD', 'EUR', 'GBP', 'JPY']
+          dimension: validity
+          severity: critical
+        - name: email_format
+          type: expect_column_values_to_match_regex
+          column: customer_email
+          parameters:
+            regex: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+          dimension: validity
+          severity: warning
+        - name: total_matches_parts
+          type: expect_column_sum_to_be_between
+          column: total_amount
+          parameters:
+            min_value: 0
+          dimension: consistency
+          severity: critical
+```
+
+## Provider Selection
+
+Configure your preferred provider in the `manifest.yaml`.
+
+### Great Expectations (GX)
+Best for comprehensive validation and complex cross-column expectations.
+
+```yaml
+# manifest.yaml
 plugins:
   quality:
-    provider: great_expectations  # or: dbt_expectations
-    quality_gates:
-      bronze:
-        min_test_coverage: 50
-        required_tests: []
-        min_score: 60
-      silver:
-        min_test_coverage: 80
-        required_tests: [not_null, unique]
-        min_score: 75
-      gold:
-        min_test_coverage: 100
-        required_tests: [not_null, unique, accepted_values, relationships]
-        min_score: 90
-        overridable: false  # Lock for gold tier
+    provider: great_expectations
 ```
 
-### 2. Define Quality Checks (Data Engineer)
-
-In `floe.yaml`:
+### dbt-expectations
+Best for teams heavily invested in the dbt ecosystem who want to leverage existing tests.
 
 ```yaml
-models:
-  - name: dim_customers
-    tier: gold
-    quality_checks:
-      - name: customer_id_not_null
-        type: not_null
-        column: customer_id
-        dimension: completeness
-        severity: critical
-
-      - name: email_valid_format
-        type: expect_column_values_to_match_regex
-        column: email
-        dimension: validity
-        severity: warning
-        parameters:
-          regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
-
-      - name: age_reasonable_range
-        type: expect_column_values_to_be_between
-        column: age
-        dimension: accuracy
-        severity: warning
-        parameters:
-          min_value: 0
-          max_value: 150
+# manifest.yaml
+plugins:
+  quality:
+    provider: dbt_expectations
 ```
 
-### 3. Run Quality Checks
+## Quality Scoring Explained
 
-```bash
-# Compile (validates quality gates)
-floe compile
+floe calculates a unified quality score (0-100) using a three-layer model:
 
-# Run pipeline (quality checks execute after each model)
-floe run
-```
+1.  **Dimension Weights**: Determines the importance of each quality category.
+    -   **Completeness (0.25)**: Are fields populated?
+    -   **Accuracy (0.25)**: Are values correct?
+    -   **Validity (0.20)**: Does data follow rules?
+    -   **Consistency (0.15)**: Is data coherent across sources?
+    -   **Timeliness (0.15)**: Is data up-to-date?
 
-## Quality Dimensions
+2.  **Severity Weights**: Determines the impact of a specific check failure.
+    -   `critical`: 3.0 weight
+    -   `warning`: 1.0 weight
+    -   `info`: 0.5 weight
 
-| Dimension | Example Checks | Default Weight |
-|-----------|----------------|----------------|
-| **Completeness** | not_null, expect_column_to_exist | 0.25 |
-| **Accuracy** | expect_column_values_to_be_between, expect_column_mean_to_be_between | 0.25 |
-| **Validity** | expect_column_values_to_match_regex, accepted_values | 0.20 |
-| **Consistency** | expect_compound_columns_to_be_unique, relationships | 0.15 |
-| **Timeliness** | Custom timestamp checks | 0.15 |
+3.  **Influence Capping**: Constrains how much any single check can swing the overall score, typically centered around a **Baseline Score of 70**.
 
-## Severity Levels
+## Error Code Quick Reference
 
-| Level | Weight | Use Case |
-|-------|--------|----------|
-| `critical` | 3.0 | Data integrity issues (PKs, FKs) |
-| `warning` | 1.0 | Business rule violations |
-| `info` | 0.5 | Nice-to-have validations |
+If a quality gate or check fails, floe will emit one of the following error codes:
 
-## Score Calculation
-
-```
-1. Per-dimension score = weighted average of check results (by severity)
-2. Overall score = weighted average of dimension scores (by dimension weights)
-3. Final score = baseline ± influence (capped to prevent extreme swings)
-```
-
-**Default Parameters**:
-- Baseline: 70
-- Max positive influence: +30 (max score: 100)
-- Max negative influence: -50 (min score: 20)
-
-## Three-Tier Inheritance
-
-```
-Enterprise (manifest.yaml - Platform Team)
-    ↓
-Domain (domain-manifest.yaml - optional)
-    ↓
-Product (floe.yaml - Data Engineer)
-```
-
-**Lock Control**: Settings with `overridable: false` cannot be changed at lower levels.
-
-```yaml
-# Enterprise manifest
-quality_gates:
-  gold:
-    min_score: 90
-    overridable: false  # Products cannot lower this
-```
-
-## Error Codes
-
-| Code | Meaning | Resolution |
-|------|---------|------------|
-| FLOE-DQ001 | Invalid quality provider | Check `plugins.quality.provider` |
-| FLOE-DQ102 | Quality checks failed | Review failed checks in output |
-| FLOE-DQ103 | Coverage below tier minimum | Add more tests |
-| FLOE-DQ104 | Missing required tests | Add required test types |
-| FLOE-DQ105 | Invalid column reference | Verify column exists |
-| FLOE-DQ106 | Check timeout | Increase timeout or optimize |
-| FLOE-DQ107 | Override of locked setting | Remove override from floe.yaml |
-
-## Provider Implementations
-
-### Great Expectations (`floe-quality-gx`)
-
-```bash
-pip install floe-quality-gx
-```
-
-- Native GX Core 1.0+ integration
-- Supports DuckDB, PostgreSQL, Snowflake
-- Full expectation suite support
-
-### dbt-expectations (`floe-quality-dbt`)
-
-```bash
-pip install floe-quality-dbt
-```
-
-- Executes via `DBTPlugin.test_models()`
-- Leverages existing dbt test infrastructure
-- Unified scoring with dbt tests
-
-## Integration with dbt Tests
-
-Both dbt generic tests (schema.yml) and floe quality checks contribute to the unified quality score:
-
-```yaml
-# schema.yml (dbt tests)
-models:
-  - name: dim_customers
-    columns:
-      - name: customer_id
-        tests:
-          - not_null
-          - unique
-
-# floe.yaml (additional quality checks)
-models:
-  - name: dim_customers
-    quality_checks:
-      - name: email_valid
-        type: expect_column_values_to_match_regex
-        # ...
-```
-
-Both are aggregated into a single `QualityScore`:
-- `dbt_tests_passed` / `dbt_tests_failed` - from dbt
-- `checks_passed` / `checks_failed` - from quality plugin
-- `overall` - weighted combination
-
-## Next Steps
-
-1. Install your preferred quality provider
-2. Configure quality gates in manifest.yaml
-3. Add quality checks to your models
-4. Run `floe compile` to validate
-5. Run `floe run` to execute with quality checks
+| Code | Error Name | Resolution |
+|------|------------|------------|
+| **FLOE-DQ001** | Provider Not Found | Check `plugins.quality.provider` in manifest.yaml |
+| **FLOE-DQ102** | Quality Check Failed | Review runtime logs; score is below `min_score` |
+| **FLOE-DQ103** | Coverage Violation | Add more tests to reach tier minimum (e.g., 80% for Silver) |
+| **FLOE-DQ104** | Missing Required Tests | Add required tests like `not_null` or `unique` |
+| **FLOE-DQ105** | Invalid Column | Verify the column name in your quality check matches the model |
+| **FLOE-DQ106** | Check Timeout | Increase `check_timeout_seconds` or optimize your checks |
+| **FLOE-DQ107** | Locked Override | You attempted to override a quality setting locked by the Platform Team |
