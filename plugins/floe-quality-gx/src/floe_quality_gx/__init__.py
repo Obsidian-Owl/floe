@@ -13,7 +13,12 @@ Example:
     >>> print(f"Plugin: {gx_plugin.name} v{gx_plugin.version}")
 """
 
+from floe_quality_gx.lineage import OpenLineageQualityEmitter, create_quality_facet
 from floe_quality_gx.plugin import GreatExpectationsPlugin
 
-__all__ = ["GreatExpectationsPlugin"]
+__all__ = [
+    "GreatExpectationsPlugin",
+    "OpenLineageQualityEmitter",
+    "create_quality_facet",
+]
 __version__ = "0.1.0"
