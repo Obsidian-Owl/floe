@@ -28,7 +28,7 @@ from floe_core.lineage.types import (
 
 def _run(coro: object) -> object:
     """Run an async coroutine synchronously."""
-    return asyncio.get_event_loop().run_until_complete(coro)  # type: ignore[arg-type]
+    return asyncio.run(coro)  # type: ignore[arg-type]
 
 
 @pytest.fixture()
