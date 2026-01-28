@@ -11,6 +11,7 @@ Design Decisions:
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from great_expectations.core.expectation_validation_result import (
         ExpectationSuiteValidationResult,
     )
+
+_SAFE_TABLE_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
 
 # Mapping from floe check types to GX expectation classes
 CHECK_TYPE_TO_GX_EXPECTATION: dict[str, str] = {
@@ -271,10 +274,14 @@ def create_dataframe_from_connection(
     if dialect == "duckdb":
         import duckdb
 
+        if not _SAFE_TABLE_NAME.match(table_name):
+            msg = f"Invalid table name: {table_name!r}"
+            raise ValueError(msg)
+
         path = connection_config.get("path", ":memory:")
         conn = duckdb.connect(path)
         try:
-            return conn.execute(f"SELECT * FROM {table_name}").fetchdf()  # nosec B608 - table_name is from internal config, not user input
+            return conn.execute(f"SELECT * FROM {table_name}").fetchdf()  # nosec B608 - validated above
         except duckdb.CatalogException:
             # Table doesn't exist, return empty DataFrame
             return pd.DataFrame()

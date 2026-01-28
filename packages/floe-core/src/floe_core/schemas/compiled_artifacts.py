@@ -227,7 +227,35 @@ class ResolvedPlugins(BaseModel):
 
 
 class ResolvedModel(BaseModel):
-    """A transform model with resolved compute target and quality configuration."""
+    """A transform model with resolved compute target and quality configuration.
+
+    Represents a single dbt model after compilation, with the compute
+    target resolved (never None - uses platform default if not specified)
+    and optional quality checks attached from the quality gate configuration.
+
+    Attributes:
+        name: Model name (dbt model identifier).
+        compute: Resolved compute target (never None).
+        tags: dbt tags for selection.
+        depends_on: Explicit dependencies (model names).
+        quality_checks: Quality checks assigned to this model (from quality gates).
+        quality_tier: Quality tier for this model (bronze, silver, gold).
+
+    Example:
+        >>> model = ResolvedModel(
+        ...     name="stg_customers",
+        ...     compute="duckdb",
+        ...     tags=["staging", "customers"],
+        ...     depends_on=["raw_customers"],
+        ...     quality_tier="silver",
+        ... )
+        >>> model.compute
+        'duckdb'
+
+    See Also:
+        - data-model.md: ResolvedModel entity specification
+        - quality_config.py: QualityGates tier definitions
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
