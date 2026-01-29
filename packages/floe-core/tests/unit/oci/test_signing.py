@@ -189,6 +189,7 @@ class TestOIDCTokenAcquisition:
     def test_fallback_to_interactive_oauth(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token falls back to interactive OAuth when no ambient creds."""
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -216,6 +217,7 @@ class TestOIDCTokenAcquisition:
         from sigstore.oidc import IdentityError
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -880,6 +882,7 @@ class TestOIDCTokenRetry:
             return mock_token
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -905,6 +908,7 @@ class TestOIDCTokenRetry:
         from sigstore.oidc import IdentityError
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -935,6 +939,7 @@ class TestOIDCTokenRetry:
             sleep_delays.append(delay)
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
