@@ -13,7 +13,15 @@ Exception Hierarchy:
     ├── DigestMismatchError        # Content digest verification failed
     ├── CacheError                 # Local cache operation failed
     ├── SignatureVerificationError # Artifact signature verification failed
-    └── ConcurrentSigningError     # Another process is signing the artifact
+    ├── ConcurrentSigningError     # Another process is signing the artifact
+    │
+    │   Promotion Lifecycle Exceptions (Epic 8C):
+    ├── GateValidationError        # Promotion gate validation failed
+    ├── InvalidTransitionError     # Invalid environment transition
+    ├── TagExistsError             # Promotion tag already exists
+    ├── VersionNotPromotedError    # Version not in target environment
+    ├── AuthorizationError         # Operator not authorized
+    └── EnvironmentLockedError     # Target environment is locked
 
 Exit Codes (per spec):
     0 - Success
@@ -24,6 +32,12 @@ Exit Codes (per spec):
     5 - Network/connectivity error (RegistryUnavailableError, CircuitBreakerOpenError)
     6 - Signature verification failed (SignatureVerificationError)
     7 - Concurrent signing lock failed (ConcurrentSigningError)
+    8 - Gate validation failed (GateValidationError)
+    9 - Invalid environment transition (InvalidTransitionError)
+    10 - Tag already exists (TagExistsError)
+    11 - Version not promoted (VersionNotPromotedError)
+    12 - Authorization failed (AuthorizationError)
+    13 - Environment locked (EnvironmentLockedError)
 
 Example:
     >>> from floe_core.oci.errors import ArtifactNotFoundError
@@ -448,3 +462,215 @@ class ConcurrentSigningError(OCIError):
             f"Retry later or increase FLOE_SIGNING_LOCK_TIMEOUT."
         )
         super().__init__(msg)
+
+
+# =============================================================================
+# Promotion Lifecycle Exceptions (Epic 8C)
+# =============================================================================
+
+
+class GateValidationError(OCIError):
+    """Raised when a promotion gate validation fails.
+
+    This error indicates that a validation gate (tests, security_scan, etc.)
+    did not pass during artifact promotion. The promotion is blocked unless
+    in dry-run mode.
+
+    Attributes:
+        gate: The gate type that failed (e.g., "tests", "security_scan").
+        details: Description of why the gate failed.
+        exit_code: CLI exit code (8).
+
+    Example:
+        >>> raise GateValidationError(
+        ...     gate="security_scan",
+        ...     details="Critical CVE found: CVE-2024-1234"
+        ... )
+    """
+
+    exit_code: int = 8
+
+    def __init__(self, gate: str, details: str) -> None:
+        self.gate = gate
+        self.details = details
+        super().__init__(f"Gate '{gate}' validation failed: {details}")
+
+
+class InvalidTransitionError(OCIError):
+    """Raised when an invalid environment transition is attempted.
+
+    This error indicates that the requested promotion path is not valid.
+    Artifacts must be promoted through environments in the configured order.
+
+    Attributes:
+        from_env: The source environment name.
+        to_env: The target environment name.
+        reason: Description of why the transition is invalid.
+        exit_code: CLI exit code (9).
+
+    Example:
+        >>> raise InvalidTransitionError(
+        ...     from_env="prod",
+        ...     to_env="dev",
+        ...     reason="Cannot demote from prod to dev"
+        ... )
+    """
+
+    exit_code: int = 9
+
+    def __init__(self, from_env: str, to_env: str, reason: str) -> None:
+        self.from_env = from_env
+        self.to_env = to_env
+        self.reason = reason
+        super().__init__(f"Invalid transition from '{from_env}' to '{to_env}': {reason}")
+
+
+class TagExistsError(OCIError):
+    """Raised when attempting to create a tag that already exists.
+
+    This error indicates that the target promotion tag already exists.
+    Promotion tags are immutable once created.
+
+    Attributes:
+        tag: The tag that already exists.
+        existing_digest: The digest of the existing artifact at that tag.
+        exit_code: CLI exit code (10).
+
+    Example:
+        >>> raise TagExistsError(
+        ...     tag="v1.0.0-staging",
+        ...     existing_digest="sha256:abc123..."
+        ... )
+    """
+
+    exit_code: int = 10
+
+    def __init__(self, tag: str, existing_digest: str) -> None:
+        self.tag = tag
+        self.existing_digest = existing_digest
+        super().__init__(
+            f"Tag '{tag}' already exists with digest {existing_digest[:19]}... "
+            "Promotion tags are immutable."
+        )
+
+
+class VersionNotPromotedError(OCIError):
+    """Raised when a version has not been promoted to the required environment.
+
+    This error indicates that the requested artifact version does not exist
+    in the specified environment. It may not have been promoted yet.
+
+    Attributes:
+        tag: The tag/version that was requested.
+        environment: The environment where the version was not found.
+        available_versions: List of versions available in that environment.
+        exit_code: CLI exit code (11).
+
+    Example:
+        >>> raise VersionNotPromotedError(
+        ...     tag="v2.0.0",
+        ...     environment="staging",
+        ...     available_versions=["v1.0.0", "v1.1.0"]
+        ... )
+    """
+
+    exit_code: int = 11
+
+    def __init__(
+        self,
+        tag: str,
+        environment: str,
+        available_versions: list[str] | None = None,
+    ) -> None:
+        self.tag = tag
+        self.environment = environment
+        self.available_versions = available_versions or []
+
+        msg = f"Version '{tag}' has not been promoted to '{environment}'"
+        if self.available_versions:
+            versions_preview = ", ".join(self.available_versions[:5])
+            if len(self.available_versions) > 5:
+                versions_preview += f" (and {len(self.available_versions) - 5} more)"
+            msg += f". Available versions: {versions_preview}"
+        super().__init__(msg)
+
+
+class AuthorizationError(OCIError):
+    """Raised when an operator is not authorized to perform a promotion.
+
+    This error indicates that the operator does not have permission to
+    promote to the target environment, or a separation of duties violation.
+
+    Attributes:
+        operator: The identity of the operator attempting the action.
+        required_groups: Groups that have permission for this action.
+        reason: Description of why authorization failed.
+        exit_code: CLI exit code (12).
+
+    Example:
+        >>> raise AuthorizationError(
+        ...     operator="user@example.com",
+        ...     required_groups=["platform-admins"],
+        ...     reason="Not a member of required groups"
+        ... )
+    """
+
+    exit_code: int = 12
+
+    def __init__(
+        self,
+        operator: str,
+        required_groups: list[str],
+        reason: str,
+    ) -> None:
+        self.operator = operator
+        self.required_groups = required_groups
+        self.reason = reason
+
+        groups_str = ", ".join(required_groups) if required_groups else "none configured"
+        super().__init__(
+            f"Authorization failed for '{operator}': {reason}. "
+            f"Required groups: [{groups_str}]"
+        )
+
+
+class EnvironmentLockedError(OCIError):
+    """Raised when attempting to promote to a locked environment.
+
+    This error indicates that the target environment is locked and no
+    promotions are allowed until it is unlocked.
+
+    Attributes:
+        environment: The locked environment name.
+        locked_by: The operator who locked the environment.
+        locked_at: When the environment was locked (ISO timestamp).
+        reason: Why the environment was locked.
+        exit_code: CLI exit code (13).
+
+    Example:
+        >>> raise EnvironmentLockedError(
+        ...     environment="prod",
+        ...     locked_by="sre@example.com",
+        ...     locked_at="2026-01-15T10:30:00Z",
+        ...     reason="Incident #123 - Database migration in progress"
+        ... )
+    """
+
+    exit_code: int = 13
+
+    def __init__(
+        self,
+        environment: str,
+        locked_by: str,
+        locked_at: str,
+        reason: str,
+    ) -> None:
+        self.environment = environment
+        self.locked_by = locked_by
+        self.locked_at = locked_at
+        self.reason = reason
+
+        super().__init__(
+            f"Environment '{environment}' is locked: {reason}. "
+            f"Locked by {locked_by} at {locked_at}"
+        )

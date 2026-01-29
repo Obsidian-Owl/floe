@@ -249,6 +249,24 @@ from floe_core.schemas.security import (
     SecurityConfig,
 )
 
+# Promotion schemas (Epic 8C)
+from floe_core.schemas.promotion import (
+    AuditBackend,
+    AuthorizationConfig,
+    EnvironmentConfig,
+    EnvironmentLock,
+    GateStatus,
+    PromotionConfig,
+    PromotionGate,
+    PromotionRecord,
+    RollbackImpactAnalysis,
+    RollbackRecord,
+    SecurityGateConfig,
+    SecurityScanResult,
+    WebhookConfig,
+)
+from floe_core.schemas.promotion import GateResult as PromotionGateResult
+
 # Signing schemas (Epic 8B)
 from floe_core.schemas.signing import (
     AttestationManifest,
@@ -448,6 +466,21 @@ __all__: list[str] = [
     "SigningAuditEvent",
     "VerificationAuditEvent",
     "VerificationBundle",
+    # Promotion schemas (Epic 8C)
+    "AuditBackend",
+    "AuthorizationConfig",
+    "EnvironmentConfig",
+    "EnvironmentLock",
+    "GateStatus",
+    "PromotionConfig",
+    "PromotionGate",
+    "PromotionGateResult",
+    "PromotionRecord",
+    "RollbackImpactAnalysis",
+    "RollbackRecord",
+    "SecurityGateConfig",
+    "SecurityScanResult",
+    "WebhookConfig",
     # Quality schemas
     "CalculationParameters",
     "Dimension",
