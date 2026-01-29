@@ -3,14 +3,14 @@
 ## TL;DR
 
 > **Quick Summary**: Fix critical test failures, prevent browser OAuth in tests, and standardize test infrastructure across the floe monorepo.
-> 
+>
 > **Deliverables**:
 > - Fixed contract test (mock signature alignment)
 > - Browser OAuth guard in signing module
 > - Improved error messages for test path issues
 > - Consolidated conftest patterns
 > - Testing conventions documentation
-> 
+>
 > **Estimated Effort**: Medium (2-3 days)
 > **Parallel Execution**: YES - 3 waves
 > **Critical Path**: Task 1 → Task 3 → Task 6
@@ -169,7 +169,7 @@ Wave 3 (After Wave 2):
   pytest tests/contract/test_orchestrator_plugin_abc.py::TestOrchestratorPluginSignatureContract -v
   # Assert: All tests PASS
   # Assert: Exit code 0
-  
+
   # Verify LSP clean:
   # Check file has no type errors for emit_lineage_event override
   ```
@@ -235,7 +235,7 @@ Wave 3 (After Wave 2):
   "
   # Assert: Output shows "Guard active: True"
   # Assert: Exit code 0
-  
+
   # Verify no syntax errors:
   python -m py_compile packages/floe-core/src/floe_core/oci/signing.py
   # Assert: Exit code 0
@@ -295,7 +295,7 @@ Wave 3 (After Wave 2):
   pytest packages/floe-core/tests/unit/oci/test_signing.py -v -k "browser_oauth_disabled"
   # Assert: 1 test collected, 1 passed
   # Assert: Exit code 0
-  
+
   # Verify test actually tests the guard:
   grep -n "FLOE_DISABLE_BROWSER_OAUTH" packages/floe-core/tests/unit/oci/test_signing.py
   # Assert: Shows env var being set in test
@@ -360,7 +360,7 @@ Wave 3 (After Wave 2):
       print(f'Good: Import failed as expected: {e}')
   " 2>&1
   # Assert: Shows import error (expected behavior)
-  
+
   # Verify tests still work from root:
   cd /Users/dmccarthy/Projects/floe && pytest tests/conftest.py --collect-only 2>&1 | head -5
   # Assert: No import errors
@@ -413,7 +413,7 @@ Wave 3 (After Wave 2):
   # Agent runs:
   grep -n "FLOE_DISABLE_BROWSER_OAUTH" packages/floe-core/README.md
   # Assert: Shows env var documented
-  
+
   # Verify markdown is valid:
   python -c "import re; content=open('packages/floe-core/README.md').read(); print('Headers:', len(re.findall(r'^#+', content, re.M)))"
   # Assert: No parsing errors
@@ -476,10 +476,10 @@ Wave 3 (After Wave 2):
   # Agent runs:
   test -f docs/testing/CONVENTIONS.md && echo "File exists"
   # Assert: "File exists"
-  
+
   wc -l docs/testing/CONVENTIONS.md
   # Assert: Less than 200 lines
-  
+
   grep -c "pytest" docs/testing/CONVENTIONS.md
   # Assert: At least 5 occurrences (comprehensive)
   ```
@@ -535,11 +535,11 @@ Wave 3 (After Wave 2):
     -x -q 2>&1 | tail -20
   # Assert: Shows "X passed" with 0 failures
   # Assert: Exit code 0
-  
+
   # Verify contract tests specifically:
   pytest tests/contract/test_orchestrator_plugin_abc.py -v --tb=short
   # Assert: All tests pass
-  
+
   # Verify no LSP errors in modified files:
   # Check signing.py and test_orchestrator_plugin_abc.py have no type errors
   ```
