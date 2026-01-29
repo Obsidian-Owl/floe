@@ -48,6 +48,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE '\\-\\-no-verify|\\-n\\s'; then echo 'BLOCKED: --no-verify is forbidden. Fix the underlying issue instead.' >&2; exit 1; fi"
+          },
+          {
+            "type": "command",
             "command": "if echo \"$TOOL_INPUT\" | grep -q 'gh pr create'; then ./scripts/pre-pr-gate; fi"
           }
         ]
@@ -68,6 +72,14 @@
           {
             "type": "command",
             "command": "if [[ \"$FILE_PATH\" == *.py ]]; then ./scripts/check-architecture-drift \"$FILE_PATH\" 2>/dev/null || true; fi"
+          },
+          {
+            "type": "command",
+            "command": "if [[ \"$FILE_PATH\" == *.sql ]]; then echo 'Reminder: SQL owned by dbt - validate via dbt compile' >&2; fi"
+          },
+          {
+            "type": "command",
+            "command": "if [[ \"$FILE_PATH\" == */schemas/*.py ]] || [[ \"$FILE_PATH\" == */models/*.py ]]; then ./scripts/validate-pydantic-contract \"$FILE_PATH\" 2>/dev/null || true; fi"
           }
         ]
       }

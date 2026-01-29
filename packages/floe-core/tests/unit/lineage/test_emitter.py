@@ -23,6 +23,9 @@ from floe_core.lineage.types import LineageDataset, LineageEvent, RunState
 
 from .conftest import _run
 
+# Test constants for secret values (not real secrets)
+TEST_API_KEY = "secret"  # pragma: allowlist secret
+
 
 def _make_mock_transport() -> MagicMock:
     """Create a mock transport with async emit and sync close."""
@@ -203,13 +206,13 @@ class TestCreateEmitter:
                 "type": "http",
                 "url": "http://localhost:5000",
                 "timeout": 10.0,
-                "api_key": "secret",
-            }  # pragma: allowlist secret
+                "api_key": TEST_API_KEY,
+            }
         )
         transport = emitter.transport
         assert isinstance(transport, HttpLineageTransport)
         assert transport._timeout == 10.0
-        assert transport._api_key == "secret"
+        assert transport._api_key == TEST_API_KEY
 
     @pytest.mark.requirement("REQ-527")
     def test_unknown_type_creates_noop(self) -> None:

@@ -38,7 +38,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^\.beads/
+        exclude: ^(\.beads/|\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks

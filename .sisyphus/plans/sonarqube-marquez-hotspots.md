@@ -3,13 +3,13 @@
 ## TL;DR
 
 > **Quick Summary**: Fix 2 SonarQube security hotspots in the Marquez lineage plugin by replacing hardcoded password placeholder with Kubernetes secret reference pattern and enforcing HTTPS URLs via Pydantic validation.
-> 
+>
 > **Deliverables**:
 > - Helm values use `existingSecret` pattern (no passwords in code)
 > - URL validation enforces HTTPS (except localhost)
 > - `FLOE_ALLOW_INSECURE_HTTP` env var for development override
 > - Tests for new validation behavior
-> 
+>
 > **Estimated Effort**: Medium
 > **Parallel Execution**: YES - 3 waves
 > **Critical Path**: Task 1.2 → Task 2.1 → Task 3.2
@@ -142,7 +142,7 @@ Wave 3 (After Wave 2):
   - Edit `plugins/floe-lineage-marquez/src/floe_lineage_marquez/__init__.py`
   - In `get_helm_values()` method (lines 236-243), replace the `auth` section
   - Remove `"password": "<SET_VIA_HELM_VALUES>"` line
-  - Add `"existingSecret": "marquez-postgresql-credentials"` 
+  - Add `"existingSecret": "marquez-postgresql-credentials"`
   - Add `"secretKeys": {"adminPasswordKey": "postgres-password", "userPasswordKey": "password"}`
   - Remove the `# pragma: allowlist secret` comment (no longer needed)
 
@@ -240,7 +240,7 @@ Wave 3 (After Wave 2):
   ```bash
   # Agent runs Python validation tests:
   cd plugins/floe-lineage-marquez
-  
+
   # Test 1: HTTP non-localhost rejected
   python -c "
 from floe_lineage_marquez import MarquezConfig

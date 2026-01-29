@@ -5,6 +5,11 @@
 # It attempts to recover prior session context from the knowledge graph
 # based on the current working directory or specified work area.
 #
+# Features:
+# - Phase-aware context injection (planning, coding, testing, pre-pr)
+# - Epic auto-mode recovery after compaction
+# - Agent-memory integration for prior session context
+#
 # Usage:
 #   ./scripts/session-recover [--work-area AREA] [--quiet]
 #
@@ -12,15 +17,9 @@
 #   COGNEE_API_KEY - Required for Cognee Cloud access
 #   OPENAI_API_KEY - Required for embeddings
 #
-# Example:
-#   ./scripts/session-recover --work-area "plugin-system"
-#   ./scripts/session-recover  # Auto-detects from current directory
-#
 # Exit codes:
 #   0 - Success (context found or no prior context)
 #   1 - Error (missing dependencies or API failure)
-#
-# Implementation: T050 (FLO-635)
 
 set -euo pipefail
 
@@ -58,6 +57,95 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Detect development phase based on git state and file existence
+detect_phase() {
+    local branch=""
+    local phase="exploration"
+
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    fi
+
+    # Check for epic auto-mode first (highest priority)
+    if [[ -f "$REPO_ROOT/.agent/epic-auto-mode" ]]; then
+        phase="epic-implementation"
+    # Check if we have a spec dir matching branch
+    elif [[ -n "$branch" && -d "$REPO_ROOT/specs/$branch" ]]; then
+        local spec_dir="$REPO_ROOT/specs/$branch"
+
+        # Check for tasks.md with incomplete tasks
+        if [[ -f "$spec_dir/tasks.md" ]]; then
+            if grep -q '^\- \[ \]' "$spec_dir/tasks.md" 2>/dev/null; then
+                phase="coding"
+            else
+                phase="pre-pr"
+            fi
+        # Check for plan.md but no tasks.md
+        elif [[ -f "$spec_dir/plan.md" ]]; then
+            phase="planning"
+        # Check for spec.md but no plan.md
+        elif [[ -f "$spec_dir/spec.md" ]]; then
+            phase="planning"
+        fi
+    # Check for test files in recent changes
+    elif git diff --name-only HEAD~5 2>/dev/null | grep -q 'test_.*\.py$'; then
+        phase="testing"
+    fi
+
+    echo "$phase"
+}
+
+# Output phase-specific context hints
+output_phase_context() {
+    local phase="$1"
+
+    case "$phase" in
+        planning)
+            cat << 'EOF'
+PHASE: Planning
+CONTEXT: Constitution, architecture, SpecKit workflow
+SKILLS: specify, clarify, plan, tasks
+NEXT: /speckit.specify or /speckit.plan
+EOF
+            ;;
+        coding)
+            cat << 'EOF'
+PHASE: Coding
+CONTEXT: Type hints, Pydantic v2, atomic commits
+SKILLS: implement, dbt-skill, pydantic-skill, dagster-skill
+NEXT: /speckit.implement
+EOF
+            ;;
+        testing)
+            cat << 'EOF'
+PHASE: Testing
+CONTEXT: K8s-native, 100% markers, >80% coverage
+SKILLS: testing-skill, test-review
+NEXT: make test-unit or /speckit.test-review
+EOF
+            ;;
+        pre-pr)
+            cat << 'EOF'
+PHASE: Pre-PR
+CONTEXT: Quality gates MUST pass
+SKILLS: test-review, wiring-check, merge-check
+NEXT: /speckit.test-review then /speckit.pr
+EOF
+            ;;
+        epic-implementation)
+            # Don't output here - handled separately with full banner
+            ;;
+        *)
+            cat << 'EOF'
+PHASE: Exploration
+CONTEXT: Codebase familiarization
+SKILLS: Use Task(Explore) for codebase search
+NEXT: Ask questions or /speckit.specify for new feature
+EOF
+            ;;
+    esac
+}
+
 # Check if agent-memory is available
 if [[ ! -d "$AGENT_MEMORY_DIR" ]]; then
     [[ "$QUIET" != true ]] && echo "agent-memory not found at $AGENT_MEMORY_DIR" >&2
@@ -67,6 +155,9 @@ fi
 # Check for required environment variables
 if [[ -z "${COGNEE_API_KEY:-}" ]] || [[ -z "${OPENAI_API_KEY:-}" ]]; then
     [[ "$QUIET" != true ]] && echo "Session recovery skipped: COGNEE_API_KEY or OPENAI_API_KEY not set"
+    # Still detect phase even without memory
+    PHASE=$(detect_phase)
+    [[ "$QUIET" != true ]] && output_phase_context "$PHASE"
     exit 0  # Non-intrusive exit
 fi
 
@@ -92,11 +183,18 @@ fi
 # Run session-recover command
 cd "$AGENT_MEMORY_DIR"
 if uv run agent-memory session-recover --work-area "$WORK_AREA" 2>/dev/null; then
-    :  # Success, continue to epic check
+    :  # Success, continue to phase detection
 else
     # Non-intrusive - don't fail if recovery doesn't find anything
     [[ "$QUIET" != true ]] && echo "No prior session context available for '$WORK_AREA'"
 fi
+
+# Return to repo root for phase detection
+cd "$REPO_ROOT"
+
+# Detect and output phase context
+PHASE=$(detect_phase)
+[[ "$QUIET" != true ]] && [[ "$PHASE" != "epic-implementation" ]] && output_phase_context "$PHASE"
 
 # Check for epic auto-mode state file
 EPIC_AUTO_MODE="$REPO_ROOT/.agent/epic-auto-mode"
