@@ -276,7 +276,7 @@ def test_config_schema_defaults() -> None:
     """Test that MarquezConfig has correct defaults."""
     config = MarquezConfig()
 
-    assert config.url == "http://marquez:5000"
+    assert config.url == "https://marquez:5000"
     assert config.api_key is None
     assert config.environment == "prod"
     assert config.verify_ssl is True
@@ -298,4 +298,4 @@ def test_helm_values_password_placeholder() -> None:
     values = plugin.get_helm_values()
 
     password = values["postgresql"]["auth"]["password"]
-    assert "CHANGE_ME" in password or "PRODUCTION" in password.upper()
+    assert "SET_VIA_HELM_VALUES" in password or "HELM" in password.upper()

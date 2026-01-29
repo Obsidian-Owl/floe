@@ -82,6 +82,18 @@ env:
 
 This ensures tests fail fast if OIDC credentials are unavailable rather than hanging on browser auth.
 
+### Security Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLOE_ENVIRONMENT` | `development` | Set to `production` to enforce SSL verification on all HTTPS connections. Production environment ignores `verify_ssl=False` parameters. |
+| `FLOE_ALLOW_INSECURE_SSL` | `false` | Set to `true` to allow disabling SSL certificate verification in non-production environments. Required for self-signed certificates in development. |
+
+**Security Notes:**
+- In production (`FLOE_ENVIRONMENT=production`), SSL verification is **always enforced** regardless of code settings
+- Disabling SSL verification requires explicit opt-in via `FLOE_ALLOW_INSECURE_SSL=true`
+- A CRITICAL-level log is emitted when SSL verification is disabled
+
 ## Development
 
 ```bash

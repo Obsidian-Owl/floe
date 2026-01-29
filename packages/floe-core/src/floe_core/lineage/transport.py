@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import ssl
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -30,6 +31,45 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
 _DEFAULT_QUEUE_SIZE = 1000
+
+
+def _create_ssl_context(url: str, verify_ssl: bool) -> ssl.SSLContext | None:
+    """Create SSL context with environment-aware security controls.
+
+    Production environment ALWAYS enforces SSL verification.
+    Development requires FLOE_ALLOW_INSECURE_SSL=true to disable.
+    """
+    if not url.startswith("https://"):
+        return None
+
+    import certifi
+
+    context = ssl.create_default_context(cafile=certifi.where())
+
+    if os.environ.get("FLOE_ENVIRONMENT") == "production":
+        return context
+
+    if not verify_ssl:
+        allow_insecure = os.environ.get("FLOE_ALLOW_INSECURE_SSL", "").lower() == "true"
+        if not allow_insecure:
+            logger.warning(
+                "SSL verification disabled but FLOE_ALLOW_INSECURE_SSL not set - "
+                "verification will remain enabled"
+            )
+            return context
+        logger.critical(
+            "SSL verification DISABLED - this should only be used in development "
+            "with self-signed certificates"
+        )
+        _apply_insecure_settings(context)
+
+    return context
+
+
+def _apply_insecure_settings(context: ssl.SSLContext) -> None:
+    """Apply insecure SSL settings. Development use only."""
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
 
 
 class NoOpLineageTransport:
@@ -239,13 +279,16 @@ class HttpLineageTransport:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
+        ssl_context = _create_ssl_context(self._url, self._verify_ssl)
+
         try:
             if httpx_available:
                 import httpx
 
+                verify_setting = ssl_context if ssl_context is not None else True
                 async with httpx.AsyncClient(
                     timeout=self._timeout,
-                    verify=self._verify_ssl,
+                    verify=verify_setting,
                 ) as client:
                     await client.post(
                         self._url,
@@ -261,14 +304,8 @@ class HttpLineageTransport:
                     headers=headers,
                     method="POST",
                 )
-                context: ssl.SSLContext | None = None
-                if self._url.startswith("https://"):
-                    context = ssl.create_default_context()
-                    if not self._verify_ssl:
-                        context.check_hostname = False
-                        context.verify_mode = ssl.CERT_NONE
                 urllib.request.urlopen(  # noqa: S310  # nosec B310
-                    req, timeout=self._timeout, context=context
+                    req, timeout=self._timeout, context=ssl_context
                 )
         except ssl.SSLError:
             logger.exception(

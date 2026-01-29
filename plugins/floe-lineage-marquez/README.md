@@ -32,7 +32,7 @@ plugins:
 from floe_lineage_marquez import MarquezLineageBackendPlugin
 
 plugin = MarquezLineageBackendPlugin(
-    url="http://marquez:5000",
+    url="https://marquez:5000",
     api_key="optional-api-key"  # pragma: allowlist secret
 )
 # Plugin will be loaded automatically by LineageProvider
@@ -42,12 +42,12 @@ plugin = MarquezLineageBackendPlugin(
 
 The Marquez plugin configures OpenLineage HTTP transport:
 
-- **Default endpoint**: `marquez:5000`
-- **Protocol**: HTTP/REST
+- **Default endpoint**: `marquez:5000` (HTTPS)
+- **Protocol**: HTTPS/REST (HTTP for localhost development only)
 - **API endpoint**: `/api/v1/lineage`
 
 For production, configure:
-- `url`: Marquez API base URL
+- `url`: Marquez API base URL (use HTTPS)
 - `api_key`: Optional authentication
 
 ## Helm Deployment

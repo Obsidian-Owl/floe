@@ -27,22 +27,22 @@ class MarquezConfig(BaseModel):
     the floe platform.
 
     Attributes:
-        url: Base URL for Marquez API (e.g., "http://marquez:5000")
+        url: Base URL for Marquez API (e.g., "https://marquez:5000")
         api_key: Optional API key for authentication
         environment: Deployment environment for namespace (e.g., "prod", "staging")
         verify_ssl: Whether to verify SSL certificates (default True)
 
     Example:
         >>> config = MarquezConfig(
-        ...     url="http://marquez:5000",
+        ...     url="https://marquez:5000",
         ...     environment="staging"
         ... )
         >>> plugin = MarquezLineageBackendPlugin(**config.model_dump())
     """
 
     url: str = Field(
-        default="http://marquez:5000",
-        description="Marquez API base URL",
+        default="https://marquez:5000",
+        description="Marquez API base URL (use HTTPS in production)",
     )
     api_key: str | None = Field(
         default=None,
@@ -71,22 +71,22 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         - Connection validation via Marquez API
 
     Attributes:
-        _url: Base URL for Marquez API (e.g., "http://marquez:5000")
+         _url: Base URL for Marquez API (e.g., "https://marquez:5000")
         _api_key: Optional API key for authentication
 
     Example:
         >>> plugin = MarquezLineageBackendPlugin(
-        ...     url="http://marquez:5000",
+        ...     url="https://marquez:5000",
         ...     api_key="secret-key"  # pragma: allowlist secret
         ... )
         >>> config = plugin.get_transport_config()
         >>> config["url"]
-        'http://marquez:5000/api/v1/lineage'
+        'https://marquez:5000/api/v1/lineage'
     """
 
     def __init__(
         self,
-        url: str = "http://marquez:5000",
+        url: str = "https://marquez:5000",
         api_key: str | None = None,
         environment: str = "prod",
         verify_ssl: bool = True,
@@ -94,15 +94,23 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         """Initialize Marquez backend plugin.
 
         Args:
-            url: Base URL for Marquez API (default: "http://marquez:5000")
+            url: Base URL for Marquez API (default: "https://marquez:5000")
             api_key: Optional API key for authentication
             environment: Deployment environment for namespace (default: "prod")
             verify_ssl: Whether to verify SSL certificates (default: True)
         """
+        import logging
+
         self._url = url.rstrip("/")
         self._api_key = api_key
         self._environment = environment
         self._verify_ssl = verify_ssl
+
+        # Warn if using HTTP for non-localhost URLs
+        if url.startswith("http://") and not url.startswith("http://localhost"):
+            logging.getLogger(__name__).warning(
+                "Using HTTP for Marquez URL - use HTTPS in production"
+            )
 
     @property
     def name(self) -> str:
@@ -142,12 +150,12 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 - api_key: Optional API key for authentication
 
         Example:
-            >>> plugin = MarquezLineageBackendPlugin("http://marquez:5000")
+            >>> plugin = MarquezLineageBackendPlugin("https://marquez:5000")
             >>> config = plugin.get_transport_config()
             >>> config
             {
                 'type': 'http',
-                'url': 'http://marquez:5000/api/v1/lineage',
+                'url': 'https://marquez:5000/api/v1/lineage',
                 'timeout': 5.0,
                 'api_key': None
             }
@@ -229,7 +237,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 "enabled": True,
                 "auth": {
                     "username": "marquez",
-                    "password": "CHANGE_ME_IN_PRODUCTION",  # pragma: allowlist secret
+                    "password": "<SET_VIA_HELM_VALUES>",  # pragma: allowlist secret
                     "database": "marquez",
                 },
                 "primary": {
