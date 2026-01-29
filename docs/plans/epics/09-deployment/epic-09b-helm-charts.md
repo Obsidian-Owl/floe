@@ -36,18 +36,91 @@ Helm charts provide templated Kubernetes manifests for the floe platform. This i
 | REQ-633 | Chart repository | HIGH |
 | REQ-634 | Chart signing | MEDIUM |
 | REQ-635 | Umbrella chart pattern | MEDIUM |
+| REQ-636 | Logical-to-physical environment mapping | HIGH |
+| REQ-637 | Namespace isolation for shared clusters | HIGH |
 
 ---
 
 ## Architecture References
 
 ### ADRs
+- [ADR-0042](../../../architecture/adr/ADR-0042-environment-model.md) - Logical vs Physical Environment Model **(CRITICAL)**
 - [ADR-0062](../../../architecture/adr/0062-helm-architecture.md) - Helm chart architecture
 - [ADR-0063](../../../architecture/adr/0063-chart-patterns.md) - Chart design patterns
 
 ### Contracts
 - Chart values schemas (JSON Schema)
 - Chart interfaces (subcharts)
+- Logical environment names from Epic 8C promotion pipeline
+
+---
+
+## Environment Mapping (from Epic 8C)
+
+**CRITICAL CONTEXT**: Epic 9B is responsible for mapping logical environments to physical clusters.
+
+### Separation of Concerns
+
+| Responsibility | Owner | Configuration |
+|----------------|-------|---------------|
+| Logical environment names and order | Epic 8C | `manifest.yaml` |
+| Per-environment validation gates | Epic 8C | `manifest.yaml` |
+| Artifact tagging (`v1.2.3-qa`) | Epic 8C | Promotion workflow |
+| **Physical cluster mapping** | **Epic 9B** | **Helm values** |
+| **Namespace isolation** | **Epic 9B** | **Helm values** |
+| **Per-environment RBAC/NetworkPolicy** | **Epic 9B** | **Helm templates** |
+
+### Enterprise Pattern: Hybrid Deployment
+
+Epic 8C supports user-configurable logical environments (e.g., `dev`, `qa`, `uat`, `staging`, `prod`).
+Epic 9B maps these to physical infrastructure:
+
+```
+Logical Environments (Epic 8C):    Physical Clusters (Epic 9B):
+┌─────────────────────────────┐    ┌─────────────────────────┐
+│  dev → qa → uat → staging   │ →  │  aks-shared-nonprod     │
+│          (validation gates)  │    │  (namespace isolation)  │
+└─────────────────────────────┘    └─────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────┐    ┌─────────────────────────┐
+│           prod              │ →  │  aks-shared-prod        │
+│   (strictest gates)         │    │  (dedicated cluster)    │
+└─────────────────────────────┘    └─────────────────────────┘
+```
+
+### Helm Values Configuration
+
+Epic 9B must implement cluster mapping in Helm values:
+
+```yaml
+# values-production.yaml
+clusterMapping:
+  # Multiple logical environments share one physical cluster
+  non-prod:
+    cluster: aks-shared-nonprod
+    environments:
+      - dev
+      - qa
+      - uat
+      - staging
+    isolation: namespace  # Each env gets its own namespace
+
+  prod:
+    cluster: aks-shared-prod
+    environments:
+      - prod
+    isolation: namespace
+```
+
+### Why This Matters
+
+1. **Cost Optimization**: Organizations can run 5+ logical environments on 2 physical clusters
+2. **Flexibility**: Promotion logic (8C) is portable across different physical topologies
+3. **Enterprise Compliance**: Namespace isolation provides logical separation within shared clusters
+4. **Clear Ownership**: Epic 8C validates "is this artifact ready?", Epic 9B handles "where does it run?"
+
+See [ADR-0042](../../../architecture/adr/ADR-0042-environment-model.md) for full rationale and references.
 
 ---
 
@@ -90,6 +163,7 @@ charts/
 | Blocked By | Epic 6A | OTel collector configuration |
 | Blocked By | Epic 7B | RBAC templates |
 | Blocked By | Epic 7C | Security templates |
+| Blocked By | Epic 8C | Logical environment names for cluster mapping |
 | Blocked By | Epic 9A | Wraps deployment logic |
 | Blocked By | Epic 9C | Test infrastructure (Wave 0) |
 
@@ -152,6 +226,20 @@ charts/
 - [ ] Chart versioning
 - [ ] Index generation
 
+### US6: Environment Cluster Mapping (P1)
+**As a** platform operator
+**I want** to map logical environments to physical clusters
+**So that** I can optimize infrastructure costs while maintaining environment isolation
+
+**Acceptance Criteria**:
+- [ ] `clusterMapping` values schema defined
+- [ ] Multiple logical environments can share one physical cluster
+- [ ] Namespace isolation per logical environment
+- [ ] Per-environment RBAC and NetworkPolicy templates
+- [ ] Documentation for enterprise hybrid pattern (2 clusters, 5+ environments)
+
+**Reference**: [ADR-0042](../../../architecture/adr/ADR-0042-environment-model.md)
+
 ---
 
 ## Technical Notes
@@ -161,6 +249,8 @@ charts/
 - Subcharts for external dependencies (Dagster, Polaris)
 - OCI registry for chart distribution
 - JSON Schema for values validation
+- **Logical-to-physical environment mapping via `clusterMapping` values** (ADR-0042)
+- **Namespace isolation for multi-tenant shared clusters**
 
 ### Risks
 | Risk | Likelihood | Impact | Mitigation |
@@ -181,13 +271,20 @@ charts/
 ### Relevant Codebase Paths
 - `docs/requirements/07-deployment-operations/`
 - `docs/architecture/deployment/`
+- `docs/architecture/adr/ADR-0042-environment-model.md`
 - `charts/`
+- `specs/8c-promotion-lifecycle/spec.md` (logical environments)
 
 ### Related Existing Code
 - Deployment logic from Epic 9A
 - Security templates from Epic 7B, 7C
+- Promotion lifecycle from Epic 8C (logical environments, validation gates)
 
 ### External Dependencies
 - `helm>=3.12.0`
 - `ct` (chart-testing)
 - Subchart dependencies (Dagster Helm chart, etc.)
+
+### Cross-Epic References
+- **Epic 8C**: Provides logical environment configuration (`manifest.yaml`)
+- **ADR-0042**: Documents logical vs physical environment separation decision
