@@ -373,14 +373,14 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
         """Test emit_lineage_event is no-op when no backend configured."""
-        from floe_core.plugins.orchestrator import Dataset
+        from floe_core.lineage import LineageDataset, RunState
 
         # Should not raise - graceful no-op
         dagster_plugin.emit_lineage_event(
-            "START",
+            RunState.START,
             "test_job",
-            [Dataset(namespace="floe", name="input")],
-            [Dataset(namespace="floe", name="output")],
+            inputs=[LineageDataset(namespace="floe", name="input")],
+            outputs=[LineageDataset(namespace="floe", name="output")],
         )
 
     @pytest.mark.requirement("FR-014")

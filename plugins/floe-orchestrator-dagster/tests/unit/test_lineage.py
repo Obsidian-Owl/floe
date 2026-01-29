@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import pytest
 from floe_core.lineage import LineageDataset, RunState
 from floe_core.plugins.orchestrator import Dataset
 
