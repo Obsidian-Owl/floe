@@ -7,10 +7,12 @@ for Marquez deployments.
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from floe_core.plugins.lineage import LineageBackendPlugin
+from pydantic import ValidationError
 
 from floe_lineage_marquez import MarquezConfig, MarquezLineageBackendPlugin
 
@@ -47,14 +49,15 @@ def test_transport_config_structure() -> None:
     Verifies the transport configuration has the correct structure
     for OpenLineage HTTP transport to Marquez.
     """
+    # Use HTTPS for non-localhost URLs (security requirement)
     plugin = MarquezLineageBackendPlugin(
-        url="http://marquez:5000",
+        url="https://marquez:5000",
         api_key="test-key",  # pragma: allowlist secret
     )
     config = plugin.get_transport_config()
 
     assert config["type"] == "http"
-    assert config["url"] == "http://marquez:5000/api/v1/lineage"
+    assert config["url"] == "https://marquez:5000/api/v1/lineage"
     assert config["timeout"] == 5.0
     assert config["api_key"] == "test-key"  # pragma: allowlist secret
 
@@ -66,10 +69,11 @@ def test_transport_config_url_normalization() -> None:
     Verifies that trailing slashes in the base URL are removed
     to prevent double slashes in the final endpoint URL.
     """
-    plugin = MarquezLineageBackendPlugin(url="http://marquez:5000/")
+    # Use localhost (allowed for HTTP)
+    plugin = MarquezLineageBackendPlugin(url="http://localhost:5000/")
     config = plugin.get_transport_config()
 
-    assert config["url"] == "http://marquez:5000/api/v1/lineage"
+    assert config["url"] == "http://localhost:5000/api/v1/lineage"
 
 
 @pytest.mark.requirement("REQ-527")
@@ -258,14 +262,15 @@ def test_namespace_strategy_custom_environment() -> None:
 @pytest.mark.requirement("REQ-527")
 def test_config_schema_validation() -> None:
     """Test that MarquezConfig schema validates configuration."""
+    # Use HTTPS for non-localhost URLs (security requirement)
     config = MarquezConfig(
-        url="http://custom-marquez:9000",
+        url="https://custom-marquez:9000",
         api_key="my-key",  # pragma: allowlist secret
         environment="dev",
         verify_ssl=False,
     )
 
-    assert config.url == "http://custom-marquez:9000"
+    assert config.url == "https://custom-marquez:9000"
     assert config.api_key == "my-key"  # pragma: allowlist secret
     assert config.environment == "dev"
     assert config.verify_ssl is False
@@ -292,10 +297,149 @@ def test_get_config_schema_returns_model() -> None:
 
 
 @pytest.mark.requirement("REQ-527")
-def test_helm_values_password_placeholder() -> None:
-    """Test that PostgreSQL password indicates production override needed."""
+def test_helm_values_uses_existing_secret() -> None:
+    """Test that PostgreSQL uses existingSecret pattern (no inline password).
+
+    SECURITY: Inline passwords violate floe's SecretReference architecture.
+    The Bitnami existingSecret pattern references a Kubernetes Secret.
+    """
     plugin = MarquezLineageBackendPlugin()
     values = plugin.get_helm_values()
 
-    password = values["postgresql"]["auth"]["password"]
-    assert "SET_VIA_HELM_VALUES" in password or "HELM" in password.upper()
+    auth = values["postgresql"]["auth"]
+    # Verify existingSecret pattern is used
+    assert "existingSecret" in auth
+    assert auth["existingSecret"] == "marquez-postgresql-credentials"  # pragma: allowlist secret
+    # Verify secretKeys are specified (pragma: allowlist secret)
+    assert "secretKeys" in auth
+    # These are key NAMES, not actual secrets
+    assert (
+        auth["secretKeys"]["adminPasswordKey"]  # pragma: allowlist secret
+        == "postgres-password"  # pragma: allowlist secret
+    )
+    assert (
+        auth["secretKeys"]["userPasswordKey"]  # pragma: allowlist secret
+        == "password"  # pragma: allowlist secret
+    )
+    # Verify NO inline password value
+    assert "password" not in auth
+
+
+# =============================================================================
+# URL Security Validation Tests
+# =============================================================================
+
+
+class TestURLSecurityValidation:
+    """Tests for URL security validation in MarquezConfig.
+
+    SECURITY: These tests verify that HTTP is blocked for non-localhost URLs
+    unless explicitly overridden via FLOE_ALLOW_INSECURE_HTTP environment variable.
+    """
+
+    @pytest.mark.requirement("REQ-527")
+    def test_https_url_accepted(self) -> None:
+        """Test that HTTPS URLs are always accepted."""
+        config = MarquezConfig(url="https://marquez.example.com:5000")
+        assert config.url == "https://marquez.example.com:5000"
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_localhost_accepted(self) -> None:
+        """Test that HTTP is allowed for localhost."""
+        config = MarquezConfig(url="http://localhost:5000")
+        assert config.url == "http://localhost:5000"
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_127_0_0_1_accepted(self) -> None:
+        """Test that HTTP is allowed for 127.0.0.1."""
+        config = MarquezConfig(url="http://127.0.0.1:5000")
+        assert config.url == "http://127.0.0.1:5000"
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_ipv6_loopback_accepted(self) -> None:
+        """Test that HTTP is allowed for IPv6 loopback (::1)."""
+        config = MarquezConfig(url="http://[::1]:5000")
+        assert config.url == "http://[::1]:5000"
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_non_localhost_rejected(self) -> None:
+        """Test that HTTP is rejected for non-localhost URLs by default."""
+        with pytest.raises(ValidationError) as exc_info:
+            MarquezConfig(url="http://marquez.example.com:5000")
+
+        error = exc_info.value.errors()[0]
+        assert "HTTP not allowed" in error["msg"]
+        assert "marquez.example.com" in error["msg"]
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_non_localhost_rejected_for_internal_hostnames(self) -> None:
+        """Test that HTTP is rejected for internal/cluster hostnames."""
+        with pytest.raises(ValidationError) as exc_info:
+            MarquezConfig(url="http://marquez:5000")
+
+        error = exc_info.value.errors()[0]
+        assert "HTTP not allowed" in error["msg"]
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_allowed_with_env_override(self) -> None:
+        """Test that HTTP is allowed when FLOE_ALLOW_INSECURE_HTTP=true."""
+        original = os.environ.get("FLOE_ALLOW_INSECURE_HTTP")
+        try:
+            os.environ["FLOE_ALLOW_INSECURE_HTTP"] = "true"
+            config = MarquezConfig(url="http://marquez.example.com:5000")
+            assert config.url == "http://marquez.example.com:5000"
+        finally:
+            if original is not None:
+                os.environ["FLOE_ALLOW_INSECURE_HTTP"] = original
+            else:
+                os.environ.pop("FLOE_ALLOW_INSECURE_HTTP", None)
+
+    @pytest.mark.requirement("REQ-527")
+    def test_http_rejected_when_env_override_false(self) -> None:
+        """Test that HTTP is rejected when FLOE_ALLOW_INSECURE_HTTP=false."""
+        original = os.environ.get("FLOE_ALLOW_INSECURE_HTTP")
+        try:
+            os.environ["FLOE_ALLOW_INSECURE_HTTP"] = "false"
+            with pytest.raises(ValidationError):
+                MarquezConfig(url="http://marquez.example.com:5000")
+        finally:
+            if original is not None:
+                os.environ["FLOE_ALLOW_INSECURE_HTTP"] = original
+            else:
+                os.environ.pop("FLOE_ALLOW_INSECURE_HTTP", None)
+
+    @pytest.mark.requirement("REQ-527")
+    def test_invalid_protocol_rejected(self) -> None:
+        """Test that non-HTTP(S) protocols are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            MarquezConfig(url="ftp://marquez:5000")
+
+        error = exc_info.value.errors()[0]
+        assert "must start with https://" in error["msg"]
+
+    @pytest.mark.requirement("REQ-527")
+    def test_trailing_slash_normalized(self) -> None:
+        """Test that trailing slashes are stripped from URLs."""
+        config = MarquezConfig(url="https://marquez:5000/")
+        assert config.url == "https://marquez:5000"
+
+    @pytest.mark.requirement("REQ-527")
+    def test_plugin_validates_url_on_init(self) -> None:
+        """Test that plugin constructor validates URL via MarquezConfig."""
+        with pytest.raises(ValidationError) as exc_info:
+            MarquezLineageBackendPlugin(url="http://marquez.example.com:5000")
+
+        error = exc_info.value.errors()[0]
+        assert "HTTP not allowed" in error["msg"]
+
+    @pytest.mark.requirement("REQ-527")
+    def test_localhost_bypass_not_vulnerable_to_prefix_attack(self) -> None:
+        """Test that localhost.attacker.com is NOT treated as localhost.
+
+        SECURITY: Prevents bypass via hostnames that start with 'localhost'.
+        """
+        with pytest.raises(ValidationError) as exc_info:
+            MarquezConfig(url="http://localhost.attacker.com:5000")
+
+        error = exc_info.value.errors()[0]
+        assert "HTTP not allowed" in error["msg"]

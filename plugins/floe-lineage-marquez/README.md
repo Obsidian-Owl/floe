@@ -50,6 +50,28 @@ For production, configure:
 - `url`: Marquez API base URL (use HTTPS)
 - `api_key`: Optional authentication
 
+### Security
+
+**HTTPS Enforcement**: By default, only HTTPS URLs are accepted (except for localhost).
+HTTP is allowed for `localhost`, `127.0.0.1`, and `::1` for local development.
+
+**Development Override**: To use HTTP with non-localhost URLs in development environments:
+
+```bash
+export FLOE_ALLOW_INSECURE_HTTP=true
+```
+
+> **Warning**: Never use this in production. The plugin logs a CRITICAL warning when this override is active.
+
+**PostgreSQL Credentials**: The `get_helm_values()` method uses Kubernetes Secrets via Bitnami's `existingSecret` pattern. Create a secret before deploying:
+
+```bash
+# Create the required Kubernetes secret
+kubectl create secret generic marquez-postgresql-credentials \
+  --from-literal=postgres-password='<your-admin-password>' \
+  --from-literal=password='<your-user-password>'
+```
+
 ## Helm Deployment
 
 The plugin provides Helm values for self-hosted deployment:

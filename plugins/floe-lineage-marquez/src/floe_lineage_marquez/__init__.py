@@ -10,13 +10,55 @@ See Also:
 
 from __future__ import annotations
 
+import ipaddress
+import logging
+import os
 import urllib.request
 from typing import Any
+from urllib.parse import urlparse
 
 from floe_core.plugins.lineage import LineageBackendPlugin
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 __all__ = ["MarquezLineageBackendPlugin", "MarquezConfig"]
+
+logger = logging.getLogger(__name__)
+
+# SECURITY: Known localhost hostnames (exact match only)
+_LOCALHOST_HOSTNAMES: frozenset[str] = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+    }
+)
+
+
+def _is_localhost(hostname: str) -> bool:
+    """Check if hostname represents localhost.
+
+    SECURITY: Uses exact hostname matching and proper IP address parsing
+    to prevent bypass attacks like 'localhost.attacker.com'.
+
+    Args:
+        hostname: The hostname to check.
+
+    Returns:
+        True if the hostname is localhost or a loopback IP address.
+    """
+    # Check known localhost hostnames (case-insensitive, exact match)
+    if hostname.lower() in _LOCALHOST_HOSTNAMES:
+        return True
+
+    # Check if it's a loopback IP address
+    try:
+        addr = ipaddress.ip_address(hostname)
+        # Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            return addr.ipv4_mapped.is_loopback
+        return addr.is_loopback
+    except ValueError:
+        # Not a valid IP address - must match hostname exactly
+        return False
 
 
 class MarquezConfig(BaseModel):
@@ -56,6 +98,66 @@ class MarquezConfig(BaseModel):
         default=True,
         description="Whether to verify SSL certificates",
     )
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_security(cls, v: str) -> str:
+        """Validate URL format and enforce HTTPS for non-localhost URLs.
+
+        SECURITY NOTES:
+            - HTTP is ONLY allowed for localhost/loopback addresses (127.0.0.1, ::1)
+            - This is intentional for local development and testing environments
+            - Production deployments MUST use HTTPS URLs which are enforced here
+            - Uses proper URL parsing to prevent bypass attacks (not substring matching)
+            - The localhost exception is safe because loopback traffic never leaves host
+            - Override with FLOE_ALLOW_INSECURE_HTTP=true for development environments
+
+        Args:
+            v: The URL to validate.
+
+        Returns:
+            Validated and normalized URL.
+
+        Raises:
+            ValueError: If URL is HTTP and not localhost (without override).
+        """
+        # Strip trailing slashes for consistency
+        v = v.rstrip("/")
+
+        # SECURITY: HTTP is only allowed for localhost addresses by default.
+        # This is safe because loopback traffic never leaves the host.
+        # Production deployments must use HTTPS.
+        if v.startswith("http://"):
+            # SECURITY: Parse URL to extract actual hostname
+            # Never use substring matching - vulnerable to bypass
+            parsed = urlparse(v)
+            hostname = parsed.hostname or ""
+
+            # Check if it's actually localhost (proper validation)
+            if _is_localhost(hostname):
+                return v
+
+            # Allow HTTP with explicit environment variable override
+            if os.environ.get("FLOE_ALLOW_INSECURE_HTTP", "").lower() == "true":
+                logger.critical(
+                    "INSECURE HTTP enabled for Marquez URL '%s' - "
+                    "development use only! Set FLOE_ALLOW_INSECURE_HTTP=false "
+                    "before deploying to production.",
+                    hostname,
+                )
+                return v
+
+            raise ValueError(
+                f"HTTP not allowed for '{hostname}'. "
+                "url must use HTTPS for non-localhost URLs. "
+                "HTTP is only allowed for localhost development. "
+                "Set FLOE_ALLOW_INSECURE_HTTP=true to override (not recommended)."
+            )
+
+        if not v.startswith("https://"):
+            raise ValueError("url must start with https:// or http://localhost")
+
+        return v
 
 
 class MarquezLineageBackendPlugin(LineageBackendPlugin):
@@ -98,19 +200,24 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             api_key: Optional API key for authentication
             environment: Deployment environment for namespace (default: "prod")
             verify_ssl: Whether to verify SSL certificates (default: True)
+
+        Note:
+            URL validation is performed by MarquezConfig.validate_url_security().
+            HTTP is only allowed for localhost. Use FLOE_ALLOW_INSECURE_HTTP=true
+            to override for development environments.
         """
-        import logging
+        # Validate URL security using MarquezConfig validator
+        validated_config = MarquezConfig(
+            url=url,
+            api_key=api_key,
+            environment=environment,
+            verify_ssl=verify_ssl,
+        )
 
-        self._url = url.rstrip("/")
-        self._api_key = api_key
-        self._environment = environment
-        self._verify_ssl = verify_ssl
-
-        # Warn if using HTTP for non-localhost URLs
-        if url.startswith("http://") and not url.startswith("http://localhost"):
-            logging.getLogger(__name__).warning(
-                "Using HTTP for Marquez URL - use HTTPS in production"
-            )
+        self._url = validated_config.url
+        self._api_key = validated_config.api_key
+        self._environment = validated_config.environment
+        self._verify_ssl = validated_config.verify_ssl
 
     @property
     def name(self) -> str:
@@ -237,7 +344,14 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 "enabled": True,
                 "auth": {
                     "username": "marquez",
-                    "password": "<SET_VIA_HELM_VALUES>",  # pragma: allowlist secret
+                    # SECURITY: Use Kubernetes Secret for credentials (Bitnami pattern)
+                    # Secret must contain the keys specified in secretKeys
+                    # See: https://github.com/bitnami/charts/tree/main/bitnami/postgresql
+                    "existingSecret": "marquez-postgresql-credentials",  # pragma: allowlist secret
+                    "secretKeys": {  # pragma: allowlist secret
+                        "adminPasswordKey": "postgres-password",  # pragma: allowlist secret
+                        "userPasswordKey": "password",  # pragma: allowlist secret
+                    },
                     "database": "marquez",
                 },
                 "primary": {
