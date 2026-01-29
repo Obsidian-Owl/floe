@@ -439,3 +439,153 @@ class SecurityGateConfig(BaseModel):
                 f"Valid levels: {sorted(VALID_SEVERITY_LEVELS)}"
             )
         return v
+
+
+class EnvironmentConfig(BaseModel):
+    """Per-environment configuration for promotion gates, authorization, and locks.
+
+    Defines what gates must pass for promotion to this environment,
+    who is authorized to promote, and whether the environment is locked.
+
+    Attributes:
+        name: Environment name (e.g., "dev", "staging", "prod").
+        gates: Map of gate types to enabled status. policy_compliance is always true.
+        gate_timeout_seconds: Maximum gate execution time (30-3600 seconds).
+        authorization: Access control rules for this environment.
+        lock: Current lock state (if locked, promotions are blocked).
+
+    Examples:
+        >>> config = EnvironmentConfig(
+        ...     name="prod",
+        ...     gates={PromotionGate.POLICY_COMPLIANCE: True, PromotionGate.TESTS: True},
+        ...     authorization=AuthorizationConfig(allowed_groups=["platform-admins"]),
+        ... )
+        >>> config.name
+        'prod'
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        pattern=r"^[a-z][a-z0-9_-]*$",
+        description="Environment name (lowercase, alphanumeric with hyphens/underscores)",
+    )
+    gates: dict[PromotionGate, bool | SecurityGateConfig] = Field(
+        ...,
+        description="Gate requirements for this environment",
+    )
+    gate_timeout_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        description="Maximum gate execution time in seconds",
+    )
+    authorization: AuthorizationConfig | None = Field(
+        default=None,
+        description="Access control rules for this environment",
+    )
+    lock: EnvironmentLock | None = Field(
+        default=None,
+        description="Current lock state",
+    )
+
+    @field_validator("gates")
+    @classmethod
+    def validate_policy_compliance_always_true(
+        cls, v: dict[PromotionGate, bool | SecurityGateConfig]
+    ) -> dict[PromotionGate, bool | SecurityGateConfig]:
+        """Validate that policy_compliance gate is always enabled."""
+        policy_gate = v.get(PromotionGate.POLICY_COMPLIANCE)
+        if policy_gate is False:
+            raise ValueError(
+                "policy_compliance gate cannot be disabled - it is mandatory for all environments"
+            )
+        return v
+
+
+def _default_environments() -> list[EnvironmentConfig]:
+    """Create default environment configurations [dev, staging, prod]."""
+    return [
+        EnvironmentConfig(
+            name="dev",
+            gates={PromotionGate.POLICY_COMPLIANCE: True},
+        ),
+        EnvironmentConfig(
+            name="staging",
+            gates={
+                PromotionGate.POLICY_COMPLIANCE: True,
+                PromotionGate.TESTS: True,
+            },
+        ),
+        EnvironmentConfig(
+            name="prod",
+            gates={
+                PromotionGate.POLICY_COMPLIANCE: True,
+                PromotionGate.TESTS: True,
+                PromotionGate.SECURITY_SCAN: True,
+            },
+        ),
+    ]
+
+
+class PromotionConfig(BaseModel):
+    """Top-level promotion configuration from manifest.yaml.
+
+    Defines the ordered list of environments, audit backend, timeouts,
+    and webhook notifications for the promotion workflow.
+
+    Attributes:
+        environments: Ordered list of environments (promotion path).
+        audit_backend: Where to store promotion/rollback records.
+        default_timeout_seconds: Default gate timeout.
+        webhooks: Webhook configurations for notifications.
+        gate_commands: Custom gate command configurations.
+
+    Examples:
+        >>> config = PromotionConfig()
+        >>> [env.name for env in config.environments]
+        ['dev', 'staging', 'prod']
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    environments: list[EnvironmentConfig] = Field(
+        default_factory=_default_environments,
+        min_length=1,
+        description="Ordered list of environments (promotion path)",
+    )
+    audit_backend: AuditBackend = Field(
+        default=AuditBackend.OCI,
+        description="Audit storage backend type",
+    )
+    default_timeout_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        description="Default gate timeout in seconds",
+    )
+    webhooks: list[WebhookConfig] | None = Field(
+        default=None,
+        description="Webhook configurations for notifications",
+    )
+    gate_commands: dict[str, str | SecurityGateConfig] | None = Field(
+        default=None,
+        description="Custom gate command configurations",
+    )
+
+    @field_validator("environments")
+    @classmethod
+    def validate_unique_environment_names(
+        cls, v: list[EnvironmentConfig]
+    ) -> list[EnvironmentConfig]:
+        """Validate that all environment names are unique."""
+        names = [env.name for env in v]
+        duplicates = [name for name in names if names.count(name) > 1]
+        if duplicates:
+            raise ValueError(
+                f"Environment names must be unique. Duplicates found: {set(duplicates)}"
+            )
+        return v

@@ -486,3 +486,203 @@ class TestSecurityGateConfig:
                 command="scanner ${ARTIFACT_REF}",
                 scanner_format="invalid_scanner",
             )
+
+
+class TestEnvironmentConfig:
+    """Tests for EnvironmentConfig Pydantic model."""
+
+    @pytest.mark.requirement("8C-FR-005")
+    def test_environment_config_valid(self) -> None:
+        """Test EnvironmentConfig creation with valid data."""
+        from floe_core.schemas.promotion import EnvironmentConfig, PromotionGate
+
+        config = EnvironmentConfig(
+            name="staging",
+            gates={
+                PromotionGate.POLICY_COMPLIANCE: True,
+                PromotionGate.TESTS: True,
+                PromotionGate.SECURITY_SCAN: False,
+            },
+        )
+        assert config.name == "staging"
+        assert config.gates[PromotionGate.POLICY_COMPLIANCE] is True
+        assert config.gates[PromotionGate.TESTS] is True
+
+    @pytest.mark.requirement("8C-FR-005")
+    def test_environment_config_policy_compliance_always_true(self) -> None:
+        """Test EnvironmentConfig enforces policy_compliance is always true."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import EnvironmentConfig, PromotionGate
+
+        with pytest.raises(ValidationError, match="policy_compliance"):
+            EnvironmentConfig(
+                name="staging",
+                gates={
+                    PromotionGate.POLICY_COMPLIANCE: False,  # Not allowed!
+                },
+            )
+
+    @pytest.mark.requirement("8C-FR-005")
+    def test_environment_config_with_authorization(self) -> None:
+        """Test EnvironmentConfig with authorization config."""
+        from floe_core.schemas.promotion import (
+            AuthorizationConfig,
+            EnvironmentConfig,
+            PromotionGate,
+        )
+
+        config = EnvironmentConfig(
+            name="prod",
+            gates={PromotionGate.POLICY_COMPLIANCE: True},
+            authorization=AuthorizationConfig(
+                allowed_groups=["platform-admins"],
+                separation_of_duties=True,
+            ),
+        )
+        assert config.authorization is not None
+        assert config.authorization.allowed_groups == ["platform-admins"]
+
+    @pytest.mark.requirement("8C-FR-005")
+    def test_environment_config_with_lock(self) -> None:
+        """Test EnvironmentConfig with environment lock."""
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            EnvironmentLock,
+            PromotionGate,
+        )
+
+        config = EnvironmentConfig(
+            name="prod",
+            gates={PromotionGate.POLICY_COMPLIANCE: True},
+            lock=EnvironmentLock(locked=True, reason="Maintenance"),
+        )
+        assert config.lock is not None
+        assert config.lock.locked is True
+
+    @pytest.mark.requirement("8C-FR-005")
+    def test_environment_config_gate_timeout(self) -> None:
+        """Test EnvironmentConfig with custom gate timeout."""
+        from floe_core.schemas.promotion import EnvironmentConfig, PromotionGate
+
+        config = EnvironmentConfig(
+            name="prod",
+            gates={PromotionGate.POLICY_COMPLIANCE: True},
+            gate_timeout_seconds=600,
+        )
+        assert config.gate_timeout_seconds == 600
+
+    @pytest.mark.requirement("8C-FR-005")
+    def test_environment_config_invalid_timeout_rejected(self) -> None:
+        """Test EnvironmentConfig rejects invalid timeout values."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import EnvironmentConfig, PromotionGate
+
+        with pytest.raises(ValidationError):
+            EnvironmentConfig(
+                name="prod",
+                gates={PromotionGate.POLICY_COMPLIANCE: True},
+                gate_timeout_seconds=10,  # Below minimum of 30
+            )
+
+
+class TestPromotionConfig:
+    """Tests for PromotionConfig Pydantic model."""
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promotion_config_default_environments(self) -> None:
+        """Test PromotionConfig creates default [dev, staging, prod] environments."""
+        from floe_core.schemas.promotion import PromotionConfig
+
+        config = PromotionConfig()
+        assert len(config.environments) == 3
+        assert config.environments[0].name == "dev"
+        assert config.environments[1].name == "staging"
+        assert config.environments[2].name == "prod"
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promotion_config_custom_environments(self) -> None:
+        """Test PromotionConfig with custom environments."""
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
+
+        config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="test",
+                    gates={PromotionGate.POLICY_COMPLIANCE: True},
+                ),
+                EnvironmentConfig(
+                    name="production",
+                    gates={
+                        PromotionGate.POLICY_COMPLIANCE: True,
+                        PromotionGate.TESTS: True,
+                    },
+                ),
+            ],
+        )
+        assert len(config.environments) == 2
+        assert config.environments[0].name == "test"
+        assert config.environments[1].name == "production"
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promotion_config_with_webhooks(self) -> None:
+        """Test PromotionConfig with webhook configuration."""
+        from floe_core.schemas.promotion import PromotionConfig, WebhookConfig
+
+        config = PromotionConfig(
+            webhooks=[
+                WebhookConfig(
+                    url="https://hooks.slack.com/services/T00/B00/XXX",
+                    events=["promote", "rollback"],
+                ),
+            ],
+        )
+        assert config.webhooks is not None
+        assert len(config.webhooks) == 1
+        assert config.webhooks[0].url == "https://hooks.slack.com/services/T00/B00/XXX"
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promotion_config_audit_backend(self) -> None:
+        """Test PromotionConfig with custom audit backend."""
+        from floe_core.schemas.promotion import AuditBackend, PromotionConfig
+
+        config = PromotionConfig(audit_backend=AuditBackend.S3)
+        assert config.audit_backend == AuditBackend.S3
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promotion_config_default_timeout(self) -> None:
+        """Test PromotionConfig default gate timeout."""
+        from floe_core.schemas.promotion import PromotionConfig
+
+        config = PromotionConfig()
+        assert config.default_timeout_seconds == 300
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promotion_config_unique_environment_names(self) -> None:
+        """Test PromotionConfig enforces unique environment names."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
+
+        with pytest.raises(ValidationError, match="unique"):
+            PromotionConfig(
+                environments=[
+                    EnvironmentConfig(
+                        name="prod",
+                        gates={PromotionGate.POLICY_COMPLIANCE: True},
+                    ),
+                    EnvironmentConfig(
+                        name="prod",  # Duplicate!
+                        gates={PromotionGate.POLICY_COMPLIANCE: True},
+                    ),
+                ],
+            )
