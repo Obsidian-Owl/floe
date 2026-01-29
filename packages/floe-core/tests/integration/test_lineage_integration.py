@@ -20,13 +20,13 @@ import asyncio
 import json
 import socket
 import subprocess
-import time
 import urllib.request
 from contextlib import closing
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from testing.fixtures.polling import wait_for_condition
 
 from floe_core.lineage.emitter import create_emitter
 from floe_core.lineage.events import EventBuilder, to_openlineage_event
@@ -100,19 +100,24 @@ def marquez_port() -> int:  # type: ignore[return]
     )
 
     # Wait for port-forward to be ready and Marquez to respond
-    max_attempts = 30
-    for attempt in range(max_attempts):
+    def marquez_ready() -> bool:
         try:
             _get_json(port, "/api/v1/namespaces")
-            break
+            return True
         except Exception:
-            if attempt == max_attempts - 1:
-                proc.kill()
-                pytest.fail(
-                    f"Marquez not reachable after {max_attempts}s. "
-                    "Ensure Kind cluster is running with Marquez deployed."
-                )
-            time.sleep(1)
+            return False
+
+    if not wait_for_condition(
+        marquez_ready,
+        timeout=30.0,
+        interval=1.0,
+        description="Marquez to become ready",
+        raise_on_timeout=False,
+    ):
+        proc.kill()
+        pytest.fail(
+            "Marquez not reachable after 30s. Ensure Kind cluster is running with Marquez deployed."
+        )
 
     yield port  # type: ignore[misc]
 
