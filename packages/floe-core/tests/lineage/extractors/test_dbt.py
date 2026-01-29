@@ -86,12 +86,14 @@ def realistic_manifest() -> dict[str, Any]:
 class TestDbtLineageExtractor:
     """Tests for DbtLineageExtractor."""
 
+    @pytest.mark.requirement("REQ-519")
     def test_initialization(self, realistic_manifest: dict[str, Any]) -> None:
         """Extractor initializes with manifest and default namespace."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
         assert extractor.manifest == realistic_manifest
         assert extractor.default_namespace == "prod"
 
+    @pytest.mark.requirement("REQ-519")
     def test_default_namespace(self, realistic_manifest: dict[str, Any]) -> None:
         """Extractor uses 'default' namespace when not specified."""
         extractor = DbtLineageExtractor(realistic_manifest)
@@ -110,6 +112,7 @@ class TestDbtLineageExtractor:
         assert all(isinstance(ds, LineageDataset) for ds in outputs)
 
     @pytest.mark.requirement("REQ-519")
+    @pytest.mark.requirement("REQ-522")
     def test_extract_model_with_source_input(self, realistic_manifest: dict[str, Any]) -> None:
         """Extract model with source as input dataset."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -128,6 +131,7 @@ class TestDbtLineageExtractor:
         assert outputs[0].name == "analytics.staging.stg_customers"
 
     @pytest.mark.requirement("REQ-519")
+    @pytest.mark.requirement("REQ-522")
     def test_extract_model_with_model_input(self, realistic_manifest: dict[str, Any]) -> None:
         """Extract model with another model as input dataset."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -163,6 +167,7 @@ class TestDbtLineageExtractor:
         assert fct_inputs[0].name == "analytics.marts.customers"
         assert fct_outputs[0].name == "analytics.marts.fct_orders"
 
+    @pytest.mark.requirement("REQ-519")
     def test_dataset_naming_convention(self, realistic_manifest: dict[str, Any]) -> None:
         """Dataset names follow {database}.{schema}.{name} convention."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -171,6 +176,7 @@ class TestDbtLineageExtractor:
         # Should be database.schema.name
         assert outputs[0].name == "analytics.staging.stg_customers"
 
+    @pytest.mark.requirement("REQ-519")
     def test_dataset_naming_with_alias(self, realistic_manifest: dict[str, Any]) -> None:
         """Dataset names use alias when present instead of name."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -179,6 +185,7 @@ class TestDbtLineageExtractor:
         # Should use alias "customers" instead of name "dim_customers"
         assert outputs[0].name == "analytics.marts.customers"
 
+    @pytest.mark.requirement("REQ-519")
     def test_model_with_no_columns_empty_schema_facet(self) -> None:
         """Model with no columns produces dataset with empty schema facet."""
         manifest = {
@@ -199,6 +206,7 @@ class TestDbtLineageExtractor:
         assert len(outputs) == 1
         assert "schema" not in outputs[0].facets
 
+    @pytest.mark.requirement("REQ-519")
     def test_model_with_columns_has_schema_facet(self, realistic_manifest: dict[str, Any]) -> None:
         """Model with columns produces dataset with schema facet."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -212,6 +220,7 @@ class TestDbtLineageExtractor:
         assert schema_facet["fields"][0]["name"] == "customer_id"
         assert schema_facet["fields"][0]["type"] == "BIGINT"
 
+    @pytest.mark.requirement("REQ-522")
     def test_model_with_upstream_has_column_lineage_facet(
         self, realistic_manifest: dict[str, Any]
     ) -> None:
@@ -232,6 +241,7 @@ class TestDbtLineageExtractor:
         assert len(customer_id_lineage["inputFields"]) == 1
         assert customer_id_lineage["inputFields"][0]["field"] == "customer_id"
 
+    @pytest.mark.requirement("REQ-519")
     def test_extract_test_node(self, realistic_manifest: dict[str, Any]) -> None:
         """Extract datasets being tested by a test node."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -241,6 +251,7 @@ class TestDbtLineageExtractor:
         assert len(datasets) == 1
         assert datasets[0].name == "analytics.marts.customers"
 
+    @pytest.mark.requirement("REQ-519")
     def test_extract_test_node_not_found(self, realistic_manifest: dict[str, Any]) -> None:
         """Extract test for non-existent test node returns empty list."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -248,6 +259,7 @@ class TestDbtLineageExtractor:
 
         assert datasets == []
 
+    @pytest.mark.requirement("REQ-522")
     def test_extract_all_models(self, realistic_manifest: dict[str, Any]) -> None:
         """Extract lineage for all models in manifest."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -265,6 +277,7 @@ class TestDbtLineageExtractor:
             assert isinstance(outputs, list)
             assert len(outputs) == 1  # Each model produces 1 output
 
+    @pytest.mark.requirement("REQ-519")
     def test_extract_model_not_found(self, realistic_manifest: dict[str, Any]) -> None:
         """Extract non-existent model returns empty lineage."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -273,6 +286,7 @@ class TestDbtLineageExtractor:
         assert inputs == []
         assert outputs == []
 
+    @pytest.mark.requirement("REQ-519")
     def test_fallback_to_depends_on_when_no_parent_map(self) -> None:
         """Extractor falls back to depends_on.nodes when parent_map unavailable."""
         manifest = {
@@ -300,6 +314,7 @@ class TestDbtLineageExtractor:
         assert len(inputs) == 1
         assert inputs[0].name == "raw.public.users"
 
+    @pytest.mark.requirement("REQ-519")
     def test_missing_database_schema_defaults_to_empty(self) -> None:
         """Missing database/schema fields default to empty string."""
         manifest = {
@@ -317,6 +332,7 @@ class TestDbtLineageExtractor:
         # Should create dataset with empty database/schema
         assert outputs[0].name == "..minimal"
 
+    @pytest.mark.requirement("REQ-519")
     def test_source_resolution_from_sources_dict(self, realistic_manifest: dict[str, Any]) -> None:
         """Sources are resolved from sources dict, not nodes dict."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")
@@ -326,6 +342,7 @@ class TestDbtLineageExtractor:
         assert len(inputs) == 1
         assert inputs[0].name == "raw.public.customers"
 
+    @pytest.mark.requirement("REQ-522")
     def test_multiple_inputs(self) -> None:
         """Model with multiple inputs produces multiple input datasets."""
         manifest = {
@@ -362,6 +379,7 @@ class TestDbtLineageExtractor:
         assert "analytics.staging.customers" in input_names
         assert "analytics.staging.orders" in input_names
 
+    @pytest.mark.requirement("REQ-519")
     def test_namespace_propagates_to_all_datasets(self, realistic_manifest: dict[str, Any]) -> None:
         """All datasets use the configured namespace."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="staging")
@@ -371,6 +389,7 @@ class TestDbtLineageExtractor:
         assert inputs[0].namespace == "staging"
         assert outputs[0].namespace == "staging"
 
+    @pytest.mark.requirement("REQ-519")
     def test_facets_only_on_output_datasets(self, realistic_manifest: dict[str, Any]) -> None:
         """Schema and column lineage facets only added to output datasets."""
         extractor = DbtLineageExtractor(realistic_manifest, default_namespace="prod")

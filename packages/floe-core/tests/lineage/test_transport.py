@@ -163,9 +163,10 @@ class TestHttpLineageTransport:
         """Events are enqueued for background processing (fire-and-forget)."""
         transport = HttpLineageTransport(url="http://localhost:5000/api/v1/lineage")
         try:
+            initial_size = transport._async_queue.qsize()
             _run(transport.emit(sample_event))
-            # Event was either consumed by background task or still queued
-            assert transport._async_queue.qsize() >= 0
+            final_size = transport._async_queue.qsize()
+            assert final_size >= initial_size or transport._closed
         finally:
             transport.close()
 

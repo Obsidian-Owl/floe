@@ -165,10 +165,14 @@ class TestProtocols:
 
     def test_transport_is_runtime_checkable(self) -> None:
         """LineageTransport protocol is runtime checkable."""
-        # Protocol is runtime_checkable, so isinstance works
-        assert hasattr(LineageTransport, "__protocol_attrs__") or True
+        from floe_core.lineage.transport import NoOpLineageTransport
+
+        transport = NoOpLineageTransport()
+        assert isinstance(transport, LineageTransport)
 
     def test_extractor_is_runtime_checkable(self) -> None:
         """LineageExtractor protocol is runtime checkable."""
-        # Protocol is runtime_checkable, so isinstance works
-        assert hasattr(LineageExtractor, "__protocol_attrs__") or True
+        from floe_core.lineage.extractors.dbt import DbtLineageExtractor
+
+        extractor = DbtLineageExtractor(manifest={}, default_namespace="test")
+        assert isinstance(extractor, LineageExtractor)
