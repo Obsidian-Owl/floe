@@ -25,6 +25,7 @@ See Also:
 
 from __future__ import annotations
 
+import warnings
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
 
@@ -55,7 +56,18 @@ class OpenLineageEmitter(Protocol):
 
     Quality plugins that support lineage tracking should return an
     implementation of this protocol from get_lineage_emitter().
+
+    .. deprecated:: 0.5.0
+        Use :class:`floe_core.lineage.LineageEmitter` instead.
     """
+
+    def __init_subclass__(cls) -> None:
+        """Issue deprecation warning when subclassing OpenLineageEmitter."""
+        warnings.warn(
+            "OpenLineageEmitter is deprecated, use floe_core.lineage.LineageEmitter",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     def emit_fail_event(
         self,
@@ -367,6 +379,9 @@ class QualityPlugin(PluginMetadata):
         Returns an emitter for sending OpenLineage FAIL events when
         quality checks fail. Returns None if lineage is not configured.
 
+        .. deprecated:: 0.5.0
+            Use unified LineageEmitter from floe_core.lineage instead.
+
         Returns:
             OpenLineageEmitter instance, or None if not available.
 
@@ -375,7 +390,45 @@ class QualityPlugin(PluginMetadata):
             >>> if emitter is not None:
             ...     emitter.emit_fail_event(job_name, dataset, failed_checks)
         """
+        warnings.warn(
+            "get_lineage_emitter() is deprecated. Quality lineage now flows through "
+            "the unified LineageEmitter. Use get_quality_facets() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return None
+
+    def get_quality_facets(
+        self,
+        results: list[QualityCheckResult],
+    ) -> dict[str, Any]:
+        """Build OpenLineage quality facets from check results.
+
+        Returns DataQualityAssertionsDatasetFacet dict for inclusion
+        in lineage events emitted by the unified LineageEmitter.
+
+        Args:
+            results: List of quality check results.
+
+        Returns:
+            DataQualityAssertionsDatasetFacet dict compatible with
+            OpenLineage spec. Returns empty dict if no results.
+        """
+        from floe_core.lineage.facets import QualityFacetBuilder
+
+        if not results:
+            return {}
+        check_dicts = [
+            {
+                "name": r.check_name,
+                "passed": r.passed,
+                "dimension": r.dimension.value
+                if hasattr(r.dimension, "value")
+                else str(r.dimension),
+            }
+            for r in results
+        ]
+        return QualityFacetBuilder.from_check_results(check_dicts)
 
     # =========================================================================
     # Check Mapping (Helper for implementations)

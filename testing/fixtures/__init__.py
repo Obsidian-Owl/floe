@@ -88,6 +88,13 @@ from testing.fixtures.duckdb import (
 from testing.fixtures.duckdb import (
     get_connection_info as get_duckdb_connection_info,
 )
+
+# Lineage fixtures
+from testing.fixtures.lineage import (
+    mock_lineage_backend,
+    mock_lineage_emitter,
+    sample_lineage_event,
+)
 from testing.fixtures.minio import (
     MinIOConfig,
     MinIOConnectionError,
@@ -136,6 +143,10 @@ from testing.fixtures.services import (
 )
 
 __all__ = [
+    # Lineage fixtures
+    "mock_lineage_backend",
+    "mock_lineage_emitter",
+    "sample_lineage_event",
     # Catalog plugin fixtures
     "CatalogConnectionError",
     "CatalogTestConfig",

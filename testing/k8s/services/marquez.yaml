@@ -1,0 +1,215 @@
+---
+# Marquez API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marquez
+  namespace: floe-test
+  labels:
+    app: marquez
+    component: lineage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: marquez
+  template:
+    metadata:
+      labels:
+        app: marquez
+        component: lineage
+    spec:
+      containers:
+        - name: marquez
+          image: marquezproject/marquez:latest
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+            - name: admin
+              containerPort: 5001
+              protocol: TCP
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx384m -Xms256m"
+            - name: MARQUEZ_PORT
+              value: "5000"
+            - name: MARQUEZ_ADMIN_PORT
+              value: "5001"
+            - name: POSTGRES_HOST
+              value: marquez-postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: marquez-config
+                  key: postgres_db
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: marquez-config
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: marquez-config
+                  key: postgres_password
+          livenessProbe:
+            httpGet:
+              path: /api/v1/namespaces
+              port: 5000
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/v1/namespaces
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 5
+          resources:
+            limits:
+              cpu: 300m
+              memory: 768Mi
+            requests:
+              cpu: 100m
+              memory: 384Mi
+---
+# Marquez Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: marquez
+  namespace: floe-test
+  labels:
+    app: marquez
+    component: lineage
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      protocol: TCP
+    - name: admin
+      port: 5001
+      targetPort: 5001
+      protocol: TCP
+  selector:
+    app: marquez
+---
+# PostgreSQL Deployment for Marquez
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marquez-postgres
+  namespace: floe-test
+  labels:
+    app: marquez-postgres
+    component: lineage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: marquez-postgres
+  template:
+    metadata:
+      labels:
+        app: marquez-postgres
+        component: lineage
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:14
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: marquez-config
+                  key: postgres_db
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: marquez-config
+                  key: postgres_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: marquez-config
+                  key: postgres_password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - marquez
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - marquez
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+      volumes:
+        - name: postgres-data
+          emptyDir: {}
+---
+# PostgreSQL Service for Marquez
+apiVersion: v1
+kind: Service
+metadata:
+  name: marquez-postgres
+  namespace: floe-test
+  labels:
+    app: marquez-postgres
+    component: lineage
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: marquez-postgres
+---
+# Marquez ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: marquez-config
+  namespace: floe-test
+  labels:
+    app: marquez
+    component: lineage
+data:
+  postgres_db: marquez
+  postgres_user: marquez
+  postgres_password: marquez  # pragma: allowlist secret

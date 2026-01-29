@@ -1,13 +1,13 @@
 {
   "name": "pull_success_artifact_structure",
   "function_name": "",
-  "captured_at": "2026-01-22T02:36:07.287717+00:00",
-  "checksum": "c7044a1c66fc4f2c",
+  "captured_at": "2026-01-28T08:57:39.713107+00:00",
+  "checksum": "4ded5316db2dafd8",
   "output": {
-    "version": "0.4.0",
+    "version": "0.5.0",
     "metadata": {
       "compiled_at": "2026-01-15 10:30:00+00:00",
-      "floe_version": "0.4.0",
+      "floe_version": "0.5.0",
       "source_hash": "sha256:golden123abc",
       "product_name": "golden-product",
       "product_version": "1.0.0"
@@ -70,7 +70,8 @@
       "catalog": null,
       "storage": null,
       "ingestion": null,
-      "semantic": null
+      "semantic": null,
+      "lineage_backend": null
     },
     "transforms": {
       "models": [
@@ -93,8 +94,6 @@
       ],
       "default_compute": "duckdb"
     },
-    "quality_config": null,
-    "data_contracts": [],
     "dbt_profiles": {
       "golden_profile": {
         "target": "dev",
@@ -107,6 +106,8 @@
       }
     },
     "governance": null,
-    "enforcement_result": null
+    "enforcement_result": null,
+    "data_contracts": [],
+    "quality_config": null
   }
 }

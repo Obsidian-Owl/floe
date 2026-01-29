@@ -98,6 +98,13 @@ OIDC_RETRY_BASE_DELAY = 0.5  # Base delay in seconds for exponential backoff
 OIDC_RETRY_MAX_DELAY = 8.0  # Maximum delay cap in seconds
 OIDC_RETRY_JITTER = 0.1  # Random jitter added to delay (0-0.1s)
 
+# Browser OAuth guard - set FLOE_DISABLE_BROWSER_OAUTH=true to prevent interactive auth
+DISABLE_BROWSER_OAUTH = os.environ.get("FLOE_DISABLE_BROWSER_OAUTH", "").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+
 
 @contextmanager
 def _trace_span(name: str) -> Iterator[None]:
@@ -630,6 +637,15 @@ class SigningClient:
             raise
 
         logger.info("No ambient credentials, initiating interactive OAuth flow")
+
+        # Guard: prevent browser OAuth if disabled (e.g., in tests or CI)
+        if DISABLE_BROWSER_OAUTH:
+            raise OIDCTokenError(
+                "No ambient OIDC credential found and browser OAuth is disabled. "
+                "Set FLOE_DISABLE_BROWSER_OAUTH=false or ensure CI/CD OIDC is configured.",
+                issuer=str(self.config.oidc_issuer) if self.config.oidc_issuer else None,
+            )
+
         from sigstore.models import ClientTrustConfig
 
         oidc_url = ClientTrustConfig.production().signing_config.get_oidc_url()

@@ -25,7 +25,7 @@ from __future__ import annotations
 # Increment MAJOR for breaking changes (remove fields, change types)
 # Increment MINOR for backward-compatible additions (new optional fields)
 # Increment PATCH for documentation/metadata only changes
-COMPILED_ARTIFACTS_VERSION: str = "0.4.0"
+COMPILED_ARTIFACTS_VERSION: str = "0.5.0"
 
 # Version history (for documentation and compatibility checks)
 COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
@@ -33,6 +33,7 @@ COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
     "0.2.0": "Add plugins, transforms, dbt_profiles, governance (Epic 2B)",
     "0.3.0": "Add enforcement_result summary (Epic 3B)",
     "0.4.0": "Add quality_config, quality_checks/quality_tier to ResolvedModel",
+    "0.5.0": "Add lineage_backend to ResolvedPlugins (Epic 6B)",
 }
 
 

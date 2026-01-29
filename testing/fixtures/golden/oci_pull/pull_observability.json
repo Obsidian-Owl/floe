@@ -1,8 +1,8 @@
 {
   "name": "pull_observability",
   "function_name": "",
-  "captured_at": "2026-01-22T02:36:07.295730+00:00",
-  "checksum": "b5efcc8500cda3b4",
+  "captured_at": "2026-01-28T08:57:39.723084+00:00",
+  "checksum": "d1cdd8b77301ec5f",
   "output": {
     "telemetry": {
       "enabled": true,

@@ -375,7 +375,7 @@ def _simple_yaml(data: dict[str, Any]) -> str:
         prefix = "  " * indent
         if isinstance(obj, dict):
             for key, value in obj.items():
-                if isinstance(value, (dict, list)):
+                if isinstance(value, dict | list):
                     lines.append(f"{prefix}{key}:")
                     _render(value, indent + 1)
                 else:

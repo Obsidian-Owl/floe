@@ -23,8 +23,10 @@ from __future__ import annotations
 import inspect
 from abc import ABC
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
+from floe_core.lineage import LineageDataset, RunState
 
 
 class TestOrchestratorPluginABCDefinition:
@@ -162,7 +164,7 @@ class TestOrchestratorPluginABCDefinition:
         sig = inspect.signature(OrchestratorPlugin.emit_lineage_event)
         params = list(sig.parameters.keys())
         assert "event_type" in params
-        assert "job" in params
+        assert "job_name" in params
         assert "inputs" in params
         assert "outputs" in params
 
@@ -314,7 +316,6 @@ class TestOrchestratorPluginInstantiationContract:
         A class implementing all abstract methods should be instantiable.
         """
         from floe_core.plugins.orchestrator import (
-            Dataset,
             OrchestratorPlugin,
             ResourceSpec,
             TransformConfig,
@@ -361,12 +362,28 @@ class TestOrchestratorPluginInstantiationContract:
 
             def emit_lineage_event(
                 self,
-                event_type: str,
-                job: str,
-                inputs: list[Dataset],
-                outputs: list[Dataset],
-            ) -> None:
-                _ = event_type, job, inputs, outputs
+                event_type: RunState,
+                job_name: str,
+                job_namespace: str | None = None,
+                run_id: UUID | None = None,
+                inputs: list[LineageDataset] | None = None,
+                outputs: list[LineageDataset] | None = None,
+                run_facets: dict[str, Any] | None = None,
+                job_facets: dict[str, Any] | None = None,
+                producer: str | None = None,
+            ) -> UUID:
+                _ = (
+                    event_type,
+                    job_name,
+                    job_namespace,
+                    run_id,
+                    inputs,
+                    outputs,
+                    run_facets,
+                    job_facets,
+                    producer,
+                )
+                return uuid4()
 
             def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
                 _ = job_name, cron, timezone

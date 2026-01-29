@@ -179,6 +179,62 @@ class TestResolvedPlugins:
             )
         assert "orchestrator" in str(exc_info.value)
 
+    @pytest.mark.requirement("2B-FR-007")
+    def test_lineage_backend_serialization_roundtrip(self) -> None:
+        """Test lineage_backend field serialization roundtrip (v0.5.0)."""
+        lineage_ref = PluginRef(type="marquez", version="0.20.0")
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=lineage_ref,
+        )
+
+        data = plugins.model_dump(mode="json")
+        restored = ResolvedPlugins.model_validate(data)
+
+        assert restored.lineage_backend is not None
+        assert restored.lineage_backend.type == "marquez"
+        assert restored.lineage_backend.version == "0.20.0"
+
+    @pytest.mark.requirement("2B-FR-007")
+    def test_lineage_backend_backward_compatibility(self) -> None:
+        """Test backward compatibility: v0.4.0 without lineage_backend deserializes correctly."""
+        data = {
+            "compute": {"type": "duckdb", "version": "0.9.0"},
+            "orchestrator": {"type": "dagster", "version": "1.5.0"},
+        }
+
+        plugins = ResolvedPlugins.model_validate(data)
+
+        assert plugins.lineage_backend is None
+        assert plugins.compute.type == "duckdb"
+        assert plugins.orchestrator.type == "dagster"
+
+    @pytest.mark.requirement("2B-FR-007")
+    def test_lineage_backend_forward_compatibility(self) -> None:
+        """Test forward compatibility: v0.5.0 with lineage_backend serializes correctly."""
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=PluginRef(type="atlan", version="1.0.0"),
+        )
+
+        data = plugins.model_dump(mode="json")
+
+        assert "lineage_backend" in data
+        assert data["lineage_backend"]["type"] == "atlan"
+        assert data["lineage_backend"]["version"] == "1.0.0"
+
+    @pytest.mark.requirement("2B-FR-007")
+    def test_lineage_backend_default_none(self) -> None:
+        """Test lineage_backend defaults to None when not specified."""
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+        )
+
+        assert plugins.lineage_backend is None
+
 
 class TestResolvedModel:
     """Tests for ResolvedModel validation."""

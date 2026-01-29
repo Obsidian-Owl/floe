@@ -1095,6 +1095,7 @@ name = "floe-core"
 version = "0.1.0"
 source = { editable = "packages/floe-core" }
 dependencies = [
+    { name = "certifi" },
     { name = "click" },
     { name = "datacontract-cli" },
     { name = "httpx" },
@@ -1113,6 +1114,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "certifi", specifier = ">=2023.0.0" },
     { name = "click", specifier = ">=8.1.0,<9.0" },
     { name = "datacontract-cli", specifier = ">=0.10.0,<1.0" },
     { name = "httpx", specifier = ">=0.27.0,<1.0" },
@@ -1244,6 +1246,23 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+]
+
+[[package]]
+name = "floe-lineage-marquez"
+version = "0.1.0"
+source = { editable = "plugins/floe-lineage-marquez" }
+dependencies = [
+    { name = "floe-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
 ]
 
@@ -1472,6 +1491,7 @@ dependencies = [
     { name = "floe-dbt-fusion" },
     { name = "floe-iceberg" },
     { name = "floe-identity-keycloak" },
+    { name = "floe-lineage-marquez" },
     { name = "floe-network-security-k8s" },
     { name = "floe-orchestrator-dagster" },
     { name = "floe-quality-dbt" },
@@ -1512,6 +1532,7 @@ requires-dist = [
     { name = "floe-dbt-fusion", editable = "plugins/floe-dbt-fusion" },
     { name = "floe-iceberg", editable = "packages/floe-iceberg" },
     { name = "floe-identity-keycloak", editable = "plugins/floe-identity-keycloak" },
+    { name = "floe-lineage-marquez", editable = "plugins/floe-lineage-marquez" },
     { name = "floe-network-security-k8s", editable = "plugins/floe-network-security-k8s" },
     { name = "floe-orchestrator-dagster", editable = "plugins/floe-orchestrator-dagster" },
     { name = "floe-quality-dbt", editable = "plugins/floe-quality-dbt" },

@@ -420,29 +420,102 @@ class TestPluginDiscovery:
     @pytest.mark.requirement("FR-070")
     def test_discover_network_security_plugins_finds_k8s_plugin(self) -> None:
         """Test k8s plugin is discovered from entry points."""
-        from floe_core.network import discover_network_security_plugins
+        from unittest.mock import patch
 
-        plugins = discover_network_security_plugins()
+        from floe_core.network import discover_network_security_plugins
+        from floe_core.plugins import NetworkSecurityPlugin
+
+        mock_k8s_cls = type(
+            "K8sPlugin",
+            (NetworkSecurityPlugin,),
+            {
+                "name": property(lambda self: "k8s"),
+                "version": property(lambda self: "0.1.0"),
+                "floe_api_version": property(lambda self: "1.0"),
+                "generate_default_deny_policies": lambda self, ns: [],
+                "generate_dns_egress_rule": lambda self: {},
+                "generate_network_policy": lambda self, config: {},
+                "generate_pod_security_context": lambda self, config=None: {},
+                "generate_container_security_context": lambda self, config=None: {},
+                "generate_writable_volumes": lambda self, paths: ([], []),
+                "get_config_schema": lambda self: None,
+            },
+        )
+
+        mock_ep = MagicMock()
+        mock_ep.name = "k8s"
+        mock_ep.load.return_value = mock_k8s_cls
+
+        with patch("floe_core.network.generator.entry_points", return_value=[mock_ep]):
+            plugins = discover_network_security_plugins()
 
         assert "k8s" in plugins
 
     @pytest.mark.requirement("FR-070")
     def test_get_network_security_plugin_returns_instance(self) -> None:
         """Test get_network_security_plugin returns plugin instance."""
+        from unittest.mock import patch
+
         from floe_core.network import get_network_security_plugin
         from floe_core.plugins import NetworkSecurityPlugin
 
-        plugin = get_network_security_plugin("k8s")
+        mock_k8s_cls = type(
+            "K8sPlugin",
+            (NetworkSecurityPlugin,),
+            {
+                "name": property(lambda self: "k8s"),
+                "version": property(lambda self: "0.1.0"),
+                "floe_api_version": property(lambda self: "1.0"),
+                "generate_default_deny_policies": lambda self, ns: [],
+                "generate_dns_egress_rule": lambda self: {},
+                "generate_network_policy": lambda self, config: {},
+                "generate_pod_security_context": lambda self, config=None: {},
+                "generate_container_security_context": lambda self, config=None: {},
+                "generate_writable_volumes": lambda self, paths: ([], []),
+                "get_config_schema": lambda self: None,
+            },
+        )
+
+        mock_ep = MagicMock()
+        mock_ep.name = "k8s"
+        mock_ep.load.return_value = mock_k8s_cls
+
+        with patch("floe_core.network.generator.entry_points", return_value=[mock_ep]):
+            plugin = get_network_security_plugin("k8s")
 
         assert isinstance(plugin, NetworkSecurityPlugin)
 
     @pytest.mark.requirement("FR-070")
     def test_get_network_security_plugin_auto_selects_single_plugin(self) -> None:
         """Test auto-selection when only one plugin available."""
+        from unittest.mock import patch
+
         from floe_core.network import get_network_security_plugin
         from floe_core.plugins import NetworkSecurityPlugin
 
-        plugin = get_network_security_plugin()
+        mock_k8s_cls = type(
+            "K8sPlugin",
+            (NetworkSecurityPlugin,),
+            {
+                "name": property(lambda self: "k8s"),
+                "version": property(lambda self: "0.1.0"),
+                "floe_api_version": property(lambda self: "1.0"),
+                "generate_default_deny_policies": lambda self, ns: [],
+                "generate_dns_egress_rule": lambda self: {},
+                "generate_network_policy": lambda self, config: {},
+                "generate_pod_security_context": lambda self, config=None: {},
+                "generate_container_security_context": lambda self, config=None: {},
+                "generate_writable_volumes": lambda self, paths: ([], []),
+                "get_config_schema": lambda self: None,
+            },
+        )
+
+        mock_ep = MagicMock()
+        mock_ep.name = "k8s"
+        mock_ep.load.return_value = mock_k8s_cls
+
+        with patch("floe_core.network.generator.entry_points", return_value=[mock_ep]):
+            plugin = get_network_security_plugin()
 
         assert isinstance(plugin, NetworkSecurityPlugin)
 
@@ -460,19 +533,85 @@ class TestPluginDiscovery:
     @pytest.mark.requirement("FR-070")
     def test_from_entry_point_creates_generator(self) -> None:
         """Test from_entry_point factory creates generator."""
-        from floe_core.network import NetworkPolicyManifestGenerator
+        from unittest.mock import patch
 
-        generator = NetworkPolicyManifestGenerator.from_entry_point("k8s")
+        from floe_core.network import NetworkPolicyManifestGenerator
+        from floe_core.plugins import NetworkSecurityPlugin
+
+        mock_k8s_cls = type(
+            "K8sPlugin",
+            (NetworkSecurityPlugin,),
+            {
+                "name": property(lambda self: "k8s"),
+                "version": property(lambda self: "0.1.0"),
+                "floe_api_version": property(lambda self: "1.0"),
+                "generate_default_deny_policies": lambda self, ns: [],
+                "generate_dns_egress_rule": lambda self: {},
+                "generate_network_policy": lambda self, config: {},
+                "generate_pod_security_context": lambda self, config=None: {},
+                "generate_container_security_context": lambda self, config=None: {},
+                "generate_writable_volumes": lambda self, paths: ([], []),
+                "get_config_schema": lambda self: None,
+            },
+        )
+
+        mock_ep = MagicMock()
+        mock_ep.name = "k8s"
+        mock_ep.load.return_value = mock_k8s_cls
+
+        with patch("floe_core.network.generator.entry_points", return_value=[mock_ep]):
+            generator = NetworkPolicyManifestGenerator.from_entry_point("k8s")
 
         assert isinstance(generator, NetworkPolicyManifestGenerator)
 
     @pytest.mark.requirement("FR-070")
     def test_from_entry_point_generator_can_generate(self) -> None:
         """Test generator from entry point can generate policies."""
-        from floe_core.network import NetworkPolicyManifestGenerator
+        from unittest.mock import patch
 
-        generator = NetworkPolicyManifestGenerator.from_entry_point("k8s")
-        result = generator.generate(namespaces=["floe-jobs"])
+        from floe_core.network import NetworkPolicyManifestGenerator
+        from floe_core.plugins import NetworkSecurityPlugin
+
+        mock_k8s_cls = type(
+            "K8sPlugin",
+            (NetworkSecurityPlugin,),
+            {
+                "name": property(lambda self: "k8s"),
+                "version": property(lambda self: "0.1.0"),
+                "floe_api_version": property(lambda self: "1.0"),
+                "generate_default_deny_policies": lambda self, namespace: [
+                    {
+                        "apiVersion": "networking.k8s.io/v1",
+                        "kind": "NetworkPolicy",
+                        "metadata": {"name": "default-deny", "namespace": namespace},
+                        "spec": {"egress": [], "ingress": []},
+                    }
+                ],
+                "generate_dns_egress_rule": lambda self: {
+                    "to": [
+                        {
+                            "namespaceSelector": {
+                                "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                            }
+                        }
+                    ],
+                    "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+                },
+                "generate_network_policy": lambda self, config: {},
+                "generate_pod_security_context": lambda self, config=None: {},
+                "generate_container_security_context": lambda self, config=None: {},
+                "generate_writable_volumes": lambda self, paths: ([], []),
+                "get_config_schema": lambda self: None,
+            },
+        )
+
+        mock_ep = MagicMock()
+        mock_ep.name = "k8s"
+        mock_ep.load.return_value = mock_k8s_cls
+
+        with patch("floe_core.network.generator.entry_points", return_value=[mock_ep]):
+            generator = NetworkPolicyManifestGenerator.from_entry_point("k8s")
+            result = generator.generate(namespaces=["floe-jobs"])
 
         assert result.policies_count >= 1
         assert result.namespaces_count == 1

@@ -224,6 +224,10 @@ class ResolvedPlugins(BaseModel):
         default=None,
         description="Resolved semantic layer plugin (optional)",
     )
+    lineage_backend: PluginRef | None = Field(
+        default=None,
+        description="Resolved lineage backend plugin (optional, v0.5.0+)",
+    )
 
 
 class ResolvedModel(BaseModel):
@@ -518,10 +522,10 @@ class CompiledArtifacts(BaseModel):
     - OTLP Collector endpoint (Layer 2 - ENFORCED)
     - Backend plugin selection (Layer 3 - PLUGGABLE)
 
-    Contract Version: 0.4.0 (see docstring header for version history)
+    Contract Version: 0.5.0 (see docstring header for version history)
 
     Attributes:
-        version: Schema version (semver) - default 0.4.0
+        version: Schema version (semver) - default 0.5.0
         metadata: Compilation metadata
         identity: Product identity from catalog
         mode: Deployment mode (simple, centralized, mesh)

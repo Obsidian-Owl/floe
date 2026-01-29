@@ -10,7 +10,25 @@ Requirements: FR-073
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+from unittest.mock import MagicMock
+
 import pytest
+
+
+def _install_fake_floe_rbac_k8s(mock_plugin_cls: MagicMock) -> dict[str, ModuleType]:
+    """Install a fake ``floe_rbac_k8s.plugin`` into ``sys.modules``.
+
+    Returns the mapping of injected module names so the caller can clean up.
+    """
+    pkg = ModuleType("floe_rbac_k8s")
+    sub = ModuleType("floe_rbac_k8s.plugin")
+    sub.K8sRBACPlugin = mock_plugin_cls  # type: ignore[attr-defined]
+    pkg.plugin = sub  # type: ignore[attr-defined]
+    modules = {"floe_rbac_k8s": pkg, "floe_rbac_k8s.plugin": sub}
+    sys.modules.update(modules)
+    return modules
 
 
 class TestSecretReferenceValidationBasics:
@@ -165,30 +183,48 @@ class TestSecretReferenceValidationIntegration:
     @pytest.mark.requirement("FR-073")
     def test_generator_validate_method_exists(self) -> None:
         """Test RBACManifestGenerator has validate_secret_references method."""
-        from floe_rbac_k8s.plugin import K8sRBACPlugin
-
         from floe_core.rbac.generator import RBACManifestGenerator
 
-        generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
+        MockK8sRBACPlugin = MagicMock()
+        mock_plugin = MagicMock()
+        MockK8sRBACPlugin.return_value = mock_plugin
 
-        assert hasattr(generator, "validate_secret_references")
-        assert callable(generator.validate_secret_references)
+        fake_mods = _install_fake_floe_rbac_k8s(MockK8sRBACPlugin)
+        try:
+            from floe_rbac_k8s.plugin import K8sRBACPlugin
+
+            generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
+
+            assert hasattr(generator, "validate_secret_references")
+            assert callable(generator.validate_secret_references)
+        finally:
+            for mod_name in fake_mods:
+                sys.modules.pop(mod_name, None)
 
     @pytest.mark.requirement("FR-073")
     def test_generator_validate_returns_tuple(self) -> None:
         """Test generator validate method returns (bool, list) tuple."""
-        from floe_rbac_k8s.plugin import K8sRBACPlugin
-
         from floe_core.rbac.generator import RBACManifestGenerator
 
-        generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
+        MockK8sRBACPlugin = MagicMock()
+        mock_plugin = MagicMock()
+        MockK8sRBACPlugin.return_value = mock_plugin
 
-        result = generator.validate_secret_references(
-            secret_references=["secret-a"],
-            permitted_secrets={"secret-a"},
-        )
+        fake_mods = _install_fake_floe_rbac_k8s(MockK8sRBACPlugin)
+        try:
+            from floe_rbac_k8s.plugin import K8sRBACPlugin
 
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], bool)
-        assert isinstance(result[1], list)
+            generator = RBACManifestGenerator(plugin=K8sRBACPlugin())
+
+            result = generator.validate_secret_references(
+                secret_references=["secret-a"],
+                permitted_secrets={"secret-a"},
+            )
+
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+            assert isinstance(result[0], bool)
+            assert isinstance(result[1], list)
+        finally:
+            for mod_name in fake_mods:
+                sys.modules.pop(mod_name, None)

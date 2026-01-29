@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 from collections.abc import Generator
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -33,6 +33,22 @@ from floe_core.telemetry import (
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+
+@pytest.fixture(autouse=True)
+def _mock_telemetry_backend() -> Generator[None, None, None]:
+    """Mock the telemetry backend loader for all tests.
+
+    Entry point plugins are not available in the test environment,
+    so we mock load_telemetry_backend to return a mock plugin.
+    """
+    mock_plugin = Mock()
+    mock_plugin.name = "console"
+    with patch(
+        "floe_core.telemetry.provider.load_telemetry_backend",
+        return_value=mock_plugin,
+    ):
+        yield
 
 
 @pytest.fixture

@@ -39,7 +39,7 @@ from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 FLOE_VERSION = "0.3.0"
 
 # Contract version - see compiled_artifacts.py version history
-CONTRACT_VERSION = "0.4.0"
+CONTRACT_VERSION = "0.5.0"
 
 
 def build_artifacts(
@@ -85,7 +85,7 @@ def build_artifacts(
     Example:
         >>> artifacts = build_artifacts(spec, manifest, plugins, transforms, profiles)
         >>> artifacts.version
-        '0.4.0'
+        '0.5.0'
         >>> artifacts.metadata.product_name
         'my-pipeline'
     """

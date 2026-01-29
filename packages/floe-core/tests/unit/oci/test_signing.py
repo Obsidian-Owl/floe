@@ -189,6 +189,7 @@ class TestOIDCTokenAcquisition:
     def test_fallback_to_interactive_oauth(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token falls back to interactive OAuth when no ambient creds."""
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -216,6 +217,7 @@ class TestOIDCTokenAcquisition:
         from sigstore.oidc import IdentityError
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -232,6 +234,20 @@ class TestOIDCTokenAcquisition:
 
             with pytest.raises(OIDCTokenError, match="Failed to acquire OIDC token"):
                 client._get_identity_token()
+
+    def test_browser_oauth_disabled_raises_error(self, keyless_config: SigningConfig) -> None:
+        """_get_identity_token raises OIDCTokenError when browser OAuth is disabled."""
+        with (
+            patch("sigstore.oidc.detect_credential", return_value=None),
+            patch("sigstore.oidc.Issuer") as mock_issuer_cls,
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", True),
+        ):
+            client = SigningClient(keyless_config)
+
+            with pytest.raises(OIDCTokenError, match="browser OAuth is disabled"):
+                client._get_identity_token()
+
+            mock_issuer_cls.assert_not_called()
 
 
 @requires_sigstore
@@ -866,6 +882,7 @@ class TestOIDCTokenRetry:
             return mock_token
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -891,6 +908,7 @@ class TestOIDCTokenRetry:
         from sigstore.oidc import IdentityError
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,
@@ -921,6 +939,7 @@ class TestOIDCTokenRetry:
             sleep_delays.append(delay)
 
         with (
+            patch("floe_core.oci.signing.DISABLE_BROWSER_OAUTH", False),
             patch("sigstore.oidc.detect_credential", return_value=None),
             patch("sigstore.oidc.Issuer") as mock_issuer_cls,
             patch("sigstore.models.ClientTrustConfig") as mock_trust_config,

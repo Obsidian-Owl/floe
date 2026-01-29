@@ -39,6 +39,7 @@ dependencies = [
     # OCI client dependencies (Epic 8A)
     "oras>=0.2.38,<1.0",  # ORAS Python SDK; pin upper bound before 1.0 (12B-PRE-PR)
     "httpx>=0.27.0,<1.0",  # HTTP client for registry communication; pin upper bound (12B-DEP T051)
+    "certifi>=2023.0.0",  # CA bundle for HTTPS verification
     # HTML report templating (Epic 3B)
     "jinja2>=3.0,<4.0",  # Jinja2 for HTML export; pin upper bound (12B-PRE-PR)
     # Data contract validation (Epic 3C) - ODCS v3 parsing, linting, validation

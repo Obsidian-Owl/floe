@@ -12,7 +12,9 @@ Tests for drift detection integration in ContractValidator:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,6 +23,20 @@ from floe_core.schemas.data_contract import (
     SchemaComparisonResult,
     TypeMismatch,
 )
+
+
+def _install_fake_floe_iceberg(mock_drift_detector_cls: MagicMock) -> dict[str, ModuleType]:
+    """Install a fake ``floe_iceberg.drift_detector`` into ``sys.modules``.
+
+    Returns the mapping of injected module names so the caller can clean up.
+    """
+    pkg = ModuleType("floe_iceberg")
+    sub = ModuleType("floe_iceberg.drift_detector")
+    sub.DriftDetector = mock_drift_detector_cls  # type: ignore[attr-defined]
+    pkg.drift_detector = sub  # type: ignore[attr-defined]
+    modules = {"floe_iceberg": pkg, "floe_iceberg.drift_detector": sub}
+    sys.modules.update(modules)
+    return modules
 
 
 class TestValidateWithDriftDetection:
@@ -102,22 +118,26 @@ schema:
             extra_columns=[],
         )
 
-        with patch(
-            "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
-        ) as mock_extract:
-            mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
+        MockDriftDetector = MagicMock()
+        mock_detector = MagicMock()
+        mock_detector.compare_schemas.return_value = mock_drift_result
+        MockDriftDetector.return_value = mock_detector
 
-            # Mock the DriftDetector
-            with patch("floe_iceberg.drift_detector.DriftDetector") as MockDriftDetector:
-                mock_detector = MagicMock()
-                mock_detector.compare_schemas.return_value = mock_drift_result
-                MockDriftDetector.return_value = mock_detector
+        fake_mods = _install_fake_floe_iceberg(MockDriftDetector)
+        try:
+            with patch(
+                "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
+            ) as mock_extract:
+                mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
 
                 validator = ContractValidator()
                 result = validator.validate_with_drift_detection(
                     contract_path=contract_path,
                     table_schema=MagicMock(),  # Mock table schema
                 )
+        finally:
+            for mod_name in fake_mods:
+                sys.modules.pop(mod_name, None)
 
         # Should have drift violation
         assert result.valid is False
@@ -167,24 +187,29 @@ schema:
             extra_columns=[],
         )
 
-        with patch(
-            "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
-        ) as mock_extract:
-            mock_extract.return_value = [
-                {"name": "id", "logicalType": "string"},
-                {"name": "email", "logicalType": "string"},
-            ]
+        MockDriftDetector = MagicMock()
+        mock_detector = MagicMock()
+        mock_detector.compare_schemas.return_value = mock_drift_result
+        MockDriftDetector.return_value = mock_detector
 
-            with patch("floe_iceberg.drift_detector.DriftDetector") as MockDriftDetector:
-                mock_detector = MagicMock()
-                mock_detector.compare_schemas.return_value = mock_drift_result
-                MockDriftDetector.return_value = mock_detector
+        fake_mods = _install_fake_floe_iceberg(MockDriftDetector)
+        try:
+            with patch(
+                "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
+            ) as mock_extract:
+                mock_extract.return_value = [
+                    {"name": "id", "logicalType": "string"},
+                    {"name": "email", "logicalType": "string"},
+                ]
 
                 validator = ContractValidator()
                 result = validator.validate_with_drift_detection(
                     contract_path=contract_path,
                     table_schema=MagicMock(),
                 )
+        finally:
+            for mod_name in fake_mods:
+                sys.modules.pop(mod_name, None)
 
         # Should have drift violation for missing column
         assert result.valid is False
@@ -227,21 +252,26 @@ schema:
             extra_columns=["created_at", "updated_at"],
         )
 
-        with patch(
-            "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
-        ) as mock_extract:
-            mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
+        MockDriftDetector = MagicMock()
+        mock_detector = MagicMock()
+        mock_detector.compare_schemas.return_value = mock_drift_result
+        MockDriftDetector.return_value = mock_detector
 
-            with patch("floe_iceberg.drift_detector.DriftDetector") as MockDriftDetector:
-                mock_detector = MagicMock()
-                mock_detector.compare_schemas.return_value = mock_drift_result
-                MockDriftDetector.return_value = mock_detector
+        fake_mods = _install_fake_floe_iceberg(MockDriftDetector)
+        try:
+            with patch(
+                "floe_core.enforcement.validators.data_contracts.ContractValidator._extract_contract_columns"
+            ) as mock_extract:
+                mock_extract.return_value = [{"name": "id", "logicalType": "string"}]
 
                 validator = ContractValidator()
                 result = validator.validate_with_drift_detection(
                     contract_path=contract_path,
                     table_schema=MagicMock(),
                 )
+        finally:
+            for mod_name in fake_mods:
+                sys.modules.pop(mod_name, None)
 
         # Should be valid (extra columns are informational only)
         assert result.valid is True
