@@ -10,9 +10,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from floe_core.lineage.backends.marquez import MarquezLineageBackendPlugin
 from floe_core.plugins.lineage import LineageBackendPlugin
+
+from floe_lineage_marquez import MarquezLineageBackendPlugin
 
 
 @pytest.mark.requirement("REQ-527")
@@ -56,7 +56,7 @@ def test_transport_config_structure() -> None:
     assert config["type"] == "http"
     assert config["url"] == "http://marquez:5000/api/v1/lineage"
     assert config["timeout"] == 5.0
-    assert config["api_key"] == "test-key"
+    assert config["api_key"] == "test-key"  # pragma: allowlist secret
 
 
 @pytest.mark.requirement("REQ-527")

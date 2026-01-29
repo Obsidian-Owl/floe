@@ -1,4 +1,4 @@
-"""Marquez lineage backend plugin.
+"""Marquez lineage backend plugin for floe.
 
 Provides MarquezLineageBackendPlugin for self-hosted Marquez deployments.
 Marquez is the reference implementation of the OpenLineage specification.
@@ -14,6 +14,8 @@ import urllib.request
 from typing import Any
 
 from floe_core.plugins.lineage import LineageBackendPlugin
+
+__all__ = ["MarquezLineageBackendPlugin"]
 
 
 class MarquezLineageBackendPlugin(LineageBackendPlugin):

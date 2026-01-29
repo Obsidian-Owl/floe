@@ -19,7 +19,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from floe_core.lineage.backends.marquez import MarquezLineageBackendPlugin
 from floe_core.lineage.emitter import LineageEmitter
 from floe_core.lineage.events import EventBuilder
 from floe_core.lineage.transport import NoOpLineageTransport
@@ -30,6 +29,7 @@ from floe_core.lineage.types import (
     LineageRun,
     RunState,
 )
+from floe_lineage_marquez import MarquezLineageBackendPlugin
 
 
 @pytest.fixture

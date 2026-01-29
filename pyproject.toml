@@ -33,6 +33,8 @@ dependencies = [
     # Telemetry backend plugins (for entry point discovery in tests)
     "floe-telemetry-console",
     "floe-telemetry-jaeger",
+    # Lineage backend plugins (for entry point discovery in tests)
+    "floe-lineage-marquez",
     # Include floe-compute-duckdb for development
     "floe-compute-duckdb",
     # Include identity and secrets plugins for development
@@ -70,6 +72,7 @@ floe-catalog-polaris = { path = "plugins/floe-catalog-polaris", editable = true 
 floe-compute-duckdb = { path = "plugins/floe-compute-duckdb", editable = true }
 floe-telemetry-console = { path = "plugins/floe-telemetry-console", editable = true }
 floe-telemetry-jaeger = { path = "plugins/floe-telemetry-jaeger", editable = true }
+floe-lineage-marquez = { path = "plugins/floe-lineage-marquez", editable = true }
 floe-identity-keycloak = { path = "plugins/floe-identity-keycloak", editable = true }
 floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = true }
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
@@ -98,7 +101,8 @@ pythonpath = [
     "plugins/floe-network-security-k8s/src",
     "plugins/floe-quality-gx/src",
     "plugins/floe-quality-dbt/src",
-    ".",  # Enable import of 'testing' module from project root
+    "plugins/floe-lineage-marquez/src",
+    ".",
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

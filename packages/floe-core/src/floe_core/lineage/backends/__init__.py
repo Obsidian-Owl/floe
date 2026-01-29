@@ -1,21 +1,12 @@
-"""Lineage backend plugin implementations.
+"""Lineage backend plugin namespace.
 
-This module contains concrete implementations of LineageBackendPlugin
-for various OpenLineage backends (Marquez, Atlan, OpenMetadata, etc.).
+Concrete lineage backend implementations are in dedicated plugin packages:
+    - floe-lineage-marquez: MarquezLineageBackendPlugin
 
-Available backends:
-    - MarquezLineageBackendPlugin: Self-hosted Marquez backend
-
-Example:
-    >>> from floe_core.lineage.backends import MarquezLineageBackendPlugin
-    >>> plugin = MarquezLineageBackendPlugin(url="http://marquez:5000")
-    >>> config = plugin.get_transport_config()
+Install and import directly:
+    >>> from floe_lineage_marquez import MarquezLineageBackendPlugin
 """
 
 from __future__ import annotations
 
-from floe_core.lineage.backends.marquez import MarquezLineageBackendPlugin
-
-__all__ = [
-    "MarquezLineageBackendPlugin",
-]
+__all__: list[str] = []
