@@ -58,10 +58,11 @@ class TestNoOpLineageTransport:
         transport = NoOpLineageTransport()
         _run(transport.emit(sample_event))
 
-    def test_close_is_noop(self) -> None:
-        """NoOp close does nothing."""
+    def test_close_is_idempotent(self) -> None:
+        """NoOp close is idempotent - can be called multiple times safely."""
         transport = NoOpLineageTransport()
-        transport.close()  # Should not raise
+        transport.close()
+        transport.close()  # Second close should also succeed (idempotent)
 
 
 class TestConsoleLineageTransport:
@@ -83,10 +84,11 @@ class TestConsoleLineageTransport:
             assert call_kwargs[1]["event_type"] == "START"
             assert call_kwargs[1]["job_name"] == "test_job"
 
-    def test_close_is_noop(self) -> None:
-        """Console close does nothing."""
+    def test_close_is_idempotent(self) -> None:
+        """Console close is idempotent - can be called multiple times safely."""
         transport = ConsoleLineageTransport()
         transport.close()
+        transport.close()  # Second close should also succeed (idempotent)
 
 
 class TestCompositeLineageTransport:
@@ -169,7 +171,10 @@ class TestHttpLineageTransport:
             initial_size = transport._async_queue.qsize()
             _run(transport.emit(sample_event))
             final_size = transport._async_queue.qsize()
-            assert final_size >= initial_size or transport._closed
+            # Event should be enqueued (or already being processed by consumer)
+            assert final_size >= initial_size, (
+                f"Event should be enqueued: queue size {initial_size} -> {final_size}"
+            )
         finally:
             transport.close()
 

@@ -462,7 +462,7 @@ class TestEmitterEdgeCases:
 
     @pytest.mark.requirement("REQ-516")
     def test_emit_start_with_empty_facets(self) -> None:
-        """emit_start handles empty facets dicts."""
+        """emit_start handles empty facets dicts - event has empty facets."""
         transport = _make_mock_transport()
         builder = EventBuilder(producer="floe", default_namespace="test")
         emitter = LineageEmitter(transport, builder, "test")
@@ -470,6 +470,9 @@ class TestEmitterEdgeCases:
         _run(emitter.emit_start("my_job", run_facets={}, job_facets={}))
 
         transport.emit.assert_awaited_once()
+        event: LineageEvent = transport.emit.call_args[0][0]
+        assert event.run.facets == {}, "Empty run_facets should result in empty facets"
+        assert event.job.facets == {}, "Empty job_facets should result in empty facets"
 
     @pytest.mark.requirement("REQ-516")
     def test_emit_complete_with_empty_outputs_list(self) -> None:

@@ -186,8 +186,8 @@ class TestDbtLineageExtractor:
         assert outputs[0].name == "analytics.marts.customers"
 
     @pytest.mark.requirement("REQ-519")
-    def test_model_with_no_columns_empty_schema_facet(self) -> None:
-        """Model with no columns produces dataset with empty schema facet."""
+    def test_model_with_no_columns_has_no_schema_facet(self) -> None:
+        """Model with no columns produces dataset without schema facet."""
         manifest = {
             "nodes": {
                 "model.project.no_columns": {
@@ -202,9 +202,8 @@ class TestDbtLineageExtractor:
         extractor = DbtLineageExtractor(manifest, default_namespace="prod")
         _, outputs = extractor.extract_model("model.project.no_columns")
 
-        # Should have output dataset but no schema facet (empty columns)
         assert len(outputs) == 1
-        assert "schema" not in outputs[0].facets
+        assert "schema" not in outputs[0].facets, "No columns = no schema facet"
 
     @pytest.mark.requirement("REQ-519")
     def test_model_with_columns_has_schema_facet(self, realistic_manifest: dict[str, Any]) -> None:
