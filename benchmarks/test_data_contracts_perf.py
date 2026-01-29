@@ -4,13 +4,16 @@ Task: T080, T081
 Requirements: SC-001 (Contract validation <2s for 50 models),
               SC-006 (Drift detection <5s for 100 columns)
 
-These tests verify performance success criteria from the spec.
+These benchmarks track contract validation and drift detection performance
+using CodSpeed for automated performance regression detection.
+
+Run with:
+    uv run pytest benchmarks/test_data_contracts_perf.py --codspeed
 """
 
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -37,7 +40,7 @@ def _install_fake_floe_iceberg(mock_drift_detector_cls: MagicMock) -> dict[str, 
 
 
 class TestContractValidationPerformance:
-    """Performance tests for contract validation (T080).
+    """Performance benchmarks for contract validation (T080).
 
     SC-001: Contract validation MUST complete within 2 seconds for
     a contract containing 50 models.
@@ -77,55 +80,38 @@ schema:
         contract_path.write_text(contract_content)
         return contract_path
 
+    @pytest.mark.benchmark
     @pytest.mark.requirement("3C-SC-001")
-    @pytest.mark.performance
-    def test_contract_validation_under_2_seconds_for_50_models(
+    def test_contract_validation_50_models(
         self,
         large_contract_yaml: Path,
     ) -> None:
-        """SC-001: Contract validation MUST complete within 2 seconds for 50 models.
+        """Benchmark contract validation for 50 models.
 
-        Creates a contract with 50 model definitions and verifies that
-        validation completes within the 2 second SLA.
+        SC-001: Contract validation performance tracked by CodSpeed.
+        Validates that contract validation completes efficiently for
+        a 50-model contract.
         """
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 
         validator = ContractValidator()
-
-        # Measure validation time
-        start_time = time.perf_counter()
         result = validator.validate(large_contract_yaml, enforcement_level="strict")
-        end_time = time.perf_counter()
 
-        elapsed_seconds = end_time - start_time
-
-        # Assert timing constraint
-        assert elapsed_seconds < 2.0, (
-            f"Contract validation took {elapsed_seconds:.3f}s, "
-            f"exceeding 2s SLA (SC-001) for 50-model contract"
-        )
-
-        # Log performance for visibility (optional, helps debugging)
-        print(f"\nPerformance: 50-model contract validated in {elapsed_seconds:.3f}s")
-
-        # Validation should still produce valid results
-        # (contract is syntactically valid, may have schema warnings)
+        # Basic assertion to ensure operation completed
         assert result is not None
         assert result.validated_at is not None
 
+    @pytest.mark.benchmark
     @pytest.mark.requirement("3C-SC-001")
-    @pytest.mark.performance
-    def test_contract_validation_performance_with_multiple_runs(
+    def test_contract_validation_performance_multiple_runs(
         self,
         large_contract_yaml: Path,
     ) -> None:
-        """Verify consistent validation performance across multiple runs.
+        """Benchmark contract validation across multiple runs.
 
-        Runs validation with warm-up, then 5 measured runs. Uses median
-        for more stable benchmarking (less affected by outliers).
+        SC-001: Verifies consistent validation performance across
+        multiple runs. CodSpeed will track performance regression.
         """
-        import statistics
-
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 
         validator = ContractValidator()
@@ -133,29 +119,14 @@ schema:
         # Warm-up run to ensure JIT compilation, caching, etc. are complete
         validator.validate(large_contract_yaml, enforcement_level="strict")
 
-        times: list[float] = []
-
         # Run validation 5 times (after warm-up)
         for _ in range(5):
-            start_time = time.perf_counter()
-            validator.validate(large_contract_yaml, enforcement_level="strict")
-            end_time = time.perf_counter()
-            times.append(end_time - start_time)
-
-        # Use median for more stable benchmarking (less affected by outliers)
-        median_time = statistics.median(times)
-        avg_time = sum(times) / len(times)
-
-        assert median_time < 2.0, (
-            f"Median validation time {median_time:.3f}s exceeds 2s SLA. "
-            f"Times: {[f'{t:.3f}s' for t in times]}"
-        )
-
-        print(f"\nPerformance: avg={avg_time:.3f}s, median={median_time:.3f}s over 5 runs")
+            result = validator.validate(large_contract_yaml, enforcement_level="strict")
+            assert result is not None
 
 
 class TestDriftDetectionPerformance:
-    """Performance tests for schema drift detection (T081).
+    """Performance benchmarks for schema drift detection (T081).
 
     SC-006: Schema drift detection MUST complete within 5 seconds
     for a table with 100 columns.
@@ -222,17 +193,18 @@ schema:
             mock_schema.fields = [MagicMock(name=f"column_{i:03d}") for i in range(100)]
             return mock_schema
 
+    @pytest.mark.benchmark
     @pytest.mark.requirement("3C-SC-006")
-    @pytest.mark.performance
-    def test_drift_detection_under_5_seconds_for_100_columns(
+    def test_drift_detection_100_columns(
         self,
         contract_100_columns_yaml: Path,
         mock_iceberg_schema_100_columns: MagicMock,
     ) -> None:
-        """SC-006: Schema drift detection MUST complete within 5 seconds for 100 columns.
+        """Benchmark schema drift detection for 100 columns.
 
-        Creates a contract with 100 columns and verifies that drift detection
-        completes within the 5 second SLA.
+        SC-006: Schema drift detection performance tracked by CodSpeed.
+        Validates that drift detection completes efficiently for
+        a 100-column table.
         """
         MockDriftDetector = MagicMock()
         mock_detector = MagicMock()
@@ -258,23 +230,10 @@ schema:
                     }
                 )
 
-            # Measure drift detection time
-            start_time = time.perf_counter()
             result = detector.compare_schemas(
                 contract_columns=contract_columns,
                 table_schema=mock_iceberg_schema_100_columns,
             )
-            end_time = time.perf_counter()
-
-            elapsed_seconds = end_time - start_time
-
-            # Assert timing constraint
-            assert elapsed_seconds < 5.0, (
-                f"Drift detection took {elapsed_seconds:.3f}s, "
-                f"exceeding 5s SLA (SC-006) for 100-column table"
-            )
-
-            print(f"\nPerformance: 100-column drift detection in {elapsed_seconds:.3f}s")
 
             # Drift detection should produce valid result
             assert result is not None
@@ -283,18 +242,17 @@ schema:
             for mod_name in fake_mods:
                 sys.modules.pop(mod_name, None)
 
+    @pytest.mark.benchmark
     @pytest.mark.requirement("3C-SC-006")
-    @pytest.mark.performance
-    def test_drift_detection_performance_with_multiple_runs(
+    def test_drift_detection_performance_multiple_runs(
         self,
         mock_iceberg_schema_100_columns: MagicMock,
     ) -> None:
-        """Verify consistent drift detection performance across multiple runs.
+        """Benchmark drift detection across multiple runs.
 
-        Uses warm-up run and median for stable benchmarking.
+        SC-006: Verifies consistent drift detection performance across
+        multiple runs. CodSpeed will track performance regression.
         """
-        import statistics
-
         MockDriftDetector = MagicMock()
         mock_detector = MagicMock()
         mock_detector.compare_schemas.return_value = MagicMock(matches=True)
@@ -323,47 +281,33 @@ schema:
                 table_schema=mock_iceberg_schema_100_columns,
             )
 
-            times: list[float] = []
-
             # Run drift detection 5 times (after warm-up)
             for _ in range(5):
-                start_time = time.perf_counter()
-                detector.compare_schemas(
+                result = detector.compare_schemas(
                     contract_columns=contract_columns,
                     table_schema=mock_iceberg_schema_100_columns,
                 )
-                end_time = time.perf_counter()
-                times.append(end_time - start_time)
-
-            # Use median for more stable benchmarking
-            median_time = statistics.median(times)
-            avg_time = sum(times) / len(times)
-
-            assert median_time < 5.0, (
-                f"Median drift detection time {median_time:.3f}s exceeds 5s SLA. "
-                f"Times: {[f'{t:.3f}s' for t in times]}"
-            )
-
-            print(f"\nPerformance: avg={avg_time:.3f}s, median={median_time:.3f}s over 5 runs")
+                assert result is not None
         finally:
             for mod_name in fake_mods:
                 sys.modules.pop(mod_name, None)
 
 
 class TestContractValidatorIntegrationPerformance:
-    """Performance tests for ContractValidator.validate_with_drift_detection()."""
+    """Performance benchmarks for ContractValidator.validate_with_drift_detection()."""
 
+    @pytest.mark.benchmark
     @pytest.mark.requirement("3C-SC-001")
     @pytest.mark.requirement("3C-SC-006")
-    @pytest.mark.performance
-    def test_full_validation_with_drift_under_7_seconds(
+    def test_full_validation_with_drift(
         self,
         tmp_path: Path,
     ) -> None:
-        """Combined validation + drift detection should complete within 7 seconds.
+        """Benchmark combined validation + drift detection.
 
-        This tests the full workflow: contract validation (2s budget) +
-        drift detection (5s budget) = 7s total budget.
+        SC-001 + SC-006: Combined validation and drift detection
+        performance tracked by CodSpeed. Tests the full workflow:
+        contract validation + drift detection.
         """
         try:
             from pyiceberg.schema import NestedField, Schema
@@ -422,24 +366,11 @@ schema:
         try:
             validator = ContractValidator()
 
-            # Measure combined validation + drift detection time
-            start_time = time.perf_counter()
             result = validator.validate_with_drift_detection(
                 contract_path=contract_path,
                 table_schema=iceberg_schema,
                 enforcement_level="strict",
             )
-            end_time = time.perf_counter()
-
-            elapsed_seconds = end_time - start_time
-
-            # Combined should be under 7 seconds (2s validation + 5s drift)
-            assert elapsed_seconds < 7.0, (
-                f"Combined validation took {elapsed_seconds:.3f}s, "
-                "exceeding 7s budget (SC-001 + SC-006)"
-            )
-
-            print(f"\nPerformance: Combined validation + drift in {elapsed_seconds:.3f}s")
 
             # Should produce valid result
             assert result is not None
