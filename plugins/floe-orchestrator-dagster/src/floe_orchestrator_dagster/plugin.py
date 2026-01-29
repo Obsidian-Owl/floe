@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-
 from uuid import UUID, uuid4
 
 from dagster import AssetKey, AssetsDefinition, asset
@@ -676,7 +675,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """
         actual_run_id = run_id if run_id is not None else uuid4()
         actual_namespace = job_namespace if job_namespace is not None else "floe"
-        actual_producer = (
+        # TODO: Wire producer to lineage backend event emission
+        _actual_producer = (
             producer if producer is not None else f"floe-orchestrator-dagster/{self.version}"
         )
 

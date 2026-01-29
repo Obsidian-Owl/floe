@@ -87,7 +87,7 @@ def expensive_resource():
     """Session-scoped for expensive setup."""
     yield resource
 
-# Test-level fixture (tests/unit/conftest.py) 
+# Test-level fixture (tests/unit/conftest.py)
 @pytest.fixture
 def mock_client():
     """Function-scoped for isolation."""

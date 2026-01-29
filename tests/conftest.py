@@ -38,8 +38,8 @@ def _check_test_environment() -> None:
 
 _check_test_environment()
 
-import pytest
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+import pytest  # noqa: E402
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION  # noqa: E402
 
 
 @pytest.fixture

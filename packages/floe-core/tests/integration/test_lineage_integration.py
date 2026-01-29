@@ -28,7 +28,7 @@ from uuid import uuid4
 
 import pytest
 
-from floe_core.lineage.emitter import LineageEmitter, create_emitter
+from floe_core.lineage.emitter import create_emitter
 from floe_core.lineage.events import EventBuilder, to_openlineage_event
 from floe_core.lineage.facets import SchemaFacetBuilder
 from floe_core.lineage.types import LineageDataset
