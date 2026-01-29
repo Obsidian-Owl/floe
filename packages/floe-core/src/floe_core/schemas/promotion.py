@@ -24,8 +24,11 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from floe_core.schemas.signing import VerificationResult
 
 
 # =============================================================================
@@ -589,3 +592,236 @@ class PromotionConfig(BaseModel):
                 f"Environment names must be unique. Duplicates found: {set(duplicates)}"
             )
         return v
+
+
+# Regex pattern for SHA256 digests
+SHA256_DIGEST_PATTERN = r"^sha256:[a-f0-9]{64}$"
+"""Regex pattern for valid SHA256 digest format (sha256:<64 hex chars>)."""
+
+
+class RollbackImpactAnalysis(BaseModel):
+    """Pre-rollback analysis showing potential impacts.
+
+    Contains information about breaking changes, affected products,
+    and recommendations for operators before executing a rollback.
+
+    Attributes:
+        breaking_changes: List of schema/API breaking changes introduced.
+        affected_products: Data products that depend on this artifact.
+        recommendations: Operator recommendations before proceeding.
+        estimated_downtime: Estimated impact duration (e.g., "~5 minutes").
+
+    Examples:
+        >>> analysis = RollbackImpactAnalysis(
+        ...     breaking_changes=["API endpoint removed"],
+        ...     affected_products=["dashboard"],
+        ...     recommendations=["Notify API consumers"],
+        ... )
+        >>> len(analysis.breaking_changes)
+        1
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    breaking_changes: list[str] = Field(
+        ...,
+        description="Schema/API breaking changes in the target version",
+    )
+    affected_products: list[str] = Field(
+        ...,
+        description="Data products using this artifact",
+    )
+    recommendations: list[str] = Field(
+        ...,
+        description="Operator recommendations before rollback",
+    )
+    estimated_downtime: str | None = Field(
+        default=None,
+        description="Estimated impact duration",
+    )
+
+
+class PromotionRecord(BaseModel):
+    """Complete promotion event record for audit trails.
+
+    Records all details of a promotion event including gate results,
+    signature verification, and authorization. Stored in OCI annotations
+    and optional audit backends.
+
+    Attributes:
+        promotion_id: Unique promotion identifier (UUID).
+        artifact_digest: SHA256 digest of the artifact.
+        artifact_tag: Source tag (e.g., v1.2.3-dev).
+        source_environment: Source environment name.
+        target_environment: Target environment name.
+        gate_results: All gate execution results.
+        signature_verified: Whether signature check passed.
+        signature_status: Full verification details from signing module.
+        operator: Identity of the promoter.
+        promoted_at: Promotion timestamp (UTC).
+        dry_run: Whether this was a dry-run.
+        trace_id: OpenTelemetry trace ID for linking.
+        authorization_passed: Authorization check result.
+        authorized_via: How authorization was verified (group, operator).
+
+    Examples:
+        >>> from uuid import uuid4
+        >>> from datetime import datetime, timezone
+        >>> record = PromotionRecord(
+        ...     promotion_id=uuid4(),
+        ...     artifact_digest="sha256:abc...",
+        ...     artifact_tag="v1.0.0-dev",
+        ...     source_environment="dev",
+        ...     target_environment="staging",
+        ...     gate_results=[],
+        ...     signature_verified=True,
+        ...     operator="user@example.com",
+        ...     promoted_at=datetime.now(timezone.utc),
+        ...     dry_run=False,
+        ...     trace_id="abc123",
+        ...     authorization_passed=True,
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    promotion_id: UUID = Field(
+        ...,
+        description="Unique promotion identifier",
+    )
+    artifact_digest: str = Field(
+        ...,
+        pattern=SHA256_DIGEST_PATTERN,
+        description="SHA256 digest of artifact",
+    )
+    artifact_tag: str = Field(
+        ...,
+        min_length=1,
+        description="Source tag (e.g., v1.2.3-dev)",
+    )
+    source_environment: str = Field(
+        ...,
+        min_length=1,
+        description="Source environment name",
+    )
+    target_environment: str = Field(
+        ...,
+        min_length=1,
+        description="Target environment name",
+    )
+    gate_results: list[GateResult] = Field(
+        ...,
+        description="All gate execution results",
+    )
+    signature_verified: bool = Field(
+        ...,
+        description="Signature check passed",
+    )
+    signature_status: VerificationResult | None = Field(
+        default=None,
+        description="Full verification details from signing module",
+    )
+    operator: str = Field(
+        ...,
+        min_length=1,
+        description="Identity of promoter",
+    )
+    promoted_at: datetime = Field(
+        ...,
+        description="Promotion timestamp (UTC)",
+    )
+    dry_run: bool = Field(
+        ...,
+        description="Was this a dry-run?",
+    )
+    trace_id: str = Field(
+        ...,
+        min_length=1,
+        description="OpenTelemetry trace ID for linking",
+    )
+    authorization_passed: bool = Field(
+        ...,
+        description="Authorization check result",
+    )
+    authorized_via: str | None = Field(
+        default=None,
+        description="How authorization was verified (group, operator)",
+    )
+
+
+class RollbackRecord(BaseModel):
+    """Rollback event record for audit trails.
+
+    Records all details of a rollback event including reason,
+    impact analysis, and operator identity.
+
+    Attributes:
+        rollback_id: Unique rollback identifier (UUID).
+        artifact_digest: SHA256 digest of target version.
+        environment: Environment being rolled back.
+        previous_digest: Digest of current version before rollback.
+        reason: Operator-provided reason for rollback.
+        operator: Identity of operator performing rollback.
+        rolled_back_at: Rollback timestamp (UTC).
+        impact_analysis: Pre-rollback analysis (optional).
+        trace_id: OpenTelemetry trace ID for linking.
+
+    Examples:
+        >>> from uuid import uuid4
+        >>> from datetime import datetime, timezone
+        >>> record = RollbackRecord(
+        ...     rollback_id=uuid4(),
+        ...     artifact_digest="sha256:abc...",
+        ...     environment="prod",
+        ...     previous_digest="sha256:def...",
+        ...     reason="Critical bug",
+        ...     operator="sre@example.com",
+        ...     rolled_back_at=datetime.now(timezone.utc),
+        ...     trace_id="xyz789",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rollback_id: UUID = Field(
+        ...,
+        description="Unique rollback identifier",
+    )
+    artifact_digest: str = Field(
+        ...,
+        pattern=SHA256_DIGEST_PATTERN,
+        description="SHA256 digest of target version",
+    )
+    environment: str = Field(
+        ...,
+        min_length=1,
+        description="Environment being rolled back",
+    )
+    previous_digest: str = Field(
+        ...,
+        pattern=SHA256_DIGEST_PATTERN,
+        description="Digest of current version before rollback",
+    )
+    reason: str = Field(
+        ...,
+        min_length=1,
+        description="Operator-provided reason for rollback",
+    )
+    operator: str = Field(
+        ...,
+        min_length=1,
+        description="Identity of operator",
+    )
+    rolled_back_at: datetime = Field(
+        ...,
+        description="Rollback timestamp (UTC)",
+    )
+    impact_analysis: RollbackImpactAnalysis | None = Field(
+        default=None,
+        description="Pre-rollback analysis",
+    )
+    trace_id: str = Field(
+        ...,
+        min_length=1,
+        description="OpenTelemetry trace ID for linking",
+    )

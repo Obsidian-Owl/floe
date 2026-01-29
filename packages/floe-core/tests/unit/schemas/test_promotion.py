@@ -686,3 +686,398 @@ class TestPromotionConfig:
                     ),
                 ],
             )
+
+
+class TestRollbackImpactAnalysis:
+    """Tests for RollbackImpactAnalysis Pydantic model."""
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_impact_analysis_valid(self) -> None:
+        """Test RollbackImpactAnalysis with valid data."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        analysis = RollbackImpactAnalysis(
+            breaking_changes=["Schema change: removed column 'old_field'"],
+            affected_products=["dashboard-v2", "api-service"],
+            recommendations=["Verify API consumers are updated"],
+        )
+        assert len(analysis.breaking_changes) == 1
+        assert len(analysis.affected_products) == 2
+        assert len(analysis.recommendations) == 1
+        assert analysis.estimated_downtime is None
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_impact_analysis_with_downtime(self) -> None:
+        """Test RollbackImpactAnalysis with estimated downtime."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        analysis = RollbackImpactAnalysis(
+            breaking_changes=[],
+            affected_products=[],
+            recommendations=[],
+            estimated_downtime="~5 minutes",
+        )
+        assert analysis.estimated_downtime == "~5 minutes"
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_impact_analysis_frozen(self) -> None:
+        """Test RollbackImpactAnalysis is immutable (frozen)."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        analysis = RollbackImpactAnalysis(
+            breaking_changes=[],
+            affected_products=[],
+            recommendations=[],
+        )
+        with pytest.raises(Exception):  # ValidationError for frozen model
+            analysis.estimated_downtime = "10 minutes"  # type: ignore[misc]
+
+
+class TestPromotionRecord:
+    """Tests for PromotionRecord Pydantic model."""
+
+    @pytest.mark.requirement("8C-FR-007")
+    def test_promotion_record_valid(self) -> None:
+        """Test PromotionRecord with valid data."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import (
+            GateResult,
+            GateStatus,
+            PromotionGate,
+            PromotionRecord,
+        )
+
+        record = PromotionRecord(
+            promotion_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            artifact_tag="v1.2.3-dev",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=100,
+                ),
+            ],
+            signature_verified=True,
+            operator="user@example.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=False,
+            trace_id="abc123",
+            authorization_passed=True,
+        )
+        assert record.promotion_id == UUID("12345678-1234-5678-1234-567812345678")
+        assert record.source_environment == "dev"
+        assert record.target_environment == "staging"
+        assert record.signature_verified is True
+
+    @pytest.mark.requirement("8C-FR-007")
+    def test_promotion_record_with_signature_status(self) -> None:
+        """Test PromotionRecord with VerificationResult."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import (
+            GateResult,
+            GateStatus,
+            PromotionGate,
+            PromotionRecord,
+        )
+        from floe_core.schemas.signing import VerificationResult
+
+        verification = VerificationResult(
+            status="valid",
+            signer_identity="user@example.com",
+            verified_at=datetime.now(timezone.utc),
+        )
+        record = PromotionRecord(
+            promotion_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            artifact_tag="v1.2.3-dev",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=100,
+                ),
+            ],
+            signature_verified=True,
+            signature_status=verification,
+            operator="user@example.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=False,
+            trace_id="abc123",
+            authorization_passed=True,
+        )
+        assert record.signature_status is not None
+        assert record.signature_status.status == "valid"
+
+    @pytest.mark.requirement("8C-FR-007")
+    def test_promotion_record_dry_run(self) -> None:
+        """Test PromotionRecord with dry_run=True."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import (
+            GateResult,
+            GateStatus,
+            PromotionGate,
+            PromotionRecord,
+        )
+
+        record = PromotionRecord(
+            promotion_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            artifact_tag="v1.2.3-dev",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.FAILED,  # Allowed in dry run
+                    duration_ms=100,
+                    error="Policy violation",
+                ),
+            ],
+            signature_verified=False,
+            operator="user@example.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=True,
+            trace_id="abc123",
+            authorization_passed=True,
+        )
+        assert record.dry_run is True
+        assert record.gate_results[0].status == GateStatus.FAILED
+
+    @pytest.mark.requirement("8C-FR-007")
+    def test_promotion_record_with_authorization_via(self) -> None:
+        """Test PromotionRecord with authorized_via field."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import (
+            GateResult,
+            GateStatus,
+            PromotionGate,
+            PromotionRecord,
+        )
+
+        record = PromotionRecord(
+            promotion_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            artifact_tag="v1.2.3-dev",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=100,
+                ),
+            ],
+            signature_verified=True,
+            operator="user@example.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=False,
+            trace_id="abc123",
+            authorization_passed=True,
+            authorized_via="group:platform-admins",
+        )
+        assert record.authorized_via == "group:platform-admins"
+
+    @pytest.mark.requirement("8C-FR-007")
+    def test_promotion_record_invalid_digest_format(self) -> None:
+        """Test PromotionRecord rejects invalid artifact digest format."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import (
+            GateResult,
+            GateStatus,
+            PromotionGate,
+            PromotionRecord,
+        )
+
+        with pytest.raises(ValidationError, match="artifact_digest"):
+            PromotionRecord(
+                promotion_id=UUID("12345678-1234-5678-1234-567812345678"),
+                artifact_digest="invalid-digest",  # Invalid format
+                artifact_tag="v1.2.3-dev",
+                source_environment="dev",
+                target_environment="staging",
+                gate_results=[
+                    GateResult(
+                        gate=PromotionGate.POLICY_COMPLIANCE,
+                        status=GateStatus.PASSED,
+                        duration_ms=100,
+                    ),
+                ],
+                signature_verified=True,
+                operator="user@example.com",
+                promoted_at=datetime.now(timezone.utc),
+                dry_run=False,
+                trace_id="abc123",
+                authorization_passed=True,
+            )
+
+    @pytest.mark.requirement("8C-FR-007")
+    def test_promotion_record_frozen(self) -> None:
+        """Test PromotionRecord is immutable (frozen)."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import (
+            GateResult,
+            GateStatus,
+            PromotionGate,
+            PromotionRecord,
+        )
+
+        record = PromotionRecord(
+            promotion_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            artifact_tag="v1.2.3-dev",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=100,
+                ),
+            ],
+            signature_verified=True,
+            operator="user@example.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=False,
+            trace_id="abc123",
+            authorization_passed=True,
+        )
+        with pytest.raises(Exception):  # ValidationError for frozen model
+            record.dry_run = True  # type: ignore[misc]
+
+
+class TestRollbackRecord:
+    """Tests for RollbackRecord Pydantic model."""
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_record_valid(self) -> None:
+        """Test RollbackRecord with valid data."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import RollbackRecord
+
+        record = RollbackRecord(
+            rollback_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            environment="prod",
+            previous_digest="sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            reason="Critical bug in v1.3.0",
+            operator="sre@example.com",
+            rolled_back_at=datetime.now(timezone.utc),
+            trace_id="xyz789",
+        )
+        assert record.rollback_id == UUID("12345678-1234-5678-1234-567812345678")
+        assert record.environment == "prod"
+        assert record.impact_analysis is None
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_record_with_impact_analysis(self) -> None:
+        """Test RollbackRecord with impact analysis."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import RollbackImpactAnalysis, RollbackRecord
+
+        analysis = RollbackImpactAnalysis(
+            breaking_changes=["API endpoint removed"],
+            affected_products=["frontend-app"],
+            recommendations=["Notify API consumers"],
+            estimated_downtime="~2 minutes",
+        )
+        record = RollbackRecord(
+            rollback_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            environment="prod",
+            previous_digest="sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            reason="Critical bug in v1.3.0",
+            operator="sre@example.com",
+            rolled_back_at=datetime.now(timezone.utc),
+            trace_id="xyz789",
+            impact_analysis=analysis,
+        )
+        assert record.impact_analysis is not None
+        assert record.impact_analysis.estimated_downtime == "~2 minutes"
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_record_invalid_digest_format(self) -> None:
+        """Test RollbackRecord rejects invalid artifact digest format."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import RollbackRecord
+
+        with pytest.raises(ValidationError, match="artifact_digest"):
+            RollbackRecord(
+                rollback_id=UUID("12345678-1234-5678-1234-567812345678"),
+                artifact_digest="not-a-sha256",  # Invalid format
+                environment="prod",
+                previous_digest="sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                reason="Critical bug",
+                operator="sre@example.com",
+                rolled_back_at=datetime.now(timezone.utc),
+                trace_id="xyz789",
+            )
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_record_invalid_previous_digest_format(self) -> None:
+        """Test RollbackRecord rejects invalid previous_digest format."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import RollbackRecord
+
+        with pytest.raises(ValidationError, match="previous_digest"):
+            RollbackRecord(
+                rollback_id=UUID("12345678-1234-5678-1234-567812345678"),
+                artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                environment="prod",
+                previous_digest="invalid",  # Invalid format
+                reason="Critical bug",
+                operator="sre@example.com",
+                rolled_back_at=datetime.now(timezone.utc),
+                trace_id="xyz789",
+            )
+
+    @pytest.mark.requirement("8C-FR-014")
+    def test_rollback_record_frozen(self) -> None:
+        """Test RollbackRecord is immutable (frozen)."""
+        from datetime import datetime, timezone
+        from uuid import UUID
+
+        from floe_core.schemas.promotion import RollbackRecord
+
+        record = RollbackRecord(
+            rollback_id=UUID("12345678-1234-5678-1234-567812345678"),
+            artifact_digest="sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            environment="prod",
+            previous_digest="sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            reason="Critical bug",
+            operator="sre@example.com",
+            rolled_back_at=datetime.now(timezone.utc),
+            trace_id="xyz789",
+        )
+        with pytest.raises(Exception):  # ValidationError for frozen model
+            record.reason = "Changed reason"  # type: ignore[misc]
