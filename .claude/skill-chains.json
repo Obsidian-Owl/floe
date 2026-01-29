@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-skill-chains.json",
+  "description": "Skill chaining configuration for floe development workflows",
+  "chains": {
+    "epic-planning": {
+      "description": "Full epic planning workflow from spec to Linear",
+      "skills": [
+        "speckit-specify",
+        "speckit-clarify",
+        "speckit-plan",
+        "speckit-tasks",
+        "speckit-taskstolinear"
+      ],
+      "trigger": "plan epic",
+      "mode": "sequential"
+    },
+    "pre-pr": {
+      "description": "Pre-PR quality gates (run in parallel)",
+      "skills": [
+        "speckit-test-review",
+        "speckit-wiring-check",
+        "speckit-merge-check"
+      ],
+      "trigger": "pre-pr check",
+      "mode": "parallel"
+    },
+    "dbt-work": {
+      "description": "dbt development with contract validation",
+      "skills": [
+        "dbt-skill",
+        "pydantic-skill"
+      ],
+      "trigger": "*.sql",
+      "mode": "sequential"
+    },
+    "k8s-deploy": {
+      "description": "Kubernetes deployment workflow",
+      "skills": [
+        "helm-k8s-skill"
+      ],
+      "trigger": "charts/**",
+      "mode": "sequential"
+    },
+    "plugin-dev": {
+      "description": "Plugin development workflow",
+      "skills": [
+        "pydantic-skill",
+        "dagster-skill",
+        "testing-skill"
+      ],
+      "trigger": "plugins/**",
+      "mode": "sequential"
+    }
+  },
+  "autoInvoke": {
+    "enabled": true,
+    "matchPatterns": true,
+    "matchKeywords": true
+  }
+}

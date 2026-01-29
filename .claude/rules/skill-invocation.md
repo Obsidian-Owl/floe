@@ -1,69 +1,74 @@
 # Skill Invocation Rules
 
-## Automatic Skill Activation
+## File Pattern Triggers (Auto-Invoke)
 
-When working on specific components, you SHOULD invoke the appropriate skill to ensure best practices are followed.
+| Pattern | Skill | When |
+|---------|-------|------|
+| `*.sql`, `dbt_project.yml`, `profiles.yml` | `dbt-skill` | SQL/dbt work |
+| `**/schemas/*.py`, `**/models/*.py`, `**/config*.py` | `pydantic-skill` | Schema/model work |
+| `charts/**`, `**/templates/**`, Helm YAML | `helm-k8s-skill` | K8s deployment |
+| `**/assets.py`, `**/resources.py`, `**/io_managers.py` | `dagster-skill` | Orchestration |
+| `**/test_*.py`, `**/conftest.py` | `testing-skill` | Test writing |
 
-## Skill Trigger Matrix
+## Skill Chains (See `.claude/skill-chains.json`)
+
+| Chain | Skills | Trigger |
+|-------|--------|---------|
+| `epic-planning` | specify→clarify→plan→tasks→taskstolinear | "plan epic" |
+| `pre-pr` | test-review + wiring-check + merge-check (parallel) | "pre-pr check" |
+| `dbt-work` | dbt-skill→pydantic-skill | `*.sql` files |
+| `k8s-deploy` | helm-k8s-skill | `charts/**` |
+| `plugin-dev` | pydantic-skill→dagster-skill→testing-skill | `plugins/**` |
+
+## Core Skills (Active)
 
 ### pydantic-skill
 **Trigger words**: schema, model, validation, config, BaseModel, Field, validator
-**Trigger files**: Any `**/models.py`, `**/schemas.py`, `**/config.py`
-**Invoke when**: Creating or modifying Pydantic models, data validation, API contracts
+**Trigger files**: `**/models.py`, `**/schemas.py`, `**/config.py`
 
 ### dagster-skill
-**Trigger words**: asset, job, schedule, sensor, resource, IOManager, materialize
-**Trigger files**: Any `plugins/floe-orchestrator-dagster/**`, `**/assets.py`, `**/resources.py`
-**Invoke when**: Working with Dagster orchestration, assets, or scheduling
+**Trigger words**: asset, job, schedule, sensor, resource, IOManager
+**Trigger files**: `**/assets.py`, `**/resources.py`
 
 ### dbt-skill
-**Trigger words**: dbt, SQL model, macro, source, test, profiles.yml, dbt_project.yml
-**Trigger files**: Any `floe-dbt/**`, `**/*.sql`, `**/dbt_project.yml`
-**Invoke when**: Creating dbt models, tests, or macros
-
-### pyiceberg-skill
-**Trigger words**: Iceberg, table, partition, schema evolution, time travel, scan
-**Trigger files**: Any `floe-iceberg/**`
-**Invoke when**: Working with Iceberg table operations
-
-### polaris-skill
-**Trigger words**: Polaris, catalog, namespace, principal, REST catalog
-**Trigger files**: Any `plugins/floe-catalog-polaris/**`
-**Invoke when**: Working with Polaris catalog management
-
-### cube-skill
-**Trigger words**: Cube, semantic layer, measure, dimension, pre-aggregation
-**Trigger files**: Any `plugins/floe-semantic-cube/**`, `**/cube/**`
-**Invoke when**: Working with Cube semantic layer
+**Trigger words**: dbt, SQL model, macro, profiles.yml
+**Trigger files**: `**/*.sql`, `**/dbt_project.yml`
 
 ### helm-k8s-skill
-**Trigger words**: Helm, chart, Kubernetes, kubectl, pod, deployment, values.yaml
-**Trigger files**: Any `charts/**`, `**/templates/**`
-**Invoke when**: Working with Helm charts or K8s deployments
+**Trigger words**: Helm, chart, Kubernetes, kubectl, pod
+**Trigger files**: `charts/**`, `**/templates/**`
 
-## How to Invoke
+### testing-skill
+**Trigger words**: test, pytest, fixture, coverage
+**Trigger files**: `**/test_*.py`, `**/conftest.py`
 
-Skills can be invoked explicitly:
+## Reference Docs (Moved from Skills)
 
-```markdown
-# Explicit invocation
-Use the pydantic-skill to help design the CompiledArtifacts schema.
+For less frequent technology work, reference docs are in `docs/reference/`:
+- `docs/reference/polaris-skill.md` - Polaris catalog operations
+- `docs/reference/pyiceberg-skill.md` - Iceberg table operations
+- `docs/reference/cube-skill.md` - Cube semantic layer
+- `docs/reference/duckdb-lakehouse.md` - DuckDB compute
+- `docs/reference/arch-review.md` - Architecture review (use `tech-debt-review --arch`)
 
-# Or reference the skill file
-Read .claude/skills/pydantic-skill/SKILL.md for Pydantic best practices.
-```
+## OMC Agent Integration
 
-## Skill Chaining
+For generic tasks, use OMC agents instead of custom:
 
-For complex tasks, multiple skills may be needed:
+| Task | OMC Agent |
+|------|-----------|
+| Code quality review | `oh-my-claudecode:code-reviewer` |
+| Architecture analysis | `oh-my-claudecode:architect` |
+| Build fixes | `oh-my-claudecode:build-fixer` |
+| Security review | `oh-my-claudecode:security-reviewer` |
+| Codebase search | `oh-my-claudecode:explore` |
 
-| Task | Primary | Secondary |
-|------|---------|-----------|
-| Create Dagster asset for dbt | dagster-skill | dbt-skill |
-| Configure Polaris in K8s | polaris-skill | helm-k8s-skill |
-| Design CompiledArtifacts | pydantic-skill | All (integration) |
+## Custom Agents (floe-Specific)
 
-## Context Efficiency
-
-Skills inject research protocols and validation steps, NOT full implementations.
-This keeps context lean while ensuring correct patterns.
+Keep custom agents for project-specific concerns:
+- `plugin-quality` - 11 floe plugin types testing
+- `contract-stability` - CompiledArtifacts contract
+- `test-debt-analyzer` - Consolidated test debt analysis
+- `critic` - Final review gate
+- `docker-log-analyser` - Context-efficient container logs
+- `helm-debugger` - Context-efficient K8s debugging

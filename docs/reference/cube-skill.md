@@ -297,7 +297,7 @@ conn = psycopg2.connect(
     host="localhost",
     port=15432,
     user="cube",
-    password="cube_password",
+    password="cube_password",  # pragma: allowlist secret
     database="cube"
 )
 cursor = conn.cursor()
