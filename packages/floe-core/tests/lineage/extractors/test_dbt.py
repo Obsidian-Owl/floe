@@ -401,3 +401,191 @@ class TestDbtLineageExtractor:
         # Output dataset should have facets
         assert "schema" in outputs[0].facets
         assert "columnLineage" in outputs[0].facets
+
+    @pytest.mark.requirement("REQ-519")
+    def test_source_in_parent_map_but_missing_from_sources_dict(self) -> None:
+        """Source referenced in parent_map but not in sources dict is skipped."""
+        manifest = {
+            "nodes": {
+                "model.project.customers": {
+                    "database": "analytics",
+                    "schema": "public",
+                    "name": "customers",
+                    "columns": {},
+                },
+            },
+            "sources": {},
+            "parent_map": {"model.project.customers": ["source.project.raw.missing"]},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        inputs, outputs = extractor.extract_model("model.project.customers")
+
+        assert inputs == []
+        assert len(outputs) == 1
+
+    @pytest.mark.requirement("REQ-519")
+    def test_parent_model_missing_from_nodes_dict(self) -> None:
+        """Parent model referenced but missing from nodes dict is skipped."""
+        manifest = {
+            "nodes": {
+                "model.project.downstream": {
+                    "database": "analytics",
+                    "schema": "public",
+                    "name": "downstream",
+                    "columns": {},
+                },
+            },
+            "parent_map": {"model.project.downstream": ["model.project.upstream"]},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        inputs, outputs = extractor.extract_model("model.project.downstream")
+
+        assert inputs == []
+        assert len(outputs) == 1
+
+    @pytest.mark.requirement("REQ-519")
+    def test_extract_test_with_missing_tested_node(self) -> None:
+        """Test node depends on model that's missing from nodes dict."""
+        manifest = {
+            "nodes": {
+                "test.project.not_null_missing_model_id": {
+                    "depends_on": {"nodes": ["model.project.missing"]},
+                },
+            },
+            "parent_map": {},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        datasets = extractor.extract_test("test.project.not_null_missing_model_id")
+
+        assert datasets == []
+
+    @pytest.mark.requirement("REQ-519")
+    def test_model_with_columns_but_no_upstream_columns(self) -> None:
+        """Model with columns but no upstream produces schema facet but no column lineage."""
+        manifest = {
+            "nodes": {
+                "model.project.orphan": {
+                    "database": "analytics",
+                    "schema": "public",
+                    "name": "orphan",
+                    "columns": {
+                        "id": {"name": "id", "data_type": "BIGINT"},
+                        "value": {"name": "value", "data_type": "VARCHAR"},
+                    },
+                },
+            },
+            "parent_map": {"model.project.orphan": []},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        _, outputs = extractor.extract_model("model.project.orphan")
+
+        assert "schema" in outputs[0].facets
+        assert len(outputs[0].facets["schema"]["fields"]) == 2
+        assert "columnLineage" not in outputs[0].facets
+
+    @pytest.mark.requirement("REQ-519")
+    def test_empty_manifest(self) -> None:
+        """Empty manifest produces no lineage."""
+        manifest: dict[str, Any] = {}
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+
+        inputs, outputs = extractor.extract_model("model.project.any")
+        assert inputs == []
+        assert outputs == []
+
+        all_models = extractor.extract_all_models()
+        assert all_models == {}
+
+    @pytest.mark.requirement("REQ-519")
+    def test_manifest_with_only_tests_no_models(self) -> None:
+        """Manifest with only test nodes produces no model lineage."""
+        manifest = {
+            "nodes": {
+                "test.project.some_test": {
+                    "depends_on": {"nodes": []},
+                },
+            },
+            "parent_map": {},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+
+        all_models = extractor.extract_all_models()
+        assert all_models == {}
+
+    @pytest.mark.requirement("REQ-519")
+    def test_extract_test_with_no_depends_on(self) -> None:
+        """Test node without depends_on key returns empty list."""
+        manifest = {
+            "nodes": {
+                "test.project.orphan_test": {},
+            },
+            "parent_map": {},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        datasets = extractor.extract_test("test.project.orphan_test")
+
+        assert datasets == []
+
+    @pytest.mark.requirement("REQ-519")
+    def test_model_uses_name_when_alias_is_none(self) -> None:
+        """Model with alias=None uses name field."""
+        manifest = {
+            "nodes": {
+                "model.project.explicit_none": {
+                    "database": "analytics",
+                    "schema": "public",
+                    "name": "explicit_none",
+                    "alias": None,
+                },
+            },
+            "parent_map": {"model.project.explicit_none": []},
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        _, outputs = extractor.extract_model("model.project.explicit_none")
+
+        assert outputs[0].name == "analytics.public.explicit_none"
+
+    @pytest.mark.requirement("REQ-519")
+    def test_mixed_source_and_model_parents(self) -> None:
+        """Model with both source and model parents resolves all correctly."""
+        manifest = {
+            "nodes": {
+                "model.project.combined": {
+                    "database": "analytics",
+                    "schema": "marts",
+                    "name": "combined",
+                    "columns": {},
+                },
+                "model.project.upstream": {
+                    "database": "analytics",
+                    "schema": "staging",
+                    "name": "upstream",
+                    "columns": {
+                        "col1": {"name": "col1", "data_type": "INT"},
+                    },
+                },
+            },
+            "sources": {
+                "source.project.raw.external": {
+                    "database": "raw",
+                    "schema": "public",
+                    "name": "external",
+                    "columns": {
+                        "col2": {"name": "col2", "data_type": "VARCHAR"},
+                    },
+                },
+            },
+            "parent_map": {
+                "model.project.combined": [
+                    "model.project.upstream",
+                    "source.project.raw.external",
+                ]
+            },
+        }
+        extractor = DbtLineageExtractor(manifest, default_namespace="prod")
+        inputs, outputs = extractor.extract_model("model.project.combined")
+
+        assert len(inputs) == 2
+        input_names = {ds.name for ds in inputs}
+        assert "analytics.staging.upstream" in input_names
+        assert "raw.public.external" in input_names

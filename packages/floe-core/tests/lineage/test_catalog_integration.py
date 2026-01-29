@@ -33,12 +33,25 @@ class TestSimpleNamespaceStrategy:
         strategy = SimpleNamespaceStrategy(namespace="staging")
         assert strategy.resolve(environment="prod", platform="test") == "staging"
 
+    @pytest.mark.requirement("REQ-517")
     def test_different_namespaces(self) -> None:
         """Different instances can have different namespaces."""
         strategy1 = SimpleNamespaceStrategy(namespace="dev")
         strategy2 = SimpleNamespaceStrategy(namespace="prod")
         assert strategy1.resolve() == "dev"
         assert strategy2.resolve() == "prod"
+
+    @pytest.mark.requirement("REQ-517")
+    def test_empty_namespace(self) -> None:
+        """Simple strategy allows empty namespace."""
+        strategy = SimpleNamespaceStrategy(namespace="")
+        assert strategy.resolve() == ""
+
+    @pytest.mark.requirement("REQ-517")
+    def test_special_characters_in_namespace(self) -> None:
+        """Simple strategy preserves special characters in namespace."""
+        strategy = SimpleNamespaceStrategy(namespace="prod-us-east-1.analytics")
+        assert strategy.resolve() == "prod-us-east-1.analytics"
 
 
 class TestCentralizedNamespaceStrategy:
@@ -62,6 +75,7 @@ class TestCentralizedNamespaceStrategy:
         )
         assert strategy.resolve() == "staging.analytics"
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_ignores_kwargs(self) -> None:
         """Centralized strategy ignores kwargs passed to resolve()."""
         strategy = CentralizedNamespaceStrategy(
@@ -69,6 +83,12 @@ class TestCentralizedNamespaceStrategy:
             platform="platform",
         )
         assert strategy.resolve(extra="ignored") == "prod.platform"
+
+    @pytest.mark.requirement("REQ-517")
+    def test_empty_environment_and_platform(self) -> None:
+        """Centralized strategy handles empty strings."""
+        strategy = CentralizedNamespaceStrategy(environment="", platform="")
+        assert strategy.resolve() == "."
 
 
 class TestDataMeshNamespaceStrategy:
@@ -92,6 +112,7 @@ class TestDataMeshNamespaceStrategy:
         )
         assert strategy.resolve() == "finance.revenue-analytics"
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_ignores_kwargs(self) -> None:
         """Data mesh strategy ignores kwargs passed to resolve()."""
         strategy = DataMeshNamespaceStrategy(
@@ -99,6 +120,12 @@ class TestDataMeshNamespaceStrategy:
             product_name="pipeline",
         )
         assert strategy.resolve(extra="ignored") == "sales.pipeline"
+
+    @pytest.mark.requirement("REQ-517")
+    def test_empty_domain_and_product(self) -> None:
+        """Data mesh strategy handles empty strings."""
+        strategy = DataMeshNamespaceStrategy(domain="", product_name="")
+        assert strategy.resolve() == "."
 
 
 class TestNamespaceResolver:
@@ -160,15 +187,34 @@ class TestNamespaceResolver:
         with pytest.raises(ValueError, match="Unknown strategy: invalid"):
             NamespaceResolver(strategy="invalid")
 
+    @pytest.mark.requirement("REQ-517")
     def test_dataset_namespace_with_table_identifier(self) -> None:
         """resolve_dataset_namespace accepts table_identifier parameter."""
         resolver = NamespaceResolver(
             strategy="simple",
             default_namespace="prod",
         )
-        # Currently unused but should not raise error
         namespace = resolver.resolve_dataset_namespace(table_identifier="bronze.customers")
         assert namespace == "prod"
+
+    @pytest.mark.requirement("REQ-517")
+    def test_default_strategy_and_namespace(self) -> None:
+        """NamespaceResolver uses default strategy and namespace when not specified."""
+        resolver = NamespaceResolver()
+        assert resolver.resolve_job_namespace() == "default"
+        assert resolver.default_namespace == "default"
+
+    @pytest.mark.requirement("REQ-528")
+    def test_centralized_missing_both_parameters(self) -> None:
+        """Centralized strategy raises error when both parameters missing."""
+        with pytest.raises(ValueError, match="centralized strategy requires"):
+            NamespaceResolver(strategy="centralized")
+
+    @pytest.mark.requirement("REQ-528")
+    def test_data_mesh_missing_both_parameters(self) -> None:
+        """Data mesh strategy raises error when both parameters missing."""
+        with pytest.raises(ValueError, match="data_mesh strategy requires"):
+            NamespaceResolver(strategy="data_mesh")
 
 
 class MockCatalogPlugin:
@@ -180,15 +226,26 @@ class MockCatalogPlugin:
         return "polaris"
 
 
+class MockCatalogPluginNonString:
+    """Mock catalog plugin that returns non-string name."""
+
+    @property
+    def name(self) -> int:
+        """Return non-string name to test str() conversion."""
+        return 12345
+
+
 class TestCatalogDatasetResolver:
     """Tests for CatalogDatasetResolver."""
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_namespace_with_catalog_plugin(self) -> None:
         """Resolver uses catalog plugin name when available."""
         mock_catalog = MockCatalogPlugin()
         resolver = CatalogDatasetResolver(catalog_plugin=mock_catalog)
         assert resolver.resolve_namespace() == "polaris"
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_namespace_without_catalog_plugin(self) -> None:
         """Resolver uses default namespace when catalog plugin is None."""
         resolver = CatalogDatasetResolver(
@@ -197,6 +254,21 @@ class TestCatalogDatasetResolver:
         )
         assert resolver.resolve_namespace() == "staging"
 
+    @pytest.mark.requirement("REQ-517")
+    def test_resolve_namespace_with_non_string_plugin_name(self) -> None:
+        """Resolver converts non-string catalog plugin name via str()."""
+        mock_catalog = MockCatalogPluginNonString()
+        resolver = CatalogDatasetResolver(catalog_plugin=mock_catalog)
+        assert resolver.resolve_namespace() == "12345"
+
+    @pytest.mark.requirement("REQ-517")
+    def test_default_namespace_is_default(self) -> None:
+        """CatalogDatasetResolver uses 'default' as default namespace."""
+        resolver = CatalogDatasetResolver()
+        assert resolver.resolve_namespace() == "default"
+        assert resolver.default_namespace == "default"
+
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_dataset_with_catalog_plugin(self) -> None:
         """resolve_dataset creates LineageDataset with catalog namespace."""
         mock_catalog = MockCatalogPlugin()
@@ -209,6 +281,7 @@ class TestCatalogDatasetResolver:
         assert dataset.name == "customers"
         assert dataset.facets == {}
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_dataset_without_catalog_plugin(self) -> None:
         """resolve_dataset uses default namespace when catalog is None."""
         resolver = CatalogDatasetResolver(default_namespace="production")
@@ -218,6 +291,7 @@ class TestCatalogDatasetResolver:
         assert dataset.namespace == "production"
         assert dataset.name == "orders"
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_dataset_with_explicit_namespace(self) -> None:
         """resolve_dataset respects explicit namespace override."""
         mock_catalog = MockCatalogPlugin()
@@ -228,6 +302,7 @@ class TestCatalogDatasetResolver:
         assert dataset.namespace == "custom"
         assert dataset.name == "products"
 
+    @pytest.mark.requirement("REQ-517")
     def test_resolve_dataset_with_qualified_table_name(self) -> None:
         """resolve_dataset handles qualified table names."""
         resolver = CatalogDatasetResolver(default_namespace="prod")
@@ -236,6 +311,16 @@ class TestCatalogDatasetResolver:
 
         assert dataset.name == "bronze.raw_customers"
         assert dataset.namespace == "prod"
+
+    @pytest.mark.requirement("REQ-517")
+    def test_resolve_dataset_with_empty_table_name_raises_error(self) -> None:
+        """resolve_dataset raises ValidationError for empty table name."""
+        from pydantic import ValidationError
+
+        resolver = CatalogDatasetResolver(default_namespace="prod")
+
+        with pytest.raises(ValidationError, match="String should have at least 1 character"):
+            resolver.resolve_dataset("")
 
     @pytest.mark.requirement("REQ-531")
     def test_enrich_with_snapshot_adds_iceberg_facet(self) -> None:
@@ -308,6 +393,7 @@ class TestCatalogDatasetResolver:
         # New facet added
         assert "icebergSnapshot" in enriched.facets
 
+    @pytest.mark.requirement("REQ-531")
     def test_enrich_with_snapshot_returns_new_instance(self) -> None:
         """enrich_with_snapshot returns new LineageDataset instance."""
         resolver = CatalogDatasetResolver(default_namespace="prod")
@@ -327,6 +413,39 @@ class TestCatalogDatasetResolver:
         # Enriched has facet
         assert "icebergSnapshot" in enriched.facets
 
+    @pytest.mark.requirement("REQ-531")
+    def test_enrich_with_snapshot_empty_summary(self) -> None:
+        """enrich_with_snapshot handles empty summary dict."""
+        resolver = CatalogDatasetResolver(default_namespace="prod")
+        dataset = resolver.resolve_dataset("events")
+
+        enriched = resolver.enrich_with_snapshot(
+            dataset=dataset,
+            snapshot_id=111,
+            timestamp_ms=1000,
+            operation="append",
+            summary={},
+        )
+
+        assert enriched.facets["icebergSnapshot"]["summary"] == {}
+
+    @pytest.mark.requirement("REQ-531")
+    def test_enrich_with_snapshot_none_summary(self) -> None:
+        """enrich_with_snapshot omits summary key when None."""
+        resolver = CatalogDatasetResolver(default_namespace="prod")
+        dataset = resolver.resolve_dataset("events")
+
+        enriched = resolver.enrich_with_snapshot(
+            dataset=dataset,
+            snapshot_id=222,
+            timestamp_ms=2000,
+            operation="overwrite",
+            summary=None,
+        )
+
+        assert "summary" not in enriched.facets["icebergSnapshot"]
+
+    @pytest.mark.requirement("REQ-531")
     def test_multiple_enrichments_accumulate_facets(self) -> None:
         """Multiple enrichments can add different facets."""
         resolver = CatalogDatasetResolver(default_namespace="prod")
@@ -357,26 +476,26 @@ class TestCatalogDatasetResolver:
 class TestIntegration:
     """Integration tests combining resolver components."""
 
+    @pytest.mark.requirement("REQ-517")
     def test_namespace_resolver_with_catalog_resolver(self) -> None:
         """NamespaceResolver and CatalogDatasetResolver work together."""
-        # Setup namespace resolver
         ns_resolver = NamespaceResolver(
             strategy="centralized",
             environment="production",
             platform="data-platform",
         )
 
-        # Setup catalog resolver
         catalog_resolver = CatalogDatasetResolver(
             default_namespace=ns_resolver.resolve_job_namespace()
         )
 
-        # Resolve dataset
         dataset = catalog_resolver.resolve_dataset("customers")
 
         assert dataset.namespace == "production.data-platform"
         assert dataset.name == "customers"
 
+    @pytest.mark.requirement("REQ-517")
+    @pytest.mark.requirement("REQ-531")
     def test_full_workflow_with_enrichment(self) -> None:
         """Full workflow: namespace resolution, dataset creation, enrichment."""
         # 1. Resolve namespace using data mesh strategy

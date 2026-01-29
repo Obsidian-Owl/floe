@@ -6,6 +6,7 @@ This module tests the four lineage transports: NoOp, Console, Composite, and HTT
 from __future__ import annotations
 
 import asyncio
+import ssl
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,6 +18,8 @@ from floe_core.lineage.transport import (
     ConsoleLineageTransport,
     HttpLineageTransport,
     NoOpLineageTransport,
+    _apply_insecure_settings,
+    _create_ssl_context,
 )
 from floe_core.lineage.types import (
     LineageEvent,
@@ -194,3 +197,227 @@ class TestHttpLineageTransport:
         transport = HttpLineageTransport(url="http://localhost:5000/api/v1/lineage")
         transport.close()
         _run(transport.emit(sample_event))  # Should not raise
+
+
+class TestCreateSslContext:
+    """Tests for _create_ssl_context function."""
+
+    def test_returns_none_for_http_url(self) -> None:
+        """HTTP URLs should return None (no SSL context needed)."""
+        result = _create_ssl_context("http://localhost:5000/api", verify_ssl=True)
+        assert result is None, "HTTP URLs should not create SSL context"
+
+    def test_returns_none_for_http_with_verify_false(self) -> None:
+        """HTTP URLs with verify_ssl=False should still return None."""
+        result = _create_ssl_context("http://example.com/lineage", verify_ssl=False)
+        assert result is None, "HTTP URLs never need SSL context"
+
+    def test_returns_secure_context_for_https_with_verify_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """HTTPS with verify_ssl=True returns secure context."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+        monkeypatch.delenv("FLOE_ALLOW_INSECURE_SSL", raising=False)
+
+        with patch("ssl.create_default_context") as mock_create_ctx:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create_ctx.return_value = mock_ctx
+
+            with patch("certifi.where", return_value="/path/to/cacert.pem"):
+                result = _create_ssl_context("https://example.com/api", verify_ssl=True)
+
+            assert result is mock_ctx, "Should return the created SSL context"
+            mock_create_ctx.assert_called_once_with(cafile="/path/to/cacert.pem")
+
+    def test_production_always_returns_secure_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Production environment always returns secure context even with verify_ssl=False."""
+        monkeypatch.setenv("FLOE_ENVIRONMENT", "production")
+        monkeypatch.setenv("FLOE_ALLOW_INSECURE_SSL", "true")
+
+        with patch("ssl.create_default_context") as mock_create_ctx:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create_ctx.return_value = mock_ctx
+
+            with patch("certifi.where", return_value="/path/to/cacert.pem"):
+                result = _create_ssl_context("https://example.com/api", verify_ssl=False)
+
+            assert result is mock_ctx, "Production should return secure context"
+
+    def test_dev_with_insecure_env_var_returns_insecure_context(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Dev environment with FLOE_ALLOW_INSECURE_SSL=true returns insecure context."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+        monkeypatch.setenv("FLOE_ALLOW_INSECURE_SSL", "true")
+
+        with patch("ssl.create_default_context") as mock_create_ctx:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create_ctx.return_value = mock_ctx
+
+            with patch("certifi.where", return_value="/path/to/cacert.pem"):
+                result = _create_ssl_context("https://example.com/api", verify_ssl=False)
+
+            assert result is mock_ctx, "Should return context"
+            assert mock_ctx.check_hostname is False, "Should disable hostname check"
+            assert mock_ctx.verify_mode == ssl.CERT_NONE, "Should disable cert verification"
+
+        assert any("SSL verification DISABLED" in record.message for record in caplog.records), (
+            "Should log critical warning about disabled SSL"
+        )
+
+    def test_dev_without_insecure_env_var_returns_secure_context_with_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Dev without FLOE_ALLOW_INSECURE_SSL returns secure context with warning."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+        monkeypatch.delenv("FLOE_ALLOW_INSECURE_SSL", raising=False)
+
+        with patch("ssl.create_default_context") as mock_create_ctx:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create_ctx.return_value = mock_ctx
+
+            with patch("certifi.where", return_value="/path/to/cacert.pem"):
+                result = _create_ssl_context("https://example.com/api", verify_ssl=False)
+
+            assert result is mock_ctx, "Should return secure context"
+
+        assert any(
+            "FLOE_ALLOW_INSECURE_SSL not set" in record.message for record in caplog.records
+        ), "Should warn that verification remains enabled"
+
+    def test_certifi_ca_bundle_is_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify certifi.where() is used for CA bundle."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+
+        with patch("ssl.create_default_context") as mock_create_ctx:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create_ctx.return_value = mock_ctx
+
+            with patch("certifi.where", return_value="/custom/ca/bundle.pem") as mock_where:
+                _create_ssl_context("https://example.com/api", verify_ssl=True)
+
+            mock_where.assert_called_once()
+            mock_create_ctx.assert_called_once_with(cafile="/custom/ca/bundle.pem")
+
+    @pytest.mark.parametrize(
+        ("url", "expected_none"),
+        [
+            ("http://localhost:8080/api", True),
+            ("http://example.com/lineage", True),
+            ("https://localhost:8443/api", False),
+            ("https://secure.example.com/lineage", False),
+        ],
+    )
+    def test_http_vs_https_urls(
+        self, url: str, expected_none: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Parametrized test for HTTP vs HTTPS URL handling."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+
+        with patch("ssl.create_default_context") as mock_create_ctx:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create_ctx.return_value = mock_ctx
+
+            with patch("certifi.where", return_value="/path/to/cacert.pem"):
+                result = _create_ssl_context(url, verify_ssl=True)
+
+        if expected_none:
+            assert result is None, f"HTTP URL {url} should return None"
+        else:
+            assert result is not None, f"HTTPS URL {url} should return SSL context"
+
+
+class TestApplyInsecureSettings:
+    """Tests for _apply_insecure_settings function."""
+
+    def test_disables_hostname_check(self) -> None:
+        """_apply_insecure_settings sets check_hostname to False."""
+        context = ssl.create_default_context()
+        assert context.check_hostname is True, "Default context should check hostname"
+
+        _apply_insecure_settings(context)
+
+        assert context.check_hostname is False, "Should disable hostname checking"
+
+    def test_sets_verify_mode_to_cert_none(self) -> None:
+        """_apply_insecure_settings sets verify_mode to ssl.CERT_NONE."""
+        context = ssl.create_default_context()
+        assert context.verify_mode == ssl.CERT_REQUIRED, "Default context should require certs"
+
+        _apply_insecure_settings(context)
+
+        assert context.verify_mode == ssl.CERT_NONE, "Should disable certificate verification"
+
+    def test_both_settings_applied_together(self) -> None:
+        """Both insecure settings are applied atomically."""
+        context = ssl.create_default_context()
+
+        _apply_insecure_settings(context)
+
+        assert context.check_hostname is False, "Hostname check should be disabled"
+        assert context.verify_mode == ssl.CERT_NONE, "Cert verification should be disabled"
+
+
+class TestHttpLineageTransportSsl:
+    """Tests for HttpLineageTransport SSL context usage."""
+
+    def test_https_url_uses_ssl_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """HTTPS transport should use SSL context for connections."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+
+        transport = HttpLineageTransport(
+            url="https://lineage.example.com/api/v1/lineage",
+            verify_ssl=True,
+        )
+
+        assert transport._url.startswith("https://"), "URL should be HTTPS"
+        assert transport._verify_ssl is True, "verify_ssl should be True"
+        transport.close()
+
+    def test_http_url_works_without_ssl_context(self) -> None:
+        """HTTP transport works without SSL context (verify_ssl is ignored for HTTP)."""
+        transport = HttpLineageTransport(
+            url="http://localhost:5000/api/v1/lineage",
+            verify_ssl=True,
+        )
+
+        assert transport._url.startswith("http://"), "URL should be HTTP"
+        transport.close()
+
+    def test_transport_verify_ssl_parameter_stored(self) -> None:
+        """Transport stores verify_ssl parameter for later use."""
+        transport_secure = HttpLineageTransport(
+            url="https://example.com/lineage",
+            verify_ssl=True,
+        )
+        transport_insecure = HttpLineageTransport(
+            url="https://example.com/lineage",
+            verify_ssl=False,
+        )
+
+        assert transport_secure._verify_ssl is True, "Should store verify_ssl=True"
+        assert transport_insecure._verify_ssl is False, "Should store verify_ssl=False"
+
+        transport_secure.close()
+        transport_insecure.close()
+
+    @pytest.mark.requirement("REQ-SECURITY-001")
+    def test_production_enforces_ssl_verification(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        sample_event: LineageEvent,
+    ) -> None:
+        """Production environment always enforces SSL verification."""
+        monkeypatch.setenv("FLOE_ENVIRONMENT", "production")
+
+        transport = HttpLineageTransport(
+            url="https://lineage.example.com/api/v1/lineage",
+            verify_ssl=False,
+        )
+
+        assert transport._verify_ssl is False, (
+            "Parameter stored as passed, production enforces at emit time"
+        )
+        transport.close()
