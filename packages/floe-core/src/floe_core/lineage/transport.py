@@ -14,7 +14,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import ssl
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import structlog
 
@@ -25,6 +27,9 @@ if TYPE_CHECKING:
     from floe_core.lineage.protocols import LineageTransport
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
+_DEFAULT_QUEUE_SIZE = 1000
 
 
 class NoOpLineageTransport:
@@ -132,6 +137,8 @@ class HttpLineageTransport:
         url: HTTP endpoint URL for lineage events.
         timeout: HTTP request timeout in seconds.
         api_key: Optional API key for authentication.
+        verify_ssl: Whether to verify SSL certificates (default: True).
+        max_queue_size: Maximum queue size before dropping events (default: 1000).
     """
 
     def __init__(
@@ -139,6 +146,8 @@ class HttpLineageTransport:
         url: str,
         timeout: float = 5.0,
         api_key: str | None = None,
+        verify_ssl: bool = True,
+        max_queue_size: int = _DEFAULT_QUEUE_SIZE,
     ) -> None:
         """Initialize HTTP transport.
 
@@ -146,14 +155,35 @@ class HttpLineageTransport:
             url: HTTP endpoint URL.
             timeout: Request timeout in seconds.
             api_key: Optional API key for authentication header.
+            verify_ssl: Whether to verify SSL certificates.
+            max_queue_size: Maximum queue size before dropping events.
+
+        Raises:
+            ValueError: If URL is invalid or uses unsupported scheme.
         """
+        parsed = urlparse(url)
+        if parsed.scheme not in _ALLOWED_URL_SCHEMES:
+            raise ValueError(
+                f"URL scheme must be one of {sorted(_ALLOWED_URL_SCHEMES)}, got: {parsed.scheme!r}"
+            )
+        if not parsed.netloc:
+            raise ValueError(f"Invalid URL: missing host in {url!r}")
+
         self._url = url
         self._timeout = timeout
         self._api_key = api_key
+        self._verify_ssl = verify_ssl
         self._closed = False
 
-        self._async_queue: asyncio.Queue[LineageEvent | None] = asyncio.Queue()
+        self._async_queue: asyncio.Queue[LineageEvent | None] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
         self._consumer_task: asyncio.Task[None] | None = None
+
+    def _sanitized_url(self) -> str:
+        """Return URL without query string for safe logging."""
+        parsed = urlparse(self._url)
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
     async def emit(self, event: LineageEvent) -> None:
         """Enqueue event for async emission (non-blocking, <1ms).
@@ -164,9 +194,18 @@ class HttpLineageTransport:
         if self._closed:
             return
 
-        # Ensure background consumer is running
         self._ensure_consumer()
-        await self._async_queue.put(event)
+        try:
+            self._async_queue.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning(
+                "Lineage queue full, dropping event",
+                extra={
+                    "url": self._sanitized_url(),
+                    "queue_size": self._async_queue.maxsize,
+                    "run_id": str(event.run.run_id),
+                },
+            )
 
     def _ensure_consumer(self) -> None:
         """Start background consumer task if not already running."""
@@ -178,23 +217,22 @@ class HttpLineageTransport:
 
     async def _consume_async(self) -> None:
         """Background consumer that posts events via httpx."""
-        try:
-            import httpx
-        except ImportError:
-            httpx = None  # type: ignore[assignment]
+        import importlib.util
+
+        httpx_available = importlib.util.find_spec("httpx") is not None
 
         while True:
             event = await self._async_queue.get()
             if event is None:
                 break
-            await self._post_event(event, httpx)
+            await self._post_event(event, httpx_available)
 
-    async def _post_event(self, event: LineageEvent, httpx_mod: object | None) -> None:
+    async def _post_event(self, event: LineageEvent, httpx_available: bool) -> None:
         """Post a single event via HTTP.
 
         Args:
             event: Event to post.
-            httpx_mod: The httpx module if available, else None.
+            httpx_available: Whether httpx module is available.
         """
         payload = to_openlineage_event(event)
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -202,17 +240,19 @@ class HttpLineageTransport:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
         try:
-            if httpx_mod is not None:
+            if httpx_available:
                 import httpx
 
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout,
+                    verify=self._verify_ssl,
+                ) as client:
                     await client.post(
                         self._url,
                         json=payload,
                         headers=headers,
                     )
             else:
-                # Fallback to urllib
                 import urllib.request
 
                 req = urllib.request.Request(
@@ -221,11 +261,28 @@ class HttpLineageTransport:
                     headers=headers,
                     method="POST",
                 )
-                urllib.request.urlopen(req, timeout=self._timeout)  # noqa: S310  # nosec B310
+                context: ssl.SSLContext | None = None
+                if self._url.startswith("https://"):
+                    context = ssl.create_default_context()
+                    if not self._verify_ssl:
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                urllib.request.urlopen(  # noqa: S310  # nosec B310
+                    req, timeout=self._timeout, context=context
+                )
+        except ssl.SSLError:
+            logger.exception(
+                "SSL/TLS error posting lineage event - check certificates",
+                extra={"url": self._sanitized_url()},
+            )
         except Exception:
             logger.exception(
                 "Failed to post lineage event",
-                extra={"url": self._url},
+                extra={
+                    "url": self._sanitized_url(),
+                    "run_id": str(event.run.run_id),
+                    "job_name": event.job.name,
+                },
             )
 
     def close(self) -> None:
@@ -238,7 +295,7 @@ class HttpLineageTransport:
         try:
             self._async_queue.put_nowait(None)
         except asyncio.QueueFull:
-            pass
+            logger.warning("Queue full during close, some events may be lost")
 
     async def close_async(self) -> None:
         """Drain queue and wait for consumer task to complete.
@@ -251,7 +308,7 @@ class HttpLineageTransport:
         try:
             self._async_queue.put_nowait(None)
         except asyncio.QueueFull:
-            pass
+            logger.warning("Queue full during close, some events may be lost")
 
         if self._consumer_task is not None:
             await self._consumer_task

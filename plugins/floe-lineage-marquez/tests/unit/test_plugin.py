@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from floe_core.plugins.lineage import LineageBackendPlugin
 
-from floe_lineage_marquez import MarquezLineageBackendPlugin
+from floe_lineage_marquez import MarquezConfig, MarquezLineageBackendPlugin
 
 
 @pytest.mark.requirement("REQ-527")
@@ -242,3 +242,60 @@ def test_validate_connection_endpoint() -> None:
         # Verify correct endpoint was called
         request = mock_urlopen.call_args[0][0]
         assert request.full_url == "http://localhost:5000/api/v1/namespaces"
+
+
+@pytest.mark.requirement("REQ-527")
+def test_namespace_strategy_custom_environment() -> None:
+    """Test that namespace strategy uses configurable environment."""
+    plugin = MarquezLineageBackendPlugin(environment="staging")
+    strategy = plugin.get_namespace_strategy()
+
+    assert strategy["strategy"] == "centralized"
+    assert strategy["environment"] == "staging"
+    assert strategy["platform"] == "floe"
+
+
+@pytest.mark.requirement("REQ-527")
+def test_config_schema_validation() -> None:
+    """Test that MarquezConfig schema validates configuration."""
+    config = MarquezConfig(
+        url="http://custom-marquez:9000",
+        api_key="my-key",  # pragma: allowlist secret
+        environment="dev",
+        verify_ssl=False,
+    )
+
+    assert config.url == "http://custom-marquez:9000"
+    assert config.api_key == "my-key"  # pragma: allowlist secret
+    assert config.environment == "dev"
+    assert config.verify_ssl is False
+
+
+@pytest.mark.requirement("REQ-527")
+def test_config_schema_defaults() -> None:
+    """Test that MarquezConfig has correct defaults."""
+    config = MarquezConfig()
+
+    assert config.url == "http://marquez:5000"
+    assert config.api_key is None
+    assert config.environment == "prod"
+    assert config.verify_ssl is True
+
+
+@pytest.mark.requirement("REQ-527")
+def test_get_config_schema_returns_model() -> None:
+    """Test that get_config_schema returns the MarquezConfig class."""
+    plugin = MarquezLineageBackendPlugin()
+    schema = plugin.get_config_schema()
+
+    assert schema is MarquezConfig
+
+
+@pytest.mark.requirement("REQ-527")
+def test_helm_values_password_placeholder() -> None:
+    """Test that PostgreSQL password indicates production override needed."""
+    plugin = MarquezLineageBackendPlugin()
+    values = plugin.get_helm_values()
+
+    password = values["postgresql"]["auth"]["password"]
+    assert "CHANGE_ME" in password or "PRODUCTION" in password.upper()

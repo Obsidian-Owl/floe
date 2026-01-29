@@ -14,8 +14,48 @@ import urllib.request
 from typing import Any
 
 from floe_core.plugins.lineage import LineageBackendPlugin
+from pydantic import BaseModel, Field
 
-__all__ = ["MarquezLineageBackendPlugin"]
+__all__ = ["MarquezLineageBackendPlugin", "MarquezConfig"]
+
+
+class MarquezConfig(BaseModel):
+    """Configuration schema for Marquez lineage backend.
+
+    This model provides type-safe configuration validation for Marquez
+    backend settings, following the Pydantic v2 conventions used throughout
+    the floe platform.
+
+    Attributes:
+        url: Base URL for Marquez API (e.g., "http://marquez:5000")
+        api_key: Optional API key for authentication
+        environment: Deployment environment for namespace (e.g., "prod", "staging")
+        verify_ssl: Whether to verify SSL certificates (default True)
+
+    Example:
+        >>> config = MarquezConfig(
+        ...     url="http://marquez:5000",
+        ...     environment="staging"
+        ... )
+        >>> plugin = MarquezLineageBackendPlugin(**config.model_dump())
+    """
+
+    url: str = Field(
+        default="http://marquez:5000",
+        description="Marquez API base URL",
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="Optional API key for authentication",
+    )
+    environment: str = Field(
+        default="prod",
+        description="Deployment environment for namespace",
+    )
+    verify_ssl: bool = Field(
+        default=True,
+        description="Whether to verify SSL certificates",
+    )
 
 
 class MarquezLineageBackendPlugin(LineageBackendPlugin):
@@ -48,15 +88,21 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         self,
         url: str = "http://marquez:5000",
         api_key: str | None = None,
+        environment: str = "prod",
+        verify_ssl: bool = True,
     ) -> None:
         """Initialize Marquez backend plugin.
 
         Args:
             url: Base URL for Marquez API (default: "http://marquez:5000")
             api_key: Optional API key for authentication
+            environment: Deployment environment for namespace (default: "prod")
+            verify_ssl: Whether to verify SSL certificates (default: True)
         """
         self._url = url.rstrip("/")
         self._api_key = api_key
+        self._environment = environment
+        self._verify_ssl = verify_ssl
 
     @property
     def name(self) -> str:
@@ -133,7 +179,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         """
         return {
             "strategy": "centralized",
-            "environment": "prod",
+            "environment": self._environment,
             "platform": "floe",
         }
 
@@ -183,7 +229,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 "enabled": True,
                 "auth": {
                     "username": "marquez",
-                    "password": "marquez",  # pragma: allowlist secret
+                    "password": "CHANGE_ME_IN_PRODUCTION",  # pragma: allowlist secret
                     "database": "marquez",
                 },
                 "primary": {
@@ -232,3 +278,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 return bool(response.status == 200)
         except Exception:
             return False
+
+    def get_config_schema(self) -> type[MarquezConfig]:
+        """Return the Pydantic configuration schema for this plugin."""
+        return MarquezConfig

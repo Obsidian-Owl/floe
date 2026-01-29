@@ -12,12 +12,17 @@ See Also:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time with timezone info (Python 3.12+ compatible)."""
+    return datetime.now(timezone.utc)
 
 
 class RunState(str, Enum):
@@ -149,8 +154,8 @@ class LineageEvent(BaseModel):
         description="Type of event (START, COMPLETE, FAIL, etc.)",
     )
     event_time: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Timestamp of the event",
+        default_factory=_utc_now,
+        description="Timestamp of the event (UTC with timezone)",
     )
     run: LineageRun = Field(
         default_factory=LineageRun,
