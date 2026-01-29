@@ -11,6 +11,33 @@ Note:
 
 from __future__ import annotations
 
+from pathlib import Path
+
+
+# Early PYTHONPATH check for better error messages
+def _check_test_environment() -> None:
+    """Verify tests are run from correct directory with proper PYTHONPATH."""
+    try:
+        import floe_core as _fc
+    except ImportError:
+        # Check if we're in a subdirectory
+        cwd = Path.cwd()
+        if cwd.name in ("floe-core", "packages", "plugins"):
+            raise ImportError(
+                f"Tests must be run from the repository root, not from {cwd}.\n"
+                f"Run: cd {cwd.parent} && pytest tests/\n"
+                "Or use: PYTHONPATH=. pytest tests/"
+            ) from None
+        raise ImportError(
+            "floe_core not found. Ensure you're running from the repository root.\n"
+            "Run: cd /path/to/floe && pytest tests/"
+        ) from None
+    # Verify module is importable
+    _ = _fc.__name__
+
+
+_check_test_environment()
+
 import pytest
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 

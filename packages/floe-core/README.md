@@ -55,6 +55,33 @@ syft version
 
 > **Note**: Keyless signing (OIDC-based) uses the `sigstore` Python library and does not require cosign CLI.
 
+## Environment Variables
+
+Configuration environment variables for signing and testing:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLOE_DISABLE_BROWSER_OAUTH` | `false` | Set to `true` to prevent interactive browser OAuth. Use in CI/CD where OIDC ambient credentials should be available. |
+| `FLOE_OIDC_TOKEN_MAX_RETRIES` | `3` | Maximum retries for OIDC token acquisition (1-10). |
+
+### CI/CD Configuration
+
+In GitHub Actions, ensure OIDC is enabled:
+
+```yaml
+permissions:
+  id-token: write  # Required for keyless signing
+```
+
+Then disable browser OAuth fallback:
+
+```yaml
+env:
+  FLOE_DISABLE_BROWSER_OAUTH: "true"
+```
+
+This ensures tests fail fast if OIDC credentials are unavailable rather than hanging on browser auth.
+
 ## Development
 
 ```bash
