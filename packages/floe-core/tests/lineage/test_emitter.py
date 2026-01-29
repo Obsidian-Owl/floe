@@ -6,7 +6,6 @@ and the factory function for creating emitters from configuration.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
@@ -22,10 +21,7 @@ from floe_core.lineage.transport import (
 )
 from floe_core.lineage.types import LineageDataset, LineageEvent, RunState
 
-
-def _run(coro: Any) -> Any:
-    """Run an async coroutine synchronously."""
-    return asyncio.run(coro)
+from .conftest import _run
 
 
 def _make_mock_transport() -> MagicMock:

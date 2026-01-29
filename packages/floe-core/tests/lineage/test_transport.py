@@ -5,7 +5,6 @@ This module tests the four lineage transports: NoOp, Console, Composite, and HTT
 
 from __future__ import annotations
 
-import asyncio
 import ssl
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -28,10 +27,7 @@ from floe_core.lineage.types import (
     RunState,
 )
 
-
-def _run(coro: object) -> object:
-    """Run an async coroutine synchronously."""
-    return asyncio.run(coro)  # type: ignore[arg-type]
+from .conftest import _run
 
 
 @pytest.fixture()
