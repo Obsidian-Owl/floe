@@ -21,7 +21,8 @@ Exception Hierarchy:
     ├── TagExistsError             # Promotion tag already exists
     ├── VersionNotPromotedError    # Version not in target environment
     ├── AuthorizationError         # Operator not authorized
-    └── EnvironmentLockedError     # Target environment is locked
+    ├── EnvironmentLockedError     # Target environment is locked
+    └── SeparationOfDutiesError    # Same operator for consecutive environments
 
 Exit Codes (per spec):
     0 - Success
@@ -38,6 +39,7 @@ Exit Codes (per spec):
     11 - Version not promoted (VersionNotPromotedError)
     12 - Authorization failed (AuthorizationError)
     13 - Environment locked (EnvironmentLockedError)
+    14 - Separation of duties violation (SeparationOfDutiesError)
 
 Example:
     >>> from floe_core.oci.errors import ArtifactNotFoundError
@@ -744,3 +746,54 @@ class EnvironmentLockedError(OCIError):
             f"Environment '{environment}' is locked: {reason}. "
             f"Locked by {locked_by} at {locked_at}"
         )
+
+
+class SeparationOfDutiesError(OCIError):
+    """Raised when separation of duties is violated during promotion.
+
+    This error indicates that the same operator cannot promote to consecutive
+    environments when separation_of_duties is enabled. A different operator
+    must promote to the next environment.
+
+    Implements FR-049 (separation rule), FR-050 (enable/disable), FR-052 (audit).
+
+    Attributes:
+        operator: The operator attempting the promotion.
+        previous_operator: The operator who promoted to the source environment.
+        from_env: The source environment.
+        to_env: The target environment.
+        exit_code: CLI exit code (14).
+
+    Example:
+        >>> raise SeparationOfDutiesError(
+        ...     operator="alice@example.com",
+        ...     previous_operator="alice@example.com",
+        ...     from_env="staging",
+        ...     to_env="prod"
+        ... )
+    """
+
+    exit_code: int = 14
+
+    def __init__(
+        self,
+        operator: str,
+        previous_operator: str,
+        from_env: str,
+        to_env: str,
+    ) -> None:
+        self.operator = operator
+        self.previous_operator = previous_operator
+        self.from_env = from_env
+        self.to_env = to_env
+
+        msg = (
+            f"Separation of duties violation: Operator '{operator}' cannot promote "
+            f"from '{from_env}' to '{to_env}' because they also promoted to '{from_env}'.\n\n"
+            f"Separation of duties requires different operators for consecutive promotions.\n"
+            f"Previous promotion to '{from_env}' was performed by: {previous_operator}\n\n"
+            f"Remediation:\n"
+            f"  - Request a different team member to perform this promotion\n"
+            f"  - Or disable separation_of_duties in the environment config"
+        )
+        super().__init__(msg)
