@@ -659,7 +659,7 @@ class PromotionController:
             attributes={
                 "dry_run": dry_run,
             },
-        ):
+        ) as span:
             start_time = time.monotonic()
 
             # If no PolicyEnforcer configured, skip this gate
@@ -668,6 +668,8 @@ class PromotionController:
                     "policy_compliance_gate_skipped",
                     reason="no_policy_enforcer_configured",
                 )
+                span.set_attribute("duration_ms", 0)
+                span.set_attribute("status", "skipped")
                 return GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
                     status=GateStatus.SKIPPED,
@@ -694,6 +696,8 @@ class PromotionController:
                         duration_ms=duration_ms,
                         violation_count=len(result.violations),
                     )
+                    span.set_attribute("duration_ms", duration_ms)
+                    span.set_attribute("status", "passed")
                     return GateResult(
                         gate=PromotionGate.POLICY_COMPLIANCE,
                         status=GateStatus.PASSED,
@@ -717,6 +721,8 @@ class PromotionController:
                         error_count=result.error_count,
                         warning_count=result.warning_count,
                     )
+                    span.set_attribute("duration_ms", duration_ms)
+                    span.set_attribute("status", "failed")
                     return GateResult(
                         gate=PromotionGate.POLICY_COMPLIANCE,
                         status=GateStatus.FAILED,
@@ -746,6 +752,8 @@ class PromotionController:
                     duration_ms=duration_ms,
                     error=str(e),
                 )
+                span.set_attribute("duration_ms", duration_ms)
+                span.set_attribute("status", "error")
                 return GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
                     status=GateStatus.FAILED,
@@ -787,7 +795,7 @@ class PromotionController:
                 "scanner_format": config.scanner_format,
                 "artifact_ref": artifact_ref,
             },
-        ):
+        ) as span:
             start_time = time.monotonic()
             self._log.info(
                 "security_gate_started",
@@ -829,6 +837,8 @@ class PromotionController:
                         exit_code=result.returncode,
                         stderr=result.stderr[:500] if result.stderr else None,
                     )
+                    span.set_attribute("duration_ms", duration_ms)
+                    span.set_attribute("status", "failed")
                     return GateResult(
                         gate=PromotionGate.SECURITY_SCAN,
                         status=GateStatus.FAILED,
@@ -864,12 +874,16 @@ class PromotionController:
                 )
 
                 if evaluation.passed:
+                    span.set_attribute("duration_ms", duration_ms)
+                    span.set_attribute("status", "passed")
                     return GateResult(
                         gate=PromotionGate.SECURITY_SCAN,
                         status=GateStatus.PASSED,
                         duration_ms=duration_ms,
                     )
                 else:
+                    span.set_attribute("duration_ms", duration_ms)
+                    span.set_attribute("status", "failed")
                     return GateResult(
                         gate=PromotionGate.SECURITY_SCAN,
                         status=GateStatus.FAILED,
@@ -884,6 +898,8 @@ class PromotionController:
                     "security_gate_timeout",
                     timeout_seconds=timeout_seconds,
                 )
+                span.set_attribute("duration_ms", duration_ms)
+                span.set_attribute("status", "timeout")
                 return GateResult(
                     gate=PromotionGate.SECURITY_SCAN,
                     status=GateStatus.FAILED,
@@ -899,6 +915,8 @@ class PromotionController:
                     scanner_format=config.scanner_format,
                     error=str(e),
                 )
+                span.set_attribute("duration_ms", duration_ms)
+                span.set_attribute("status", "parse_error")
                 return GateResult(
                     gate=PromotionGate.SECURITY_SCAN,
                     status=GateStatus.FAILED,
@@ -914,6 +932,8 @@ class PromotionController:
                     duration_ms=duration_ms,
                     error=str(e),
                 )
+                span.set_attribute("duration_ms", duration_ms)
+                span.set_attribute("status", "error")
                 return GateResult(
                     gate=PromotionGate.SECURITY_SCAN,
                     status=GateStatus.FAILED,
@@ -954,7 +974,9 @@ class PromotionController:
                 "environment": to_env,
                 "dry_run": dry_run,
             },
-        ):
+        ) as span:
+            start_time = time.monotonic()
+
             # Get environment configuration
             env_config = self._get_environment(to_env)
             if env_config is None:
@@ -979,11 +1001,15 @@ class PromotionController:
 
             # Check for failure (stop unless dry_run)
             if policy_result.status == GateStatus.FAILED and not dry_run:
+                duration_ms = int((time.monotonic() - start_time) * 1000)
                 self._log.warning(
                     "run_all_gates_stopped",
                     reason="policy_compliance_failed",
                     results_count=len(results),
                 )
+                span.set_attribute("duration_ms", duration_ms)
+                span.set_attribute("gate_count", len(results))
+                span.set_attribute("status", "failed")
                 return results
 
             # Run other enabled gates
@@ -1009,11 +1035,15 @@ class PromotionController:
 
                     # Check for failure (stop unless dry_run)
                     if gate_result.status == GateStatus.FAILED and not dry_run:
+                        duration_ms = int((time.monotonic() - start_time) * 1000)
                         self._log.warning(
                             "run_all_gates_stopped",
                             reason="security_scan_failed",
                             results_count=len(results),
                         )
+                        span.set_attribute("duration_ms", duration_ms)
+                        span.set_attribute("gate_count", len(results))
+                        span.set_attribute("status", "failed")
                         return results
                     continue
 
@@ -1045,21 +1075,30 @@ class PromotionController:
 
                 # Check for failure (stop unless dry_run)
                 if gate_result.status == GateStatus.FAILED and not dry_run:
+                    duration_ms = int((time.monotonic() - start_time) * 1000)
                     self._log.warning(
                         "run_all_gates_stopped",
                         reason=f"{gate.value}_failed",
                         results_count=len(results),
                     )
+                    span.set_attribute("duration_ms", duration_ms)
+                    span.set_attribute("gate_count", len(results))
+                    span.set_attribute("status", "failed")
                     return results
 
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            all_passed = all(
+                r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results
+            )
             self._log.info(
                 "run_all_gates_completed",
                 environment=to_env,
                 results_count=len(results),
-                all_passed=all(
-                    r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results
-                ),
+                all_passed=all_passed,
             )
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("gate_count", len(results))
+            span.set_attribute("status", "passed" if all_passed else "failed")
 
             return results
 
@@ -1276,8 +1315,13 @@ class PromotionController:
                 "to_env": to_env,
                 "secondary_count": len(secondary_clients),
             },
-        ):
+        ) as span:
+            start_time = time.monotonic()
+
             if not secondary_clients:
+                span.set_attribute("duration_ms", 0)
+                span.set_attribute("success_count", 0)
+                span.set_attribute("status", "skipped")
                 return []
 
             sync_results: list[RegistrySyncStatus] = []
@@ -1347,12 +1391,16 @@ class PromotionController:
                     sync_results.append(result)
 
             # Log summary
+            duration_ms = int((time.monotonic() - start_time) * 1000)
             successful = sum(1 for r in sync_results if r.synced)
             self._log.info(
                 "sync_to_registries_completed",
                 successful=successful,
                 total=len(sync_results),
             )
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("success_count", successful)
+            span.set_attribute("status", "completed" if successful == len(sync_results) else "partial")
 
             return sync_results
 
