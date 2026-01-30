@@ -157,6 +157,9 @@ from floe_core.oci.signing import (
     sign_artifact,
 )
 
+# Promotion (Epic 8C)
+from floe_core.oci.promotion import PromotionController
+
 # Verification (Epic 8B)
 from floe_core.oci.verification import (
     PolicyViolationError,
@@ -269,4 +272,6 @@ __all__: list[str] = [
     "generate_sbom_for_python_project",
     "retrieve_attestations",
     "retrieve_sbom",
+    # Promotion (Epic 8C)
+    "PromotionController",
 ]
