@@ -27,6 +27,7 @@ from floe_core.schemas.promotion import (
     EnvironmentConfig,
     PromotionConfig,
     PromotionGate,
+    RegistrySyncStatus,
 )
 
 if TYPE_CHECKING:
@@ -312,9 +313,106 @@ class TestMultiRegistrySyncStatus:
             # assert len(result.registry_sync_status) == 2  # primary + secondary
 
 
+class TestPromotionConfigSecondaryRegistries:
+    """Tests for PromotionConfig secondary registry fields (T079).
+
+    FR-028: Support secondary registries in configuration.
+    """
+
+    @pytest.mark.requirement("FR-028")
+    def test_config_accepts_secondary_registries(self) -> None:
+        """PromotionConfig accepts secondary_registries list."""
+        config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
+            ],
+            secondary_registries=[
+                "oci://secondary1.registry.com/repo",
+                "oci://secondary2.registry.com/repo",
+            ],
+        )
+        assert len(config.secondary_registries) == 2
+        assert config.secondary_registries[0] == "oci://secondary1.registry.com/repo"
+
+    @pytest.mark.requirement("FR-028")
+    def test_config_secondary_registries_defaults_to_none(self) -> None:
+        """PromotionConfig secondary_registries defaults to None."""
+        config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
+            ],
+        )
+        assert config.secondary_registries is None
+
+    @pytest.mark.requirement("FR-029")
+    def test_config_verify_secondary_digests_defaults_to_true(self) -> None:
+        """PromotionConfig verify_secondary_digests defaults to True."""
+        config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
+            ],
+        )
+        assert config.verify_secondary_digests is True
+
+    @pytest.mark.requirement("FR-029")
+    def test_config_can_disable_digest_verification(self) -> None:
+        """PromotionConfig allows disabling digest verification."""
+        config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
+            ],
+            secondary_registries=["oci://secondary.registry.com/repo"],
+            verify_secondary_digests=False,
+        )
+        assert config.verify_secondary_digests is False
+
+
+class TestRegistrySyncStatusSchema:
+    """Tests for RegistrySyncStatus schema (T079/T083).
+
+    FR-028, FR-030: Track sync status per registry.
+    """
+
+    @pytest.mark.requirement("FR-028")
+    def test_registry_sync_status_success(self) -> None:
+        """RegistrySyncStatus represents successful sync."""
+        from datetime import datetime, timezone
+
+        status = RegistrySyncStatus(
+            registry_uri="oci://secondary.registry.com/repo",
+            synced=True,
+            digest="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+            synced_at=datetime.now(timezone.utc),
+        )
+        assert status.synced is True
+        assert status.error is None
+
+    @pytest.mark.requirement("FR-030")
+    def test_registry_sync_status_failure(self) -> None:
+        """RegistrySyncStatus represents failed sync with error."""
+        status = RegistrySyncStatus(
+            registry_uri="oci://failing.registry.com/repo",
+            synced=False,
+            error="Connection refused",
+        )
+        assert status.synced is False
+        assert status.error == "Connection refused"
+        assert status.digest is None
+
+
 __all__: list[str] = [
     "TestMultiRegistryPromotionSuccess",
     "TestMultiRegistryDigestVerification",
     "TestMultiRegistryPartialFailure",
     "TestMultiRegistrySyncStatus",
+    "TestPromotionConfigSecondaryRegistries",
+    "TestRegistrySyncStatusSchema",
 ]
