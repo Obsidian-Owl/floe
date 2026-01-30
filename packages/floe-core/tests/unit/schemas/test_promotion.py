@@ -315,7 +315,11 @@ class TestGateResult:
 
 
 class TestAuthorizationConfig:
-    """Tests for AuthorizationConfig Pydantic model."""
+    """Tests for AuthorizationConfig Pydantic model.
+
+    Tests FR-046 (environment-specific authorization rules) and
+    FR-047 (group-based access control).
+    """
 
     @pytest.mark.requirement("FR-046")
     def test_authorization_config_valid(self) -> None:
@@ -348,6 +352,135 @@ class TestAuthorizationConfig:
 
         config = AuthorizationConfig(separation_of_duties=True)
         assert config.separation_of_duties is True
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_frozen(self) -> None:
+        """Test AuthorizationConfig is immutable (frozen)."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_groups=["platform-admins"],
+        )
+        with pytest.raises(Exception):  # ValidationError for frozen model
+            config.separation_of_duties = True  # type: ignore[misc]
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_extra_forbid(self) -> None:
+        """Test AuthorizationConfig rejects unknown fields."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        with pytest.raises(ValidationError, match="extra"):
+            AuthorizationConfig(
+                allowed_groups=["admins"],
+                unknown_field="value",  # type: ignore[call-arg]
+            )
+
+    @pytest.mark.requirement("FR-047")
+    def test_authorization_config_groups_only(self) -> None:
+        """Test AuthorizationConfig with only allowed_groups."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_groups=["platform-admins", "release-managers", "devops"],
+        )
+        assert config.allowed_groups == ["platform-admins", "release-managers", "devops"]
+        assert config.allowed_operators is None
+        assert config.separation_of_duties is False
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_operators_only(self) -> None:
+        """Test AuthorizationConfig with only allowed_operators."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_operators=["alice@example.com", "bob@example.com"],
+        )
+        assert config.allowed_groups is None
+        assert config.allowed_operators == ["alice@example.com", "bob@example.com"]
+
+    @pytest.mark.requirement("FR-047")
+    def test_authorization_config_empty_groups_list(self) -> None:
+        """Test AuthorizationConfig with empty groups list."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_groups=[],
+            allowed_operators=None,
+        )
+        # Empty list is different from None
+        assert config.allowed_groups == []
+        assert config.allowed_operators is None
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_empty_operators_list(self) -> None:
+        """Test AuthorizationConfig with empty operators list."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_groups=None,
+            allowed_operators=[],
+        )
+        assert config.allowed_groups is None
+        assert config.allowed_operators == []
+
+    @pytest.mark.requirement("FR-047")
+    def test_authorization_config_combined_groups_and_operators(self) -> None:
+        """Test AuthorizationConfig with both groups and operators (OR semantics)."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_groups=["admins"],
+            allowed_operators=["special-user@example.com"],
+            separation_of_duties=True,
+        )
+        # Both are set - authorization should check either
+        assert config.allowed_groups == ["admins"]
+        assert config.allowed_operators == ["special-user@example.com"]
+        assert config.separation_of_duties is True
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_json_serialization(self) -> None:
+        """Test AuthorizationConfig serializes to JSON correctly."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(
+            allowed_groups=["platform-admins"],
+            separation_of_duties=True,
+        )
+        json_data = config.model_dump()
+        assert json_data == {
+            "allowed_groups": ["platform-admins"],
+            "allowed_operators": None,
+            "separation_of_duties": True,
+        }
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_from_dict(self) -> None:
+        """Test AuthorizationConfig creation from dict."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        data = {
+            "allowed_groups": ["release-managers"],
+            "allowed_operators": ["admin@example.com"],
+            "separation_of_duties": False,
+        }
+        config = AuthorizationConfig.model_validate(data)
+        assert config.allowed_groups == ["release-managers"]
+        assert config.allowed_operators == ["admin@example.com"]
+        assert config.separation_of_duties is False
+
+    @pytest.mark.requirement("FR-046")
+    def test_authorization_config_json_schema_export(self) -> None:
+        """Test AuthorizationConfig JSON schema includes all fields."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        schema = AuthorizationConfig.model_json_schema()
+        properties = schema.get("properties", {})
+        assert "allowed_groups" in properties
+        assert "allowed_operators" in properties
+        assert "separation_of_duties" in properties
 
 
 class TestEnvironmentLock:
