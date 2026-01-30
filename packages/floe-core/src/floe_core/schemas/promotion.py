@@ -1062,3 +1062,7 @@ class PromotionStatusResponse(BaseModel):
         ...,
         description="When the status was queried",
     )
+    environment_locks: dict[str, EnvironmentLock] = Field(
+        default_factory=dict,
+        description="Lock status for each environment",
+    )
