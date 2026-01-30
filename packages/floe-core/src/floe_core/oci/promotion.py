@@ -2176,8 +2176,17 @@ class PromotionController:
         if self._get_environment(environment) is None:
             raise ValueError(f"Environment '{environment}' not found")
 
-        # TODO: T103+ - Implement unlock logic
-        raise NotImplementedError("Unlock implementation in T103+")
+        # Remove lock from cache (FR-037)
+        # Idempotent: no-op if already unlocked
+        if environment in self._environment_locks:
+            del self._environment_locks[environment]
+
+        self._log.info(
+            "unlock_environment_completed",
+            environment=environment,
+            reason=reason,
+            operator=operator,
+        )
 
     def get_lock_status(self, environment: str) -> EnvironmentLock:
         """Get the lock status for an environment.
