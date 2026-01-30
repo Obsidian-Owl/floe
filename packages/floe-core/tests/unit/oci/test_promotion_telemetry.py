@@ -605,3 +605,159 @@ class TestPromotionOpenTelemetryIntegration:
 
         attrs = dict(sync_span.attributes)
         assert attrs["secondary_count"] == 1
+
+    @pytest.mark.requirement("8C-FR-054")
+    def test_run_security_gate_span_has_timing_attributes(
+        self,
+        controller,
+        tracer_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test _run_security_gate() span includes duration_ms and status attributes."""
+        from floe_core.schemas.promotion import SecurityGateConfig
+
+        _, exporter = tracer_with_exporter
+
+        config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
+            scanner_format="trivy",
+            block_on_severity=["CRITICAL"],
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(
+                returncode=0,
+                stdout='{"Results": []}',
+                stderr="",
+            )
+            controller._run_security_gate(
+                config=config,
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+            )
+
+        spans = exporter.get_finished_spans()
+        security_span = next(s for s in spans if s.name == "floe.oci.gate.security_scan")
+
+        attrs = dict(security_span.attributes)
+        assert "duration_ms" in attrs
+        assert isinstance(attrs["duration_ms"], int)
+        assert "status" in attrs
+        assert attrs["status"] == "passed"
+
+    @pytest.mark.requirement("8C-FR-024")
+    def test_run_all_gates_span_has_timing_attributes(
+        self,
+        controller,
+        tracer_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test _run_all_gates() span includes duration_ms, gate_count, and status."""
+        from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
+
+        _, exporter = tracer_with_exporter
+
+        # Mock _run_policy_compliance_gate to return skipped (no enforcer)
+        with patch.object(
+            controller,
+            "_run_policy_compliance_gate",
+            return_value=GateResult(
+                gate=PromotionGate.POLICY_COMPLIANCE,
+                status=GateStatus.SKIPPED,
+                duration_ms=10,
+            ),
+        ):
+            controller._run_all_gates(
+                to_env="staging",
+                manifest={},
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+            )
+
+        spans = exporter.get_finished_spans()
+        gates_span = next(s for s in spans if s.name == "floe.oci.run_all_gates")
+
+        attrs = dict(gates_span.attributes)
+        assert "duration_ms" in attrs
+        assert isinstance(attrs["duration_ms"], int)
+        assert "gate_count" in attrs
+        assert isinstance(attrs["gate_count"], int)
+        assert "status" in attrs
+        assert attrs["status"] in ["passed", "failed"]
+
+    @pytest.mark.requirement("8C-FR-024")
+    def test_sync_to_registries_span_has_timing_attributes_empty(
+        self,
+        controller,
+        tracer_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test _sync_to_registries() span with no clients has timing attributes."""
+        _, exporter = tracer_with_exporter
+
+        # No secondary clients = skipped
+        controller._sync_to_registries(
+            tag="v1.0.0",
+            to_env="staging",
+            artifact_digest="sha256:abc123",
+            secondary_clients=[],
+        )
+
+        spans = exporter.get_finished_spans()
+        sync_span = next(s for s in spans if s.name == "floe.oci.sync_to_registries")
+
+        attrs = dict(sync_span.attributes)
+        assert attrs["duration_ms"] == 0
+        assert attrs["success_count"] == 0
+        assert attrs["status"] == "skipped"
+
+    @pytest.mark.requirement("8C-FR-024")
+    def test_sync_to_registries_span_has_timing_attributes_with_clients(
+        self,
+        controller,
+        tracer_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test _sync_to_registries() span with clients has timing attributes."""
+        _, exporter = tracer_with_exporter
+
+        # Create mock secondary client
+        mock_secondary_client = Mock()
+        mock_secondary_client.registry_uri = "oci://secondary.example.com/floe"
+        mock_secondary_client.copy_tag.return_value = None
+        mock_secondary_client.get_artifact_digest.return_value = "sha256:abc123"
+
+        controller._sync_to_registries(
+            tag="v1.0.0",
+            to_env="staging",
+            artifact_digest="sha256:abc123",
+            secondary_clients=[mock_secondary_client],
+        )
+
+        spans = exporter.get_finished_spans()
+        sync_span = next(s for s in spans if s.name == "floe.oci.sync_to_registries")
+
+        attrs = dict(sync_span.attributes)
+        assert "duration_ms" in attrs
+        assert isinstance(attrs["duration_ms"], int)
+        assert "success_count" in attrs
+        assert isinstance(attrs["success_count"], int)
+        assert "status" in attrs
+        assert attrs["status"] in ["completed", "partial"]
+
+    @pytest.mark.requirement("8C-FR-024")
+    def test_policy_compliance_gate_span_has_timing_attributes(
+        self,
+        controller,
+        tracer_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
+    ) -> None:
+        """Test _run_policy_compliance_gate() span has duration_ms and status."""
+        _, exporter = tracer_with_exporter
+
+        # Run policy gate (will skip because no enforcer configured)
+        controller._run_policy_compliance_gate(manifest={})
+
+        spans = exporter.get_finished_spans()
+        policy_span = next(
+            s for s in spans if s.name == "floe.oci.gate.policy_compliance"
+        )
+
+        attrs = dict(policy_span.attributes)
+        assert "duration_ms" in attrs
+        assert isinstance(attrs["duration_ms"], int)
+        assert "status" in attrs
+        assert attrs["status"] == "skipped"
