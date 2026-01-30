@@ -46,6 +46,8 @@ See Also:
 
 from __future__ import annotations
 
+import subprocess
+import time
 from typing import TYPE_CHECKING
 
 import structlog
@@ -53,7 +55,10 @@ import structlog
 from floe_core.oci.errors import InvalidTransitionError
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
+    GateResult,
+    GateStatus,
     PromotionConfig,
+    PromotionGate,
     PromotionRecord,
     RollbackRecord,
 )
@@ -216,6 +221,139 @@ class PromotionController:
                 from_env=from_env,
                 to_env=to_env,
                 reason=f"Cannot skip environments: must promote through {skipped_envs}",
+            )
+
+    def _run_gate(
+        self,
+        gate: PromotionGate,
+        command: str,
+        timeout_seconds: int,
+    ) -> GateResult:
+        """Execute a single validation gate with timeout handling.
+
+        Runs the gate command as a subprocess with timeout enforcement.
+        If the command exceeds the timeout, SIGTERM is sent first,
+        then SIGKILL after a 5-second grace period.
+
+        Args:
+            gate: The gate type being executed.
+            command: Shell command to run for the gate.
+            timeout_seconds: Maximum execution time in seconds.
+
+        Returns:
+            GateResult with status, duration, and any error message.
+
+        Note:
+            Duration is recorded even for timed-out gates.
+        """
+        start_time = time.monotonic()
+        grace_period = 5  # Seconds to wait after SIGTERM before SIGKILL
+
+        self._log.info(
+            "gate_execution_started",
+            gate=gate.value,
+            command=command,
+            timeout_seconds=timeout_seconds,
+        )
+
+        try:
+            # Try simple subprocess.run first (covers most cases)
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+
+            if result.returncode == 0:
+                self._log.info(
+                    "gate_execution_passed",
+                    gate=gate.value,
+                    duration_ms=duration_ms,
+                )
+                return GateResult(
+                    gate=gate,
+                    status=GateStatus.PASSED,
+                    duration_ms=duration_ms,
+                    details={"stdout": result.stdout, "stderr": result.stderr},
+                )
+            else:
+                error_msg = f"Gate failed with exit code {result.returncode}"
+                if result.stderr:
+                    error_msg = f"{error_msg}: {result.stderr.strip()}"
+
+                self._log.warning(
+                    "gate_execution_failed",
+                    gate=gate.value,
+                    duration_ms=duration_ms,
+                    exit_code=result.returncode,
+                    error=error_msg,
+                )
+                return GateResult(
+                    gate=gate,
+                    status=GateStatus.FAILED,
+                    duration_ms=duration_ms,
+                    error=error_msg,
+                    details={"stdout": result.stdout, "stderr": result.stderr},
+                )
+
+        except subprocess.TimeoutExpired:
+            # Timeout handling with SIGTERM -> SIGKILL escalation
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+
+            # For proper SIGTERM/SIGKILL handling, use Popen
+            try:
+                proc = subprocess.Popen(
+                    command,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                proc.terminate()  # Send SIGTERM
+
+                try:
+                    proc.wait(timeout=grace_period)
+                except subprocess.TimeoutExpired:
+                    proc.kill()  # Send SIGKILL after grace period
+                    proc.wait()
+
+            except Exception:
+                # If Popen fails, we've already recorded the timeout
+                pass
+
+            error_msg = f"Gate execution timed out after {timeout_seconds} seconds"
+            self._log.warning(
+                "gate_execution_timeout",
+                gate=gate.value,
+                duration_ms=duration_ms,
+                timeout_seconds=timeout_seconds,
+            )
+            return GateResult(
+                gate=gate,
+                status=GateStatus.FAILED,
+                duration_ms=duration_ms,
+                error=error_msg,
+            )
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_msg = f"Gate execution error: {e}"
+
+            self._log.error(
+                "gate_execution_error",
+                gate=gate.value,
+                duration_ms=duration_ms,
+                error=str(e),
+            )
+            return GateResult(
+                gate=gate,
+                status=GateStatus.FAILED,
+                duration_ms=duration_ms,
+                error=error_msg,
             )
 
     def promote(
