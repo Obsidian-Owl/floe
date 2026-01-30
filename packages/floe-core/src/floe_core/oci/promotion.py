@@ -46,12 +46,52 @@ See Also:
 
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
 import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import structlog
+
+# Security: Strict pattern for OCI tags to prevent command injection
+# Allows: v1.0.0, 1.2.3, v1.0.0-alpha, v1.0.0-rc.1, latest, latest-staging
+# Blocks: shell metacharacters (;, |, &, $, `, etc.)
+SAFE_TAG_PATTERN = re.compile(
+    r"^[a-zA-Z0-9]"  # Must start with alphanumeric
+    r"[a-zA-Z0-9._-]*$"  # Only allow alphanumeric, dots, underscores, hyphens
+)
+MAX_TAG_LENGTH = 128  # OCI spec limit
+
+
+def validate_tag_security(tag: str) -> None:
+    """Validate tag for command injection safety.
+
+    Args:
+        tag: The artifact tag to validate.
+
+    Raises:
+        ValueError: If tag contains unsafe characters or is invalid format.
+
+    Security:
+        This validation prevents command injection attacks when tags are used
+        in shell commands for security scanning gates. Tags must match the
+        SAFE_TAG_PATTERN which only allows alphanumeric characters, dots,
+        underscores, and hyphens.
+    """
+    if not tag:
+        raise ValueError("Tag cannot be empty")
+
+    if len(tag) > MAX_TAG_LENGTH:
+        raise ValueError(f"Tag exceeds maximum length of {MAX_TAG_LENGTH} characters")
+
+    if not SAFE_TAG_PATTERN.match(tag):
+        raise ValueError(
+            f"Invalid tag format: '{tag}'. "
+            "Tags must start with alphanumeric and contain only "
+            "alphanumeric characters, dots, underscores, or hyphens."
+        )
 
 from floe_core.oci.errors import (
     AuthorizationError,
@@ -805,8 +845,10 @@ class PromotionController:
             )
 
             try:
-                # Substitute artifact reference in command
-                command = config.command.replace("${ARTIFACT_REF}", artifact_ref)
+                # Security: Quote artifact reference to prevent command injection
+                # shlex.quote() escapes shell metacharacters (;, |, &, $, `, etc.)
+                safe_artifact_ref = shlex.quote(artifact_ref)
+                command = config.command.replace("${ARTIFACT_REF}", safe_artifact_ref)
 
                 self._log.debug(
                     "security_gate_command",
@@ -1131,6 +1173,10 @@ class PromotionController:
 
         Returns:
             Command string or None if not configured.
+
+        Security:
+            Uses shlex.quote() to escape artifact_ref, preventing command
+            injection via malicious tag names containing shell metacharacters.
         """
         if self.promotion.gate_commands is None:
             return None
@@ -1148,8 +1194,9 @@ class PromotionController:
             # SecurityGateConfig has .command attribute
             command = command_config.command
 
-        # Substitute artifact reference
-        return command.replace("${ARTIFACT_REF}", artifact_ref)
+        # Security: Quote artifact reference to prevent command injection
+        safe_artifact_ref = shlex.quote(artifact_ref)
+        return command.replace("${ARTIFACT_REF}", safe_artifact_ref)
 
     def _verify_signature(
         self,
@@ -1961,6 +2008,10 @@ class PromotionController:
 
         from floe_core.oci.errors import GateValidationError, SignatureVerificationError
 
+        # Security: Validate tag format to prevent command injection
+        # Must be done before tag is used in any shell commands via gates
+        validate_tag_security(tag)
+
         # Build artifact reference for span attributes
         artifact_ref = self.client._build_target_ref(tag)
 
@@ -2331,6 +2382,10 @@ class PromotionController:
         Example:
             >>> record = controller.rollback("v1.0.0", "prod", "Hotfix rollback", "sre@example.com")
         """
+        # Security: Validate tag format to prevent command injection
+        # Must be done before tag is used in any operations
+        validate_tag_security(tag)
+
         # Build artifact reference for span attributes
         artifact_ref = self.client._build_target_ref(tag)
 

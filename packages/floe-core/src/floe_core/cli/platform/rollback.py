@@ -239,9 +239,16 @@ def rollback_command(
         RegistryUnavailableError,
         VersionNotPromotedError,
     )
-    from floe_core.oci.promotion import PromotionController
+    from floe_core.oci.promotion import PromotionController, validate_tag_security
     from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
     from floe_core.schemas.promotion import PromotionConfig
+
+    # Security: Validate tag format early to prevent command injection
+    try:
+        validate_tag_security(tag)
+    except ValueError as e:
+        error(f"Invalid tag: {e}")
+        sys.exit(2)
 
     # Validate reason is provided unless analyze mode
     if not analyze and not reason:
