@@ -19,18 +19,23 @@ class TestRollbackOpenTelemetrySpan:
 
     @pytest.fixture
     def controller(self) -> MagicMock:
-        """Create a PromotionController with mocked OCI client."""
-        from floe_core.oci.client import OCIClient
+        """Create a PromotionController with fully mocked OCI client."""
         from floe_core.oci.promotion import PromotionController
-        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
 
-        auth = RegistryAuth(type=AuthType.ANONYMOUS)
-        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
-        oci_client = OCIClient.from_registry_config(registry_config)
-        promotion = PromotionConfig()
+        # Create a mock OCI client to avoid network calls
+        mock_client = Mock()
+        mock_client.inspect.return_value = Mock(
+            digest="sha256:" + "a" * 64,  # Valid sha256 format
+            annotations={},
+        )
+        mock_client.create_tag.return_value = None
+        mock_client.list.return_value = []  # Empty list for rollback number calculation
 
-        return PromotionController(client=oci_client, promotion=promotion)
+        # Use signature_enforcement="off" to skip verification in tests
+        promotion = PromotionConfig(signature_enforcement="off")
+
+        return PromotionController(client=mock_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-024")
     def test_rollback_creates_span(self, controller: MagicMock) -> None:
