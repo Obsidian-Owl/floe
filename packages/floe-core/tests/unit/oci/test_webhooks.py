@@ -212,6 +212,34 @@ class TestWebhookDelivery:
             assert result.success is False
             assert mock_post.call_count == 4  # 1 initial + 3 retries
 
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_uses_exponential_backoff(
+        self, webhook_config: MagicMock, promotion_event: dict
+    ) -> None:
+        """WebhookNotifier uses exponential backoff between retries."""
+        from floe_core.oci.webhooks import WebhookNotifier
+
+        notifier = WebhookNotifier(config=webhook_config)
+
+        with (
+            patch("httpx.AsyncClient.post") as mock_post,
+            patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        ):
+            # All calls fail to trigger retries
+            mock_post.return_value = MagicMock(status_code=500)
+
+            await notifier.notify("promote", promotion_event)
+
+            # Should have 3 sleeps (before each retry, not before initial)
+            assert mock_sleep.call_count == 3
+
+            # Verify exponential backoff delays: 1s, 2s, 4s (base=1, 2^0, 2^1, 2^2)
+            sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
+            assert sleep_calls[0] == 1.0  # 1 * 2^0 = 1
+            assert sleep_calls[1] == 2.0  # 1 * 2^1 = 2
+            assert sleep_calls[2] == 4.0  # 1 * 2^2 = 4
+
 
 class TestWebhookPayload:
     """Tests for webhook payload formatting (FR-043)."""
