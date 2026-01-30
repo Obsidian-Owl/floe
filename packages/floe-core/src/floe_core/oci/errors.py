@@ -600,18 +600,22 @@ class AuthorizationError(OCIError):
 
     This error indicates that the operator does not have permission to
     promote to the target environment, or a separation of duties violation.
+    Includes actionable guidance for the user (T132 - FR-048).
 
     Attributes:
         operator: The identity of the operator attempting the action.
         required_groups: Groups that have permission for this action.
         reason: Description of why authorization failed.
+        environment: Target environment for the promotion (optional).
+        allowed_operators: Specific operators allowed for this environment (optional).
         exit_code: CLI exit code (12).
 
     Example:
         >>> raise AuthorizationError(
         ...     operator="user@example.com",
         ...     required_groups=["platform-admins"],
-        ...     reason="Not a member of required groups"
+        ...     reason="Not a member of required groups",
+        ...     environment="prod",
         ... )
     """
 
@@ -622,16 +626,82 @@ class AuthorizationError(OCIError):
         operator: str,
         required_groups: list[str],
         reason: str,
+        environment: str | None = None,
+        allowed_operators: list[str] | None = None,
     ) -> None:
         self.operator = operator
         self.required_groups = required_groups
         self.reason = reason
+        self.environment = environment
+        self.allowed_operators = allowed_operators
 
-        groups_str = ", ".join(required_groups) if required_groups else "none configured"
-        super().__init__(
-            f"Authorization failed for '{operator}': {reason}. "
-            f"Required groups: [{groups_str}]"
-        )
+        # Build actionable error message (T132 - FR-048)
+        message_parts = [f"Authorization failed for operator '{operator}'"]
+
+        if environment:
+            message_parts.append(f"to promote to '{environment}' environment")
+
+        message_parts.append(f": {reason}")
+
+        # Add actionable guidance
+        guidance_parts = []
+
+        if required_groups:
+            groups_str = ", ".join(required_groups)
+            guidance_parts.append(f"Required groups: [{groups_str}]")
+            guidance_parts.append(
+                "To get access: Request membership in one of the required groups "
+                "from your platform administrator."
+            )
+        elif allowed_operators:
+            operators_str = ", ".join(allowed_operators[:3])
+            if len(allowed_operators) > 3:
+                operators_str += f", ... ({len(allowed_operators) - 3} more)"
+            guidance_parts.append(f"Allowed operators: [{operators_str}]")
+            guidance_parts.append(
+                "Contact a listed operator or your platform administrator "
+                "to perform this promotion."
+            )
+
+        if environment:
+            guidance_parts.append(
+                f"Run 'floe promote info --env={environment}' to see authorization rules."
+            )
+
+        full_message = "".join(message_parts)
+        if guidance_parts:
+            full_message += "\n\n" + "\n".join(guidance_parts)
+
+        super().__init__(full_message)
+
+    def get_actionable_guidance(self) -> str:
+        """Get actionable guidance for resolving authorization failure.
+
+        Returns:
+            Human-readable guidance on how to resolve the authorization issue.
+        """
+        guidance = []
+
+        if self.required_groups:
+            guidance.append(
+                "1. Request access to one of the required groups: "
+                f"{', '.join(self.required_groups)}"
+            )
+            guidance.append("2. Contact your platform administrator for group membership")
+        elif self.allowed_operators:
+            guidance.append(
+                "1. Contact one of the allowed operators to perform this promotion"
+            )
+            guidance.append("2. Request to be added to the allowed_operators list")
+
+        if self.environment:
+            guidance.append(
+                f"3. Review authorization rules: floe promote info --env={self.environment}"
+            )
+
+        guidance.append("4. Check your identity: floe whoami")
+
+        return "\n".join(guidance)
 
 
 class EnvironmentLockedError(OCIError):
