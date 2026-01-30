@@ -197,7 +197,8 @@ class TestPromoteSuccessPath:
 
             assert result.artifact_digest == expected_digest
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-011")
     def test_promote_runs_all_gates(self, controller: MagicMock) -> None:
         """Test promote() runs all configured gates before creating tags.
 
@@ -243,7 +244,7 @@ class TestPromoteSuccessPath:
             mock_gates.assert_called_once()
             assert len(result.gate_results) == 2
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
     def test_promote_verifies_signature(self, controller: MagicMock) -> None:
         """Test promote() verifies artifact signature before promotion.
 
@@ -277,6 +278,8 @@ class TestPromoteSuccessPath:
             assert result.signature_verified is True
 
     @pytest.mark.requirement("8C-FR-001")
+    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-003")
     def test_promote_creates_environment_tag(self, controller: MagicMock) -> None:
         """Test promote() creates immutable environment-specific tag.
 
@@ -313,6 +316,7 @@ class TestPromoteSuccessPath:
             assert "staging" in str(call_args) or "v1.0.0" in str(call_args)
 
     @pytest.mark.requirement("8C-FR-001")
+    @pytest.mark.requirement("8C-FR-007")
     def test_promote_dry_run_does_not_modify(self, controller: MagicMock) -> None:
         """Test promote() with dry_run=True validates but doesn't create tags.
 
@@ -434,7 +438,8 @@ class TestPromoteGateFailurePath:
 
         return PromotionController(client=oci_client, promotion=promotion)
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-011")
     def test_promote_raises_gate_validation_error_on_gate_failure(
         self, controller: MagicMock
     ) -> None:
@@ -471,7 +476,8 @@ class TestPromoteGateFailurePath:
             assert exc_info.value.gate == "tests"
             assert "failed" in exc_info.value.details.lower()
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-011")
     def test_promote_includes_failed_gate_in_error(
         self, controller: MagicMock
     ) -> None:
@@ -508,7 +514,7 @@ class TestPromoteGateFailurePath:
             assert exc_info.value.gate == "security_scan"
             assert "CVE" in exc_info.value.details
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
     def test_promote_stops_at_first_gate_failure(
         self, controller: MagicMock
     ) -> None:
@@ -555,7 +561,7 @@ class TestPromoteGateFailurePath:
             mock_verify.assert_not_called()
             mock_create_tag.assert_not_called()
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
     def test_promote_gate_failure_does_not_create_tags(
         self, controller: MagicMock
     ) -> None:
@@ -599,7 +605,7 @@ class TestPromoteGateFailurePath:
             mock_update_latest.assert_not_called()
             mock_store.assert_not_called()
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
     def test_promote_gate_failure_exit_code(
         self, controller: MagicMock
     ) -> None:
@@ -635,7 +641,8 @@ class TestPromoteGateFailurePath:
             # Exit code 8 for gate validation failure
             assert exc_info.value.exit_code == 8
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-007")
     def test_promote_dry_run_reports_gate_failure_without_raising(
         self, controller: MagicMock
     ) -> None:
@@ -712,7 +719,7 @@ class TestPromoteGateFailurePath:
 
             assert "timed out" in exc_info.value.details.lower()
 
-    @pytest.mark.requirement("8C-FR-002")
+    @pytest.mark.requirement("8C-FR-006")
     def test_promote_multiple_gate_failures_reports_first(
         self, controller: MagicMock
     ) -> None:
@@ -774,7 +781,8 @@ class TestPromoteSignatureFailurePath:
 
         return PromotionController(client=oci_client, promotion=promotion)
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_raises_signature_verification_error_on_invalid_signature(
         self, controller: MagicMock
     ) -> None:
@@ -808,7 +816,8 @@ class TestPromoteSignatureFailurePath:
 
             assert "Invalid signature" in exc_info.value.reason
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_raises_signature_verification_error_on_unsigned_artifact(
         self, controller: MagicMock
     ) -> None:
@@ -842,7 +851,8 @@ class TestPromoteSignatureFailurePath:
 
             assert "no signature" in exc_info.value.reason.lower()
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_raises_signature_verification_error_on_untrusted_signer(
         self, controller: MagicMock
     ) -> None:
@@ -879,7 +889,8 @@ class TestPromoteSignatureFailurePath:
             assert exc_info.value.expected_signer == "repo:acme/floe:ref:refs/heads/main"
             assert exc_info.value.actual_signer == "repo:unknown/repo:ref:refs/heads/main"
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_signature_failure_does_not_create_tags(
         self, controller: MagicMock
     ) -> None:
@@ -922,7 +933,8 @@ class TestPromoteSignatureFailurePath:
             mock_update_latest.assert_not_called()
             mock_store.assert_not_called()
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_signature_failure_exit_code(
         self, controller: MagicMock
     ) -> None:
@@ -957,7 +969,8 @@ class TestPromoteSignatureFailurePath:
             # Exit code 6 for signature verification failure
             assert exc_info.value.exit_code == 6
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_signature_failure_after_gates_pass(
         self, controller: MagicMock
     ) -> None:
@@ -1001,7 +1014,8 @@ class TestPromoteSignatureFailurePath:
             mock_gates.assert_called_once()
             mock_verify.assert_called_once()
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-011")
     def test_promote_signature_verification_records_result_on_success(
         self, controller: MagicMock
     ) -> None:
@@ -1035,7 +1049,8 @@ class TestPromoteSignatureFailurePath:
 
             assert result.signature_verified is True
 
-    @pytest.mark.requirement("8C-FR-006")
+    @pytest.mark.requirement("8C-FR-004")
+    @pytest.mark.requirement("8C-FR-005")
     def test_promote_includes_artifact_ref_in_signature_error(
         self, controller: MagicMock
     ) -> None:
