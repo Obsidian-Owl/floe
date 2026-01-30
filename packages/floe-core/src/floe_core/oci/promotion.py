@@ -653,97 +653,105 @@ class PromotionController:
         Note:
             If no PolicyEnforcer is configured, returns SKIPPED status.
         """
-        start_time = time.monotonic()
+        # Create OpenTelemetry span for policy compliance gate
+        with create_span(
+            "floe.oci.gate.policy_compliance",
+            attributes={
+                "dry_run": dry_run,
+            },
+        ):
+            start_time = time.monotonic()
 
-        # If no PolicyEnforcer configured, skip this gate
-        if self.policy_enforcer is None:
-            self._log.info(
-                "policy_compliance_gate_skipped",
-                reason="no_policy_enforcer_configured",
-            )
-            return GateResult(
-                gate=PromotionGate.POLICY_COMPLIANCE,
-                status=GateStatus.SKIPPED,
-                duration_ms=0,
-            )
-
-        self._log.info(
-            "policy_compliance_gate_started",
-            dry_run=dry_run,
-        )
-
-        try:
-            # Call PolicyEnforcer.enforce()
-            result = self.policy_enforcer.enforce(
-                manifest=manifest,
-                dry_run=dry_run,
-            )
-
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-
-            if result.passed:
+            # If no PolicyEnforcer configured, skip this gate
+            if self.policy_enforcer is None:
                 self._log.info(
-                    "policy_compliance_gate_passed",
-                    duration_ms=duration_ms,
-                    violation_count=len(result.violations),
+                    "policy_compliance_gate_skipped",
+                    reason="no_policy_enforcer_configured",
                 )
                 return GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
-                    status=GateStatus.PASSED,
-                    duration_ms=duration_ms,
-                    details={
-                        "enforcement_level": result.enforcement_level,
-                        "warning_count": result.warning_count,
-                    },
+                    status=GateStatus.SKIPPED,
+                    duration_ms=0,
                 )
-            else:
-                # Enforcement failed - extract violation summary
-                violation_summary = (
-                    f"{result.error_count} error(s), {result.warning_count} warning(s)"
-                )
-                error_msg = f"Policy compliance failed: {violation_summary}"
 
-                self._log.warning(
-                    "policy_compliance_gate_failed",
+            self._log.info(
+                "policy_compliance_gate_started",
+                dry_run=dry_run,
+            )
+
+            try:
+                # Call PolicyEnforcer.enforce()
+                result = self.policy_enforcer.enforce(
+                    manifest=manifest,
+                    dry_run=dry_run,
+                )
+
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+
+                if result.passed:
+                    self._log.info(
+                        "policy_compliance_gate_passed",
+                        duration_ms=duration_ms,
+                        violation_count=len(result.violations),
+                    )
+                    return GateResult(
+                        gate=PromotionGate.POLICY_COMPLIANCE,
+                        status=GateStatus.PASSED,
+                        duration_ms=duration_ms,
+                        details={
+                            "enforcement_level": result.enforcement_level,
+                            "warning_count": result.warning_count,
+                        },
+                    )
+                else:
+                    # Enforcement failed - extract violation summary
+                    violation_summary = (
+                        f"{result.error_count} error(s), "
+                        f"{result.warning_count} warning(s)"
+                    )
+                    error_msg = f"Policy compliance failed: {violation_summary}"
+
+                    self._log.warning(
+                        "policy_compliance_gate_failed",
+                        duration_ms=duration_ms,
+                        error_count=result.error_count,
+                        warning_count=result.warning_count,
+                    )
+                    return GateResult(
+                        gate=PromotionGate.POLICY_COMPLIANCE,
+                        status=GateStatus.FAILED,
+                        duration_ms=duration_ms,
+                        error=error_msg,
+                        details={
+                            "enforcement_level": result.enforcement_level,
+                            "error_count": result.error_count,
+                            "warning_count": result.warning_count,
+                            "violations": [
+                                {
+                                    "error_code": v.error_code,
+                                    "model_name": v.model_name,
+                                    "message": v.message,
+                                }
+                                for v in result.violations[:5]  # Limit to first 5
+                            ],
+                        },
+                    )
+
+            except Exception as e:
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                error_msg = f"Policy compliance gate error: {e}"
+
+                self._log.error(
+                    "policy_compliance_gate_error",
                     duration_ms=duration_ms,
-                    error_count=result.error_count,
-                    warning_count=result.warning_count,
+                    error=str(e),
                 )
                 return GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
                     status=GateStatus.FAILED,
                     duration_ms=duration_ms,
                     error=error_msg,
-                    details={
-                        "enforcement_level": result.enforcement_level,
-                        "error_count": result.error_count,
-                        "warning_count": result.warning_count,
-                        "violations": [
-                            {
-                                "error_code": v.error_code,
-                                "model_name": v.model_name,
-                                "message": v.message,
-                            }
-                            for v in result.violations[:5]  # Limit to first 5
-                        ],
-                    },
                 )
-
-        except Exception as e:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            error_msg = f"Policy compliance gate error: {e}"
-
-            self._log.error(
-                "policy_compliance_gate_error",
-                duration_ms=duration_ms,
-                error=str(e),
-            )
-            return GateResult(
-                gate=PromotionGate.POLICY_COMPLIANCE,
-                status=GateStatus.FAILED,
-                duration_ms=duration_ms,
-                error=error_msg,
-            )
 
     def _run_security_gate(
         self,
@@ -772,46 +780,109 @@ class PromotionController:
             - Evaluates vulnerabilities against severity thresholds
             - Returns FAILED if blocking vulnerabilities found
         """
-        start_time = time.monotonic()
-        self._log.info(
-            "security_gate_started",
-            scanner_format=config.scanner_format,
-            block_on_severity=config.block_on_severity,
-            ignore_unfixed=config.ignore_unfixed,
-        )
-
-        try:
-            # Substitute artifact reference in command
-            command = config.command.replace("${ARTIFACT_REF}", artifact_ref)
-
-            self._log.debug(
-                "security_gate_command",
-                command=command,
-                timeout_seconds=timeout_seconds,
+        # Create OpenTelemetry span for security gate
+        with create_span(
+            "floe.oci.gate.security_scan",
+            attributes={
+                "scanner_format": config.scanner_format,
+                "artifact_ref": artifact_ref,
+            },
+        ):
+            start_time = time.monotonic()
+            self._log.info(
+                "security_gate_started",
+                scanner_format=config.scanner_format,
+                block_on_severity=config.block_on_severity,
+                ignore_unfixed=config.ignore_unfixed,
             )
 
-            # Run the scanner command
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=min(timeout_seconds, config.timeout_seconds),
-            )
+            try:
+                # Substitute artifact reference in command
+                command = config.command.replace("${ARTIFACT_REF}", artifact_ref)
 
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-
-            # Check for command failure (non-zero exit that isn't just findings)
-            # Note: Trivy returns 0 even with vulnerabilities, Grype may vary
-            if result.returncode != 0 and not result.stdout:
-                error_msg = (
-                    f"Security scanner failed with exit code {result.returncode}: "
-                    f"{result.stderr[:500] if result.stderr else 'No error output'}"
+                self._log.debug(
+                    "security_gate_command",
+                    command=command,
+                    timeout_seconds=timeout_seconds,
                 )
+
+                # Run the scanner command
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=min(timeout_seconds, config.timeout_seconds),
+                )
+
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+
+                # Check for command failure (non-zero exit that isn't just findings)
+                # Note: Trivy returns 0 even with vulnerabilities, Grype may vary
+                if result.returncode != 0 and not result.stdout:
+                    error_msg = (
+                        f"Security scanner failed with exit code {result.returncode}: "
+                        f"{result.stderr[:500] if result.stderr else 'No error output'}"
+                    )
+                    self._log.error(
+                        "security_gate_scanner_failed",
+                        exit_code=result.returncode,
+                        stderr=result.stderr[:500] if result.stderr else None,
+                    )
+                    return GateResult(
+                        gate=PromotionGate.SECURITY_SCAN,
+                        status=GateStatus.FAILED,
+                        duration_ms=duration_ms,
+                        error=error_msg,
+                    )
+
+                # Parse the scanner output
+                scanner_output = result.stdout
+                if config.scanner_format == "trivy":
+                    scan_result = parse_trivy_output(
+                        output=scanner_output,
+                        block_on_severity=config.block_on_severity,
+                        ignore_unfixed=config.ignore_unfixed,
+                    )
+                else:  # grype
+                    scan_result = parse_grype_output(
+                        output=scanner_output,
+                        block_on_severity=config.block_on_severity,
+                        ignore_unfixed=config.ignore_unfixed,
+                    )
+
+                # Evaluate the security gate
+                evaluation = evaluate_security_gate(scan_result, config)
+
+                self._log.info(
+                    "security_gate_evaluated",
+                    passed=evaluation.passed,
+                    total_vulnerabilities=scan_result.total_vulnerabilities,
+                    blocking_cves_count=len(evaluation.blocking_cves),
+                    ignored_unfixed=scan_result.ignored_unfixed,
+                    duration_ms=duration_ms,
+                )
+
+                if evaluation.passed:
+                    return GateResult(
+                        gate=PromotionGate.SECURITY_SCAN,
+                        status=GateStatus.PASSED,
+                        duration_ms=duration_ms,
+                    )
+                else:
+                    return GateResult(
+                        gate=PromotionGate.SECURITY_SCAN,
+                        status=GateStatus.FAILED,
+                        duration_ms=duration_ms,
+                        error=evaluation.reason,
+                    )
+
+            except subprocess.TimeoutExpired:
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                error_msg = f"Security scan timed out after {timeout_seconds}s"
                 self._log.error(
-                    "security_gate_scanner_failed",
-                    exit_code=result.returncode,
-                    stderr=result.stderr[:500] if result.stderr else None,
+                    "security_gate_timeout",
+                    timeout_seconds=timeout_seconds,
                 )
                 return GateResult(
                     gate=PromotionGate.SECURITY_SCAN,
@@ -820,90 +891,35 @@ class PromotionController:
                     error=error_msg,
                 )
 
-            # Parse the scanner output
-            scanner_output = result.stdout
-            if config.scanner_format == "trivy":
-                scan_result = parse_trivy_output(
-                    output=scanner_output,
-                    block_on_severity=config.block_on_severity,
-                    ignore_unfixed=config.ignore_unfixed,
+            except SecurityGateParseError as e:
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                error_msg = f"Failed to parse security scanner output: {e}"
+                self._log.error(
+                    "security_gate_parse_error",
+                    scanner_format=config.scanner_format,
+                    error=str(e),
                 )
-            else:  # grype
-                scan_result = parse_grype_output(
-                    output=scanner_output,
-                    block_on_severity=config.block_on_severity,
-                    ignore_unfixed=config.ignore_unfixed,
-                )
-
-            # Evaluate the security gate
-            evaluation = evaluate_security_gate(scan_result, config)
-
-            self._log.info(
-                "security_gate_evaluated",
-                passed=evaluation.passed,
-                total_vulnerabilities=scan_result.total_vulnerabilities,
-                blocking_cves_count=len(evaluation.blocking_cves),
-                ignored_unfixed=scan_result.ignored_unfixed,
-                duration_ms=duration_ms,
-            )
-
-            if evaluation.passed:
-                return GateResult(
-                    gate=PromotionGate.SECURITY_SCAN,
-                    status=GateStatus.PASSED,
-                    duration_ms=duration_ms,
-                )
-            else:
                 return GateResult(
                     gate=PromotionGate.SECURITY_SCAN,
                     status=GateStatus.FAILED,
                     duration_ms=duration_ms,
-                    error=evaluation.reason,
+                    error=error_msg,
                 )
 
-        except subprocess.TimeoutExpired:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            error_msg = f"Security scan timed out after {timeout_seconds}s"
-            self._log.error(
-                "security_gate_timeout",
-                timeout_seconds=timeout_seconds,
-            )
-            return GateResult(
-                gate=PromotionGate.SECURITY_SCAN,
-                status=GateStatus.FAILED,
-                duration_ms=duration_ms,
-                error=error_msg,
-            )
-
-        except SecurityGateParseError as e:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            error_msg = f"Failed to parse security scanner output: {e}"
-            self._log.error(
-                "security_gate_parse_error",
-                scanner_format=config.scanner_format,
-                error=str(e),
-            )
-            return GateResult(
-                gate=PromotionGate.SECURITY_SCAN,
-                status=GateStatus.FAILED,
-                duration_ms=duration_ms,
-                error=error_msg,
-            )
-
-        except Exception as e:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            error_msg = f"Security gate error: {e}"
-            self._log.error(
-                "security_gate_error",
-                duration_ms=duration_ms,
-                error=str(e),
-            )
-            return GateResult(
-                gate=PromotionGate.SECURITY_SCAN,
-                status=GateStatus.FAILED,
-                duration_ms=duration_ms,
-                error=error_msg,
-            )
+            except Exception as e:
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                error_msg = f"Security gate error: {e}"
+                self._log.error(
+                    "security_gate_error",
+                    duration_ms=duration_ms,
+                    error=str(e),
+                )
+                return GateResult(
+                    gate=PromotionGate.SECURITY_SCAN,
+                    status=GateStatus.FAILED,
+                    duration_ms=duration_ms,
+                    error=error_msg,
+                )
 
     def _run_all_gates(
         self,
@@ -931,54 +947,98 @@ class PromotionController:
         Raises:
             ValueError: If target environment is not found.
         """
-        # Get environment configuration
-        env_config = self._get_environment(to_env)
-        if env_config is None:
-            raise ValueError(f"Environment '{to_env}' not found in promotion path")
+        # Create OpenTelemetry span for run_all_gates operation
+        with create_span(
+            "floe.oci.run_all_gates",
+            attributes={
+                "environment": to_env,
+                "dry_run": dry_run,
+            },
+        ):
+            # Get environment configuration
+            env_config = self._get_environment(to_env)
+            if env_config is None:
+                raise ValueError(f"Environment '{to_env}' not found in promotion path")
 
-        self._log.info(
-            "run_all_gates_started",
-            environment=to_env,
-            gates=[g.value for g in env_config.gates.keys()],
-            dry_run=dry_run,
-        )
-
-        results: list[GateResult] = []
-        timeout_seconds = env_config.gate_timeout_seconds
-
-        # Always run policy_compliance gate first (mandatory)
-        policy_result = self._run_policy_compliance_gate(
-            manifest=manifest,
-            dry_run=dry_run,
-        )
-        results.append(policy_result)
-
-        # Check for failure (stop unless dry_run)
-        if policy_result.status == GateStatus.FAILED and not dry_run:
-            self._log.warning(
-                "run_all_gates_stopped",
-                reason="policy_compliance_failed",
-                results_count=len(results),
+            self._log.info(
+                "run_all_gates_started",
+                environment=to_env,
+                gates=[g.value for g in env_config.gates.keys()],
+                dry_run=dry_run,
             )
-            return results
 
-        # Run other enabled gates
-        for gate, gate_config in env_config.gates.items():
-            # Skip policy_compliance (already run)
-            if gate == PromotionGate.POLICY_COMPLIANCE:
-                continue
+            results: list[GateResult] = []
+            timeout_seconds = env_config.gate_timeout_seconds
 
-            # Skip disabled gates
-            if gate_config is False:
-                continue
+            # Always run policy_compliance gate first (mandatory)
+            policy_result = self._run_policy_compliance_gate(
+                manifest=manifest,
+                dry_run=dry_run,
+            )
+            results.append(policy_result)
 
-            # Special handling for SECURITY_SCAN gate with SecurityGateConfig
-            if gate == PromotionGate.SECURITY_SCAN and isinstance(
-                gate_config, SecurityGateConfig
-            ):
-                gate_result = self._run_security_gate(
-                    config=gate_config,
-                    artifact_ref=artifact_ref,
+            # Check for failure (stop unless dry_run)
+            if policy_result.status == GateStatus.FAILED and not dry_run:
+                self._log.warning(
+                    "run_all_gates_stopped",
+                    reason="policy_compliance_failed",
+                    results_count=len(results),
+                )
+                return results
+
+            # Run other enabled gates
+            for gate, gate_config in env_config.gates.items():
+                # Skip policy_compliance (already run)
+                if gate == PromotionGate.POLICY_COMPLIANCE:
+                    continue
+
+                # Skip disabled gates
+                if gate_config is False:
+                    continue
+
+                # Special handling for SECURITY_SCAN gate with SecurityGateConfig
+                if gate == PromotionGate.SECURITY_SCAN and isinstance(
+                    gate_config, SecurityGateConfig
+                ):
+                    gate_result = self._run_security_gate(
+                        config=gate_config,
+                        artifact_ref=artifact_ref,
+                        timeout_seconds=timeout_seconds,
+                    )
+                    results.append(gate_result)
+
+                    # Check for failure (stop unless dry_run)
+                    if gate_result.status == GateStatus.FAILED and not dry_run:
+                        self._log.warning(
+                            "run_all_gates_stopped",
+                            reason="security_scan_failed",
+                            results_count=len(results),
+                        )
+                        return results
+                    continue
+
+                # Get command for the gate
+                command = self._get_gate_command(gate, artifact_ref)
+                if command is None:
+                    # No command configured, skip
+                    self._log.debug(
+                        "gate_skipped",
+                        gate=gate.value,
+                        reason="no_command_configured",
+                    )
+                    results.append(
+                        GateResult(
+                            gate=gate,
+                            status=GateStatus.SKIPPED,
+                            duration_ms=0,
+                        )
+                    )
+                    continue
+
+                # Run the gate
+                gate_result = self._run_gate(
+                    gate=gate,
+                    command=command,
                     timeout_seconds=timeout_seconds,
                 )
                 results.append(gate_result)
@@ -987,55 +1047,21 @@ class PromotionController:
                 if gate_result.status == GateStatus.FAILED and not dry_run:
                     self._log.warning(
                         "run_all_gates_stopped",
-                        reason="security_scan_failed",
+                        reason=f"{gate.value}_failed",
                         results_count=len(results),
                     )
                     return results
-                continue
 
-            # Get command for the gate
-            command = self._get_gate_command(gate, artifact_ref)
-            if command is None:
-                # No command configured, skip
-                self._log.debug(
-                    "gate_skipped",
-                    gate=gate.value,
-                    reason="no_command_configured",
-                )
-                results.append(
-                    GateResult(
-                        gate=gate,
-                        status=GateStatus.SKIPPED,
-                        duration_ms=0,
-                    )
-                )
-                continue
-
-            # Run the gate
-            gate_result = self._run_gate(
-                gate=gate,
-                command=command,
-                timeout_seconds=timeout_seconds,
+            self._log.info(
+                "run_all_gates_completed",
+                environment=to_env,
+                results_count=len(results),
+                all_passed=all(
+                    r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results
+                ),
             )
-            results.append(gate_result)
 
-            # Check for failure (stop unless dry_run)
-            if gate_result.status == GateStatus.FAILED and not dry_run:
-                self._log.warning(
-                    "run_all_gates_stopped",
-                    reason=f"{gate.value}_failed",
-                    results_count=len(results),
-                )
-                return results
-
-        self._log.info(
-            "run_all_gates_completed",
-            environment=to_env,
-            results_count=len(results),
-            all_passed=all(r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results),
-        )
-
-        return results
+            return results
 
     def _get_artifact_digest(self, tag: str) -> str:
         """Get artifact digest from registry.
@@ -1242,80 +1268,93 @@ class PromotionController:
 
         from floe_core.schemas.promotion import RegistrySyncStatus
 
-        if not secondary_clients:
-            return []
+        # Create OpenTelemetry span for sync_to_registries operation
+        with create_span(
+            "floe.oci.sync_to_registries",
+            attributes={
+                "tag": tag,
+                "to_env": to_env,
+                "secondary_count": len(secondary_clients),
+            },
+        ):
+            if not secondary_clients:
+                return []
 
-        sync_results: list[RegistrySyncStatus] = []
-        env_tag = f"{tag}-{to_env}"
+            sync_results: list[RegistrySyncStatus] = []
+            env_tag = f"{tag}-{to_env}"
 
-        self._log.info(
-            "sync_to_registries_started",
-            tag=tag,
-            env_tag=env_tag,
-            secondary_count=len(secondary_clients),
-        )
+            self._log.info(
+                "sync_to_registries_started",
+                tag=tag,
+                env_tag=env_tag,
+                secondary_count=len(secondary_clients),
+            )
 
-        def sync_to_registry(client: "OCIClient") -> RegistrySyncStatus:
-            """Sync to a single secondary registry."""
-            registry_uri = client.registry_uri
-            try:
-                # Copy the artifact tag to secondary registry
-                # This would use oci-copy or equivalent operation
-                client.copy_tag(
-                    source_ref=f"{self.client.registry_uri}/{tag}",
-                    dest_ref=f"{registry_uri}/{env_tag}",
-                )
+            def sync_to_registry(client: "OCIClient") -> RegistrySyncStatus:
+                """Sync to a single secondary registry."""
+                registry_uri = client.registry_uri
+                try:
+                    # Copy the artifact tag to secondary registry
+                    # This would use oci-copy or equivalent operation
+                    client.copy_tag(
+                        source_ref=f"{self.client.registry_uri}/{tag}",
+                        dest_ref=f"{registry_uri}/{env_tag}",
+                    )
 
-                # Verify digest if configured
-                actual_digest = None
-                if self.promotion.verify_secondary_digests:
-                    actual_digest = client.get_artifact_digest(env_tag)
-                    if actual_digest != artifact_digest:
-                        return RegistrySyncStatus(
-                            registry_uri=registry_uri,
-                            synced=False,
-                            digest=actual_digest,
-                            error=f"Digest mismatch: expected {artifact_digest[:19]}..., got {actual_digest[:19]}...",
-                        )
+                    # Verify digest if configured
+                    actual_digest = None
+                    if self.promotion.verify_secondary_digests:
+                        actual_digest = client.get_artifact_digest(env_tag)
+                        if actual_digest != artifact_digest:
+                            return RegistrySyncStatus(
+                                registry_uri=registry_uri,
+                                synced=False,
+                                digest=actual_digest,
+                                error=(
+                                    f"Digest mismatch: expected "
+                                    f"{artifact_digest[:19]}..., "
+                                    f"got {actual_digest[:19]}..."
+                                ),
+                            )
 
-                return RegistrySyncStatus(
-                    registry_uri=registry_uri,
-                    synced=True,
-                    digest=actual_digest or artifact_digest,
-                    synced_at=datetime.now(timezone.utc),
-                )
+                    return RegistrySyncStatus(
+                        registry_uri=registry_uri,
+                        synced=True,
+                        digest=actual_digest or artifact_digest,
+                        synced_at=datetime.now(timezone.utc),
+                    )
 
-            except Exception as e:
-                self._log.warning(
-                    "sync_to_registry_failed",
-                    registry_uri=registry_uri,
-                    error=str(e),
-                )
-                return RegistrySyncStatus(
-                    registry_uri=registry_uri,
-                    synced=False,
-                    error=str(e),
-                )
+                except Exception as e:
+                    self._log.warning(
+                        "sync_to_registry_failed",
+                        registry_uri=registry_uri,
+                        error=str(e),
+                    )
+                    return RegistrySyncStatus(
+                        registry_uri=registry_uri,
+                        synced=False,
+                        error=str(e),
+                    )
 
-        # Execute syncs in parallel (FR-028)
-        with ThreadPoolExecutor(max_workers=len(secondary_clients)) as executor:
-            futures = {
-                executor.submit(sync_to_registry, client): client
-                for client in secondary_clients
-            }
-            for future in as_completed(futures):
-                result = future.result()
-                sync_results.append(result)
+            # Execute syncs in parallel (FR-028)
+            with ThreadPoolExecutor(max_workers=len(secondary_clients)) as executor:
+                futures = {
+                    executor.submit(sync_to_registry, client): client
+                    for client in secondary_clients
+                }
+                for future in as_completed(futures):
+                    result = future.result()
+                    sync_results.append(result)
 
-        # Log summary
-        successful = sum(1 for r in sync_results if r.synced)
-        self._log.info(
-            "sync_to_registries_completed",
-            successful=successful,
-            total=len(sync_results),
-        )
+            # Log summary
+            successful = sum(1 for r in sync_results if r.synced)
+            self._log.info(
+                "sync_to_registries_completed",
+                successful=successful,
+                total=len(sync_results),
+            )
 
-        return sync_results
+            return sync_results
 
     def _get_promotion_history(
         self,
@@ -2677,43 +2716,51 @@ class PromotionController:
         Example:
             >>> controller.lock_environment("prod", "Database migration", "dba@example.com")
         """
-        self._log.info(
-            "lock_environment",
-            environment=environment,
-            reason=reason,
-            operator=operator,
-        )
-
-        if self._get_environment(environment) is None:
-            raise ValueError(f"Environment '{environment}' not found")
-
-        # Create and store the lock (FR-035)
-        locked_at = datetime.now(timezone.utc)
-        lock = EnvironmentLock(
-            locked=True,
-            reason=reason,
-            locked_by=operator,
-            locked_at=locked_at,
-        )
-        self._environment_locks[environment] = lock
-
-        self._log.info(
-            "lock_environment_completed",
-            environment=environment,
-            locked_by=operator,
-            locked_at=locked_at.isoformat(),
-        )
-
-        # Send webhook notification for lock event (T117 - FR-040)
-        self._send_webhook_notification(
-            "lock",
-            {
+        # Create OpenTelemetry span for lock_environment operation
+        with create_span(
+            "floe.oci.lock_environment",
+            attributes={
                 "environment": environment,
-                "reason": reason,
                 "operator": operator,
-                "timestamp": locked_at.isoformat(),
             },
-        )
+        ):
+            self._log.info(
+                "lock_environment",
+                environment=environment,
+                reason=reason,
+                operator=operator,
+            )
+
+            if self._get_environment(environment) is None:
+                raise ValueError(f"Environment '{environment}' not found")
+
+            # Create and store the lock (FR-035)
+            locked_at = datetime.now(timezone.utc)
+            lock = EnvironmentLock(
+                locked=True,
+                reason=reason,
+                locked_by=operator,
+                locked_at=locked_at,
+            )
+            self._environment_locks[environment] = lock
+
+            self._log.info(
+                "lock_environment_completed",
+                environment=environment,
+                locked_by=operator,
+                locked_at=locked_at.isoformat(),
+            )
+
+            # Send webhook notification for lock event (T117 - FR-040)
+            self._send_webhook_notification(
+                "lock",
+                {
+                    "environment": environment,
+                    "reason": reason,
+                    "operator": operator,
+                    "timestamp": locked_at.isoformat(),
+                },
+            )
 
     def unlock_environment(
         self,
@@ -2734,38 +2781,46 @@ class PromotionController:
         Example:
             >>> controller.unlock_environment("prod", "Migration complete", "dba@example.com")
         """
-        self._log.info(
-            "unlock_environment",
-            environment=environment,
-            reason=reason,
-            operator=operator,
-        )
-
-        if self._get_environment(environment) is None:
-            raise ValueError(f"Environment '{environment}' not found")
-
-        # Remove lock from cache (FR-037)
-        # Idempotent: no-op if already unlocked
-        if environment in self._environment_locks:
-            del self._environment_locks[environment]
-
-        self._log.info(
-            "unlock_environment_completed",
-            environment=environment,
-            reason=reason,
-            operator=operator,
-        )
-
-        # Send webhook notification for unlock event (T117 - FR-040)
-        self._send_webhook_notification(
-            "unlock",
-            {
+        # Create OpenTelemetry span for unlock_environment operation
+        with create_span(
+            "floe.oci.unlock_environment",
+            attributes={
                 "environment": environment,
-                "reason": reason,
                 "operator": operator,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
-        )
+        ):
+            self._log.info(
+                "unlock_environment",
+                environment=environment,
+                reason=reason,
+                operator=operator,
+            )
+
+            if self._get_environment(environment) is None:
+                raise ValueError(f"Environment '{environment}' not found")
+
+            # Remove lock from cache (FR-037)
+            # Idempotent: no-op if already unlocked
+            if environment in self._environment_locks:
+                del self._environment_locks[environment]
+
+            self._log.info(
+                "unlock_environment_completed",
+                environment=environment,
+                reason=reason,
+                operator=operator,
+            )
+
+            # Send webhook notification for unlock event (T117 - FR-040)
+            self._send_webhook_notification(
+                "unlock",
+                {
+                    "environment": environment,
+                    "reason": reason,
+                    "operator": operator,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
 
     def get_lock_status(self, environment: str) -> EnvironmentLock:
         """Get the lock status for an environment.
