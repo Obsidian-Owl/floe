@@ -205,10 +205,11 @@ class PromotionController:
         event_type: str,
         event_data: dict,
     ) -> None:
-        """Send webhook notification for a lifecycle event (T117).
+        """Send webhook notification for a lifecycle event (T117/T119).
 
         This is a fire-and-forget operation - failures are logged but don't
         raise exceptions. Webhooks should not block or fail promotions.
+        Supports multiple webhooks via notify_all (non-blocking delivery).
 
         Args:
             event_type: Event type (promote, rollback, lock, unlock).
@@ -217,35 +218,35 @@ class PromotionController:
         if self._webhook_notifier is None:
             return
 
-        if not self._webhook_notifier.should_notify(event_type):
-            self._log.debug(
-                "webhook_skipped",
-                event_type=event_type,
-                reason="event_type_not_subscribed",
-            )
-            return
-
         import asyncio
 
         try:
-            # Run async notify in sync context
-            result = asyncio.run(
-                self._webhook_notifier.notify(event_type, event_data)
+            # Run async notify_all in sync context (T119 - non-blocking multi-webhook)
+            results = asyncio.run(
+                self._webhook_notifier.notify_all(event_type, event_data)
             )
-            if result.success:
-                self._log.info(
-                    "webhook_notification_sent",
+            # Log results for each webhook
+            for result in results:
+                if result.success:
+                    self._log.info(
+                        "webhook_notification_sent",
+                        event_type=event_type,
+                        url=result.url,
+                        status_code=result.status_code,
+                    )
+                else:
+                    self._log.warning(
+                        "webhook_notification_failed",
+                        event_type=event_type,
+                        url=result.url,
+                        error=result.error,
+                        attempts=result.attempts,
+                    )
+            if not results:
+                self._log.debug(
+                    "webhook_skipped",
                     event_type=event_type,
-                    url=result.url,
-                    status_code=result.status_code,
-                )
-            else:
-                self._log.warning(
-                    "webhook_notification_failed",
-                    event_type=event_type,
-                    url=result.url,
-                    error=result.error,
-                    attempts=result.attempts,
+                    reason="no_webhooks_subscribed",
                 )
         except Exception as e:
             # Webhook failures should never fail the promotion

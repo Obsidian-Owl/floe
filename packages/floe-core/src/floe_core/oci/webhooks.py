@@ -316,6 +316,55 @@ class WebhookNotifier:
             attempts=max_attempts,
         )
 
+    async def notify_all(
+        self,
+        event_type: str,
+        event_data: dict[str, Any],
+    ) -> list[WebhookNotificationResult]:
+        """Send webhook notification to all matching configurations (T119).
+
+        Implements non-blocking delivery to multiple webhooks:
+        - Filters configs by event type subscription (FR-041)
+        - Continues to other webhooks even if one fails (non-blocking)
+        - Returns results for all attempted notifications
+
+        Args:
+            event_type: Type of event (promote, rollback, lock, unlock).
+            event_data: Event-specific data to include in payload.
+
+        Returns:
+            List of WebhookNotificationResult for each notified webhook.
+            Empty list if no webhooks are subscribed to the event.
+
+        Example:
+            >>> results = await notifier.notify_all("promote", {"artifact_tag": "v1.0.0"})
+            >>> for r in results:
+            ...     print(f"{r.url}: {'success' if r.success else 'failed'}")
+        """
+        results: list[WebhookNotificationResult] = []
+
+        for config in self.configs:
+            # Check if this config is subscribed to the event
+            if event_type not in config.events:
+                logger.debug(
+                    "webhook_skipped",
+                    url=config.url,
+                    event_type=event_type,
+                    reason="event_type_not_subscribed",
+                )
+                continue
+
+            # Temporarily set self.config to this config for notify()
+            original_config = self.config
+            self.config = config
+            try:
+                result = await self.notify(event_type, event_data)
+                results.append(result)
+            finally:
+                self.config = original_config
+
+        return results
+
 
 __all__: list[str] = [
     "WebhookNotificationResult",
