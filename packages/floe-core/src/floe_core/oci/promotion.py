@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from floe_core.enforcement import PolicyEnforcer
     from floe_core.oci.client import OCIClient
     from floe_core.schemas.oci import RegistryConfig
+    from floe_core.schemas.signing import VerificationResult
 
 logger = structlog.get_logger(__name__)
 
@@ -611,6 +612,101 @@ class PromotionController:
 
         # Substitute artifact reference
         return command.replace("${ARTIFACT_REF}", artifact_ref)
+
+    def _verify_signature(
+        self,
+        artifact_ref: str,
+        artifact_digest: str,
+        content: bytes,
+        enforcement: str,
+    ) -> "VerificationResult":
+        """Verify artifact signature using existing verification infrastructure.
+
+        Integrates with Epic 8B's VerificationClient for signature verification
+        during promotion. Supports enforce/warn/off enforcement modes.
+
+        Args:
+            artifact_ref: Full OCI artifact reference.
+            artifact_digest: SHA256 digest of the artifact.
+            content: Raw artifact bytes to verify.
+            enforcement: Enforcement mode ("enforce", "warn", "off").
+
+        Returns:
+            VerificationResult with verification status and signer info.
+
+        Note:
+            When enforcement="off", returns a skipped result without verification.
+            When enforcement="warn", verification errors return invalid but don't raise.
+            When enforcement="enforce", verification errors propagate as exceptions.
+        """
+        from datetime import datetime, timezone
+
+        from floe_core.oci.verification import VerificationClient
+        from floe_core.schemas.signing import VerificationPolicy, VerificationResult
+
+        self._log.info(
+            "verify_signature_started",
+            artifact_ref=artifact_ref,
+            enforcement=enforcement,
+        )
+
+        # If enforcement is off, skip verification
+        if enforcement == "off":
+            self._log.info(
+                "verify_signature_skipped",
+                reason="enforcement=off",
+            )
+            return VerificationResult(
+                status="unsigned",
+                verified_at=datetime.now(timezone.utc),
+                failure_reason="Verification skipped (enforcement=off)",
+            )
+
+        # Create verification policy with the specified enforcement
+        policy = VerificationPolicy(
+            enabled=True,
+            enforcement=enforcement,
+        )
+
+        try:
+            # Create client and verify
+            client = VerificationClient(policy)
+
+            # Get signature metadata from annotations if available
+            # For now, pass None and let client handle unsigned artifacts
+            result = client.verify(
+                content=content,
+                metadata=None,  # TODO: T020+ - Extract metadata from OCI annotations
+                artifact_ref=artifact_ref,
+                artifact_digest=artifact_digest,
+            )
+
+            self._log.info(
+                "verify_signature_completed",
+                artifact_ref=artifact_ref,
+                status=result.status,
+                is_valid=result.is_valid,
+            )
+
+            return result
+
+        except Exception as e:
+            self._log.error(
+                "verify_signature_error",
+                artifact_ref=artifact_ref,
+                error=str(e),
+            )
+
+            # In warn mode, return invalid result instead of raising
+            if enforcement == "warn":
+                return VerificationResult(
+                    status="invalid",
+                    verified_at=datetime.now(timezone.utc),
+                    failure_reason=f"Verification error: {e}",
+                )
+
+            # Re-raise in enforce mode
+            raise
 
     def promote(
         self,
