@@ -657,69 +657,80 @@ class PromotionController:
         from floe_core.oci.verification import VerificationClient
         from floe_core.schemas.signing import VerificationPolicy, VerificationResult
 
-        self._log.info(
-            "verify_signature_started",
-            artifact_ref=artifact_ref,
-            enforcement=enforcement,
-        )
-
-        # If enforcement is off, skip verification
-        if enforcement == "off":
+        # Create OpenTelemetry span for signature verification
+        with create_span(
+            "floe.oci.promote.verify",
+            attributes={
+                "artifact_ref": artifact_ref,
+                "enforcement_mode": enforcement,
+            },
+        ) as span:
             self._log.info(
-                "verify_signature_skipped",
-                reason="enforcement=off",
-            )
-            return VerificationResult(
-                status="unsigned",
-                verified_at=datetime.now(timezone.utc),
-                failure_reason="Verification skipped (enforcement=off)",
-            )
-
-        # Create verification policy with the specified enforcement
-        policy = VerificationPolicy(
-            enabled=True,
-            enforcement=enforcement,
-        )
-
-        try:
-            # Create client and verify
-            client = VerificationClient(policy)
-
-            # Get signature metadata from annotations if available
-            # For now, pass None and let client handle unsigned artifacts
-            result = client.verify(
-                content=content,
-                metadata=None,  # TODO: T020+ - Extract metadata from OCI annotations
+                "verify_signature_started",
                 artifact_ref=artifact_ref,
-                artifact_digest=artifact_digest,
+                enforcement=enforcement,
             )
 
-            self._log.info(
-                "verify_signature_completed",
-                artifact_ref=artifact_ref,
-                status=result.status,
-                is_valid=result.is_valid,
-            )
-
-            return result
-
-        except Exception as e:
-            self._log.error(
-                "verify_signature_error",
-                artifact_ref=artifact_ref,
-                error=str(e),
-            )
-
-            # In warn mode, return invalid result instead of raising
-            if enforcement == "warn":
+            # If enforcement is off, skip verification
+            if enforcement == "off":
+                self._log.info(
+                    "verify_signature_skipped",
+                    reason="enforcement=off",
+                )
+                span.set_attribute("skipped", True)
                 return VerificationResult(
-                    status="invalid",
+                    status="unsigned",
                     verified_at=datetime.now(timezone.utc),
-                    failure_reason=f"Verification error: {e}",
+                    failure_reason="Verification skipped (enforcement=off)",
                 )
 
-            # Re-raise in enforce mode
-            raise
+            # Create verification policy with the specified enforcement
+            policy = VerificationPolicy(
+                enabled=True,
+                enforcement=enforcement,
+            )
+
+            try:
+                # Create client and verify
+                client = VerificationClient(policy)
+
+                # Get signature metadata from annotations if available
+                # For now, pass None and let client handle unsigned artifacts
+                result = client.verify(
+                    content=content,
+                    metadata=None,  # TODO: T020+ - Extract metadata from OCI annotations
+                    artifact_ref=artifact_ref,
+                    artifact_digest=artifact_digest,
+                )
+
+                self._log.info(
+                    "verify_signature_completed",
+                    artifact_ref=artifact_ref,
+                    status=result.status,
+                    is_valid=result.is_valid,
+                )
+
+                span.set_attribute("verification_status", result.status)
+                return result
+
+            except Exception as e:
+                self._log.error(
+                    "verify_signature_error",
+                    artifact_ref=artifact_ref,
+                    error=str(e),
+                )
+
+                # In warn mode, return invalid result instead of raising
+                if enforcement == "warn":
+                    span.set_attribute("verification_status", "invalid")
+                    return VerificationResult(
+                        status="invalid",
+                        verified_at=datetime.now(timezone.utc),
+                        failure_reason=f"Verification error: {e}",
+                    )
+
+                # Re-raise in enforce mode
+                raise
 
     def _create_env_tag(
         self,
