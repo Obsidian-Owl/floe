@@ -469,6 +469,149 @@ class PromotionController:
                 error=error_msg,
             )
 
+    def _run_all_gates(
+        self,
+        to_env: str,
+        manifest: dict,
+        artifact_ref: str,
+        *,
+        dry_run: bool = False,
+    ) -> list[GateResult]:
+        """Run all enabled gates for an environment.
+
+        Orchestrates execution of all gates configured for the target environment.
+        Policy compliance gate always runs first. If a gate fails and dry_run is False,
+        execution stops immediately (fail-fast).
+
+        Args:
+            to_env: Target environment name.
+            manifest: The dbt manifest for policy compliance gate.
+            artifact_ref: Full artifact reference for security scan.
+            dry_run: If True, continue all gates even if one fails.
+
+        Returns:
+            List of GateResult for all executed gates.
+
+        Raises:
+            ValueError: If target environment is not found.
+        """
+        # Get environment configuration
+        env_config = self._get_environment(to_env)
+        if env_config is None:
+            raise ValueError(f"Environment '{to_env}' not found in promotion path")
+
+        self._log.info(
+            "run_all_gates_started",
+            environment=to_env,
+            gates=[g.value for g in env_config.gates.keys()],
+            dry_run=dry_run,
+        )
+
+        results: list[GateResult] = []
+        timeout_seconds = env_config.gate_timeout_seconds
+
+        # Always run policy_compliance gate first (mandatory)
+        policy_result = self._run_policy_compliance_gate(
+            manifest=manifest,
+            dry_run=dry_run,
+        )
+        results.append(policy_result)
+
+        # Check for failure (stop unless dry_run)
+        if policy_result.status == GateStatus.FAILED and not dry_run:
+            self._log.warning(
+                "run_all_gates_stopped",
+                reason="policy_compliance_failed",
+                results_count=len(results),
+            )
+            return results
+
+        # Run other enabled gates
+        for gate, gate_config in env_config.gates.items():
+            # Skip policy_compliance (already run)
+            if gate == PromotionGate.POLICY_COMPLIANCE:
+                continue
+
+            # Skip disabled gates
+            if gate_config is False:
+                continue
+
+            # Get command for the gate
+            command = self._get_gate_command(gate, artifact_ref)
+            if command is None:
+                # No command configured, skip
+                self._log.debug(
+                    "gate_skipped",
+                    gate=gate.value,
+                    reason="no_command_configured",
+                )
+                results.append(
+                    GateResult(
+                        gate=gate,
+                        status=GateStatus.SKIPPED,
+                        duration_ms=0,
+                    )
+                )
+                continue
+
+            # Run the gate
+            gate_result = self._run_gate(
+                gate=gate,
+                command=command,
+                timeout_seconds=timeout_seconds,
+            )
+            results.append(gate_result)
+
+            # Check for failure (stop unless dry_run)
+            if gate_result.status == GateStatus.FAILED and not dry_run:
+                self._log.warning(
+                    "run_all_gates_stopped",
+                    reason=f"{gate.value}_failed",
+                    results_count=len(results),
+                )
+                return results
+
+        self._log.info(
+            "run_all_gates_completed",
+            environment=to_env,
+            results_count=len(results),
+            all_passed=all(r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results),
+        )
+
+        return results
+
+    def _get_gate_command(self, gate: PromotionGate, artifact_ref: str) -> str | None:
+        """Get the command to execute for a gate.
+
+        Looks up the command in promotion.gate_commands configuration.
+        Substitutes ${ARTIFACT_REF} placeholder with actual reference.
+
+        Args:
+            gate: The gate type.
+            artifact_ref: Full artifact reference for substitution.
+
+        Returns:
+            Command string or None if not configured.
+        """
+        if self.promotion.gate_commands is None:
+            return None
+
+        gate_key = gate.value  # e.g., "tests", "security_scan"
+        command_config = self.promotion.gate_commands.get(gate_key)
+
+        if command_config is None:
+            return None
+
+        # Handle string command or SecurityGateConfig
+        if isinstance(command_config, str):
+            command = command_config
+        else:
+            # SecurityGateConfig has .command attribute
+            command = command_config.command
+
+        # Substitute artifact reference
+        return command.replace("${ARTIFACT_REF}", artifact_ref)
+
     def promote(
         self,
         tag: str,
