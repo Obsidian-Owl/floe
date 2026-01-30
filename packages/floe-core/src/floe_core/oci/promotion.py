@@ -796,6 +796,69 @@ class PromotionController:
 
         return env_tag
 
+    def _update_latest_tag(
+        self,
+        source_tag: str,
+        target_env: str,
+    ) -> str:
+        """Update the mutable latest-{env} tag to point to the source artifact.
+
+        Updates the mutable `latest-{target_env}` tag to point to the same
+        digest as the source tag. This implements FR-003 for mutable "latest"
+        tag updates during promotion.
+
+        Unlike immutable environment tags, this can overwrite existing tags.
+
+        Args:
+            source_tag: Source artifact tag (e.g., "v1.2.3" or "v1.2.3-staging").
+            target_env: Target environment name (e.g., "staging").
+
+        Returns:
+            The updated latest tag (e.g., "latest-staging").
+
+        Raises:
+            ArtifactNotFoundError: If source tag doesn't exist.
+
+        Example:
+            >>> tag = controller._update_latest_tag("v1.2.3-staging", "staging")
+            >>> assert tag == "latest-staging"
+        """
+        # Build the latest tag
+        latest_tag = f"latest-{target_env}"
+
+        self._log.info(
+            "update_latest_tag_started",
+            source_tag=source_tag,
+            target_env=target_env,
+            latest_tag=latest_tag,
+        )
+
+        # Get source manifest (to verify it exists and get digest)
+        source_manifest = self.client.inspect(source_tag)
+        source_digest = source_manifest.digest
+
+        # Create ORAS client and get manifest
+        oras_client = self.client._create_oras_client()
+        source_ref = self.client._build_target_ref(source_tag)
+        target_ref = self.client._build_target_ref(latest_tag)
+
+        # Fetch the source manifest
+        manifest_data = oras_client.get_manifest(container=source_ref)
+
+        # Upload manifest with latest tag (overwrites if exists)
+        oras_client.upload_manifest(
+            manifest=manifest_data,
+            container=target_ref,
+        )
+
+        self._log.info(
+            "update_latest_tag_completed",
+            latest_tag=latest_tag,
+            digest=source_digest,
+        )
+
+        return latest_tag
+
     def promote(
         self,
         tag: str,
