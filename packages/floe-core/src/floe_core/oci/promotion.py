@@ -859,6 +859,46 @@ class PromotionController:
 
         return latest_tag
 
+    def _store_promotion_record(
+        self,
+        tag: str,
+        record: PromotionRecord,
+    ) -> None:
+        """Store a promotion record in OCI annotations.
+
+        Stores the complete promotion record as a JSON annotation on the
+        specified artifact tag. This implements FR-008 for immutable audit
+        trails in OCI annotations.
+
+        Args:
+            tag: Tag to store the record on (e.g., "v1.2.3-staging").
+            record: PromotionRecord to store.
+
+        Raises:
+            ArtifactNotFoundError: If tag doesn't exist.
+
+        Example:
+            >>> controller._store_promotion_record("v1.2.3-staging", record)
+        """
+        self._log.info(
+            "store_promotion_record_started",
+            tag=tag,
+            promotion_id=str(record.promotion_id),
+        )
+
+        # Serialize record to JSON
+        record_json = record.model_dump_json()
+
+        # Store in OCI annotation with dev.floe.promotion key
+        annotations = {"dev.floe.promotion": record_json}
+        self.client._update_artifact_annotations(tag, annotations)
+
+        self._log.info(
+            "store_promotion_record_completed",
+            tag=tag,
+            promotion_id=str(record.promotion_id),
+        )
+
     def promote(
         self,
         tag: str,
