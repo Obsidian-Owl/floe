@@ -297,3 +297,258 @@ class TestRollbackExpectedBehavior:
         assert isinstance(result, RollbackRecord)
         assert result.artifact_digest is not None
         assert result.artifact_digest.startswith("sha256:")
+
+
+class TestRollbackVersionNotFound:
+    """Unit tests for rollback() version-not-found error path (T047).
+
+    TDD: These tests document the expected error behavior when attempting
+    to rollback to a version that was never promoted to the environment.
+    Currently xfail until T050 implements the validation logic.
+    """
+
+    @pytest.fixture
+    def controller(self) -> MagicMock:
+        """Create a PromotionController with mocked dependencies."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        return PromotionController(client=oci_client, promotion=promotion)
+
+    @pytest.mark.xfail(reason="T050: Implement VersionNotPromotedError handling")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_rollback_raises_version_not_promoted_error(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: rollback() raises VersionNotPromotedError for unknown version.
+
+        When the target version was never promoted to the specified environment,
+        rollback() should raise VersionNotPromotedError with helpful context.
+        """
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError):
+            controller.rollback(
+                tag="v99.0.0",  # Version that was never promoted
+                environment="prod",
+                reason="Rollback to unknown version",
+                operator="sre@example.com",
+            )
+
+    @pytest.mark.xfail(reason="T050: Implement VersionNotPromotedError with tag")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_version_not_promoted_error_contains_tag(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: VersionNotPromotedError includes the requested tag."""
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError) as exc_info:
+            controller.rollback(
+                tag="v99.0.0",
+                environment="prod",
+                reason="Check error tag",
+                operator="sre@example.com",
+            )
+
+        assert exc_info.value.tag == "v99.0.0"
+
+    @pytest.mark.xfail(reason="T050: Implement VersionNotPromotedError with environment")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_version_not_promoted_error_contains_environment(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: VersionNotPromotedError includes the target environment."""
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError) as exc_info:
+            controller.rollback(
+                tag="v99.0.0",
+                environment="prod",
+                reason="Check error environment",
+                operator="sre@example.com",
+            )
+
+        assert exc_info.value.environment == "prod"
+
+    @pytest.mark.xfail(reason="T050: Implement VersionNotPromotedError with available_versions")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_version_not_promoted_error_contains_available_versions(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: VersionNotPromotedError includes list of available versions.
+
+        To help operators, the error should list what versions ARE available
+        in the environment for rollback.
+        """
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError) as exc_info:
+            controller.rollback(
+                tag="v99.0.0",
+                environment="prod",
+                reason="Check available versions",
+                operator="sre@example.com",
+            )
+
+        # available_versions should be populated with actual env versions
+        assert exc_info.value.available_versions is not None
+        assert isinstance(exc_info.value.available_versions, list)
+
+    @pytest.mark.xfail(reason="T050: Implement exit code for VersionNotPromotedError")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_version_not_promoted_error_has_correct_exit_code(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: VersionNotPromotedError uses exit code 11."""
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError) as exc_info:
+            controller.rollback(
+                tag="v99.0.0",
+                environment="prod",
+                reason="Check exit code",
+                operator="sre@example.com",
+            )
+
+        assert exc_info.value.exit_code == 11
+
+    @pytest.mark.xfail(reason="T050: Implement error message format")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_version_not_promoted_error_message_is_helpful(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: Error message includes both tag and environment for context."""
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError) as exc_info:
+            controller.rollback(
+                tag="v99.0.0",
+                environment="prod",
+                reason="Check message",
+                operator="sre@example.com",
+            )
+
+        error_message = str(exc_info.value)
+        assert "v99.0.0" in error_message
+        assert "prod" in error_message
+
+
+class TestRollbackAuthorizationError:
+    """Unit tests for rollback() authorization error path (T047 extension).
+
+    TDD: Tests for when operator is not authorized to rollback in the environment.
+    """
+
+    @pytest.fixture
+    def controller(self) -> MagicMock:
+        """Create a PromotionController with mocked dependencies."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        return PromotionController(client=oci_client, promotion=promotion)
+
+    @pytest.mark.xfail(reason="T050: Implement AuthorizationError handling")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_rollback_raises_authorization_error_for_unauthorized_operator(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: rollback() raises AuthorizationError for unauthorized operator."""
+        from floe_core.oci.errors import AuthorizationError
+
+        with pytest.raises(AuthorizationError):
+            controller.rollback(
+                tag="v1.0.0",
+                environment="prod",
+                reason="Unauthorized rollback attempt",
+                operator="unauthorized@example.com",
+            )
+
+    @pytest.mark.xfail(reason="T050: Implement AuthorizationError with operator")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_authorization_error_contains_operator(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: AuthorizationError includes the operator identity."""
+        from floe_core.oci.errors import AuthorizationError
+
+        with pytest.raises(AuthorizationError) as exc_info:
+            controller.rollback(
+                tag="v1.0.0",
+                environment="prod",
+                reason="Check operator in error",
+                operator="unauthorized@example.com",
+            )
+
+        assert exc_info.value.operator == "unauthorized@example.com"
+
+
+class TestRollbackEnvironmentLocked:
+    """Unit tests for rollback() environment-locked error path (T047 extension).
+
+    TDD: Tests for when the target environment is locked.
+    """
+
+    @pytest.fixture
+    def controller(self) -> MagicMock:
+        """Create a PromotionController with mocked dependencies."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        return PromotionController(client=oci_client, promotion=promotion)
+
+    @pytest.mark.xfail(reason="T050: Implement EnvironmentLockedError handling")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_rollback_raises_environment_locked_error(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: rollback() raises EnvironmentLockedError for locked environment."""
+        from floe_core.oci.errors import EnvironmentLockedError
+
+        with pytest.raises(EnvironmentLockedError):
+            controller.rollback(
+                tag="v1.0.0",
+                environment="prod",  # Assume prod is locked
+                reason="Rollback to locked environment",
+                operator="sre@example.com",
+            )
+
+    @pytest.mark.xfail(reason="T050: Implement EnvironmentLockedError with reason")
+    @pytest.mark.requirement("8C-FR-013")
+    def test_environment_locked_error_contains_lock_reason(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: EnvironmentLockedError includes why the environment is locked."""
+        from floe_core.oci.errors import EnvironmentLockedError
+
+        with pytest.raises(EnvironmentLockedError) as exc_info:
+            controller.rollback(
+                tag="v1.0.0",
+                environment="prod",
+                reason="Check lock reason",
+                operator="sre@example.com",
+            )
+
+        assert exc_info.value.reason is not None
+        assert len(exc_info.value.reason) > 0
