@@ -28,7 +28,9 @@ from floe_core.schemas.governance import (
     QualityGatesConfig,
 )
 from floe_core.schemas.metadata import ManifestMetadata
+from floe_core.schemas.oci import RegistryConfig
 from floe_core.schemas.plugins import PluginsConfig
+from floe_core.schemas.promotion import PromotionConfig
 
 # Manifest scope literals
 ManifestScope = Literal["enterprise", "domain"]
@@ -55,6 +57,58 @@ FORBIDDEN_ENVIRONMENT_FIELDS = frozenset(
 Manifests MUST NOT contain environment-specific configuration.
 Runtime behavior is determined by FLOE_ENV environment variable.
 """
+
+
+class ArtifactsConfig(BaseModel):
+    """Configuration for OCI artifact storage and promotion lifecycle.
+
+    Defines how compiled artifacts are stored in OCI registries and
+    how they are promoted through environment stages.
+
+    Attributes:
+        registry: OCI registry configuration for artifact storage.
+        promotion: Optional promotion lifecycle configuration.
+            If None, promotion features are disabled.
+
+    Example:
+        >>> from floe_core.schemas.oci import RegistryConfig
+        >>> from floe_core.schemas.promotion import PromotionConfig
+        >>> config = ArtifactsConfig(
+        ...     registry=RegistryConfig(uri="oci://harbor.example.com/floe"),
+        ...     promotion=PromotionConfig()  # Default [dev, staging, prod]
+        ... )
+
+    See Also:
+        - Epic 8C: Promotion Lifecycle specification
+        - FR-009a: ArtifactsConfig schema integration with manifest
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "registry": {"uri": "oci://harbor.example.com/floe"},
+                    "promotion": {
+                        "environments": [
+                            {"name": "dev"},
+                            {"name": "staging"},
+                            {"name": "prod"},
+                        ]
+                    },
+                }
+            ]
+        },
+    )
+
+    registry: RegistryConfig = Field(
+        description="OCI registry configuration for artifact storage",
+    )
+    promotion: PromotionConfig | None = Field(
+        default=None,
+        description="Promotion lifecycle configuration (None disables promotion)",
+    )
 
 
 class GovernanceConfig(BaseModel):
@@ -267,6 +321,10 @@ class PlatformManifest(BaseModel):
         default=None,
         description="Default settings (e.g., compute: duckdb)",
     )
+    artifacts: ArtifactsConfig | None = Field(
+        default=None,
+        description="OCI artifact storage and promotion lifecycle configuration (Epic 8C)",
+    )
 
     @model_validator(mode="after")
     def validate_scope_constraints(self) -> PlatformManifest:
@@ -356,8 +414,9 @@ class PlatformManifest(BaseModel):
 
 
 __all__ = [
+    "ArtifactsConfig",
     "FORBIDDEN_ENVIRONMENT_FIELDS",
-    "ManifestScope",
     "GovernanceConfig",
+    "ManifestScope",
     "PlatformManifest",
 ]
