@@ -24,6 +24,7 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -31,6 +32,10 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.schemas.promotion import WebhookConfig
+
+# Exponential backoff configuration
+BACKOFF_BASE_SECONDS = 1.0
+"""Base delay for exponential backoff (doubles each retry)."""
 
 logger = structlog.get_logger(__name__)
 
@@ -227,17 +232,22 @@ class WebhookNotifier:
                             attempts=attempt,
                         )
 
-                    # Server error - retry
+                    # Server error - retry with exponential backoff
                     if response.status_code >= 500:
                         last_error = f"Server error: {response.status_code}"
-                        logger.warning(
-                            "webhook_notification_retry",
-                            url=url,
-                            event_type=event_type,
-                            status_code=response.status_code,
-                            attempt=attempt,
-                            max_attempts=max_attempts,
-                        )
+                        if attempt < max_attempts:
+                            # Exponential backoff: 1s, 2s, 4s, ...
+                            backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                            logger.warning(
+                                "webhook_notification_retry",
+                                url=url,
+                                event_type=event_type,
+                                status_code=response.status_code,
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                                backoff_seconds=backoff_delay,
+                            )
+                            await asyncio.sleep(backoff_delay)
                         continue
 
                     # Client error - don't retry
@@ -246,23 +256,48 @@ class WebhookNotifier:
 
             except httpx.TimeoutException:
                 last_error = "Request timed out"
-                logger.warning(
-                    "webhook_notification_timeout",
-                    url=url,
-                    event_type=event_type,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                )
+                if attempt < max_attempts:
+                    backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                    logger.warning(
+                        "webhook_notification_timeout",
+                        url=url,
+                        event_type=event_type,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        backoff_seconds=backoff_delay,
+                    )
+                    await asyncio.sleep(backoff_delay)
+                else:
+                    logger.warning(
+                        "webhook_notification_timeout",
+                        url=url,
+                        event_type=event_type,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                    )
             except httpx.RequestError as e:
                 last_error = str(e)
-                logger.warning(
-                    "webhook_notification_error",
-                    url=url,
-                    event_type=event_type,
-                    error=str(e),
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                )
+                if attempt < max_attempts:
+                    backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                    logger.warning(
+                        "webhook_notification_error",
+                        url=url,
+                        event_type=event_type,
+                        error=str(e),
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        backoff_seconds=backoff_delay,
+                    )
+                    await asyncio.sleep(backoff_delay)
+                else:
+                    logger.warning(
+                        "webhook_notification_error",
+                        url=url,
+                        event_type=event_type,
+                        error=str(e),
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                    )
 
         # All attempts failed
         logger.error(
