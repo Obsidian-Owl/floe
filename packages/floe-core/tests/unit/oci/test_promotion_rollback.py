@@ -552,3 +552,189 @@ class TestRollbackEnvironmentLocked:
 
         assert exc_info.value.reason is not None
         assert len(exc_info.value.reason) > 0
+
+
+class TestAnalyzeRollbackImpact:
+    """Unit tests for PromotionController.analyze_rollback_impact() (T048).
+
+    TDD: Tests document expected behavior for the impact analysis method
+    that will be implemented in T051. analyze_rollback_impact() provides
+    pre-rollback analysis per FR-016.
+    """
+
+    @pytest.fixture
+    def controller(self) -> MagicMock:
+        """Create a PromotionController with mocked dependencies."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        return PromotionController(client=oci_client, promotion=promotion)
+
+    @pytest.mark.xfail(reason="T051: analyze_rollback_impact() method not yet implemented")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_analyze_rollback_impact_method_exists(self, controller: MagicMock) -> None:
+        """Test that analyze_rollback_impact() method exists on controller.
+
+        TDD baseline: Method should exist after T051 implementation.
+        """
+        assert hasattr(controller, "analyze_rollback_impact"), (
+            "PromotionController should have analyze_rollback_impact method"
+        )
+
+    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_analyze_rollback_impact_returns_impact_analysis(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: analyze_rollback_impact() returns RollbackImpactAnalysis.
+
+        Implementation in T051 should return analysis with:
+        - breaking_changes: List of schema/API changes
+        - affected_products: Data products using this artifact
+        - recommendations: Operator guidance
+        - estimated_downtime: Impact duration estimate
+        """
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        result = controller.analyze_rollback_impact(
+            tag="v1.0.0",
+            environment="prod",
+        )
+
+        assert isinstance(result, RollbackImpactAnalysis)
+
+    @pytest.mark.xfail(reason="T051: Implement breaking_changes detection")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_impact_analysis_contains_breaking_changes(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: Analysis includes list of breaking changes."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        result = controller.analyze_rollback_impact(
+            tag="v1.0.0",
+            environment="prod",
+        )
+
+        assert isinstance(result, RollbackImpactAnalysis)
+        assert isinstance(result.breaking_changes, list)
+
+    @pytest.mark.xfail(reason="T051: Implement affected_products detection")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_impact_analysis_contains_affected_products(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: Analysis includes list of affected data products."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        result = controller.analyze_rollback_impact(
+            tag="v1.0.0",
+            environment="prod",
+        )
+
+        assert isinstance(result, RollbackImpactAnalysis)
+        assert isinstance(result.affected_products, list)
+
+    @pytest.mark.xfail(reason="T051: Implement recommendations generation")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_impact_analysis_contains_recommendations(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: Analysis includes operator recommendations."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        result = controller.analyze_rollback_impact(
+            tag="v1.0.0",
+            environment="prod",
+        )
+
+        assert isinstance(result, RollbackImpactAnalysis)
+        assert isinstance(result.recommendations, list)
+
+    @pytest.mark.xfail(reason="T051: Implement estimated_downtime calculation")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_impact_analysis_may_contain_estimated_downtime(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: Analysis may include estimated_downtime (optional)."""
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        result = controller.analyze_rollback_impact(
+            tag="v1.0.0",
+            environment="prod",
+        )
+
+        assert isinstance(result, RollbackImpactAnalysis)
+        # estimated_downtime is optional (can be None or string)
+        if result.estimated_downtime is not None:
+            assert isinstance(result.estimated_downtime, str)
+
+    @pytest.mark.xfail(reason="T051: Implement version validation in analyze")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_analyze_raises_version_not_promoted_for_unknown_version(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: analyze_rollback_impact() raises error for unknown version."""
+        from floe_core.oci.errors import VersionNotPromotedError
+
+        with pytest.raises(VersionNotPromotedError):
+            controller.analyze_rollback_impact(
+                tag="v99.0.0",
+                environment="prod",
+            )
+
+    @pytest.mark.xfail(reason="T051: Implement OpenTelemetry span for analyze")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_analyze_rollback_impact_creates_span(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: analyze_rollback_impact() creates OpenTelemetry span."""
+        with patch("floe_core.oci.promotion.create_span") as mock_span:
+            mock_span_instance = Mock()
+            mock_span_instance.get_span_context.return_value = Mock(
+                trace_id=0x12345678901234567890123456789012,
+                is_valid=True,
+            )
+            mock_span.return_value.__enter__ = Mock(return_value=mock_span_instance)
+            mock_span.return_value.__exit__ = Mock(return_value=None)
+
+            controller.analyze_rollback_impact(
+                tag="v1.0.0",
+                environment="prod",
+            )
+
+            mock_span.assert_called_once()
+            # Span name should indicate analysis operation
+            span_name = mock_span.call_args[0][0]
+            assert "analyze" in span_name.lower() or "impact" in span_name.lower()
+
+    @pytest.mark.xfail(reason="T051: Implement dry-run integration")
+    @pytest.mark.requirement("8C-FR-016")
+    def test_rollback_with_analyze_flag_includes_impact_analysis(
+        self, controller: MagicMock
+    ) -> None:
+        """EXPECTED: rollback() with analyze=True includes impact analysis.
+
+        When analyze=True is passed to rollback(), the RollbackRecord
+        should include the impact_analysis field populated.
+        """
+        from floe_core.schemas.promotion import RollbackImpactAnalysis, RollbackRecord
+
+        result = controller.rollback(
+            tag="v1.0.0",
+            environment="prod",
+            reason="Rollback with impact analysis",
+            operator="sre@example.com",
+            analyze=True,  # Request impact analysis
+        )
+
+        assert isinstance(result, RollbackRecord)
+        assert result.impact_analysis is not None
+        assert isinstance(result.impact_analysis, RollbackImpactAnalysis)
