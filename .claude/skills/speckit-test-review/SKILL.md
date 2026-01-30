@@ -103,22 +103,24 @@ If no test files to review in default mode, suggest using `--all` for full audit
 
 ### Phase 1: Semantic Test Analysis
 
-**Invoke `test-reviewer` agent for each test file (or batch by type).**
+**Use OMC `code-reviewer` agent for semantic analysis (replaces custom test-reviewer).**
 
 ```
-Task(test-reviewer, "Review the following test file for quality, correctness, and maintainability.
+Task(oh-my-claudecode:code-reviewer, "Review test quality for the following files.
 
-File: [path]
+Files: [list]
 
-Apply your full analysis framework:
-1. For each test, evaluate Purpose, Correctness, Isolation, Maintainability, Type Appropriateness
-2. Apply type-specific checks based on test classification
-3. Full analysis for tests with issues, brief summary for clean tests
+Focus on:
+1. Purpose clarity - is it clear what's being tested?
+2. Correctness - could test pass while code is broken?
+3. Isolation - deterministic and independent?
+4. Maintainability - brittle to implementation changes?
+5. Type appropriateness - right level of test?
 
-Return your structured analysis.")
+Return structured analysis with severity ratings.")
 ```
 
-**Wait for test-reviewer to return.**
+**Wait for code-reviewer to return.**
 
 ### Phase 2: floe-Specific Analysis (Parallel)
 
@@ -132,10 +134,6 @@ Return your Plugin Quality Report.")
 Task(contract-stability, "Analyze contract stability.
 Changed files: [list]
 Return your Contract Stability Report.")
-
-Task(architecture-compliance, "Analyze architecture compliance in tests.
-Changed files: [list]
-Return your Architecture Compliance Report.")
 ```
 
 **Wait for all agents to return.**
