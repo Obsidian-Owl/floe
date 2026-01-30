@@ -15,4 +15,3 @@ Commands:
   status    Query artifact promotion status across environments (FR-023).
   test      Run platform tests (FR-016).
   unlock    Unlock an environment to allow promotions (FR-037).
-

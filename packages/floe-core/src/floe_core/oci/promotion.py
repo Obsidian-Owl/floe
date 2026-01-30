@@ -55,6 +55,46 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from floe_core.oci.errors import (
+    AuthorizationError,
+    EnvironmentLockedError,
+    InvalidTransitionError,
+    SeparationOfDutiesError,
+)
+from floe_core.oci.security_gate import (
+    SecurityGateParseError,
+    evaluate_security_gate,
+    parse_grype_output,
+    parse_trivy_output,
+)
+from floe_core.schemas.promotion import (
+    EnvironmentConfig,
+    EnvironmentLock,
+    EnvironmentStatus,
+    GateResult,
+    GateStatus,
+    PromotionConfig,
+    PromotionGate,
+    PromotionHistoryEntry,
+    PromotionRecord,
+    PromotionStatusResponse,
+    RegistrySyncStatus,
+    RollbackImpactAnalysis,
+    RollbackRecord,
+    SecurityGateConfig,
+)
+from floe_core.telemetry.tracing import create_span
+
+if TYPE_CHECKING:
+    from floe_core.enforcement import PolicyEnforcer
+    from floe_core.oci.authorization import AuthorizationChecker
+    from floe_core.oci.client import OCIClient
+    from floe_core.oci.webhooks import WebhookNotifier
+    from floe_core.schemas.oci import RegistryConfig
+    from floe_core.schemas.signing import VerificationResult
+
+logger = structlog.get_logger(__name__)
+
 # Security: Strict pattern for OCI tags to prevent command injection
 # Allows: v1.0.0, 1.2.3, v1.0.0-alpha, v1.0.0-rc.1, latest, latest-staging
 # Blocks: shell metacharacters (;, |, &, $, `, etc.)
@@ -92,47 +132,6 @@ def validate_tag_security(tag: str) -> None:
             "Tags must start with alphanumeric and contain only "
             "alphanumeric characters, dots, underscores, or hyphens."
         )
-
-from floe_core.oci.errors import (
-    AuthorizationError,
-    EnvironmentLockedError,
-    InvalidTransitionError,
-    SeparationOfDutiesError,
-)
-from floe_core.telemetry.tracing import create_span
-from floe_core.oci.security_gate import (
-    SecurityGateEvaluation,
-    SecurityGateParseError,
-    evaluate_security_gate,
-    parse_grype_output,
-    parse_trivy_output,
-)
-from floe_core.schemas.promotion import (
-    EnvironmentConfig,
-    EnvironmentLock,
-    EnvironmentStatus,
-    GateResult,
-    GateStatus,
-    PromotionConfig,
-    PromotionGate,
-    PromotionHistoryEntry,
-    PromotionRecord,
-    PromotionStatusResponse,
-    RollbackImpactAnalysis,
-    RollbackRecord,
-    SecurityGateConfig,
-    WebhookConfig,
-)
-
-if TYPE_CHECKING:
-    from floe_core.enforcement import PolicyEnforcer
-    from floe_core.oci.authorization import AuthorizationChecker
-    from floe_core.oci.client import OCIClient
-    from floe_core.oci.webhooks import WebhookNotifier
-    from floe_core.schemas.oci import RegistryConfig
-    from floe_core.schemas.signing import VerificationResult
-
-logger = structlog.get_logger(__name__)
 
 
 class PromotionController:
@@ -203,14 +202,14 @@ class PromotionController:
         # Verification result cache keyed by artifact digest (T072 - FR-022)
         # Since artifacts are immutable (same digest = same content), we can
         # cache verification results to avoid redundant cryptographic operations
-        self._verification_cache: dict[str, "VerificationResult"] = {}
+        self._verification_cache: dict[str, VerificationResult] = {}
 
         # Environment lock cache keyed by environment name (T102 - FR-035)
         # Stores EnvironmentLock for each locked environment
-        self._environment_locks: dict[str, "EnvironmentLock"] = {}
+        self._environment_locks: dict[str, EnvironmentLock] = {}
 
         # Webhook notifier for lifecycle events (T117 - FR-040 through FR-043)
-        self._webhook_notifier: "WebhookNotifier | None" = None
+        self._webhook_notifier: WebhookNotifier | None = None
         if promotion.webhooks:
             from floe_core.oci.webhooks import WebhookNotifier
 
@@ -222,7 +221,7 @@ class PromotionController:
             )
 
         # Authorization checker for access control (T128 - FR-045 through FR-048)
-        self._authorization_checker: "AuthorizationChecker | None" = None
+        self._authorization_checker: AuthorizationChecker | None = None
 
         self._log.info("promotion_controller_initialized")
 
@@ -495,7 +494,7 @@ class PromotionController:
                 from_env=from_env,
                 to_env=to_env,
                 reason=f"Unknown source environment: '{from_env}'",
-            )
+            ) from None
 
         # Check target environment exists
         try:
@@ -505,14 +504,17 @@ class PromotionController:
                 from_env=from_env,
                 to_env=to_env,
                 reason=f"Unknown target environment: '{to_env}'",
-            )
+            ) from None
 
         # Check forward direction (not backward)
         if to_idx <= from_idx:
             raise InvalidTransitionError(
                 from_env=from_env,
                 to_env=to_env,
-                reason=f"Invalid direction: cannot promote backward from '{from_env}' to '{to_env}'",
+                reason=(
+                    f"Invalid direction: cannot promote backward "
+                    f"from '{from_env}' to '{to_env}'"
+                ),
             )
 
         # Check adjacent environments (no skipping)
@@ -1208,7 +1210,7 @@ class PromotionController:
         artifact_digest: str,
         content: bytes | None = None,
         enforcement: str = "enforce",
-    ) -> "VerificationResult":
+    ) -> VerificationResult:
         """Verify artifact signature using existing verification infrastructure.
 
         Integrates with Epic 8B's VerificationClient for signature verification
@@ -1337,8 +1339,8 @@ class PromotionController:
         tag: str,
         to_env: str,
         artifact_digest: str,
-        secondary_clients: list["OCIClient"],
-    ) -> list["RegistrySyncStatus"]:
+        secondary_clients: list[OCIClient],
+    ) -> list[RegistrySyncStatus]:
         """Sync artifact to secondary registries (T080 - FR-028).
 
         Syncs the promoted artifact to secondary registries in parallel.
@@ -1385,7 +1387,7 @@ class PromotionController:
                 secondary_count=len(secondary_clients),
             )
 
-            def sync_to_registry(client: "OCIClient") -> RegistrySyncStatus:
+            def sync_to_registry(client: OCIClient) -> RegistrySyncStatus:
                 """Sync to a single secondary registry."""
                 registry_uri = client.registry_uri
                 try:
@@ -1451,7 +1453,8 @@ class PromotionController:
             )
             span.set_attribute("duration_ms", duration_ms)
             span.set_attribute("success_count", successful)
-            span.set_attribute("status", "completed" if successful == len(sync_results) else "partial")
+            status = "completed" if successful == len(sync_results) else "partial"
+            span.set_attribute("status", status)
 
             return sync_results
 
@@ -1803,7 +1806,6 @@ class PromotionController:
             >>> versions = controller._get_promoted_versions("prod")
             >>> print(versions)  # ['v1.0.0', 'v1.1.0', 'v2.0.0']
         """
-        import fnmatch
         import re
 
         self._log.debug("get_promoted_versions_started", environment=environment)
@@ -2010,7 +2012,7 @@ class PromotionController:
         from datetime import datetime, timezone
         from uuid import uuid4
 
-        from floe_core.oci.errors import GateValidationError, SignatureVerificationError
+        from floe_core.oci.errors import GateValidationError
 
         # Security: Validate tag format to prevent command injection
         # Must be done before tag is used in any shell commands via gates
@@ -2129,11 +2131,9 @@ class PromotionController:
 
                 # Step 7: Update mutable latest tag (with retry on transient failures)
                 max_retries = 3
-                latest_tag_updated = False
                 for attempt in range(max_retries):
                     try:
                         self._update_latest_tag(env_tag, to_env)
-                        latest_tag_updated = True
                         break
                     except Exception as e:
                         if attempt < max_retries - 1:
@@ -2169,7 +2169,6 @@ class PromotionController:
             # Note: Record is created AFTER storage to capture any storage warnings
             if not dry_run:
                 max_retries = 3
-                record_stored = False
 
                 # Build preliminary record for storage attempts
                 preliminary_record = PromotionRecord(
@@ -2195,7 +2194,6 @@ class PromotionController:
                     try:
                         env_tag = f"{tag}-{to_env}"
                         self._store_promotion_record(env_tag, preliminary_record)
-                        record_stored = True
                         break
                     except Exception as e:
                         if attempt < max_retries - 1:
@@ -2271,10 +2269,10 @@ class PromotionController:
         to_env: str,
         operator: str,
         *,
-        secondary_clients: list["OCIClient"] | None = None,
+        secondary_clients: list[OCIClient] | None = None,
         dry_run: bool = False,
         verify_digests: bool | None = None,
-    ) -> "PromotionRecord":
+    ) -> PromotionRecord:
         """Promote artifact with multi-registry sync support (T080 - FR-028).
 
         Extends promote() with optional secondary registry sync.
@@ -2348,7 +2346,8 @@ class PromotionController:
         for sync_status in sync_results:
             if not sync_status.synced:
                 warnings.append(
-                    f"Secondary registry sync failed for {sync_status.registry_uri}: {sync_status.error}"
+                    f"Secondary registry sync failed for "
+                    f"{sync_status.registry_uri}: {sync_status.error}"
                 )
 
         # Return updated record with sync status
@@ -2440,7 +2439,7 @@ class PromotionController:
                     tag=tag,
                     environment=environment,
                     available_versions=available,
-                )
+                ) from None
 
             # Step 2: Get target artifact digest (the version we're rolling back TO)
             target_digest = self._get_artifact_digest(env_tag)
@@ -2558,7 +2557,7 @@ class PromotionController:
                 tag=tag,
                 environment=environment,
                 available_versions=available,
-            )
+            ) from None
 
         # Step 2: Get current latest version info
         latest_tag = f"latest-{environment}"

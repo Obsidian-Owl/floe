@@ -269,7 +269,7 @@ class AuthorizationChecker:
         self,
         operator: str,
         previous_operator: str | None,
-    ) -> "SeparationOfDutiesResult":
+    ) -> SeparationOfDutiesResult:
         """Check if promotion violates separation of duties (T135).
 
         Implements FR-049 (separation rule), FR-050 (enable/disable), FR-052 (case-insensitive).
