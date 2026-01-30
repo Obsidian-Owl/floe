@@ -56,11 +56,14 @@ from floe_core.oci.errors import InvalidTransitionError
 from floe_core.telemetry.tracing import create_span
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
+    EnvironmentStatus,
     GateResult,
     GateStatus,
     PromotionConfig,
     PromotionGate,
+    PromotionHistoryEntry,
     PromotionRecord,
+    PromotionStatusResponse,
     RollbackImpactAnalysis,
     RollbackRecord,
 )
@@ -1613,6 +1616,155 @@ class PromotionController:
         )
 
         return analysis
+
+    def get_status(
+        self,
+        tag: str,
+        env: str | None = None,
+        history: int | None = None,
+    ) -> PromotionStatusResponse:
+        """Get promotion status for an artifact across environments.
+
+        Queries the registry to determine which environments contain the
+        artifact and retrieves promotion history from OCI annotations.
+
+        Args:
+            tag: Artifact tag to query status for.
+            env: Optional environment filter for single-environment status.
+            history: Optional limit on number of history entries to return.
+
+        Returns:
+            PromotionStatusResponse with environment states and history.
+
+        Raises:
+            ArtifactNotFoundError: If artifact tag not found.
+
+        Example:
+            >>> status = controller.get_status("v1.0.0")
+            >>> if status.environments["prod"].promoted:
+            ...     print(f"v1.0.0 is in production")
+            >>> status = controller.get_status("v1.0.0", env="prod")
+            >>> status = controller.get_status("v1.0.0", history=5)
+        """
+        import json
+        from datetime import datetime, timezone
+
+        from floe_core.oci.errors import ArtifactNotFoundError
+
+        self._log.info(
+            "get_status_started",
+            tag=tag,
+            env_filter=env,
+            history_limit=history,
+        )
+
+        # Step 1: Get artifact manifest and digest
+        manifest = self.client.inspect(tag)
+        digest = manifest.digest
+        annotations = getattr(manifest, "annotations", {}) or {}
+
+        # Step 2: Determine environments to check
+        if env is not None:
+            environments_to_check = [env]
+        else:
+            environments_to_check = [e.name for e in self.promotion.environments]
+
+        # Step 3: Check each environment for this artifact
+        environment_states: dict[str, EnvironmentStatus] = {}
+        for env_name in environments_to_check:
+            env_tag = f"{tag}-{env_name}"
+            latest_tag = f"latest-{env_name}"
+
+            promoted = False
+            promoted_at = None
+            is_latest = False
+            operator = None
+
+            try:
+                # Check if environment-specific tag exists
+                env_manifest = self.client.inspect(env_tag)
+                if env_manifest.digest == digest:
+                    promoted = True
+
+                    # Try to get promotion metadata from annotations
+                    env_annotations = getattr(env_manifest, "annotations", {}) or {}
+                    promotion_data = env_annotations.get("dev.floe.promotion", "{}")
+                    try:
+                        promo_info = json.loads(promotion_data)
+                        if isinstance(promo_info, dict):
+                            if "promoted_at" in promo_info:
+                                promoted_at = datetime.fromisoformat(
+                                    promo_info["promoted_at"].replace("Z", "+00:00")
+                                )
+                            operator = promo_info.get("operator")
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
+            except ArtifactNotFoundError:
+                pass  # Not promoted to this environment
+
+            try:
+                # Check if this artifact is the latest in the environment
+                latest_manifest = self.client.inspect(latest_tag)
+                if latest_manifest.digest == digest:
+                    is_latest = True
+            except ArtifactNotFoundError:
+                pass  # No latest tag exists
+
+            environment_states[env_name] = EnvironmentStatus(
+                promoted=promoted,
+                promoted_at=promoted_at,
+                is_latest=is_latest,
+                operator=operator,
+            )
+
+        # Step 4: Extract promotion history from annotations
+        history_entries: list[PromotionHistoryEntry] = []
+        history_data = annotations.get("dev.floe.promotion.history", "[]")
+        try:
+            history_list = json.loads(history_data)
+            if isinstance(history_list, list):
+                for entry in history_list:
+                    if isinstance(entry, dict):
+                        try:
+                            history_entries.append(
+                                PromotionHistoryEntry(
+                                    promotion_id=entry.get("promotion_id", ""),
+                                    artifact_digest=entry.get("artifact_digest", digest),
+                                    source_environment=entry.get("source_environment", ""),
+                                    target_environment=entry.get("target_environment", ""),
+                                    operator=entry.get("operator", "unknown"),
+                                    promoted_at=entry.get("promoted_at", ""),
+                                    gate_results=entry.get("gate_results", []),
+                                    signature_verified=entry.get("signature_verified", False),
+                                )
+                            )
+                        except Exception:
+                            pass  # Skip malformed entries
+        except json.JSONDecodeError:
+            pass
+
+        # Step 5: Apply history limit if specified
+        if history is not None and history > 0:
+            history_entries = history_entries[:history]
+
+        # Step 6: Build response
+        response = PromotionStatusResponse(
+            tag=tag,
+            digest=digest,
+            environments=environment_states,
+            history=history_entries,
+            queried_at=datetime.now(timezone.utc),
+        )
+
+        self._log.info(
+            "get_status_completed",
+            tag=tag,
+            environment_count=len(environment_states),
+            history_count=len(history_entries),
+        )
+
+        return response
 
     def status(self, environment: str | None = None) -> dict:
         """Get promotion status for environment(s).

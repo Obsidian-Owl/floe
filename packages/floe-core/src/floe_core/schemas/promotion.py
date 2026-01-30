@@ -852,7 +852,7 @@ class EnvironmentStatus(BaseModel):
         ... )
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(extra="forbid")
 
     promoted: bool = Field(
         ...,
@@ -899,7 +899,7 @@ class PromotionHistoryEntry(BaseModel):
         ... )
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(extra="forbid")
 
     promotion_id: UUID | str = Field(
         ...,
