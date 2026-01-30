@@ -340,6 +340,8 @@ class PromotionController:
             operator=operator,
             required_groups=list(env_config.authorization.allowed_groups or []),
             reason=result.reason or "Not authorized",
+            environment=environment,  # T132 - actionable guidance
+            allowed_operators=list(env_config.authorization.allowed_operators or []),
         )
 
     def _validate_transition(self, from_env: str, to_env: str) -> None:

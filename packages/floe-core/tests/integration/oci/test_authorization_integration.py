@@ -333,3 +333,69 @@ class TestAuthorizationErrorMessages:
             reason="Not authorized",
         )
         assert error.exit_code == 12
+
+    @pytest.mark.requirement("FR-048")
+    def test_authorization_error_includes_environment(self) -> None:
+        """Test AuthorizationError includes environment in message (T132)."""
+        from floe_core.oci.errors import AuthorizationError
+
+        error = AuthorizationError(
+            operator="alice@example.com",
+            required_groups=["platform-admins"],
+            reason="Not a member of required groups",
+            environment="prod",
+        )
+        assert "prod" in str(error)
+        assert error.environment == "prod"
+
+    @pytest.mark.requirement("FR-048")
+    def test_authorization_error_includes_actionable_guidance(self) -> None:
+        """Test AuthorizationError includes actionable guidance (T132)."""
+        from floe_core.oci.errors import AuthorizationError
+
+        error = AuthorizationError(
+            operator="alice@example.com",
+            required_groups=["platform-admins"],
+            reason="Not a member of required groups",
+            environment="prod",
+        )
+        error_str = str(error)
+        # Should include guidance about getting access
+        assert "Request membership" in error_str or "get access" in error_str.lower()
+        # Should include info command
+        assert "floe promote info" in error_str
+
+    @pytest.mark.requirement("FR-048")
+    def test_authorization_error_get_actionable_guidance_method(self) -> None:
+        """Test AuthorizationError.get_actionable_guidance() method (T132)."""
+        from floe_core.oci.errors import AuthorizationError
+
+        error = AuthorizationError(
+            operator="alice@example.com",
+            required_groups=["platform-admins", "release-managers"],
+            reason="Not authorized",
+            environment="staging",
+        )
+        guidance = error.get_actionable_guidance()
+
+        # Should include steps
+        assert "1." in guidance
+        assert "platform-admins" in guidance
+        assert "floe promote info" in guidance
+        assert "floe whoami" in guidance
+
+    @pytest.mark.requirement("FR-048")
+    def test_authorization_error_with_allowed_operators(self) -> None:
+        """Test AuthorizationError shows allowed operators when no groups (T132)."""
+        from floe_core.oci.errors import AuthorizationError
+
+        error = AuthorizationError(
+            operator="alice@example.com",
+            required_groups=[],
+            reason="Not in allowed operators list",
+            environment="prod",
+            allowed_operators=["admin@example.com", "ops@example.com"],
+        )
+        error_str = str(error)
+        # Should include allowed operators info
+        assert "admin@example.com" in error_str or "Allowed operators" in error_str
