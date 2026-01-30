@@ -714,3 +714,304 @@ class TestPromoteGateFailurePath:
 
             # Should report the first failed gate
             assert exc_info.value.gate == "policy_compliance"
+
+
+class TestPromoteSignatureFailurePath:
+    """Unit tests for PromotionController.promote() signature failure path (T030)."""
+
+    @pytest.fixture
+    def controller(self) -> MagicMock:
+        """Create a PromotionController with mocked dependencies."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        return PromotionController(client=oci_client, promotion=promotion)
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_raises_signature_verification_error_on_invalid_signature(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() raises SignatureVerificationError when signature is invalid.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            mock_gates.return_value = []  # All gates pass
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+                reason="Invalid signature",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            assert "Invalid signature" in exc_info.value.reason
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_raises_signature_verification_error_on_unsigned_artifact(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() raises SignatureVerificationError for unsigned artifacts.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            mock_gates.return_value = []
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+                reason="No signature found",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            assert "no signature" in exc_info.value.reason.lower()
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_raises_signature_verification_error_on_untrusted_signer(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() raises SignatureVerificationError for untrusted signer.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            mock_gates.return_value = []
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+                reason="Signer not in trusted issuers",
+                expected_signer="repo:acme/floe:ref:refs/heads/main",
+                actual_signer="repo:unknown/repo:ref:refs/heads/main",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            assert exc_info.value.expected_signer == "repo:acme/floe:ref:refs/heads/main"
+            assert exc_info.value.actual_signer == "repo:unknown/repo:ref:refs/heads/main"
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_signature_failure_does_not_create_tags(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() does not create tags when signature verification fails.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify, patch.object(
+            controller, "_create_env_tag"
+        ) as mock_create_tag, patch.object(
+            controller, "_update_latest_tag"
+        ) as mock_update_latest, patch.object(
+            controller, "_store_promotion_record"
+        ) as mock_store:
+            mock_gates.return_value = []
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+                reason="Invalid signature",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError):
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # No modifications should have been made
+            mock_create_tag.assert_not_called()
+            mock_update_latest.assert_not_called()
+            mock_store.assert_not_called()
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_signature_failure_exit_code(
+        self, controller: MagicMock
+    ) -> None:
+        """Test SignatureVerificationError has correct exit code (6).
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            mock_gates.return_value = []
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+                reason="Invalid signature",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # Exit code 6 for signature verification failure
+            assert exc_info.value.exit_code == 6
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_signature_failure_after_gates_pass(
+        self, controller: MagicMock
+    ) -> None:
+        """Test signature verification happens after gates pass.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            # Gates pass
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=100,
+                ),
+            ]
+            # But signature fails
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref="harbor.example.com/floe:v1.0.0",
+                reason="Signature expired",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError):
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # Both gates and verify should be called (gates pass, verify fails)
+            mock_gates.assert_called_once()
+            mock_verify.assert_called_once()
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_signature_verification_records_result_on_success(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() records signature_verified=True when verification passes.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify, patch.object(
+            controller, "_create_env_tag"
+        ), patch.object(
+            controller, "_update_latest_tag"
+        ), patch.object(
+            controller, "_store_promotion_record"
+        ):
+            mock_gates.return_value = []
+            mock_verify.return_value = Mock(status="valid")
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            result = controller.promote(
+                tag="v1.0.0",
+                from_env="dev",
+                to_env="staging",
+                operator="ci@github.com",
+            )
+
+            assert result.signature_verified is True
+
+    @pytest.mark.requirement("8C-FR-006")
+    def test_promote_includes_artifact_ref_in_signature_error(
+        self, controller: MagicMock
+    ) -> None:
+        """Test SignatureVerificationError includes the artifact reference.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import SignatureVerificationError
+
+        artifact_ref = "harbor.example.com/floe:v1.0.0"
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            mock_gates.return_value = []
+            mock_verify.side_effect = SignatureVerificationError(
+                artifact_ref=artifact_ref,
+                reason="Invalid signature",
+            )
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(SignatureVerificationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            assert exc_info.value.artifact_ref == artifact_ref
+            assert artifact_ref in str(exc_info.value)
