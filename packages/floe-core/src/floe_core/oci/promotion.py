@@ -356,6 +356,119 @@ class PromotionController:
                 error=error_msg,
             )
 
+    def _run_policy_compliance_gate(
+        self,
+        manifest: dict,
+        *,
+        dry_run: bool = False,
+    ) -> GateResult:
+        """Execute the policy compliance gate using PolicyEnforcer.
+
+        Integrates with Epic 3B's PolicyEnforcer to validate artifacts against
+        governance policies before promotion.
+
+        Args:
+            manifest: The dbt manifest dictionary to validate.
+            dry_run: If True, violations are reported as warnings.
+
+        Returns:
+            GateResult with status based on enforcement result.
+
+        Note:
+            If no PolicyEnforcer is configured, returns SKIPPED status.
+        """
+        start_time = time.monotonic()
+
+        # If no PolicyEnforcer configured, skip this gate
+        if self.policy_enforcer is None:
+            self._log.info(
+                "policy_compliance_gate_skipped",
+                reason="no_policy_enforcer_configured",
+            )
+            return GateResult(
+                gate=PromotionGate.POLICY_COMPLIANCE,
+                status=GateStatus.SKIPPED,
+                duration_ms=0,
+            )
+
+        self._log.info(
+            "policy_compliance_gate_started",
+            dry_run=dry_run,
+        )
+
+        try:
+            # Call PolicyEnforcer.enforce()
+            result = self.policy_enforcer.enforce(
+                manifest=manifest,
+                dry_run=dry_run,
+            )
+
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+
+            if result.passed:
+                self._log.info(
+                    "policy_compliance_gate_passed",
+                    duration_ms=duration_ms,
+                    violation_count=len(result.violations),
+                )
+                return GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=duration_ms,
+                    details={
+                        "enforcement_level": result.enforcement_level,
+                        "warning_count": result.warning_count,
+                    },
+                )
+            else:
+                # Enforcement failed - extract violation summary
+                violation_summary = (
+                    f"{result.error_count} error(s), {result.warning_count} warning(s)"
+                )
+                error_msg = f"Policy compliance failed: {violation_summary}"
+
+                self._log.warning(
+                    "policy_compliance_gate_failed",
+                    duration_ms=duration_ms,
+                    error_count=result.error_count,
+                    warning_count=result.warning_count,
+                )
+                return GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.FAILED,
+                    duration_ms=duration_ms,
+                    error=error_msg,
+                    details={
+                        "enforcement_level": result.enforcement_level,
+                        "error_count": result.error_count,
+                        "warning_count": result.warning_count,
+                        "violations": [
+                            {
+                                "error_code": v.error_code,
+                                "model_name": v.model_name,
+                                "message": v.message,
+                            }
+                            for v in result.violations[:5]  # Limit to first 5
+                        ],
+                    },
+                )
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_msg = f"Policy compliance gate error: {e}"
+
+            self._log.error(
+                "policy_compliance_gate_error",
+                duration_ms=duration_ms,
+                error=str(e),
+            )
+            return GateResult(
+                gate=PromotionGate.POLICY_COMPLIANCE,
+                status=GateStatus.FAILED,
+                duration_ms=duration_ms,
+                error=error_msg,
+            )
+
     def promote(
         self,
         tag: str,
