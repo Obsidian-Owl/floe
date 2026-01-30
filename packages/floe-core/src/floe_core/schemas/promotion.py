@@ -732,6 +732,7 @@ class PromotionRecord(BaseModel):
         trace_id: OpenTelemetry trace ID for linking.
         authorization_passed: Authorization check result.
         authorized_via: How authorization was verified (group, operator).
+        operator_groups: Groups the operator belonged to at promotion time.
 
     Examples:
         >>> from uuid import uuid4
@@ -815,6 +816,10 @@ class PromotionRecord(BaseModel):
     authorized_via: str | None = Field(
         default=None,
         description="How authorization was verified (group, operator)",
+    )
+    operator_groups: list[str] = Field(
+        default_factory=list,
+        description="Groups the operator belonged to at promotion time (FR-048 audit trail)",
     )
     warnings: list[str] = Field(
         default_factory=list,

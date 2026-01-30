@@ -268,7 +268,7 @@ class PromotionController:
         self,
         operator: str,
         environment: str,
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool, str | None, list[str]]:
         """Check if operator is authorized to promote to environment (T128).
 
         Implements FR-045 (identity), FR-046 (env rules), FR-047 (groups), FR-048 (audit).
@@ -280,7 +280,8 @@ class PromotionController:
             environment: Target environment name.
 
         Returns:
-            Tuple of (authorized: bool, authorized_via: str | None).
+            Tuple of (authorized: bool, authorized_via: str | None, groups: list[str]).
+            groups contains the groups checked for FR-048 audit trail.
             If not authorized, authorized_via is None.
 
         Raises:
@@ -297,7 +298,7 @@ class PromotionController:
                 operator=operator,
                 environment=environment,
             )
-            return True, "no_config"
+            return True, "no_config", []
 
         # Create checker with environment's authorization config
         checker = AuthorizationChecker(config=env_config.authorization)
@@ -325,7 +326,7 @@ class PromotionController:
                 authorized_via=result.authorized_via,
                 groups_checked=result.groups_checked,
             )
-            return True, result.authorized_via
+            return True, result.authorized_via, result.groups_checked
 
         # Authorization denied - raise error
         self._log.warning(
@@ -1595,7 +1596,9 @@ class PromotionController:
                 )
 
             # Step 1.6: Check operator authorization (T128 - FR-045 through FR-048)
-            authorized, authorized_via = self._check_authorization(operator, to_env)
+            authorized, authorized_via, operator_groups = self._check_authorization(
+                operator, to_env
+            )
 
             # Step 2: Get artifact digest (verifies artifact exists)
             artifact_digest = self._get_artifact_digest(tag)
@@ -1700,6 +1703,7 @@ class PromotionController:
                     trace_id=effective_trace_id,
                     authorization_passed=authorized,  # T128 - FR-048 audit
                     authorized_via=authorized_via,  # T128 - FR-048 audit
+                    operator_groups=operator_groups,  # T130 - FR-048 audit trail
                     warnings=warnings.copy(),  # Copy current warnings
                 )
 
@@ -1743,6 +1747,7 @@ class PromotionController:
                 trace_id=effective_trace_id,
                 authorization_passed=authorized,  # T128 - FR-048 audit
                 authorized_via=authorized_via,  # T128 - FR-048 audit
+                operator_groups=operator_groups,  # T130 - FR-048 audit trail
                 warnings=warnings,
             )
 
