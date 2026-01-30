@@ -53,7 +53,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from floe_core.oci.errors import InvalidTransitionError
+from floe_core.oci.errors import EnvironmentLockedError, InvalidTransitionError
 from floe_core.telemetry.tracing import create_span
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
@@ -1418,6 +1418,26 @@ class PromotionController:
 
             # Step 1: Validate transition path
             self._validate_transition(from_env, to_env)
+
+            # Step 1.5: Check if target environment is locked (FR-036)
+            lock_status = self.get_lock_status(to_env)
+            if lock_status.locked:
+                self._log.warning(
+                    "promotion_blocked_environment_locked",
+                    environment=to_env,
+                    locked_by=lock_status.locked_by,
+                    reason=lock_status.reason,
+                )
+                raise EnvironmentLockedError(
+                    environment=to_env,
+                    locked_by=lock_status.locked_by or "",
+                    locked_at=(
+                        lock_status.locked_at.isoformat()
+                        if lock_status.locked_at
+                        else ""
+                    ),
+                    reason=lock_status.reason or "",
+                )
 
             # Step 2: Get artifact digest (verifies artifact exists)
             artifact_digest = self._get_artifact_digest(tag)

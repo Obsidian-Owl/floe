@@ -251,8 +251,8 @@ class TestPromotionRejectionOnLocked:
         with pytest.raises(EnvironmentLockedError) as exc_info:
             controller.promote(
                 tag="v1.0.0",
-                source_environment="staging",
-                target_environment="prod",
+                from_env="staging",
+                to_env="prod",
                 operator="release@example.com",
             )
 
@@ -274,8 +274,8 @@ class TestPromotionRejectionOnLocked:
         with pytest.raises(EnvironmentLockedError) as exc_info:
             controller.promote(
                 tag="v1.0.0",
-                source_environment="staging",
-                target_environment="prod",
+                from_env="staging",
+                to_env="prod",
                 operator="release@example.com",
             )
 
@@ -309,8 +309,8 @@ class TestPromotionRejectionOnLocked:
         try:
             controller.promote(
                 tag="v1.0.0",
-                source_environment="staging",
-                target_environment="prod",
+                from_env="staging",
+                to_env="prod",
                 operator="release@example.com",
             )
         except EnvironmentLockedError:
