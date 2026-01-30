@@ -14,6 +14,7 @@ Tests for Epic 8C (Promotion Lifecycle) schemas including:
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestPromotionGate:
