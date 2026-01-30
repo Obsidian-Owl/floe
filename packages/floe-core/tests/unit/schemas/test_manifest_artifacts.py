@@ -220,3 +220,190 @@ class TestPlatformManifestArtifacts:
         artifacts_prop = properties["artifacts"]
         # Should be anyOf (ArtifactsConfig | null) or nullable
         assert "anyOf" in artifacts_prop or artifacts_prop.get("type") == "null"
+
+
+class TestManifestWebhookConfiguration:
+    """Tests for webhook configuration in manifest.yaml parsing (T118).
+
+    Task ID: T118
+    Phase: 11 - Webhooks (US9)
+    Requirements: FR-040, FR-041, FR-042, FR-043
+    """
+
+    @pytest.mark.requirement("FR-040")
+    def test_manifest_with_webhooks(self) -> None:
+        """Test manifest parses webhook configuration in artifacts.promotion.webhooks."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import PromotionConfig, WebhookConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        webhooks = [
+            WebhookConfig(
+                url="https://hooks.example.com/webhook",
+                events=["promote", "rollback"],
+            ),
+        ]
+        promotion = PromotionConfig(webhooks=webhooks)
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        assert manifest.artifacts.promotion is not None
+        assert manifest.artifacts.promotion.webhooks is not None
+        assert len(manifest.artifacts.promotion.webhooks) == 1
+        assert manifest.artifacts.promotion.webhooks[0].url == "https://hooks.example.com/webhook"
+        assert manifest.artifacts.promotion.webhooks[0].events == ["promote", "rollback"]
+
+    @pytest.mark.requirement("FR-040")
+    def test_manifest_with_multiple_webhooks(self) -> None:
+        """Test manifest parses multiple webhook configurations."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import PromotionConfig, WebhookConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        webhooks = [
+            WebhookConfig(
+                url="https://slack.example.com/webhook",
+                events=["promote"],
+            ),
+            WebhookConfig(
+                url="https://pagerduty.example.com/webhook",
+                events=["rollback"],
+                headers={"Authorization": "Bearer token"},
+            ),
+        ]
+        promotion = PromotionConfig(webhooks=webhooks)
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        assert manifest.artifacts.promotion is not None
+        assert manifest.artifacts.promotion.webhooks is not None
+        assert len(manifest.artifacts.promotion.webhooks) == 2
+        assert manifest.artifacts.promotion.webhooks[0].events == ["promote"]
+        assert manifest.artifacts.promotion.webhooks[1].events == ["rollback"]
+        assert manifest.artifacts.promotion.webhooks[1].headers == {"Authorization": "Bearer token"}
+
+    @pytest.mark.requirement("FR-040")
+    def test_manifest_webhook_with_custom_timeout_and_retry(self) -> None:
+        """Test manifest parses webhook with custom timeout and retry settings."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import PromotionConfig, WebhookConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        webhooks = [
+            WebhookConfig(
+                url="https://hooks.example.com/webhook",
+                events=["promote", "lock", "unlock"],
+                timeout_seconds=60,
+                retry_count=5,
+            ),
+        ]
+        promotion = PromotionConfig(webhooks=webhooks)
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        assert manifest.artifacts.promotion is not None
+        webhook = manifest.artifacts.promotion.webhooks[0]
+        assert webhook.timeout_seconds == 60
+        assert webhook.retry_count == 5
+        assert "lock" in webhook.events
+        assert "unlock" in webhook.events
+
+    @pytest.mark.requirement("FR-040")
+    def test_manifest_without_webhooks(self) -> None:
+        """Test manifest works without webhooks (webhooks is optional)."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        promotion = PromotionConfig()  # No webhooks
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        assert manifest.artifacts.promotion is not None
+        assert manifest.artifacts.promotion.webhooks is None
+
+    @pytest.mark.requirement("FR-041")
+    def test_manifest_webhook_validates_event_types(self) -> None:
+        """Test manifest webhook validates event types are valid."""
+        from pydantic import ValidationError
+
+        from floe_core.schemas.promotion import WebhookConfig
+
+        with pytest.raises(ValidationError, match="Invalid event types"):
+            WebhookConfig(
+                url="https://hooks.example.com/webhook",
+                events=["promote", "invalid_event"],
+            )
+
+    @pytest.mark.requirement("FR-040")
+    def test_manifest_webhook_all_event_types(self) -> None:
+        """Test manifest webhook supports all valid event types."""
+        from floe_core.schemas.promotion import WebhookConfig
+
+        config = WebhookConfig(
+            url="https://hooks.example.com/webhook",
+            events=["promote", "rollback", "lock", "unlock"],
+        )
+
+        assert len(config.events) == 4
+        assert set(config.events) == {"promote", "rollback", "lock", "unlock"}
