@@ -14,9 +14,7 @@ Requirements tested:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, Mock, patch
-from uuid import uuid4
 
 import pytest
 
@@ -392,3 +390,327 @@ class TestPromoteSuccessPath:
             # trace_id should be present (may be empty string if no tracer configured)
             assert hasattr(result, "trace_id")
             assert isinstance(result.trace_id, str)
+
+
+class TestPromoteGateFailurePath:
+    """Unit tests for PromotionController.promote() gate failure path (T029)."""
+
+    @pytest.fixture
+    def controller(self) -> MagicMock:
+        """Create a PromotionController with mocked dependencies."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        return PromotionController(client=oci_client, promotion=promotion)
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_raises_gate_validation_error_on_gate_failure(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() raises GateValidationError when a gate fails.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates:
+            # Gate returns failure
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.FAILED,
+                    duration_ms=500,
+                    error="Test suite failed with 3 failures",
+                )
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            assert exc_info.value.gate == "tests"
+            assert "failed" in exc_info.value.details.lower()
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_includes_failed_gate_in_error(
+        self, controller: MagicMock
+    ) -> None:
+        """Test GateValidationError includes which gate failed.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates:
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.SECURITY_SCAN,
+                    status=GateStatus.FAILED,
+                    duration_ms=2000,
+                    error="Critical CVE found: CVE-2026-12345",
+                )
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # Error should identify which gate failed
+            assert exc_info.value.gate == "security_scan"
+            assert "CVE" in exc_info.value.details
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_stops_at_first_gate_failure(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() stops processing when first gate fails.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify, patch.object(
+            controller, "_create_env_tag"
+        ) as mock_create_tag:
+            # First gate passes, second fails
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=100,
+                ),
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.FAILED,
+                    duration_ms=500,
+                    error="Test suite failed",
+                ),
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError):
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # Signature verification and tag creation should NOT be called
+            mock_verify.assert_not_called()
+            mock_create_tag.assert_not_called()
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_gate_failure_does_not_create_tags(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() does not create tags when a gate fails.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_create_env_tag"
+        ) as mock_create_tag, patch.object(
+            controller, "_update_latest_tag"
+        ) as mock_update_latest, patch.object(
+            controller, "_store_promotion_record"
+        ) as mock_store:
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.FAILED,
+                    duration_ms=500,
+                    error="Test failed",
+                )
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError):
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # No modifications should have been made
+            mock_create_tag.assert_not_called()
+            mock_update_latest.assert_not_called()
+            mock_store.assert_not_called()
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_gate_failure_exit_code(
+        self, controller: MagicMock
+    ) -> None:
+        """Test GateValidationError has correct exit code (8).
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates:
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.FAILED,
+                    duration_ms=500,
+                    error="Test failed",
+                )
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # Exit code 8 for gate validation failure
+            assert exc_info.value.exit_code == 8
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_dry_run_reports_gate_failure_without_raising(
+        self, controller: MagicMock
+    ) -> None:
+        """Test promote() in dry_run mode returns record with failed gates (no exception).
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+
+        In dry-run mode, gate failures should be recorded but not raise an exception,
+        allowing users to see what WOULD happen without actually blocking.
+        """
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates, patch.object(
+            controller, "_verify_signature"
+        ) as mock_verify:
+            failed_gate = GateResult(
+                gate=PromotionGate.TESTS,
+                status=GateStatus.FAILED,
+                duration_ms=500,
+                error="Test failed",
+            )
+            mock_gates.return_value = [failed_gate]
+            mock_verify.return_value = Mock(status="valid")
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            # In dry-run mode, should NOT raise but return record with failures
+            result = controller.promote(
+                tag="v1.0.0",
+                from_env="dev",
+                to_env="staging",
+                operator="ci@github.com",
+                dry_run=True,
+            )
+
+            assert result.dry_run is True
+            assert len(result.gate_results) == 1
+            assert result.gate_results[0].status == GateStatus.FAILED
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_gate_timeout_is_failure(
+        self, controller: MagicMock
+    ) -> None:
+        """Test gate timeout is treated as gate failure.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates:
+            # Gate timed out (status=FAILED due to timeout)
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.FAILED,
+                    duration_ms=60000,  # Hit timeout
+                    error="Gate timed out after 60 seconds",
+                )
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            assert "timeout" in exc_info.value.details.lower()
+
+    @pytest.mark.requirement("8C-FR-002")
+    def test_promote_multiple_gate_failures_reports_first(
+        self, controller: MagicMock
+    ) -> None:
+        """Test when multiple gates fail, error reports the first failure.
+
+        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
+        """
+        from floe_core.oci.errors import GateValidationError
+
+        with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_run_all_gates"
+        ) as mock_gates:
+            # Multiple gates fail
+            mock_gates.return_value = [
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.FAILED,
+                    duration_ms=50,
+                    error="Policy violation: naming convention",
+                ),
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.FAILED,
+                    duration_ms=500,
+                    error="Test suite failed",
+                ),
+            ]
+            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+
+            with pytest.raises(GateValidationError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="dev",
+                    to_env="staging",
+                    operator="ci@github.com",
+                )
+
+            # Should report the first failed gate
+            assert exc_info.value.gate == "policy_compliance"
