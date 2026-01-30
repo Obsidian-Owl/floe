@@ -115,7 +115,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
 
     required_services: list[tuple[str, int]] = [("registry", 5000)]
 
-    @pytest.mark.xfail(reason="T050: Implement rollback() for integration testing")
+    @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-013")
     def test_rollback_to_previous_version(self) -> None:
         """Integration: Rollback prod to a previous version.
@@ -200,7 +200,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
         latest_digest = oci_client.resolve_digest(f"latest-prod-{unique_id}")
         assert latest_digest == v1_digest
 
-    @pytest.mark.xfail(reason="T050: Implement rollback tag creation")
+    @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-014")
     def test_rollback_creates_rollback_tag(self) -> None:
         """Integration: Verify rollback creates tag with correct pattern.
@@ -269,7 +269,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
         rollback_digest = oci_client.resolve_digest(rollback_tag)
         assert rollback_digest is not None, f"Rollback tag {rollback_tag} should exist"
 
-    @pytest.mark.xfail(reason="T050: Implement version-not-found error")
+    @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-013")
     def test_rollback_fails_for_non_promoted_version(self) -> None:
         """Integration: Rollback fails if version was never promoted.
@@ -317,7 +317,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
         assert exc_info.value.tag == f"v1.0.0-{unique_id}"
         assert exc_info.value.environment == "prod"
 
-    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
+    @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-016")
     def test_rollback_impact_analysis(self) -> None:
         """Integration: analyze_rollback_impact() provides pre-rollback analysis.
@@ -371,7 +371,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
         assert isinstance(analysis.affected_products, list)
         assert isinstance(analysis.recommendations, list)
 
-    @pytest.mark.xfail(reason="T050: Implement rollback record storage")
+    @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-017")
     def test_rollback_stores_audit_record(self) -> None:
         """Integration: Rollback stores RollbackRecord for audit trail.
