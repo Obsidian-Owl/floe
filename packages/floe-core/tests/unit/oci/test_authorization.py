@@ -362,3 +362,172 @@ class TestOperatorIdentityVerification:
 
         groups = checker.get_operator_groups(metadata=None)
         assert groups == []
+
+
+class TestSeparationOfDuties:
+    """Tests for separation of duties enforcement (T134).
+
+    Task ID: T134
+    Phase: 13 - Separation of Duties (US11)
+    User Story: US11 - Separation of Duties
+    Requirements: FR-049, FR-050, FR-051, FR-052
+
+    TDD: These tests are written FIRST and should FAIL until implementation.
+
+    Tests the separation of duties logic that prevents the same operator
+    from promoting an artifact through consecutive environments.
+    """
+
+    @pytest.mark.requirement("FR-049")
+    def test_check_separation_of_duties_passes_different_operator(self) -> None:
+        """Test separation of duties passes when different operators promote."""
+        from floe_core.oci.authorization import AuthorizationChecker
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(separation_of_duties=True)
+        checker = AuthorizationChecker(config=config)
+
+        # Alice promoted to dev, Bob promoting to staging - should pass
+        result = checker.check_separation_of_duties(
+            operator="bob@example.com",
+            previous_operator="alice@example.com",
+        )
+        assert result.allowed is True
+        assert result.reason is None
+
+    @pytest.mark.requirement("FR-049")
+    def test_check_separation_of_duties_fails_same_operator(self) -> None:
+        """Test separation of duties fails when same operator promotes consecutive envs."""
+        from floe_core.oci.authorization import AuthorizationChecker
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(separation_of_duties=True)
+        checker = AuthorizationChecker(config=config)
+
+        # Alice promoted to dev, Alice trying to promote to staging - should fail
+        result = checker.check_separation_of_duties(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+        )
+        assert result.allowed is False
+        assert "alice@example.com" in result.reason
+        assert "separation" in result.reason.lower()
+
+    @pytest.mark.requirement("FR-050")
+    def test_check_separation_of_duties_disabled_allows_same_operator(self) -> None:
+        """Test same operator allowed when separation_of_duties is disabled."""
+        from floe_core.oci.authorization import AuthorizationChecker
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(separation_of_duties=False)
+        checker = AuthorizationChecker(config=config)
+
+        # Same operator, but separation_of_duties is disabled
+        result = checker.check_separation_of_duties(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+        )
+        assert result.allowed is True
+
+    @pytest.mark.requirement("FR-050")
+    def test_check_separation_of_duties_no_previous_operator(self) -> None:
+        """Test separation of duties passes when no previous promotion exists."""
+        from floe_core.oci.authorization import AuthorizationChecker
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(separation_of_duties=True)
+        checker = AuthorizationChecker(config=config)
+
+        # First promotion in chain (no previous operator)
+        result = checker.check_separation_of_duties(
+            operator="alice@example.com",
+            previous_operator=None,
+        )
+        assert result.allowed is True
+
+    @pytest.mark.requirement("FR-051")
+    def test_check_separation_of_duties_result_includes_operators(self) -> None:
+        """Test separation of duties result includes operator identities."""
+        from floe_core.oci.authorization import AuthorizationChecker
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(separation_of_duties=True)
+        checker = AuthorizationChecker(config=config)
+
+        result = checker.check_separation_of_duties(
+            operator="alice@example.com",
+            previous_operator="bob@example.com",
+        )
+        assert result.operator == "alice@example.com"
+        assert result.previous_operator == "bob@example.com"
+
+    @pytest.mark.requirement("FR-052")
+    def test_check_separation_of_duties_case_insensitive(self) -> None:
+        """Test separation of duties comparison is case-insensitive for emails."""
+        from floe_core.oci.authorization import AuthorizationChecker
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig(separation_of_duties=True)
+        checker = AuthorizationChecker(config=config)
+
+        # Same operator with different case
+        result = checker.check_separation_of_duties(
+            operator="Alice@Example.com",
+            previous_operator="alice@example.com",
+        )
+        assert result.allowed is False  # Should detect same person
+
+    @pytest.mark.requirement("FR-049")
+    def test_separation_of_duties_config_defaults_to_false(self) -> None:
+        """Test separation_of_duties defaults to False in AuthorizationConfig."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        config = AuthorizationConfig()
+        assert config.separation_of_duties is False
+
+
+class TestSeparationOfDutiesResult:
+    """Tests for SeparationOfDutiesResult schema (T134)."""
+
+    @pytest.mark.requirement("FR-051")
+    def test_separation_of_duties_result_allowed(self) -> None:
+        """Test SeparationOfDutiesResult for allowed promotion."""
+        from floe_core.oci.authorization import SeparationOfDutiesResult
+
+        result = SeparationOfDutiesResult(
+            allowed=True,
+            operator="bob@example.com",
+            previous_operator="alice@example.com",
+        )
+        assert result.allowed is True
+        assert result.operator == "bob@example.com"
+        assert result.previous_operator == "alice@example.com"
+        assert result.reason is None
+
+    @pytest.mark.requirement("FR-051")
+    def test_separation_of_duties_result_denied(self) -> None:
+        """Test SeparationOfDutiesResult for denied promotion."""
+        from floe_core.oci.authorization import SeparationOfDutiesResult
+
+        result = SeparationOfDutiesResult(
+            allowed=False,
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            reason="Separation of duties violation: same operator",
+        )
+        assert result.allowed is False
+        assert result.reason is not None
+        assert "separation" in result.reason.lower()
+
+    @pytest.mark.requirement("FR-052")
+    def test_separation_of_duties_result_frozen(self) -> None:
+        """Test SeparationOfDutiesResult is immutable."""
+        from floe_core.oci.authorization import SeparationOfDutiesResult
+
+        result = SeparationOfDutiesResult(
+            allowed=True,
+            operator="alice@example.com",
+            previous_operator=None,
+        )
+        with pytest.raises(Exception):
+            result.allowed = False  # type: ignore[misc]
