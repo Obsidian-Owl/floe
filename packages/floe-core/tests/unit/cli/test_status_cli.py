@@ -118,6 +118,7 @@ def mock_status_response() -> MagicMock:
 class TestStatusCliBasic:
     """Basic tests for status CLI command structure."""
 
+    @pytest.mark.requirement("8C-FR-023")
     def test_status_command_exists(self) -> None:
         """Test that status command is registered under platform."""
         runner = CliRunner()
@@ -704,6 +705,7 @@ class TestStatusCliErrors:
         assert "tag" in data
         assert data["tag"] == "v999.0.0"
 
+    @pytest.mark.requirement("8C-FR-023")
     def test_missing_registry_error(self) -> None:
         """Test error when --registry is not provided."""
         runner = CliRunner()
