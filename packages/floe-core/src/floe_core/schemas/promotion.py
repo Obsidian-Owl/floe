@@ -747,6 +747,10 @@ class PromotionRecord(BaseModel):
         default=None,
         description="How authorization was verified (group, operator)",
     )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Warning messages from promotion (e.g., partial failures)",
+    )
 
 
 class RollbackRecord(BaseModel):

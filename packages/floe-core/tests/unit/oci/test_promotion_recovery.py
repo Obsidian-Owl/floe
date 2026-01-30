@@ -191,13 +191,10 @@ class TestLatestTagRecovery:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-004")
-    @pytest.mark.xfail(reason="T032a: Retry logic not yet implemented")
     def test_promote_retries_latest_tag_update_on_transient_failure(
         self, controller: MagicMock
     ) -> None:
         """Test promote() retries latest tag update on transient failures.
-
-        ⚠️ TDD: This test WILL FAIL until T032a implements recovery logic.
 
         If the env tag was created but latest tag update fails transiently,
         retry should eventually succeed.
@@ -241,18 +238,15 @@ class TestLatestTagRecovery:
             assert mock_update_latest.call_count == 2
 
     @pytest.mark.requirement("8C-NFR-004")
-    @pytest.mark.xfail(reason="T032a: Retry/error raising logic not yet implemented")
     def test_promote_gives_up_after_max_retries(
         self, controller: MagicMock
     ) -> None:
-        """Test promote() gives up after max retry attempts.
+        """Test promote() records warning after max retry attempts.
 
-        ⚠️ TDD: This test WILL FAIL until T032a implements recovery logic.
-
-        If latest tag update keeps failing, promotion should eventually fail
-        with an appropriate error.
+        If latest tag update keeps failing, promotion should succeed
+        with warnings instead of raising an exception.
         """
-        from floe_core.oci.errors import RegistryUnavailableError
+        from floe_core.schemas.promotion import PromotionRecord
 
         with patch.object(controller, "_validate_transition"), patch.object(
             controller, "_get_artifact_digest"
@@ -264,22 +258,30 @@ class TestLatestTagRecovery:
             controller, "_create_env_tag"
         ) as mock_create_tag, patch.object(
             controller, "_update_latest_tag"
-        ) as mock_update_latest:
+        ) as mock_update_latest, patch.object(
+            controller, "_store_promotion_record"
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = "v1.0.0-staging"
             mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # All calls fail
             mock_update_latest.side_effect = ConnectionError("Persistent failure")
 
-            with pytest.raises((ConnectionError, RegistryUnavailableError)):
-                controller.promote(
-                    tag="v1.0.0",
-                    from_env="dev",
-                    to_env="staging",
-                    operator="ci@github.com",
-                )
+            # Should succeed with warnings instead of raising
+            result = controller.promote(
+                tag="v1.0.0",
+                from_env="dev",
+                to_env="staging",
+                operator="ci@github.com",
+            )
+
+            assert isinstance(result, PromotionRecord)
+            assert len(result.warnings) > 0
+            assert "Latest tag update failed" in result.warnings[0]
+            # Verify 3 retry attempts were made
+            assert mock_update_latest.call_count == 3
 
 
 class TestPromotionRecordRecovery:
@@ -344,16 +346,14 @@ class TestPromotionRecordRecovery:
             )
 
             assert isinstance(result, PromotionRecord)
-            mock_store.assert_called_once()
+            # Verify retry happened (3 attempts)
+            assert mock_store.call_count == 3
 
     @pytest.mark.requirement("8C-NFR-004")
-    @pytest.mark.xfail(reason="T032a: warnings/errors field not yet added to PromotionRecord schema")
     def test_promote_records_partial_failure_in_result(
         self, controller: MagicMock
     ) -> None:
         """Test promote() records partial failures in the result.
-
-        ⚠️ TDD: This test WILL FAIL until T032a implements recovery logic.
 
         If record storage fails, the PromotionRecord should indicate
         that there were warnings during promotion.
@@ -375,7 +375,7 @@ class TestPromotionRecordRecovery:
         ) as mock_store:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = "v1.0.0-staging"
             mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Record storage fails
@@ -390,5 +390,6 @@ class TestPromotionRecordRecovery:
 
             # Result should indicate partial failure
             assert isinstance(result, PromotionRecord)
-            # warnings field should exist and contain storage failure info
-            assert hasattr(result, "warnings") or hasattr(result, "errors")
+            assert hasattr(result, "warnings")
+            assert len(result.warnings) > 0
+            assert "Promotion record storage failed" in result.warnings[0]
