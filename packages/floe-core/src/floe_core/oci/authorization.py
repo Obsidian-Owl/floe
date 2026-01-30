@@ -265,8 +265,118 @@ class AuthorizationChecker:
 
         return []
 
+    def check_separation_of_duties(
+        self,
+        operator: str,
+        previous_operator: str | None,
+    ) -> "SeparationOfDutiesResult":
+        """Check if promotion violates separation of duties (T135).
+
+        Implements FR-049 (separation rule), FR-050 (enable/disable), FR-052 (case-insensitive).
+        Prevents the same operator from promoting through consecutive environments
+        when separation_of_duties is enabled.
+
+        Args:
+            operator: Identity of the operator attempting this promotion.
+            previous_operator: Identity of operator who promoted to the previous
+                environment. None if this is the first promotion in the chain.
+
+        Returns:
+            SeparationOfDutiesResult with allowed status and reason if denied.
+        """
+        log = logger.bind(operator=operator, previous_operator=previous_operator)
+
+        # If separation of duties is not enabled, always allow
+        if self.config is None or not self.config.separation_of_duties:
+            log.debug("separation_of_duties_disabled")
+            return SeparationOfDutiesResult(
+                allowed=True,
+                operator=operator,
+                previous_operator=previous_operator,
+            )
+
+        # If no previous operator, this is first promotion - allow
+        if previous_operator is None:
+            log.debug("separation_of_duties_no_previous_operator")
+            return SeparationOfDutiesResult(
+                allowed=True,
+                operator=operator,
+                previous_operator=None,
+            )
+
+        # Case-insensitive comparison (FR-052)
+        current_normalized = operator.lower().strip()
+        previous_normalized = previous_operator.lower().strip()
+
+        if current_normalized == previous_normalized:
+            reason = (
+                f"Separation of duties violation: operator '{operator}' cannot "
+                f"promote to consecutive environments. Previous promotion was also "
+                f"performed by '{previous_operator}'."
+            )
+            log.warning(
+                "separation_of_duties_violation",
+                reason=reason,
+            )
+            return SeparationOfDutiesResult(
+                allowed=False,
+                operator=operator,
+                previous_operator=previous_operator,
+                reason=reason,
+            )
+
+        log.debug("separation_of_duties_passed")
+        return SeparationOfDutiesResult(
+            allowed=True,
+            operator=operator,
+            previous_operator=previous_operator,
+        )
+
+
+class SeparationOfDutiesResult(BaseModel):
+    """Result of a separation of duties check (T135).
+
+    Records whether a promotion is allowed based on separation of duties rules.
+    Implements FR-051 (result schema), FR-052 (immutability).
+
+    Attributes:
+        allowed: Whether the promotion is allowed.
+        operator: Identity of the operator attempting promotion.
+        previous_operator: Identity of operator who promoted to previous env.
+        reason: Explanation if denied.
+
+    Examples:
+        >>> result = SeparationOfDutiesResult(
+        ...     allowed=True,
+        ...     operator="bob@example.com",
+        ...     previous_operator="alice@example.com",
+        ... )
+        >>> result.allowed
+        True
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    allowed: bool = Field(
+        ...,
+        description="Whether the promotion is allowed",
+    )
+    operator: str = Field(
+        ...,
+        description="Identity of the operator attempting promotion",
+    )
+    previous_operator: str | None = Field(
+        default=None,
+        description="Identity of operator who promoted to previous environment",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Explanation if denied",
+    )
+
 
 __all__: list[str] = [
     "AuthorizationResult",
     "AuthorizationChecker",
+    "SeparationOfDutiesResult",
 ]
