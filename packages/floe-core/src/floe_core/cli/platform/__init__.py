@@ -22,6 +22,7 @@ import click
 
 from floe_core.cli.platform.compile import compile_command
 from floe_core.cli.platform.deploy import deploy_command
+from floe_core.cli.platform.promote import promote_command
 from floe_core.cli.platform.publish import publish_command
 from floe_core.cli.platform.status import status_command
 from floe_core.cli.platform.test_cmd import test_command
@@ -45,6 +46,7 @@ platform.add_command(compile_command)
 platform.add_command(test_command)
 platform.add_command(publish_command)
 platform.add_command(deploy_command)
+platform.add_command(promote_command)
 platform.add_command(status_command)
 
 
