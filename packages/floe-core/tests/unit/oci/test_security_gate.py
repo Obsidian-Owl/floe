@@ -755,6 +755,7 @@ class TestSecurityGateEvaluationBasic:
             ignored_unfixed=0,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
         )
 
@@ -786,6 +787,7 @@ class TestSecurityGateEvaluationBasic:
             ignored_unfixed=0,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
         )
 
@@ -814,6 +816,7 @@ class TestSecurityGateEvaluationBasic:
             ignored_unfixed=0,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
         )
 
@@ -824,10 +827,10 @@ class TestSecurityGateEvaluationBasic:
         assert len(evaluation.blocking_cves) == 2
 
     @pytest.mark.requirement("FR-053")
-    def test_evaluate_security_gate_disabled_always_passes(self) -> None:
-        """Test security gate passes when disabled (enabled=False)."""
+    def test_evaluate_security_gate_none_config_always_passes(self) -> None:
+        """Test security gate passes when config is None (gate disabled)."""
         from floe_core.oci.security_gate import evaluate_security_gate
-        from floe_core.schemas.promotion import SecurityGateConfig, SecurityScanResult
+        from floe_core.schemas.promotion import SecurityScanResult
 
         scan_result = SecurityScanResult(
             critical_count=5,
@@ -837,12 +840,9 @@ class TestSecurityGateEvaluationBasic:
             blocking_cves=["CVE-1", "CVE-2", "CVE-3"],
             ignored_unfixed=0,
         )
-        config = SecurityGateConfig(
-            enabled=False,
-            block_on_severity=["CRITICAL", "HIGH"],
-        )
 
-        evaluation = evaluate_security_gate(scan_result, config)
+        # None config means gate is disabled
+        evaluation = evaluate_security_gate(scan_result, config=None)
 
         assert evaluation.passed is True
         assert evaluation.blocked is False
@@ -866,6 +866,7 @@ class TestSecurityGateEvaluationReason:
             ignored_unfixed=0,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
         )
 
@@ -890,6 +891,7 @@ class TestSecurityGateEvaluationReason:
             ignored_unfixed=0,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
         )
 
@@ -917,6 +919,7 @@ class TestSecurityGateEvaluationSummary:
             ignored_unfixed=1,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
         )
 
@@ -943,6 +946,7 @@ class TestSecurityGateEvaluationSummary:
             ignored_unfixed=3,  # 3 unfixed vulns were ignored
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL", "HIGH"],
             ignore_unfixed=True,
         )
@@ -970,6 +974,7 @@ class TestSecurityGateEvaluationImmutability:
             ignored_unfixed=0,
         )
         config = SecurityGateConfig(
+            command="trivy image ${ARTIFACT_REF} --format json",
             block_on_severity=["CRITICAL"],
         )
 

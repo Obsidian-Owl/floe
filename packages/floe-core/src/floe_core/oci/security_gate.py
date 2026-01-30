@@ -31,7 +31,9 @@ from typing import Any
 
 import structlog
 
-from floe_core.schemas.promotion import SecurityScanResult
+from pydantic import BaseModel, ConfigDict, Field
+
+from floe_core.schemas.promotion import SecurityGateConfig, SecurityScanResult
 
 logger = structlog.get_logger(__name__)
 
@@ -340,8 +342,140 @@ def parse_grype_output(
     )
 
 
+class SecurityGateEvaluation(BaseModel):
+    """Result of security gate evaluation (T152).
+
+    Records whether promotion should be blocked based on security scan results
+    and configured severity thresholds.
+
+    Attributes:
+        passed: Whether the security gate passed (no blocking vulnerabilities).
+        blocked: Whether promotion is blocked (inverse of passed).
+        blocking_cves: List of CVE IDs that caused the block.
+        reason: Explanation message if blocked, None if passed.
+        scan_result: The SecurityScanResult used for evaluation.
+
+    Examples:
+        >>> evaluation = SecurityGateEvaluation(
+        ...     passed=False,
+        ...     blocked=True,
+        ...     blocking_cves=["CVE-2024-0001"],
+        ...     reason="Blocked by 1 vulnerability: CVE-2024-0001",
+        ...     scan_result=scan_result,
+        ... )
+        >>> evaluation.passed
+        False
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    passed: bool = Field(
+        ...,
+        description="Whether the security gate passed",
+    )
+    blocked: bool = Field(
+        ...,
+        description="Whether promotion is blocked (inverse of passed)",
+    )
+    blocking_cves: list[str] = Field(
+        default_factory=list,
+        description="List of CVE IDs that caused the block",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Explanation message if blocked",
+    )
+    scan_result: SecurityScanResult = Field(
+        ...,
+        description="The SecurityScanResult used for evaluation",
+    )
+
+
+def evaluate_security_gate(
+    scan_result: SecurityScanResult,
+    config: SecurityGateConfig | None,
+) -> SecurityGateEvaluation:
+    """Evaluate security scan result against gate configuration.
+
+    Determines if promotion should be blocked based on the scan result
+    and configured severity thresholds.
+
+    Args:
+        scan_result: SecurityScanResult from a scanner parser.
+        config: SecurityGateConfig with severity thresholds. If None,
+            the gate is considered disabled and always passes.
+
+    Returns:
+        SecurityGateEvaluation with pass/block decision and details.
+
+    Examples:
+        >>> evaluation = evaluate_security_gate(scan_result, config)
+        >>> evaluation.passed
+        True
+
+        >>> evaluation = evaluate_security_gate(scan_result_with_cves, config)
+        >>> evaluation.blocked
+        True
+        >>> evaluation.blocking_cves
+        ['CVE-2024-0001']
+    """
+    log = logger.bind(
+        config_present=config is not None,
+    )
+
+    # If no config, gate is disabled - always pass
+    if config is None:
+        log.debug("security_gate_disabled")
+        return SecurityGateEvaluation(
+            passed=True,
+            blocked=False,
+            blocking_cves=[],
+            reason=None,
+            scan_result=scan_result,
+        )
+
+    # Check if there are blocking CVEs
+    blocking_cves = scan_result.blocking_cves
+
+    if not blocking_cves:
+        log.info(
+            "security_gate_passed",
+            total_vulnerabilities=scan_result.total_vulnerabilities,
+        )
+        return SecurityGateEvaluation(
+            passed=True,
+            blocked=False,
+            blocking_cves=[],
+            reason=None,
+            scan_result=scan_result,
+        )
+
+    # Gate is blocked
+    cve_list = ", ".join(blocking_cves)
+    reason = (
+        f"Security gate blocked promotion: {len(blocking_cves)} "
+        f"blocking vulnerabilities found: {cve_list}"
+    )
+
+    log.warning(
+        "security_gate_blocked",
+        blocking_count=len(blocking_cves),
+        blocking_cves=blocking_cves,
+    )
+
+    return SecurityGateEvaluation(
+        passed=False,
+        blocked=True,
+        blocking_cves=list(blocking_cves),
+        reason=reason,
+        scan_result=scan_result,
+    )
+
+
 __all__: list[str] = [
     "SecurityGateParseError",
+    "SecurityGateEvaluation",
     "parse_trivy_output",
     "parse_grype_output",
+    "evaluate_security_gate",
 ]
