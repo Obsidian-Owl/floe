@@ -54,9 +54,17 @@ def _format_status_table(response: PromotionStatusResponse) -> str:
         "Environments:",
     ]
 
+    # Get environment locks (supports both schema field and MagicMock)
+    env_locks = getattr(response, "environment_locks", {}) or {}
+
     for env_name, env_state in sorted(response.environments.items()):
         status_icon = "✓" if env_state.promoted else "✗"
         latest_marker = " (latest)" if env_state.is_latest else ""
+
+        # Check lock status for this environment
+        lock_info = env_locks.get(env_name)
+        is_locked = lock_info and getattr(lock_info, "locked", False)
+        lock_marker = " 🔒 LOCKED" if is_locked else ""
 
         if env_state.promoted:
             promoted_at = (
@@ -66,12 +74,21 @@ def _format_status_table(response: PromotionStatusResponse) -> str:
             )
             operator = env_state.operator or "unknown"
             lines.append(
-                f"  {status_icon} {env_name}: Promoted{latest_marker}"
+                f"  {status_icon} {env_name}: Promoted{latest_marker}{lock_marker}"
             )
             lines.append(f"      at: {promoted_at}")
             lines.append(f"      by: {operator}")
         else:
-            lines.append(f"  {status_icon} {env_name}: Not promoted")
+            lines.append(f"  {status_icon} {env_name}: Not promoted{lock_marker}")
+
+        # Display lock details if locked
+        if is_locked and lock_info:
+            locked_by = getattr(lock_info, "locked_by", None)
+            reason = getattr(lock_info, "reason", None)
+            if locked_by:
+                lines.append(f"      locked by: {locked_by}")
+            if reason:
+                lines.append(f"      reason: {reason}")
 
     if response.history:
         lines.append("")
@@ -101,7 +118,9 @@ def _format_status_json(response: PromotionStatusResponse) -> str:
     Returns:
         JSON string.
     """
-    return response.model_dump_json(indent=2)
+    # Use model_dump for compatibility with MagicMock in tests
+    data = response.model_dump(mode="json")
+    return json.dumps(data, indent=2, default=str)
 
 
 def _format_status_yaml(response: PromotionStatusResponse) -> str:
