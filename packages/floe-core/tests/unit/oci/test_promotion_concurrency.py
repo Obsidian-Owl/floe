@@ -214,51 +214,46 @@ class TestConcurrentPromotionSameEnvironment:
         promotion_ids: list[str] = []
         lock = threading.Lock()
 
-        def run_promotion(index: int) -> PromotionRecord | Exception:
-            """Run a promotion with unique from_env."""
-            try:
-                with patch.object(controller, "_validate_transition"), patch.object(
-                    controller, "_get_artifact_digest"
-                ) as mock_get_digest, patch.object(
-                    controller, "_run_all_gates"
-                ) as mock_gates, patch.object(
-                    controller, "_verify_signature"
-                ) as mock_verify, patch.object(
-                    controller, "_create_env_tag"
-                ) as mock_create_tag, patch.object(
-                    controller, "_update_latest_tag"
-                ), patch.object(
-                    controller, "_store_promotion_record"
-                ):
-                    mock_gates.return_value = []
-                    mock_verify.return_value = Mock(status="valid")
-                    # Create unique but valid 64-char digests for each promotion
-                    tag_digest = f"tag{index}".ljust(64, '0')[:64]
-                    art_digest = f"art{index}".ljust(64, '0')[:64]
-                    mock_create_tag.return_value = f"sha256:{tag_digest}"
-                    mock_get_digest.return_value = f"sha256:{art_digest}"
+        # Apply patches at test level (before threads) for thread-safe mocking
+        with patch.object(controller, "_validate_transition"), \
+             patch.object(controller, "_get_artifact_digest") as mock_get_digest, \
+             patch.object(controller, "_run_all_gates") as mock_gates, \
+             patch.object(controller, "_verify_signature") as mock_verify, \
+             patch.object(controller, "_create_env_tag") as mock_create_tag, \
+             patch.object(controller, "_update_latest_tag"), \
+             patch.object(controller, "_store_promotion_record"):
 
-                    # Each promotion has a unique tag to avoid TagExistsError
+            # Configure mocks once, outside threads
+            mock_gates.return_value = []
+            mock_verify.return_value = Mock(status="valid")
+            mock_create_tag.return_value = (
+                "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            )
+            mock_get_digest.return_value = (
+                "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
+            )
+
+            def run_promotion(index: int) -> PromotionRecord | Exception:
+                """Run a promotion with unique tag."""
+                try:
                     result = controller.promote(
                         tag=f"v1.0.{index}",
                         from_env="dev",
                         to_env="staging",
                         operator=f"ci{index}@github.com",
                     )
-
                     with lock:
                         promotion_ids.append(result.promotion_id)
-
                     return result
-            except Exception as e:
-                return e
+                except Exception as e:
+                    return e
 
-        # Run 5 concurrent promotions
-        results: list[PromotionRecord | Exception] = []
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(run_promotion, i) for i in range(5)]
-            for future in as_completed(futures):
-                results.append(future.result())
+            # Run 5 concurrent promotions
+            results: list[PromotionRecord | Exception] = []
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [executor.submit(run_promotion, i) for i in range(5)]
+                for future in as_completed(futures):
+                    results.append(future.result())
 
         # All should succeed
         successes = [r for r in results if isinstance(r, PromotionRecord)]
@@ -330,7 +325,7 @@ class TestConcurrentPromotionSameEnvironment:
                 # Even calls fail
                 return [
                     GateResult(
-                        gate=PromotionGate.TEST_SUITE,
+                        gate=PromotionGate.TESTS,
                         status=GateStatus.FAILED,
                         duration_ms=100,
                         error="Tests failed",
@@ -340,50 +335,49 @@ class TestConcurrentPromotionSameEnvironment:
                 # Odd calls pass
                 return [
                     GateResult(
-                        gate=PromotionGate.TEST_SUITE,
+                        gate=PromotionGate.TESTS,
                         status=GateStatus.PASSED,
                         duration_ms=100,
                     )
                 ]
 
-        def run_promotion(index: int) -> PromotionRecord | Exception:
-            """Run a promotion that may fail gates."""
-            try:
-                with patch.object(controller, "_validate_transition"), patch.object(
-                    controller, "_get_artifact_digest"
-                ) as mock_get_digest, patch.object(
-                    controller, "_run_all_gates"
-                ) as mock_gates, patch.object(
-                    controller, "_verify_signature"
-                ) as mock_verify, patch.object(
-                    controller, "_create_env_tag"
-                ) as mock_create_tag, patch.object(
-                    controller, "_update_latest_tag"
-                ), patch.object(
-                    controller, "_store_promotion_record"
-                ):
-                    mock_gates.side_effect = mock_gates_alternate
-                    mock_verify.return_value = Mock(status="valid")
-                    # Create unique but valid 64-char digest for each promotion
-                    tag_digest = f"tag{index}".ljust(64, '0')[:64]
-                    mock_create_tag.return_value = f"sha256:{tag_digest}"
-                    mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        # Apply patches at test level (before threads) for thread-safe mocking
+        with patch.object(controller, "_validate_transition"), \
+             patch.object(controller, "_get_artifact_digest") as mock_get_digest, \
+             patch.object(controller, "_run_all_gates") as mock_gates, \
+             patch.object(controller, "_verify_signature") as mock_verify, \
+             patch.object(controller, "_create_env_tag") as mock_create_tag, \
+             patch.object(controller, "_update_latest_tag"), \
+             patch.object(controller, "_store_promotion_record"):
 
+            # Configure mocks once, outside threads
+            mock_gates.side_effect = mock_gates_alternate
+            mock_verify.return_value = Mock(status="valid")
+            mock_create_tag.return_value = (
+                "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            )
+            mock_get_digest.return_value = (
+                "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            )
+
+            def run_promotion(index: int) -> PromotionRecord | Exception:
+                """Run a promotion that may fail gates."""
+                try:
                     return controller.promote(
                         tag=f"v1.0.{index}",
                         from_env="dev",
                         to_env="staging",
                         operator="ci@github.com",
                     )
-            except Exception as e:
-                return e
+                except Exception as e:
+                    return e
 
-        # Run 4 concurrent promotions
-        results: list[PromotionRecord | Exception] = []
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(run_promotion, i) for i in range(4)]
-            for future in as_completed(futures):
-                results.append(future.result())
+            # Run 4 concurrent promotions
+            results: list[PromotionRecord | Exception] = []
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(run_promotion, i) for i in range(4)]
+                for future in as_completed(futures):
+                    results.append(future.result())
 
         # Should have mix of successes and gate failures
         successes = [r for r in results if isinstance(r, PromotionRecord)]
