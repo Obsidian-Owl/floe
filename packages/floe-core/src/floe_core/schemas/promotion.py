@@ -578,6 +578,14 @@ class PromotionConfig(BaseModel):
         default=None,
         description="Custom gate command configurations",
     )
+    signature_enforcement: str = Field(
+        default="enforce",
+        pattern=r"^(enforce|warn|off)$",
+        description=(
+            "Signature verification enforcement mode: "
+            "'enforce' (block on invalid), 'warn' (log but allow), 'off' (skip)"
+        ),
+    )
 
     @field_validator("environments")
     @classmethod
