@@ -940,6 +940,190 @@ class PromotionController:
             promotion_id=str(record.promotion_id),
         )
 
+    def _get_promoted_versions(self, environment: str) -> list[str]:
+        """Get list of versions promoted to an environment.
+
+        Scans tags with pattern `*-{environment}` to find promoted versions.
+
+        Args:
+            environment: Environment to scan (e.g., "prod").
+
+        Returns:
+            List of version tags that have been promoted to this environment.
+
+        Example:
+            >>> versions = controller._get_promoted_versions("prod")
+            >>> print(versions)  # ['v1.0.0', 'v1.1.0', 'v2.0.0']
+        """
+        import fnmatch
+        import re
+
+        self._log.debug("get_promoted_versions_started", environment=environment)
+
+        try:
+            all_tags = self.client.list()
+        except Exception:
+            return []
+
+        # Pattern: v{X.Y.Z}-{environment} (not rollback tags)
+        env_suffix = f"-{environment}"
+        rollback_pattern = re.compile(r"-rollback-\d+$")
+        versions: list[str] = []
+
+        for tag_info in all_tags:
+            tag_name = tag_info.name
+            if tag_name.endswith(env_suffix) and not rollback_pattern.search(tag_name):
+                # Extract version by removing environment suffix
+                version = tag_name[: -len(env_suffix)]
+                versions.append(version)
+
+        self._log.debug(
+            "get_promoted_versions_completed",
+            environment=environment,
+            version_count=len(versions),
+        )
+        return versions
+
+    def _get_next_rollback_number(self, tag: str, environment: str) -> int:
+        """Calculate the next rollback number for a version-environment pair.
+
+        Scans existing rollback tags with pattern `{tag}-{env}-rollback-{N}`
+        and returns the next available number.
+
+        Args:
+            tag: Version tag (e.g., "v1.0.0").
+            environment: Environment name (e.g., "prod").
+
+        Returns:
+            Next available rollback number (starts at 1).
+
+        Example:
+            >>> # If v1.0.0-prod-rollback-1 and v1.0.0-prod-rollback-2 exist:
+            >>> controller._get_next_rollback_number("v1.0.0", "prod")
+            3
+        """
+        import re
+
+        self._log.debug(
+            "get_next_rollback_number_started",
+            tag=tag,
+            environment=environment,
+        )
+
+        try:
+            all_tags = self.client.list()
+        except Exception:
+            return 1
+
+        # Pattern: {tag}-{environment}-rollback-{N}
+        rollback_prefix = f"{tag}-{environment}-rollback-"
+        pattern = re.compile(rf"^{re.escape(rollback_prefix)}(\d+)$")
+
+        max_number = 0
+        for tag_info in all_tags:
+            match = pattern.match(tag_info.name)
+            if match:
+                number = int(match.group(1))
+                max_number = max(max_number, number)
+
+        next_number = max_number + 1
+
+        self._log.debug(
+            "get_next_rollback_number_completed",
+            tag=tag,
+            environment=environment,
+            next_number=next_number,
+        )
+        return next_number
+
+    def _create_rollback_tag(
+        self,
+        source_tag: str,
+        rollback_tag: str,
+    ) -> None:
+        """Create a rollback-specific tag by copying manifest from source.
+
+        Creates an immutable rollback tag following FR-014 pattern.
+
+        Args:
+            source_tag: Source artifact tag (e.g., "v1.0.0-prod").
+            rollback_tag: Target rollback tag (e.g., "v1.0.0-prod-rollback-1").
+
+        Raises:
+            ArtifactNotFoundError: If source tag doesn't exist.
+
+        Example:
+            >>> controller._create_rollback_tag("v1.0.0-prod", "v1.0.0-prod-rollback-1")
+        """
+        self._log.info(
+            "create_rollback_tag_started",
+            source_tag=source_tag,
+            rollback_tag=rollback_tag,
+        )
+
+        # Get source manifest
+        source_manifest = self.client.inspect(source_tag)
+        source_digest = source_manifest.digest
+
+        # Create ORAS client
+        oras_client = self.client._create_oras_client()
+        source_ref = self.client._build_target_ref(source_tag)
+        target_ref = self.client._build_target_ref(rollback_tag)
+
+        # Fetch the source manifest
+        manifest_data = oras_client.get_manifest(container=source_ref)
+
+        # Upload manifest with rollback tag
+        oras_client.upload_manifest(
+            manifest=manifest_data,
+            container=target_ref,
+        )
+
+        self._log.info(
+            "create_rollback_tag_completed",
+            rollback_tag=rollback_tag,
+            digest=source_digest,
+        )
+
+    def _store_rollback_record(
+        self,
+        tag: str,
+        record: RollbackRecord,
+    ) -> None:
+        """Store a rollback record in OCI annotations.
+
+        Stores the complete rollback record as a JSON annotation on the
+        specified artifact tag. This implements FR-017 for audit trails.
+
+        Args:
+            tag: Tag to store the record on (e.g., "v1.0.0-prod-rollback-1").
+            record: RollbackRecord to store.
+
+        Raises:
+            ArtifactNotFoundError: If tag doesn't exist.
+
+        Example:
+            >>> controller._store_rollback_record("v1.0.0-prod-rollback-1", record)
+        """
+        self._log.info(
+            "store_rollback_record_started",
+            tag=tag,
+            rollback_id=str(record.rollback_id),
+        )
+
+        # Serialize record to JSON
+        record_json = record.model_dump_json()
+
+        # Store in OCI annotation with dev.floe.rollback key
+        annotations = {"dev.floe.rollback": record_json}
+        self.client._update_artifact_annotations(tag, annotations)
+
+        self._log.info(
+            "store_rollback_record_completed",
+            tag=tag,
+            rollback_id=str(record.rollback_id),
+        )
+
     def promote(
         self,
         tag: str,
@@ -1230,8 +1414,82 @@ class PromotionController:
                 trace_id=trace_id,
             )
 
-            # TODO: T050+ - Implement rollback logic
-            raise NotImplementedError("Rollback implementation in T050+")
+            from datetime import datetime, timezone
+            from uuid import uuid4
+
+            from floe_core.oci.errors import (
+                ArtifactNotFoundError,
+                VersionNotPromotedError,
+            )
+            from floe_core.schemas.promotion import RollbackRecord
+
+            # Step 1: Validate version was promoted to this environment
+            env_tag = f"{tag}-{environment}"
+            try:
+                self.client.inspect(env_tag)
+            except ArtifactNotFoundError:
+                # Get available versions promoted to this environment
+                available = self._get_promoted_versions(environment)
+                raise VersionNotPromotedError(
+                    tag=tag,
+                    environment=environment,
+                    available_versions=available,
+                )
+
+            # Step 2: Get target artifact digest (the version we're rolling back TO)
+            target_digest = self._get_artifact_digest(env_tag)
+
+            # Step 3: Get current latest digest (the version we're rolling back FROM)
+            latest_tag = f"latest-{environment}"
+            try:
+                previous_digest = self._get_artifact_digest(latest_tag)
+            except ArtifactNotFoundError:
+                # No current latest - first deployment scenario (unlikely for rollback)
+                previous_digest = "sha256:" + "0" * 64  # Sentinel value
+
+            # Step 4: Calculate next rollback number and create rollback tag (FR-014)
+            rollback_number = self._get_next_rollback_number(tag, environment)
+            rollback_tag = f"{tag}-{environment}-rollback-{rollback_number}"
+
+            # Step 5: Create rollback tag by copying manifest from env_tag
+            self._create_rollback_tag(env_tag, rollback_tag)
+
+            # Step 6: Update latest tag to point to rollback target (FR-015)
+            self._update_latest_tag(env_tag, environment)
+
+            # Generate rollback ID
+            rollback_id = uuid4()
+            rolled_back_at = datetime.now(timezone.utc)
+
+            # Create RollbackRecord for audit trail (FR-017)
+            effective_trace_id = trace_id or f"rollback-{rollback_id.hex[:16]}"
+
+            record = RollbackRecord(
+                rollback_id=rollback_id,
+                artifact_digest=target_digest,
+                environment=environment,
+                previous_digest=previous_digest,
+                reason=reason,
+                operator=operator,
+                rolled_back_at=rolled_back_at,
+                trace_id=effective_trace_id,
+            )
+
+            # Step 7: Store rollback record in OCI annotations
+            self._store_rollback_record(rollback_tag, record)
+
+            self._log.info(
+                "rollback_completed",
+                rollback_id=str(rollback_id),
+                tag=tag,
+                environment=environment,
+                rollback_tag=rollback_tag,
+                target_digest=target_digest,
+                previous_digest=previous_digest,
+                trace_id=effective_trace_id,
+            )
+
+            return record
 
     def status(self, environment: str | None = None) -> dict:
         """Get promotion status for environment(s).
