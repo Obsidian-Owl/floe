@@ -1056,20 +1056,32 @@ class PromotionController:
                 # Step 6: Create immutable environment tag
                 env_tag = self._create_env_tag(tag, to_env, force=True)
 
-                # Step 7: Update mutable latest tag
-                try:
-                    self._update_latest_tag(env_tag, to_env)
-                except Exception as e:
-                    # Log warning but continue - env tag was created
-                    self._log.warning(
-                        "latest_tag_update_failed",
-                        env_tag=env_tag,
-                        error=str(e),
-                    )
-                    warnings.append(f"Latest tag update failed: {e}")
+                # Step 7: Update mutable latest tag (with retry on transient failures)
+                max_retries = 3
+                latest_tag_updated = False
+                for attempt in range(max_retries):
+                    try:
+                        self._update_latest_tag(env_tag, to_env)
+                        latest_tag_updated = True
+                        break
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            self._log.warning(
+                                "latest_tag_update_retry",
+                                attempt=attempt + 1,
+                                max_retries=max_retries,
+                                error=str(e),
+                            )
+                            time.sleep(0.1 * (attempt + 1))  # Simple backoff
+                        else:
+                            self._log.warning(
+                                "latest_tag_update_failed",
+                                env_tag=env_tag,
+                                error=str(e),
+                            )
+                            warnings.append(f"Latest tag update failed: {e}")
 
-            # Step 8: Create promotion record
-            # Generate trace_id if not provided (required by schema)
+            # Step 8: Generate trace_id if not provided (required by schema)
             effective_trace_id = trace_id or f"promo-{promotion_id.hex[:16]}"
 
             # Only pass verification_result if it's a proper VerificationResult
@@ -1082,6 +1094,55 @@ class PromotionController:
                 else None
             )
 
+            # Step 9: Store promotion record (if not dry_run) with retry
+            # Note: Record is created AFTER storage to capture any storage warnings
+            if not dry_run:
+                max_retries = 3
+                record_stored = False
+
+                # Build preliminary record for storage attempts
+                preliminary_record = PromotionRecord(
+                    promotion_id=promotion_id,
+                    artifact_digest=artifact_digest,
+                    artifact_tag=tag,
+                    source_environment=from_env,
+                    target_environment=to_env,
+                    gate_results=gate_results,
+                    signature_verified=signature_verified,
+                    signature_status=signature_status,
+                    operator=operator,
+                    promoted_at=promoted_at,
+                    dry_run=dry_run,
+                    trace_id=effective_trace_id,
+                    authorization_passed=True,  # TODO: T040+ - Real authorization check
+                    warnings=warnings.copy(),  # Copy current warnings
+                )
+
+                for attempt in range(max_retries):
+                    try:
+                        env_tag = f"{tag}-{to_env}"
+                        self._store_promotion_record(env_tag, preliminary_record)
+                        record_stored = True
+                        break
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            self._log.warning(
+                                "promotion_record_storage_retry",
+                                attempt=attempt + 1,
+                                max_retries=max_retries,
+                                error=str(e),
+                            )
+                            time.sleep(0.1 * (attempt + 1))  # Simple backoff
+                        else:
+                            # Log warning but don't fail - promotion succeeded
+                            self._log.warning(
+                                "promotion_record_storage_failed",
+                                promotion_id=str(promotion_id),
+                                error=str(e),
+                            )
+                            warnings.append(f"Promotion record storage failed: {e}")
+
+            # Create final record with all warnings
             record = PromotionRecord(
                 promotion_id=promotion_id,
                 artifact_digest=artifact_digest,
@@ -1096,21 +1157,8 @@ class PromotionController:
                 dry_run=dry_run,
                 trace_id=effective_trace_id,
                 authorization_passed=True,  # TODO: T040+ - Real authorization check
+                warnings=warnings,
             )
-
-            # Step 9: Store promotion record (if not dry_run)
-            if not dry_run:
-                try:
-                    env_tag = f"{tag}-{to_env}"
-                    self._store_promotion_record(env_tag, record)
-                except Exception as e:
-                    # Log warning but don't fail - promotion succeeded
-                    self._log.warning(
-                        "promotion_record_storage_failed",
-                        promotion_id=str(promotion_id),
-                        error=str(e),
-                    )
-                    warnings.append(f"Promotion record storage failed: {e}")
 
             self._log.info(
                 "promote_completed",
