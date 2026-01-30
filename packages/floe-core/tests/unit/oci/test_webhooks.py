@@ -442,6 +442,92 @@ class TestWebhookNotifyAll:
             mock_post.assert_not_called()
 
 
+class TestWebhookOpenTelemetry:
+    """Tests for OpenTelemetry tracing in webhook delivery (T120).
+
+    Task ID: T120
+    Phase: 11 - Webhooks (US9)
+    Requirements: FR-040, FR-041, FR-042, FR-043
+    """
+
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_creates_span(self) -> None:
+        """notify() creates OpenTelemetry span via tracer.start_as_current_span."""
+        from floe_core.oci.webhooks import WebhookNotifier, tracer
+        from floe_core.schemas.promotion import WebhookConfig
+
+        config = WebhookConfig(
+            url="https://hooks.example.com/webhook",
+            events=["promote"],
+        )
+        notifier = WebhookNotifier(config=config)
+
+        with (
+            patch("httpx.AsyncClient.post") as mock_post,
+            patch.object(tracer, "start_as_current_span") as mock_span_ctx,
+        ):
+            mock_post.return_value = MagicMock(status_code=200)
+            mock_span = MagicMock()
+            mock_span_ctx.return_value.__enter__ = MagicMock(return_value=mock_span)
+            mock_span_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+            await notifier.notify("promote", {"artifact_tag": "v1.0.0"})
+
+        # Verify span was created with correct name
+        mock_span_ctx.assert_called_once_with("floe.webhook.notify")
+        # Verify attributes were set
+        mock_span.set_attribute.assert_any_call("floe.webhook.url", "https://hooks.example.com/webhook")
+        mock_span.set_attribute.assert_any_call("floe.webhook.event_type", "promote")
+        mock_span.set_attribute.assert_any_call("floe.webhook.success", True)
+
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_span_includes_timing_attributes(self) -> None:
+        """notify() span includes duration and attempt count."""
+        from floe_core.oci.webhooks import WebhookNotifier
+        from floe_core.schemas.promotion import WebhookConfig
+
+        config = WebhookConfig(
+            url="https://hooks.example.com/webhook",
+            events=["promote"],
+            retry_count=0,
+        )
+        notifier = WebhookNotifier(config=config)
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=200)
+
+            result = await notifier.notify("promote", {"artifact_tag": "v1.0.0"})
+
+        # Result should contain timing info
+        assert result.attempts >= 1
+        assert result.status_code == 200
+
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_span_records_failure(self) -> None:
+        """notify() span records failure status and error."""
+        from floe_core.oci.webhooks import WebhookNotifier
+        from floe_core.schemas.promotion import WebhookConfig
+
+        config = WebhookConfig(
+            url="https://hooks.example.com/webhook",
+            events=["promote"],
+            retry_count=0,
+        )
+        notifier = WebhookNotifier(config=config)
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=500)
+
+            result = await notifier.notify("promote", {"artifact_tag": "v1.0.0"})
+
+        assert result.success is False
+        assert result.error is not None
+        assert result.attempts == 1
+
+
 __all__: list[str] = [
     "TestWebhookNotifierCreation",
     "TestWebhookEventFiltering",
@@ -449,4 +535,5 @@ __all__: list[str] = [
     "TestWebhookPayload",
     "TestWebhookNotificationResult",
     "TestWebhookNotifyAll",
+    "TestWebhookOpenTelemetry",
 ]

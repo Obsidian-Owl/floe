@@ -25,10 +25,12 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 import httpx
 import structlog
+from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.schemas.promotion import WebhookConfig
@@ -38,6 +40,8 @@ BACKOFF_BASE_SECONDS = 1.0
 """Base delay for exponential backoff (doubles each retry)."""
 
 logger = structlog.get_logger(__name__)
+tracer = trace.get_tracer(__name__)
+"""OpenTelemetry tracer for webhook operations."""
 
 
 class WebhookNotificationResult(BaseModel):
@@ -179,6 +183,7 @@ class WebhookNotifier:
         """Send webhook notification for an event.
 
         Implements FR-042 HTTP delivery with retry logic.
+        Includes OpenTelemetry span for observability (T120).
 
         Args:
             event_type: Type of event (promote, rollback, lock, unlock).
@@ -201,120 +206,147 @@ class WebhookNotifier:
 
         payload = self.build_payload(event_type, event_data)
 
-        # Retry loop: 1 initial + retry_count retries
-        max_attempts = 1 + retry_count
-        last_status_code: int | None = None
-        last_error: str | None = None
+        # Start OpenTelemetry span for this webhook notification (T120)
+        with tracer.start_as_current_span("floe.webhook.notify") as span:
+            span.set_attribute("floe.webhook.url", url)
+            span.set_attribute("floe.webhook.event_type", event_type)
+            span.set_attribute("floe.webhook.timeout_seconds", timeout)
+            span.set_attribute("floe.webhook.max_retries", retry_count)
 
-        for attempt in range(1, max_attempts + 1):
-            try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    response = await client.post(
-                        url=url,
-                        json=payload,
-                        headers=headers,
-                    )
+            start_time = time.monotonic()
 
-                    last_status_code = response.status_code
+            # Retry loop: 1 initial + retry_count retries
+            max_attempts = 1 + retry_count
+            last_status_code: int | None = None
+            last_error: str | None = None
 
-                    if response.status_code < 400:
-                        logger.info(
-                            "webhook_notification_sent",
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    async with httpx.AsyncClient(timeout=timeout) as client:
+                        response = await client.post(
                             url=url,
-                            event_type=event_type,
-                            status_code=response.status_code,
-                            attempts=attempt,
-                        )
-                        return WebhookNotificationResult(
-                            success=True,
-                            status_code=response.status_code,
-                            url=url,
-                            attempts=attempt,
+                            json=payload,
+                            headers=headers,
                         )
 
-                    # Server error - retry with exponential backoff
-                    if response.status_code >= 500:
-                        last_error = f"Server error: {response.status_code}"
-                        if attempt < max_attempts:
-                            # Exponential backoff: 1s, 2s, 4s, ...
-                            backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-                            logger.warning(
-                                "webhook_notification_retry",
+                        last_status_code = response.status_code
+
+                        if response.status_code < 400:
+                            # Record success in span
+                            duration_ms = int((time.monotonic() - start_time) * 1000)
+                            span.set_attribute("floe.webhook.duration_ms", duration_ms)
+                            span.set_attribute("floe.webhook.attempts", attempt)
+                            span.set_attribute("floe.webhook.status_code", response.status_code)
+                            span.set_attribute("floe.webhook.success", True)
+
+                            logger.info(
+                                "webhook_notification_sent",
                                 url=url,
                                 event_type=event_type,
                                 status_code=response.status_code,
-                                attempt=attempt,
-                                max_attempts=max_attempts,
-                                backoff_seconds=backoff_delay,
+                                attempts=attempt,
+                                duration_ms=duration_ms,
                             )
-                            await asyncio.sleep(backoff_delay)
-                        continue
+                            return WebhookNotificationResult(
+                                success=True,
+                                status_code=response.status_code,
+                                url=url,
+                                attempts=attempt,
+                            )
 
-                    # Client error - don't retry
-                    last_error = f"Client error: {response.status_code}"
-                    break
+                        # Server error - retry with exponential backoff
+                        if response.status_code >= 500:
+                            last_error = f"Server error: {response.status_code}"
+                            if attempt < max_attempts:
+                                # Exponential backoff: 1s, 2s, 4s, ...
+                                backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                                logger.warning(
+                                    "webhook_notification_retry",
+                                    url=url,
+                                    event_type=event_type,
+                                    status_code=response.status_code,
+                                    attempt=attempt,
+                                    max_attempts=max_attempts,
+                                    backoff_seconds=backoff_delay,
+                                )
+                                await asyncio.sleep(backoff_delay)
+                            continue
 
-            except httpx.TimeoutException:
-                last_error = "Request timed out"
-                if attempt < max_attempts:
-                    backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-                    logger.warning(
-                        "webhook_notification_timeout",
-                        url=url,
-                        event_type=event_type,
-                        attempt=attempt,
-                        max_attempts=max_attempts,
-                        backoff_seconds=backoff_delay,
-                    )
-                    await asyncio.sleep(backoff_delay)
-                else:
-                    logger.warning(
-                        "webhook_notification_timeout",
-                        url=url,
-                        event_type=event_type,
-                        attempt=attempt,
-                        max_attempts=max_attempts,
-                    )
-            except httpx.RequestError as e:
-                last_error = str(e)
-                if attempt < max_attempts:
-                    backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-                    logger.warning(
-                        "webhook_notification_error",
-                        url=url,
-                        event_type=event_type,
-                        error=str(e),
-                        attempt=attempt,
-                        max_attempts=max_attempts,
-                        backoff_seconds=backoff_delay,
-                    )
-                    await asyncio.sleep(backoff_delay)
-                else:
-                    logger.warning(
-                        "webhook_notification_error",
-                        url=url,
-                        event_type=event_type,
-                        error=str(e),
-                        attempt=attempt,
-                        max_attempts=max_attempts,
-                    )
+                        # Client error - don't retry
+                        last_error = f"Client error: {response.status_code}"
+                        break
 
-        # All attempts failed
-        logger.error(
-            "webhook_notification_failed",
-            url=url,
-            event_type=event_type,
-            status_code=last_status_code,
-            error=last_error,
-            attempts=max_attempts,
-        )
-        return WebhookNotificationResult(
-            success=False,
-            status_code=last_status_code,
-            url=url,
-            error=last_error,
-            attempts=max_attempts,
-        )
+                except httpx.TimeoutException:
+                    last_error = "Request timed out"
+                    if attempt < max_attempts:
+                        backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                        logger.warning(
+                            "webhook_notification_timeout",
+                            url=url,
+                            event_type=event_type,
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            backoff_seconds=backoff_delay,
+                        )
+                        await asyncio.sleep(backoff_delay)
+                    else:
+                        logger.warning(
+                            "webhook_notification_timeout",
+                            url=url,
+                            event_type=event_type,
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                        )
+                except httpx.RequestError as e:
+                    last_error = str(e)
+                    if attempt < max_attempts:
+                        backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                        logger.warning(
+                            "webhook_notification_error",
+                            url=url,
+                            event_type=event_type,
+                            error=str(e),
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            backoff_seconds=backoff_delay,
+                        )
+                        await asyncio.sleep(backoff_delay)
+                    else:
+                        logger.warning(
+                            "webhook_notification_error",
+                            url=url,
+                            event_type=event_type,
+                            error=str(e),
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                        )
+
+            # All attempts failed - record failure in span
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            span.set_attribute("floe.webhook.duration_ms", duration_ms)
+            span.set_attribute("floe.webhook.attempts", max_attempts)
+            span.set_attribute("floe.webhook.success", False)
+            if last_status_code is not None:
+                span.set_attribute("floe.webhook.status_code", last_status_code)
+            if last_error is not None:
+                span.set_attribute("floe.webhook.error", last_error)
+
+            logger.error(
+                "webhook_notification_failed",
+                url=url,
+                event_type=event_type,
+                status_code=last_status_code,
+                error=last_error,
+                attempts=max_attempts,
+                duration_ms=duration_ms,
+            )
+            return WebhookNotificationResult(
+                success=False,
+                status_code=last_status_code,
+                url=url,
+                error=last_error,
+                attempts=max_attempts,
+            )
 
     async def notify_all(
         self,
