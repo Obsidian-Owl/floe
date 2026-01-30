@@ -86,37 +86,39 @@ class TestConcurrentPromotionSameEnvironment:
 
         results: list[PromotionRecord | Exception] = []
 
-        def run_promotion() -> PromotionRecord | Exception:
-            """Run a promotion and capture result or exception."""
-            try:
-                with (
-                    patch.object(controller, "_validate_transition"),
-                    patch.object(controller, "_get_artifact_digest") as mock_get_digest,
-                    patch.object(controller, "_run_all_gates") as mock_gates,
-                    patch.object(controller, "_verify_signature") as mock_verify,
-                    patch.object(controller, "_create_env_tag") as mock_create_tag,
-                    patch.object(controller, "_update_latest_tag"),
-                    patch.object(controller, "_store_promotion_record"),
-                ):
-                    mock_gates.return_value = []
-                    mock_verify.return_value = Mock(status="valid")
-                    mock_create_tag.side_effect = mock_create_tag_with_race
-                    mock_get_digest.return_value = TEST_DIGEST
+        # Apply patches at test level (before threads) for thread-safe mocking
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
+        ):
+            # Configure mocks once, outside threads
+            mock_gates.return_value = []
+            mock_verify.return_value = Mock(status="valid")
+            mock_create_tag.side_effect = mock_create_tag_with_race
+            mock_get_digest.return_value = TEST_DIGEST
 
+            def run_promotion() -> PromotionRecord | Exception:
+                """Run a promotion and capture result or exception."""
+                try:
                     return controller.promote(
                         tag="v1.0.0",
                         from_env="dev",
                         to_env="staging",
                         operator="ci@github.com",
                     )
-            except Exception as e:
-                return e
+                except Exception as e:
+                    return e
 
-        # Run two promotions concurrently
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [executor.submit(run_promotion) for _ in range(2)]
-            for future in as_completed(futures):
-                results.append(future.result())
+            # Run two promotions concurrently
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [executor.submit(run_promotion) for _ in range(2)]
+                for future in as_completed(futures):
+                    results.append(future.result())
 
         # Exactly one should succeed, one should fail
         successes = [r for r in results if isinstance(r, PromotionRecord)]
@@ -146,27 +148,33 @@ class TestConcurrentPromotionSameEnvironment:
 
         results: list[tuple[str, PromotionRecord | Exception]] = []
 
-        def run_promotion(to_env: str) -> tuple[str, PromotionRecord | Exception]:
-            """Run a promotion to specified environment."""
-            try:
-                with (
-                    patch.object(controller, "_validate_transition"),
-                    patch.object(controller, "_get_artifact_digest") as mock_get_digest,
-                    patch.object(controller, "_run_all_gates") as mock_gates,
-                    patch.object(controller, "_verify_signature") as mock_verify,
-                    patch.object(controller, "_create_env_tag") as mock_create_tag,
-                    patch.object(controller, "_update_latest_tag"),
-                    patch.object(controller, "_store_promotion_record"),
-                ):
-                    mock_gates.return_value = []
-                    mock_verify.return_value = Mock(status="valid")
-                    # Create unique but valid 64-char digest for each environment
-                    if to_env == "staging":
-                        mock_create_tag.return_value = TEST_DIGEST_STAGING
-                    else:
-                        mock_create_tag.return_value = TEST_DIGEST_PROD
-                    mock_get_digest.return_value = TEST_DIGEST
+        # Apply patches at test level (before threads) for thread-safe mocking
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
+        ):
+            # Configure mocks once, outside threads
+            mock_gates.return_value = []
+            mock_verify.return_value = Mock(status="valid")
+            mock_get_digest.return_value = TEST_DIGEST
 
+            # Use side_effect to return different digests based on call
+            def create_tag_side_effect(*args: object, **kwargs: object) -> str:
+                to_env = kwargs.get("to_env") or (args[2] if len(args) > 2 else None)
+                if to_env == "staging":
+                    return TEST_DIGEST_STAGING
+                return TEST_DIGEST_PROD
+
+            mock_create_tag.return_value = TEST_DIGEST_STAGING  # Default
+
+            def run_promotion(to_env: str) -> tuple[str, PromotionRecord | Exception]:
+                """Run a promotion to specified environment."""
+                try:
                     result = controller.promote(
                         tag="v1.0.0",
                         from_env="dev" if to_env == "staging" else "staging",
@@ -174,17 +182,17 @@ class TestConcurrentPromotionSameEnvironment:
                         operator="ci@github.com",
                     )
                     return (to_env, result)
-            except Exception as e:
-                return (to_env, e)
+                except Exception as e:
+                    return (to_env, e)
 
-        # Run two promotions to different environments concurrently
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [
-                executor.submit(run_promotion, "staging"),
-                executor.submit(run_promotion, "prod"),
-            ]
-            for future in as_completed(futures):
-                results.append(future.result())
+            # Run two promotions to different environments concurrently
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [
+                    executor.submit(run_promotion, "staging"),
+                    executor.submit(run_promotion, "prod"),
+                ]
+                for future in as_completed(futures):
+                    results.append(future.result())
 
         # Both should succeed
         for env, result in results:
