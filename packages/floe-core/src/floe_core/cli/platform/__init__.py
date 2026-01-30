@@ -22,6 +22,7 @@ import click
 
 from floe_core.cli.platform.compile import compile_command
 from floe_core.cli.platform.deploy import deploy_command
+from floe_core.cli.platform.lock import lock_command, unlock_command
 from floe_core.cli.platform.promote import promote_command
 from floe_core.cli.platform.publish import publish_command
 from floe_core.cli.platform.rollback import rollback_command
@@ -50,6 +51,8 @@ platform.add_command(deploy_command)
 platform.add_command(promote_command)
 platform.add_command(rollback_command)
 platform.add_command(status_command)
+platform.add_command(lock_command)
+platform.add_command(unlock_command)
 
 
 __all__: list[str] = ["platform"]
