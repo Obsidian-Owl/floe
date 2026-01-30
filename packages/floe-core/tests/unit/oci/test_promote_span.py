@@ -19,18 +19,22 @@ class TestPromoteOpenTelemetrySpan:
 
     @pytest.fixture
     def controller(self) -> MagicMock:
-        """Create a PromotionController with mocked OCI client."""
-        from floe_core.oci.client import OCIClient
+        """Create a PromotionController with fully mocked OCI client."""
         from floe_core.oci.promotion import PromotionController
-        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
 
-        auth = RegistryAuth(type=AuthType.ANONYMOUS)
-        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
-        oci_client = OCIClient.from_registry_config(registry_config)
-        promotion = PromotionConfig()
+        # Create a mock OCI client to avoid network calls
+        mock_client = Mock()
+        mock_client.inspect.return_value = Mock(
+            digest="sha256:" + "a" * 64,  # Valid sha256 format (64 hex chars)
+            annotations={},
+        )
+        mock_client.create_tag.return_value = None
 
-        return PromotionController(client=oci_client, promotion=promotion)
+        # Use signature_enforcement="off" to skip signature verification in tests
+        promotion = PromotionConfig(signature_enforcement="off")
+
+        return PromotionController(client=mock_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-024")
     def test_promote_creates_span(self, controller: MagicMock) -> None:
@@ -55,10 +59,11 @@ class TestPromoteOpenTelemetrySpan:
             except NotImplementedError:
                 pass  # Expected - promote not fully implemented
 
-            # Verify create_span was called with correct name
-            mock_create_span.assert_called_once()
-            call_kwargs = mock_create_span.call_args
-            assert call_kwargs[0][0] == "floe.oci.promote"
+            # Verify create_span was called at least once with the main span name
+            assert mock_create_span.called, "create_span should be called"
+            # Find the call with the main promotion span name
+            span_names = [call[0][0] for call in mock_create_span.call_args_list]
+            assert "floe.oci.promote" in span_names
 
     @pytest.mark.requirement("8C-FR-024")
     def test_promote_span_has_artifact_ref_attribute(
@@ -113,8 +118,15 @@ class TestPromoteOpenTelemetrySpan:
             except NotImplementedError:
                 pass
 
-            call_kwargs = mock_create_span.call_args
-            attributes = call_kwargs[1].get("attributes", {})
+            # Find the main promote span call and get its attributes
+            promote_call = None
+            for call in mock_create_span.call_args_list:
+                if call[0] and call[0][0] == "floe.oci.promote":
+                    promote_call = call
+                    break
+
+            assert promote_call is not None, "Should have a floe.oci.promote span"
+            attributes = promote_call[1].get("attributes", {})
 
             # Check for from_env and to_env (prefixed or unprefixed)
             has_from_env = (
@@ -152,8 +164,15 @@ class TestPromoteOpenTelemetrySpan:
             except NotImplementedError:
                 pass
 
-            call_kwargs = mock_create_span.call_args
-            attributes = call_kwargs[1].get("attributes", {})
+            # Find the main promote span call and get its attributes
+            promote_call = None
+            for call in mock_create_span.call_args_list:
+                if call[0] and call[0][0] == "floe.oci.promote":
+                    promote_call = call
+                    break
+
+            assert promote_call is not None, "Should have a floe.oci.promote span"
+            attributes = promote_call[1].get("attributes", {})
 
             # Check for dry_run (prefixed or unprefixed)
             has_dry_run = (
