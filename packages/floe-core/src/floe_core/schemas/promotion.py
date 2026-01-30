@@ -829,3 +829,160 @@ class RollbackRecord(BaseModel):
         min_length=1,
         description="OpenTelemetry trace ID for linking",
     )
+
+
+class EnvironmentStatus(BaseModel):
+    """Status of an artifact in a specific environment.
+
+    Tracks whether an artifact has been promoted to an environment
+    and when the promotion occurred.
+
+    Attributes:
+        promoted: Whether the artifact is promoted to this environment.
+        promoted_at: When the artifact was promoted (if promoted).
+        is_latest: Whether this artifact is the latest in the environment.
+        operator: Who performed the promotion (if promoted).
+
+    Examples:
+        >>> status = EnvironmentStatus(
+        ...     promoted=True,
+        ...     promoted_at=datetime.now(timezone.utc),
+        ...     is_latest=True,
+        ...     operator="ci@example.com",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    promoted: bool = Field(
+        ...,
+        description="Whether the artifact is promoted to this environment",
+    )
+    promoted_at: datetime | None = Field(
+        default=None,
+        description="When the artifact was promoted",
+    )
+    is_latest: bool = Field(
+        default=False,
+        description="Whether this artifact is the latest in the environment",
+    )
+    operator: str | None = Field(
+        default=None,
+        description="Who performed the promotion",
+    )
+
+
+class PromotionHistoryEntry(BaseModel):
+    """Single entry in promotion history.
+
+    Represents one promotion event in the artifact's history.
+    Contains the required fields per FR-027.
+
+    Attributes:
+        promotion_id: Unique promotion identifier.
+        artifact_digest: SHA256 digest of the artifact.
+        source_environment: Source environment.
+        target_environment: Target environment.
+        operator: Who performed the promotion.
+        promoted_at: When the promotion occurred.
+        gate_results: Results of gate validations.
+        signature_verified: Whether signature was verified.
+
+    Examples:
+        >>> entry = PromotionHistoryEntry(
+        ...     promotion_id=uuid4(),
+        ...     artifact_digest="sha256:abc...",
+        ...     source_environment="dev",
+        ...     target_environment="staging",
+        ...     operator="ci@example.com",
+        ...     promoted_at=datetime.now(timezone.utc),
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    promotion_id: UUID | str = Field(
+        ...,
+        description="Unique promotion identifier",
+    )
+    artifact_digest: str = Field(
+        ...,
+        pattern=SHA256_DIGEST_PATTERN,
+        description="SHA256 digest of the artifact",
+    )
+    source_environment: str = Field(
+        ...,
+        min_length=1,
+        description="Source environment",
+    )
+    target_environment: str = Field(
+        ...,
+        min_length=1,
+        description="Target environment",
+    )
+    operator: str = Field(
+        ...,
+        min_length=1,
+        description="Who performed the promotion",
+    )
+    promoted_at: datetime | str = Field(
+        ...,
+        description="When the promotion occurred",
+    )
+    gate_results: list[GateResult] = Field(
+        default_factory=list,
+        description="Results of gate validations",
+    )
+    signature_verified: bool = Field(
+        default=False,
+        description="Whether signature was verified",
+    )
+
+
+class PromotionStatusResponse(BaseModel):
+    """Response model for get_status() queries.
+
+    Contains complete promotion status information for an artifact,
+    including current environment states and promotion history.
+
+    Attributes:
+        tag: Artifact tag being queried.
+        digest: SHA256 digest of the artifact.
+        environments: Status in each configured environment.
+        history: List of promotion events (most recent first).
+        queried_at: When the status was queried.
+
+    Examples:
+        >>> response = PromotionStatusResponse(
+        ...     tag="v1.0.0",
+        ...     digest="sha256:abc...",
+        ...     environments={"dev": EnvironmentStatus(promoted=True)},
+        ...     history=[],
+        ...     queried_at=datetime.now(timezone.utc),
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tag: str = Field(
+        ...,
+        min_length=1,
+        description="Artifact tag being queried",
+    )
+    digest: str = Field(
+        ...,
+        pattern=SHA256_DIGEST_PATTERN,
+        description="SHA256 digest of the artifact",
+    )
+    environments: dict[str, EnvironmentStatus] = Field(
+        ...,
+        description="Status in each configured environment",
+    )
+    history: list[PromotionHistoryEntry] = Field(
+        default_factory=list,
+        description="List of promotion events (most recent first)",
+    )
+    queried_at: datetime = Field(
+        ...,
+        description="When the status was queried",
+    )
