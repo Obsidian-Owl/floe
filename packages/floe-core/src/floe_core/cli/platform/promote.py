@@ -283,6 +283,13 @@ def promote_command(
         else:
             # Table format - success message
             click.echo(formatted)
+
+            # Display signature verification status (T074 - FR-021)
+            if record.signature_verified:
+                success("✓ Signature verified")
+            else:
+                warn("WARNING: Artifact is unsigned or signature not verified")
+
             if dry_run:
                 success("Dry run complete. No changes were made.")
             else:
