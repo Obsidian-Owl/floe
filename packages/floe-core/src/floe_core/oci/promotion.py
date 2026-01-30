@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import structlog
@@ -56,6 +57,7 @@ from floe_core.oci.errors import InvalidTransitionError
 from floe_core.telemetry.tracing import create_span
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
+    EnvironmentLock,
     EnvironmentStatus,
     GateResult,
     GateStatus,
@@ -146,6 +148,10 @@ class PromotionController:
         # Since artifacts are immutable (same digest = same content), we can
         # cache verification results to avoid redundant cryptographic operations
         self._verification_cache: dict[str, "VerificationResult"] = {}
+
+        # Environment lock cache keyed by environment name (T102 - FR-035)
+        # Stores EnvironmentLock for each locked environment
+        self._environment_locks: dict[str, "EnvironmentLock"] = {}
 
         self._log.info("promotion_controller_initialized")
 
@@ -2124,8 +2130,22 @@ class PromotionController:
         if self._get_environment(environment) is None:
             raise ValueError(f"Environment '{environment}' not found")
 
-        # TODO: T102+ - Implement lock logic
-        raise NotImplementedError("Lock implementation in T102+")
+        # Create and store the lock (FR-035)
+        locked_at = datetime.now(timezone.utc)
+        lock = EnvironmentLock(
+            locked=True,
+            reason=reason,
+            locked_by=operator,
+            locked_at=locked_at,
+        )
+        self._environment_locks[environment] = lock
+
+        self._log.info(
+            "lock_environment_completed",
+            environment=environment,
+            locked_by=operator,
+            locked_at=locked_at.isoformat(),
+        )
 
     def unlock_environment(
         self,
@@ -2158,6 +2178,38 @@ class PromotionController:
 
         # TODO: T103+ - Implement unlock logic
         raise NotImplementedError("Unlock implementation in T103+")
+
+    def get_lock_status(self, environment: str) -> EnvironmentLock:
+        """Get the lock status for an environment.
+
+        Args:
+            environment: Environment to check.
+
+        Returns:
+            EnvironmentLock with current lock state.
+
+        Raises:
+            ValueError: If environment does not exist.
+
+        Example:
+            >>> status = controller.get_lock_status("prod")
+            >>> if status.locked:
+            ...     print(f"Locked by {status.locked_by}: {status.reason}")
+        """
+        if self._get_environment(environment) is None:
+            raise ValueError(f"Environment '{environment}' not found")
+
+        # Return cached lock or unlocked status
+        if environment in self._environment_locks:
+            return self._environment_locks[environment]
+
+        # Default: unlocked
+        return EnvironmentLock(
+            locked=False,
+            reason=None,
+            locked_by=None,
+            locked_at=None,
+        )
 
 
 __all__ = ["PromotionController"]
