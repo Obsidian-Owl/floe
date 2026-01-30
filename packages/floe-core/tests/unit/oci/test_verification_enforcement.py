@@ -506,8 +506,188 @@ class TestVerificationEnforcementOff:
         )
 
 
+class TestVerificationResultCaching:
+    """Tests for verification result caching (T071).
+
+    When an artifact is verified, the result should be cached to avoid
+    re-verification of immutable artifacts. Cache is keyed by artifact digest.
+
+    Requirements: FR-022
+    """
+
+    @pytest.mark.requirement("FR-022")
+    def test_same_artifact_verified_once(
+        self, controller: PromotionController
+    ) -> None:
+        """Verifying same artifact twice only calls VerificationClient once."""
+        mock_verification_result = VerificationResult(
+            status="valid",
+            signer_identity="repo:acme/floe:ref:refs/heads/main",
+            verified_at=datetime.now(timezone.utc),
+        )
+
+        with (
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_cls,
+            patch("floe_core.schemas.signing.VerificationPolicy"),
+        ):
+            mock_client = MagicMock()
+            mock_client.verify.return_value = mock_verification_result
+            mock_client_cls.return_value = mock_client
+
+            # First verification call
+            result1 = controller._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123def456",
+                content=b"content",
+                enforcement="enforce",
+            )
+
+            # Second verification call with same digest
+            result2 = controller._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123def456",
+                content=b"content",
+                enforcement="enforce",
+            )
+
+            # Both should return valid result
+            assert result1.status == "valid"
+            assert result2.status == "valid"
+
+            # VerificationClient.verify should only be called once (cached)
+            assert mock_client.verify.call_count == 1
+
+    @pytest.mark.requirement("FR-022")
+    def test_different_digests_verified_separately(
+        self, controller: PromotionController
+    ) -> None:
+        """Different artifact digests are verified separately (not cached)."""
+        mock_verification_result = VerificationResult(
+            status="valid",
+            verified_at=datetime.now(timezone.utc),
+        )
+
+        with (
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_cls,
+            patch("floe_core.schemas.signing.VerificationPolicy"),
+        ):
+            mock_client = MagicMock()
+            mock_client.verify.return_value = mock_verification_result
+            mock_client_cls.return_value = mock_client
+
+            # First digest
+            controller._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123",
+                content=b"content1",
+                enforcement="enforce",
+            )
+
+            # Different digest
+            controller._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.1",
+                artifact_digest="sha256:def456",
+                content=b"content2",
+                enforcement="enforce",
+            )
+
+            # Both should be verified (2 calls, not cached)
+            assert mock_client.verify.call_count == 2
+
+    @pytest.mark.requirement("FR-022")
+    def test_cached_result_returned_for_same_digest(
+        self, controller: PromotionController
+    ) -> None:
+        """Cached verification result is returned for same artifact digest."""
+        first_result = VerificationResult(
+            status="valid",
+            signer_identity="original-signer",
+            verified_at=datetime.now(timezone.utc),
+        )
+
+        with (
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_cls,
+            patch("floe_core.schemas.signing.VerificationPolicy"),
+        ):
+            mock_client = MagicMock()
+            mock_client.verify.return_value = first_result
+            mock_client_cls.return_value = mock_client
+
+            # First call
+            result1 = controller._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123def456",
+                content=b"content",
+                enforcement="enforce",
+            )
+
+            # Change mock return value
+            mock_client.verify.return_value = VerificationResult(
+                status="invalid",
+                verified_at=datetime.now(timezone.utc),
+            )
+
+            # Second call should return cached result (still valid)
+            result2 = controller._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123def456",
+                content=b"content",
+                enforcement="enforce",
+            )
+
+            # Should return original cached result
+            assert result2.status == "valid"
+            assert result2.signer_identity == "original-signer"
+
+    @pytest.mark.requirement("FR-022")
+    def test_cache_is_per_controller_instance(
+        self, mock_oci_client: MagicMock, promotion_config: PromotionConfig
+    ) -> None:
+        """Cache is scoped to controller instance, not global."""
+        mock_verification_result = VerificationResult(
+            status="valid",
+            verified_at=datetime.now(timezone.utc),
+        )
+
+        with (
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_cls,
+            patch("floe_core.schemas.signing.VerificationPolicy"),
+        ):
+            mock_client = MagicMock()
+            mock_client.verify.return_value = mock_verification_result
+            mock_client_cls.return_value = mock_client
+
+            # Two separate controller instances
+            controller1 = PromotionController(
+                client=mock_oci_client,
+                promotion=promotion_config,
+            )
+            controller2 = PromotionController(
+                client=mock_oci_client,
+                promotion=promotion_config,
+            )
+
+            # Same artifact verified by both controllers
+            controller1._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123",
+                content=b"content",
+                enforcement="enforce",
+            )
+            controller2._verify_signature(
+                artifact_ref="oci://registry/repo:v1.0.0",
+                artifact_digest="sha256:abc123",
+                content=b"content",
+                enforcement="enforce",
+            )
+
+            # Each controller should verify independently (2 calls)
+            assert mock_client.verify.call_count == 2
+
+
 __all__: list[str] = [
     "TestVerificationEnforcementEnforce",
     "TestVerificationEnforcementWarn",
     "TestVerificationEnforcementOff",
+    "TestVerificationResultCaching",
 ]
