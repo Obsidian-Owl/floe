@@ -671,3 +671,135 @@ class TestPromoteCliExitCodes:
 
             # Dry-run should succeed even with failed gates
             assert result.exit_code == 0
+
+
+class TestPromoteCliSignatureVerificationMessages:
+    """Tests for signature verification CLI messages (T074 - FR-021)."""
+
+    @pytest.fixture
+    def mock_record_signature_verified(self) -> PromotionRecord:
+        """Create a mock PromotionRecord with verified signature."""
+        return PromotionRecord(
+            promotion_id=uuid4(),
+            artifact_digest="sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            artifact_tag="v1.0.0",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[],
+            signature_verified=True,
+            operator="ci@github.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=False,
+            trace_id="abc123",
+            authorization_passed=True,
+        )
+
+    @pytest.fixture
+    def mock_record_signature_not_verified(self) -> PromotionRecord:
+        """Create a mock PromotionRecord with unverified/unsigned signature."""
+        return PromotionRecord(
+            promotion_id=uuid4(),
+            artifact_digest="sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            artifact_tag="v1.0.0",
+            source_environment="dev",
+            target_environment="staging",
+            gate_results=[],
+            signature_verified=False,
+            operator="ci@github.com",
+            promoted_at=datetime.now(timezone.utc),
+            dry_run=False,
+            trace_id="abc123",
+            authorization_passed=True,
+        )
+
+    @pytest.mark.requirement("FR-021")
+    def test_table_output_shows_signature_verified_message(
+        self, mock_record_signature_verified: PromotionRecord
+    ) -> None:
+        """Table output shows '✓ Signature verified' when signature is verified."""
+        runner = CliRunner()
+
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
+            mock_controller = MagicMock()
+            mock_controller.promote.return_value = mock_record_signature_verified
+            mock_controller_class.return_value = mock_controller
+
+            result = runner.invoke(
+                cli,
+                [
+                    "platform",
+                    "promote",
+                    "v1.0.0",
+                    "--from=dev",
+                    "--to=staging",
+                    "--registry=oci://example.com/repo",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "Signature verified" in result.output
+
+    @pytest.mark.requirement("FR-021")
+    def test_table_output_shows_unsigned_warning(
+        self, mock_record_signature_not_verified: PromotionRecord
+    ) -> None:
+        """Table output shows warning when signature is not verified."""
+        runner = CliRunner()
+
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
+            mock_controller = MagicMock()
+            mock_controller.promote.return_value = mock_record_signature_not_verified
+            mock_controller_class.return_value = mock_controller
+
+            result = runner.invoke(
+                cli,
+                [
+                    "platform",
+                    "promote",
+                    "v1.0.0",
+                    "--from=dev",
+                    "--to=staging",
+                    "--registry=oci://example.com/repo",
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should contain warning about unsigned
+            assert "WARNING" in result.output or "unsigned" in result.output.lower()
+
+    @pytest.mark.requirement("FR-021")
+    def test_json_output_does_not_add_signature_messages(
+        self, mock_record_signature_verified: PromotionRecord
+    ) -> None:
+        """JSON output includes signature_verified field but no extra messages."""
+        runner = CliRunner()
+
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
+            mock_controller = MagicMock()
+            mock_controller.promote.return_value = mock_record_signature_verified
+            mock_controller_class.return_value = mock_controller
+
+            result = runner.invoke(
+                cli,
+                [
+                    "platform",
+                    "promote",
+                    "v1.0.0",
+                    "--from=dev",
+                    "--to=staging",
+                    "--registry=oci://example.com/repo",
+                    "--output=json",
+                ],
+            )
+
+            assert result.exit_code == 0
+            # JSON output should be parseable and contain signature_verified
+            data = extract_json_from_output(result.output)
+            assert "signature_verified" in data
+            assert data["signature_verified"] is True
