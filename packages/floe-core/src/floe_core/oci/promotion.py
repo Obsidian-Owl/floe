@@ -753,6 +753,85 @@ class PromotionController:
                 # Re-raise in enforce mode
                 raise
 
+    def _get_promotion_history(
+        self,
+        annotations: dict[str, str],
+        default_digest: str,
+        *,
+        limit: int | None = None,
+    ) -> list[PromotionHistoryEntry]:
+        """Extract promotion history from OCI manifest annotations.
+
+        Parses the promotion history stored in the `dev.floe.promotion.history`
+        annotation and returns a list of PromotionHistoryEntry objects.
+
+        Args:
+            annotations: Dictionary of OCI manifest annotations.
+            default_digest: Default digest to use if entry doesn't have one.
+            limit: Optional maximum number of history entries to return.
+
+        Returns:
+            List of PromotionHistoryEntry objects, newest first.
+            Returns empty list if no history or parsing fails.
+
+        Note:
+            History entries are stored as JSON array in annotation.
+            Malformed entries are silently skipped to ensure robustness.
+
+        Example:
+            >>> annotations = {"dev.floe.promotion.history": '[{...}]'}
+            >>> history = controller._get_promotion_history(annotations, digest)
+            >>> for entry in history:
+            ...     print(f"{entry.source_environment} -> {entry.target_environment}")
+        """
+        import json
+
+        history_entries: list[PromotionHistoryEntry] = []
+        history_data = annotations.get("dev.floe.promotion.history", "[]")
+
+        try:
+            history_list = json.loads(history_data)
+            if isinstance(history_list, list):
+                for entry in history_list:
+                    if isinstance(entry, dict):
+                        try:
+                            # Validate required fields exist
+                            if not entry.get("source_environment"):
+                                continue  # Skip entries without source
+                            if not entry.get("target_environment"):
+                                continue  # Skip entries without target
+
+                            history_entries.append(
+                                PromotionHistoryEntry(
+                                    promotion_id=entry.get("promotion_id", ""),
+                                    artifact_digest=entry.get(
+                                        "artifact_digest", default_digest
+                                    ),
+                                    source_environment=entry.get(
+                                        "source_environment", ""
+                                    ),
+                                    target_environment=entry.get(
+                                        "target_environment", ""
+                                    ),
+                                    operator=entry.get("operator", "unknown"),
+                                    promoted_at=entry.get("promoted_at", ""),
+                                    gate_results=entry.get("gate_results", []),
+                                    signature_verified=entry.get(
+                                        "signature_verified", False
+                                    ),
+                                )
+                            )
+                        except Exception:
+                            pass  # Skip malformed entries
+        except json.JSONDecodeError:
+            pass  # Return empty list on JSON parse error
+
+        # Apply limit if specified
+        if limit is not None and limit > 0:
+            history_entries = history_entries[:limit]
+
+        return history_entries
+
     def _create_env_tag(
         self,
         source_tag: str,
@@ -1718,37 +1797,14 @@ class PromotionController:
                 operator=operator,
             )
 
-        # Step 4: Extract promotion history from annotations
-        history_entries: list[PromotionHistoryEntry] = []
-        history_data = annotations.get("dev.floe.promotion.history", "[]")
-        try:
-            history_list = json.loads(history_data)
-            if isinstance(history_list, list):
-                for entry in history_list:
-                    if isinstance(entry, dict):
-                        try:
-                            history_entries.append(
-                                PromotionHistoryEntry(
-                                    promotion_id=entry.get("promotion_id", ""),
-                                    artifact_digest=entry.get("artifact_digest", digest),
-                                    source_environment=entry.get("source_environment", ""),
-                                    target_environment=entry.get("target_environment", ""),
-                                    operator=entry.get("operator", "unknown"),
-                                    promoted_at=entry.get("promoted_at", ""),
-                                    gate_results=entry.get("gate_results", []),
-                                    signature_verified=entry.get("signature_verified", False),
-                                )
-                            )
-                        except Exception:
-                            pass  # Skip malformed entries
-        except json.JSONDecodeError:
-            pass
+        # Step 4: Extract promotion history using helper method
+        history_entries = self._get_promotion_history(
+            annotations=annotations,
+            default_digest=digest,
+            limit=history,
+        )
 
-        # Step 5: Apply history limit if specified
-        if history is not None and history > 0:
-            history_entries = history_entries[:history]
-
-        # Step 6: Build response
+        # Step 5: Build response
         response = PromotionStatusResponse(
             tag=tag,
             digest=digest,
