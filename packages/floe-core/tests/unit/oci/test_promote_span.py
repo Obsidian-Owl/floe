@@ -210,8 +210,10 @@ class TestPromoteOpenTelemetrySpan:
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)
 
-            # Test with invalid transition that raises ValueError
-            with pytest.raises(ValueError):
+            # Test with invalid transition that raises InvalidTransitionError
+            from floe_core.oci.errors import InvalidTransitionError
+
+            with pytest.raises(InvalidTransitionError):
                 controller.promote(
                     tag="v1.0.0",
                     from_env="prod",  # Invalid: can't promote backward
