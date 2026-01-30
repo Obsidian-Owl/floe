@@ -68,11 +68,13 @@ from floe_core.schemas.promotion import (
     PromotionStatusResponse,
     RollbackImpactAnalysis,
     RollbackRecord,
+    WebhookConfig,
 )
 
 if TYPE_CHECKING:
     from floe_core.enforcement import PolicyEnforcer
     from floe_core.oci.client import OCIClient
+    from floe_core.oci.webhooks import WebhookNotifier
     from floe_core.schemas.oci import RegistryConfig
     from floe_core.schemas.signing import VerificationResult
 
@@ -153,6 +155,18 @@ class PromotionController:
         # Stores EnvironmentLock for each locked environment
         self._environment_locks: dict[str, "EnvironmentLock"] = {}
 
+        # Webhook notifier for lifecycle events (T117 - FR-040 through FR-043)
+        self._webhook_notifier: "WebhookNotifier | None" = None
+        if promotion.webhooks:
+            from floe_core.oci.webhooks import WebhookNotifier
+
+            # Use first webhook config for now; multi-webhook support in future
+            self._webhook_notifier = WebhookNotifier(configs=promotion.webhooks)
+            self._log.info(
+                "webhook_notifier_initialized",
+                webhook_count=len(promotion.webhooks),
+            )
+
         self._log.info("promotion_controller_initialized")
 
     def _get_environment(self, name: str) -> EnvironmentConfig | None:
@@ -185,6 +199,61 @@ class PromotionController:
             if env.name == name:
                 return idx
         raise ValueError(f"Environment '{name}' not found in promotion path")
+
+    def _send_webhook_notification(
+        self,
+        event_type: str,
+        event_data: dict,
+    ) -> None:
+        """Send webhook notification for a lifecycle event (T117).
+
+        This is a fire-and-forget operation - failures are logged but don't
+        raise exceptions. Webhooks should not block or fail promotions.
+
+        Args:
+            event_type: Event type (promote, rollback, lock, unlock).
+            event_data: Event-specific data to include in payload.
+        """
+        if self._webhook_notifier is None:
+            return
+
+        if not self._webhook_notifier.should_notify(event_type):
+            self._log.debug(
+                "webhook_skipped",
+                event_type=event_type,
+                reason="event_type_not_subscribed",
+            )
+            return
+
+        import asyncio
+
+        try:
+            # Run async notify in sync context
+            result = asyncio.run(
+                self._webhook_notifier.notify(event_type, event_data)
+            )
+            if result.success:
+                self._log.info(
+                    "webhook_notification_sent",
+                    event_type=event_type,
+                    url=result.url,
+                    status_code=result.status_code,
+                )
+            else:
+                self._log.warning(
+                    "webhook_notification_failed",
+                    event_type=event_type,
+                    url=result.url,
+                    error=result.error,
+                    attempts=result.attempts,
+                )
+        except Exception as e:
+            # Webhook failures should never fail the promotion
+            self._log.error(
+                "webhook_notification_error",
+                event_type=event_type,
+                error=str(e),
+            )
 
     def _validate_transition(self, from_env: str, to_env: str) -> None:
         """Validate that a promotion transition is allowed.
@@ -1598,6 +1667,21 @@ class PromotionController:
                 warning_count=len(warnings),
             )
 
+            # Send webhook notification for promote event (T117 - FR-040)
+            if not dry_run:
+                self._send_webhook_notification(
+                    "promote",
+                    {
+                        "artifact_tag": tag,
+                        "artifact_digest": record.artifact_digest,
+                        "source_environment": from_env,
+                        "target_environment": to_env,
+                        "operator": operator,
+                        "timestamp": record.promoted_at.isoformat(),
+                        "promotion_id": str(record.promotion_id),
+                    },
+                )
+
             return record
 
     def promote_multi(
@@ -1825,6 +1909,21 @@ class PromotionController:
                 target_digest=target_digest,
                 previous_digest=previous_digest,
                 trace_id=effective_trace_id,
+            )
+
+            # Send webhook notification for rollback event (T117 - FR-040)
+            self._send_webhook_notification(
+                "rollback",
+                {
+                    "artifact_tag": tag,
+                    "artifact_digest": record.artifact_digest,
+                    "environment": environment,
+                    "previous_digest": previous_digest,
+                    "reason": reason,
+                    "operator": operator,
+                    "timestamp": record.rolled_back_at.isoformat(),
+                    "rollback_id": str(record.rollback_id),
+                },
             )
 
             return record
@@ -2167,6 +2266,17 @@ class PromotionController:
             locked_at=locked_at.isoformat(),
         )
 
+        # Send webhook notification for lock event (T117 - FR-040)
+        self._send_webhook_notification(
+            "lock",
+            {
+                "environment": environment,
+                "reason": reason,
+                "operator": operator,
+                "timestamp": locked_at.isoformat(),
+            },
+        )
+
     def unlock_environment(
         self,
         environment: str,
@@ -2206,6 +2316,17 @@ class PromotionController:
             environment=environment,
             reason=reason,
             operator=operator,
+        )
+
+        # Send webhook notification for unlock event (T117 - FR-040)
+        self._send_webhook_notification(
+            "unlock",
+            {
+                "environment": environment,
+                "reason": reason,
+                "operator": operator,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
         )
 
     def get_lock_status(self, environment: str) -> EnvironmentLock:
