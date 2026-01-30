@@ -248,115 +248,127 @@ class PromotionController:
         Note:
             Duration is recorded even for timed-out gates.
         """
-        start_time = time.monotonic()
-        grace_period = 5  # Seconds to wait after SIGTERM before SIGKILL
+        # Create OpenTelemetry span for gate execution
+        gate_name = gate.value
+        with create_span(
+            f"floe.oci.gate.{gate_name}",
+            attributes={
+                "gate_type": gate_name,
+                "timeout_seconds": timeout_seconds,
+            },
+        ) as span:
+            start_time = time.monotonic()
+            grace_period = 5  # Seconds to wait after SIGTERM before SIGKILL
 
-        self._log.info(
-            "gate_execution_started",
-            gate=gate.value,
-            command=command,
-            timeout_seconds=timeout_seconds,
-        )
-
-        try:
-            # Try simple subprocess.run first (covers most cases)
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
+            self._log.info(
+                "gate_execution_started",
+                gate=gate.value,
+                command=command,
+                timeout_seconds=timeout_seconds,
             )
 
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-
-            if result.returncode == 0:
-                self._log.info(
-                    "gate_execution_passed",
-                    gate=gate.value,
-                    duration_ms=duration_ms,
+            try:
+                # Try simple subprocess.run first (covers most cases)
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_seconds,
                 )
-                return GateResult(
-                    gate=gate,
-                    status=GateStatus.PASSED,
-                    duration_ms=duration_ms,
-                    details={"stdout": result.stdout, "stderr": result.stderr},
-                )
-            else:
-                error_msg = f"Gate failed with exit code {result.returncode}"
-                if result.stderr:
-                    error_msg = f"{error_msg}: {result.stderr.strip()}"
 
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                span.set_attribute("duration_ms", duration_ms)
+
+                if result.returncode == 0:
+                    self._log.info(
+                        "gate_execution_passed",
+                        gate=gate.value,
+                        duration_ms=duration_ms,
+                    )
+                    return GateResult(
+                        gate=gate,
+                        status=GateStatus.PASSED,
+                        duration_ms=duration_ms,
+                        details={"stdout": result.stdout, "stderr": result.stderr},
+                    )
+                else:
+                    error_msg = f"Gate failed with exit code {result.returncode}"
+                    if result.stderr:
+                        error_msg = f"{error_msg}: {result.stderr.strip()}"
+
+                    self._log.warning(
+                        "gate_execution_failed",
+                        gate=gate.value,
+                        duration_ms=duration_ms,
+                        exit_code=result.returncode,
+                        error=error_msg,
+                    )
+                    return GateResult(
+                        gate=gate,
+                        status=GateStatus.FAILED,
+                        duration_ms=duration_ms,
+                        error=error_msg,
+                        details={"stdout": result.stdout, "stderr": result.stderr},
+                    )
+
+            except subprocess.TimeoutExpired:
+                # Timeout handling with SIGTERM -> SIGKILL escalation
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                span.set_attribute("duration_ms", duration_ms)
+
+                # For proper SIGTERM/SIGKILL handling, use Popen
+                try:
+                    proc = subprocess.Popen(
+                        command,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    proc.terminate()  # Send SIGTERM
+
+                    try:
+                        proc.wait(timeout=grace_period)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()  # Send SIGKILL after grace period
+                        proc.wait()
+
+                except Exception:
+                    # If Popen fails, we've already recorded the timeout
+                    pass
+
+                error_msg = f"Gate execution timed out after {timeout_seconds} seconds"
                 self._log.warning(
-                    "gate_execution_failed",
+                    "gate_execution_timeout",
                     gate=gate.value,
                     duration_ms=duration_ms,
-                    exit_code=result.returncode,
-                    error=error_msg,
+                    timeout_seconds=timeout_seconds,
                 )
                 return GateResult(
                     gate=gate,
                     status=GateStatus.FAILED,
                     duration_ms=duration_ms,
                     error=error_msg,
-                    details={"stdout": result.stdout, "stderr": result.stderr},
                 )
 
-        except subprocess.TimeoutExpired:
-            # Timeout handling with SIGTERM -> SIGKILL escalation
-            duration_ms = int((time.monotonic() - start_time) * 1000)
+            except Exception as e:
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                span.set_attribute("duration_ms", duration_ms)
+                error_msg = f"Gate execution error: {e}"
 
-            # For proper SIGTERM/SIGKILL handling, use Popen
-            try:
-                proc = subprocess.Popen(
-                    command,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
+                self._log.error(
+                    "gate_execution_error",
+                    gate=gate.value,
+                    duration_ms=duration_ms,
+                    error=str(e),
                 )
-                proc.terminate()  # Send SIGTERM
-
-                try:
-                    proc.wait(timeout=grace_period)
-                except subprocess.TimeoutExpired:
-                    proc.kill()  # Send SIGKILL after grace period
-                    proc.wait()
-
-            except Exception:
-                # If Popen fails, we've already recorded the timeout
-                pass
-
-            error_msg = f"Gate execution timed out after {timeout_seconds} seconds"
-            self._log.warning(
-                "gate_execution_timeout",
-                gate=gate.value,
-                duration_ms=duration_ms,
-                timeout_seconds=timeout_seconds,
-            )
-            return GateResult(
-                gate=gate,
-                status=GateStatus.FAILED,
-                duration_ms=duration_ms,
-                error=error_msg,
-            )
-
-        except Exception as e:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-            error_msg = f"Gate execution error: {e}"
-
-            self._log.error(
-                "gate_execution_error",
-                gate=gate.value,
-                duration_ms=duration_ms,
-                error=str(e),
-            )
-            return GateResult(
-                gate=gate,
-                status=GateStatus.FAILED,
-                duration_ms=duration_ms,
-                error=error_msg,
-            )
+                return GateResult(
+                    gate=gate,
+                    status=GateStatus.FAILED,
+                    duration_ms=duration_ms,
+                    error=error_msg,
+                )
 
     def _run_policy_compliance_gate(
         self,
