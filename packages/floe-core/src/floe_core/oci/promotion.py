@@ -783,6 +783,107 @@ class PromotionController:
                 # Re-raise in enforce mode
                 raise
 
+    def _sync_to_registries(
+        self,
+        tag: str,
+        to_env: str,
+        artifact_digest: str,
+        secondary_clients: list["OCIClient"],
+    ) -> list["RegistrySyncStatus"]:
+        """Sync artifact to secondary registries (T080 - FR-028).
+
+        Syncs the promoted artifact to secondary registries in parallel.
+        Failures are captured but don't block the primary promotion (FR-030).
+
+        Args:
+            tag: Source artifact tag.
+            to_env: Target environment name.
+            artifact_digest: Expected artifact digest for verification.
+            secondary_clients: List of OCIClient instances for secondary registries.
+
+        Returns:
+            List of RegistrySyncStatus for each secondary registry.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from datetime import datetime, timezone
+
+        from floe_core.schemas.promotion import RegistrySyncStatus
+
+        if not secondary_clients:
+            return []
+
+        sync_results: list[RegistrySyncStatus] = []
+        env_tag = f"{tag}-{to_env}"
+
+        self._log.info(
+            "sync_to_registries_started",
+            tag=tag,
+            env_tag=env_tag,
+            secondary_count=len(secondary_clients),
+        )
+
+        def sync_to_registry(client: "OCIClient") -> RegistrySyncStatus:
+            """Sync to a single secondary registry."""
+            registry_uri = client.registry_uri
+            try:
+                # Copy the artifact tag to secondary registry
+                # This would use oci-copy or equivalent operation
+                client.copy_tag(
+                    source_ref=f"{self.client.registry_uri}/{tag}",
+                    dest_ref=f"{registry_uri}/{env_tag}",
+                )
+
+                # Verify digest if configured
+                actual_digest = None
+                if self.promotion.verify_secondary_digests:
+                    actual_digest = client.get_artifact_digest(env_tag)
+                    if actual_digest != artifact_digest:
+                        return RegistrySyncStatus(
+                            registry_uri=registry_uri,
+                            synced=False,
+                            digest=actual_digest,
+                            error=f"Digest mismatch: expected {artifact_digest[:19]}..., got {actual_digest[:19]}...",
+                        )
+
+                return RegistrySyncStatus(
+                    registry_uri=registry_uri,
+                    synced=True,
+                    digest=actual_digest or artifact_digest,
+                    synced_at=datetime.now(timezone.utc),
+                )
+
+            except Exception as e:
+                self._log.warning(
+                    "sync_to_registry_failed",
+                    registry_uri=registry_uri,
+                    error=str(e),
+                )
+                return RegistrySyncStatus(
+                    registry_uri=registry_uri,
+                    synced=False,
+                    error=str(e),
+                )
+
+        # Execute syncs in parallel (FR-028)
+        with ThreadPoolExecutor(max_workers=len(secondary_clients)) as executor:
+            futures = {
+                executor.submit(sync_to_registry, client): client
+                for client in secondary_clients
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                sync_results.append(result)
+
+        # Log summary
+        successful = sum(1 for r in sync_results if r.synced)
+        self._log.info(
+            "sync_to_registries_completed",
+            successful=successful,
+            total=len(sync_results),
+        )
+
+        return sync_results
+
     def _get_promotion_history(
         self,
         annotations: dict[str, str],
@@ -1472,6 +1573,102 @@ class PromotionController:
             )
 
             return record
+
+    def promote_multi(
+        self,
+        tag: str,
+        from_env: str,
+        to_env: str,
+        operator: str,
+        *,
+        secondary_clients: list["OCIClient"] | None = None,
+        dry_run: bool = False,
+        verify_digests: bool | None = None,
+    ) -> "PromotionRecord":
+        """Promote artifact with multi-registry sync support (T080 - FR-028).
+
+        Extends promote() with optional secondary registry sync.
+        Secondary registries are synced in parallel after primary promotion.
+        Failures in secondary registries are captured as warnings (FR-030).
+
+        Args:
+            tag: Source artifact tag to promote.
+            from_env: Source environment name.
+            to_env: Target environment name.
+            operator: Identity of the operator.
+            secondary_clients: Optional list of OCIClient instances for secondary registries.
+                If None, uses config.secondary_registries to create clients.
+            dry_run: If True, validate without making changes.
+            verify_digests: Override config.verify_secondary_digests. If None, uses config.
+
+        Returns:
+            PromotionRecord with registry_sync_status populated.
+
+        Raises:
+            Same exceptions as promote().
+        """
+        # Execute primary promotion
+        record = self.promote(
+            tag=tag,
+            from_env=from_env,
+            to_env=to_env,
+            operator=operator,
+            dry_run=dry_run,
+        )
+
+        # Skip secondary sync in dry-run mode
+        if dry_run:
+            return record
+
+        # Determine secondary clients
+        clients_to_sync = secondary_clients or []
+
+        # If no explicit clients, try to create from config
+        if not clients_to_sync and self.promotion.secondary_registries:
+            from floe_core.oci.client import OCIClient
+            from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+
+            for registry_uri in self.promotion.secondary_registries:
+                try:
+                    config = RegistryConfig(
+                        uri=registry_uri,
+                        auth=RegistryAuth(type=AuthType.ANONYMOUS),
+                    )
+                    clients_to_sync.append(OCIClient.from_registry_config(config))
+                except Exception as e:
+                    self._log.warning(
+                        "secondary_registry_client_creation_failed",
+                        registry_uri=registry_uri,
+                        error=str(e),
+                    )
+
+        if not clients_to_sync:
+            return record
+
+        # Sync to secondary registries
+        sync_results = self._sync_to_registries(
+            tag=tag,
+            to_env=to_env,
+            artifact_digest=record.artifact_digest,
+            secondary_clients=clients_to_sync,
+        )
+
+        # Add warnings for failed syncs (FR-030)
+        warnings = list(record.warnings)
+        for sync_status in sync_results:
+            if not sync_status.synced:
+                warnings.append(
+                    f"Secondary registry sync failed for {sync_status.registry_uri}: {sync_status.error}"
+                )
+
+        # Return updated record with sync status
+        # Since PromotionRecord is frozen, we need to create a new instance
+        return record.model_copy(
+            update={
+                "registry_sync_status": sync_results,
+                "warnings": warnings,
+            }
+        )
 
     def rollback(
         self,
