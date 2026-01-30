@@ -53,6 +53,8 @@ class TestRegistryUnavailableMidPromotion:
         from floe_core.oci.errors import RegistryUnavailableError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -68,7 +70,7 @@ class TestRegistryUnavailableMidPromotion:
                 )
             ]
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Registry becomes unavailable during tag creation
             mock_create_tag.side_effect = RegistryUnavailableError(
@@ -101,6 +103,8 @@ class TestRegistryUnavailableMidPromotion:
         from floe_core.oci.errors import RegistryUnavailableError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -113,7 +117,7 @@ class TestRegistryUnavailableMidPromotion:
         ) as mock_store:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Registry fails on tag creation
             mock_create_tag.side_effect = RegistryUnavailableError(
@@ -149,6 +153,8 @@ class TestRegistryUnavailableMidPromotion:
         from floe_core.oci.errors import RegistryUnavailableError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -157,7 +163,7 @@ class TestRegistryUnavailableMidPromotion:
         ) as mock_create_tag:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             mock_create_tag.side_effect = RegistryUnavailableError(
                 registry="harbor.example.com",
@@ -184,14 +190,17 @@ class TestRegistryUnavailableMidPromotion:
     ) -> None:
         """Test promote() handles registry failure during latest tag update.
 
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
-
         Scenario: Env tag created successfully, but registry fails during
         latest tag update. This is a recoverable state - the env tag exists.
+        The promote() should succeed (with warning) since env tag is the critical
+        part and latest tag is non-critical.
         """
         from floe_core.oci.errors import RegistryUnavailableError
+        from floe_core.schemas.promotion import PromotionRecord
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -199,11 +208,13 @@ class TestRegistryUnavailableMidPromotion:
             controller, "_create_env_tag"
         ) as mock_create_tag, patch.object(
             controller, "_update_latest_tag"
-        ) as mock_update_latest:
+        ) as mock_update_latest, patch.object(
+            controller, "_store_promotion_record"
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:abc123"  # Tag created successfully
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"  # Tag created successfully
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Registry fails during latest tag update
             mock_update_latest.side_effect = RegistryUnavailableError(
@@ -211,18 +222,19 @@ class TestRegistryUnavailableMidPromotion:
                 reason="Connection refused",
             )
 
-            # Should raise or handle gracefully (depends on implementation)
-            # Either way, env tag was created so promotion is partially successful
-            with pytest.raises((RegistryUnavailableError, Exception)):
-                controller.promote(
-                    tag="v1.0.0",
-                    from_env="dev",
-                    to_env="staging",
-                    operator="ci@github.com",
-                )
+            # Promotion should succeed (with warning) since env tag was created
+            # Latest tag update is non-critical - failure is logged but doesn't block
+            result = controller.promote(
+                tag="v1.0.0",
+                from_env="dev",
+                to_env="staging",
+                operator="ci@github.com",
+            )
 
             # Env tag creation should have been called
             mock_create_tag.assert_called_once()
+            # Promotion should return a valid record (partial success)
+            assert isinstance(result, PromotionRecord)
 
 
 class TestCircuitBreakerBehavior:
@@ -257,6 +269,8 @@ class TestCircuitBreakerBehavior:
         from floe_core.oci.errors import CircuitBreakerOpenError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -265,13 +279,12 @@ class TestCircuitBreakerBehavior:
         ) as mock_create_tag:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Circuit breaker is open
             mock_create_tag.side_effect = CircuitBreakerOpenError(
-                service="harbor.example.com",
-                failures=5,
-                window_seconds=60,
+                registry="harbor.example.com",
+                failure_count=5,
             )
 
             with pytest.raises(CircuitBreakerOpenError) as exc_info:
@@ -298,6 +311,8 @@ class TestCircuitBreakerBehavior:
         from floe_core.oci.errors import CircuitBreakerOpenError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -306,12 +321,12 @@ class TestCircuitBreakerBehavior:
         ) as mock_create_tag:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             mock_create_tag.side_effect = CircuitBreakerOpenError(
-                service="harbor.example.com",
-                failures=5,
-                window_seconds=60,
+                registry="harbor.example.com",
+                failure_count=5,
+                recovery_at="2026-01-30T15:00:00Z",
             )
 
             with pytest.raises(CircuitBreakerOpenError) as exc_info:
@@ -322,6 +337,6 @@ class TestCircuitBreakerBehavior:
                     operator="ci@github.com",
                 )
 
-            # Error should include failure count and window
-            assert exc_info.value.failures == 5
-            assert exc_info.value.window_seconds == 60
+            # Error should include failure count and recovery timestamp
+            assert exc_info.value.failure_count == 5
+            assert exc_info.value.recovery_at == "2026-01-30T15:00:00Z"
