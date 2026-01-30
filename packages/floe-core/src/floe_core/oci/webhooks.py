@@ -99,7 +99,7 @@ class WebhookNotifier:
     configurable timeout, and retry logic.
 
     Attributes:
-        config: Single WebhookConfig (when initialized with config=).
+        config: Single WebhookConfig (when initialized with config=), or None if configs is empty.
         configs: List of WebhookConfigs (when initialized with configs=).
 
     Examples:
@@ -114,6 +114,10 @@ class WebhookNotifier:
         >>> notifier.should_notify("lock")
         False
     """
+
+    # Type annotations for instance attributes
+    config: WebhookConfig | None
+    configs: list[WebhookConfig]
 
     def __init__(
         self,

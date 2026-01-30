@@ -230,7 +230,7 @@ class AuthorizationChecker:
             username = credentials.get("username")
             if username:
                 logger.debug("operator_identity_from_credentials", identity=username)
-                return username
+                return str(username)
 
         # Fall back to environment variable
         env_operator = os.environ.get("FLOE_OPERATOR")

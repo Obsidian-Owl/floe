@@ -1547,6 +1547,58 @@ class OCIClient:
                     registry=self._registry_host,
                 )
 
+    def copy_tag(self, source_ref: str, dest_ref: str) -> None:
+        """Copy an artifact tag from source to destination.
+
+        Used for cross-registry sync operations (FR-028).
+
+        Args:
+            source_ref: Full source reference (e.g., oci://registry/repo:tag).
+            dest_ref: Full destination reference.
+
+        Raises:
+            ArtifactNotFoundError: If source artifact doesn't exist.
+            AuthenticationError: If authentication fails.
+            RegistryUnavailableError: If registry is unavailable.
+
+        Note:
+            This is a stub implementation. Production use requires
+            oci-copy or crane copy integration.
+        """
+        logger.info(
+            "copy_tag_stub",
+            source_ref=source_ref,
+            dest_ref=dest_ref,
+            message="Cross-registry copy not yet implemented",
+        )
+        raise NotImplementedError(
+            "Cross-registry copy requires oci-copy or crane integration. "
+            f"Would copy {source_ref} to {dest_ref}"
+        )
+
+    def get_artifact_digest(self, tag: str) -> str:
+        """Get the digest of an artifact by tag.
+
+        Args:
+            tag: Tag to look up.
+
+        Returns:
+            SHA256 digest string (e.g., sha256:abc123...).
+
+        Raises:
+            ArtifactNotFoundError: If artifact doesn't exist.
+            AuthenticationError: If authentication fails.
+        """
+        manifest_data = self._fetch_manifest_data(tag)
+        # The digest is computed from the manifest content
+        # For OCI manifests, it's the sha256 of the canonical JSON
+        import hashlib
+        import json
+
+        canonical = json.dumps(manifest_data, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(canonical.encode()).hexdigest()
+        return f"sha256:{digest}"
+
     def close(self) -> None:
         """Close the client and release resources.
 

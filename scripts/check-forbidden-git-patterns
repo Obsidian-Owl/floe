@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Claude Code PreToolUse hook to block dangerous git patterns
+# This script prevents AI from bypassing quality gates
+set -euo pipefail
+
+# Get the command from TOOL_INPUT (passed by Claude Code)
+COMMAND="${TOOL_INPUT:-}"
+
+if [[ -z "$COMMAND" ]]; then
+    # No command to check
+    exit 0
+fi
+
+# Patterns that bypass quality gates
+FORBIDDEN_PATTERNS=(
+    "--no-verify"
+    "--force-with-lease"
+    "push --force"
+    "push -f "
+    "reset --hard"
+    "checkout -- ."
+    "clean -fd"
+    "clean -f"
+    "branch -D "
+    "rebase -i"
+    "commit --amend"
+)
+
+# Check each forbidden pattern
+for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
+    if echo "$COMMAND" | grep -qF "$pattern"; then
+        echo "═══════════════════════════════════════════════════════════════" >&2
+        echo "🚫 BLOCKED: Forbidden git pattern detected: '$pattern'" >&2
+        echo "═══════════════════════════════════════════════════════════════" >&2
+        echo "" >&2
+        echo "This pattern is blocked because it bypasses quality gates." >&2
+        echo "" >&2
+        case "$pattern" in
+            "--no-verify")
+                echo "Fix: Address the pre-commit hook failures instead of skipping them." >&2
+                echo "     Run: make check" >&2
+                ;;
+            *"--force"*|*"-f "*)
+                echo "Fix: Use 'git push' without force. Resolve conflicts properly." >&2
+                ;;
+            "reset --hard"|"checkout -- .")
+                echo "Fix: Use 'git stash' to preserve changes, or commit first." >&2
+                ;;
+            "clean -f"*)
+                echo "Fix: Review untracked files before removal. Use 'git status' first." >&2
+                ;;
+            "branch -D"*)
+                echo "Fix: Use 'git branch -d' (lowercase) for safe deletion." >&2
+                ;;
+            "rebase -i")
+                echo "Fix: Interactive rebase not supported in non-interactive mode." >&2
+                ;;
+            "commit --amend")
+                echo "Fix: Create a new commit instead. Amending can destroy history." >&2
+                ;;
+        esac
+        echo "" >&2
+        exit 1
+    fi
+done
+
+# Command is allowed
+exit 0

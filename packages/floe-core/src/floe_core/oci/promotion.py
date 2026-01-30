@@ -51,7 +51,7 @@ import shlex
 import subprocess
 import time
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
@@ -259,7 +259,7 @@ class PromotionController:
     def _send_webhook_notification(
         self,
         event_type: str,
-        event_data: dict,
+        event_data: dict[str, Any],
     ) -> None:
         """Send webhook notification for a lifecycle event (T117/T119).
 
@@ -679,7 +679,7 @@ class PromotionController:
 
     def _run_policy_compliance_gate(
         self,
-        manifest: dict,
+        manifest: dict[str, Any],
         *,
         dry_run: bool = False,
     ) -> GateResult:
@@ -992,7 +992,7 @@ class PromotionController:
     def _run_all_gates(
         self,
         to_env: str,
-        manifest: dict,
+        manifest: dict[str, Any],
         artifact_ref: str,
         *,
         dry_run: bool = False,
@@ -1209,7 +1209,7 @@ class PromotionController:
         artifact_ref: str,
         artifact_digest: str,
         content: bytes | None = None,
-        enforcement: str = "enforce",
+        enforcement: Literal["enforce", "warn", "off"] = "enforce",
     ) -> VerificationResult:
         """Verify artifact signature using existing verification infrastructure.
 
@@ -1285,6 +1285,18 @@ class PromotionController:
             try:
                 # Create client and verify
                 client = VerificationClient(policy)
+
+                # If content is None, return unsigned result
+                if content is None:
+                    self._log.info(
+                        "verify_signature_skipped",
+                        reason="content is None",
+                    )
+                    return VerificationResult(
+                        status="unsigned",
+                        verified_at=datetime.now(timezone.utc),
+                        failure_reason="No content provided for verification",
+                    )
 
                 # Get signature metadata from annotations if available
                 # For now, pass None and let client handle unsigned artifacts
@@ -1562,8 +1574,8 @@ class PromotionController:
         """
         try:
             # Get artifact manifest to access annotations
-            manifest = self.client._get_manifest(f"{tag}-{from_env}")
-            annotations = getattr(manifest, "annotations", {}) or {}
+            manifest_data = self.client._fetch_manifest_data(f"{tag}-{from_env}")
+            annotations = manifest_data.get("annotations", {}) or {}
 
             # Get promotion history
             history = self._get_promotion_history(
@@ -2759,7 +2771,7 @@ class PromotionController:
 
         return response
 
-    def status(self, environment: str | None = None) -> dict:
+    def status(self, environment: str | None = None) -> dict[str, Any]:
         """Get promotion status for environment(s).
 
         Args:

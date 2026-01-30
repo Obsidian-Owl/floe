@@ -198,13 +198,11 @@ class TestConcurrentPromotionSameEnvironment:
             assert result.target_environment == env
 
     @pytest.mark.requirement("8C-NFR-006")
-    @pytest.mark.skip(reason="T032a: Full promote() implementation pending - concurrent promotion logic incomplete (test times out)")
+    @pytest.mark.timeout(30)
     def test_concurrent_promotion_no_data_corruption(
         self, controller: MagicMock
     ) -> None:
         """Test that concurrent promotions do not cause data corruption.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         When multiple promotions run concurrently:
         - Each promotion record has unique promotion_id
@@ -305,13 +303,11 @@ class TestConcurrentPromotionSameEnvironment:
         assert "sha256:" in error_message or "exists" in error_message.lower()
 
     @pytest.mark.requirement("8C-NFR-006")
-    @pytest.mark.skip(reason="T032a: Full promote() implementation pending - gate validation path incomplete (test may timeout)")
+    @pytest.mark.timeout(30)
     def test_concurrent_promotion_with_gate_failures(
         self, controller: MagicMock
     ) -> None:
         """Test concurrent promotions where some fail gate validation.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         When concurrent promotions have different gate outcomes:
         - Those passing gates should proceed to tag creation

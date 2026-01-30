@@ -97,7 +97,7 @@ def _get_exit_code_from_exception(exc: Exception) -> int:
     """
     # Check if exception has exit_code attribute (our custom exceptions)
     if hasattr(exc, "exit_code"):
-        return exc.exit_code
+        return int(exc.exit_code)
 
     # Fallback mapping for standard exceptions
     exc_type = type(exc).__name__

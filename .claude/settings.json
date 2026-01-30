@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$TOOL_INPUT\" | grep -qE '\\-\\-no-verify|\\-n\\s'; then echo 'BLOCKED: --no-verify is forbidden. Fix the underlying issue instead.' >&2; exit 1; fi"
+            "command": "./scripts/check-forbidden-git-patterns"
           },
           {
             "type": "command",

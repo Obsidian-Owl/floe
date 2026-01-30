@@ -21,15 +21,16 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 import structlog
+import yaml
 
 from floe_core.cli.utils import error, info, success
 
 if TYPE_CHECKING:
-    pass
+    from floe_core.schemas.manifest import PlatformManifest
 
 logger = structlog.get_logger(__name__)
 
@@ -41,6 +42,30 @@ def _get_operator() -> str:
         Operator identity string.
     """
     return os.environ.get("USER") or os.environ.get("FLOE_OPERATOR") or "unknown"
+
+
+def _load_platform_manifest(path: Path) -> PlatformManifest:
+    """Load PlatformManifest from YAML file.
+
+    Args:
+        path: Path to manifest.yaml file.
+
+    Returns:
+        Parsed PlatformManifest object.
+
+    Raises:
+        click.ClickException: If file cannot be loaded or parsed.
+    """
+    from floe_core.schemas.manifest import PlatformManifest
+
+    try:
+        with open(path) as f:
+            data: dict[str, Any] = yaml.safe_load(f)
+        return PlatformManifest.model_validate(data)
+    except yaml.YAMLError as e:
+        raise click.ClickException(f"Failed to parse YAML: {e}") from e
+    except Exception as e:
+        raise click.ClickException(f"Failed to load manifest: {e}") from e
 
 
 @click.command(
@@ -123,7 +148,6 @@ def lock_command(
     """
     from floe_core.oci.client import OCIClient
     from floe_core.oci.promotion import PromotionController
-    from floe_core.schemas.manifest import Manifest
     from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
 
     # Resolve operator
@@ -139,13 +163,16 @@ def lock_command(
     try:
         # Load manifest or use registry directly
         if manifest:
-            manifest_config = Manifest.from_yaml_file(manifest)
-            registry_config = manifest_config.registry
-            promotion_config = manifest_config.promotion
+            manifest_config = _load_platform_manifest(manifest)
+            if manifest_config.artifacts is None:
+                error("Manifest does not contain 'artifacts' configuration")
+                sys.exit(3)
+            registry_config = manifest_config.artifacts.registry
+            promotion_config = manifest_config.artifacts.promotion
         elif registry:
             registry_config = RegistryConfig(
-                registry_uri=registry,
-                auth=RegistryAuth(auth_type=AuthType.NONE),
+                uri=registry,
+                auth=RegistryAuth(type=AuthType.ANONYMOUS),
             )
             # Minimal promotion config - controller will validate environment
             from floe_core.schemas.promotion import (
@@ -164,6 +191,11 @@ def lock_command(
             )
         else:
             error("Either --manifest or --registry is required")
+            sys.exit(3)
+
+        # Validate promotion config exists
+        if promotion_config is None:
+            error("Manifest does not contain promotion configuration")
             sys.exit(3)
 
         # Create client and controller
@@ -293,7 +325,6 @@ def unlock_command(
     """
     from floe_core.oci.client import OCIClient
     from floe_core.oci.promotion import PromotionController
-    from floe_core.schemas.manifest import Manifest
     from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
 
     # Resolve operator
@@ -309,13 +340,16 @@ def unlock_command(
     try:
         # Load manifest or use registry directly
         if manifest:
-            manifest_config = Manifest.from_yaml_file(manifest)
-            registry_config = manifest_config.registry
-            promotion_config = manifest_config.promotion
+            manifest_config = _load_platform_manifest(manifest)
+            if manifest_config.artifacts is None:
+                error("Manifest does not contain 'artifacts' configuration")
+                sys.exit(3)
+            registry_config = manifest_config.artifacts.registry
+            promotion_config = manifest_config.artifacts.promotion
         elif registry:
             registry_config = RegistryConfig(
-                registry_uri=registry,
-                auth=RegistryAuth(auth_type=AuthType.NONE),
+                uri=registry,
+                auth=RegistryAuth(type=AuthType.ANONYMOUS),
             )
             # Minimal promotion config - controller will validate environment
             from floe_core.schemas.promotion import (
@@ -334,6 +368,11 @@ def unlock_command(
             )
         else:
             error("Either --manifest or --registry is required")
+            sys.exit(3)
+
+        # Validate promotion config exists
+        if promotion_config is None:
+            error("Manifest does not contain promotion configuration")
             sys.exit(3)
 
         # Create client and controller
