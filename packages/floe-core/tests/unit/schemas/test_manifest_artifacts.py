@@ -407,3 +407,196 @@ class TestManifestWebhookConfiguration:
 
         assert len(config.events) == 4
         assert set(config.events) == {"promote", "rollback", "lock", "unlock"}
+
+
+class TestManifestAuthorizationConfiguration:
+    """Tests for authorization configuration in manifest.yaml parsing (T131).
+
+    Task ID: T131
+    Phase: 12 - Authorization (US10)
+    Requirements: FR-045, FR-046, FR-047, FR-048
+    """
+
+    @pytest.mark.requirement("FR-046")
+    def test_manifest_with_environment_authorization(self) -> None:
+        """Test manifest parses authorization config in environment."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import (
+            AuthorizationConfig,
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+
+        # Create environments with authorization config
+        environments = [
+            EnvironmentConfig(
+                name="dev",
+                gates={PromotionGate.POLICY_COMPLIANCE: True},
+                authorization=None,  # No auth required for dev
+            ),
+            EnvironmentConfig(
+                name="staging",
+                gates={PromotionGate.POLICY_COMPLIANCE: True},
+                authorization=AuthorizationConfig(
+                    allowed_groups=["release-managers"],
+                ),
+            ),
+            EnvironmentConfig(
+                name="prod",
+                gates={PromotionGate.POLICY_COMPLIANCE: True},
+                authorization=AuthorizationConfig(
+                    allowed_groups=["platform-admins"],
+                    allowed_operators=["emergency@example.com"],
+                    separation_of_duties=True,
+                ),
+            ),
+        ]
+        promotion = PromotionConfig(environments=environments)
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        assert manifest.artifacts.promotion is not None
+        envs = manifest.artifacts.promotion.environments
+
+        # Dev has no authorization
+        assert envs[0].authorization is None
+
+        # Staging has group-based auth
+        assert envs[1].authorization is not None
+        assert envs[1].authorization.allowed_groups == ["release-managers"]
+
+        # Prod has full authorization config
+        assert envs[2].authorization is not None
+        assert envs[2].authorization.allowed_groups == ["platform-admins"]
+        assert envs[2].authorization.allowed_operators == ["emergency@example.com"]
+        assert envs[2].authorization.separation_of_duties is True
+
+    @pytest.mark.requirement("FR-047")
+    def test_manifest_authorization_groups_only(self) -> None:
+        """Test manifest parses authorization with groups only."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import (
+            AuthorizationConfig,
+            EnvironmentConfig,
+            PromotionConfig,
+        )
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+
+        environments = [
+            EnvironmentConfig(
+                name="prod",
+                gates={},  # Required field
+                authorization=AuthorizationConfig(
+                    allowed_groups=["admins", "operators"],
+                ),
+            ),
+        ]
+        promotion = PromotionConfig(environments=environments)
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        prod_env = manifest.artifacts.promotion.environments[0]
+        assert prod_env.authorization.allowed_groups == ["admins", "operators"]
+        assert prod_env.authorization.allowed_operators is None
+
+    @pytest.mark.requirement("FR-046")
+    def test_manifest_authorization_operators_only(self) -> None:
+        """Test manifest parses authorization with operators only."""
+        from floe_core.schemas.manifest import ArtifactsConfig, PlatformManifest
+        from floe_core.schemas.metadata import ManifestMetadata
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.plugins import PluginsConfig
+        from floe_core.schemas.promotion import (
+            AuthorizationConfig,
+            EnvironmentConfig,
+            PromotionConfig,
+        )
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+
+        environments = [
+            EnvironmentConfig(
+                name="prod",
+                gates={},  # Required field
+                authorization=AuthorizationConfig(
+                    allowed_operators=["alice@example.com", "bob@example.com"],
+                ),
+            ),
+        ]
+        promotion = PromotionConfig(environments=environments)
+
+        manifest = PlatformManifest(
+            apiVersion="floe.dev/v1",
+            kind="Manifest",
+            metadata=ManifestMetadata(
+                name="test-platform",
+                version="1.0.0",
+                owner="test@example.com",
+            ),
+            plugins=PluginsConfig(),
+            artifacts=ArtifactsConfig(registry=registry, promotion=promotion),
+        )
+
+        assert manifest.artifacts is not None
+        prod_env = manifest.artifacts.promotion.environments[0]
+        assert prod_env.authorization.allowed_groups is None
+        assert prod_env.authorization.allowed_operators == [
+            "alice@example.com",
+            "bob@example.com",
+        ]
+
+    @pytest.mark.requirement("FR-045")
+    def test_manifest_json_schema_includes_authorization(self) -> None:
+        """Test PlatformManifest JSON Schema includes authorization fields."""
+        from floe_core.schemas.promotion import EnvironmentConfig
+
+        schema = EnvironmentConfig.model_json_schema()
+        properties = schema.get("properties", {})
+
+        assert "authorization" in properties
+
+    @pytest.mark.requirement("FR-048")
+    def test_manifest_authorization_defaults(self) -> None:
+        """Test manifest authorization config has correct defaults."""
+        from floe_core.schemas.promotion import AuthorizationConfig
+
+        # Default authorization config should allow nothing
+        config = AuthorizationConfig()
+        assert config.allowed_groups is None
+        assert config.allowed_operators is None
+        assert config.separation_of_duties is False
