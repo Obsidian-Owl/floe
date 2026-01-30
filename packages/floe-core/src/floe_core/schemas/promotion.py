@@ -586,6 +586,21 @@ class PromotionConfig(BaseModel):
             "'enforce' (block on invalid), 'warn' (log but allow), 'off' (skip)"
         ),
     )
+    secondary_registries: list[str] | None = Field(
+        default=None,
+        description=(
+            "Secondary registry URIs for cross-registry sync (FR-028). "
+            "Artifacts are synced to these registries after primary promotion. "
+            "Format: 'oci://registry.example.com/repo'"
+        ),
+    )
+    verify_secondary_digests: bool = Field(
+        default=True,
+        description=(
+            "Verify digest match across all registries after sync (FR-029). "
+            "If False, sync continues without verification."
+        ),
+    )
 
     @field_validator("environments")
     @classmethod
@@ -646,6 +661,52 @@ class RollbackImpactAnalysis(BaseModel):
     estimated_downtime: str | None = Field(
         default=None,
         description="Estimated impact duration",
+    )
+
+
+class RegistrySyncStatus(BaseModel):
+    """Sync status for a single registry in multi-registry promotion (T079/T083).
+
+    Tracks whether artifact sync succeeded for each registry during
+    cross-registry promotion (FR-028, FR-030).
+
+    Attributes:
+        registry_uri: OCI registry URI.
+        synced: Whether sync completed successfully.
+        digest: Artifact digest in this registry (for verification).
+        error: Error message if sync failed.
+        synced_at: Sync completion timestamp.
+
+    Examples:
+        >>> status = RegistrySyncStatus(
+        ...     registry_uri="oci://secondary.registry.com/repo",
+        ...     synced=True,
+        ...     digest="sha256:abc...",
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    registry_uri: str = Field(
+        ...,
+        min_length=1,
+        description="OCI registry URI",
+    )
+    synced: bool = Field(
+        ...,
+        description="Whether sync completed successfully",
+    )
+    digest: str | None = Field(
+        default=None,
+        description="Artifact digest in this registry (for FR-029 verification)",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error message if sync failed",
+    )
+    synced_at: datetime | None = Field(
+        default=None,
+        description="Sync completion timestamp",
     )
 
 
@@ -758,6 +819,13 @@ class PromotionRecord(BaseModel):
     warnings: list[str] = Field(
         default_factory=list,
         description="Warning messages from promotion (e.g., partial failures)",
+    )
+    registry_sync_status: list[RegistrySyncStatus] = Field(
+        default_factory=list,
+        description=(
+            "Sync status for each registry in multi-registry promotion (FR-028/FR-030). "
+            "Empty list if single-registry promotion."
+        ),
     )
 
 
