@@ -65,12 +65,10 @@ class TestGetStatusBasic:
     def test_get_status_method_exists(self, controller: MagicMock) -> None:
         """Test get_status() method exists on PromotionController."""
         assert hasattr(controller, "get_status")
-        assert callable(getattr(controller, "get_status"))
+        assert callable(controller.get_status)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_returns_status_response(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_returns_status_response(self, controller: MagicMock) -> None:
         """Test get_status() returns a PromotionStatusResponse."""
         from floe_core.schemas.promotion import PromotionStatusResponse
 
@@ -79,9 +77,7 @@ class TestGetStatusBasic:
         assert isinstance(result, PromotionStatusResponse)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_includes_tag(
-        self, controller: MagicMock, mock_client: MagicMock
-    ) -> None:
+    def test_get_status_includes_tag(self, controller: MagicMock, mock_client: MagicMock) -> None:
         """Test status response includes the artifact tag."""
         result = controller.get_status(tag="v1.0.0")
 
@@ -97,9 +93,7 @@ class TestGetStatusBasic:
         assert result.digest.startswith("sha256:")
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_includes_environment_states(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_includes_environment_states(self, controller: MagicMock) -> None:
         """Test status response includes state for each environment."""
         result = controller.get_status(tag="v1.0.0")
 
@@ -162,14 +156,10 @@ class TestGetStatusEnvironments:
         from floe_core.schemas.promotion import PromotionConfig
 
         promotion = PromotionConfig()
-        return PromotionController(
-            client=mock_client_with_promotions, promotion=promotion
-        )
+        return PromotionController(client=mock_client_with_promotions, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_shows_promoted_environments(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_shows_promoted_environments(self, controller: MagicMock) -> None:
         """Test status shows which environments the artifact is promoted to."""
         result = controller.get_status(tag="v1.0.0")
 
@@ -178,25 +168,21 @@ class TestGetStatusEnvironments:
         assert "staging" in result.environments
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_environment_has_promoted_flag(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_environment_has_promoted_flag(self, controller: MagicMock) -> None:
         """Test each environment state has a promoted flag."""
         result = controller.get_status(tag="v1.0.0")
 
-        for env_name, env_state in result.environments.items():
+        for _env_name, env_state in result.environments.items():
             assert hasattr(env_state, "promoted")
             assert isinstance(env_state.promoted, bool)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_environment_has_promoted_at(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_environment_has_promoted_at(self, controller: MagicMock) -> None:
         """Test promoted environments include promoted_at timestamp."""
         result = controller.get_status(tag="v1.0.0")
 
         # Promoted environments should have timestamp
-        for env_name, env_state in result.environments.items():
+        for _env_name, env_state in result.environments.items():
             if env_state.promoted:
                 assert env_state.promoted_at is not None
 
@@ -228,9 +214,7 @@ class TestGetStatusWithEnvFilter:
         return PromotionController(client=mock_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_with_env_filter(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_with_env_filter(self, controller: MagicMock) -> None:
         """Test get_status() accepts env parameter to filter results."""
         # Should not raise - accepts env parameter
         result = controller.get_status(tag="v1.0.0", env="prod")
@@ -304,14 +288,10 @@ class TestGetStatusHistory:
         from floe_core.schemas.promotion import PromotionConfig
 
         promotion = PromotionConfig()
-        return PromotionController(
-            client=mock_client_with_history, promotion=promotion
-        )
+        return PromotionController(client=mock_client_with_history, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_get_status_includes_history(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_includes_history(self, controller: MagicMock) -> None:
         """Test status response includes promotion history."""
         result = controller.get_status(tag="v1.0.0")
 
@@ -319,9 +299,7 @@ class TestGetStatusHistory:
         assert isinstance(result.history, list)
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_get_status_history_has_required_fields(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_history_has_required_fields(self, controller: MagicMock) -> None:
         """Test history entries have FR-027 required fields."""
         result = controller.get_status(tag="v1.0.0")
 
@@ -335,9 +313,7 @@ class TestGetStatusHistory:
             assert hasattr(entry, "promoted_at")
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_get_status_with_history_limit(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_with_history_limit(self, controller: MagicMock) -> None:
         """Test get_status() accepts history parameter to limit results."""
         result = controller.get_status(tag="v1.0.0", history=1)
 
@@ -370,14 +346,10 @@ class TestGetStatusNotFound:
         from floe_core.schemas.promotion import PromotionConfig
 
         promotion = PromotionConfig()
-        return PromotionController(
-            client=mock_client_not_found, promotion=promotion
-        )
+        return PromotionController(client=mock_client_not_found, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_get_status_raises_for_missing_artifact(
-        self, controller: MagicMock
-    ) -> None:
+    def test_get_status_raises_for_missing_artifact(self, controller: MagicMock) -> None:
         """Test get_status() raises ArtifactNotFoundError for missing tag."""
         from floe_core.oci.errors import ArtifactNotFoundError
 

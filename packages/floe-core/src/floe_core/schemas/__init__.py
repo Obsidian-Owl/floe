@@ -128,8 +128,8 @@ from floe_core.schemas.json_schema import (
 
 # Manifest models (T018, T019, T001a Epic 8C)
 from floe_core.schemas.manifest import (
-    ArtifactsConfig,
     FORBIDDEN_ENVIRONMENT_FIELDS,
+    ArtifactsConfig,
     GovernanceConfig,
     ManifestScope,
     PlatformManifest,
@@ -171,6 +171,28 @@ from floe_core.schemas.plugins import (
     validate_domain_plugin_whitelist,
     validate_plugin_selection,
 )
+
+# Promotion schemas (Epic 8C)
+from floe_core.schemas.promotion import (
+    AuditBackend,
+    AuthorizationConfig,
+    EnvironmentConfig,
+    EnvironmentLock,
+    EnvironmentStatus,
+    GateStatus,
+    PromotionConfig,
+    PromotionGate,
+    PromotionHistoryEntry,
+    PromotionRecord,
+    PromotionStatusResponse,
+    RegistrySyncStatus,
+    RollbackImpactAnalysis,
+    RollbackRecord,
+    SecurityGateConfig,
+    SecurityScanResult,
+    WebhookConfig,
+)
+from floe_core.schemas.promotion import GateResult as PromotionGateResult
 
 # Quality schemas
 from floe_core.schemas.quality_config import (
@@ -249,28 +271,6 @@ from floe_core.schemas.security import (
     RBACConfig,
     SecurityConfig,
 )
-
-# Promotion schemas (Epic 8C)
-from floe_core.schemas.promotion import (
-    AuditBackend,
-    AuthorizationConfig,
-    EnvironmentConfig,
-    EnvironmentLock,
-    EnvironmentStatus,
-    GateStatus,
-    PromotionConfig,
-    PromotionGate,
-    PromotionHistoryEntry,
-    PromotionRecord,
-    PromotionStatusResponse,
-    RegistrySyncStatus,
-    RollbackImpactAnalysis,
-    RollbackRecord,
-    SecurityGateConfig,
-    SecurityScanResult,
-    WebhookConfig,
-)
-from floe_core.schemas.promotion import GateResult as PromotionGateResult
 
 # Signing schemas (Epic 8B)
 from floe_core.schemas.signing import (

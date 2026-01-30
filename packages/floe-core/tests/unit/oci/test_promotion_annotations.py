@@ -13,16 +13,17 @@ Requirements tested:
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-
 # OCI annotation size limit (64KB per annotation, 256KB total)
 OCI_ANNOTATION_SIZE_LIMIT = 64 * 1024  # 64KB
+
+# Test constants
+TEST_DIGEST = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
 
 class TestAnnotationSizeLimitHandling:
@@ -68,9 +69,7 @@ class TestAnnotationSizeLimitHandling:
         )
 
     @pytest.mark.requirement("8C-NFR-005")
-    def test_promote_handles_large_promotion_record_gracefully(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_handles_large_promotion_record_gracefully(self, controller: MagicMock) -> None:
         """Test promote() handles PromotionRecord exceeding 64KB gracefully.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -85,24 +84,20 @@ class TestAnnotationSizeLimitHandling:
         # Create gate results that will make the record exceed 64KB
         large_gate_result = self._create_large_gate_result(size_kb=100)
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             # Gates return large result
             mock_gates.return_value = [large_gate_result]
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             result = controller.promote(
                 tag="v1.0.0",
@@ -113,7 +108,7 @@ class TestAnnotationSizeLimitHandling:
 
             # Promotion should succeed despite large record
             assert isinstance(result, PromotionRecord)
-            assert result.artifact_digest == "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            assert result.artifact_digest == TEST_DIGEST
 
             # Record storage should have been called
             mock_store.assert_called_once()
@@ -133,7 +128,6 @@ class TestAnnotationSizeLimitHandling:
         - Duration
         - Error message (if any)
         """
-        from floe_core.schemas.promotion import PromotionRecord
 
         # Create multiple large gate results
         large_gate_results = [
@@ -146,25 +140,21 @@ class TestAnnotationSizeLimitHandling:
             ),
         ]
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = large_gate_results
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
-            result = controller.promote(
+            controller.promote(
                 tag="v1.0.0",
                 from_env="dev",
                 to_env="staging",
@@ -176,7 +166,7 @@ class TestAnnotationSizeLimitHandling:
 
             # Core fields must be preserved
             assert stored_record.promotion_id is not None
-            assert stored_record.artifact_digest == "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            assert stored_record.artifact_digest == TEST_DIGEST
             assert stored_record.source_environment == "dev"
             assert stored_record.target_environment == "staging"
 
@@ -193,9 +183,7 @@ class TestAnnotationSizeLimitHandling:
 
     @pytest.mark.requirement("8C-NFR-005")
     @pytest.mark.xfail(reason="T032a: Annotation truncation warning logging not yet implemented")
-    def test_promote_logs_warning_when_truncation_occurs(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_logs_warning_when_truncation_occurs(self, controller: MagicMock) -> None:
         """Test promote() logs warning when record truncation occurs.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -205,27 +193,23 @@ class TestAnnotationSizeLimitHandling:
         - Truncated size
         - Which fields were affected
         """
-        import logging
 
         large_gate_result = self._create_large_gate_result(size_kb=100)
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ), patch("floe_core.oci.promotion.logger") as mock_logger:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
+            patch("floe_core.oci.promotion.logger") as mock_logger,
+        ):
             mock_gates.return_value = [large_gate_result]
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             controller.promote(
                 tag="v1.0.0",
@@ -243,7 +227,10 @@ class TestAnnotationSizeLimitHandling:
             assert len(warning_calls) >= 1, "Expected warning about truncation"
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(reason="T032a: TEST_SUITE gate not in PromotionGate enum, error preservation logic incomplete")
+    @pytest.mark.xfail(
+        reason="T032a: TEST_SUITE gate not in PromotionGate enum, "
+        "error preservation logic incomplete"
+    )
     def test_promote_preserves_error_messages_during_truncation(
         self, controller: MagicMock
     ) -> None:
@@ -254,7 +241,6 @@ class TestAnnotationSizeLimitHandling:
         Error messages are critical for debugging and should be preserved
         even when other details are truncated.
         """
-        from floe_core.schemas.promotion import PromotionRecord
 
         # Gate with error and large details
         gate_with_error = GateResult(
@@ -268,23 +254,19 @@ class TestAnnotationSizeLimitHandling:
             },
         )
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = [gate_with_error]
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             controller.promote(
                 tag="v1.0.0",
@@ -302,17 +284,17 @@ class TestAnnotationSizeLimitHandling:
             assert stored_gate.error == "Test suite had 3 flaky tests but passed on retry"
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(reason="T032a: _store_promotion_record mock interface mismatch - stores string not PromotionRecord")
-    def test_promote_small_record_not_truncated(
-        self, controller: MagicMock
-    ) -> None:
+    @pytest.mark.xfail(
+        reason="T032a: _store_promotion_record mock interface mismatch - "
+        "stores string not PromotionRecord"
+    )
+    def test_promote_small_record_not_truncated(self, controller: MagicMock) -> None:
         """Test promote() does not truncate records under size limit.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         Records under 64KB should be stored as-is without any truncation.
         """
-        from floe_core.schemas.promotion import PromotionRecord
 
         # Small gate result (well under limit)
         small_gate_result = GateResult(
@@ -325,23 +307,19 @@ class TestAnnotationSizeLimitHandling:
             },
         )
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = [small_gate_result]
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             controller.promote(
                 tag="v1.0.0",
@@ -361,10 +339,10 @@ class TestAnnotationSizeLimitHandling:
             }
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(reason="T032a: TEST_SUITE gate not in PromotionGate enum, truncation logic incomplete")
-    def test_promote_handles_multiple_large_gates_efficiently(
-        self, controller: MagicMock
-    ) -> None:
+    @pytest.mark.xfail(
+        reason="T032a: TEST_SUITE gate not in PromotionGate enum, truncation logic incomplete"
+    )
+    def test_promote_handles_multiple_large_gates_efficiently(self, controller: MagicMock) -> None:
         """Test promote() handles multiple large gate results efficiently.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -397,23 +375,19 @@ class TestAnnotationSizeLimitHandling:
         ]
         # Total: ~90KB, exceeds 64KB limit
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = gate_results
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             result = controller.promote(
                 tag="v1.0.0",

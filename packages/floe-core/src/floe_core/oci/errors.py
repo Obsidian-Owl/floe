@@ -691,9 +691,7 @@ class AuthorizationError(OCIError):
             )
             guidance.append("2. Contact your platform administrator for group membership")
         elif self.allowed_operators:
-            guidance.append(
-                "1. Contact one of the allowed operators to perform this promotion"
-            )
+            guidance.append("1. Contact one of the allowed operators to perform this promotion")
             guidance.append("2. Request to be added to the allowed_operators list")
 
         if self.environment:
@@ -743,8 +741,7 @@ class EnvironmentLockedError(OCIError):
         self.reason = reason
 
         super().__init__(
-            f"Environment '{environment}' is locked: {reason}. "
-            f"Locked by {locked_by} at {locked_at}"
+            f"Environment '{environment}' is locked: {reason}. Locked by {locked_by} at {locked_at}"
         )
 
 

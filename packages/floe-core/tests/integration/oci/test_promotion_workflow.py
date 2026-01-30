@@ -164,7 +164,6 @@ class TestPromotionWorkflow(IntegrationTestBase):
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-        from floe_core.schemas.oci import RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig, PromotionRecord
 
         # Create test artifacts with unique ID for isolation
@@ -285,9 +284,7 @@ class TestPromotionWorkflow(IntegrationTestBase):
         client.push(artifacts, tag=initial_tag)
 
         # Promote
-        controller = PromotionController(
-            client=client, promotion=PromotionConfig()
-        )
+        controller = PromotionController(client=client, promotion=PromotionConfig())
         controller.promote(
             tag=initial_tag,
             from_env="dev",
@@ -332,9 +329,7 @@ class TestPromotionWorkflow(IntegrationTestBase):
         client.push(artifacts, tag=initial_tag)
 
         # Promote
-        controller = PromotionController(
-            client=client, promotion=PromotionConfig()
-        )
+        controller = PromotionController(client=client, promotion=PromotionConfig())
         result = controller.promote(
             tag=initial_tag,
             from_env="dev",
@@ -379,9 +374,7 @@ class TestPromotionWorkflow(IntegrationTestBase):
         client.push(artifacts, tag=initial_tag)
 
         # Promote with dry_run=True
-        controller = PromotionController(
-            client=client, promotion=PromotionConfig()
-        )
+        controller = PromotionController(client=client, promotion=PromotionConfig())
         result = controller.promote(
             tag=initial_tag,
             from_env="dev",
@@ -432,9 +425,7 @@ class TestPromotionWorkflow(IntegrationTestBase):
 
         # Configure promotion with signature verification in warn mode
         # (since test artifacts may not be signed)
-        promotion_config = PromotionConfig(
-            signature_verification={"enforcement": "warn"}
-        )
+        promotion_config = PromotionConfig(signature_verification={"enforcement": "warn"})
         controller = PromotionController(client=client, promotion=promotion_config)
 
         # Promote

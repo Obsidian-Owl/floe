@@ -18,7 +18,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
@@ -112,9 +111,6 @@ class TestMultiRegistryPromotionSuccess:
 
         # Mock promote() to return a valid record
         with patch.object(controller, "promote") as mock_promote:
-            from datetime import datetime, timezone
-            from uuid import uuid4
-
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
@@ -468,9 +464,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig accepts secondary_registries list."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             secondary_registries=[
                 "oci://secondary1.registry.com/repo",
@@ -485,9 +479,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig secondary_registries defaults to None."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
         )
         assert config.secondary_registries is None
@@ -497,9 +489,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig verify_secondary_digests defaults to True."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
         )
         assert config.verify_secondary_digests is True
@@ -509,9 +499,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig allows disabling digest verification."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             secondary_registries=["oci://secondary.registry.com/repo"],
             verify_secondary_digests=False,
@@ -528,7 +516,6 @@ class TestRegistrySyncStatusSchema:
     @pytest.mark.requirement("FR-028")
     def test_registry_sync_status_success(self) -> None:
         """RegistrySyncStatus represents successful sync."""
-        from datetime import datetime, timezone
 
         status = RegistrySyncStatus(
             registry_uri="oci://secondary.registry.com/repo",

@@ -16,7 +16,6 @@ from typing import Any
 
 import pytest
 
-
 # Sample Trivy JSON output for testing
 TRIVY_OUTPUT_WITH_VULNERABILITIES: dict[str, Any] = {
     "Results": [
@@ -350,7 +349,7 @@ class TestTrivySecurityScanResultIntegration:
 
         result = parse_trivy_output(json.dumps(TRIVY_OUTPUT_WITH_VULNERABILITIES))
 
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             result.critical_count = 999  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-056")
@@ -362,10 +361,7 @@ class TestTrivySecurityScanResultIntegration:
 
         # Should be sum of all severity counts
         expected_total = (
-            result.critical_count
-            + result.high_count
-            + result.medium_count
-            + result.low_count
+            result.critical_count + result.high_count + result.medium_count + result.low_count
         )
         assert result.total_vulnerabilities == expected_total
 
@@ -802,7 +798,6 @@ class TestSecurityGateEvaluationBasic:
     def test_evaluate_security_gate_blocks_with_high_vulnerabilities(self) -> None:
         """Test security gate blocks when HIGH vulnerabilities found."""
         from floe_core.oci.security_gate import (
-            SecurityGateEvaluation,
             evaluate_security_gate,
         )
         from floe_core.schemas.promotion import SecurityGateConfig, SecurityScanResult
@@ -980,7 +975,7 @@ class TestSecurityGateEvaluationImmutability:
 
         evaluation = evaluate_security_gate(scan_result, config)
 
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             evaluation.passed = True  # type: ignore[misc]
 
 

@@ -18,7 +18,6 @@ import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from click.testing import CliRunner
@@ -176,9 +175,7 @@ class TestStatusLockTableOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -199,11 +196,7 @@ class TestStatusLockTableOutput:
 
             assert result.exit_code == 0
             # Look for lock indicator (could be 🔒, [LOCKED], or similar)
-            assert (
-                "🔒" in result.output
-                or "[LOCKED]" in result.output
-                or "LOCKED" in result.output
-            )
+            assert "🔒" in result.output or "[LOCKED]" in result.output or "LOCKED" in result.output
 
     @pytest.mark.requirement("FR-039")
     def test_locked_environment_shows_lock_reason(
@@ -214,9 +207,7 @@ class TestStatusLockTableOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -248,9 +239,7 @@ class TestStatusLockTableOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -282,9 +271,7 @@ class TestStatusLockTableOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -313,17 +300,13 @@ class TestStatusLockJsonOutput:
     """Tests for lock status in JSON output format (FR-039)."""
 
     @pytest.mark.requirement("FR-039")
-    def test_json_output_includes_lock_status(
-        self, mock_status_with_locked_env: MagicMock
-    ) -> None:
+    def test_json_output_includes_lock_status(self, mock_status_with_locked_env: MagicMock) -> None:
         """JSON output includes lock status for environments."""
         runner = CliRunner()
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -348,8 +331,7 @@ class TestStatusLockJsonOutput:
 
             # JSON should include environment_locks or lock info per environment
             assert "environment_locks" in data or any(
-                "lock" in str(env).lower()
-                for env in data.get("environments", {}).values()
+                "lock" in str(env).lower() for env in data.get("environments", {}).values()
             )
 
     @pytest.mark.requirement("FR-039")
@@ -361,9 +343,7 @@ class TestStatusLockJsonOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -392,17 +372,13 @@ class TestStatusLockJsonOutput:
             assert "Incident" in output_str or "migration" in output_str  # reason
 
     @pytest.mark.requirement("FR-039")
-    def test_json_output_unlocked_shows_false(
-        self, mock_status_all_unlocked: MagicMock
-    ) -> None:
+    def test_json_output_unlocked_shows_false(self, mock_status_all_unlocked: MagicMock) -> None:
         """JSON output shows locked=false for unlocked environments."""
         runner = CliRunner()
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -444,9 +420,7 @@ class TestStatusLockWithEnvFilter:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -468,11 +442,7 @@ class TestStatusLockWithEnvFilter:
 
             assert result.exit_code == 0
             # Lock should be visible when filtering to locked environment
-            assert (
-                "🔒" in result.output
-                or "[LOCKED]" in result.output
-                or "LOCKED" in result.output
-            )
+            assert "🔒" in result.output or "[LOCKED]" in result.output or "LOCKED" in result.output
 
 
 __all__: list[str] = [

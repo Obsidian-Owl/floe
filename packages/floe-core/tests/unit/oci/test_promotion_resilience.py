@@ -20,6 +20,9 @@ import pytest
 
 from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
+# Test constants
+TEST_DIGEST = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
 
 class TestRegistryUnavailableMidPromotion:
     """Unit tests for registry unavailable mid-promotion (T031b)."""
@@ -52,15 +55,13 @@ class TestRegistryUnavailableMidPromotion:
         """
         from floe_core.oci.errors import RegistryUnavailableError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+        ):
             # Gates pass successfully
             mock_gates.return_value = [
                 GateResult(
@@ -70,7 +71,7 @@ class TestRegistryUnavailableMidPromotion:
                 )
             ]
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             # Registry becomes unavailable during tag creation
             mock_create_tag.side_effect = RegistryUnavailableError(
@@ -90,9 +91,7 @@ class TestRegistryUnavailableMidPromotion:
             assert exc_info.value.exit_code == 5
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_no_partial_state_on_registry_failure(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_no_partial_state_on_registry_failure(self, controller: MagicMock) -> None:
         """Test promote() leaves no partial state when registry fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -102,22 +101,18 @@ class TestRegistryUnavailableMidPromotion:
         """
         from floe_core.oci.errors import RegistryUnavailableError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             # Registry fails on tag creation
             mock_create_tag.side_effect = RegistryUnavailableError(
@@ -138,9 +133,7 @@ class TestRegistryUnavailableMidPromotion:
             mock_store.assert_not_called()
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_registry_unavailable_error_is_actionable(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_registry_unavailable_error_is_actionable(self, controller: MagicMock) -> None:
         """Test RegistryUnavailableError message is actionable.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -152,18 +145,16 @@ class TestRegistryUnavailableMidPromotion:
         """
         from floe_core.oci.errors import RegistryUnavailableError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             mock_create_tag.side_effect = RegistryUnavailableError(
                 registry="harbor.example.com",
@@ -185,9 +176,7 @@ class TestRegistryUnavailableMidPromotion:
             assert "timed out" in error_message.lower() or "connection" in error_message.lower()
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_registry_fails_during_latest_tag_update(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_registry_fails_during_latest_tag_update(self, controller: MagicMock) -> None:
         """Test promote() handles registry failure during latest tag update.
 
         Scenario: Env tag created successfully, but registry fails during
@@ -198,23 +187,20 @@ class TestRegistryUnavailableMidPromotion:
         from floe_core.oci.errors import RegistryUnavailableError
         from floe_core.schemas.promotion import PromotionRecord
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record"),
         ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"  # Tag created successfully
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            # Tag created successfully
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             # Registry fails during latest tag update
             mock_update_latest.side_effect = RegistryUnavailableError(
@@ -256,9 +242,7 @@ class TestCircuitBreakerBehavior:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_respects_circuit_breaker_open_state(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_respects_circuit_breaker_open_state(self, controller: MagicMock) -> None:
         """Test promote() fails fast when circuit breaker is open.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -268,18 +252,16 @@ class TestCircuitBreakerBehavior:
         """
         from floe_core.oci.errors import CircuitBreakerOpenError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             # Circuit breaker is open
             mock_create_tag.side_effect = CircuitBreakerOpenError(
@@ -299,9 +281,7 @@ class TestCircuitBreakerBehavior:
             assert exc_info.value.exit_code == 5
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_circuit_breaker_error_includes_retry_info(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_circuit_breaker_error_includes_retry_info(self, controller: MagicMock) -> None:
         """Test CircuitBreakerOpenError includes retry information.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -310,18 +290,16 @@ class TestCircuitBreakerBehavior:
         """
         from floe_core.oci.errors import CircuitBreakerOpenError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             mock_create_tag.side_effect = CircuitBreakerOpenError(
                 registry="harbor.example.com",

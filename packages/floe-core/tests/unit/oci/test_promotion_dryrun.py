@@ -20,6 +20,9 @@ import pytest
 
 from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
+# Test constants
+TEST_DIGEST = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
 
 class TestDryRunPromotion:
     """Unit tests for PromotionController.promote(dry_run=True) (T039)."""
@@ -45,20 +48,16 @@ class TestDryRunPromotion:
 
         Dry-run should validate without making registry changes.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
@@ -87,20 +86,16 @@ class TestDryRunPromotion:
 
         Dry-run should validate without making registry changes.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -120,20 +115,16 @@ class TestDryRunPromotion:
 
         Dry-run should not create audit records.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -153,20 +144,16 @@ class TestDryRunPromotion:
 
         Gates should be validated even in dry-run mode to show what would happen.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
@@ -196,20 +183,16 @@ class TestDryRunPromotion:
 
         Signatures should be verified even in dry-run mode to show what would happen.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -225,29 +208,25 @@ class TestDryRunPromotion:
             mock_verify.assert_called_once()
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_returns_record_with_dry_run_true(
-        self, controller: MagicMock
-    ) -> None:
+    def test_dry_run_returns_record_with_dry_run_true(self, controller: MagicMock) -> None:
         """Test dry_run=True returns PromotionRecord with dry_run=True.
 
         The returned record should indicate this was a dry-run.
         """
         from floe_core.schemas.promotion import PromotionRecord
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        # Test constants
+
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -263,9 +242,7 @@ class TestDryRunPromotion:
             assert result.dry_run is True
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_does_not_raise_on_gate_failure(
-        self, controller: MagicMock
-    ) -> None:
+    def test_dry_run_does_not_raise_on_gate_failure(self, controller: MagicMock) -> None:
         """Test dry_run=True does NOT raise GateValidationError on gate failure.
 
         In dry-run mode, gate failures should be reported in the record,
@@ -273,20 +250,18 @@ class TestDryRunPromotion:
         """
         from floe_core.schemas.promotion import PromotionRecord
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        # Test constants
+
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             # Return a FAILED gate result
             mock_gates.return_value = [
                 GateResult(
@@ -314,27 +289,21 @@ class TestDryRunPromotion:
             assert result.gate_results[0].status == GateStatus.FAILED
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_runs_all_gates_even_after_failure(
-        self, controller: MagicMock
-    ) -> None:
+    def test_dry_run_runs_all_gates_even_after_failure(self, controller: MagicMock) -> None:
         """Test dry_run=True runs all gates even after one fails.
 
         In dry-run mode, all gates should run to show complete validation status.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             # Return multiple gate results - first fails, second passes
             mock_gates.return_value = [
                 GateResult(
@@ -374,6 +343,8 @@ class TestDryRunConvenienceMethod:
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
 
+        # Test constants
+
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
         oci_client = OCIClient.from_registry_config(registry_config)
@@ -382,9 +353,7 @@ class TestDryRunConvenienceMethod:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_method_calls_promote_with_dry_run_true(
-        self, controller: MagicMock
-    ) -> None:
+    def test_dry_run_method_calls_promote_with_dry_run_true(self, controller: MagicMock) -> None:
         """Test dry_run() convenience method calls promote(dry_run=True)."""
         with patch.object(controller, "promote") as mock_promote:
             mock_promote.return_value = Mock()
@@ -401,26 +370,22 @@ class TestDryRunConvenienceMethod:
             )
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_method_returns_promotion_record(
-        self, controller: MagicMock
-    ) -> None:
+    def test_dry_run_method_returns_promotion_record(self, controller: MagicMock) -> None:
         """Test dry_run() convenience method returns PromotionRecord."""
         from floe_core.schemas.promotion import PromotionRecord
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        # Test constants
+
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -445,6 +410,8 @@ class TestDryRunValidation:
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
+
+        # Test constants
 
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
@@ -477,20 +444,16 @@ class TestDryRunValidation:
 
         The record should show what gates would run and their results.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
@@ -520,24 +483,18 @@ class TestDryRunValidation:
             assert PromotionGate.TESTS in gate_types
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_record_contains_signature_status(
-        self, controller: MagicMock
-    ) -> None:
+    def test_dry_run_record_contains_signature_status(self, controller: MagicMock) -> None:
         """Test dry-run PromotionRecord contains signature verification status."""
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 

@@ -34,13 +34,12 @@ class TestRunGateOpenTelemetrySpan:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_run_gate_creates_span_with_gate_name(
-        self, controller: MagicMock
-    ) -> None:
+    def test_run_gate_creates_span_with_gate_name(self, controller: MagicMock) -> None:
         """Test _run_gate() creates span named 'floe.oci.gate.{gate_name}'."""
-        with patch("floe_core.oci.promotion.create_span") as mock_create_span, patch(
-            "subprocess.run"
-        ) as mock_subprocess:
+        with (
+            patch("floe_core.oci.promotion.create_span") as mock_create_span,
+            patch("subprocess.run") as mock_subprocess,
+        ):
             mock_span = Mock()
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)
@@ -60,13 +59,12 @@ class TestRunGateOpenTelemetrySpan:
             assert call_args[0][0] == "floe.oci.gate.tests"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_run_gate_span_includes_different_gate_types(
-        self, controller: MagicMock
-    ) -> None:
+    def test_run_gate_span_includes_different_gate_types(self, controller: MagicMock) -> None:
         """Test _run_gate() span name includes correct gate type."""
-        with patch("floe_core.oci.promotion.create_span") as mock_create_span, patch(
-            "subprocess.run"
-        ) as mock_subprocess:
+        with (
+            patch("floe_core.oci.promotion.create_span") as mock_create_span,
+            patch("subprocess.run") as mock_subprocess,
+        ):
             mock_span = Mock()
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)
@@ -84,13 +82,12 @@ class TestRunGateOpenTelemetrySpan:
             assert call_args[0][0] == "floe.oci.gate.security_scan"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_run_gate_span_has_gate_type_attribute(
-        self, controller: MagicMock
-    ) -> None:
+    def test_run_gate_span_has_gate_type_attribute(self, controller: MagicMock) -> None:
         """Test _run_gate() span has gate_type attribute."""
-        with patch("floe_core.oci.promotion.create_span") as mock_create_span, patch(
-            "subprocess.run"
-        ) as mock_subprocess:
+        with (
+            patch("floe_core.oci.promotion.create_span") as mock_create_span,
+            patch("subprocess.run") as mock_subprocess,
+        ):
             mock_span = Mock()
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)
@@ -109,13 +106,12 @@ class TestRunGateOpenTelemetrySpan:
             assert attributes["gate_type"] == "tests"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_run_gate_span_has_timeout_attribute(
-        self, controller: MagicMock
-    ) -> None:
+    def test_run_gate_span_has_timeout_attribute(self, controller: MagicMock) -> None:
         """Test _run_gate() span has timeout_seconds attribute."""
-        with patch("floe_core.oci.promotion.create_span") as mock_create_span, patch(
-            "subprocess.run"
-        ) as mock_subprocess:
+        with (
+            patch("floe_core.oci.promotion.create_span") as mock_create_span,
+            patch("subprocess.run") as mock_subprocess,
+        ):
             mock_span = Mock()
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)
@@ -134,13 +130,12 @@ class TestRunGateOpenTelemetrySpan:
             assert attributes["timeout_seconds"] == 90
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_run_gate_span_records_duration(
-        self, controller: MagicMock
-    ) -> None:
+    def test_run_gate_span_records_duration(self, controller: MagicMock) -> None:
         """Test _run_gate() records duration_ms on span."""
-        with patch("floe_core.oci.promotion.create_span") as mock_create_span, patch(
-            "subprocess.run"
-        ) as mock_subprocess:
+        with (
+            patch("floe_core.oci.promotion.create_span") as mock_create_span,
+            patch("subprocess.run") as mock_subprocess,
+        ):
             mock_span = Mock()
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)

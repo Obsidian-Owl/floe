@@ -10,9 +10,7 @@ Requirements tested:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -85,11 +83,10 @@ class TestRunAllGates:
         from floe_core.schemas.promotion import GateResult
 
         # Mock the individual gate methods
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy, patch.object(
-            controller_with_gates, "_run_gate"
-        ) as mock_gate:
+        with (
+            patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy,
+            patch.object(controller_with_gates, "_run_gate") as mock_gate,
+        ):
             from floe_core.schemas.promotion import GateStatus, PromotionGate
 
             mock_policy.return_value = GateResult(
@@ -121,9 +118,7 @@ class TestRunAllGates:
         """Test that policy_compliance gate is always executed."""
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy:
+        with patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy:
             mock_policy.return_value = GateResult(
                 gate=PromotionGate.POLICY_COMPLIANCE,
                 status=GateStatus.PASSED,
@@ -143,17 +138,14 @@ class TestRunAllGates:
             assert len(policy_results) == 1
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_run_all_gates_runs_enabled_gates_only(
-        self, controller_with_gates: MagicMock
-    ) -> None:
+    def test_run_all_gates_runs_enabled_gates_only(self, controller_with_gates: MagicMock) -> None:
         """Test that only enabled gates for the environment are run."""
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy, patch.object(
-            controller_with_gates, "_run_gate"
-        ) as mock_gate:
+        with (
+            patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy,
+            patch.object(controller_with_gates, "_run_gate") as mock_gate,
+        ):
             mock_policy.return_value = GateResult(
                 gate=PromotionGate.POLICY_COMPLIANCE,
                 status=GateStatus.PASSED,
@@ -185,11 +177,10 @@ class TestRunAllGates:
         """Test that tests gate is run when enabled for environment."""
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy, patch.object(
-            controller_with_gates, "_run_gate"
-        ) as mock_gate:
+        with (
+            patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy,
+            patch.object(controller_with_gates, "_run_gate") as mock_gate,
+        ):
             mock_policy.return_value = GateResult(
                 gate=PromotionGate.POLICY_COMPLIANCE,
                 status=GateStatus.PASSED,
@@ -220,11 +211,10 @@ class TestRunAllGates:
         """Test that gate execution stops on first failure (not dry_run)."""
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy, patch.object(
-            controller_with_gates, "_run_gate"
-        ) as mock_gate:
+        with (
+            patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy,
+            patch.object(controller_with_gates, "_run_gate") as mock_gate,
+        ):
             # Policy compliance fails
             mock_policy.return_value = GateResult(
                 gate=PromotionGate.POLICY_COMPLIANCE,
@@ -261,11 +251,10 @@ class TestRunAllGates:
         """Test that dry_run continues all gates even after failure."""
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy, patch.object(
-            controller_with_gates, "_run_gate"
-        ) as mock_gate:
+        with (
+            patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy,
+            patch.object(controller_with_gates, "_run_gate") as mock_gate,
+        ):
             # Policy compliance fails
             mock_policy.return_value = GateResult(
                 gate=PromotionGate.POLICY_COMPLIANCE,
@@ -295,17 +284,14 @@ class TestRunAllGates:
             assert len(results) == 2
 
     @pytest.mark.requirement("8C-FR-012")
-    def test_run_all_gates_uses_environment_timeout(
-        self, controller_with_gates: MagicMock
-    ) -> None:
+    def test_run_all_gates_uses_environment_timeout(self, controller_with_gates: MagicMock) -> None:
         """Test that gate execution uses environment's timeout configuration."""
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
-        with patch.object(
-            controller_with_gates, "_run_policy_compliance_gate"
-        ) as mock_policy, patch.object(
-            controller_with_gates, "_run_gate"
-        ) as mock_gate:
+        with (
+            patch.object(controller_with_gates, "_run_policy_compliance_gate") as mock_policy,
+            patch.object(controller_with_gates, "_run_gate") as mock_gate,
+        ):
             mock_policy.return_value = GateResult(
                 gate=PromotionGate.POLICY_COMPLIANCE,
                 status=GateStatus.PASSED,

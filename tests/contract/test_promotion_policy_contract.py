@@ -46,8 +46,9 @@ class TestPolicyEnforcerPromotionContract:
         PromotionController checks result.passed to determine gate success/failure.
         This must be a boolean to enable correct gate status determination.
         """
-        from floe_core.enforcement import EnforcementResult, EnforcementSummary
         from datetime import datetime, timezone
+
+        from floe_core.enforcement import EnforcementResult, EnforcementSummary
 
         # Create result with passed=True
         result_pass = EnforcementResult(
@@ -80,12 +81,13 @@ class TestPolicyEnforcerPromotionContract:
         PromotionController iterates over violations to construct gate result
         details. The violations field must support iteration.
         """
+        from datetime import datetime, timezone
+
         from floe_core.enforcement import (
             EnforcementResult,
             EnforcementSummary,
             Violation,
         )
-        from datetime import datetime, timezone
 
         violation = Violation(
             error_code="FLOE-E201",
@@ -124,8 +126,9 @@ class TestPolicyEnforcerPromotionContract:
 
         When no policy violations occur, violations should be an empty list.
         """
-        from floe_core.enforcement import EnforcementResult, EnforcementSummary
         from datetime import datetime, timezone
+
+        from floe_core.enforcement import EnforcementResult, EnforcementSummary
 
         result = EnforcementResult(
             passed=True,
@@ -241,12 +244,13 @@ class TestEnforcementResultGateIntegration:
 
         PromotionController uses error_count to determine gate failure severity.
         """
+        from datetime import datetime, timezone
+
         from floe_core.enforcement import (
             EnforcementResult,
             EnforcementSummary,
             Violation,
         )
-        from datetime import datetime, timezone
 
         result = EnforcementResult(
             passed=False,
@@ -293,12 +297,13 @@ class TestEnforcementResultGateIntegration:
 
         PromotionController uses warning_count for gate result details.
         """
+        from datetime import datetime, timezone
+
         from floe_core.enforcement import (
             EnforcementResult,
             EnforcementSummary,
             Violation,
         )
-        from datetime import datetime, timezone
 
         result = EnforcementResult(
             passed=True,

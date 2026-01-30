@@ -10,8 +10,6 @@ Requirements tested:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock
-
 import pytest
 
 
@@ -328,4 +326,5 @@ class TestPromotionControllerEnvironmentValidation:
         with pytest.raises(InvalidTransitionError) as excinfo:
             controller._validate_transition("prod", "dev")
 
-        assert "backward" in excinfo.value.reason.lower() or "direction" in excinfo.value.reason.lower()
+        reason_lower = excinfo.value.reason.lower()
+        assert "backward" in reason_lower or "direction" in reason_lower

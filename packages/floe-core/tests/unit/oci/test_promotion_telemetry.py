@@ -26,9 +26,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def tracer_with_exporter() -> Generator[
-    tuple[TracerProvider, InMemorySpanExporter], None, None
-]:
+def tracer_with_exporter() -> Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]:
     """Create a TracerProvider with InMemorySpanExporter for testing.
 
     Injects the tracer into the tracing module for testing purposes.
@@ -257,11 +255,10 @@ class TestPromotionOpenTelemetryIntegration:
             verified_at=datetime.now(timezone.utc),
         )
 
-        with patch(
-            "floe_core.schemas.signing.VerificationPolicy"
-        ) as mock_policy_class, patch(
-            "floe_core.oci.verification.VerificationClient"
-        ) as mock_client_class:
+        with (
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_class,
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_class,
+        ):
             mock_policy = Mock()
             mock_policy.enforcement = "enforce"
             mock_policy_class.return_value = mock_policy
@@ -323,11 +320,10 @@ class TestPromotionOpenTelemetryIntegration:
         """Test _run_all_gates() creates a span that appears in the exporter."""
         _, exporter = tracer_with_exporter
 
-        with patch.object(
-            controller, "_run_policy_compliance_gate"
-        ) as mock_policy_gate, patch.object(
-            controller, "_get_environment"
-        ) as mock_get_env:
+        with (
+            patch.object(controller, "_run_policy_compliance_gate") as mock_policy_gate,
+            patch.object(controller, "_get_environment") as mock_get_env,
+        ):
             from floe_core.schemas.promotion import (
                 EnvironmentConfig,
                 GateResult,
@@ -365,11 +361,10 @@ class TestPromotionOpenTelemetryIntegration:
         """Test _run_all_gates() span has environment attribute."""
         _, exporter = tracer_with_exporter
 
-        with patch.object(
-            controller, "_run_policy_compliance_gate"
-        ) as mock_policy_gate, patch.object(
-            controller, "_get_environment"
-        ) as mock_get_env:
+        with (
+            patch.object(controller, "_run_policy_compliance_gate") as mock_policy_gate,
+            patch.object(controller, "_get_environment") as mock_get_env,
+        ):
             from floe_core.schemas.promotion import (
                 EnvironmentConfig,
                 GateResult,
@@ -752,9 +747,7 @@ class TestPromotionOpenTelemetryIntegration:
         controller._run_policy_compliance_gate(manifest={})
 
         spans = exporter.get_finished_spans()
-        policy_span = next(
-            s for s in spans if s.name == "floe.oci.gate.policy_compliance"
-        )
+        policy_span = next(s for s in spans if s.name == "floe.oci.gate.policy_compliance")
 
         attrs = dict(policy_span.attributes)
         assert "duration_ms" in attrs

@@ -143,18 +143,12 @@ class TestStatusCliTableOutput:
     """Tests for status CLI table output format."""
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_table_output_default(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_table_output_default(self, mock_status_response: MagicMock) -> None:
         """Test status with default table output format."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -182,18 +176,12 @@ class TestStatusCliTableOutput:
         assert "prod" in result.output
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_table_shows_promoted_status(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_table_shows_promoted_status(self, mock_status_response: MagicMock) -> None:
         """Test table output shows promoted/not promoted status."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -220,18 +208,12 @@ class TestStatusCliTableOutput:
         assert "promoted" in output_lower or "✓" in result.output or "yes" in output_lower
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_table_shows_latest_marker(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_table_shows_latest_marker(self, mock_status_response: MagicMock) -> None:
         """Test table output shows latest marker for current environment."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -261,18 +243,12 @@ class TestStatusCliJsonOutput:
     """Tests for status CLI JSON output format."""
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_json_output(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_json_output(self, mock_status_response: MagicMock) -> None:
         """Test status with JSON output format."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -308,12 +284,8 @@ class TestStatusCliJsonOutput:
         """Test JSON output includes environment promotion details."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -347,18 +319,12 @@ class TestStatusCliJsonOutput:
         assert prod["promoted"] is False
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_status_json_includes_history(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_json_includes_history(self, mock_status_response: MagicMock) -> None:
         """Test JSON output includes promotion history."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -398,18 +364,12 @@ class TestStatusCliYamlOutput:
     """Tests for status CLI YAML output format."""
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_yaml_output(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_yaml_output(self, mock_status_response: MagicMock) -> None:
         """Test status with YAML output format."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -437,20 +397,14 @@ class TestStatusCliYamlOutput:
         assert "environments:" in result.output
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_yaml_is_valid(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_yaml_is_valid(self, mock_status_response: MagicMock) -> None:
         """Test YAML output is parseable."""
         import yaml
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -487,9 +441,7 @@ class TestStatusCliEnvFilter:
     """Tests for status CLI --env filter option."""
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_with_env_filter(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_with_env_filter(self, mock_status_response: MagicMock) -> None:
         """Test --env filter returns single environment status."""
         from floe_core.schemas.promotion import (
             EnvironmentStatus,
@@ -514,12 +466,8 @@ class TestStatusCliEnvFilter:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -555,9 +503,7 @@ class TestStatusCliHistoryLimit:
     """Tests for status CLI --history=N option."""
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_status_with_history_limit(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_with_history_limit(self, mock_status_response: MagicMock) -> None:
         """Test --history=N limits history entries."""
         from floe_core.schemas.promotion import (
             EnvironmentStatus,
@@ -587,12 +533,8 @@ class TestStatusCliHistoryLimit:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -633,12 +575,8 @@ class TestStatusCliErrors:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -671,12 +609,8 @@ class TestStatusCliErrors:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -736,9 +670,7 @@ class TestStatusCliOutputFormat:
         assert "format" in result.output.lower()
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_invalid_format_rejected(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_invalid_format_rejected(self, mock_status_response: MagicMock) -> None:
         """Test invalid --format value is rejected."""
         runner = CliRunner()
         result = runner.invoke(

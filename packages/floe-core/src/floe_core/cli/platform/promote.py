@@ -317,11 +317,7 @@ def promote_command(
 
     except GateValidationError as e:
         if output == "json":
-            click.echo(
-                json.dumps(
-                    {"error": str(e), "gate": e.gate, "exit_code": e.exit_code}
-                )
-            )
+            click.echo(json.dumps({"error": str(e), "gate": e.gate, "exit_code": e.exit_code}))
         else:
             error(f"Gate validation failed: {e}")
         sys.exit(e.exit_code)

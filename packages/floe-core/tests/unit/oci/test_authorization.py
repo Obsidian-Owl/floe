@@ -239,7 +239,7 @@ class TestAuthorizationResult:
             operator="alice@example.com",
             authorized_via="group:admins",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             result.authorized = False  # type: ignore[misc]
 
 
@@ -529,5 +529,5 @@ class TestSeparationOfDutiesResult:
             operator="alice@example.com",
             previous_operator=None,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             result.allowed = False  # type: ignore[misc]

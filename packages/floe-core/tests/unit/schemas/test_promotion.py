@@ -361,7 +361,7 @@ class TestAuthorizationConfig:
         config = AuthorizationConfig(
             allowed_groups=["platform-admins"],
         )
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             config.separation_of_duties = True  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-046")
@@ -862,7 +862,7 @@ class TestRollbackImpactAnalysis:
             affected_products=[],
             recommendations=[],
         )
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             analysis.estimated_downtime = "10 minutes"  # type: ignore[misc]
 
 
@@ -1093,7 +1093,7 @@ class TestPromotionRecord:
             trace_id="abc123",
             authorization_passed=True,
         )
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             record.dry_run = True  # type: ignore[misc]
 
 
@@ -1212,5 +1212,5 @@ class TestRollbackRecord:
             rolled_back_at=datetime.now(timezone.utc),
             trace_id="xyz789",
         )
-        with pytest.raises(Exception):  # ValidationError for frozen model
+        with pytest.raises(TypeError):  # Frozen model raises TypeError
             record.reason = "Changed reason"  # type: ignore[misc]

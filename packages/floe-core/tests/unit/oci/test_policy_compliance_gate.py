@@ -8,10 +8,8 @@ Requirements tested:
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,7 +21,6 @@ class TestPolicyComplianceGate:
     def controller_with_enforcer(self) -> MagicMock:
         """Create a PromotionController with mocked PolicyEnforcer."""
         from floe_core.enforcement import PolicyEnforcer
-        from floe_core.enforcement.result import EnforcementResult, EnforcementSummary
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.manifest import GovernanceConfig
@@ -119,9 +116,7 @@ class TestPolicyComplianceGate:
         mock_result = EnforcementResult(
             passed=False,
             violations=[violation],
-            summary=EnforcementSummary(
-                total_models=5, models_validated=5, naming_violations=1
-            ),
+            summary=EnforcementSummary(total_models=5, models_validated=5, naming_violations=1),
             enforcement_level="strict",
             manifest_version="1.8.0",
             timestamp=datetime.now(timezone.utc),

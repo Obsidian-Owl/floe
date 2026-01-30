@@ -252,9 +252,7 @@ class TestExitCodesExhaustiveness:
             assert isinstance(exc_class.exit_code, int), (
                 f"{exc_class.__name__}.exit_code must be int"
             )
-            assert exc_class.exit_code >= 0, (
-                f"{exc_class.__name__}.exit_code must be non-negative"
-            )
+            assert exc_class.exit_code >= 0, f"{exc_class.__name__}.exit_code must be non-negative"
 
     @pytest.mark.requirement("FR-032")
     def test_exit_codes_are_unique_per_error_category(self) -> None:
@@ -299,9 +297,7 @@ class TestExitCodesExhaustiveness:
                     f"Exit code 5 should only be for network errors, got: {classes}"
                 )
             elif len(classes) > 1:
-                raise AssertionError(
-                    f"Exit code {code} is used by multiple exceptions: {classes}"
-                )
+                raise AssertionError(f"Exit code {code} is used by multiple exceptions: {classes}")
 
     @pytest.mark.requirement("FR-032")
     def test_promotion_lifecycle_errors_have_codes_8_to_13(self) -> None:
@@ -347,8 +343,7 @@ class TestExitCodesDocumentation:
 
         for exc_class in oci_exceptions:
             assert 0 <= exc_class.exit_code <= 13, (
-                f"{exc_class.__name__}.exit_code ({exc_class.exit_code}) "
-                "should be in range 0-13"
+                f"{exc_class.__name__}.exit_code ({exc_class.exit_code}) should be in range 0-13"
             )
 
     @pytest.mark.requirement("FR-032")

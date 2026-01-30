@@ -66,9 +66,7 @@ class TestRollbackOpenTelemetrySpan:
             assert call_kwargs[0][0] == "floe.oci.rollback"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_rollback_span_has_artifact_ref_attribute(
-        self, controller: MagicMock
-    ) -> None:
+    def test_rollback_span_has_artifact_ref_attribute(self, controller: MagicMock) -> None:
         """Test rollback() span has artifact_ref attribute."""
         with patch("floe_core.oci.promotion.create_span") as mock_create_span:
             mock_span = Mock()
@@ -96,9 +94,7 @@ class TestRollbackOpenTelemetrySpan:
             assert "artifact_ref" in attributes
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_rollback_span_has_environment_attribute(
-        self, controller: MagicMock
-    ) -> None:
+    def test_rollback_span_has_environment_attribute(self, controller: MagicMock) -> None:
         """Test rollback() span has environment attribute."""
         with patch("floe_core.oci.promotion.create_span") as mock_create_span:
             mock_span = Mock()

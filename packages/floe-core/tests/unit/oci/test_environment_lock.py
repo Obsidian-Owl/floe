@@ -16,7 +16,7 @@ TDD: Tests written FIRST (T097-T099), implementation follows in T102-T104.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,7 +24,6 @@ from floe_core.oci.errors import EnvironmentLockedError
 from floe_core.oci.promotion import PromotionController
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
-    EnvironmentLock,
     PromotionConfig,
     PromotionGate,
 )
@@ -100,9 +99,7 @@ class TestLockEnvironment:
         assert lock_status.locked is True
 
     @pytest.mark.requirement("FR-035")
-    def test_lock_environment_includes_reason(
-        self, controller: PromotionController
-    ) -> None:
+    def test_lock_environment_includes_reason(self, controller: PromotionController) -> None:
         """Lock includes reason field."""
         controller.lock_environment(
             environment="prod",
@@ -114,9 +111,7 @@ class TestLockEnvironment:
         assert lock_status.reason == "Maintenance window"
 
     @pytest.mark.requirement("FR-035")
-    def test_lock_environment_includes_locked_by(
-        self, controller: PromotionController
-    ) -> None:
+    def test_lock_environment_includes_locked_by(self, controller: PromotionController) -> None:
         """Lock includes locked_by field with operator identity."""
         controller.lock_environment(
             environment="prod",
@@ -128,9 +123,7 @@ class TestLockEnvironment:
         assert lock_status.locked_by == "platform@example.com"
 
     @pytest.mark.requirement("FR-035")
-    def test_lock_environment_includes_locked_at(
-        self, controller: PromotionController
-    ) -> None:
+    def test_lock_environment_includes_locked_at(self, controller: PromotionController) -> None:
         """Lock includes locked_at timestamp."""
         before_lock = datetime.now(timezone.utc)
 
@@ -166,9 +159,7 @@ class TestUnlockEnvironment:
     """
 
     @pytest.mark.requirement("FR-037")
-    def test_unlock_environment_removes_lock(
-        self, controller: PromotionController
-    ) -> None:
+    def test_unlock_environment_removes_lock(self, controller: PromotionController) -> None:
         """Unlock removes the lock from the environment."""
         # First lock the environment
         controller.lock_environment(
@@ -188,9 +179,7 @@ class TestUnlockEnvironment:
         assert lock_status.locked is False
 
     @pytest.mark.requirement("FR-037")
-    def test_unlock_records_unlock_event(
-        self, controller: PromotionController
-    ) -> None:
+    def test_unlock_records_unlock_event(self, controller: PromotionController) -> None:
         """Unlock records the unlock event with reason."""
         controller.lock_environment(
             environment="prod",
@@ -210,9 +199,7 @@ class TestUnlockEnvironment:
         assert lock_status.locked is False
 
     @pytest.mark.requirement("FR-037")
-    def test_unlock_unlocked_environment_is_noop(
-        self, controller: PromotionController
-    ) -> None:
+    def test_unlock_unlocked_environment_is_noop(self, controller: PromotionController) -> None:
         """Unlocking an already unlocked environment is a no-op."""
         # Environment starts unlocked
         lock_status = controller.get_lock_status("prod")

@@ -20,6 +20,9 @@ import pytest
 
 from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
+# Test constants
+TEST_DIGEST = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
 
 class TestPromoteSuccessPath:
     """Unit tests for PromotionController.promote() success path (T028)."""
@@ -47,25 +50,21 @@ class TestPromoteSuccessPath:
         """
         from floe_core.schemas.promotion import PromotionRecord
 
+        # Test constants
+
         # Mock all internal methods to simulate successful promotion
-        with patch.object(
-            controller, "_validate_transition"
-        ) as mock_validate, patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition") as mock_validate,
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             # Configure mocks for success path
             mock_validate.return_value = None  # No exception = valid
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.POLICY_COMPLIANCE,
@@ -74,7 +73,7 @@ class TestPromoteSuccessPath:
                 )
             ]
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
             mock_update_latest.return_value = None
             mock_store.return_value = None
 
@@ -97,24 +96,19 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        from floe_core.oci.errors import InvalidTransitionError
 
         # Valid transitions should not raise
-        with patch.object(controller, "_validate_transition") as mock_validate, patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition") as mock_validate,
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
             mock_validate.return_value = None
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -135,22 +129,16 @@ class TestPromoteSuccessPath:
         """
         from uuid import UUID
 
-        from floe_core.schemas.promotion import PromotionRecord
-
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -171,18 +159,14 @@ class TestPromoteSuccessPath:
         """
         expected_digest = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0"
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
             mock_get_digest.return_value = expected_digest
             mock_gates.return_value = []
@@ -217,20 +201,16 @@ class TestPromoteSuccessPath:
             ),
         ]
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = gate_results
             mock_verify.return_value = Mock(status="valid")
 
@@ -250,20 +230,16 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -285,23 +261,19 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_create_tag.return_value = TEST_DIGEST
 
             controller.promote(
                 tag="v1.0.0",
@@ -322,20 +294,16 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -359,20 +327,16 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -391,20 +355,16 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
 
@@ -431,6 +391,8 @@ class TestPromoteGateFailurePath:
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
 
+        # Test constants
+
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
         oci_client = OCIClient.from_registry_config(registry_config)
@@ -449,11 +411,11 @@ class TestPromoteGateFailurePath:
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+        ):
             # Gate returns failure
             mock_gates.return_value = [
                 GateResult(
@@ -463,7 +425,7 @@ class TestPromoteGateFailurePath:
                     error="Test suite failed with 3 failures",
                 )
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError) as exc_info:
                 controller.promote(
@@ -478,20 +440,18 @@ class TestPromoteGateFailurePath:
 
     @pytest.mark.requirement("8C-FR-006")
     @pytest.mark.requirement("8C-FR-011")
-    def test_promote_includes_failed_gate_in_error(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_includes_failed_gate_in_error(self, controller: MagicMock) -> None:
         """Test GateValidationError includes which gate failed.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+        ):
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.SECURITY_SCAN,
@@ -500,7 +460,7 @@ class TestPromoteGateFailurePath:
                     error="Critical CVE found: CVE-2026-12345",
                 )
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError) as exc_info:
                 controller.promote(
@@ -515,24 +475,20 @@ class TestPromoteGateFailurePath:
             assert "CVE" in exc_info.value.details
 
     @pytest.mark.requirement("8C-FR-006")
-    def test_promote_stops_at_first_gate_failure(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_stops_at_first_gate_failure(self, controller: MagicMock) -> None:
         """Test promote() stops processing when first gate fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+        ):
             # First gate passes, second fails
             mock_gates.return_value = [
                 GateResult(
@@ -547,7 +503,7 @@ class TestPromoteGateFailurePath:
                     error="Test suite failed",
                 ),
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError):
                 controller.promote(
@@ -562,26 +518,21 @@ class TestPromoteGateFailurePath:
             mock_create_tag.assert_not_called()
 
     @pytest.mark.requirement("8C-FR-006")
-    def test_promote_gate_failure_does_not_create_tags(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_gate_failure_does_not_create_tags(self, controller: MagicMock) -> None:
         """Test promote() does not create tags when a gate fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.TESTS,
@@ -590,7 +541,7 @@ class TestPromoteGateFailurePath:
                     error="Test failed",
                 )
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError):
                 controller.promote(
@@ -606,20 +557,18 @@ class TestPromoteGateFailurePath:
             mock_store.assert_not_called()
 
     @pytest.mark.requirement("8C-FR-006")
-    def test_promote_gate_failure_exit_code(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_gate_failure_exit_code(self, controller: MagicMock) -> None:
         """Test GateValidationError has correct exit code (8).
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+        ):
             mock_gates.return_value = [
                 GateResult(
                     gate=PromotionGate.TESTS,
@@ -628,7 +577,7 @@ class TestPromoteGateFailurePath:
                     error="Test failed",
                 )
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError) as exc_info:
                 controller.promote(
@@ -653,13 +602,12 @@ class TestPromoteGateFailurePath:
         In dry-run mode, gate failures should be recorded but not raise an exception,
         allowing users to see what WOULD happen without actually blocking.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             failed_gate = GateResult(
                 gate=PromotionGate.TESTS,
                 status=GateStatus.FAILED,
@@ -668,7 +616,7 @@ class TestPromoteGateFailurePath:
             )
             mock_gates.return_value = [failed_gate]
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             # In dry-run mode, should NOT raise but return record with failures
             result = controller.promote(
@@ -684,20 +632,18 @@ class TestPromoteGateFailurePath:
             assert result.gate_results[0].status == GateStatus.FAILED
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_promote_gate_timeout_is_failure(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_gate_timeout_is_failure(self, controller: MagicMock) -> None:
         """Test gate timeout is treated as gate failure.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+        ):
             # Gate timed out (status=FAILED due to timeout)
             mock_gates.return_value = [
                 GateResult(
@@ -707,7 +653,7 @@ class TestPromoteGateFailurePath:
                     error="Gate timed out after 60 seconds",
                 )
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError) as exc_info:
                 controller.promote(
@@ -720,20 +666,18 @@ class TestPromoteGateFailurePath:
             assert "timed out" in exc_info.value.details.lower()
 
     @pytest.mark.requirement("8C-FR-006")
-    def test_promote_multiple_gate_failures_reports_first(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_multiple_gate_failures_reports_first(self, controller: MagicMock) -> None:
         """Test when multiple gates fail, error reports the first failure.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import GateValidationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+        ):
             # Multiple gates fail
             mock_gates.return_value = [
                 GateResult(
@@ -749,7 +693,7 @@ class TestPromoteGateFailurePath:
                     error="Test suite failed",
                 ),
             ]
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(GateValidationError) as exc_info:
                 controller.promote(
@@ -774,6 +718,8 @@ class TestPromoteSignatureFailurePath:
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
 
+        # Test constants
+
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
         oci_client = OCIClient.from_registry_config(registry_config)
@@ -792,19 +738,18 @@ class TestPromoteSignatureFailurePath:
         """
         from floe_core.oci.errors import SignatureVerificationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             mock_gates.return_value = []  # All gates pass
             mock_verify.side_effect = SignatureVerificationError(
                 artifact_ref="harbor.example.com/floe:v1.0.0",
                 reason="Invalid signature",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError) as exc_info:
                 controller.promote(
@@ -827,19 +772,18 @@ class TestPromoteSignatureFailurePath:
         """
         from floe_core.oci.errors import SignatureVerificationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             mock_gates.return_value = []
             mock_verify.side_effect = SignatureVerificationError(
                 artifact_ref="harbor.example.com/floe:v1.0.0",
                 reason="No signature found",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError) as exc_info:
                 controller.promote(
@@ -862,13 +806,12 @@ class TestPromoteSignatureFailurePath:
         """
         from floe_core.oci.errors import SignatureVerificationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             mock_gates.return_value = []
             mock_verify.side_effect = SignatureVerificationError(
                 artifact_ref="harbor.example.com/floe:v1.0.0",
@@ -876,7 +819,7 @@ class TestPromoteSignatureFailurePath:
                 expected_signer="repo:acme/floe:ref:refs/heads/main",
                 actual_signer="repo:unknown/repo:ref:refs/heads/main",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError) as exc_info:
                 controller.promote(
@@ -891,34 +834,28 @@ class TestPromoteSignatureFailurePath:
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_signature_failure_does_not_create_tags(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_signature_failure_does_not_create_tags(self, controller: MagicMock) -> None:
         """Test promote() does not create tags when signature verification fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import SignatureVerificationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag, patch.object(
-            controller, "_update_latest_tag"
-        ) as mock_update_latest, patch.object(
-            controller, "_store_promotion_record"
-        ) as mock_store:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag") as mock_update_latest,
+            patch.object(controller, "_store_promotion_record") as mock_store,
+        ):
             mock_gates.return_value = []
             mock_verify.side_effect = SignatureVerificationError(
                 artifact_ref="harbor.example.com/floe:v1.0.0",
                 reason="Invalid signature",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError):
                 controller.promote(
@@ -935,28 +872,25 @@ class TestPromoteSignatureFailurePath:
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_signature_failure_exit_code(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_signature_failure_exit_code(self, controller: MagicMock) -> None:
         """Test SignatureVerificationError has correct exit code (6).
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import SignatureVerificationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             mock_gates.return_value = []
             mock_verify.side_effect = SignatureVerificationError(
                 artifact_ref="harbor.example.com/floe:v1.0.0",
                 reason="Invalid signature",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError) as exc_info:
                 controller.promote(
@@ -971,22 +905,19 @@ class TestPromoteSignatureFailurePath:
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_signature_failure_after_gates_pass(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_signature_failure_after_gates_pass(self, controller: MagicMock) -> None:
         """Test signature verification happens after gates pass.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
         from floe_core.oci.errors import SignatureVerificationError
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             # Gates pass
             mock_gates.return_value = [
                 GateResult(
@@ -1000,7 +931,7 @@ class TestPromoteSignatureFailurePath:
                 artifact_ref="harbor.example.com/floe:v1.0.0",
                 reason="Signature expired",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError):
                 controller.promote(
@@ -1023,22 +954,18 @@ class TestPromoteSignatureFailurePath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ), patch.object(
-            controller, "_update_latest_tag"
-        ), patch.object(
-            controller, "_store_promotion_record"
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag"),
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
         ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             result = controller.promote(
                 tag="v1.0.0",
@@ -1051,9 +978,7 @@ class TestPromoteSignatureFailurePath:
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_includes_artifact_ref_in_signature_error(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_includes_artifact_ref_in_signature_error(self, controller: MagicMock) -> None:
         """Test SignatureVerificationError includes the artifact reference.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -1062,19 +987,18 @@ class TestPromoteSignatureFailurePath:
 
         artifact_ref = "harbor.example.com/floe:v1.0.0"
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+        ):
             mock_gates.return_value = []
             mock_verify.side_effect = SignatureVerificationError(
                 artifact_ref=artifact_ref,
                 reason="Invalid signature",
             )
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             with pytest.raises(SignatureVerificationError) as exc_info:
                 controller.promote(

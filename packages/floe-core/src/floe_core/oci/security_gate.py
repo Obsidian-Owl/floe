@@ -27,10 +27,8 @@ Example:
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import structlog
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.schemas.promotion import SecurityGateConfig, SecurityScanResult

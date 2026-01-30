@@ -105,9 +105,7 @@ class TestRollbackCliBasic:
     def test_rollback_requires_reason_without_analyze(self) -> None:
         """Test that --reason is required unless --analyze is used."""
         runner = CliRunner()
-        with patch(
-            "floe_core.oci.client.OCIClient"
-        ) as mock_client_cls:
+        with patch("floe_core.oci.client.OCIClient") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
 
@@ -131,18 +129,12 @@ class TestRollbackCliSuccess:
     """Tests for successful rollback CLI operations."""
 
     @pytest.mark.requirement("8C-FR-013")
-    def test_rollback_table_output(
-        self, mock_rollback_record: RollbackRecord
-    ) -> None:
+    def test_rollback_table_output(self, mock_rollback_record: RollbackRecord) -> None:
         """Test rollback with table output format."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -171,18 +163,12 @@ class TestRollbackCliSuccess:
         assert "Successfully rolled back" in result.output
 
     @pytest.mark.requirement("8C-FR-013")
-    def test_rollback_json_output(
-        self, mock_rollback_record: RollbackRecord
-    ) -> None:
+    def test_rollback_json_output(self, mock_rollback_record: RollbackRecord) -> None:
         """Test rollback with JSON output format."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -215,18 +201,12 @@ class TestRollbackCliAnalyze:
     """Tests for rollback impact analysis mode."""
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_mode_table_output(
-        self, mock_impact_analysis: RollbackImpactAnalysis
-    ) -> None:
+    def test_analyze_mode_table_output(self, mock_impact_analysis: RollbackImpactAnalysis) -> None:
         """Test --analyze flag shows impact analysis."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -256,18 +236,12 @@ class TestRollbackCliAnalyze:
         assert "Recommendations" in result.output
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_mode_json_output(
-        self, mock_impact_analysis: RollbackImpactAnalysis
-    ) -> None:
+    def test_analyze_mode_json_output(self, mock_impact_analysis: RollbackImpactAnalysis) -> None:
         """Test --analyze flag with JSON output."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -303,12 +277,8 @@ class TestRollbackCliAnalyze:
         """Test --analyze flag does not require --reason."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -343,12 +313,8 @@ class TestRollbackCliErrors:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -383,12 +349,8 @@ class TestRollbackCliErrors:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -426,12 +388,8 @@ class TestRollbackCliErrors:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -466,12 +424,8 @@ class TestRollbackCliErrors:
 
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -522,18 +476,12 @@ class TestRollbackCliOperator:
     """Tests for operator identity handling."""
 
     @pytest.mark.requirement("8C-FR-017")
-    def test_operator_from_option(
-        self, mock_rollback_record: RollbackRecord
-    ) -> None:
+    def test_operator_from_option(self, mock_rollback_record: RollbackRecord) -> None:
         """Test --operator option sets operator identity."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -562,18 +510,12 @@ class TestRollbackCliOperator:
         assert call_kwargs["operator"] == "custom@example.com"
 
     @pytest.mark.requirement("8C-FR-017")
-    def test_operator_defaults_to_user(
-        self, mock_rollback_record: RollbackRecord
-    ) -> None:
+    def test_operator_defaults_to_user(self, mock_rollback_record: RollbackRecord) -> None:
         """Test operator defaults to $USER when not specified."""
         runner = CliRunner()
         with (
-            patch(
-                "floe_core.oci.client.OCIClient"
-            ) as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.client.OCIClient") as mock_client_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
             patch.dict("os.environ", {"USER": "testuser"}),
         ):
             mock_client = MagicMock()

@@ -32,16 +32,14 @@ class TestCreateEnvTag:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_creates_immutable_tag(
-        self, controller: MagicMock
-    ) -> None:
+    def test_create_env_tag_creates_immutable_tag(self, controller: MagicMock) -> None:
         """Test _create_env_tag creates immutable environment-specific tag."""
         # Mock the OCI client methods
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "tag_exists", return_value=False
-        ), patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "tag_exists", return_value=False),
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             # Setup mock inspect to return artifact with digest
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
@@ -63,11 +61,11 @@ class TestCreateEnvTag:
     @pytest.mark.requirement("8C-FR-002")
     def test_create_env_tag_format(self, controller: MagicMock) -> None:
         """Test _create_env_tag returns correct tag format."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "tag_exists", return_value=False
-        ), patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "tag_exists", return_value=False),
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:def456"
             mock_inspect.return_value = mock_manifest
@@ -77,31 +75,24 @@ class TestCreateEnvTag:
             mock_oras_client_factory.return_value = mock_oras
 
             # Test various environment names
-            tag_staging = controller._create_env_tag(
-                source_tag="v2.0.0", target_env="staging"
-            )
+            tag_staging = controller._create_env_tag(source_tag="v2.0.0", target_env="staging")
             assert tag_staging == "v2.0.0-staging"
 
-            tag_prod = controller._create_env_tag(
-                source_tag="v2.0.0", target_env="prod"
-            )
+            tag_prod = controller._create_env_tag(source_tag="v2.0.0", target_env="prod")
             assert tag_prod == "v2.0.0-prod"
 
-            tag_qa = controller._create_env_tag(
-                source_tag="v2.0.0", target_env="qa"
-            )
+            tag_qa = controller._create_env_tag(source_tag="v2.0.0", target_env="qa")
             assert tag_qa == "v2.0.0-qa"
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_raises_when_tag_exists(
-        self, controller: MagicMock
-    ) -> None:
+    def test_create_env_tag_raises_when_tag_exists(self, controller: MagicMock) -> None:
         """Test _create_env_tag raises error if immutable tag already exists."""
         from floe_core.oci.errors import ImmutabilityViolationError
 
-        with patch.object(
-            controller.client, "tag_exists", return_value=True
-        ), patch.object(controller.client, "inspect") as mock_inspect:
+        with (
+            patch.object(controller.client, "tag_exists", return_value=True),
+            patch.object(controller.client, "inspect") as mock_inspect,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:existing123"
             mock_inspect.return_value = mock_manifest
@@ -113,13 +104,12 @@ class TestCreateEnvTag:
                 )
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_allows_force_when_same_digest(
-        self, controller: MagicMock
-    ) -> None:
+    def test_create_env_tag_allows_force_when_same_digest(self, controller: MagicMock) -> None:
         """Test _create_env_tag allows force when digests match (idempotent)."""
-        with patch.object(
-            controller.client, "tag_exists", return_value=True
-        ), patch.object(controller.client, "inspect") as mock_inspect:
+        with (
+            patch.object(controller.client, "tag_exists", return_value=True),
+            patch.object(controller.client, "inspect") as mock_inspect,
+        ):
             # Both source and target have same digest
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:same123"
@@ -136,17 +126,14 @@ class TestCreateEnvTag:
             assert tag == "v1.2.3-staging"
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_uses_oras_upload_manifest(
-        self, controller: MagicMock
-    ) -> None:
+    def test_create_env_tag_uses_oras_upload_manifest(self, controller: MagicMock) -> None:
         """Test _create_env_tag uses ORAS upload_manifest for tag creation."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "tag_exists", return_value=False
-        ), patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory, patch.object(
-            controller.client, "_build_target_ref"
-        ) as mock_build_ref:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "tag_exists", return_value=False),
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+            patch.object(controller.client, "_build_target_ref") as mock_build_ref,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
             mock_inspect.return_value = mock_manifest
@@ -174,15 +161,13 @@ class TestCreateEnvTag:
             assert "v1.2.3-staging" in str(call_args)
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_returns_created_tag_name(
-        self, controller: MagicMock
-    ) -> None:
+    def test_create_env_tag_returns_created_tag_name(self, controller: MagicMock) -> None:
         """Test _create_env_tag returns the created tag name."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "tag_exists", return_value=False
-        ), patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "tag_exists", return_value=False),
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
             mock_inspect.return_value = mock_manifest

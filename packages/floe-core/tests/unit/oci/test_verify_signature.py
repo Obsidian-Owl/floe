@@ -49,11 +49,10 @@ class TestVerifySignature:
         )
 
         # Mock both VerificationPolicy (to bypass validation) and VerificationClient
-        with patch(
-            "floe_core.schemas.signing.VerificationPolicy"
-        ) as mock_policy_class, patch(
-            "floe_core.oci.verification.VerificationClient"
-        ) as mock_client_class:
+        with (
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_class,
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_class,
+        ):
             mock_policy = Mock()
             mock_policy.enforcement = "enforce"
             mock_policy_class.return_value = mock_policy
@@ -86,11 +85,10 @@ class TestVerifySignature:
         )
 
         # Mock both VerificationPolicy and VerificationClient
-        with patch(
-            "floe_core.schemas.signing.VerificationPolicy"
-        ) as mock_policy_class, patch(
-            "floe_core.oci.verification.VerificationClient"
-        ) as mock_client_class:
+        with (
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_class,
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_class,
+        ):
             mock_policy = Mock()
             mock_policy.enforcement = "warn"
             mock_policy_class.return_value = mock_policy
@@ -125,11 +123,10 @@ class TestVerifySignature:
         )
 
         # Mock both VerificationPolicy and VerificationClient
-        with patch(
-            "floe_core.schemas.signing.VerificationPolicy"
-        ) as mock_policy_class, patch(
-            "floe_core.oci.verification.VerificationClient"
-        ) as mock_client_class:
+        with (
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_class,
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_class,
+        ):
             mock_policy = Mock()
             mock_policy.enforcement = "enforce"
             mock_policy_class.return_value = mock_policy
@@ -161,11 +158,10 @@ class TestVerifySignature:
         )
 
         # Mock both VerificationPolicy and VerificationClient
-        with patch(
-            "floe_core.schemas.signing.VerificationPolicy"
-        ) as mock_policy_class, patch(
-            "floe_core.oci.verification.VerificationClient"
-        ) as mock_client_class:
+        with (
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_class,
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_class,
+        ):
             mock_policy = Mock()
             mock_policy.enforcement = "enforce"
             mock_policy_class.return_value = mock_policy
@@ -207,11 +203,10 @@ class TestVerifySignature:
         from floe_core.oci.errors import SignatureVerificationError
 
         # Mock both VerificationPolicy and VerificationClient
-        with patch(
-            "floe_core.schemas.signing.VerificationPolicy"
-        ) as mock_policy_class, patch(
-            "floe_core.oci.verification.VerificationClient"
-        ) as mock_client_class:
+        with (
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_class,
+            patch("floe_core.oci.verification.VerificationClient") as mock_client_class,
+        ):
             mock_policy = Mock()
             mock_policy.enforcement = "warn"
             mock_policy_class.return_value = mock_policy

@@ -278,9 +278,7 @@ class PromotionController:
 
         try:
             # Run async notify_all in sync context (T119 - non-blocking multi-webhook)
-            results = asyncio.run(
-                self._webhook_notifier.notify_all(event_type, event_data)
-            )
+            results = asyncio.run(self._webhook_notifier.notify_all(event_type, event_data))
             # Log results for each webhook
             for result in results:
                 if result.success:
@@ -512,16 +510,14 @@ class PromotionController:
                 from_env=from_env,
                 to_env=to_env,
                 reason=(
-                    f"Invalid direction: cannot promote backward "
-                    f"from '{from_env}' to '{to_env}'"
+                    f"Invalid direction: cannot promote backward from '{from_env}' to '{to_env}'"
                 ),
             )
 
         # Check adjacent environments (no skipping)
         if to_idx != from_idx + 1:
             skipped_envs = [
-                self.promotion.environments[i].name
-                for i in range(from_idx + 1, to_idx)
+                self.promotion.environments[i].name for i in range(from_idx + 1, to_idx)
             ]
             raise InvalidTransitionError(
                 from_env=from_env,
@@ -755,8 +751,7 @@ class PromotionController:
                 else:
                     # Enforcement failed - extract violation summary
                     violation_summary = (
-                        f"{result.error_count} error(s), "
-                        f"{result.warning_count} warning(s)"
+                        f"{result.error_count} error(s), {result.warning_count} warning(s)"
                     )
                     error_msg = f"Policy compliance failed: {violation_summary}"
 
@@ -1135,9 +1130,7 @@ class PromotionController:
                     return results
 
             duration_ms = int((time.monotonic() - start_time) * 1000)
-            all_passed = all(
-                r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results
-            )
+            all_passed = all(r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results)
             self._log.info(
                 "run_all_gates_completed",
                 environment=to_env,
@@ -1521,21 +1514,13 @@ class PromotionController:
                             history_entries.append(
                                 PromotionHistoryEntry(
                                     promotion_id=entry.get("promotion_id", ""),
-                                    artifact_digest=entry.get(
-                                        "artifact_digest", default_digest
-                                    ),
-                                    source_environment=entry.get(
-                                        "source_environment", ""
-                                    ),
-                                    target_environment=entry.get(
-                                        "target_environment", ""
-                                    ),
+                                    artifact_digest=entry.get("artifact_digest", default_digest),
+                                    source_environment=entry.get("source_environment", ""),
+                                    target_environment=entry.get("target_environment", ""),
                                     operator=entry.get("operator", "unknown"),
                                     promoted_at=entry.get("promoted_at", ""),
                                     gate_results=entry.get("gate_results", []),
-                                    signature_verified=entry.get(
-                                        "signature_verified", False
-                                    ),
+                                    signature_verified=entry.get("signature_verified", False),
                                 )
                             )
                         except Exception:
@@ -2046,11 +2031,7 @@ class PromotionController:
         ) as span:
             # Extract trace_id for CLI output and correlation
             span_context = span.get_span_context()
-            trace_id = (
-                format(span_context.trace_id, "032x")
-                if span_context.is_valid
-                else ""
-            )
+            trace_id = format(span_context.trace_id, "032x") if span_context.is_valid else ""
 
             self._log.info(
                 "promote_started",
@@ -2077,11 +2058,7 @@ class PromotionController:
                 raise EnvironmentLockedError(
                     environment=to_env,
                     locked_by=lock_status.locked_by or "",
-                    locked_at=(
-                        lock_status.locked_at.isoformat()
-                        if lock_status.locked_at
-                        else ""
-                    ),
+                    locked_at=(lock_status.locked_at.isoformat() if lock_status.locked_at else ""),
                     reason=lock_status.reason or "",
                 )
 
@@ -2172,9 +2149,7 @@ class PromotionController:
             from floe_core.schemas.signing import VerificationResult
 
             signature_status: VerificationResult | None = (
-                verification_result
-                if isinstance(verification_result, VerificationResult)
-                else None
+                verification_result if isinstance(verification_result, VerificationResult) else None
             )
 
             # Step 9: Store promotion record (if not dry_run) with retry
@@ -2416,11 +2391,7 @@ class PromotionController:
         ) as span:
             # Extract trace_id for CLI output and correlation
             span_context = span.get_span_context()
-            trace_id = (
-                format(span_context.trace_id, "032x")
-                if span_context.is_valid
-                else ""
-            )
+            trace_id = format(span_context.trace_id, "032x") if span_context.is_valid else ""
 
             self._log.info(
                 "rollback_started",
@@ -2603,6 +2574,7 @@ class PromotionController:
         # Extract version info if available (semantic versioning)
         try:
             import re
+
             version_match = re.match(r"v(\d+)\.(\d+)\.(\d+)", tag)
             if version_match:
                 major, minor, patch = map(int, version_match.groups())
@@ -2617,11 +2589,13 @@ class PromotionController:
         affected_products: list[str] = []
 
         # Step 6: Build recommendations
-        recommendations.extend([
-            "Verify downstream systems are compatible with rollback version",
-            "Monitor application health after rollback",
-            "Consider notifying dependent teams before rollback",
-        ])
+        recommendations.extend(
+            [
+                "Verify downstream systems are compatible with rollback version",
+                "Monitor application health after rollback",
+                "Consider notifying dependent teams before rollback",
+            ]
+        )
 
         # Step 7: Estimate downtime
         # In a full implementation, this would consider deployment time

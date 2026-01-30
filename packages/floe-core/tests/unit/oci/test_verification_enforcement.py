@@ -67,7 +67,9 @@ def promotion_config() -> PromotionConfig:
 
 
 @pytest.fixture
-def controller(mock_oci_client: MagicMock, promotion_config: PromotionConfig) -> PromotionController:
+def controller(
+    mock_oci_client: MagicMock, promotion_config: PromotionConfig
+) -> PromotionController:
     """Create PromotionController with mocked dependencies."""
     return PromotionController(
         client=mock_oci_client,
@@ -184,9 +186,7 @@ class TestVerificationEnforcementEnforce:
         # Patch at the import location inside _verify_signature method
         with (
             patch("floe_core.oci.verification.VerificationClient") as mock_client_cls,
-            patch(
-                "floe_core.schemas.signing.VerificationPolicy"
-            ) as mock_policy_cls,
+            patch("floe_core.schemas.signing.VerificationPolicy") as mock_policy_cls,
         ):
             mock_client = MagicMock()
             mock_client.verify.return_value = mock_verification_result
@@ -292,9 +292,7 @@ class TestVerificationEnforcementEnforce:
                 )
 
     @pytest.mark.requirement("FR-021")
-    def test_enforce_mode_emits_otel_span_attributes(
-        self, controller: PromotionController
-    ) -> None:
+    def test_enforce_mode_emits_otel_span_attributes(self, controller: PromotionController) -> None:
         """Enforcement=enforce emits OTel span with enforcement_mode attribute."""
         mock_verification_result = VerificationResult(
             status="valid",
@@ -409,9 +407,7 @@ class TestVerificationEnforcementWarn:
             assert result.failure_reason is not None
 
     @pytest.mark.requirement("FR-021")
-    def test_warn_mode_logs_error_on_failure(
-        self, controller: PromotionController
-    ) -> None:
+    def test_warn_mode_logs_error_on_failure(self, controller: PromotionController) -> None:
         """Enforcement=warn logs error message when verification fails."""
         import structlog
 
@@ -435,10 +431,7 @@ class TestVerificationEnforcementWarn:
             )
 
             # Check for error log entry using structlog's testing facility
-            assert any(
-                log.get("event") == "verify_signature_error"
-                for log in captured_logs
-            )
+            assert any(log.get("event") == "verify_signature_error" for log in captured_logs)
 
 
 class TestVerificationEnforcementOff:
@@ -453,9 +446,7 @@ class TestVerificationEnforcementOff:
     """
 
     @pytest.mark.requirement("FR-021")
-    def test_off_mode_skips_verification(
-        self, controller: PromotionController
-    ) -> None:
+    def test_off_mode_skips_verification(self, controller: PromotionController) -> None:
         """Enforcement=off returns unsigned result without verification."""
         with patch("floe_core.oci.verification.VerificationClient") as mock_client_cls:
             result = controller._verify_signature(
@@ -471,9 +462,7 @@ class TestVerificationEnforcementOff:
             mock_client_cls.assert_not_called()
 
     @pytest.mark.requirement("FR-021")
-    def test_off_mode_includes_skip_reason(
-        self, controller: PromotionController
-    ) -> None:
+    def test_off_mode_includes_skip_reason(self, controller: PromotionController) -> None:
         """Enforcement=off result includes reason for skip."""
         result = controller._verify_signature(
             artifact_ref="oci://registry/repo:v1.0.0",
@@ -486,9 +475,7 @@ class TestVerificationEnforcementOff:
         assert "off" in result.failure_reason.lower() or "skip" in result.failure_reason.lower()
 
     @pytest.mark.requirement("FR-021")
-    def test_off_mode_emits_skipped_log(
-        self, controller: PromotionController
-    ) -> None:
+    def test_off_mode_emits_skipped_log(self, controller: PromotionController) -> None:
         """Enforcement=off logs that verification was skipped."""
         import structlog
 
@@ -501,10 +488,7 @@ class TestVerificationEnforcementOff:
             )
 
         # Check for skipped log entry using structlog's testing facility
-        assert any(
-            log.get("event") == "verify_signature_skipped"
-            for log in captured_logs
-        )
+        assert any(log.get("event") == "verify_signature_skipped" for log in captured_logs)
 
 
 class TestVerificationResultCaching:
@@ -517,9 +501,7 @@ class TestVerificationResultCaching:
     """
 
     @pytest.mark.requirement("FR-022")
-    def test_same_artifact_verified_once(
-        self, controller: PromotionController
-    ) -> None:
+    def test_same_artifact_verified_once(self, controller: PromotionController) -> None:
         """Verifying same artifact twice only calls VerificationClient once."""
         mock_verification_result = VerificationResult(
             status="valid",
@@ -559,9 +541,7 @@ class TestVerificationResultCaching:
             assert mock_client.verify.call_count == 1
 
     @pytest.mark.requirement("FR-022")
-    def test_different_digests_verified_separately(
-        self, controller: PromotionController
-    ) -> None:
+    def test_different_digests_verified_separately(self, controller: PromotionController) -> None:
         """Different artifact digests are verified separately (not cached)."""
         mock_verification_result = VerificationResult(
             status="valid",
@@ -596,9 +576,7 @@ class TestVerificationResultCaching:
             assert mock_client.verify.call_count == 2
 
     @pytest.mark.requirement("FR-022")
-    def test_cached_result_returned_for_same_digest(
-        self, controller: PromotionController
-    ) -> None:
+    def test_cached_result_returned_for_same_digest(self, controller: PromotionController) -> None:
         """Cached verification result is returned for same artifact digest."""
         first_result = VerificationResult(
             status="valid",
@@ -615,7 +593,7 @@ class TestVerificationResultCaching:
             mock_client_cls.return_value = mock_client
 
             # First call
-            result1 = controller._verify_signature(
+            controller._verify_signature(
                 artifact_ref="oci://registry/repo:v1.0.0",
                 artifact_digest="sha256:abc123def456",
                 content=b"content",
@@ -713,9 +691,7 @@ class TestEnforcementPolicyConfig:
         """PromotionConfig defaults signature_enforcement to 'enforce'."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
         )
         assert config.signature_enforcement == "enforce"
@@ -725,9 +701,7 @@ class TestEnforcementPolicyConfig:
         """PromotionConfig accepts signature_enforcement='enforce'."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             signature_enforcement="enforce",
         )
@@ -738,9 +712,7 @@ class TestEnforcementPolicyConfig:
         """PromotionConfig accepts signature_enforcement='warn'."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             signature_enforcement="warn",
         )
@@ -751,9 +723,7 @@ class TestEnforcementPolicyConfig:
         """PromotionConfig accepts signature_enforcement='off'."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             signature_enforcement="off",
         )
@@ -765,23 +735,17 @@ class TestEnforcementPolicyConfig:
         with pytest.raises(ValidationError, match="signature_enforcement"):
             PromotionConfig(
                 environments=[
-                    EnvironmentConfig(
-                        name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                    ),
+                    EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
                 ],
                 signature_enforcement="invalid",
             )
 
     @pytest.mark.requirement("FR-018")
-    def test_controller_reads_enforcement_from_config(
-        self, mock_oci_client: MagicMock
-    ) -> None:
+    def test_controller_reads_enforcement_from_config(self, mock_oci_client: MagicMock) -> None:
         """Controller stores promotion config which includes enforcement."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             signature_enforcement="warn",
         )
@@ -802,9 +766,7 @@ class TestEnforcementPolicyConfig:
         for enforcement_mode in ["enforce", "warn", "off"]:
             config = PromotionConfig(
                 environments=[
-                    EnvironmentConfig(
-                        name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                    ),
+                    EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
                     EnvironmentConfig(
                         name="staging", gates={PromotionGate.POLICY_COMPLIANCE: True}
                     ),

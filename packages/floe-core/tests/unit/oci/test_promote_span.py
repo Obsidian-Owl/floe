@@ -66,9 +66,7 @@ class TestPromoteOpenTelemetrySpan:
             assert "floe.oci.promote" in span_names
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_promote_span_has_artifact_ref_attribute(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_span_has_artifact_ref_attribute(self, controller: MagicMock) -> None:
         """Test promote() span has artifact_ref attribute."""
         with patch("floe_core.oci.promotion.create_span") as mock_create_span:
             mock_span = Mock()
@@ -129,14 +127,8 @@ class TestPromoteOpenTelemetrySpan:
             attributes = promote_call[1].get("attributes", {})
 
             # Check for from_env and to_env (prefixed or unprefixed)
-            has_from_env = (
-                "from_env" in attributes
-                or "floe.promotion.from_env" in attributes
-            )
-            has_to_env = (
-                "to_env" in attributes
-                or "floe.promotion.to_env" in attributes
-            )
+            has_from_env = "from_env" in attributes or "floe.promotion.from_env" in attributes
+            has_to_env = "to_env" in attributes or "floe.promotion.to_env" in attributes
             assert has_from_env, "Span should have from_env attribute"
             assert has_to_env, "Span should have to_env attribute"
 
@@ -175,10 +167,7 @@ class TestPromoteOpenTelemetrySpan:
             attributes = promote_call[1].get("attributes", {})
 
             # Check for dry_run (prefixed or unprefixed)
-            has_dry_run = (
-                "dry_run" in attributes
-                or "floe.promotion.dry_run" in attributes
-            )
+            has_dry_run = "dry_run" in attributes or "floe.promotion.dry_run" in attributes
             assert has_dry_run, "Span should have dry_run attribute"
 
     @pytest.mark.requirement("8C-FR-033")
@@ -209,9 +198,7 @@ class TestPromoteOpenTelemetrySpan:
             mock_span.get_span_context.assert_called()
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_promote_span_records_exception_on_error(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_span_records_exception_on_error(self, controller: MagicMock) -> None:
         """Test promote() span records exceptions when errors occur."""
         with patch("floe_core.oci.promotion.create_span") as mock_create_span:
             mock_span = Mock()
@@ -223,8 +210,8 @@ class TestPromoteOpenTelemetrySpan:
             mock_create_span.return_value.__enter__ = Mock(return_value=mock_span)
             mock_create_span.return_value.__exit__ = Mock(return_value=None)
 
-            # Test with invalid transition that raises an error
-            with pytest.raises(Exception):
+            # Test with invalid transition that raises ValueError
+            with pytest.raises(ValueError):
                 controller.promote(
                     tag="v1.0.0",
                     from_env="prod",  # Invalid: can't promote backward

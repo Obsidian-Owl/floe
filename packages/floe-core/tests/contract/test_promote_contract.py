@@ -329,6 +329,4 @@ class TestExitCodeUniquenessContract:
                 f"{error_class.__name__} exit_code {error_class.exit_code} "
                 f"conflicts with core OCI error codes"
             )
-            assert error_class.exit_code >= 8, (
-                f"{error_class.__name__} exit_code must be >= 8"
-            )
+            assert error_class.exit_code >= 8, f"{error_class.__name__} exit_code must be >= 8"

@@ -110,17 +110,13 @@ class TestStatusJsonOutputFields:
     """
 
     @pytest.mark.requirement("FR-031")
-    def test_json_output_contains_tag(
-        self, mock_status_response: PromotionStatusResponse
-    ) -> None:
+    def test_json_output_contains_tag(self, mock_status_response: PromotionStatusResponse) -> None:
         """JSON output contains tag field."""
         runner = CliRunner()
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -154,9 +150,7 @@ class TestStatusJsonOutputFields:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -190,9 +184,7 @@ class TestStatusJsonOutputFields:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -229,9 +221,7 @@ class TestStatusJsonOutputFields:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -272,9 +262,7 @@ class TestStatusJsonOutputFields:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -314,9 +302,7 @@ class TestStatusJsonErrorOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -356,9 +342,7 @@ class TestStatusJsonErrorOutput:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -402,9 +386,7 @@ class TestStatusJsonExitCodes:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -435,9 +417,7 @@ class TestStatusJsonExitCodes:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client
@@ -471,9 +451,7 @@ class TestStatusJsonExitCodes:
 
         with (
             patch("floe_core.oci.client.OCIClient") as mock_client_cls,
-            patch(
-                "floe_core.oci.promotion.PromotionController"
-            ) as mock_controller_cls,
+            patch("floe_core.oci.promotion.PromotionController") as mock_controller_cls,
         ):
             mock_client = MagicMock()
             mock_client_cls.from_registry_config.return_value = mock_client

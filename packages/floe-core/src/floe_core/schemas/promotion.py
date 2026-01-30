@@ -30,7 +30,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from floe_core.schemas.signing import VerificationResult
 
-
 # =============================================================================
 # Enums
 # =============================================================================
@@ -378,8 +377,7 @@ class WebhookConfig(BaseModel):
         invalid = set(v) - VALID_WEBHOOK_EVENTS
         if invalid:
             raise ValueError(
-                f"Invalid event types: {invalid}. "
-                f"Valid types: {sorted(VALID_WEBHOOK_EVENTS)}"
+                f"Invalid event types: {invalid}. Valid types: {sorted(VALID_WEBHOOK_EVENTS)}"
             )
         return v
 
@@ -438,8 +436,7 @@ class SecurityGateConfig(BaseModel):
         invalid = set(v) - VALID_SEVERITY_LEVELS
         if invalid:
             raise ValueError(
-                f"Invalid severity levels: {invalid}. "
-                f"Valid levels: {sorted(VALID_SEVERITY_LEVELS)}"
+                f"Invalid severity levels: {invalid}. Valid levels: {sorted(VALID_SEVERITY_LEVELS)}"
             )
         return v
 

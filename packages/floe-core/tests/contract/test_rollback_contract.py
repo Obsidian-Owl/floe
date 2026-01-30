@@ -31,7 +31,6 @@ from floe_core.oci.errors import (
 )
 from floe_core.schemas.promotion import RollbackRecord
 
-
 # Rollback tag pattern per FR-014: v{X.Y.Z}-{env}-rollback-{N}
 ROLLBACK_TAG_PATTERN = r"^v\d+\.\d+\.\d+-[a-z]+-rollback-\d+$"
 """Regex pattern for rollback-specific tags per FR-014."""
@@ -170,7 +169,9 @@ class TestRollbackTagPatternContract:
         ]
 
         for tag in invalid_tags:
-            assert not re.match(ROLLBACK_TAG_PATTERN, tag), f"Tag '{tag}' should NOT match rollback pattern"
+            assert not re.match(ROLLBACK_TAG_PATTERN, tag), (
+                f"Tag '{tag}' should NOT match rollback pattern"
+            )
 
     @pytest.mark.requirement("8C-FR-014")
     def test_rollback_tag_sequential_numbers(self) -> None:
@@ -234,7 +235,9 @@ class TestRollbackRecordContract:
         }
 
         for field in core_fields:
-            assert field in required_fields, f"Required field '{field}' missing from RollbackRecord schema"
+            assert field in required_fields, (
+                f"Required field '{field}' missing from RollbackRecord schema"
+            )
 
     @pytest.mark.requirement("8C-FR-017")
     def test_rollback_record_serialization_round_trip(
@@ -274,9 +277,7 @@ class TestRollbackRecordContract:
         assert "undocumented_field" in str(exc_info.value)
 
     @pytest.mark.requirement("8C-FR-017")
-    def test_rollback_record_immutability(
-        self, minimal_rollback_record: RollbackRecord
-    ) -> None:
+    def test_rollback_record_immutability(self, minimal_rollback_record: RollbackRecord) -> None:
         """Contract: RollbackRecord is immutable (frozen=True)."""
         with pytest.raises(ValidationError):
             minimal_rollback_record.reason = "Modified reason"  # type: ignore[misc]

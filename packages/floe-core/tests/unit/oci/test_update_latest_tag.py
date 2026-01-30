@@ -32,13 +32,12 @@ class TestUpdateLatestTag:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-003")
-    def test_update_latest_tag_creates_mutable_tag(
-        self, controller: MagicMock
-    ) -> None:
+    def test_update_latest_tag_creates_mutable_tag(self, controller: MagicMock) -> None:
         """Test _update_latest_tag creates mutable latest-{env} tag."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
             mock_inspect.return_value = mock_manifest
@@ -58,9 +57,10 @@ class TestUpdateLatestTag:
     @pytest.mark.requirement("8C-FR-003")
     def test_update_latest_tag_format(self, controller: MagicMock) -> None:
         """Test _update_latest_tag returns correct tag format."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:def456"
             mock_inspect.return_value = mock_manifest
@@ -70,31 +70,23 @@ class TestUpdateLatestTag:
             mock_oras_client_factory.return_value = mock_oras
 
             # Test various environment names
-            tag_staging = controller._update_latest_tag(
-                source_tag="v2.0.0", target_env="staging"
-            )
+            tag_staging = controller._update_latest_tag(source_tag="v2.0.0", target_env="staging")
             assert tag_staging == "latest-staging"
 
-            tag_prod = controller._update_latest_tag(
-                source_tag="v2.0.0", target_env="prod"
-            )
+            tag_prod = controller._update_latest_tag(source_tag="v2.0.0", target_env="prod")
             assert tag_prod == "latest-prod"
 
-            tag_dev = controller._update_latest_tag(
-                source_tag="v2.0.0", target_env="dev"
-            )
+            tag_dev = controller._update_latest_tag(source_tag="v2.0.0", target_env="dev")
             assert tag_dev == "latest-dev"
 
     @pytest.mark.requirement("8C-FR-003")
-    def test_update_latest_tag_overwrites_existing(
-        self, controller: MagicMock
-    ) -> None:
+    def test_update_latest_tag_overwrites_existing(self, controller: MagicMock) -> None:
         """Test _update_latest_tag overwrites existing mutable tag."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "tag_exists", return_value=True
-        ), patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "tag_exists", return_value=True),
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             # New artifact to promote
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:newdigest"
@@ -115,15 +107,13 @@ class TestUpdateLatestTag:
             mock_oras.upload_manifest.assert_called()
 
     @pytest.mark.requirement("8C-FR-003")
-    def test_update_latest_tag_uses_source_manifest(
-        self, controller: MagicMock
-    ) -> None:
+    def test_update_latest_tag_uses_source_manifest(self, controller: MagicMock) -> None:
         """Test _update_latest_tag copies manifest from source tag."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory, patch.object(
-            controller.client, "_build_target_ref"
-        ) as mock_build_ref:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+            patch.object(controller.client, "_build_target_ref") as mock_build_ref,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
             mock_inspect.return_value = mock_manifest
@@ -152,13 +142,12 @@ class TestUpdateLatestTag:
             assert "latest-staging" in str(call_kwargs)
 
     @pytest.mark.requirement("8C-FR-003")
-    def test_update_latest_tag_returns_tag_name(
-        self, controller: MagicMock
-    ) -> None:
+    def test_update_latest_tag_returns_tag_name(self, controller: MagicMock) -> None:
         """Test _update_latest_tag returns the updated tag name."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
             mock_inspect.return_value = mock_manifest
@@ -176,13 +165,12 @@ class TestUpdateLatestTag:
             assert tag == "latest-prod"
 
     @pytest.mark.requirement("8C-FR-003")
-    def test_update_latest_tag_from_env_tag(
-        self, controller: MagicMock
-    ) -> None:
+    def test_update_latest_tag_from_env_tag(self, controller: MagicMock) -> None:
         """Test _update_latest_tag can use environment tag as source."""
-        with patch.object(controller.client, "inspect") as mock_inspect, patch.object(
-            controller.client, "_create_oras_client"
-        ) as mock_oras_client_factory:
+        with (
+            patch.object(controller.client, "inspect") as mock_inspect,
+            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+        ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"
             mock_inspect.return_value = mock_manifest

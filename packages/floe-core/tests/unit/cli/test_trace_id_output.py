@@ -120,9 +120,7 @@ class TestPromoteTraceIdOutput:
         """Promote command JSON output includes trace_id for observability."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -152,9 +150,7 @@ class TestPromoteTraceIdOutput:
         """Promote command human-readable output includes trace_id."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -173,18 +169,15 @@ class TestPromoteTraceIdOutput:
 
             assert result.exit_code == 0
             # trace_id should appear somewhere in human-readable output
-            assert "trace" in result.output.lower() or mock_promotion_record.trace_id in result.output
+            output_lower = result.output.lower()
+            assert "trace" in output_lower or mock_promotion_record.trace_id in result.output
 
     @pytest.mark.requirement("FR-033")
-    def test_promote_trace_id_is_non_empty(
-        self, mock_promotion_record: PromotionRecord
-    ) -> None:
+    def test_promote_trace_id_is_non_empty(self, mock_promotion_record: PromotionRecord) -> None:
         """Promote command trace_id is a non-empty string."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -219,9 +212,7 @@ class TestRollbackTraceIdOutput:
         """Rollback command JSON output includes trace_id for observability."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -251,9 +242,7 @@ class TestRollbackTraceIdOutput:
         """Rollback command human-readable output includes trace_id."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -272,18 +261,15 @@ class TestRollbackTraceIdOutput:
 
             assert result.exit_code == 0
             # trace_id should appear somewhere in human-readable output
-            assert "trace" in result.output.lower() or mock_rollback_record.trace_id in result.output
+            output_lower = result.output.lower()
+            assert "trace" in output_lower or mock_rollback_record.trace_id in result.output
 
     @pytest.mark.requirement("FR-033")
-    def test_rollback_trace_id_is_non_empty(
-        self, mock_rollback_record: RollbackRecord
-    ) -> None:
+    def test_rollback_trace_id_is_non_empty(self, mock_rollback_record: RollbackRecord) -> None:
         """Rollback command trace_id is a non-empty string."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -312,9 +298,7 @@ class TestTraceIdObservabilityCorrelation:
     """Tests for trace_id correlation with observability systems (FR-033)."""
 
     @pytest.mark.requirement("FR-033")
-    def test_trace_id_format_is_usable(
-        self, mock_promotion_record: PromotionRecord
-    ) -> None:
+    def test_trace_id_format_is_usable(self, mock_promotion_record: PromotionRecord) -> None:
         """Trace ID format is suitable for OpenTelemetry correlation.
 
         The trace_id should be a non-empty string that can be used to
@@ -322,9 +306,7 @@ class TestTraceIdObservabilityCorrelation:
         """
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller

@@ -22,6 +22,12 @@ import pytest
 
 from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
+# Test constants
+TEST_DIGEST = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+TEST_DIGEST_STAGING = "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+TEST_DIGEST_PROD = "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+TEST_DIGEST_EXISTING = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
 
 class TestConcurrentPromotionSameEnvironment:
     """Unit tests for concurrent promotion to same environment (T031d)."""
@@ -42,9 +48,7 @@ class TestConcurrentPromotionSameEnvironment:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-006")
-    def test_concurrent_promotions_one_succeeds_one_fails(
-        self, controller: MagicMock
-    ) -> None:
+    def test_concurrent_promotions_one_succeeds_one_fails(self, controller: MagicMock) -> None:
         """Test that concurrent promotions to same env - one succeeds, one fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -72,12 +76,12 @@ class TestConcurrentPromotionSameEnvironment:
 
             if call_number == 1:
                 # First caller succeeds
-                return "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+                return TEST_DIGEST
             else:
                 # Second caller fails - tag already exists
                 raise TagExistsError(
                     tag="v1.0.0-staging",
-                    existing_digest="sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+                    existing_digest=TEST_DIGEST,
                 )
 
         results: list[PromotionRecord | Exception] = []
@@ -85,23 +89,19 @@ class TestConcurrentPromotionSameEnvironment:
         def run_promotion() -> PromotionRecord | Exception:
             """Run a promotion and capture result or exception."""
             try:
-                with patch.object(controller, "_validate_transition"), patch.object(
-                    controller, "_get_artifact_digest"
-                ) as mock_get_digest, patch.object(
-                    controller, "_run_all_gates"
-                ) as mock_gates, patch.object(
-                    controller, "_verify_signature"
-                ) as mock_verify, patch.object(
-                    controller, "_create_env_tag"
-                ) as mock_create_tag, patch.object(
-                    controller, "_update_latest_tag"
-                ), patch.object(
-                    controller, "_store_promotion_record"
+                with (
+                    patch.object(controller, "_validate_transition"),
+                    patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+                    patch.object(controller, "_run_all_gates") as mock_gates,
+                    patch.object(controller, "_verify_signature") as mock_verify,
+                    patch.object(controller, "_create_env_tag") as mock_create_tag,
+                    patch.object(controller, "_update_latest_tag"),
+                    patch.object(controller, "_store_promotion_record"),
                 ):
                     mock_gates.return_value = []
                     mock_verify.return_value = Mock(status="valid")
                     mock_create_tag.side_effect = mock_create_tag_with_race
-                    mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+                    mock_get_digest.return_value = TEST_DIGEST
 
                     return controller.promote(
                         tag="v1.0.0",
@@ -128,7 +128,7 @@ class TestConcurrentPromotionSameEnvironment:
         # Verify the failure has correct info
         failure = failures[0]
         assert failure.tag == "v1.0.0-staging"
-        assert failure.existing_digest == "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        assert failure.existing_digest == TEST_DIGEST
 
     @pytest.mark.requirement("8C-NFR-006")
     def test_concurrent_promotions_to_different_envs_both_succeed(
@@ -149,27 +149,23 @@ class TestConcurrentPromotionSameEnvironment:
         def run_promotion(to_env: str) -> tuple[str, PromotionRecord | Exception]:
             """Run a promotion to specified environment."""
             try:
-                with patch.object(controller, "_validate_transition"), patch.object(
-                    controller, "_get_artifact_digest"
-                ) as mock_get_digest, patch.object(
-                    controller, "_run_all_gates"
-                ) as mock_gates, patch.object(
-                    controller, "_verify_signature"
-                ) as mock_verify, patch.object(
-                    controller, "_create_env_tag"
-                ) as mock_create_tag, patch.object(
-                    controller, "_update_latest_tag"
-                ), patch.object(
-                    controller, "_store_promotion_record"
+                with (
+                    patch.object(controller, "_validate_transition"),
+                    patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+                    patch.object(controller, "_run_all_gates") as mock_gates,
+                    patch.object(controller, "_verify_signature") as mock_verify,
+                    patch.object(controller, "_create_env_tag") as mock_create_tag,
+                    patch.object(controller, "_update_latest_tag"),
+                    patch.object(controller, "_store_promotion_record"),
                 ):
                     mock_gates.return_value = []
                     mock_verify.return_value = Mock(status="valid")
                     # Create unique but valid 64-char digest for each environment
                     if to_env == "staging":
-                        mock_create_tag.return_value = "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+                        mock_create_tag.return_value = TEST_DIGEST_STAGING
                     else:
-                        mock_create_tag.return_value = "sha256:8888888888888888888888888888888888888888888888888888888888888888"
-                    mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+                        mock_create_tag.return_value = TEST_DIGEST_PROD
+                    mock_get_digest.return_value = TEST_DIGEST
 
                     result = controller.promote(
                         tag="v1.0.0",
@@ -192,16 +188,14 @@ class TestConcurrentPromotionSameEnvironment:
 
         # Both should succeed
         for env, result in results:
-            assert isinstance(
-                result, PromotionRecord
-            ), f"Expected success for {env}, got {type(result).__name__}"
+            assert isinstance(result, PromotionRecord), (
+                f"Expected success for {env}, got {type(result).__name__}"
+            )
             assert result.target_environment == env
 
     @pytest.mark.requirement("8C-NFR-006")
     @pytest.mark.timeout(30)
-    def test_concurrent_promotion_no_data_corruption(
-        self, controller: MagicMock
-    ) -> None:
+    def test_concurrent_promotion_no_data_corruption(self, controller: MagicMock) -> None:
         """Test that concurrent promotions do not cause data corruption.
 
         When multiple promotions run concurrently:
@@ -215,20 +209,19 @@ class TestConcurrentPromotionSameEnvironment:
         lock = threading.Lock()
 
         # Apply patches at test level (before threads) for thread-safe mocking
-        with patch.object(controller, "_validate_transition"), \
-             patch.object(controller, "_get_artifact_digest") as mock_get_digest, \
-             patch.object(controller, "_run_all_gates") as mock_gates, \
-             patch.object(controller, "_verify_signature") as mock_verify, \
-             patch.object(controller, "_create_env_tag") as mock_create_tag, \
-             patch.object(controller, "_update_latest_tag"), \
-             patch.object(controller, "_store_promotion_record"):
-
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
+        ):
             # Configure mocks once, outside threads
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = (
-                "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            )
+            mock_create_tag.return_value = TEST_DIGEST
             mock_get_digest.return_value = (
                 "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
             )
@@ -271,9 +264,7 @@ class TestConcurrentPromotionSameEnvironment:
             assert record.operator.endswith("@github.com")
 
     @pytest.mark.requirement("8C-NFR-006")
-    def test_tag_exists_error_exit_code_during_race(
-        self, controller: MagicMock
-    ) -> None:
+    def test_tag_exists_error_exit_code_during_race(self, controller: MagicMock) -> None:
         """Test TagExistsError has correct exit code during race condition.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -286,7 +277,7 @@ class TestConcurrentPromotionSameEnvironment:
 
         error = TagExistsError(
             tag="v1.0.0-staging",
-            existing_digest="sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            existing_digest=TEST_DIGEST,
         )
 
         # Verify exit code
@@ -299,9 +290,7 @@ class TestConcurrentPromotionSameEnvironment:
 
     @pytest.mark.requirement("8C-NFR-006")
     @pytest.mark.timeout(30)
-    def test_concurrent_promotion_with_gate_failures(
-        self, controller: MagicMock
-    ) -> None:
+    def test_concurrent_promotion_with_gate_failures(self, controller: MagicMock) -> None:
         """Test concurrent promotions where some fail gate validation.
 
         When concurrent promotions have different gate outcomes:
@@ -342,23 +331,20 @@ class TestConcurrentPromotionSameEnvironment:
                 ]
 
         # Apply patches at test level (before threads) for thread-safe mocking
-        with patch.object(controller, "_validate_transition"), \
-             patch.object(controller, "_get_artifact_digest") as mock_get_digest, \
-             patch.object(controller, "_run_all_gates") as mock_gates, \
-             patch.object(controller, "_verify_signature") as mock_verify, \
-             patch.object(controller, "_create_env_tag") as mock_create_tag, \
-             patch.object(controller, "_update_latest_tag"), \
-             patch.object(controller, "_store_promotion_record"):
-
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+            patch.object(controller, "_update_latest_tag"),
+            patch.object(controller, "_store_promotion_record"),
+        ):
             # Configure mocks once, outside threads
             mock_gates.side_effect = mock_gates_alternate
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = (
-                "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            )
-            mock_get_digest.return_value = (
-                "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-            )
+            mock_create_tag.return_value = TEST_DIGEST
+            mock_get_digest.return_value = TEST_DIGEST
 
             def run_promotion(index: int) -> PromotionRecord | Exception:
                 """Run a promotion that may fail gates."""
@@ -408,9 +394,7 @@ class TestPromotionLocking:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-006")
-    def test_promotion_check_and_create_is_atomic(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promotion_check_and_create_is_atomic(self, controller: MagicMock) -> None:
         """Test that check-and-create of env tag is atomic.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -423,23 +407,21 @@ class TestPromotionLocking:
         # This test verifies the controller uses atomic operations
         # by checking that TagExistsError is raised correctly
 
-        with patch.object(controller, "_validate_transition"), patch.object(
-            controller, "_get_artifact_digest"
-        ) as mock_get_digest, patch.object(
-            controller, "_run_all_gates"
-        ) as mock_gates, patch.object(
-            controller, "_verify_signature"
-        ) as mock_verify, patch.object(
-            controller, "_create_env_tag"
-        ) as mock_create_tag:
+        with (
+            patch.object(controller, "_validate_transition"),
+            patch.object(controller, "_get_artifact_digest") as mock_get_digest,
+            patch.object(controller, "_run_all_gates") as mock_gates,
+            patch.object(controller, "_verify_signature") as mock_verify,
+            patch.object(controller, "_create_env_tag") as mock_create_tag,
+        ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = TEST_DIGEST
 
             # Simulate atomic check-and-create failure
             mock_create_tag.side_effect = TagExistsError(
                 tag="v1.0.0-staging",
-                existing_digest="sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                existing_digest=TEST_DIGEST_EXISTING,
             )
 
             with pytest.raises(TagExistsError) as exc_info:
@@ -452,4 +434,4 @@ class TestPromotionLocking:
 
             # Error should indicate the tag already exists with different digest
             assert exc_info.value.tag == "v1.0.0-staging"
-            assert exc_info.value.existing_digest == "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            assert exc_info.value.existing_digest == TEST_DIGEST_EXISTING

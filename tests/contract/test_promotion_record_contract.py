@@ -21,15 +21,13 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from floe_core.schemas.promotion import (
     GateResult,
     GateStatus,
     PromotionGate,
     PromotionRecord,
 )
-
+from pydantic import ValidationError
 
 # OCI annotation key prefix for promotion metadata
 OCI_ANNOTATION_PREFIX = "dev.floe.promotion"
@@ -158,9 +156,7 @@ class TestPromotionRecordSchemaContract:
         assert "gate_results" in props
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_serialization_round_trip(
-        self, minimal_promotion_record: PromotionRecord
-    ) -> None:
+    def test_serialization_round_trip(self, minimal_promotion_record: PromotionRecord) -> None:
         """Contract: PromotionRecord serializes to JSON and back.
 
         This ensures the contract can be passed between processes
@@ -203,14 +199,12 @@ class TestPromotionRecordSchemaContract:
         for key in OCI_ANNOTATION_KEYS.values():
             assert key == key.lower(), f"Key '{key}' must be lowercase"
             # OCI annotation keys should be DNS-like labels
-            assert all(
-                c.isalnum() or c in ".-" for c in key
-            ), f"Key '{key}' contains invalid characters"
+            assert all(c.isalnum() or c in ".-" for c in key), (
+                f"Key '{key}' contains invalid characters"
+            )
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_gate_results_list_contract(
-        self, minimal_promotion_record: PromotionRecord
-    ) -> None:
+    def test_gate_results_list_contract(self, minimal_promotion_record: PromotionRecord) -> None:
         """Contract: gate_results is a list of GateResult objects.
 
         Epic 9B consumers iterate over gate_results for audit display.
@@ -250,9 +244,7 @@ class TestPromotionRecordSchemaContract:
         assert "undocumented_field" in str(exc_info.value)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_immutability_contract(
-        self, minimal_promotion_record: PromotionRecord
-    ) -> None:
+    def test_immutability_contract(self, minimal_promotion_record: PromotionRecord) -> None:
         """Contract: PromotionRecord is immutable (frozen=True).
 
         Once created, PromotionRecord should not be modified.

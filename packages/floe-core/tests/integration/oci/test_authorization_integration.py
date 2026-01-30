@@ -14,9 +14,16 @@ Tests the authorization flow integration with PromotionController:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from floe_core.schemas.promotion import PromotionConfig
+
+# Test constants
+TEST_DIGEST = "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1"
 
 
 class TestAuthorizationIntegration:
@@ -32,7 +39,7 @@ class TestAuthorizationIntegration:
         return client
 
     @pytest.fixture
-    def promotion_config_with_auth(self) -> "PromotionConfig":
+    def promotion_config_with_auth(self) -> PromotionConfig:
         """Create promotion config with authorization rules."""
         from floe_core.schemas.promotion import (
             AuthorizationConfig,
@@ -100,7 +107,7 @@ class TestAuthorizationIntegration:
         )
 
         # Mock internal methods to avoid actual registry operations
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1"):
+        with patch.object(controller, "_get_artifact_digest", return_value=TEST_DIGEST):
             with patch.object(controller, "_run_all_gates", return_value=[]):
                 with patch.object(controller, "_verify_signature") as mock_verify:
                     mock_verify.return_value = MagicMock(status="valid")
@@ -121,7 +128,7 @@ class TestAuthorizationIntegration:
     def test_promote_with_authorized_group(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_auth: "PromotionConfig",
+        promotion_config_with_auth: PromotionConfig,
     ) -> None:
         """Test promotion succeeds when operator is in allowed group."""
         from floe_core.oci.promotion import PromotionController
@@ -137,7 +144,7 @@ class TestAuthorizationIntegration:
             "groups": ["release-managers", "developers"],
         }
 
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1"):
+        with patch.object(controller, "_get_artifact_digest", return_value=TEST_DIGEST):
             with patch.object(controller, "_run_all_gates", return_value=[]):
                 with patch.object(controller, "_verify_signature") as mock_verify:
                     mock_verify.return_value = MagicMock(status="valid")
@@ -159,7 +166,7 @@ class TestAuthorizationIntegration:
     def test_promote_with_authorized_operator(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_auth: "PromotionConfig",
+        promotion_config_with_auth: PromotionConfig,
     ) -> None:
         """Test promotion succeeds when operator is explicitly allowed."""
         from floe_core.oci.promotion import PromotionController
@@ -173,7 +180,7 @@ class TestAuthorizationIntegration:
         mock_oci_client._credentials = MagicMock()
         mock_oci_client._credentials.metadata = {"groups": []}
 
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1"):
+        with patch.object(controller, "_get_artifact_digest", return_value=TEST_DIGEST):
             with patch.object(controller, "_run_all_gates", return_value=[]):
                 with patch.object(controller, "_verify_signature") as mock_verify:
                     mock_verify.return_value = MagicMock(status="valid")
@@ -193,7 +200,7 @@ class TestAuthorizationIntegration:
     def test_promote_denied_not_in_group(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_auth: "PromotionConfig",
+        promotion_config_with_auth: PromotionConfig,
     ) -> None:
         """Test promotion denied when operator not in allowed groups."""
         from floe_core.oci.errors import AuthorizationError
@@ -226,7 +233,7 @@ class TestAuthorizationIntegration:
     def test_promote_denied_not_allowed_operator(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_auth: "PromotionConfig",
+        promotion_config_with_auth: PromotionConfig,
     ) -> None:
         """Test promotion denied when operator not in allowed list for prod."""
         from floe_core.oci.errors import AuthorizationError
@@ -256,7 +263,7 @@ class TestAuthorizationIntegration:
     def test_authorization_decision_recorded_in_audit(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_auth: "PromotionConfig",
+        promotion_config_with_auth: PromotionConfig,
     ) -> None:
         """Test authorization decision is recorded in PromotionRecord."""
         from floe_core.oci.promotion import PromotionController
@@ -272,7 +279,7 @@ class TestAuthorizationIntegration:
             "groups": ["platform-admins"],
         }
 
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1"):
+        with patch.object(controller, "_get_artifact_digest", return_value=TEST_DIGEST):
             with patch.object(controller, "_run_all_gates", return_value=[]):
                 with patch.object(controller, "_verify_signature") as mock_verify:
                     mock_verify.return_value = MagicMock(status="valid")
@@ -421,7 +428,7 @@ class TestSeparationOfDutiesIntegration:
         return client
 
     @pytest.fixture
-    def promotion_config_with_sod(self) -> "PromotionConfig":
+    def promotion_config_with_sod(self) -> PromotionConfig:
         """Create promotion config with separation of duties enabled for prod."""
         from floe_core.schemas.promotion import (
             AuthorizationConfig,
@@ -458,7 +465,7 @@ class TestSeparationOfDutiesIntegration:
     def test_promote_fails_same_operator_consecutive_environments(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_sod: "PromotionConfig",
+        promotion_config_with_sod: PromotionConfig,
     ) -> None:
         """Test promotion fails when same operator promotes consecutively (FR-049).
 
@@ -479,9 +486,7 @@ class TestSeparationOfDutiesIntegration:
 
         # Mock _get_previous_operator to return same operator
         # The check should fail BEFORE gates/signature verification
-        with patch.object(
-            controller, "_get_previous_operator", return_value="alice@example.com"
-        ):
+        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
             with pytest.raises(SeparationOfDutiesError) as exc_info:
                 controller.promote(
                     tag="v1.0.0",
@@ -500,7 +505,7 @@ class TestSeparationOfDutiesIntegration:
     def test_promote_succeeds_different_operator(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_sod: "PromotionConfig",
+        promotion_config_with_sod: PromotionConfig,
     ) -> None:
         """Test promotion succeeds when different operator promotes (FR-049)."""
         from floe_core.oci.promotion import PromotionController
@@ -515,9 +520,7 @@ class TestSeparationOfDutiesIntegration:
         mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
 
         # Mock _get_previous_operator to return different operator
-        with patch.object(
-            controller, "_get_previous_operator", return_value="alice@example.com"
-        ):
+        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
             with patch.object(
                 controller,
                 "_get_artifact_digest",
@@ -544,13 +547,13 @@ class TestSeparationOfDutiesIntegration:
         mock_oci_client: MagicMock,
     ) -> None:
         """Test same operator can promote when separation_of_duties=False (FR-050)."""
+        from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.promotion import (
             AuthorizationConfig,
             EnvironmentConfig,
             PromotionConfig,
             PromotionGate,
         )
-        from floe_core.oci.promotion import PromotionController
 
         # Config with separation_of_duties=False
         config = PromotionConfig(
@@ -579,9 +582,7 @@ class TestSeparationOfDutiesIntegration:
         mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
 
         # Mock _get_previous_operator to return same operator
-        with patch.object(
-            controller, "_get_previous_operator", return_value="alice@example.com"
-        ):
+        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
             with patch.object(
                 controller,
                 "_get_artifact_digest",
@@ -606,7 +607,7 @@ class TestSeparationOfDutiesIntegration:
     def test_promote_succeeds_first_promotion_no_previous_operator(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_sod: "PromotionConfig",
+        promotion_config_with_sod: PromotionConfig,
     ) -> None:
         """Test first promotion succeeds when no previous operator exists (FR-049)."""
         from floe_core.oci.promotion import PromotionController
@@ -644,7 +645,7 @@ class TestSeparationOfDutiesIntegration:
     def test_promote_fails_case_insensitive_operator_comparison(
         self,
         mock_oci_client: MagicMock,
-        promotion_config_with_sod: "PromotionConfig",
+        promotion_config_with_sod: PromotionConfig,
     ) -> None:
         """Test separation of duties is case-insensitive (FR-052).
 
@@ -663,9 +664,7 @@ class TestSeparationOfDutiesIntegration:
 
         # Previous operator was lowercase, current is uppercase - should still fail
         # The check should fail BEFORE gates/signature verification
-        with patch.object(
-            controller, "_get_previous_operator", return_value="alice@example.com"
-        ):
+        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
             with pytest.raises(SeparationOfDutiesError):
                 controller.promote(
                     tag="v1.0.0",
@@ -720,4 +719,5 @@ class TestSeparationOfDutiesErrorMessages:
         )
         error_str = str(error)
         assert "Remediation" in error_str
-        assert "different team member" in error_str.lower() or "different operator" in error_str.lower()
+        error_str_lower = error_str.lower()
+        assert "different team member" in error_str_lower or "different operator" in error_str_lower

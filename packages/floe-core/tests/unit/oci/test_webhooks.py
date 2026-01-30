@@ -93,9 +93,7 @@ class TestWebhookEventFiltering:
     """Tests for event type filtering (FR-041)."""
 
     @pytest.mark.requirement("FR-041")
-    def test_notifier_filters_events_by_config(
-        self, webhook_config: MagicMock
-    ) -> None:
+    def test_notifier_filters_events_by_config(self, webhook_config: MagicMock) -> None:
         """WebhookNotifier only sends events matching config.events."""
         from floe_core.oci.webhooks import WebhookNotifier
 
@@ -477,7 +475,9 @@ class TestWebhookOpenTelemetry:
         # Verify span was created with correct name
         mock_span_ctx.assert_called_once_with("floe.webhook.notify")
         # Verify attributes were set
-        mock_span.set_attribute.assert_any_call("floe.webhook.url", "https://hooks.example.com/webhook")
+        mock_span.set_attribute.assert_any_call(
+            "floe.webhook.url", "https://hooks.example.com/webhook"
+        )
         mock_span.set_attribute.assert_any_call("floe.webhook.event_type", "promote")
         mock_span.set_attribute.assert_any_call("floe.webhook.success", True)
 
