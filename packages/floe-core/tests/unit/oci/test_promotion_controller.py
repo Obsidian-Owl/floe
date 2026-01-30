@@ -5,9 +5,12 @@ Tests Epic 8C promotion controller skeleton and basic operations.
 Requirements tested:
     FR-001: Promote artifact from one environment to next
     FR-002: Gate validation before promotion
+    FR-010: Policy compliance gate integration
 """
 
 from __future__ import annotations
+
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -16,8 +19,72 @@ class TestPromotionControllerInit:
     """Tests for PromotionController initialization."""
 
     @pytest.mark.requirement("8C-FR-001")
+    def test_promotion_controller_init_with_oci_client(self) -> None:
+        """Test PromotionController can be initialized with OCIClient (T014)."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()  # Default environments [dev, staging, prod]
+
+        controller = PromotionController(client=oci_client, promotion=promotion)
+
+        assert controller.client == oci_client
+        assert controller.promotion == promotion
+
+    @pytest.mark.requirement("8C-FR-010")
+    def test_promotion_controller_init_with_policy_enforcer(self) -> None:
+        """Test PromotionController can be initialized with PolicyEnforcer (T014)."""
+        from floe_core.enforcement import PolicyEnforcer
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.manifest import GovernanceConfig
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+        governance = GovernanceConfig()
+        policy_enforcer = PolicyEnforcer(governance_config=governance)
+
+        controller = PromotionController(
+            client=oci_client,
+            promotion=promotion,
+            policy_enforcer=policy_enforcer,
+        )
+
+        assert controller.client == oci_client
+        assert controller.promotion == promotion
+        assert controller.policy_enforcer == policy_enforcer
+
+    @pytest.mark.requirement("8C-FR-001")
+    def test_promotion_controller_init_without_policy_enforcer(self) -> None:
+        """Test PromotionController works without PolicyEnforcer (optional)."""
+        from floe_core.oci.client import OCIClient
+        from floe_core.oci.promotion import PromotionController
+        from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
+        from floe_core.schemas.promotion import PromotionConfig
+
+        auth = RegistryAuth(type=AuthType.ANONYMOUS)
+        registry_config = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
+        oci_client = OCIClient.from_registry_config(registry_config)
+        promotion = PromotionConfig()
+
+        controller = PromotionController(client=oci_client, promotion=promotion)
+
+        assert controller.client == oci_client
+        assert controller.promotion == promotion
+        assert controller.policy_enforcer is None
+
+    @pytest.mark.requirement("8C-FR-001")
     def test_promotion_controller_init_from_registry_config(self) -> None:
-        """Test PromotionController can be initialized from RegistryConfig."""
+        """Test PromotionController can be initialized from RegistryConfig (deprecated)."""
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
         from floe_core.schemas.promotion import PromotionConfig
@@ -26,9 +93,11 @@ class TestPromotionControllerInit:
         registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
         promotion = PromotionConfig()  # Default environments [dev, staging, prod]
 
+        # Legacy initialization via registry= parameter should still work
         controller = PromotionController(registry=registry, promotion=promotion)
 
-        assert controller.registry == registry
+        # Controller should have created an internal OCIClient
+        assert controller.client is not None
         assert controller.promotion == promotion
 
     @pytest.mark.requirement("8C-FR-001")

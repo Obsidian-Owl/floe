@@ -46,16 +46,22 @@ See Also:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from floe_core.oci.errors import InvalidTransitionError
-from floe_core.schemas.oci import RegistryConfig
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
     PromotionConfig,
     PromotionRecord,
     RollbackRecord,
 )
+
+if TYPE_CHECKING:
+    from floe_core.enforcement import PolicyEnforcer
+    from floe_core.oci.client import OCIClient
+    from floe_core.schemas.oci import RegistryConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -67,12 +73,15 @@ class PromotionController:
     validation gates, signature verification, and audit logging.
 
     Attributes:
-        registry: OCI registry configuration
+        client: OCI client for registry operations
         promotion: Promotion lifecycle configuration
+        policy_enforcer: Optional policy enforcer for compliance gates
 
     Example:
+        >>> from floe_core.oci import OCIClient
+        >>> client = OCIClient.from_registry_config(registry_config)
         >>> controller = PromotionController(
-        ...     registry=registry_config,
+        ...     client=client,
         ...     promotion=PromotionConfig()  # Default [dev, staging, prod]
         ... )
         >>> record = controller.promote("v1.0.0", "dev", "staging", "operator@example.com")
@@ -80,20 +89,46 @@ class PromotionController:
 
     def __init__(
         self,
-        registry: RegistryConfig,
         promotion: PromotionConfig,
+        *,
+        client: OCIClient | None = None,
+        registry: RegistryConfig | None = None,
+        policy_enforcer: PolicyEnforcer | None = None,
     ) -> None:
         """Initialize the PromotionController.
 
+        Can be initialized with either an OCIClient (preferred) or a RegistryConfig
+        (legacy, will create client internally).
+
         Args:
-            registry: OCI registry configuration for artifact operations.
             promotion: Promotion lifecycle configuration with environments and gates.
+            client: OCIClient instance for registry operations. Preferred.
+            registry: Legacy: RegistryConfig to create OCIClient from.
+                Deprecated - use client parameter instead.
+            policy_enforcer: Optional PolicyEnforcer for policy_compliance gate.
+                If None, policy_compliance gate will be skipped.
+
+        Raises:
+            ValueError: If neither client nor registry is provided.
         """
-        self.registry = registry
+        # Handle both new (client=) and legacy (registry=) initialization
+        if client is not None:
+            self.client = client
+        elif registry is not None:
+            # Legacy path: create OCIClient from RegistryConfig
+            from floe_core.oci.client import OCIClient
+
+            self.client = OCIClient.from_registry_config(registry)
+        else:
+            raise ValueError("Either client or registry must be provided")
+
         self.promotion = promotion
+        self.policy_enforcer = policy_enforcer
+
         self._log = logger.bind(
-            registry_uri=registry.uri,
+            registry_uri=self.client.registry_uri,
             environments=[e.name for e in promotion.environments],
+            has_policy_enforcer=policy_enforcer is not None,
         )
         self._log.info("promotion_controller_initialized")
 
