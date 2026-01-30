@@ -53,7 +53,7 @@ class TestArtifactsConfig:
         registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
         config = ArtifactsConfig(registry=registry)
 
-        with pytest.raises(TypeError):  # Frozen model raises TypeError
+        with pytest.raises(ValidationError):  # Frozen model raises ValidationError
             config.promotion = None  # type: ignore[misc]
 
     @pytest.mark.requirement("8C-FR-009a")

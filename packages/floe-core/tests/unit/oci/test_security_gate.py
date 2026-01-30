@@ -15,6 +15,7 @@ import json
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 # Sample Trivy JSON output for testing
 TRIVY_OUTPUT_WITH_VULNERABILITIES: dict[str, Any] = {
@@ -349,7 +350,7 @@ class TestTrivySecurityScanResultIntegration:
 
         result = parse_trivy_output(json.dumps(TRIVY_OUTPUT_WITH_VULNERABILITIES))
 
-        with pytest.raises(TypeError):  # Frozen model raises TypeError
+        with pytest.raises(ValidationError):  # Frozen model raises ValidationError
             result.critical_count = 999  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-056")
@@ -975,7 +976,7 @@ class TestSecurityGateEvaluationImmutability:
 
         evaluation = evaluate_security_gate(scan_result, config)
 
-        with pytest.raises(TypeError):  # Frozen model raises TypeError
+        with pytest.raises(ValidationError):  # Frozen model raises ValidationError
             evaluation.passed = True  # type: ignore[misc]
 
 

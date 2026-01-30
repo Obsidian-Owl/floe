@@ -17,6 +17,7 @@ Tests the AuthorizationChecker class that enforces:
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 
 class TestAuthorizationCheckerInit:
@@ -239,7 +240,7 @@ class TestAuthorizationResult:
             operator="alice@example.com",
             authorized_via="group:admins",
         )
-        with pytest.raises(TypeError):  # Frozen model raises TypeError
+        with pytest.raises(ValidationError):  # Frozen model raises ValidationError
             result.authorized = False  # type: ignore[misc]
 
 
@@ -529,5 +530,5 @@ class TestSeparationOfDutiesResult:
             operator="alice@example.com",
             previous_operator=None,
         )
-        with pytest.raises(TypeError):  # Frozen model raises TypeError
+        with pytest.raises(ValidationError):  # Frozen model raises ValidationError
             result.allowed = False  # type: ignore[misc]
