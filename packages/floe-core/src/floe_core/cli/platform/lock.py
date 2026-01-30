@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 import click
 import structlog
 
-from floe_core.cli.utils import error, info, success, warn
+from floe_core.cli.utils import error, info, success
 
 if TYPE_CHECKING:
     pass
