@@ -1127,6 +1127,69 @@ class PromotionController:
 
         return history_entries
 
+    def _get_previous_operator(
+        self,
+        tag: str,
+        from_env: str,
+    ) -> str | None:
+        """Get the operator who promoted the artifact to the source environment (T136).
+
+        Used for separation of duties checks (FR-049 through FR-052).
+        Retrieves the operator from the most recent promotion to from_env.
+
+        Args:
+            tag: Artifact tag (e.g., v1.2.3).
+            from_env: Source environment to check (e.g., "staging").
+
+        Returns:
+            Operator identity (email/username) who promoted to from_env,
+            or None if no promotion history found.
+
+        Example:
+            >>> previous = controller._get_previous_operator("v1.2.3", "staging")
+            >>> previous
+            'alice@example.com'
+        """
+        try:
+            # Get artifact manifest to access annotations
+            manifest = self.client._get_manifest(f"{tag}-{from_env}")
+            annotations = getattr(manifest, "annotations", {}) or {}
+
+            # Get promotion history
+            history = self._get_promotion_history(
+                annotations,
+                default_digest="",
+            )
+
+            # Find most recent promotion TO from_env
+            for entry in history:
+                if entry.target_environment == from_env:
+                    self._log.debug(
+                        "found_previous_operator",
+                        tag=tag,
+                        from_env=from_env,
+                        operator=entry.operator,
+                    )
+                    return entry.operator
+
+            self._log.debug(
+                "no_previous_operator_found",
+                tag=tag,
+                from_env=from_env,
+            )
+            return None
+
+        except Exception as e:
+            # If we can't get previous operator, allow promotion to proceed
+            # (fail open for robustness)
+            self._log.warning(
+                "previous_operator_lookup_failed",
+                tag=tag,
+                from_env=from_env,
+                error=str(e),
+            )
+            return None
+
     def _create_env_tag(
         self,
         source_tag: str,
