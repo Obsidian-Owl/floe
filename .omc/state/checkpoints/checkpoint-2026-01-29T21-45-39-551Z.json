@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-01-29T21:45:39.551Z",
+  "trigger": "auto",
+  "active_modes": {
+    "ultrawork": {
+      "original_prompt": "Ultrawork. This is important. If we can't do this, we should throw the project away cause its a mess"
+    }
+  },
+  "todo_summary": {
+    "pending": 0,
+    "in_progress": 0,
+    "completed": 0
+  },
+  "wisdom_exported": false
+}
