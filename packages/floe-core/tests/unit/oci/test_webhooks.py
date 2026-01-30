@@ -319,10 +319,134 @@ class TestWebhookNotificationResult:
         assert result.attempts == 4
 
 
+class TestWebhookNotifyAll:
+    """Tests for WebhookNotifier.notify_all() for multi-webhook delivery (T119).
+
+    Task ID: T119
+    Phase: 11 - Webhooks (US9)
+    Requirements: FR-040, FR-041, FR-042, FR-043
+    """
+
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_all_sends_to_multiple_webhooks(self) -> None:
+        """notify_all() sends to all configured webhooks."""
+        from floe_core.oci.webhooks import WebhookNotifier
+        from floe_core.schemas.promotion import WebhookConfig
+
+        configs = [
+            WebhookConfig(
+                url="https://slack.example.com/webhook",
+                events=["promote"],
+            ),
+            WebhookConfig(
+                url="https://pagerduty.example.com/webhook",
+                events=["promote"],
+            ),
+        ]
+        notifier = WebhookNotifier(configs=configs)
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=200)
+
+            results = await notifier.notify_all("promote", {"artifact_tag": "v1.0.0"})
+
+            assert len(results) == 2
+            assert all(r.success for r in results)
+            assert mock_post.call_count == 2
+
+    @pytest.mark.requirement("FR-041")
+    @pytest.mark.anyio
+    async def test_notify_all_filters_by_event_type(self) -> None:
+        """notify_all() only notifies webhooks subscribed to the event."""
+        from floe_core.oci.webhooks import WebhookNotifier
+        from floe_core.schemas.promotion import WebhookConfig
+
+        configs = [
+            WebhookConfig(
+                url="https://slack.example.com/webhook",
+                events=["promote"],  # Only promote
+            ),
+            WebhookConfig(
+                url="https://pagerduty.example.com/webhook",
+                events=["rollback"],  # Only rollback
+            ),
+        ]
+        notifier = WebhookNotifier(configs=configs)
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=200)
+
+            # Only slack should be notified
+            results = await notifier.notify_all("promote", {"artifact_tag": "v1.0.0"})
+
+            assert len(results) == 1
+            assert results[0].url == "https://slack.example.com/webhook"
+            assert mock_post.call_count == 1
+
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_all_continues_on_failure(self) -> None:
+        """notify_all() continues to other webhooks even if one fails (non-blocking)."""
+        from floe_core.oci.webhooks import WebhookNotifier
+        from floe_core.schemas.promotion import WebhookConfig
+
+        configs = [
+            WebhookConfig(
+                url="https://failing.example.com/webhook",
+                events=["promote"],
+                retry_count=0,  # No retries
+            ),
+            WebhookConfig(
+                url="https://working.example.com/webhook",
+                events=["promote"],
+            ),
+        ]
+        notifier = WebhookNotifier(configs=configs)
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            # First webhook fails, second succeeds
+            mock_post.side_effect = [
+                MagicMock(status_code=500),
+                MagicMock(status_code=200),
+            ]
+
+            results = await notifier.notify_all("promote", {"artifact_tag": "v1.0.0"})
+
+            assert len(results) == 2
+            assert results[0].success is False
+            assert results[1].success is True
+            assert mock_post.call_count == 2
+
+    @pytest.mark.requirement("FR-042")
+    @pytest.mark.anyio
+    async def test_notify_all_returns_empty_for_no_matching_webhooks(self) -> None:
+        """notify_all() returns empty list if no webhooks match the event."""
+        from floe_core.oci.webhooks import WebhookNotifier
+        from floe_core.schemas.promotion import WebhookConfig
+
+        configs = [
+            WebhookConfig(
+                url="https://slack.example.com/webhook",
+                events=["rollback"],  # Only rollback
+            ),
+        ]
+        notifier = WebhookNotifier(configs=configs)
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=200)
+
+            results = await notifier.notify_all("promote", {"artifact_tag": "v1.0.0"})
+
+            assert len(results) == 0
+            mock_post.assert_not_called()
+
+
 __all__: list[str] = [
     "TestWebhookNotifierCreation",
     "TestWebhookEventFiltering",
     "TestWebhookDelivery",
     "TestWebhookPayload",
     "TestWebhookNotificationResult",
+    "TestWebhookNotifyAll",
 ]
