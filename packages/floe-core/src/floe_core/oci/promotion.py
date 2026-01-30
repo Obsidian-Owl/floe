@@ -53,6 +53,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from floe_core.oci.errors import InvalidTransitionError
+from floe_core.telemetry.tracing import create_span
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
     GateResult,
@@ -933,29 +934,52 @@ class PromotionController:
             >>> record = controller.promote("v1.0.0", "dev", "staging", "ci@github.com")
             >>> print(f"Promoted to staging: {record.promotion_id}")
         """
-        self._log.info(
-            "promote_started",
-            tag=tag,
-            from_env=from_env,
-            to_env=to_env,
-            operator=operator,
-            dry_run=dry_run,
-        )
+        # Build artifact reference for span attributes
+        artifact_ref = self.client._build_target_ref(tag)
 
-        # Validate transition path
-        self._validate_transition(from_env, to_env)
+        # Create OpenTelemetry span for promotion operation
+        with create_span(
+            "floe.oci.promote",
+            attributes={
+                "artifact_ref": artifact_ref,
+                "from_env": from_env,
+                "to_env": to_env,
+                "dry_run": dry_run,
+                "operator": operator,
+            },
+        ) as span:
+            # Extract trace_id for CLI output and correlation
+            span_context = span.get_span_context()
+            trace_id = (
+                format(span_context.trace_id, "032x")
+                if span_context.is_valid
+                else ""
+            )
 
-        # TODO: T014+ - Implement full promotion logic
-        # 1. Verify artifact exists with source tag
-        # 2. Verify signature (if enforcement enabled)
-        # 3. Check authorization
-        # 4. Check environment lock
-        # 5. Run validation gates
-        # 6. Create immutable environment tag
-        # 7. Update mutable latest tag
-        # 8. Write promotion record
+            self._log.info(
+                "promote_started",
+                tag=tag,
+                from_env=from_env,
+                to_env=to_env,
+                operator=operator,
+                dry_run=dry_run,
+                trace_id=trace_id,
+            )
 
-        raise NotImplementedError("Full promote implementation in T014+")
+            # Validate transition path
+            self._validate_transition(from_env, to_env)
+
+            # TODO: T014+ - Implement full promotion logic
+            # 1. Verify artifact exists with source tag
+            # 2. Verify signature (if enforcement enabled)
+            # 3. Check authorization
+            # 4. Check environment lock
+            # 5. Run validation gates
+            # 6. Create immutable environment tag
+            # 7. Update mutable latest tag
+            # 8. Write promotion record
+
+            raise NotImplementedError("Full promote implementation in T014+")
 
     def rollback(
         self,
