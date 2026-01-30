@@ -708,6 +708,94 @@ class PromotionController:
             # Re-raise in enforce mode
             raise
 
+    def _create_env_tag(
+        self,
+        source_tag: str,
+        target_env: str,
+        *,
+        force: bool = False,
+    ) -> str:
+        """Create an immutable environment-specific tag.
+
+        Creates a new tag in the format `{source_tag}-{target_env}` by copying
+        the manifest from the source tag. This implements FR-002 for immutable
+        environment-specific tags.
+
+        Args:
+            source_tag: Source artifact tag (e.g., "v1.2.3").
+            target_env: Target environment name (e.g., "staging").
+            force: If True, allow idempotent re-creation when digests match.
+
+        Returns:
+            The created environment tag (e.g., "v1.2.3-staging").
+
+        Raises:
+            ImmutabilityViolationError: If tag already exists with different digest.
+            ArtifactNotFoundError: If source tag doesn't exist.
+
+        Example:
+            >>> tag = controller._create_env_tag("v1.2.3", "staging")
+            >>> assert tag == "v1.2.3-staging"
+        """
+        from floe_core.oci.errors import ImmutabilityViolationError
+
+        # Build the new environment tag
+        env_tag = f"{source_tag}-{target_env}"
+
+        self._log.info(
+            "create_env_tag_started",
+            source_tag=source_tag,
+            target_env=target_env,
+            env_tag=env_tag,
+        )
+
+        # Get source manifest and digest
+        source_manifest = self.client.inspect(source_tag)
+        source_digest = source_manifest.digest
+
+        # Check if tag already exists
+        if self.client.tag_exists(env_tag):
+            existing_manifest = self.client.inspect(env_tag)
+            existing_digest = existing_manifest.digest
+
+            # If digests match and force=True, this is idempotent - no action needed
+            if existing_digest == source_digest and force:
+                self._log.info(
+                    "create_env_tag_idempotent",
+                    env_tag=env_tag,
+                    digest=source_digest,
+                )
+                return env_tag
+
+            # Tag exists with different digest or force=False
+            raise ImmutabilityViolationError(
+                tag=env_tag,
+                registry=self.client._config.uri,
+                digest=existing_digest,
+            )
+
+        # Create the new tag by copying the manifest
+        oras_client = self.client._create_oras_client()
+        source_ref = self.client._build_target_ref(source_tag)
+        target_ref = self.client._build_target_ref(env_tag)
+
+        # Fetch the source manifest
+        manifest_data = oras_client.get_manifest(container=source_ref)
+
+        # Upload manifest with new tag
+        oras_client.upload_manifest(
+            manifest=manifest_data,
+            container=target_ref,
+        )
+
+        self._log.info(
+            "create_env_tag_completed",
+            env_tag=env_tag,
+            digest=source_digest,
+        )
+
+        return env_tag
+
     def promote(
         self,
         tag: str,
