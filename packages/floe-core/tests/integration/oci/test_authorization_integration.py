@@ -152,6 +152,8 @@ class TestAuthorizationIntegration:
                                 )
                                 assert record.authorization_passed is True
                                 assert "group:release-managers" in record.authorized_via
+                                # T130: Verify operator_groups audit field
+                                assert record.operator_groups == ["release-managers", "developers"]
 
     @pytest.mark.requirement("FR-046")
     def test_promote_with_authorized_operator(
@@ -288,6 +290,8 @@ class TestAuthorizationIntegration:
         assert record.authorization_passed is True
         assert record.authorized_via is not None
         assert "group:" in record.authorized_via
+        # T130: Verify operator_groups audit field (FR-048)
+        assert record.operator_groups == ["platform-admins"]
 
 
 class TestAuthorizationErrorMessages:
