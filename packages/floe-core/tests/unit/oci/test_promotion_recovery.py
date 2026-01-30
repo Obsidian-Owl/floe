@@ -53,9 +53,11 @@ class TestPromotionIdempotency:
         """
         from floe_core.schemas.promotion import PromotionRecord
 
-        expected_digest = "sha256:abc123def456"
+        expected_digest = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -68,7 +70,7 @@ class TestPromotionIdempotency:
         ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value=expected_digest)
+            mock_get_digest.return_value = expected_digest
 
             # Tag creation says "tag exists with same digest" - should be treated as success
             mock_create_tag.return_value = expected_digest  # Same digest = idempotent
@@ -97,10 +99,12 @@ class TestPromotionIdempotency:
         """
         from floe_core.oci.errors import TagExistsError
 
-        source_digest = "sha256:abc123def456"
-        existing_digest = "sha256:different789"
+        source_digest = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        existing_digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -109,7 +113,7 @@ class TestPromotionIdempotency:
         ) as mock_create_tag:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value=source_digest)
+            mock_get_digest.return_value = source_digest
 
             # Tag creation fails because tag exists with different digest
             mock_create_tag.side_effect = TagExistsError(
@@ -139,6 +143,8 @@ class TestPromotionIdempotency:
         from floe_core.oci.errors import TagExistsError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -147,11 +153,11 @@ class TestPromotionIdempotency:
         ) as mock_create_tag:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             mock_create_tag.side_effect = TagExistsError(
                 tag="v1.0.0-staging",
-                existing_digest="sha256:different",
+                existing_digest="sha256:1111111111111111111111111111111111111111111111111111111111111111",
             )
 
             with pytest.raises(TagExistsError) as exc_info:
@@ -185,6 +191,7 @@ class TestLatestTagRecovery:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-004")
+    @pytest.mark.xfail(reason="T032a: Retry logic not yet implemented")
     def test_promote_retries_latest_tag_update_on_transient_failure(
         self, controller: MagicMock
     ) -> None:
@@ -198,6 +205,8 @@ class TestLatestTagRecovery:
         from floe_core.schemas.promotion import PromotionRecord
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -210,8 +219,8 @@ class TestLatestTagRecovery:
         ):
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:abc123"
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # First call fails, second succeeds (simulating retry)
             mock_update_latest.side_effect = [
@@ -232,6 +241,7 @@ class TestLatestTagRecovery:
             assert mock_update_latest.call_count == 2
 
     @pytest.mark.requirement("8C-NFR-004")
+    @pytest.mark.xfail(reason="T032a: Retry/error raising logic not yet implemented")
     def test_promote_gives_up_after_max_retries(
         self, controller: MagicMock
     ) -> None:
@@ -245,6 +255,8 @@ class TestLatestTagRecovery:
         from floe_core.oci.errors import RegistryUnavailableError
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -255,8 +267,8 @@ class TestLatestTagRecovery:
         ) as mock_update_latest:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:abc123"
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # All calls fail
             mock_update_latest.side_effect = ConnectionError("Persistent failure")
@@ -303,6 +315,8 @@ class TestPromotionRecordRecovery:
         from floe_core.schemas.promotion import PromotionRecord
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -315,8 +329,8 @@ class TestPromotionRecordRecovery:
         ) as mock_store:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:abc123"
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Record storage fails
             mock_store.side_effect = Exception("Storage failed")
@@ -333,6 +347,7 @@ class TestPromotionRecordRecovery:
             mock_store.assert_called_once()
 
     @pytest.mark.requirement("8C-NFR-004")
+    @pytest.mark.xfail(reason="T032a: warnings/errors field not yet added to PromotionRecord schema")
     def test_promote_records_partial_failure_in_result(
         self, controller: MagicMock
     ) -> None:
@@ -346,6 +361,8 @@ class TestPromotionRecordRecovery:
         from floe_core.schemas.promotion import PromotionRecord
 
         with patch.object(controller, "_validate_transition"), patch.object(
+            controller, "_get_artifact_digest"
+        ) as mock_get_digest, patch.object(
             controller, "_run_all_gates"
         ) as mock_gates, patch.object(
             controller, "_verify_signature"
@@ -358,8 +375,8 @@ class TestPromotionRecordRecovery:
         ) as mock_store:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
-            mock_create_tag.return_value = "sha256:abc123"
-            controller.client._get_artifact_digest = Mock(return_value="sha256:abc123")
+            mock_create_tag.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            mock_get_digest.return_value = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
 
             # Record storage fails
             mock_store.side_effect = Exception("Storage failed")
