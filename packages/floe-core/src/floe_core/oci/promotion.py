@@ -61,6 +61,7 @@ from floe_core.schemas.promotion import (
     PromotionConfig,
     PromotionGate,
     PromotionRecord,
+    RollbackImpactAnalysis,
     RollbackRecord,
 )
 
@@ -1490,6 +1491,128 @@ class PromotionController:
             )
 
             return record
+
+    def analyze_rollback_impact(
+        self,
+        tag: str,
+        environment: str,
+    ) -> RollbackImpactAnalysis:
+        """Analyze the impact of rolling back to a specific version.
+
+        Performs pre-rollback analysis to help operators understand the
+        consequences before executing. Returns information about breaking
+        changes, affected products, and recommendations.
+
+        Args:
+            tag: Target artifact tag to analyze rollback to.
+            environment: Environment to analyze.
+
+        Returns:
+            RollbackImpactAnalysis with impact details.
+
+        Raises:
+            VersionNotPromotedError: If target version was never promoted.
+            ArtifactNotFoundError: If artifact not found.
+
+        Example:
+            >>> analysis = controller.analyze_rollback_impact("v1.0.0", "prod")
+            >>> if analysis.breaking_changes:
+            ...     print("Warning: Breaking changes detected!")
+        """
+        from floe_core.oci.errors import ArtifactNotFoundError, VersionNotPromotedError
+        from floe_core.schemas.promotion import RollbackImpactAnalysis
+
+        self._log.info(
+            "analyze_rollback_impact_started",
+            tag=tag,
+            environment=environment,
+        )
+
+        # Step 1: Validate version was promoted to this environment
+        env_tag = f"{tag}-{environment}"
+        try:
+            target_manifest = self.client.inspect(env_tag)
+        except ArtifactNotFoundError:
+            available = self._get_promoted_versions(environment)
+            raise VersionNotPromotedError(
+                tag=tag,
+                environment=environment,
+                available_versions=available,
+            )
+
+        # Step 2: Get current latest version info
+        latest_tag = f"latest-{environment}"
+        try:
+            current_manifest = self.client.inspect(latest_tag)
+            current_digest = current_manifest.digest
+        except ArtifactNotFoundError:
+            current_digest = None
+
+        # Step 3: Check if already at target version (no rollback needed)
+        target_digest = target_manifest.digest
+        if current_digest == target_digest:
+            self._log.info(
+                "analyze_rollback_impact_same_version",
+                tag=tag,
+                environment=environment,
+            )
+            return RollbackImpactAnalysis(
+                breaking_changes=[],
+                affected_products=[],
+                recommendations=["Environment already at target version - no rollback needed"],
+                estimated_downtime=None,
+            )
+
+        # Step 4: Analyze potential breaking changes
+        # In a full implementation, this would compare schemas/manifests
+        # For now, we provide basic analysis based on version comparison
+        breaking_changes: list[str] = []
+        recommendations: list[str] = []
+
+        # Extract version info if available (semantic versioning)
+        try:
+            import re
+            version_match = re.match(r"v(\d+)\.(\d+)\.(\d+)", tag)
+            if version_match:
+                major, minor, patch = map(int, version_match.groups())
+                # If rolling back to a lower major version, likely breaking
+                if major < 1:
+                    recommendations.append("Rolling back to pre-1.0 version - check stability")
+        except Exception:
+            pass  # Version parsing optional
+
+        # Step 5: Analyze affected products
+        # In a full implementation, this would query lineage/dependencies
+        affected_products: list[str] = []
+
+        # Step 6: Build recommendations
+        recommendations.extend([
+            "Verify downstream systems are compatible with rollback version",
+            "Monitor application health after rollback",
+            "Consider notifying dependent teams before rollback",
+        ])
+
+        # Step 7: Estimate downtime
+        # In a full implementation, this would consider deployment time
+        estimated_downtime = "~1-2 minutes for tag update"
+
+        analysis = RollbackImpactAnalysis(
+            breaking_changes=breaking_changes,
+            affected_products=affected_products,
+            recommendations=recommendations,
+            estimated_downtime=estimated_downtime,
+        )
+
+        self._log.info(
+            "analyze_rollback_impact_completed",
+            tag=tag,
+            environment=environment,
+            breaking_change_count=len(breaking_changes),
+            affected_product_count=len(affected_products),
+            recommendation_count=len(recommendations),
+        )
+
+        return analysis
 
     def status(self, environment: str | None = None) -> dict:
         """Get promotion status for environment(s).

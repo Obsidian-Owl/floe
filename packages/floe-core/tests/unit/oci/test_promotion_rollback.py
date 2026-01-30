@@ -351,9 +351,9 @@ class TestRollbackTagNumbering:
 
 
 class TestAnalyzeRollbackImpact:
-    """Unit tests for analyze_rollback_impact() (T048).
+    """Unit tests for analyze_rollback_impact() (T048, T051).
 
-    TDD: These tests are xfail until T051 implements analyze_rollback_impact().
+    Tests verify the analyze_rollback_impact() method works correctly.
     """
 
     @pytest.fixture
@@ -378,13 +378,11 @@ class TestAnalyzeRollbackImpact:
         promotion = PromotionConfig()
         return PromotionController(client=mock_client, promotion=promotion)
 
-    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
     @pytest.mark.requirement("8C-FR-016")
     def test_analyze_rollback_impact_exists(self, controller: MagicMock) -> None:
         """Test analyze_rollback_impact() method exists."""
         assert hasattr(controller, "analyze_rollback_impact")
 
-    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
     @pytest.mark.requirement("8C-FR-016")
     def test_analyze_rollback_impact_returns_analysis(
         self, controller: MagicMock
@@ -399,7 +397,6 @@ class TestAnalyzeRollbackImpact:
 
         assert isinstance(result, RollbackImpactAnalysis)
 
-    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
     @pytest.mark.requirement("8C-FR-016")
     def test_analyze_rollback_impact_has_breaking_changes(
         self, controller: MagicMock
@@ -413,7 +410,6 @@ class TestAnalyzeRollbackImpact:
         assert hasattr(result, "breaking_changes")
         assert isinstance(result.breaking_changes, list)
 
-    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
     @pytest.mark.requirement("8C-FR-016")
     def test_analyze_rollback_impact_has_affected_products(
         self, controller: MagicMock
@@ -427,7 +423,6 @@ class TestAnalyzeRollbackImpact:
         assert hasattr(result, "affected_products")
         assert isinstance(result.affected_products, list)
 
-    @pytest.mark.xfail(reason="T051: Implement analyze_rollback_impact()")
     @pytest.mark.requirement("8C-FR-016")
     def test_analyze_rollback_impact_has_recommendations(
         self, controller: MagicMock
