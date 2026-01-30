@@ -1007,16 +1007,38 @@ class PromotionController:
         Example:
             >>> record = controller.rollback("v1.0.0", "prod", "Hotfix rollback", "sre@example.com")
         """
-        self._log.info(
-            "rollback_started",
-            tag=tag,
-            environment=environment,
-            reason=reason,
-            operator=operator,
-        )
+        # Build artifact reference for span attributes
+        artifact_ref = self.client._build_target_ref(tag)
 
-        # TODO: T050+ - Implement rollback logic
-        raise NotImplementedError("Rollback implementation in T050+")
+        # Create OpenTelemetry span for rollback operation
+        with create_span(
+            "floe.oci.rollback",
+            attributes={
+                "artifact_ref": artifact_ref,
+                "environment": environment,
+                "reason": reason,
+                "operator": operator,
+            },
+        ) as span:
+            # Extract trace_id for CLI output and correlation
+            span_context = span.get_span_context()
+            trace_id = (
+                format(span_context.trace_id, "032x")
+                if span_context.is_valid
+                else ""
+            )
+
+            self._log.info(
+                "rollback_started",
+                tag=tag,
+                environment=environment,
+                reason=reason,
+                operator=operator,
+                trace_id=trace_id,
+            )
+
+            # TODO: T050+ - Implement rollback logic
+            raise NotImplementedError("Rollback implementation in T050+")
 
     def status(self, environment: str | None = None) -> dict:
         """Get promotion status for environment(s).
