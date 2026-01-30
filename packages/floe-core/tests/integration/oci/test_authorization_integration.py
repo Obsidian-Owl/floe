@@ -399,3 +399,325 @@ class TestAuthorizationErrorMessages:
         error_str = str(error)
         # Should include allowed operators info
         assert "admin@example.com" in error_str or "Allowed operators" in error_str
+
+
+class TestSeparationOfDutiesIntegration:
+    """Integration tests for separation of duties enforcement (T137, T138).
+
+    Tests FR-049, FR-050, FR-051, FR-052:
+    - FR-049: Same operator cannot promote to consecutive environments
+    - FR-050: Enable/disable per environment
+    - FR-051: Result schema for audit trail
+    - FR-052: Case-insensitive operator comparison
+    """
+
+    @pytest.fixture
+    def mock_oci_client(self) -> MagicMock:
+        """Create a mock OCI client for testing."""
+        client = MagicMock()
+        client.registry_uri = "oci://test.registry.io/repo"
+        client._build_target_ref.return_value = "test.registry.io/repo:v1.0.0"
+        client._credentials = None
+        return client
+
+    @pytest.fixture
+    def promotion_config_with_sod(self) -> "PromotionConfig":
+        """Create promotion config with separation of duties enabled for prod."""
+        from floe_core.schemas.promotion import (
+            AuthorizationConfig,
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
+
+        return PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="dev",
+                    gates={PromotionGate.POLICY_COMPLIANCE: True},
+                ),
+                EnvironmentConfig(
+                    name="staging",
+                    gates={PromotionGate.POLICY_COMPLIANCE: True},
+                    authorization=AuthorizationConfig(
+                        allowed_groups=["release-managers", "platform-admins"],
+                    ),
+                ),
+                EnvironmentConfig(
+                    name="prod",
+                    gates={PromotionGate.POLICY_COMPLIANCE: True},
+                    authorization=AuthorizationConfig(
+                        allowed_groups=["platform-admins"],
+                        separation_of_duties=True,
+                    ),
+                ),
+            ],
+        )
+
+    @pytest.mark.requirement("FR-049")
+    def test_promote_fails_same_operator_consecutive_environments(
+        self,
+        mock_oci_client: MagicMock,
+        promotion_config_with_sod: "PromotionConfig",
+    ) -> None:
+        """Test promotion fails when same operator promotes consecutively (FR-049).
+
+        Separation of duties check happens BEFORE gates and signature verification,
+        so this test should fail immediately at the separation check.
+        """
+        from floe_core.oci.errors import SeparationOfDutiesError
+        from floe_core.oci.promotion import PromotionController
+
+        controller = PromotionController(
+            client=mock_oci_client,
+            promotion=promotion_config_with_sod,
+        )
+
+        # Operator is in platform-admins (authorized)
+        mock_oci_client._credentials = MagicMock()
+        mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
+
+        # Mock _get_previous_operator to return same operator
+        # The check should fail BEFORE gates/signature verification
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
+            with pytest.raises(SeparationOfDutiesError) as exc_info:
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="staging",
+                    to_env="prod",
+                    operator="alice@example.com",
+                )
+
+        assert exc_info.value.exit_code == 14
+        assert "alice@example.com" in str(exc_info.value)
+        assert "separation of duties" in str(exc_info.value).lower()
+        assert exc_info.value.from_env == "staging"
+        assert exc_info.value.to_env == "prod"
+
+    @pytest.mark.requirement("FR-049")
+    def test_promote_succeeds_different_operator(
+        self,
+        mock_oci_client: MagicMock,
+        promotion_config_with_sod: "PromotionConfig",
+    ) -> None:
+        """Test promotion succeeds when different operator promotes (FR-049)."""
+        from floe_core.oci.promotion import PromotionController
+
+        controller = PromotionController(
+            client=mock_oci_client,
+            promotion=promotion_config_with_sod,
+        )
+
+        # Operator is in platform-admins (authorized)
+        mock_oci_client._credentials = MagicMock()
+        mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
+
+        # Mock _get_previous_operator to return different operator
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
+            with patch.object(
+                controller,
+                "_get_artifact_digest",
+                return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+            ):
+                with patch.object(controller, "_run_all_gates", return_value=[]):
+                    with patch.object(controller, "_verify_signature") as mock_verify:
+                        mock_verify.return_value = MagicMock(status="valid")
+                        with patch.object(controller, "_create_env_tag"):
+                            with patch.object(controller, "_update_latest_tag"):
+                                with patch.object(controller, "_store_promotion_record"):
+                                    # Bob promotes, Alice previously promoted - should succeed
+                                    record = controller.promote(
+                                        tag="v1.0.0",
+                                        from_env="staging",
+                                        to_env="prod",
+                                        operator="bob@example.com",
+                                    )
+                                    assert record.authorization_passed is True
+
+    @pytest.mark.requirement("FR-050")
+    def test_promote_succeeds_when_sod_disabled(
+        self,
+        mock_oci_client: MagicMock,
+    ) -> None:
+        """Test same operator can promote when separation_of_duties=False (FR-050)."""
+        from floe_core.schemas.promotion import (
+            AuthorizationConfig,
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
+        from floe_core.oci.promotion import PromotionController
+
+        # Config with separation_of_duties=False
+        config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(
+                    name="staging",
+                    gates={PromotionGate.POLICY_COMPLIANCE: True},
+                ),
+                EnvironmentConfig(
+                    name="prod",
+                    gates={PromotionGate.POLICY_COMPLIANCE: True},
+                    authorization=AuthorizationConfig(
+                        allowed_groups=["platform-admins"],
+                        separation_of_duties=False,  # Explicitly disabled
+                    ),
+                ),
+            ],
+        )
+
+        controller = PromotionController(
+            client=mock_oci_client,
+            promotion=config,
+        )
+
+        mock_oci_client._credentials = MagicMock()
+        mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
+
+        # Mock _get_previous_operator to return same operator
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
+            with patch.object(
+                controller,
+                "_get_artifact_digest",
+                return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+            ):
+                with patch.object(controller, "_run_all_gates", return_value=[]):
+                    with patch.object(controller, "_verify_signature") as mock_verify:
+                        mock_verify.return_value = MagicMock(status="valid")
+                        with patch.object(controller, "_create_env_tag"):
+                            with patch.object(controller, "_update_latest_tag"):
+                                with patch.object(controller, "_store_promotion_record"):
+                                    # Same operator should succeed when SOD disabled
+                                    record = controller.promote(
+                                        tag="v1.0.0",
+                                        from_env="staging",
+                                        to_env="prod",
+                                        operator="alice@example.com",
+                                    )
+                                    assert record.authorization_passed is True
+
+    @pytest.mark.requirement("FR-049")
+    def test_promote_succeeds_first_promotion_no_previous_operator(
+        self,
+        mock_oci_client: MagicMock,
+        promotion_config_with_sod: "PromotionConfig",
+    ) -> None:
+        """Test first promotion succeeds when no previous operator exists (FR-049)."""
+        from floe_core.oci.promotion import PromotionController
+
+        controller = PromotionController(
+            client=mock_oci_client,
+            promotion=promotion_config_with_sod,
+        )
+
+        mock_oci_client._credentials = MagicMock()
+        mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
+
+        # Mock _get_previous_operator to return None (no previous promotion)
+        with patch.object(controller, "_get_previous_operator", return_value=None):
+            with patch.object(
+                controller,
+                "_get_artifact_digest",
+                return_value="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+            ):
+                with patch.object(controller, "_run_all_gates", return_value=[]):
+                    with patch.object(controller, "_verify_signature") as mock_verify:
+                        mock_verify.return_value = MagicMock(status="valid")
+                        with patch.object(controller, "_create_env_tag"):
+                            with patch.object(controller, "_update_latest_tag"):
+                                with patch.object(controller, "_store_promotion_record"):
+                                    record = controller.promote(
+                                        tag="v1.0.0",
+                                        from_env="staging",
+                                        to_env="prod",
+                                        operator="alice@example.com",
+                                    )
+                                    assert record.authorization_passed is True
+
+    @pytest.mark.requirement("FR-052")
+    def test_promote_fails_case_insensitive_operator_comparison(
+        self,
+        mock_oci_client: MagicMock,
+        promotion_config_with_sod: "PromotionConfig",
+    ) -> None:
+        """Test separation of duties is case-insensitive (FR-052).
+
+        Separation of duties check happens BEFORE gates and signature verification.
+        """
+        from floe_core.oci.errors import SeparationOfDutiesError
+        from floe_core.oci.promotion import PromotionController
+
+        controller = PromotionController(
+            client=mock_oci_client,
+            promotion=promotion_config_with_sod,
+        )
+
+        mock_oci_client._credentials = MagicMock()
+        mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
+
+        # Previous operator was lowercase, current is uppercase - should still fail
+        # The check should fail BEFORE gates/signature verification
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
+            with pytest.raises(SeparationOfDutiesError):
+                controller.promote(
+                    tag="v1.0.0",
+                    from_env="staging",
+                    to_env="prod",
+                    operator="ALICE@EXAMPLE.COM",  # Different case
+                )
+
+
+class TestSeparationOfDutiesErrorMessages:
+    """Tests for separation of duties error message quality (T140)."""
+
+    @pytest.mark.requirement("FR-052")
+    def test_separation_of_duties_error_includes_operators(self) -> None:
+        """Test SeparationOfDutiesError includes both operators."""
+        from floe_core.oci.errors import SeparationOfDutiesError
+
+        error = SeparationOfDutiesError(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            from_env="staging",
+            to_env="prod",
+        )
+        error_str = str(error)
+        assert "alice@example.com" in error_str
+        assert "staging" in error_str
+        assert "prod" in error_str
+
+    @pytest.mark.requirement("FR-052")
+    def test_separation_of_duties_error_exit_code(self) -> None:
+        """Test SeparationOfDutiesError has correct exit code (14)."""
+        from floe_core.oci.errors import SeparationOfDutiesError
+
+        error = SeparationOfDutiesError(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            from_env="staging",
+            to_env="prod",
+        )
+        assert error.exit_code == 14
+
+    @pytest.mark.requirement("FR-052")
+    def test_separation_of_duties_error_includes_remediation(self) -> None:
+        """Test SeparationOfDutiesError includes remediation steps."""
+        from floe_core.oci.errors import SeparationOfDutiesError
+
+        error = SeparationOfDutiesError(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            from_env="staging",
+            to_env="prod",
+        )
+        error_str = str(error)
+        assert "Remediation" in error_str
+        assert "different team member" in error_str.lower() or "different operator" in error_str.lower()

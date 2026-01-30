@@ -57,6 +57,7 @@ from floe_core.oci.errors import (
     AuthorizationError,
     EnvironmentLockedError,
     InvalidTransitionError,
+    SeparationOfDutiesError,
 )
 from floe_core.telemetry.tracing import create_span
 from floe_core.schemas.promotion import (
@@ -342,6 +343,85 @@ class PromotionController:
             reason=result.reason or "Not authorized",
             environment=environment,  # T132 - actionable guidance
             allowed_operators=list(env_config.authorization.allowed_operators or []),
+        )
+
+    def _check_separation_of_duties(
+        self,
+        operator: str,
+        tag: str,
+        from_env: str,
+        to_env: str,
+    ) -> None:
+        """Check separation of duties before promotion (T137 - FR-049 through FR-052).
+
+        Validates that the same operator cannot promote to consecutive environments
+        when separation_of_duties is enabled for the target environment.
+
+        Args:
+            operator: Identity of the operator attempting the promotion.
+            tag: Artifact tag being promoted.
+            from_env: Source environment name.
+            to_env: Target environment name.
+
+        Raises:
+            SeparationOfDutiesError: If the same operator promoted to the source
+                environment and separation_of_duties is enabled.
+        """
+        from floe_core.oci.authorization import AuthorizationChecker
+
+        # Get target environment config
+        env_config = self._get_environment(to_env)
+        if env_config is None or env_config.authorization is None:
+            # No authorization config = no separation of duties check
+            self._log.debug(
+                "separation_of_duties_skipped",
+                reason="no_authorization_config",
+                to_env=to_env,
+            )
+            return
+
+        # Check if separation of duties is enabled
+        if not env_config.authorization.separation_of_duties:
+            self._log.debug(
+                "separation_of_duties_disabled",
+                to_env=to_env,
+            )
+            return
+
+        # Get previous operator who promoted to from_env
+        previous_operator = self._get_previous_operator(tag, from_env)
+
+        # Create checker and perform check
+        checker = AuthorizationChecker(config=env_config.authorization)
+        result = checker.check_separation_of_duties(
+            operator=operator,
+            previous_operator=previous_operator,
+        )
+
+        if result.allowed:
+            self._log.info(
+                "separation_of_duties_passed",
+                operator=operator,
+                previous_operator=previous_operator,
+                from_env=from_env,
+                to_env=to_env,
+            )
+            return
+
+        # Separation of duties violation
+        self._log.warning(
+            "separation_of_duties_violation",
+            operator=operator,
+            previous_operator=previous_operator,
+            from_env=from_env,
+            to_env=to_env,
+            reason=result.reason,
+        )
+        raise SeparationOfDutiesError(
+            operator=operator,
+            previous_operator=previous_operator or "",
+            from_env=from_env,
+            to_env=to_env,
         )
 
     def _validate_transition(self, from_env: str, to_env: str) -> None:
@@ -1663,6 +1743,14 @@ class PromotionController:
             # Step 1.6: Check operator authorization (T128 - FR-045 through FR-048)
             authorized, authorized_via, operator_groups = self._check_authorization(
                 operator, to_env
+            )
+
+            # Step 1.7: Check separation of duties (T137 - FR-049 through FR-052)
+            self._check_separation_of_duties(
+                operator=operator,
+                tag=tag,
+                from_env=from_env,
+                to_env=to_env,
             )
 
             # Step 2: Get artifact digest (verifies artifact exists)
