@@ -132,6 +132,9 @@ from floe_core.oci.metrics import (
     set_oci_metrics,
 )
 
+# Promotion (Epic 8C)
+from floe_core.oci.promotion import PromotionController
+
 # Resilience patterns (T008, T009)
 from floe_core.oci.resilience import (
     CircuitBreaker,
@@ -156,9 +159,6 @@ from floe_core.oci.signing import (
     SigningError,
     sign_artifact,
 )
-
-# Promotion (Epic 8C)
-from floe_core.oci.promotion import PromotionController
 
 # Verification (Epic 8B)
 from floe_core.oci.verification import (

@@ -1,0 +1,282 @@
+# Promotion API Contract
+# Epic 8C: Promotion Lifecycle
+#
+# This defines the CLI interface and internal API contract for promotion operations.
+# Not a REST API - these are CLI commands and Python function signatures.
+
+---
+name: Promotion Lifecycle API
+version: "1.0.0"
+description: Contract for artifact promotion operations
+
+commands:
+  promote:
+    description: Promote artifact to next environment
+    usage: floe platform promote <tag> --from=<env> --to=<env> [options]
+    arguments:
+      tag:
+        type: string
+        required: true
+        pattern: "^v?\\d+\\.\\d+\\.\\d+(-[a-z]+)?$"
+        description: Artifact version tag (e.g., v1.2.3, v1.2.3-dev)
+    options:
+      from:
+        type: string
+        required: true
+        description: Source environment name
+      to:
+        type: string
+        required: true
+        description: Target environment name
+      dry-run:
+        type: boolean
+        default: false
+        description: Preview promotion without executing
+      force:
+        type: boolean
+        default: false
+        description: Re-promote even if target tag exists
+      manifest:
+        type: path
+        default: manifest.yaml
+        description: Path to manifest.yaml
+    exit_codes:
+      0: Promotion successful
+      1: Gate validation failed
+      2: Signature verification failed
+      3: Artifact not found
+      4: Invalid environment transition
+      5: Target tag already exists (use --force)
+    outputs:
+      success:
+        format: |
+          Promoted v1.2.3 from dev to staging
+          New tag: v1.2.3-staging
+          Latest tag updated: latest-staging
+          Gates passed: 3/3
+          Signature: verified (keyless, GitHub Actions)
+      dry_run:
+        format: |
+          [DRY RUN] Would promote v1.2.3 from dev to staging
+          Gates to validate:
+            - policy_compliance: required
+            - tests: required
+            - security_scan: required
+          Signature status: valid
+          Estimated time: ~45s
+      error:
+        format: |
+          ERROR: Gate 'tests' failed
+          Details: 3 tests failed in test-suite-a
+          Promotion aborted. Artifact NOT tagged.
+
+  rollback:
+    description: Rollback environment to previous version
+    usage: floe platform rollback <tag> --env=<env> [options]
+    arguments:
+      tag:
+        type: string
+        required: true
+        description: Target version to rollback to
+    options:
+      env:
+        type: string
+        required: true
+        description: Environment to rollback
+      reason:
+        type: string
+        required: false
+        description: Reason for rollback (prompted if not provided)
+      dry-run:
+        type: boolean
+        default: false
+        description: Show impact analysis without executing
+      manifest:
+        type: path
+        default: manifest.yaml
+        description: Path to manifest.yaml
+    exit_codes:
+      0: Rollback successful
+      1: Version never promoted to environment
+      2: Impact analysis shows breaking changes (use --force)
+      3: Artifact not found
+    outputs:
+      success:
+        format: |
+          Rolled back prod to v1.2.2
+          Previous version: v1.2.3
+          Latest tag updated: latest-prod -> v1.2.2
+          Reason: "Performance regression in v1.2.3"
+      dry_run:
+        format: |
+          [DRY RUN] Would rollback prod to v1.2.2
+
+          Impact Analysis:
+          - Breaking changes: 2
+            - Removed field: config.deprecated_setting
+            - Changed type: limits.memory (str -> int)
+          - Affected products: 3
+            - analytics-pipeline
+            - reporting-dashboard
+            - etl-jobs
+          - Recommendations:
+            - Notify downstream teams before rollback
+            - Verify schema compatibility
+
+  status:
+    description: Show promotion status across environments
+    usage: floe platform status [options]
+    options:
+      env:
+        type: string
+        required: false
+        description: Filter to specific environment
+      history:
+        type: integer
+        default: 0
+        description: Number of historical entries to show
+      format:
+        type: string
+        enum: [table, json, yaml]
+        default: table
+        description: Output format
+      manifest:
+        type: path
+        default: manifest.yaml
+        description: Path to manifest.yaml
+    exit_codes:
+      0: Success
+      1: No promotions found
+    outputs:
+      table:
+        format: |
+          Environment   Version     Digest          Promoted By        At
+          ───────────────────────────────────────────────────────────────
+          dev           v1.2.3      sha256:abc...   ci@github.com      2026-01-15 10:30
+          staging       v1.2.3      sha256:abc...   platform@acme.com  2026-01-15 14:45
+          prod          v1.2.2      sha256:def...   platform@acme.com  2026-01-14 09:00
+      json:
+        schema: PromotionStatus[]
+
+python_api:
+  module: floe_core.oci.promotion
+
+  classes:
+    PromotionController:
+      description: Main controller for promotion operations
+      constructor:
+        parameters:
+          - name: oci_client
+            type: OCIClient
+          - name: config
+            type: PromotionConfig
+          - name: policy_enforcer
+            type: PolicyEnforcer | None
+            default: null
+
+      methods:
+        promote:
+          description: Promote artifact between environments
+          parameters:
+            - name: tag
+              type: str
+              description: Source artifact tag
+            - name: from_env
+              type: str
+              description: Source environment
+            - name: to_env
+              type: str
+              description: Target environment
+            - name: dry_run
+              type: bool
+              default: false
+            - name: force
+              type: bool
+              default: false
+          returns:
+            type: PromotionRecord
+          raises:
+            - GateValidationError
+            - SignatureVerificationError
+            - ArtifactNotFoundError
+            - InvalidTransitionError
+            - TagExistsError
+
+        rollback:
+          description: Rollback environment to previous version
+          parameters:
+            - name: tag
+              type: str
+              description: Target version
+            - name: environment
+              type: str
+            - name: reason
+              type: str
+            - name: dry_run
+              type: bool
+              default: false
+          returns:
+            type: RollbackRecord
+          raises:
+            - VersionNotPromotedError
+            - ArtifactNotFoundError
+
+        get_status:
+          description: Get promotion status for environments
+          parameters:
+            - name: environment
+              type: str | None
+              default: null
+            - name: history_count
+              type: int
+              default: 0
+          returns:
+            type: list[EnvironmentStatus]
+
+        analyze_rollback_impact:
+          description: Analyze impact of potential rollback
+          parameters:
+            - name: tag
+              type: str
+            - name: environment
+              type: str
+          returns:
+            type: RollbackImpactAnalysis
+
+exceptions:
+  GateValidationError:
+    description: One or more validation gates failed
+    attributes:
+      - gate: PromotionGate
+      - details: str
+
+  SignatureVerificationError:
+    description: Artifact signature verification failed
+    attributes:
+      - verification_result: VerificationResult
+
+  ArtifactNotFoundError:
+    description: Artifact tag does not exist
+    attributes:
+      - tag: str
+      - registry: str
+
+  InvalidTransitionError:
+    description: Environment transition not allowed
+    attributes:
+      - from_env: str
+      - to_env: str
+      - reason: str
+
+  TagExistsError:
+    description: Target environment tag already exists
+    attributes:
+      - tag: str
+      - existing_digest: str
+
+  VersionNotPromotedError:
+    description: Version was never promoted to environment
+    attributes:
+      - tag: str
+      - environment: str
+      - available_versions: list[str]
