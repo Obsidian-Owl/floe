@@ -141,6 +141,12 @@ class PromotionController:
             environments=[e.name for e in promotion.environments],
             has_policy_enforcer=policy_enforcer is not None,
         )
+
+        # Verification result cache keyed by artifact digest (T072 - FR-022)
+        # Since artifacts are immutable (same digest = same content), we can
+        # cache verification results to avoid redundant cryptographic operations
+        self._verification_cache: dict[str, "VerificationResult"] = {}
+
         self._log.info("promotion_controller_initialized")
 
     def _get_environment(self, name: str) -> EnvironmentConfig | None:
@@ -692,6 +698,20 @@ class PromotionController:
                 enforcement=enforcement,
             )
 
+            # Check cache first (T072 - FR-022)
+            # Artifacts are immutable - same digest always yields same verification result
+            if artifact_digest in self._verification_cache:
+                cached_result = self._verification_cache[artifact_digest]
+                self._log.info(
+                    "verify_signature_cache_hit",
+                    artifact_ref=artifact_ref,
+                    artifact_digest=artifact_digest,
+                    cached_status=cached_result.status,
+                )
+                span.set_attribute("cache_hit", True)
+                span.set_attribute("verification_status", cached_result.status)
+                return cached_result
+
             # If enforcement is off, skip verification
             if enforcement == "off":
                 self._log.info(
@@ -731,7 +751,17 @@ class PromotionController:
                     is_valid=result.is_valid,
                 )
 
+                # Cache successful verification result (T072 - FR-022)
+                # Cache on digest since artifacts are immutable
+                self._verification_cache[artifact_digest] = result
+                self._log.debug(
+                    "verify_signature_cached",
+                    artifact_digest=artifact_digest,
+                    status=result.status,
+                )
+
                 span.set_attribute("verification_status", result.status)
+                span.set_attribute("cache_hit", False)
                 return result
 
             except Exception as e:
