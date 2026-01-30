@@ -60,6 +60,13 @@ from floe_core.oci.errors import (
     SeparationOfDutiesError,
 )
 from floe_core.telemetry.tracing import create_span
+from floe_core.oci.security_gate import (
+    SecurityGateEvaluation,
+    SecurityGateParseError,
+    evaluate_security_gate,
+    parse_grype_output,
+    parse_trivy_output,
+)
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
     EnvironmentLock,
@@ -73,6 +80,7 @@ from floe_core.schemas.promotion import (
     PromotionStatusResponse,
     RollbackImpactAnalysis,
     RollbackRecord,
+    SecurityGateConfig,
     WebhookConfig,
 )
 
@@ -737,6 +745,166 @@ class PromotionController:
                 error=error_msg,
             )
 
+    def _run_security_gate(
+        self,
+        config: SecurityGateConfig,
+        artifact_ref: str,
+        timeout_seconds: int = 600,
+    ) -> GateResult:
+        """Execute the security scan gate using configured scanner.
+
+        Runs the security scanner command, parses the output, and evaluates
+        whether the artifact passes the security gate based on vulnerability
+        severity thresholds.
+
+        Args:
+            config: SecurityGateConfig with scanner command and thresholds.
+            artifact_ref: Full artifact reference (registry/repo:tag@digest).
+            timeout_seconds: Command timeout in seconds.
+
+        Returns:
+            GateResult with status based on security scan evaluation.
+
+        Note:
+            This gate:
+            - Runs the configured scanner command (Trivy or Grype)
+            - Parses JSON output using the appropriate parser
+            - Evaluates vulnerabilities against severity thresholds
+            - Returns FAILED if blocking vulnerabilities found
+        """
+        start_time = time.monotonic()
+        self._log.info(
+            "security_gate_started",
+            scanner_format=config.scanner_format,
+            block_on_severity=config.block_on_severity,
+            ignore_unfixed=config.ignore_unfixed,
+        )
+
+        try:
+            # Substitute artifact reference in command
+            command = config.command.replace("${ARTIFACT_REF}", artifact_ref)
+
+            self._log.debug(
+                "security_gate_command",
+                command=command,
+                timeout_seconds=timeout_seconds,
+            )
+
+            # Run the scanner command
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=min(timeout_seconds, config.timeout_seconds),
+            )
+
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+
+            # Check for command failure (non-zero exit that isn't just findings)
+            # Note: Trivy returns 0 even with vulnerabilities, Grype may vary
+            if result.returncode != 0 and not result.stdout:
+                error_msg = (
+                    f"Security scanner failed with exit code {result.returncode}: "
+                    f"{result.stderr[:500] if result.stderr else 'No error output'}"
+                )
+                self._log.error(
+                    "security_gate_scanner_failed",
+                    exit_code=result.returncode,
+                    stderr=result.stderr[:500] if result.stderr else None,
+                )
+                return GateResult(
+                    gate=PromotionGate.SECURITY_SCAN,
+                    status=GateStatus.FAILED,
+                    duration_ms=duration_ms,
+                    error=error_msg,
+                )
+
+            # Parse the scanner output
+            scanner_output = result.stdout
+            if config.scanner_format == "trivy":
+                scan_result = parse_trivy_output(
+                    output=scanner_output,
+                    block_on_severity=config.block_on_severity,
+                    ignore_unfixed=config.ignore_unfixed,
+                )
+            else:  # grype
+                scan_result = parse_grype_output(
+                    output=scanner_output,
+                    block_on_severity=config.block_on_severity,
+                    ignore_unfixed=config.ignore_unfixed,
+                )
+
+            # Evaluate the security gate
+            evaluation = evaluate_security_gate(scan_result, config)
+
+            self._log.info(
+                "security_gate_evaluated",
+                passed=evaluation.passed,
+                total_vulnerabilities=scan_result.total_vulnerabilities,
+                blocking_cves_count=len(evaluation.blocking_cves),
+                ignored_unfixed=scan_result.ignored_unfixed,
+                duration_ms=duration_ms,
+            )
+
+            if evaluation.passed:
+                return GateResult(
+                    gate=PromotionGate.SECURITY_SCAN,
+                    status=GateStatus.PASSED,
+                    duration_ms=duration_ms,
+                )
+            else:
+                return GateResult(
+                    gate=PromotionGate.SECURITY_SCAN,
+                    status=GateStatus.FAILED,
+                    duration_ms=duration_ms,
+                    error=evaluation.reason,
+                )
+
+        except subprocess.TimeoutExpired:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_msg = f"Security scan timed out after {timeout_seconds}s"
+            self._log.error(
+                "security_gate_timeout",
+                timeout_seconds=timeout_seconds,
+            )
+            return GateResult(
+                gate=PromotionGate.SECURITY_SCAN,
+                status=GateStatus.FAILED,
+                duration_ms=duration_ms,
+                error=error_msg,
+            )
+
+        except SecurityGateParseError as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_msg = f"Failed to parse security scanner output: {e}"
+            self._log.error(
+                "security_gate_parse_error",
+                scanner_format=config.scanner_format,
+                error=str(e),
+            )
+            return GateResult(
+                gate=PromotionGate.SECURITY_SCAN,
+                status=GateStatus.FAILED,
+                duration_ms=duration_ms,
+                error=error_msg,
+            )
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            error_msg = f"Security gate error: {e}"
+            self._log.error(
+                "security_gate_error",
+                duration_ms=duration_ms,
+                error=str(e),
+            )
+            return GateResult(
+                gate=PromotionGate.SECURITY_SCAN,
+                status=GateStatus.FAILED,
+                duration_ms=duration_ms,
+                error=error_msg,
+            )
+
     def _run_all_gates(
         self,
         to_env: str,
@@ -802,6 +970,27 @@ class PromotionController:
 
             # Skip disabled gates
             if gate_config is False:
+                continue
+
+            # Special handling for SECURITY_SCAN gate with SecurityGateConfig
+            if gate == PromotionGate.SECURITY_SCAN and isinstance(
+                gate_config, SecurityGateConfig
+            ):
+                gate_result = self._run_security_gate(
+                    config=gate_config,
+                    artifact_ref=artifact_ref,
+                    timeout_seconds=timeout_seconds,
+                )
+                results.append(gate_result)
+
+                # Check for failure (stop unless dry_run)
+                if gate_result.status == GateStatus.FAILED and not dry_run:
+                    self._log.warning(
+                        "run_all_gates_stopped",
+                        reason="security_scan_failed",
+                        results_count=len(results),
+                    )
+                    return results
                 continue
 
             # Get command for the gate
