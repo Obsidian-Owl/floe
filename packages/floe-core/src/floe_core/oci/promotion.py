@@ -53,7 +53,11 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from floe_core.oci.errors import EnvironmentLockedError, InvalidTransitionError
+from floe_core.oci.errors import (
+    AuthorizationError,
+    EnvironmentLockedError,
+    InvalidTransitionError,
+)
 from floe_core.telemetry.tracing import create_span
 from floe_core.schemas.promotion import (
     EnvironmentConfig,
@@ -73,6 +77,7 @@ from floe_core.schemas.promotion import (
 
 if TYPE_CHECKING:
     from floe_core.enforcement import PolicyEnforcer
+    from floe_core.oci.authorization import AuthorizationChecker
     from floe_core.oci.client import OCIClient
     from floe_core.oci.webhooks import WebhookNotifier
     from floe_core.schemas.oci import RegistryConfig
@@ -167,6 +172,9 @@ class PromotionController:
                 webhook_count=len(promotion.webhooks),
             )
 
+        # Authorization checker for access control (T128 - FR-045 through FR-048)
+        self._authorization_checker: "AuthorizationChecker | None" = None
+
         self._log.info("promotion_controller_initialized")
 
     def _get_environment(self, name: str) -> EnvironmentConfig | None:
@@ -255,6 +263,83 @@ class PromotionController:
                 event_type=event_type,
                 error=str(e),
             )
+
+    def _check_authorization(
+        self,
+        operator: str,
+        environment: str,
+    ) -> tuple[bool, str | None]:
+        """Check if operator is authorized to promote to environment (T128).
+
+        Implements FR-045 (identity), FR-046 (env rules), FR-047 (groups), FR-048 (audit).
+        Gets authorization config from the target environment and checks
+        if the operator is authorized via groups or explicit operators list.
+
+        Args:
+            operator: Identity of the operator (email or username).
+            environment: Target environment name.
+
+        Returns:
+            Tuple of (authorized: bool, authorized_via: str | None).
+            If not authorized, authorized_via is None.
+
+        Raises:
+            AuthorizationError: If operator is not authorized.
+        """
+        from floe_core.oci.authorization import AuthorizationChecker, AuthorizationResult
+
+        # Get environment config for target
+        env_config = self._get_environment(environment)
+        if env_config is None or env_config.authorization is None:
+            # No authorization config = allow all
+            self._log.debug(
+                "authorization_allowed_no_config",
+                operator=operator,
+                environment=environment,
+            )
+            return True, "no_config"
+
+        # Create checker with environment's authorization config
+        checker = AuthorizationChecker(config=env_config.authorization)
+
+        # Get operator groups from client credentials (if available)
+        # In production, this would come from registry auth metadata
+        groups: list[str] = []
+        if hasattr(self.client, "_credentials") and self.client._credentials:
+            # Try to extract groups from credentials metadata
+            metadata = getattr(self.client._credentials, "metadata", None)
+            if metadata:
+                groups = checker.get_operator_groups(metadata)
+
+        # Perform authorization check
+        result: AuthorizationResult = checker.check_authorization(
+            operator=operator,
+            groups=groups,
+        )
+
+        if result.authorized:
+            self._log.info(
+                "authorization_passed",
+                operator=operator,
+                environment=environment,
+                authorized_via=result.authorized_via,
+                groups_checked=result.groups_checked,
+            )
+            return True, result.authorized_via
+
+        # Authorization denied - raise error
+        self._log.warning(
+            "authorization_denied",
+            operator=operator,
+            environment=environment,
+            reason=result.reason,
+            groups_checked=result.groups_checked,
+        )
+        raise AuthorizationError(
+            operator=operator,
+            required_groups=list(env_config.authorization.allowed_groups or []),
+            reason=result.reason or "Not authorized",
+        )
 
     def _validate_transition(self, from_env: str, to_env: str) -> None:
         """Validate that a promotion transition is allowed.
@@ -1509,6 +1594,9 @@ class PromotionController:
                     reason=lock_status.reason or "",
                 )
 
+            # Step 1.6: Check operator authorization (T128 - FR-045 through FR-048)
+            authorized, authorized_via = self._check_authorization(operator, to_env)
+
             # Step 2: Get artifact digest (verifies artifact exists)
             artifact_digest = self._get_artifact_digest(tag)
 
@@ -1610,7 +1698,8 @@ class PromotionController:
                     promoted_at=promoted_at,
                     dry_run=dry_run,
                     trace_id=effective_trace_id,
-                    authorization_passed=True,  # TODO: T040+ - Real authorization check
+                    authorization_passed=authorized,  # T128 - FR-048 audit
+                    authorized_via=authorized_via,  # T128 - FR-048 audit
                     warnings=warnings.copy(),  # Copy current warnings
                 )
 
@@ -1652,7 +1741,8 @@ class PromotionController:
                 promoted_at=promoted_at,
                 dry_run=dry_run,
                 trace_id=effective_trace_id,
-                authorization_passed=True,  # TODO: T040+ - Real authorization check
+                authorization_passed=authorized,  # T128 - FR-048 audit
+                authorized_via=authorized_via,  # T128 - FR-048 audit
                 warnings=warnings,
             )
 
