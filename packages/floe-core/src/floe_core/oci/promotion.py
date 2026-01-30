@@ -1334,11 +1334,13 @@ class PromotionController:
                 )
 
             # Step 5: Verify signature (only after gates pass)
+            # Read enforcement mode from config (T073 - FR-018/FR-019/FR-020)
             # The _verify_signature method handles enforcement logic internally
             # It returns a result object with status or raises SignatureVerificationError
             verification_result = self._verify_signature(
                 artifact_ref=artifact_ref,
                 artifact_digest=artifact_digest,
+                enforcement=self.promotion.signature_enforcement,
             )
             # If _verify_signature doesn't raise, signature is valid
             signature_verified = verification_result.status == "valid"
