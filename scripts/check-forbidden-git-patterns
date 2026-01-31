@@ -28,7 +28,7 @@ FORBIDDEN_PATTERNS=(
 
 # Check each forbidden pattern
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
-    if echo "$COMMAND" | grep -qF "$pattern"; then
+    if echo "$COMMAND" | grep -qF -- "$pattern"; then
         echo "═══════════════════════════════════════════════════════════════" >&2
         echo "🚫 BLOCKED: Forbidden git pattern detected: '$pattern'" >&2
         echo "═══════════════════════════════════════════════════════════════" >&2

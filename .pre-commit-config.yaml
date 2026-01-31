@@ -204,6 +204,15 @@ repos:
         stages: [pre-push]
         pass_filenames: false
 
+      # Hardcoded sleep check (matches CI - redundant but ensures alignment)
+      - id: no-hardcoded-sleep-prepush
+        name: no hardcoded sleep (pre-push)
+        entry: scripts/pre-commit-no-sleep.sh
+        language: script
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
       # Requirement traceability (matches CI threshold)
       - id: traceability
         name: requirement traceability (80%)
