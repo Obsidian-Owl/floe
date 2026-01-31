@@ -410,3 +410,555 @@ class TestExceptionCatching:
         except OCIError:
             pass
         assert caught_auth, "AuthenticationError should be caught specifically"
+
+
+# =============================================================================
+# Promotion-Specific Exceptions (Epic 8C)
+# =============================================================================
+
+
+# Import promotion error classes
+GateValidationError = getattr(oci_errors, "GateValidationError", None)
+InvalidTransitionError = getattr(oci_errors, "InvalidTransitionError", None)
+TagExistsError = getattr(oci_errors, "TagExistsError", None)
+VersionNotPromotedError = getattr(oci_errors, "VersionNotPromotedError", None)
+AuthorizationError = getattr(oci_errors, "AuthorizationError", None)
+EnvironmentLockedError = getattr(oci_errors, "EnvironmentLockedError", None)
+
+
+class TestGateValidationError:
+    """Tests for GateValidationError (exit_code=8)."""
+
+    @pytest.mark.requirement("8C-FR-008")
+    def test_gate_validation_error_exit_code(self) -> None:
+        """GateValidationError has exit code 8."""
+        assert GateValidationError is not None, "GateValidationError not implemented"
+        error = GateValidationError(
+            gate="tests",
+            details="Test suite failed: 3 tests failing",
+        )
+        assert error.exit_code == 8
+
+    @pytest.mark.requirement("8C-FR-008")
+    def test_gate_validation_error_attributes(self) -> None:
+        """GateValidationError stores gate and details."""
+        assert GateValidationError is not None
+        error = GateValidationError(
+            gate="security_scan",
+            details="Critical CVE found: CVE-2024-1234",
+        )
+        assert error.gate == "security_scan"
+        assert error.details == "Critical CVE found: CVE-2024-1234"
+
+    @pytest.mark.requirement("8C-FR-008")
+    def test_gate_validation_error_message(self) -> None:
+        """GateValidationError formats message correctly."""
+        assert GateValidationError is not None
+        error = GateValidationError(
+            gate="policy_compliance",
+            details="Required label 'owner' missing",
+        )
+        msg = str(error)
+        assert "policy_compliance" in msg
+        assert "Required label" in msg
+
+    @pytest.mark.requirement("8C-FR-008")
+    def test_gate_validation_error_inherits_oci_error(self) -> None:
+        """GateValidationError inherits from OCIError."""
+        assert GateValidationError is not None
+        assert issubclass(GateValidationError, OCIError)
+
+
+class TestInvalidTransitionError:
+    """Tests for InvalidTransitionError (exit_code=9)."""
+
+    @pytest.mark.requirement("8C-FR-009")
+    def test_invalid_transition_error_exit_code(self) -> None:
+        """InvalidTransitionError has exit code 9."""
+        assert InvalidTransitionError is not None, "InvalidTransitionError not implemented"
+        error = InvalidTransitionError(
+            from_env="prod",
+            to_env="dev",
+            reason="Cannot demote from prod to dev",
+        )
+        assert error.exit_code == 9
+
+    @pytest.mark.requirement("8C-FR-009")
+    def test_invalid_transition_error_attributes(self) -> None:
+        """InvalidTransitionError stores from_env, to_env, reason."""
+        assert InvalidTransitionError is not None
+        error = InvalidTransitionError(
+            from_env="dev",
+            to_env="prod",
+            reason="Must promote through staging first",
+        )
+        assert error.from_env == "dev"
+        assert error.to_env == "prod"
+        assert error.reason == "Must promote through staging first"
+
+    @pytest.mark.requirement("8C-FR-009")
+    def test_invalid_transition_error_message(self) -> None:
+        """InvalidTransitionError formats message correctly."""
+        assert InvalidTransitionError is not None
+        error = InvalidTransitionError(
+            from_env="staging",
+            to_env="dev",
+            reason="Cannot demote artifacts",
+        )
+        msg = str(error)
+        assert "staging" in msg
+        assert "dev" in msg
+        assert "demote" in msg.lower() or "Cannot" in msg
+
+    @pytest.mark.requirement("8C-FR-009")
+    def test_invalid_transition_error_inherits_oci_error(self) -> None:
+        """InvalidTransitionError inherits from OCIError."""
+        assert InvalidTransitionError is not None
+        assert issubclass(InvalidTransitionError, OCIError)
+
+
+class TestTagExistsError:
+    """Tests for TagExistsError (exit_code=10)."""
+
+    @pytest.mark.requirement("8C-FR-010")
+    def test_tag_exists_error_exit_code(self) -> None:
+        """TagExistsError has exit code 10."""
+        assert TagExistsError is not None, "TagExistsError not implemented"
+        error = TagExistsError(
+            tag="v1.0.0-staging",
+            existing_digest="sha256:abc123",
+        )
+        assert error.exit_code == 10
+
+    @pytest.mark.requirement("8C-FR-010")
+    def test_tag_exists_error_attributes(self) -> None:
+        """TagExistsError stores tag and existing_digest."""
+        assert TagExistsError is not None
+        error = TagExistsError(
+            tag="v1.0.0-prod",
+            existing_digest="sha256:def456",
+        )
+        assert error.tag == "v1.0.0-prod"
+        assert error.existing_digest == "sha256:def456"
+
+    @pytest.mark.requirement("8C-FR-010")
+    def test_tag_exists_error_message(self) -> None:
+        """TagExistsError formats message correctly."""
+        assert TagExistsError is not None
+        error = TagExistsError(
+            tag="v1.0.0-staging",
+            existing_digest="sha256:abc123def456789",
+        )
+        msg = str(error)
+        assert "v1.0.0-staging" in msg
+        assert "exists" in msg.lower() or "already" in msg.lower()
+
+    @pytest.mark.requirement("8C-FR-010")
+    def test_tag_exists_error_inherits_oci_error(self) -> None:
+        """TagExistsError inherits from OCIError."""
+        assert TagExistsError is not None
+        assert issubclass(TagExistsError, OCIError)
+
+
+class TestVersionNotPromotedError:
+    """Tests for VersionNotPromotedError (exit_code=11)."""
+
+    @pytest.mark.requirement("8C-FR-011")
+    def test_version_not_promoted_error_exit_code(self) -> None:
+        """VersionNotPromotedError has exit code 11."""
+        assert VersionNotPromotedError is not None, "VersionNotPromotedError not implemented"
+        error = VersionNotPromotedError(
+            tag="v1.0.0",
+            environment="staging",
+            available_versions=["v0.9.0", "v0.9.1"],
+        )
+        assert error.exit_code == 11
+
+    @pytest.mark.requirement("8C-FR-011")
+    def test_version_not_promoted_error_attributes(self) -> None:
+        """VersionNotPromotedError stores tag, environment, available_versions."""
+        assert VersionNotPromotedError is not None
+        error = VersionNotPromotedError(
+            tag="v2.0.0",
+            environment="prod",
+            available_versions=["v1.0.0", "v1.1.0"],
+        )
+        assert error.tag == "v2.0.0"
+        assert error.environment == "prod"
+        assert error.available_versions == ["v1.0.0", "v1.1.0"]
+
+    @pytest.mark.requirement("8C-FR-011")
+    def test_version_not_promoted_error_message(self) -> None:
+        """VersionNotPromotedError formats message correctly."""
+        assert VersionNotPromotedError is not None
+        error = VersionNotPromotedError(
+            tag="v1.0.0",
+            environment="staging",
+            available_versions=["v0.9.0"],
+        )
+        msg = str(error)
+        assert "v1.0.0" in msg
+        assert "staging" in msg
+
+    @pytest.mark.requirement("8C-FR-011")
+    def test_version_not_promoted_error_inherits_oci_error(self) -> None:
+        """VersionNotPromotedError inherits from OCIError."""
+        assert VersionNotPromotedError is not None
+        assert issubclass(VersionNotPromotedError, OCIError)
+
+
+class TestAuthorizationError:
+    """Tests for AuthorizationError (exit_code=12)."""
+
+    @pytest.mark.requirement("8C-FR-012")
+    def test_authorization_error_exit_code(self) -> None:
+        """AuthorizationError has exit code 12."""
+        assert AuthorizationError is not None, "AuthorizationError not implemented"
+        error = AuthorizationError(
+            operator="user@example.com",
+            required_groups=["platform-admins"],
+            reason="Not a member of required groups",
+        )
+        assert error.exit_code == 12
+
+    @pytest.mark.requirement("8C-FR-012")
+    def test_authorization_error_attributes(self) -> None:
+        """AuthorizationError stores operator, required_groups, reason."""
+        assert AuthorizationError is not None
+        error = AuthorizationError(
+            operator="dev@example.com",
+            required_groups=["release-managers", "platform-admins"],
+            reason="Separation of duties violation",
+        )
+        assert error.operator == "dev@example.com"
+        assert error.required_groups == ["release-managers", "platform-admins"]
+        assert error.reason == "Separation of duties violation"
+
+    @pytest.mark.requirement("8C-FR-012")
+    def test_authorization_error_message(self) -> None:
+        """AuthorizationError formats message correctly."""
+        assert AuthorizationError is not None
+        error = AuthorizationError(
+            operator="user@example.com",
+            required_groups=["admins"],
+            reason="Not authorized",
+        )
+        msg = str(error)
+        assert "user@example.com" in msg
+        assert "admins" in msg or "authorized" in msg.lower()
+
+    @pytest.mark.requirement("8C-FR-012")
+    def test_authorization_error_inherits_oci_error(self) -> None:
+        """AuthorizationError inherits from OCIError."""
+        assert AuthorizationError is not None
+        assert issubclass(AuthorizationError, OCIError)
+
+
+class TestEnvironmentLockedError:
+    """Tests for EnvironmentLockedError (exit_code=13)."""
+
+    @pytest.mark.requirement("8C-FR-013")
+    def test_environment_locked_error_exit_code(self) -> None:
+        """EnvironmentLockedError has exit code 13."""
+        assert EnvironmentLockedError is not None, "EnvironmentLockedError not implemented"
+        error = EnvironmentLockedError(
+            environment="prod",
+            locked_by="sre@example.com",
+            locked_at="2026-01-15T10:30:00Z",
+            reason="Incident #123",
+        )
+        assert error.exit_code == 13
+
+    @pytest.mark.requirement("8C-FR-013")
+    def test_environment_locked_error_attributes(self) -> None:
+        """EnvironmentLockedError stores environment, locked_by, locked_at, reason."""
+        assert EnvironmentLockedError is not None
+        error = EnvironmentLockedError(
+            environment="staging",
+            locked_by="ops@example.com",
+            locked_at="2026-01-20T08:00:00Z",
+            reason="Maintenance window",
+        )
+        assert error.environment == "staging"
+        assert error.locked_by == "ops@example.com"
+        assert error.locked_at == "2026-01-20T08:00:00Z"
+        assert error.reason == "Maintenance window"
+
+    @pytest.mark.requirement("8C-FR-013")
+    def test_environment_locked_error_message(self) -> None:
+        """EnvironmentLockedError formats message correctly."""
+        assert EnvironmentLockedError is not None
+        error = EnvironmentLockedError(
+            environment="prod",
+            locked_by="admin@example.com",
+            locked_at="2026-01-15T10:30:00Z",
+            reason="Database migration",
+        )
+        msg = str(error)
+        assert "prod" in msg
+        assert "locked" in msg.lower()
+
+    @pytest.mark.requirement("8C-FR-013")
+    def test_environment_locked_error_inherits_oci_error(self) -> None:
+        """EnvironmentLockedError inherits from OCIError."""
+        assert EnvironmentLockedError is not None
+        assert issubclass(EnvironmentLockedError, OCIError)
+
+
+# Import additional error classes for complete coverage
+SignatureVerificationError = getattr(oci_errors, "SignatureVerificationError", None)
+ConcurrentSigningError = getattr(oci_errors, "ConcurrentSigningError", None)
+SeparationOfDutiesError = getattr(oci_errors, "SeparationOfDutiesError", None)
+
+
+class TestSignatureVerificationError:
+    """Tests for SignatureVerificationError (exit_code=6)."""
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_exit_code(self) -> None:
+        """SignatureVerificationError has exit code 6."""
+        assert SignatureVerificationError is not None
+        error = SignatureVerificationError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            reason="No signature found",
+        )
+        assert error.exit_code == 6
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_attributes(self) -> None:
+        """SignatureVerificationError stores artifact_ref, reason, signers."""
+        assert SignatureVerificationError is not None
+        error = SignatureVerificationError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            reason="Signer mismatch",
+            expected_signer="repo:acme/floe:ref:refs/heads/main",
+            actual_signer="repo:unknown/repo:ref:refs/heads/main",
+        )
+        assert error.artifact_ref == "oci://registry.example.com/floe:v1.0.0"
+        assert error.reason == "Signer mismatch"
+        assert error.expected_signer == "repo:acme/floe:ref:refs/heads/main"
+        assert error.actual_signer == "repo:unknown/repo:ref:refs/heads/main"
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_message_with_signers(self) -> None:
+        """SignatureVerificationError includes signer mismatch in message."""
+        assert SignatureVerificationError is not None
+        error = SignatureVerificationError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            reason="Signer not in trusted issuers",
+            expected_signer="expected@example.com",
+            actual_signer="actual@example.com",
+        )
+        msg = str(error)
+        assert "expected@example.com" in msg
+        assert "actual@example.com" in msg
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_remediation_unsigned(self) -> None:
+        """SignatureVerificationError provides remediation for unsigned artifacts."""
+        assert SignatureVerificationError is not None
+        error = SignatureVerificationError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            reason="No signature found - artifact is unsigned",
+        )
+        msg = str(error)
+        assert "Sign the artifact" in msg or "floe artifact sign" in msg
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_remediation_signer_mismatch(self) -> None:
+        """SignatureVerificationError provides remediation for signer mismatch."""
+        assert SignatureVerificationError is not None
+        error = SignatureVerificationError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            reason="Signer not in trusted issuers",
+        )
+        msg = str(error)
+        assert "trusted_issuers" in msg or "re-sign" in msg.lower()
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_remediation_expired(self) -> None:
+        """SignatureVerificationError provides remediation for expired signatures."""
+        assert SignatureVerificationError is not None
+        error = SignatureVerificationError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            reason="Signature has expired",
+        )
+        msg = str(error)
+        assert "re-sign" in msg.lower() or "--force" in msg
+
+    @pytest.mark.requirement("8B-FR-006")
+    def test_signature_verification_error_inherits_oci_error(self) -> None:
+        """SignatureVerificationError inherits from OCIError."""
+        assert SignatureVerificationError is not None
+        assert issubclass(SignatureVerificationError, OCIError)
+
+
+class TestConcurrentSigningError:
+    """Tests for ConcurrentSigningError (exit_code=7)."""
+
+    @pytest.mark.requirement("8B-FR-007")
+    def test_concurrent_signing_error_exit_code(self) -> None:
+        """ConcurrentSigningError has exit code 7."""
+        assert ConcurrentSigningError is not None
+        error = ConcurrentSigningError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            timeout_seconds=30.0,
+        )
+        assert error.exit_code == 7
+
+    @pytest.mark.requirement("8B-FR-007")
+    def test_concurrent_signing_error_attributes(self) -> None:
+        """ConcurrentSigningError stores artifact_ref and timeout_seconds."""
+        assert ConcurrentSigningError is not None
+        error = ConcurrentSigningError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            timeout_seconds=60.0,
+        )
+        assert error.artifact_ref == "oci://registry.example.com/floe:v1.0.0"
+        assert error.timeout_seconds == 60.0
+
+    @pytest.mark.requirement("8B-FR-007")
+    def test_concurrent_signing_error_message(self) -> None:
+        """ConcurrentSigningError formats message with timeout."""
+        assert ConcurrentSigningError is not None
+        error = ConcurrentSigningError(
+            artifact_ref="oci://registry.example.com/floe:v1.0.0",
+            timeout_seconds=30.0,
+        )
+        msg = str(error)
+        assert "signing lock" in msg.lower() or "lock" in msg.lower()
+        assert "30" in msg  # timeout
+        assert "FLOE_SIGNING_LOCK_TIMEOUT" in msg
+
+    @pytest.mark.requirement("8B-FR-007")
+    def test_concurrent_signing_error_inherits_oci_error(self) -> None:
+        """ConcurrentSigningError inherits from OCIError."""
+        assert ConcurrentSigningError is not None
+        assert issubclass(ConcurrentSigningError, OCIError)
+
+
+class TestSeparationOfDutiesError:
+    """Tests for SeparationOfDutiesError (exit_code=14)."""
+
+    @pytest.mark.requirement("8C-FR-049")
+    def test_separation_of_duties_error_exit_code(self) -> None:
+        """SeparationOfDutiesError has exit code 14."""
+        assert SeparationOfDutiesError is not None
+        error = SeparationOfDutiesError(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            from_env="staging",
+            to_env="prod",
+        )
+        assert error.exit_code == 14
+
+    @pytest.mark.requirement("8C-FR-049")
+    def test_separation_of_duties_error_attributes(self) -> None:
+        """SeparationOfDutiesError stores operator, previous_operator, envs."""
+        assert SeparationOfDutiesError is not None
+        error = SeparationOfDutiesError(
+            operator="bob@example.com",
+            previous_operator="bob@example.com",
+            from_env="dev",
+            to_env="staging",
+        )
+        assert error.operator == "bob@example.com"
+        assert error.previous_operator == "bob@example.com"
+        assert error.from_env == "dev"
+        assert error.to_env == "staging"
+
+    @pytest.mark.requirement("8C-FR-049")
+    def test_separation_of_duties_error_message(self) -> None:
+        """SeparationOfDutiesError formats message with environments."""
+        assert SeparationOfDutiesError is not None
+        error = SeparationOfDutiesError(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            from_env="staging",
+            to_env="prod",
+        )
+        msg = str(error)
+        assert "alice@example.com" in msg
+        assert "staging" in msg
+        assert "prod" in msg
+        assert "separation" in msg.lower() or "different" in msg.lower()
+
+    @pytest.mark.requirement("8C-FR-049")
+    def test_separation_of_duties_error_remediation(self) -> None:
+        """SeparationOfDutiesError provides remediation steps."""
+        assert SeparationOfDutiesError is not None
+        error = SeparationOfDutiesError(
+            operator="alice@example.com",
+            previous_operator="alice@example.com",
+            from_env="staging",
+            to_env="prod",
+        )
+        msg = str(error)
+        assert "different team member" in msg.lower() or "remediation" in msg.lower()
+
+    @pytest.mark.requirement("8C-FR-049")
+    def test_separation_of_duties_error_inherits_oci_error(self) -> None:
+        """SeparationOfDutiesError inherits from OCIError."""
+        assert SeparationOfDutiesError is not None
+        assert issubclass(SeparationOfDutiesError, OCIError)
+
+
+class TestAuthorizationErrorGuidance:
+    """Tests for AuthorizationError.get_actionable_guidance() method."""
+
+    @pytest.mark.requirement("8C-FR-048")
+    def test_authorization_error_get_actionable_guidance_with_groups(self) -> None:
+        """get_actionable_guidance returns group-based guidance."""
+        assert AuthorizationError is not None
+        error = AuthorizationError(
+            operator="user@example.com",
+            required_groups=["platform-admins", "release-managers"],
+            reason="Not authorized",
+            environment="prod",
+        )
+        guidance = error.get_actionable_guidance()
+        assert "platform-admins" in guidance
+        assert "release-managers" in guidance
+        assert "floe promote info" in guidance or "floe whoami" in guidance
+
+    @pytest.mark.requirement("8C-FR-048")
+    def test_authorization_error_get_actionable_guidance_with_operators(self) -> None:
+        """get_actionable_guidance returns operator-based guidance."""
+        assert AuthorizationError is not None
+        error = AuthorizationError(
+            operator="user@example.com",
+            required_groups=[],
+            reason="Not in allowed operators",
+            environment="prod",
+            allowed_operators=["admin@example.com", "sre@example.com"],
+        )
+        guidance = error.get_actionable_guidance()
+        assert "allowed operators" in guidance.lower() or "contact" in guidance.lower()
+
+    @pytest.mark.requirement("8C-FR-048")
+    def test_authorization_error_message_includes_environment(self) -> None:
+        """AuthorizationError message includes environment when provided."""
+        assert AuthorizationError is not None
+        error = AuthorizationError(
+            operator="user@example.com",
+            required_groups=["admins"],
+            reason="Not authorized",
+            environment="prod",
+        )
+        msg = str(error)
+        assert "prod" in msg
+
+    @pytest.mark.requirement("8C-FR-048")
+    def test_authorization_error_message_truncates_many_operators(self) -> None:
+        """AuthorizationError truncates long allowed_operators list."""
+        assert AuthorizationError is not None
+        many_operators = [f"user{i}@example.com" for i in range(10)]
+        error = AuthorizationError(
+            operator="user@example.com",
+            required_groups=[],
+            reason="Not authorized",
+            allowed_operators=many_operators,
+        )
+        msg = str(error)
+        # Should truncate to first 3 and show "... (7 more)"
+        assert "more" in msg.lower() or "user0@example.com" in msg

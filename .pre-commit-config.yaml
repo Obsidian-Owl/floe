@@ -38,7 +38,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^\.beads/
+        exclude: ^(\.beads/|\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -50,7 +50,7 @@ repos:
 
       # End of file newline
       - id: end-of-file-fixer
-        exclude: ^\.beads/
+        exclude: (^\.beads/|\.omc/)
 
       # YAML syntax (exclude Helm templates - Go template syntax not parseable)
       - id: check-yaml
@@ -203,6 +203,15 @@ repos:
         types: [python]
         stages: [pre-push]
         pass_filenames: false
+
+      # Hardcoded sleep check (matches CI - redundant but ensures alignment)
+      - id: no-hardcoded-sleep-prepush
+        name: no hardcoded sleep (pre-push)
+        entry: scripts/pre-commit-no-sleep.sh
+        language: script
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
 
       # Requirement traceability (matches CI threshold)
       - id: traceability

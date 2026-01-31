@@ -6,8 +6,12 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  compile  Compile FloeSpec and Manifest into CompiledArtifacts (FR-010).
-  deploy   Deploy platform to environment (FR-018).
-  publish  Publish compiled artifacts to registry (FR-017).
-  status   Check deployment status (FR-019).
-  test     Run platform tests (FR-016).
+  compile   Compile FloeSpec and Manifest into CompiledArtifacts (FR-010).
+  deploy    Deploy platform to environment (FR-018).
+  lock      Lock an environment to prevent promotions (FR-035).
+  promote   Promote an artifact from one environment to the next (FR-001).
+  publish   Publish compiled artifacts to registry (FR-017).
+  rollback  Rollback an environment to a previous artifact version (FR-013).
+  status    Query artifact promotion status across environments (FR-023).
+  test      Run platform tests (FR-016).
+  unlock    Unlock an environment to allow promotions (FR-037).

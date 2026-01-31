@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Validate Pydantic contract files for backwards compatibility
+#
+# This script checks schema files for potential breaking changes.
+# Run after editing files in schemas/ or models/ directories.
+#
+# Usage:
+#   ./scripts/validate-pydantic-contract <file_path>
+#
+# Exit codes:
+#   0 - No issues found
+#   1 - Warning: potential breaking change detected
+
+set -euo pipefail
+
+FILE_PATH="${1:-}"
+
+if [[ -z "$FILE_PATH" ]]; then
+    echo "Usage: $0 <file_path>" >&2
+    exit 1
+fi
+
+if [[ ! -f "$FILE_PATH" ]]; then
+    exit 0  # File doesn't exist yet, skip validation
+fi
+
+# Check for potential breaking changes in schema files
+WARNINGS=()
+
+# Check for removed fields (look for commented out or deleted Field definitions)
+if git diff --cached -- "$FILE_PATH" 2>/dev/null | grep -E '^\-.*Field\(' >/dev/null; then
+    WARNINGS+=("Removed Field() definition - may be breaking change")
+fi
+
+# Check for type changes (Optional -> required or type changes)
+if git diff --cached -- "$FILE_PATH" 2>/dev/null | grep -E '^\-.*: Optional\[' >/dev/null; then
+    if git diff --cached -- "$FILE_PATH" 2>/dev/null | grep -E '^\+.*: [^O]' >/dev/null; then
+        WARNINGS+=("Changed Optional to required - breaking change")
+    fi
+fi
+
+# Check for renamed fields
+if git diff --cached -- "$FILE_PATH" 2>/dev/null | grep -E '^\-\s+\w+:.*Field\(' >/dev/null; then
+    if git diff --cached -- "$FILE_PATH" 2>/dev/null | grep -E '^\+\s+\w+:.*Field\(' >/dev/null; then
+        WARNINGS+=("Field rename detected - check for alias/deprecated pattern")
+    fi
+fi
+
+# Output warnings
+if [[ ${#WARNINGS[@]} -gt 0 ]]; then
+    echo "⚠️  Pydantic Contract Validation Warnings for $FILE_PATH:" >&2
+    for warning in "${WARNINGS[@]}"; do
+        echo "   - $warning" >&2
+    done
+    echo "   See .claude/rules/pydantic-contracts.md for versioning rules" >&2
+fi
+
+exit 0

@@ -98,6 +98,7 @@ from floe_core.schemas.oci import (
 if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_core.schemas.promotion import PromotionConfig, PromotionRecord
     from floe_core.schemas.signing import SignatureMetadata, SigningConfig
 
 logger = structlog.get_logger(__name__)
@@ -1305,37 +1306,80 @@ class OCIClient:
         source_tag: str,
         target_environment: str,
         *,
-        target_tag: str | None = None,
-    ) -> str:
+        source_environment: str | None = None,
+        operator: str | None = None,
+        promotion_config: PromotionConfig | None = None,
+        dry_run: bool = False,
+    ) -> PromotionRecord:
         """Promote artifact to target environment.
 
-        Promotes an artifact from one environment to another by creating
-        a new tag or copying to a target registry. This is a placeholder
-        for Epic 8C (Artifact Promotion) integration.
+        Promotes an artifact from one environment to another using the
+        PromotionController. Requires either a promotion_config or the
+        controller must be configured separately.
 
         Args:
             source_tag: Tag of artifact to promote.
             target_environment: Target environment (e.g., "staging", "production").
-            target_tag: Optional specific tag for promoted artifact.
-                       Defaults to generating a tag based on source + environment.
+            source_environment: Source environment name. Required if promotion_config
+                is provided. Defaults to "dev" if not specified.
+            operator: Identity of person/system performing promotion.
+                Defaults to FLOE_OPERATOR environment variable.
+            promotion_config: PromotionConfig with environment definitions and gates.
+                Required for full promotion workflow.
+            dry_run: If True, validate without actually promoting.
 
         Returns:
-            Digest of promoted artifact.
+            PromotionRecord with promotion details and gate results.
 
         Raises:
             ArtifactNotFoundError: If source artifact doesn't exist.
-            PromotionError: If promotion workflow fails.
-            AuthenticationError: If authentication fails.
+            ValueError: If promotion_config is not provided.
+            InvalidTransitionError: If promotion path is invalid.
+            AuthorizationError: If operator is not authorized.
+            GateFailedError: If any validation gate fails.
 
         Example:
-            >>> digest = client.promote_to_environment(
+            >>> from floe_core.schemas.promotion import PromotionConfig
+            >>> record = client.promote_to_environment(
             ...     source_tag="v1.0.0",
+            ...     source_environment="staging",
             ...     target_environment="production",
+            ...     promotion_config=promotion_config,
+            ...     operator="ci@github.com",
             ... )
-            >>> print(f"Promoted to: {digest}")
+            >>> print(f"Promoted: {record.tag} -> {record.to_env}")
         """
-        # Placeholder - implementation in Epic 8C
-        raise NotImplementedError("promote_to_environment() not yet implemented - see Epic 8C")
+        import os
+
+        from floe_core.oci.promotion import PromotionController
+
+        if promotion_config is None:
+            raise ValueError(
+                "promotion_config is required for promote_to_environment(). "
+                "Create a PromotionConfig with environment definitions and gates."
+            )
+
+        # Default operator from environment
+        if operator is None:
+            operator = os.environ.get("FLOE_OPERATOR", "unknown")
+
+        # Default source environment
+        if source_environment is None:
+            source_environment = "dev"
+
+        # Create controller and delegate
+        controller = PromotionController(
+            client=self,
+            promotion=promotion_config,
+        )
+
+        return controller.promote(
+            tag=source_tag,
+            from_env=source_environment,
+            to_env=target_environment,
+            operator=operator,
+            dry_run=dry_run,
+        )
 
     def check_registry_capabilities(self) -> dict[str, Any]:
         """Check registry capabilities and configuration.
@@ -1502,6 +1546,58 @@ class OCIClient:
                     tag=tag,
                     registry=self._registry_host,
                 )
+
+    def copy_tag(self, source_ref: str, dest_ref: str) -> None:
+        """Copy an artifact tag from source to destination.
+
+        Used for cross-registry sync operations (FR-028).
+
+        Args:
+            source_ref: Full source reference (e.g., oci://registry/repo:tag).
+            dest_ref: Full destination reference.
+
+        Raises:
+            ArtifactNotFoundError: If source artifact doesn't exist.
+            AuthenticationError: If authentication fails.
+            RegistryUnavailableError: If registry is unavailable.
+
+        Note:
+            This is a stub implementation. Production use requires
+            oci-copy or crane copy integration.
+        """
+        logger.info(
+            "copy_tag_stub",
+            source_ref=source_ref,
+            dest_ref=dest_ref,
+            message="Cross-registry copy not yet implemented",
+        )
+        raise NotImplementedError(
+            "Cross-registry copy requires oci-copy or crane integration. "
+            f"Would copy {source_ref} to {dest_ref}"
+        )
+
+    def get_artifact_digest(self, tag: str) -> str:
+        """Get the digest of an artifact by tag.
+
+        Args:
+            tag: Tag to look up.
+
+        Returns:
+            SHA256 digest string (e.g., sha256:abc123...).
+
+        Raises:
+            ArtifactNotFoundError: If artifact doesn't exist.
+            AuthenticationError: If authentication fails.
+        """
+        manifest_data = self._fetch_manifest_data(tag)
+        # The digest is computed from the manifest content
+        # For OCI manifests, it's the sha256 of the canonical JSON
+        import hashlib
+        import json
+
+        canonical = json.dumps(manifest_data, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(canonical.encode()).hexdigest()
+        return f"sha256:{digest}"
 
     def close(self) -> None:
         """Close the client and release resources.

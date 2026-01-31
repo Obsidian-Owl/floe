@@ -132,6 +132,9 @@ from floe_core.oci.metrics import (
     set_oci_metrics,
 )
 
+# Promotion (Epic 8C)
+from floe_core.oci.promotion import PromotionController
+
 # Resilience patterns (T008, T009)
 from floe_core.oci.resilience import (
     CircuitBreaker,
@@ -269,4 +272,6 @@ __all__: list[str] = [
     "generate_sbom_for_python_project",
     "retrieve_attestations",
     "retrieve_sbom",
+    # Promotion (Epic 8C)
+    "PromotionController",
 ]

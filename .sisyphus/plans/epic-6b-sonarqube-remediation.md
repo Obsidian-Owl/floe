@@ -3,13 +3,13 @@
 ## TL;DR
 
 > **Quick Summary**: Fix critical SSL verification vulnerabilities and security hotspots flagged by SonarQube, then increase test coverage to >80% on all affected lineage module files.
-> 
+>
 > **Deliverables**:
 > - Fixed SSL verification code in `transport.py` (SonarQube compliant)
 > - Fixed security hotspots in Marquez plugin (HTTPS default, no hardcoded passwords)
 > - Environment-based security controls documented
 > - Test coverage >80% on 6 files (transport, emitter, events, facets, catalog_integration, extractors/dbt)
-> 
+>
 > **Estimated Effort**: Medium (2-3 hours)
 > **Parallel Execution**: YES - 3 waves + 1 sequential validation
 > **Critical Path**: Task 1.1 → Task 2.1 → Task 4.2
@@ -210,14 +210,14 @@ Parallel Speedup: ~50% faster than sequential
       """Create SSL context with environment-aware security controls."""
       if not url.startswith("https://"):
           return None
-      
+
       import certifi
       context = ssl.create_default_context(cafile=certifi.where())
-      
+
       # Production: ALWAYS secure
       if os.environ.get("FLOE_ENVIRONMENT") == "production":
           return context
-      
+
       # Development: require explicit opt-in for insecure
       if not verify_ssl:
           if os.environ.get("FLOE_ALLOW_INSECURE_SSL", "").lower() != "true":
@@ -225,9 +225,9 @@ Parallel Speedup: ~50% faster than sequential
               return context
           logger.critical("SSL verification DISABLED - development only")
           _apply_insecure_settings(context)
-      
+
       return context
-  
+
   def _apply_insecure_settings(context: ssl.SSLContext) -> None:
       """Apply insecure settings. Development use only."""
       context.check_hostname = False
@@ -248,13 +248,13 @@ Parallel Speedup: ~50% faster than sequential
   - [ ] `FLOE_ALLOW_INSECURE_SSL=true` required to disable verification in dev
   - [ ] CRITICAL-level log emitted when SSL verification disabled
   - [ ] No literal `verify=False` in code (grep check passes)
-  
+
   **Automated Verification:**
   ```bash
   # Verify no literal verify=False:
   grep -r "verify=False" packages/floe-core/src/floe_core/lineage/ | grep -v "#" | wc -l
   # Assert: 0
-  
+
   # Verify production enforcement (test script):
   python -c "
   import os
@@ -311,14 +311,14 @@ Parallel Speedup: ~50% faster than sequential
       default="https://marquez:5000",  # Was: http://marquez:5000
       description="Marquez API base URL. Use HTTPS in production.",
   )
-  
+
   # Line 88-89: Change __init__ default
   def __init__(
       self,
       url: str = "https://marquez:5000",  # Was: http://marquez:5000
       ...
   )
-  
+
   # Line 232: Change password placeholder
   "password": "<SET_IN_PRODUCTION>",  # Was: CHANGE_ME_IN_PRODUCTION
   ```
@@ -328,17 +328,17 @@ Parallel Speedup: ~50% faster than sequential
   - [ ] Default URL uses HTTPS scheme
   - [ ] Password placeholder doesn't contain "password" or trigger secret detection
   - [ ] Docstrings updated to mention production configuration
-  
+
   **Automated Verification:**
   ```bash
   # Verify HTTPS default:
   grep -r "http://marquez" plugins/floe-lineage-marquez/ | grep -v "https://" | wc -l
   # Assert: 0
-  
+
   # Verify no hardcoded password pattern:
   grep -r "CHANGE_ME_IN_PRODUCTION" plugins/floe-lineage-marquez/ | wc -l
   # Assert: 0
-  
+
   # Run plugin tests:
   pytest plugins/floe-lineage-marquez/tests/ -v
   # Assert: All pass
@@ -388,12 +388,12 @@ Parallel Speedup: ~50% faster than sequential
 
   - [ ] `FLOE_ALLOW_INSECURE_SSL` documented in README
   - [ ] `FLOE_ENVIRONMENT` documented with production behavior
-  
+
   **Automated Verification:**
   ```bash
   grep "FLOE_ALLOW_INSECURE_SSL" packages/floe-core/README.md
   # Assert: Match found
-  
+
   grep "FLOE_ENVIRONMENT" packages/floe-core/README.md
   # Assert: Match found
   ```
@@ -449,41 +449,41 @@ Parallel Speedup: ~50% faster than sequential
   ```python
   class TestHttpLineageTransportSecurity:
       """Security tests for HttpLineageTransport SSL handling."""
-      
+
       @pytest.mark.requirement("REQ-6B-SEC-001")
       def test_production_env_always_verifies_ssl(self, monkeypatch):
           """FLOE_ENVIRONMENT=production enforces SSL even with verify_ssl=False"""
-          
+
       @pytest.mark.requirement("REQ-6B-SEC-002")
       def test_insecure_ssl_requires_env_var(self, monkeypatch, caplog):
           """verify_ssl=False without FLOE_ALLOW_INSECURE_SSL logs warning"""
-          
+
       @pytest.mark.requirement("REQ-6B-SEC-003")
       def test_insecure_ssl_with_env_var_works(self, monkeypatch, caplog):
           """verify_ssl=False with FLOE_ALLOW_INSECURE_SSL=true disables verification"""
-          
+
       @pytest.mark.requirement("REQ-6B-SEC-004")
       def test_critical_log_when_ssl_disabled(self, monkeypatch, caplog):
           """CRITICAL log emitted when SSL verification disabled"""
-          
+
       def test_ssl_error_is_logged(self, sample_event, caplog):
           """SSLError exceptions are logged with sanitized URL"""
-          
+
       def test_url_scheme_validation_http(self):
           """HTTP URLs are accepted"""
-          
+
       def test_url_scheme_validation_invalid(self):
           """Invalid URL schemes raise ValueError"""
-          
+
       def test_url_missing_host_raises(self):
           """URLs without host raise ValueError"""
-          
+
       def test_sanitized_url_removes_query_string(self):
           """_sanitized_url() removes sensitive query parameters"""
-          
+
       def test_queue_full_during_close(self, sample_event):
           """Queue full during close is handled gracefully"""
-          
+
       def test_close_async_drains_queue(self, sample_event):
           """close_async() waits for consumer task"""
   ```
@@ -493,12 +493,12 @@ Parallel Speedup: ~50% faster than sequential
   - [ ] All security scenarios tested with requirement markers
   - [ ] Coverage of `transport.py` ≥80%
   - [ ] Environment cleanup in all tests (no leaky state)
-  
+
   **Automated Verification:**
   ```bash
   pytest packages/floe-core/tests/lineage/test_transport.py -v
   # Assert: All pass
-  
+
   pytest packages/floe-core/tests/lineage/test_transport.py --cov=floe_core.lineage.transport --cov-report=term-missing
   # Assert: Coverage ≥80%
   ```
@@ -538,19 +538,19 @@ Parallel Speedup: ~50% faster than sequential
   ```python
   class TestCreateEmitterFactory:
       """Tests for create_emitter() factory function coverage."""
-      
+
       def test_none_config_creates_noop(self):
           """None transport_config creates NoOpLineageTransport"""
-          
+
       def test_none_type_creates_noop(self):
           """{"type": None} creates NoOpLineageTransport"""
-          
+
       def test_http_type_creates_http_transport(self):
           """{"type": "http"} creates HttpLineageTransport"""
-          
+
       def test_console_type_creates_console_transport(self):
           """{"type": "console"} creates ConsoleLineageTransport"""
-          
+
       def test_unknown_type_creates_noop(self):
           """Unknown type falls back to NoOpLineageTransport"""
   ```
@@ -558,7 +558,7 @@ Parallel Speedup: ~50% faster than sequential
   **Acceptance Criteria**:
   - [ ] Coverage of `emitter.py` ≥80%
   - [ ] All factory paths covered
-  
+
   **Automated Verification:**
   ```bash
   pytest packages/floe-core/tests/lineage/test_emitter.py --cov=floe_core.lineage.emitter --cov-report=term-missing
@@ -593,7 +593,7 @@ Parallel Speedup: ~50% faster than sequential
 
   **Acceptance Criteria**:
   - [ ] Coverage of `events.py` ≥80%
-  
+
   **Commit**: YES (Wave 2, combined)
 
 ---
@@ -624,7 +624,7 @@ Parallel Speedup: ~50% faster than sequential
 
   **Acceptance Criteria**:
   - [ ] Coverage of `facets.py` ≥80%
-  
+
   **Commit**: YES (Wave 2, combined)
 
 ---
@@ -686,7 +686,7 @@ Parallel Speedup: ~50% faster than sequential
           "sources": {
               "source.project.raw.users": {
                   "database": "raw",
-                  "schema": "public", 
+                  "schema": "public",
                   "name": "users",
                   "columns": {"id": {"name": "id", "data_type": "INTEGER"}},
               },
@@ -697,7 +697,7 @@ Parallel Speedup: ~50% faster than sequential
   **Acceptance Criteria**:
   - [ ] Coverage of `extractors/dbt.py` ≥80%
   - [ ] All manifest variations tested (sources, models, tests, aliases)
-  
+
   **Automated Verification:**
   ```bash
   pytest packages/floe-core/tests/lineage/extractors/test_dbt.py --cov=floe_core.lineage.extractors.dbt --cov-report=term-missing
@@ -741,7 +741,7 @@ Parallel Speedup: ~50% faster than sequential
   - [ ] Coverage of `catalog_integration.py` ≥80%
   - [ ] All namespace strategies tested
   - [ ] Error cases for invalid strategies tested
-  
+
   **Commit**: YES (Wave 3, combined)
 
 ---
@@ -766,7 +766,7 @@ Parallel Speedup: ~50% faster than sequential
 
   **Acceptance Criteria**:
   - [ ] `pre-commit run --all-files` exits 0
-  
+
   **Automated Verification:**
   ```bash
   pre-commit run --all-files
@@ -797,7 +797,7 @@ Parallel Speedup: ~50% faster than sequential
   - [ ] All tests pass
   - [ ] Overall lineage coverage ≥80%
   - [ ] No individual file below 80% (except backends/__init__.py)
-  
+
   **Automated Verification:**
   ```bash
   pytest packages/floe-core/tests/lineage/ -v --cov=floe_core.lineage --cov-report=term-missing --cov-fail-under=80
@@ -830,20 +830,20 @@ Parallel Speedup: ~50% faster than sequential
   - [ ] All tests pass
   - [ ] Coverage ≥80%
   - [ ] Git status clean after commit
-  
+
   **Automated Verification:**
   ```bash
   # Security pattern check:
   grep -r "verify=False" packages/floe-core/src/floe_core/lineage/ | grep -v "#" | wc -l
   # Assert: 0
-  
+
   grep -r "CHANGE_ME_IN_PRODUCTION" plugins/floe-lineage-marquez/ | wc -l
   # Assert: 0
-  
+
   # Final test run:
   pytest packages/floe-core/tests/lineage/ --cov=floe_core.lineage --cov-fail-under=80
   # Assert: Exit code 0
-  
+
   git status
   # Assert: Working tree clean
   ```

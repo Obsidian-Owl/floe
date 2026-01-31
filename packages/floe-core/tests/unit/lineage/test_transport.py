@@ -29,6 +29,9 @@ from floe_core.lineage.types import (
 
 from .conftest import _run
 
+# Test constants for secret values (not real secrets)
+TEST_API_KEY = "secret-key"  # pragma: allowlist secret
+
 
 @pytest.fixture()
 def sample_event() -> LineageEvent:
@@ -192,11 +195,11 @@ class TestHttpLineageTransport:
         transport = HttpLineageTransport(
             url="http://example.com/lineage",
             timeout=10.0,
-            api_key="secret-key",  # pragma: allowlist secret
+            api_key=TEST_API_KEY,
         )
         assert transport._url == "http://example.com/lineage"
         assert transport._timeout == 10.0
-        assert transport._api_key == "secret-key"
+        assert transport._api_key == TEST_API_KEY
         transport.close()
 
     def test_emit_after_close_is_ignored(self, sample_event: LineageEvent) -> None:

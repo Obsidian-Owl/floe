@@ -126,9 +126,10 @@ from floe_core.schemas.json_schema import (
     validate_against_schema,
 )
 
-# Manifest models (T018, T019)
+# Manifest models (T018, T019, T001a Epic 8C)
 from floe_core.schemas.manifest import (
     FORBIDDEN_ENVIRONMENT_FIELDS,
+    ArtifactsConfig,
     GovernanceConfig,
     ManifestScope,
     PlatformManifest,
@@ -170,6 +171,28 @@ from floe_core.schemas.plugins import (
     validate_domain_plugin_whitelist,
     validate_plugin_selection,
 )
+
+# Promotion schemas (Epic 8C)
+from floe_core.schemas.promotion import (
+    AuditBackend,
+    AuthorizationConfig,
+    EnvironmentConfig,
+    EnvironmentLock,
+    EnvironmentStatus,
+    GateStatus,
+    PromotionConfig,
+    PromotionGate,
+    PromotionHistoryEntry,
+    PromotionRecord,
+    PromotionStatusResponse,
+    RegistrySyncStatus,
+    RollbackImpactAnalysis,
+    RollbackRecord,
+    SecurityGateConfig,
+    SecurityScanResult,
+    WebhookConfig,
+)
+from floe_core.schemas.promotion import GateResult as PromotionGateResult
 
 # Quality schemas
 from floe_core.schemas.quality_config import (
@@ -372,11 +395,12 @@ __all__: list[str] = [
     "get_available_plugins",
     "validate_plugin_selection",
     "validate_domain_plugin_whitelist",
-    # Manifest (Phase 3)
-    "ManifestScope",
-    "GovernanceConfig",
-    "PlatformManifest",
+    # Manifest (Phase 3, Epic 8C)
+    "ArtifactsConfig",
     "FORBIDDEN_ENVIRONMENT_FIELDS",
+    "GovernanceConfig",
+    "ManifestScope",
+    "PlatformManifest",
     # JSON Schema (Phase 6)
     "JSON_SCHEMA_DRAFT",
     "MANIFEST_SCHEMA_ID",
@@ -448,6 +472,25 @@ __all__: list[str] = [
     "SigningAuditEvent",
     "VerificationAuditEvent",
     "VerificationBundle",
+    # Promotion schemas (Epic 8C)
+    "AuditBackend",
+    "AuthorizationConfig",
+    "EnvironmentConfig",
+    "EnvironmentLock",
+    "EnvironmentStatus",
+    "GateStatus",
+    "PromotionConfig",
+    "PromotionGate",
+    "PromotionGateResult",
+    "PromotionHistoryEntry",
+    "PromotionRecord",
+    "PromotionStatusResponse",
+    "RegistrySyncStatus",
+    "RollbackImpactAnalysis",
+    "RollbackRecord",
+    "SecurityGateConfig",
+    "SecurityScanResult",
+    "WebhookConfig",
     # Quality schemas
     "CalculationParameters",
     "Dimension",
