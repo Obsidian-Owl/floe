@@ -214,7 +214,6 @@ class PromotionController:
 
         self._webhook_notifier: WebhookNotifier | None = None
         if promotion.webhooks:
-
             # Use first webhook config for now; multi-webhook support in future
             self._webhook_notifier = WebhookNotifier(configs=promotion.webhooks)
             self._log.info(
