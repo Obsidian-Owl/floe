@@ -1193,6 +1193,14 @@ class PromotionController:
             # SecurityGateConfig has .command attribute
             command = command_config.command
 
+        # Validate command template contains placeholder
+        if "${ARTIFACT_REF}" not in command:
+            self._log.warning(
+                "gate_command_missing_placeholder",
+                gate=gate.value,
+                command=command,
+            )
+
         # Security: Quote artifact reference to prevent command injection
         safe_artifact_ref = shlex.quote(artifact_ref)
         return command.replace("${ARTIFACT_REF}", safe_artifact_ref)
