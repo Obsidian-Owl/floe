@@ -209,9 +209,11 @@ class PromotionController:
         self._environment_locks: dict[str, EnvironmentLock] = {}
 
         # Webhook notifier for lifecycle events (T117 - FR-040 through FR-043)
+        # Import at runtime to avoid circular dependency, annotation uses string
+        from floe_core.oci.webhooks import WebhookNotifier
+
         self._webhook_notifier: WebhookNotifier | None = None
         if promotion.webhooks:
-            from floe_core.oci.webhooks import WebhookNotifier
 
             # Use first webhook config for now; multi-webhook support in future
             self._webhook_notifier = WebhookNotifier(configs=promotion.webhooks)
