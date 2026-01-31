@@ -72,7 +72,7 @@ class TestConcurrentPromotionSameEnvironment:
                 call_number = call_count["create_tag"]
 
             # Simulate some processing time to allow race
-            time.sleep(0.01)
+            time.sleep(0.01)  # simulate race condition timing
 
             if call_number == 1:
                 # First caller succeeds
