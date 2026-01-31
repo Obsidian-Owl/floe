@@ -50,7 +50,7 @@ repos:
 
       # End of file newline
       - id: end-of-file-fixer
-        exclude: ^\.beads/
+        exclude: ^(\.beads/|\.omc/)
 
       # YAML syntax (exclude Helm templates - Go template syntax not parseable)
       - id: check-yaml
