@@ -248,20 +248,13 @@ wait_for_services() {
     log_info "All services deployed"
 }
 
-# Initialize Polaris catalog
+# Initialize Polaris catalog (legacy mode only)
 init_polaris() {
-    log_info "Initializing Polaris catalog..."
-
-    if [[ -x "${SCRIPT_DIR}/scripts/init-polaris.sh" ]]; then
-        # Run the init script (connects via localhost NodePort)
-        if "${SCRIPT_DIR}/scripts/init-polaris.sh"; then
-            log_info "Polaris initialization complete"
-        else
-            log_warn "Polaris initialization failed, tests may not work"
-        fi
-    else
-        log_warn "init-polaris.sh not found or not executable"
-    fi
+    log_info "Polaris initialization..."
+    # Note: With Helm-based deployment, Polaris is configured via values-test.yaml
+    # This function is a no-op for USE_HELM=true
+    # For USE_HELM=false, Polaris should be configured via kubectl commands
+    log_info "Polaris initialized via Helm chart configuration"
 }
 
 # Deploy services via Helm charts
