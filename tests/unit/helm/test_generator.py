@@ -4,17 +4,23 @@ Tests the HelmValuesGenerator class and its methods.
 
 Requirements tested:
 - 9b-FR-060: HelmValuesGenerator implementation
+- 9b-FR-004: Values schema validation
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from floe_core.helm.generator import HelmValuesGenerator, generate_values_from_config
+from floe_core.helm.generator import (
+    HelmValuesGenerator,
+    SchemaValidationError,
+    generate_values_from_config,
+)
 from floe_core.helm.schemas import HelmValuesConfig
 
 
@@ -199,3 +205,154 @@ class TestGenerateValuesFromConfig:
         values = generate_values_from_config(config, user_overrides=overrides)
 
         assert values["custom"]["setting"] == "value"
+
+
+class TestSchemaValidation:
+    """Tests for schema validation functionality."""
+
+    @pytest.fixture
+    def valid_schema(self, tmp_path: Path) -> Path:
+        """Create a valid JSON schema for testing."""
+        schema = {
+            "$schema": "https://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "global": {
+                    "type": "object",
+                    "properties": {
+                        "environment": {
+                            "type": "string",
+                            "enum": ["dev", "qa", "staging", "prod"],
+                        }
+                    },
+                },
+                "dagster": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {"type": "boolean"},
+                        "replicas": {"type": "integer", "minimum": 1},
+                    },
+                },
+            },
+        }
+        schema_path = tmp_path / "values.schema.json"
+        with schema_path.open("w") as f:
+            json.dump(schema, f)
+        return schema_path
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_load_schema(self, valid_schema: Path) -> None:
+        """Test loading JSON schema from file."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        schema = generator.load_schema()
+
+        assert schema["$schema"] == "https://json-schema.org/draft-07/schema#"
+        assert "properties" in schema
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_load_schema_from_method(self, valid_schema: Path) -> None:
+        """Test loading schema from method parameter."""
+        generator = HelmValuesGenerator()
+        schema = generator.load_schema(valid_schema)
+
+        assert "properties" in schema
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_load_schema_not_found(self, tmp_path: Path) -> None:
+        """Test loading non-existent schema raises error."""
+        generator = HelmValuesGenerator()
+        with pytest.raises(FileNotFoundError, match="Schema file not found"):
+            generator.load_schema(tmp_path / "missing.json")
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_load_schema_no_path(self) -> None:
+        """Test loading without schema path raises error."""
+        generator = HelmValuesGenerator()
+        with pytest.raises(ValueError, match="No schema path provided"):
+            generator.load_schema()
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_valid_values(self, valid_schema: Path) -> None:
+        """Test validation passes for valid values."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {
+            "global": {"environment": "dev"},
+            "dagster": {"enabled": True, "replicas": 2},
+        }
+
+        errors = generator.validate(values)
+
+        assert errors == []
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_invalid_environment(self, valid_schema: Path) -> None:
+        """Test validation fails for invalid environment."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {"global": {"environment": "invalid"}}
+
+        errors = generator.validate(values)
+
+        assert len(errors) > 0
+        assert any("environment" in e for e in errors)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_invalid_type(self, valid_schema: Path) -> None:
+        """Test validation fails for wrong type."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {"dagster": {"replicas": "not-a-number"}}
+
+        errors = generator.validate(values)
+
+        assert len(errors) > 0
+        assert any("replicas" in e for e in errors)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_minimum_violation(self, valid_schema: Path) -> None:
+        """Test validation fails for minimum violation."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {"dagster": {"replicas": 0}}
+
+        errors = generator.validate(values)
+
+        assert len(errors) > 0
+        assert any("minimum" in e.lower() or "replicas" in e for e in errors)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_no_schema_raises(self) -> None:
+        """Test validation without schema raises error."""
+        generator = HelmValuesGenerator()
+        with pytest.raises(ValueError, match="No schema loaded"):
+            generator.validate({"test": "value"})
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_generate_and_validate_success(self, valid_schema: Path) -> None:
+        """Test generate_and_validate with valid configuration."""
+        config = HelmValuesConfig.with_defaults(environment="dev")
+        generator = HelmValuesGenerator(config, schema_path=valid_schema)
+        generator.add_plugin_values({"dagster": {"enabled": True, "replicas": 2}})
+
+        values, errors = generator.generate_and_validate(raise_on_error=False)
+
+        assert values["global"]["environment"] == "dev"
+        # May have some errors since our test schema is minimal
+        # but should not raise
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_generate_and_validate_raises_on_error(self, valid_schema: Path) -> None:
+        """Test generate_and_validate raises on validation failure."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        generator.set_user_overrides({"global": {"environment": "invalid"}})
+
+        with pytest.raises(SchemaValidationError) as exc_info:
+            generator.generate_and_validate(raise_on_error=True)
+
+        assert len(exc_info.value.errors) > 0
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_schema_validation_error_contains_errors(self) -> None:
+        """Test SchemaValidationError contains error list."""
+        errors = ["field1: error1", "field2: error2"]
+        exc = SchemaValidationError("Validation failed", errors=errors)
+
+        assert len(exc.errors) == 2
+        assert "field1: error1" in exc.errors

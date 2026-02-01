@@ -21,6 +21,7 @@ Example:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,24 @@ from floe_core.helm.schemas import HelmValuesConfig
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+class SchemaValidationError(Exception):
+    """Raised when generated values fail schema validation."""
+
+    def __init__(
+        self,
+        message: str,
+        errors: list[str] | None = None,
+    ) -> None:
+        """Initialize the error.
+
+        Args:
+            message: Error message
+            errors: List of specific validation errors
+        """
+        super().__init__(message)
+        self.errors = errors or []
 
 
 class HelmValuesGenerator:
@@ -57,17 +76,21 @@ class HelmValuesGenerator:
         config: HelmValuesConfig | None = None,
         *,
         base_values: dict[str, Any] | None = None,
+        schema_path: Path | str | None = None,
     ) -> None:
         """Initialize the generator.
 
         Args:
             config: Helm values configuration. If None, uses dev defaults.
             base_values: Base values to merge into (e.g., chart defaults)
+            schema_path: Optional path to JSON Schema for validation
         """
         self.config = config or HelmValuesConfig.with_defaults()
         self.base_values = base_values or {}
         self._plugin_values: list[dict[str, Any]] = []
         self._user_overrides: dict[str, Any] = {}
+        self._schema_path = Path(schema_path) if schema_path else None
+        self._schema: dict[str, Any] | None = None
 
     def add_plugin_values(self, values: dict[str, Any]) -> None:
         """Add plugin-contributed values.
@@ -251,6 +274,113 @@ class HelmValuesGenerator:
 
         return args
 
+    def load_schema(self, schema_path: Path | str | None = None) -> dict[str, Any]:
+        """Load JSON Schema from file.
+
+        Args:
+            schema_path: Path to schema file. Uses constructor path if None.
+
+        Returns:
+            Parsed JSON Schema dictionary
+
+        Raises:
+            FileNotFoundError: If schema file does not exist
+            ValueError: If schema is not valid JSON
+        """
+        path = Path(schema_path) if schema_path else self._schema_path
+        if path is None:
+            msg = "No schema path provided"
+            raise ValueError(msg)
+
+        if not path.exists():
+            msg = f"Schema file not found: {path}"
+            raise FileNotFoundError(msg)
+
+        with path.open() as f:
+            schema: dict[str, Any] = json.load(f)
+            self._schema = schema
+
+        return schema
+
+    def validate(
+        self,
+        values: dict[str, Any] | None = None,
+        *,
+        schema_path: Path | str | None = None,
+    ) -> list[str]:
+        """Validate values against JSON Schema.
+
+        Args:
+            values: Values to validate. If None, generates values.
+            schema_path: Optional schema path override.
+
+        Returns:
+            List of validation error messages (empty if valid)
+
+        Raises:
+            SchemaValidationError: If validation fails and raise_on_error=True
+            ValueError: If no schema available
+        """
+        try:
+            import jsonschema
+        except ImportError as e:
+            msg = "jsonschema package required for validation"
+            raise ImportError(msg) from e
+
+        if values is None:
+            values = self.generate()
+
+        # Load schema if needed
+        if schema_path:
+            self.load_schema(schema_path)
+        elif self._schema is None and self._schema_path:
+            self.load_schema()
+
+        if self._schema is None:
+            msg = "No schema loaded for validation"
+            raise ValueError(msg)
+
+        errors: list[str] = []
+        validator = jsonschema.Draft7Validator(self._schema)
+
+        for error in validator.iter_errors(values):
+            path = ".".join(str(p) for p in error.absolute_path)
+            if path:
+                errors.append(f"{path}: {error.message}")
+            else:
+                errors.append(error.message)
+
+        return errors
+
+    def generate_and_validate(
+        self,
+        *,
+        schema_path: Path | str | None = None,
+        raise_on_error: bool = True,
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Generate values and validate against schema.
+
+        Args:
+            schema_path: Optional schema path override.
+            raise_on_error: If True, raise SchemaValidationError on failure.
+
+        Returns:
+            Tuple of (values, errors). Errors empty if valid.
+
+        Raises:
+            SchemaValidationError: If validation fails and raise_on_error=True
+        """
+        values = self.generate()
+        errors = self.validate(values, schema_path=schema_path)
+
+        if errors and raise_on_error:
+            raise SchemaValidationError(
+                f"Generated values failed schema validation: {len(errors)} error(s)",
+                errors=errors,
+            )
+
+        return values, errors
+
 
 def generate_values_from_config(
     config: HelmValuesConfig,
@@ -280,5 +410,6 @@ def generate_values_from_config(
 
 __all__: list[str] = [
     "HelmValuesGenerator",
+    "SchemaValidationError",
     "generate_values_from_config",
 ]
