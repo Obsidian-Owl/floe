@@ -187,8 +187,11 @@ dagster:
             memory: 1Gi
 
   # User code deployments (configure in separate values file)
+  # Note: When user-deployments are enabled, workspace.yaml is auto-generated
+  # When disabled, workspace.yaml is NOT created by the Dagster subchart
   dagster-user-deployments:
     enabled: false
+    enableSubchart: false
     deployments: []
 
 # =============================================================================

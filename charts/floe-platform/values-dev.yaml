@@ -1,0 +1,184 @@
+# floe-platform Development Values
+# ================================
+#
+# Use this file for local Kind cluster development:
+#   helm install floe charts/floe-platform -f charts/floe-platform/values-dev.yaml
+#
+# This configuration:
+# - Enables all services for local development
+# - Uses minimal resource limits
+# - Enables MinIO for local S3-compatible storage
+# - Disables ingress (use port-forward instead)
+# - Uses in-memory/ephemeral storage where possible
+
+global:
+  environment: dev
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  storageClass: ""
+
+# Dagster - enabled with minimal resources
+dagster:
+  enabled: true
+  dagsterWebserver:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  dagsterDaemon:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  runLauncher:
+    type: K8sRunLauncher
+    config:
+      k8sRunLauncher:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+# Polaris - enabled with file-based persistence
+polaris:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    type: file
+    size: 1Gi
+  config:
+    features:
+      ALLOW_ANONYMOUS_ACCESS: true
+
+# OpenTelemetry Collector - enabled in deployment mode
+otel:
+  enabled: true
+  mode: deployment
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  config:
+    exporters:
+      debug:
+        verbosity: detailed
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+
+# PostgreSQL - enabled with minimal persistence
+postgresql:
+  enabled: true
+  image:
+    tag: "16-alpine"
+  auth:
+    database: floe
+    username: floe
+    password: "floe-dev-password"
+  persistence:
+    enabled: true
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# MinIO - ENABLED for local S3-compatible storage
+minio:
+  enabled: true
+  image:
+    tag: latest
+  auth:
+    rootUser: minioadmin
+    rootPassword: "minio-dev-password"
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  defaultBuckets: "floe-data,floe-artifacts,floe-iceberg"
+
+# Marquez - disabled by default in dev
+marquez:
+  enabled: false
+
+# RBAC - enabled
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+
+# Security contexts - relaxed for development
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Network policies - disabled for dev simplicity
+networkPolicy:
+  enabled: false
+
+# Ingress - disabled (use port-forward)
+ingress:
+  enabled: false
+
+# PDB - disabled for single-replica dev
+podDisruptionBudget:
+  enabled: false
+
+# HPA - disabled for dev
+autoscaling:
+  enabled: false
+
+# Resource quotas - disabled for dev
+resourceQuota:
+  enabled: false
