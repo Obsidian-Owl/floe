@@ -20,6 +20,39 @@ This umbrella chart deploys the complete floe platform including:
 
 ## Quick Start
 
+### From Helm Repository
+
+```bash
+# Add the floe Helm repository
+helm repo add floe https://obsidian-owl.github.io/floe
+helm repo update
+
+# Install with default values (dev environment)
+helm install floe floe/floe-platform --namespace floe-dev --create-namespace
+
+# Install for production
+helm install floe floe/floe-platform \
+  --namespace floe-prod --create-namespace \
+  --set global.environment=prod \
+  --set autoscaling.enabled=true \
+  --set podDisruptionBudget.enabled=true
+```
+
+### From OCI Registry
+
+```bash
+# Install from GHCR OCI registry
+helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
+  --namespace floe-dev --create-namespace
+
+# Install specific version
+helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
+  --version 1.0.0 \
+  --namespace floe-prod --create-namespace
+```
+
+### From Local Chart
+
 ```bash
 # Add dependencies
 helm dependency update ./charts/floe-platform

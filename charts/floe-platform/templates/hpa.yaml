@@ -1,0 +1,135 @@
+{{/*
+HorizontalPodAutoscaler for floe-platform components.
+
+Creates HPAs for:
+- Dagster webserver (if autoscaling.dagster.enabled)
+- Polaris (if autoscaling.polaris.enabled)
+
+Requirements:
+- 9b-FR-030: HPA template
+*/}}
+{{- if .Values.autoscaling.enabled }}
+
+{{- if and .Values.dagster.enabled (or .Values.autoscaling.dagster.enabled (not (hasKey .Values.autoscaling "dagster"))) }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-dagster-webserver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dagster-webserver
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-dagster-webserver
+  minReplicas: {{ .Values.autoscaling.dagster.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.autoscaling.dagster.maxReplicas | default 5 }}
+  metrics:
+    {{- if .Values.autoscaling.dagster.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.dagster.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.dagster.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.dagster.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if not (or .Values.autoscaling.dagster.targetCPUUtilizationPercentage .Values.autoscaling.dagster.targetMemoryUtilizationPercentage) }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.autoscaling.dagster.scaleDownStabilizationSeconds | default 300 }}
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: {{ .Values.autoscaling.dagster.scaleUpStabilizationSeconds | default 0 }}
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+{{- end }}
+
+{{- if and .Values.polaris.enabled .Values.autoscaling.polaris.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-polaris
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: polaris
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-polaris
+  minReplicas: {{ .Values.autoscaling.polaris.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.autoscaling.polaris.maxReplicas | default 3 }}
+  metrics:
+    {{- if .Values.autoscaling.polaris.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.polaris.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.polaris.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.polaris.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if not (or .Values.autoscaling.polaris.targetCPUUtilizationPercentage .Values.autoscaling.polaris.targetMemoryUtilizationPercentage) }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.autoscaling.polaris.scaleDownStabilizationSeconds | default 300 }}
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: {{ .Values.autoscaling.polaris.scaleUpStabilizationSeconds | default 0 }}
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 2
+          periodSeconds: 15
+      selectPolicy: Max
+{{- end }}
+
+{{- end }}
