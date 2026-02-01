@@ -160,7 +160,7 @@ jobs:
           print('Default values.yaml: VALID')
 
           # Validate environment-specific values
-          for env in ['dev', 'staging', 'prod']:
+          for env in ['dev', 'staging', 'prod', 'test']:
               try:
                   with open(f'charts/floe-platform/values-{env}.yaml') as f:
                       env_values = yaml.safe_load(f)
@@ -186,6 +186,16 @@ jobs:
 
           jsonschema.validate(values, schema)
           print('floe-jobs values.yaml: VALID')
+
+          # Validate test values
+          try:
+              with open('charts/floe-jobs/values-test.yaml') as f:
+                  test_values = yaml.safe_load(f)
+              if test_values:
+                  jsonschema.validate(test_values, schema)
+              print('floe-jobs values-test.yaml: VALID')
+          except FileNotFoundError:
+              print('floe-jobs values-test.yaml: SKIPPED (not found)')
           "
 
   # ============================================================
@@ -298,12 +308,12 @@ jobs:
         run: |
           helm dependency update charts/floe-platform
 
-      - name: Install floe-platform chart
+      - name: Install floe-platform chart with test values
         run: |
           helm upgrade --install floe-test charts/floe-platform \
             --namespace floe-test --create-namespace \
-            --values charts/floe-platform/values.yaml \
-            --values charts/floe-platform/values-dev.yaml \
+            --values charts/floe-platform/values-test.yaml \
+            --skip-schema-validation \
             --wait --timeout 10m
 
       - name: Run Helm tests

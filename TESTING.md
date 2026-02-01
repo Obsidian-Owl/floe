@@ -280,8 +280,14 @@ def test_something(service_client):
 **Staging/Prod**: Managed K8s clusters
 
 ```bash
-# Create Kind cluster and deploy services (all-in-one)
-make kind-up          # Runs testing/k8s/setup-cluster.sh
+# Create Kind cluster and deploy services via Helm (default)
+make kind-up          # Runs testing/k8s/setup-cluster.sh with USE_HELM=true
+
+# Alternative: Deploy with specific Helm targets
+make helm-install-test    # Install floe-platform + floe-jobs with test values
+make helm-upgrade-test    # Upgrade test installation
+make helm-test-infra      # Verify test infrastructure health
+make helm-uninstall-test  # Uninstall test installation
 
 # Run tests
 make test             # Unit tests + integration tests
@@ -290,19 +296,33 @@ make test             # Unit tests + integration tests
 make kind-down        # Runs testing/k8s/cleanup-cluster.sh
 ```
 
-**Note**: Services are deployed via raw K8s manifests in `testing/k8s/services/`, not Helm.
-This avoids circular dependencies with Helm chart development.
+### Helm-Based Test Infrastructure (Default)
 
-### Test Services (Deployed via Raw K8s Manifests)
+Services are deployed via **Helm charts** with test-specific values files:
 
-| Service | Purpose | Manifest |
-|---------|---------|----------|
-| PostgreSQL | Catalog metadata, orchestrator DB | `testing/k8s/services/postgres.yaml` |
-| Polaris | Iceberg REST catalog | `testing/k8s/services/polaris.yaml` |
-| MinIO | S3-compatible object storage | `testing/k8s/services/minio.yaml` |
-| Dagster | Orchestration (webserver, daemon) | `testing/k8s/services/dagster.yaml` |
+| Chart | Values File | Purpose |
+|-------|-------------|---------|
+| `charts/floe-platform` | `values-test.yaml` | Platform services (Polaris, PostgreSQL, MinIO) |
+| `charts/floe-jobs` | `values-test.yaml` | Job execution (dbt, dlt) |
 
-**Service Discovery**: Tests use K8s DNS (`polaris.floe-test.svc.cluster.local`)
+**Test values features:**
+- Single replicas (cost-efficient CI)
+- Minimal resources (faster startup)
+- In-memory Polaris (test isolation)
+- Disabled observability (speed)
+
+**Legacy mode**: Set `USE_HELM=false` to use raw K8s manifests (deprecated).
+
+### Test Services (Deployed via Helm)
+
+| Service | Purpose | Helm Subchart |
+|---------|---------|---------------|
+| PostgreSQL | Catalog metadata, orchestrator DB | `bitnami/postgresql` |
+| Polaris | Iceberg REST catalog | Built-in templates |
+| MinIO | S3-compatible object storage | `bitnami/minio` |
+| Dagster | Orchestration (webserver, daemon) | `dagster/dagster` |
+
+**Service Discovery**: Tests use K8s DNS (`floe-test-polaris.floe-test.svc.cluster.local`)
 
 ---
 
