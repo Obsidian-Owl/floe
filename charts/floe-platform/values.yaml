@@ -251,6 +251,11 @@ otel:
   # Deployment mode: deployment (gateway) or daemonset
   mode: deployment
 
+  # Image configuration (required by OTel chart)
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: ""  # Uses appVersion by default
+
   # Replica count (for deployment mode)
   replicaCount: 1
 
