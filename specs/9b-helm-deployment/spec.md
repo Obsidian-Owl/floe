@@ -316,6 +316,26 @@ As a **security engineer**, I want charts to follow K8s security best practices 
 
 ---
 
+### User Story 10 - Test Infrastructure Convergence (Priority: P0)
+
+As a **platform developer**, I want the test infrastructure to use the same Helm charts as production so that chart changes are automatically validated by tests without manual sync.
+
+**Why this priority**: Eliminates drift between test and production deployment - critical for reliability.
+
+**Independent Test**: Modify a chart template, run `make kind-up && make test-integration`, verify the change is reflected in test cluster.
+
+**Acceptance Scenarios**:
+
+1. **Given** I modify `charts/floe-platform/templates/deployment-polaris.yaml`, **When** I run `make kind-up`, **Then** the test cluster deploys with the modified template.
+
+2. **Given** `testing/k8s/services/` directory, **When** Epic 9B is complete, **Then** the directory is empty (all manifests replaced by Helm).
+
+3. **Given** I run `make kind-up`, **When** deployment completes, **Then** it uses `helm install floe-platform -f values-test.yaml` (not kubectl apply).
+
+4. **Given** I add a new chart value, **When** I run tests, **Then** tests fail if `values-test.yaml` doesn't provide required value (schema validation).
+
+---
+
 ### Edge Cases
 
 - What happens when Helm release is interrupted mid-install? -> Transaction rollback with clear status
@@ -407,6 +427,15 @@ As a **security engineer**, I want charts to follow K8s security best practices 
 - **FR-083**: CI MUST run `helm test` hooks for deployment verification
 - **FR-084**: Charts MUST include test connection pods for health verification
 
+#### Test Infrastructure Convergence
+
+- **FR-090**: Charts MUST include `values-test.yaml` with test-appropriate configuration (minimal resources, in-memory backends where applicable)
+- **FR-091**: Test infrastructure MUST use Helm charts as the deployment mechanism (replacing raw kubectl apply)
+- **FR-092**: `make kind-up` MUST deploy via `helm install floe-platform -f values-test.yaml`
+- **FR-093**: Raw K8s manifests in `testing/k8s/services/` MUST be deleted after Helm migration is complete
+- **FR-094**: Test values.yaml MUST NOT duplicate chart defaults - only override test-specific settings
+- **FR-095**: CI MUST validate that `values-test.yaml` is a valid subset of chart schema
+
 ### Key Entities
 
 - **FloeHelmChart**: Helm chart metadata (name, version, dependencies, values schema)
@@ -429,6 +458,8 @@ As a **security engineer**, I want charts to follow K8s security best practices 
 - **SC-008**: Upgrade from N to N+1 chart version completes without downtime (rolling updates)
 - **SC-009**: 5 logical environments can deploy to 2 physical clusters using namespace isolation
 - **SC-010**: `floe helm generate` produces deployable values from any CompiledArtifacts in under 10 seconds
+- **SC-011**: Test infrastructure uses identical Helm charts as production (single source of truth)
+- **SC-012**: Changes to chart templates automatically propagate to test infrastructure without manual sync
 
 ### Non-Functional Requirements
 
@@ -444,7 +475,8 @@ As a **security engineer**, I want charts to follow K8s security best practices 
 3. **Ingress controller exists**: Target clusters have an Ingress controller (nginx, traefik)
 4. **PostgreSQL is acceptable**: Shared PostgreSQL for Dagster/Marquez is acceptable for non-HA deployments
 5. **OCI registry available**: OCI-compliant registry available for chart storage
-6. **Testing manifests as baseline**: Existing `testing/k8s/services/` manifests provide correct baseline
+6. **Testing manifests as baseline**: Existing `testing/k8s/services/` manifests provide correct baseline for initial chart development
+7. **Test infrastructure migration**: After Epic 9B, `testing/k8s/services/` is deleted and replaced by Helm deployment via `values-test.yaml`
 
 ## Open Questions
 

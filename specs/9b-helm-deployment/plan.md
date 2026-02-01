@@ -92,9 +92,104 @@ The implementation uses official Helm charts as subcharts where available (Dagst
 | values-{env}.yaml | ArgoCD, Flux | Generated Helm values |
 
 ### Cleanup Required
-- [ ] Old code to remove: None (greenfield)
+- [ ] Old code to remove: `testing/k8s/services/*.yaml` (replaced by Helm charts)
 - [ ] Old tests to remove: None
-- [ ] Old docs to update: `docs/guides/deployment.md` (reference new Helm charts)
+- [ ] Old docs to update: `docs/guides/deployment.md`, `TESTING.md` (reference Helm-based test infra)
+- [ ] Scripts to update: `testing/k8s/setup-cluster.sh` (migrate to Helm install)
+
+## Test Infrastructure Convergence Strategy
+
+**Decision**: Helm charts REPLACE the existing test infrastructure (Option A).
+
+### Current State
+```
+testing/k8s/services/*.yaml  →  15 raw K8s manifests (kubectl apply)
+testing/k8s/kind-config.yaml →  Kind cluster configuration (KEEP)
+testing/k8s/setup-cluster.sh →  Uses kubectl apply (MODIFY)
+Makefile: make kind-up       →  Calls setup-cluster.sh (MODIFY)
+```
+
+### Target State
+```
+charts/floe-platform/values-test.yaml  →  Test-specific overrides (NEW)
+testing/k8s/kind-config.yaml           →  KEEP unchanged (port mappings)
+testing/k8s/setup-cluster.sh           →  Uses helm install (MODIFY)
+testing/k8s/services/                  →  DELETED (empty directory)
+Makefile: make kind-up                 →  helm install floe-platform
+```
+
+### Sync Mechanism
+
+The Helm chart is the **single source of truth**. Environment-specific configurations are layered:
+
+```
+values.yaml (defaults)
+  └── values-dev.yaml (local dev)
+  └── values-test.yaml (CI/CD testing)
+  └── values-staging.yaml (pre-prod)
+  └── values-prod.yaml (production)
+```
+
+**Invariant**: `values-test.yaml` ONLY contains overrides. New chart features automatically propagate.
+
+### values-test.yaml Design
+
+```yaml
+# Test-specific overrides - minimal resources, in-memory backends
+global:
+  environment: test
+
+# Single replicas for speed
+dagster:
+  dagsterWebserver:
+    replicaCount: 1
+  dagsterDaemon:
+    replicaCount: 1
+
+# In-memory for test isolation
+polaris:
+  persistence:
+    type: in-memory
+
+# No autoscaling in tests
+otel:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+# Test credentials (non-production)
+postgresql:
+  auth:
+    password: floe_test_password
+
+# Always enabled for tests
+minio:
+  enabled: true
+marquez:
+  enabled: true
+
+# NodePort for Kind access
+services:
+  type: NodePort
+```
+
+### Migration Order
+
+1. Complete US1 (Platform Chart) - chart exists and works
+2. Create `values-test.yaml` with test overrides
+3. Modify `setup-cluster.sh` to use Helm
+4. Validate all tests pass with Helm-based infrastructure
+5. Delete `testing/k8s/services/*.yaml`
+6. Update TESTING.md documentation
+
+### Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **No Drift** | Single source of truth for K8s manifests |
+| **Production Parity** | Tests use exact production templates |
+| **Automatic Propagation** | Chart changes affect tests without manual sync |
+| **Schema Validation** | Invalid test config caught by values.schema.json |
 
 ## Project Structure
 

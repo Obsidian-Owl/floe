@@ -363,6 +363,38 @@ tests/
 
 ---
 
+## Phase 14: Test Infrastructure Migration (Priority: P0)
+
+**Purpose**: Replace raw K8s manifests with Helm-based test infrastructure (single source of truth)
+
+**Independent Test**: Run `make kind-up && make test-integration` with Helm-based setup
+
+**Requirements**: FR-090, FR-091, FR-092, FR-093, FR-094, FR-095, SC-011, SC-012
+
+### User Story 10 Tasks
+
+- [ ] T122 [US10] Create `charts/floe-platform/values-test.yaml` with test-specific overrides (single replica, in-memory Polaris, minimal resources)
+- [ ] T123 [US10] Create `charts/floe-jobs/values-test.yaml` with test job configuration
+- [ ] T124 [US10] Modify `testing/k8s/setup-cluster.sh` to use `helm install floe-platform -f values-test.yaml`
+- [ ] T125 [US10] Add Helm deployment to `Makefile` targets (`helm-install-test`, `helm-upgrade-test`, `helm-uninstall-test`)
+- [ ] T126 [US10] Validate all existing integration tests pass with Helm-based infrastructure
+- [ ] T127 [US10] Delete `testing/k8s/services/dagster.yaml` (replaced by Helm)
+- [ ] T128 [US10] Delete `testing/k8s/services/polaris.yaml` (replaced by Helm)
+- [ ] T129 [US10] Delete `testing/k8s/services/postgres.yaml` (replaced by Helm)
+- [ ] T130 [US10] Delete `testing/k8s/services/minio.yaml` (replaced by Helm)
+- [ ] T131 [US10] Delete `testing/k8s/services/marquez.yaml` (replaced by Helm)
+- [ ] T132 [P] [US10] Delete remaining `testing/k8s/services/*.yaml` files (jaeger, keycloak, infisical, registry, metrics-server)
+- [ ] T133 [US10] Keep `testing/k8s/kind-config.yaml` (Kind cluster config unchanged)
+- [ ] T134 [US10] Keep `testing/k8s/namespace.yaml` OR migrate namespace creation to Helm pre-install hook
+- [ ] T135 [US10] Update `TESTING.md` to document Helm-based test infrastructure
+- [ ] T136 [US10] Update `.github/workflows/ci.yaml` to use Helm-based Kind deployment
+- [ ] T137 [US10] Add CI validation that `values-test.yaml` passes schema validation
+- [ ] T138 [US10] Create drift detection script `scripts/validate-test-values.sh` that verifies values-test.yaml is subset of schema
+
+**Checkpoint**: Test Infrastructure Migration complete - single source of truth achieved
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -396,6 +428,9 @@ Phase 12: Polish ◄────────────────────
                         │
                         ▼
 Phase 13: E2E Integration ──► depends on US1, US2, US7 (chart + jobs + testing)
+                        │
+                        ▼
+Phase 14: Test Infrastructure Migration ──► depends on US1, US7 (charts + testing)
 ```
 
 ### Critical Path
@@ -457,16 +492,17 @@ Task: "Create RoleBinding in charts/floe-platform/templates/rolebinding.yaml"
 2. Complete Phase 2: Foundational
 3. Complete Phase 3: User Story 1 (Platform Services)
 4. Complete Phase 4: User Story 2 (Data Product Jobs)
-5. Complete Phase 13: E2E Integration (T116-T117 minimum for MVP)
-6. **STOP and VALIDATE**: Deploy platform + run sample job + verify E2E
-7. Deploy/demo if ready
+5. Complete Phase 14: Test Infrastructure Migration (T122-T126 minimum)
+6. Complete Phase 13: E2E Integration (T116-T117 minimum for MVP)
+7. **STOP and VALIDATE**: Deploy platform + run sample job + verify E2E with Helm-based test infra
+8. Deploy/demo if ready
 
 ### Incremental Delivery
 
 | Milestone | Stories Complete | Value Delivered |
 |-----------|------------------|-----------------|
-| MVP | US1, US2, E2E (T116-T117) | Platform + Jobs deploy + E2E validated |
-| Alpha | +US3, US4 | Values generation, multi-env |
+| MVP | US1, US2, US10 (core), E2E (T116-T117) | Platform + Jobs + Helm-based test infra |
+| Alpha | +US3, US4, US10 (cleanup) | Values generation, multi-env, old manifests deleted |
 | Beta | +US5, US7, US9, E2E (T115, T118-T120) | Schema, testing, security, observability |
 | GA | +US6, US8, E2E (T121) | GitOps, publishing, quickstart validation |
 
@@ -476,7 +512,7 @@ Task: "Create RoleBinding in charts/floe-platform/templates/rolebinding.yaml"
 
 | Metric | Count |
 |--------|-------|
-| Total Tasks | 121 |
+| Total Tasks | 138 |
 | Setup Tasks | 8 |
 | Foundational Tasks | 8 |
 | US1 (Platform) | 25 |
@@ -488,9 +524,10 @@ Task: "Create RoleBinding in charts/floe-platform/templates/rolebinding.yaml"
 | US7 (Testing) | 7 |
 | US8 (Publishing) | 4 |
 | US9 (Security) | 8 |
+| US10 (Test Infra Migration) | 17 |
 | Polish | 10 |
 | E2E Integration | 7 |
-| Parallel Opportunities | 42 tasks marked [P] |
+| Parallel Opportunities | 43 tasks marked [P] |
 
 ---
 

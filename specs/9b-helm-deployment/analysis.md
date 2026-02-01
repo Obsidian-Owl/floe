@@ -234,19 +234,87 @@ This matrix shows whether Epic 9B tasks validate each integration point:
 
 ---
 
-## 7. Conclusion
+## 7. Test Infrastructure Convergence Decision
 
-The Epic 9B task list provides **solid foundational testing** for Helm charts but lacks **E2E validation of the complete vision**. The existing `testing/k8s/services/` manifests are well-structured and provide good patterns to follow, but they are:
+**DECISION MADE**: Option A - Helm charts REPLACE test infrastructure.
 
-1. Test-only (hardcoded values)
-2. Not parameterized (not Helm templates)
-3. Missing production features (HPA, PDB, NetworkPolicy, security contexts)
+### Resolution of Gaps
 
-Epic 9B addresses all of these gaps in the chart implementation (US1-US9). However, **the testing does not fully validate that the platform vision works end-to-end**. Specifically:
+| Gap ID | Status | Resolution |
+|--------|--------|------------|
+| GAP-008 | **RESOLVED** | Added US10 (17 tasks T122-T138) for test infrastructure migration |
+| GAP-009 | **RESOLVED** | Added "Test Infrastructure Convergence Strategy" section to plan.md |
+| GAP-010 | **RESOLVED** | Added FR-090 through FR-095 to spec.md |
 
-- Can a user deploy the platform with a single `helm install`? → **Tested (T020)**
-- Can a user run a dbt job after deployment? → **NOT automatically tested**
-- Does telemetry flow through OTel Collector? → **NOT tested**
-- Does lineage appear in Marquez? → **NOT tested**
+### Sync Mechanism
 
-**Recommendation**: Add T115-T121 to Phase 12a before marking Epic 9B complete.
+After Epic 9B, changes propagate automatically:
+
+```
+Developer modifies: charts/floe-platform/templates/deployment-polaris.yaml
+                              │
+                              ▼
+CI runs:           make kind-up (uses helm install -f values-test.yaml)
+                              │
+                              ▼
+Tests validate:    Integration tests run against modified chart
+                              │
+                              ▼
+Result:            Chart change is automatically tested - no manual sync needed
+```
+
+### Files to Delete (Phase 14)
+
+```
+testing/k8s/services/dagster.yaml      → Replaced by charts/floe-platform/
+testing/k8s/services/polaris.yaml      → Replaced by charts/floe-platform/
+testing/k8s/services/postgres.yaml     → Replaced by charts/floe-platform/
+testing/k8s/services/minio.yaml        → Replaced by charts/floe-platform/
+testing/k8s/services/marquez.yaml      → Replaced by charts/floe-platform/
+testing/k8s/services/jaeger.yaml       → Replaced or removed
+testing/k8s/services/keycloak.yaml     → Replaced or removed
+testing/k8s/services/infisical*.yaml   → Replaced or removed
+testing/k8s/services/registry*.yaml    → Replaced or removed
+testing/k8s/services/metrics-server.yaml → Replaced or removed
+```
+
+### Files to Keep
+
+```
+testing/k8s/kind-config.yaml           → Kind cluster configuration (port mappings)
+testing/k8s/namespace.yaml             → Namespace (or migrate to Helm hook)
+testing/k8s/jobs/test-runner.yaml      → Test execution container
+```
+
+---
+
+## 8. Conclusion
+
+The Epic 9B task list now provides **comprehensive testing** for Helm charts including **E2E validation** and **test infrastructure convergence**.
+
+### Updated Coverage
+
+| Question | Status | Task |
+|----------|--------|------|
+| Can deploy platform with `helm install`? | **TESTED** | T020, T041 |
+| Can run dbt job after deployment? | **TESTED** | T116, T117 |
+| Does telemetry flow through OTel? | **TESTED** | T119 |
+| Does lineage appear in Marquez? | **TESTED** | T118 |
+| Does test infra use same charts as prod? | **TESTED** | T122-T138 (US10) |
+| Does chart change propagate to tests? | **TESTED** | T137, T138 |
+
+### Key Improvements Made
+
+1. **E2E Integration** (Phase 13): 7 tasks for end-to-end workflow validation
+2. **Test Infrastructure Migration** (Phase 14 / US10): 17 tasks for Helm-based test infra
+3. **Spec Updates**: FR-090 through FR-095 for test infrastructure requirements
+4. **Plan Updates**: Test Infrastructure Convergence Strategy section
+5. **Success Criteria**: SC-011 and SC-012 for single source of truth
+
+### Total Task Count
+
+| Before Analysis | After Analysis | Delta |
+|-----------------|----------------|-------|
+| 114 tasks | 138 tasks | +24 tasks |
+
+**All identified gaps have been addressed.** Epic 9B is now specification-complete.
