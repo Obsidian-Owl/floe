@@ -1,0 +1,127 @@
+{{- $fullname := include "floe-platform.fullname" . -}}
+floe-platform has been deployed!
+
+================================================================================
+                              DEPLOYMENT SUMMARY
+================================================================================
+
+Release:    {{ .Release.Name }}
+Namespace:  {{ .Release.Namespace }}
+Version:    {{ .Chart.AppVersion }}
+
+================================================================================
+                              ACCESS INFORMATION
+================================================================================
+
+{{- if .Values.dagster.enabled }}
+
+DAGSTER WEBSERVER:
+{{- if .Values.ingress.enabled }}
+  URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ (index .Values.ingress.hosts 0).host }}
+{{- else }}
+  To access the Dagster UI, run:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $fullname }}-dagster-webserver 3000:80
+  Then open: http://localhost:3000
+{{- end }}
+{{- end }}
+
+{{- if .Values.polaris.enabled }}
+
+POLARIS CATALOG:
+  Internal endpoint: http://{{ $fullname }}-polaris:{{ .Values.polaris.service.port }}
+  To access Polaris locally:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $fullname }}-polaris {{ .Values.polaris.service.port }}:{{ .Values.polaris.service.port }}
+  Then use: http://localhost:{{ .Values.polaris.service.port }}
+{{- end }}
+
+{{- if .Values.otel.enabled }}
+
+OPENTELEMETRY COLLECTOR:
+  OTLP gRPC endpoint: {{ $fullname }}-otel-collector:4317
+  OTLP HTTP endpoint: http://{{ $fullname }}-otel-collector:4318
+{{- end }}
+
+{{- if .Values.postgresql.enabled }}
+
+POSTGRESQL:
+  Internal endpoint: {{ $fullname }}-postgresql:5432
+  Database: {{ .Values.postgresql.auth.database | default "floe" }}
+  Username: {{ .Values.postgresql.auth.username | default "floe" }}
+
+  To connect locally:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $fullname }}-postgresql 5432:5432
+{{- end }}
+
+================================================================================
+                              IMPORTANT WARNINGS
+================================================================================
+
+{{- if .Values.minio.enabled }}
+
+⚠️  MINIO OBJECT STORAGE WARNING:
+    MinIO is enabled and deployed as part of this release.
+
+    THIS IS FOR DEVELOPMENT AND DEMO PURPOSES ONLY!
+
+    For production deployments, you should:
+    1. Disable MinIO: minio.enabled=false
+    2. Use external S3-compatible storage (AWS S3, GCS, Azure Blob)
+    3. Configure storage credentials via external secrets
+
+    MinIO endpoints:
+    - API: http://{{ $fullname }}-minio:9000
+    - Console: http://{{ $fullname }}-minio:9001
+{{- end }}
+
+{{- if .Values.postgresql.enabled }}
+{{- if not .Values.postgresql.auth.existingSecret }}
+
+⚠️  POSTGRESQL CREDENTIALS WARNING:
+    PostgreSQL is using auto-generated or default credentials.
+
+    For production deployments:
+    1. Create a Secret with your PostgreSQL password
+    2. Set postgresql.auth.existingSecret to the Secret name
+    3. Ensure proper secret rotation policies
+{{- end }}
+{{- end }}
+
+{{- if eq .Values.global.environment "dev" }}
+
+ℹ️  DEVELOPMENT MODE:
+    This deployment is configured for development (global.environment=dev).
+    Resource limits are minimized for local development.
+
+    For production, set: global.environment=prod
+{{- end }}
+
+================================================================================
+                              NEXT STEPS
+================================================================================
+
+1. Verify all pods are running:
+   kubectl get pods -n {{ .Release.Namespace }}
+
+2. Check deployment status:
+   kubectl get deployments,statefulsets -n {{ .Release.Namespace }}
+
+3. View logs for troubleshooting:
+   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{- if .Values.dagster.enabled }}
+
+4. Deploy your dbt/Dagster code:
+   - Configure user code deployments in your values file
+   - See: dagster.dagster-user-deployments.deployments
+{{- end }}
+
+================================================================================
+                              DOCUMENTATION
+================================================================================
+
+For more information, see:
+- floe Platform Docs: https://floe.dev/docs
+- Helm Chart Reference: https://floe.dev/docs/deployment/helm
+- Troubleshooting Guide: https://floe.dev/docs/troubleshooting
+
+================================================================================
