@@ -66,7 +66,7 @@ polaris:
     size: 1Gi
   config:
     features:
-      ALLOW_ANONYMOUS_ACCESS: true
+      ALLOW_ANONYMOUS_ACCESS: false
 
 # OpenTelemetry Collector - enabled in deployment mode
 otel:
@@ -107,8 +107,7 @@ postgresql:
   auth:
     database: floe
     username: floe
-    # For local development only - set via --set or environment
-    password: ""
+    password: "floe-dev-password-1234"
   persistence:
     enabled: true
     size: 1Gi
@@ -127,8 +126,7 @@ minio:
     tag: latest
   auth:
     rootUser: minioadmin
-    # For local development only - set via --set or environment
-    rootPassword: ""
+    rootPassword: "minio-dev-password-1234"
   persistence:
     enabled: true
     size: 5Gi

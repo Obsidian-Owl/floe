@@ -256,9 +256,9 @@ polaris:
   config:
     # Default realm for authentication
     defaultRealm: default-realm
-    # Feature flags
+    # Feature flags - secure by default
     features:
-      ALLOW_ANONYMOUS_ACCESS: true
+      ALLOW_ANONYMOUS_ACCESS: false
       ALLOW_TABLE_LOCATION_OVERLAP: false
 
 # =============================================================================

@@ -109,7 +109,7 @@ postgresql:
   enabled: true
   auth:
     username: floe
-    password: floe-test-password
+    password: "floe-test-password-1234"
     database: floe
   primary:
     persistence:

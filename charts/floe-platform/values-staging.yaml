@@ -79,6 +79,13 @@ dagster:
 # PostgreSQL Configuration
 # =============================================================================
 postgresql:
+  auth:
+    # SECURITY: Staging REQUIRES one of these options:
+    # Option 1 (Recommended): Use External Secrets Operator
+    # existingSecret: "floe-postgresql-external"
+    # Option 2: Set a strong password (min 16 characters)
+    # password: "your-secure-staging-password"
+    {}
   primary:
     resources:
       requests:
@@ -101,6 +108,10 @@ polaris:
     limits:
       cpu: 1000m
       memory: 1Gi
+  # SECURITY: Disable anonymous access in staging
+  config:
+    features:
+      ALLOW_ANONYMOUS_ACCESS: false
 
 # =============================================================================
 # MinIO Configuration

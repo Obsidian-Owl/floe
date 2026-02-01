@@ -81,6 +81,11 @@ dagster:
 # PostgreSQL Configuration (Production-grade)
 # =============================================================================
 postgresql:
+  auth:
+    # REQUIRED: Use External Secrets Operator or set password via --set
+    # Option 1: existingSecret: "floe-postgresql-external"
+    # Option 2: --set postgresql.auth.password="your-secure-password"
+    existingSecret: ""  # Set this or password (min 16 chars)
   primary:
     resources:
       requests:
@@ -105,6 +110,12 @@ polaris:
     limits:
       cpu: 2000m
       memory: 2Gi
+  # SECURITY: Disable anonymous access in production
+  config:
+    features:
+      ALLOW_ANONYMOUS_ACCESS: false
+      ALLOW_TABLE_LOCATION_OVERLAP: false
+      ALLOW_EXTERNAL_METADATA_FILE_LOCATION: false
 
 # =============================================================================
 # MinIO Configuration (Production-grade)

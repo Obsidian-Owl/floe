@@ -12,9 +12,10 @@ rules:
     resources: ["pods", "pods/log", "pods/status"]
     verbs: ["get", "list", "watch", "create", "delete"]
 
+  # ConfigMaps for workspace configuration (secrets accessed via volume mounts, not API)
   - apiGroups: [""]
-    resources: ["configmaps", "secrets"]
-    verbs: ["get", "list", "watch"]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
 
   - apiGroups: [""]
     resources: ["events"]
