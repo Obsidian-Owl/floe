@@ -106,13 +106,15 @@ dagster:
   # Dagster global settings (passed to subchart)
   global:
     serviceAccountName: ""
+    # PostgreSQL secret name for Dagster components
+    postgresqlSecretName: "dagster-postgresql-secret"
 
   # Dagster webserver configuration
   dagsterWebserver:
     replicaCount: 1
     image:
-      repository: dagster/dagster-webserver
-      tag: ""  # Uses appVersion by default
+      repository: "docker.io/dagster/dagster-celery-k8s"
+      tag: ""  # Uses chart appVersion by default
       pullPolicy: IfNotPresent
     resources:
       requests:
@@ -123,26 +125,21 @@ dagster:
         memory: 512Mi
     service:
       type: ClusterIP
-      port: 3000
-    # Liveness and readiness probes
-    livenessProbe:
-      httpGet:
-        path: /server_info
-        port: http
-      initialDelaySeconds: 30
-      periodSeconds: 10
-    readinessProbe:
-      httpGet:
-        path: /server_info
-        port: http
-      initialDelaySeconds: 10
-      periodSeconds: 5
+      port: 80
+    # Workspace configuration - use external ConfigMap from this chart
+    workspace:
+      enabled: true
+      externalConfigmap: ""  # Auto-set via _helpers.tpl
+    # Additional environment variables
+    env: {}
+    envSecrets: []
+    envConfigMaps: []
 
   # Dagster daemon configuration
   dagsterDaemon:
-    replicaCount: 1
+    enabled: true
     image:
-      repository: dagster/dagster-daemon
+      repository: "docker.io/dagster/dagster-celery-k8s"
       tag: ""
       pullPolicy: IfNotPresent
     resources:
@@ -152,18 +149,25 @@ dagster:
       limits:
         cpu: 500m
         memory: 512Mi
+    # Additional environment variables
+    env: {}
+    envSecrets: []
+    envConfigMaps: []
 
   # PostgreSQL configuration for Dagster
+  # Disable subchart's PostgreSQL - we use parent chart's PostgreSQL
   postgresql:
-    # Use external PostgreSQL (recommended for production)
     enabled: false
-    # External PostgreSQL settings (when enabled: false)
-    host: ""
-    port: 5432
-    database: dagster
-    # Secret containing password
-    existingSecret: ""
-    existingSecretKey: password
+
+  # External PostgreSQL configuration (uses parent chart's PostgreSQL)
+  generatePostgresqlPasswordSecret: false
+  postgresqlHost: ""  # Auto-set to parent PostgreSQL service
+  postgresqlPort: 5432
+  postgresqlDatabase: dagster
+  postgresqlUsername: floe
+  # Secret for PostgreSQL password
+  postgresqlSecretName: "dagster-postgresql-secret"
+  postgresqlPasswordSecretKey: postgresql-password
 
   # Run launcher configuration
   runLauncher:
@@ -173,6 +177,19 @@ dagster:
         envConfigMaps: []
         envSecrets: []
         jobNamespace: ""
+        # Resources for run pods
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+  # User code deployments (configure in separate values file)
+  dagster-user-deployments:
+    enabled: false
+    deployments: []
 
 # =============================================================================
 # Polaris Configuration (Iceberg Catalog)
