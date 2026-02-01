@@ -189,12 +189,88 @@ jobs:
           "
 
   # ============================================================
-  # Stage 4: Integration Test (main branch only)
+  # Stage 4: Security Scanning (kubesec)
+  # ============================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
+      - name: Install kubesec
+        run: |
+          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz
+          sudo mv kubesec /usr/local/bin/
+
+      - name: Render templates for security scan
+        run: |
+          helm template floe charts/floe-platform \
+            --values charts/floe-platform/values.yaml \
+            --output-dir /tmp/security-scan
+
+      - name: Run kubesec scan
+        run: |
+          echo "=== Kubesec Security Scan ==="
+          FAILED=0
+          MIN_SCORE=7
+
+          # Scan each rendered template
+          for file in $(find /tmp/security-scan -name '*.yaml'); do
+            # Skip non-workload resources
+            KIND=$(yq -r '.kind // empty' "$file" 2>/dev/null || echo "")
+            if [[ "$KIND" != "Deployment" && "$KIND" != "StatefulSet" && "$KIND" != "DaemonSet" && "$KIND" != "Pod" ]]; then
+              continue
+            fi
+
+            echo "Scanning: $file"
+            RESULT=$(kubesec scan "$file" 2>/dev/null || echo "[]")
+            SCORE=$(echo "$RESULT" | jq -r '.[0].score // 0')
+
+            if [[ "$SCORE" -lt "$MIN_SCORE" ]]; then
+              echo "FAIL: $file (score: $SCORE, minimum: $MIN_SCORE)"
+              echo "$RESULT" | jq -r '.[0].scoring.critical // [] | .[] | "  CRITICAL: \(.selector) - \(.reason)"'
+              echo "$RESULT" | jq -r '.[0].scoring.advise // [] | .[] | "  ADVISE: \(.selector) - \(.reason)"'
+              FAILED=1
+            else
+              echo "PASS: $file (score: $SCORE)"
+            fi
+          done
+
+          if [[ "$FAILED" -eq 1 ]]; then
+            echo ""
+            echo "Security scan failed: One or more resources scored below minimum ($MIN_SCORE)"
+            exit 1
+          fi
+
+          echo ""
+          echo "All resources passed security scan"
+
+  # ============================================================
+  # Stage 5: Integration Test (main branch only)
   # ============================================================
   integration:
     name: Integration Test
     runs-on: ubuntu-latest
-    needs: [lint, template, schema]
+    needs: [lint, template, schema, security]
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
