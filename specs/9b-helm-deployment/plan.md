@@ -93,9 +93,13 @@ The implementation uses official Helm charts as subcharts where available (Dagst
 
 ### Cleanup Required
 - [ ] Old code to remove: `testing/k8s/services/*.yaml` (replaced by Helm charts)
+- [ ] Old code to remove: `testing/k8s/scripts/init-*.sh` (replaced by Helm hooks)
+- [ ] Old code to remove: `testing/k8s/helm-values/*.yaml` (replaced by chart values)
 - [ ] Old tests to remove: None
 - [ ] Old docs to update: `docs/guides/deployment.md`, `TESTING.md` (reference Helm-based test infra)
 - [ ] Scripts to update: `testing/k8s/setup-cluster.sh` (migrate to Helm install)
+- [ ] Scripts to update: `testing/k8s/cleanup-cluster.sh` (migrate to Helm uninstall)
+- [ ] Review: `testing/k8s/jobs/test-runner.yaml` (keep if used for pytest, delete if replaced)
 
 ## Test Infrastructure Convergence Strategy
 

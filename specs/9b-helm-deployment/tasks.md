@@ -391,7 +391,18 @@ tests/
 - [ ] T137 [US10] Add CI validation that `values-test.yaml` passes schema validation
 - [ ] T138 [US10] Create drift detection script `scripts/validate-test-values.sh` that verifies values-test.yaml is subset of schema
 
-**Checkpoint**: Test Infrastructure Migration complete - single source of truth achieved
+### Cleanup Tasks (Post-Migration)
+
+- [ ] T139 [US10] Delete or migrate `testing/k8s/scripts/init-polaris.sh` to Helm post-install hook
+- [ ] T140 [US10] Delete or migrate `testing/k8s/scripts/init-keycloak.sh` to Helm post-install hook (if Keycloak needed)
+- [ ] T141 [US10] Delete or migrate `testing/k8s/scripts/init-infisical.sh` to Helm post-install hook (if Infisical needed)
+- [ ] T142 [US10] Update `testing/k8s/cleanup-cluster.sh` to use `helm uninstall floe-platform floe-jobs`
+- [ ] T143 [US10] Delete `testing/k8s/helm-values/infisical.yaml` (replaced by chart values)
+- [ ] T144 [US10] Review `testing/k8s/jobs/test-runner.yaml` - KEEP if used for pytest execution, DELETE if replaced
+- [ ] T145 [P] [US10] Remove `.gitkeep` files from emptied directories and delete empty `testing/k8s/services/` directory
+- [ ] T146 [US10] Final verification: confirm only `kind-config.yaml`, `setup-cluster.sh`, `cleanup-cluster.sh` remain in `testing/k8s/`
+
+**Checkpoint**: Test Infrastructure Migration complete - single source of truth achieved, no orphaned artifacts
 
 ---
 
@@ -512,7 +523,7 @@ Task: "Create RoleBinding in charts/floe-platform/templates/rolebinding.yaml"
 
 | Metric | Count |
 |--------|-------|
-| Total Tasks | 138 |
+| Total Tasks | 146 |
 | Setup Tasks | 8 |
 | Foundational Tasks | 8 |
 | US1 (Platform) | 25 |
@@ -524,10 +535,10 @@ Task: "Create RoleBinding in charts/floe-platform/templates/rolebinding.yaml"
 | US7 (Testing) | 7 |
 | US8 (Publishing) | 4 |
 | US9 (Security) | 8 |
-| US10 (Test Infra Migration) | 17 |
+| US10 (Test Infra Migration) | 25 |
 | Polish | 10 |
 | E2E Integration | 7 |
-| Parallel Opportunities | 43 tasks marked [P] |
+| Parallel Opportunities | 44 tasks marked [P] |
 
 ---
 
