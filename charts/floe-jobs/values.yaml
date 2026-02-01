@@ -213,6 +213,33 @@ serviceAccount:
   annotations: {}
 
 # =============================================================================
+# ConfigMaps
+# =============================================================================
+# Define custom ConfigMaps for job configuration
+configMaps: []
+# - name: my-config
+#   labels: {}
+#   annotations: {}
+#   data:
+#     config.yaml: |
+#       key: value
+
+# =============================================================================
+# Secrets
+# =============================================================================
+# Define custom Secrets for job credentials
+# NOTE: For production, use external secrets management (ESO, Vault, etc.)
+secrets: []
+# - name: my-credentials
+#   type: Opaque
+#   data:
+#     username: admin
+#     password: secret
+#   # Or use stringData for unencoded values:
+#   # stringData:
+#   #   config.json: '{"key": "value"}'
+
+# =============================================================================
 # Platform Integration
 # =============================================================================
 # Settings for integrating with floe-platform

@@ -1,0 +1,43 @@
+{{/*
+ConfigMap for job artifacts and configuration.
+Used to mount dbt profiles, project files, and other configuration.
+*/}}
+
+{{- if .Values.dbt.enabled }}
+{{- if .Values.dbt.profiles }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-jobs.fullname" . }}-dbt-profiles
+  labels:
+    {{- include "floe-jobs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dbt
+data:
+  profiles.yml: |
+    {{- .Values.dbt.profiles | nindent 4 }}
+{{- end }}
+{{- end }}
+
+{{- /* Custom ConfigMaps */ -}}
+{{- range .Values.configMaps }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-jobs.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "floe-jobs.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- range $key, $value := .data }}
+  {{ $key }}: |
+    {{- $value | nindent 4 }}
+  {{- end }}
+{{- end }}
