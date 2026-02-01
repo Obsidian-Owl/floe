@@ -1,0 +1,616 @@
+# floe-platform Helm Chart Values
+# ================================
+#
+# This file contains default values for the floe-platform chart.
+# Override these values in environment-specific files:
+#   - values-dev.yaml: Local/Kind development
+#   - values-staging.yaml: Pre-production
+#   - values-prod.yaml: Production with HA
+#   - values-test.yaml: CI/CD testing
+#
+# Configuration Hierarchy:
+#   values.yaml (defaults) < values-{env}.yaml < --set flags
+#
+# For schema validation, see values.schema.json
+
+# =============================================================================
+# Global Configuration
+# =============================================================================
+global:
+  # Environment name (dev, staging, prod)
+  environment: dev
+
+  # Image pull policy for all containers
+  imagePullPolicy: IfNotPresent
+
+  # Image pull secrets (if using private registry)
+  imagePullSecrets: []
+  # - name: regcred
+
+  # Default storage class for PVCs
+  storageClass: ""
+
+  # Common labels applied to all resources
+  commonLabels: {}
+
+  # Common annotations applied to all resources
+  commonAnnotations: {}
+
+# =============================================================================
+# Namespace Configuration
+# =============================================================================
+namespace:
+  # Create namespace if it doesn't exist
+  create: false
+
+  # Namespace name (defaults to release namespace)
+  name: ""
+
+# =============================================================================
+# Cluster Mapping (Multi-Environment Support)
+# =============================================================================
+# Maps logical environments to physical cluster/namespace configurations.
+# Used by floe helm generate to produce environment-specific values.
+clusterMapping:
+  # Non-production cluster configuration
+  nonProd:
+    cluster: ""  # Cluster context name (empty = current)
+    environments:
+      - dev
+      - qa
+      - staging
+    namespaceTemplate: "floe-{{ .environment }}"
+    resources:
+      preset: small
+
+  # Production cluster configuration
+  prod:
+    cluster: ""
+    environments:
+      - prod
+    namespaceTemplate: "floe-prod"
+    resources:
+      preset: large
+
+# Resource presets for different environment types
+resourcePresets:
+  small:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  medium:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  large:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# =============================================================================
+# Dagster Configuration (Orchestration)
+# =============================================================================
+dagster:
+  # Enable Dagster deployment
+  enabled: true
+
+  # Dagster global settings (passed to subchart)
+  global:
+    serviceAccountName: ""
+
+  # Dagster webserver configuration
+  dagsterWebserver:
+    replicaCount: 1
+    image:
+      repository: dagster/dagster-webserver
+      tag: ""  # Uses appVersion by default
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    service:
+      type: ClusterIP
+      port: 3000
+    # Liveness and readiness probes
+    livenessProbe:
+      httpGet:
+        path: /server_info
+        port: http
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /server_info
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 5
+
+  # Dagster daemon configuration
+  dagsterDaemon:
+    replicaCount: 1
+    image:
+      repository: dagster/dagster-daemon
+      tag: ""
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # PostgreSQL configuration for Dagster
+  postgresql:
+    # Use external PostgreSQL (recommended for production)
+    enabled: false
+    # External PostgreSQL settings (when enabled: false)
+    host: ""
+    port: 5432
+    database: dagster
+    # Secret containing password
+    existingSecret: ""
+    existingSecretKey: password
+
+  # Run launcher configuration
+  runLauncher:
+    type: K8sRunLauncher
+    config:
+      k8sRunLauncher:
+        envConfigMaps: []
+        envSecrets: []
+        jobNamespace: ""
+
+# =============================================================================
+# Polaris Configuration (Iceberg Catalog)
+# =============================================================================
+polaris:
+  # Enable Polaris deployment
+  enabled: true
+
+  # Polaris image
+  image:
+    repository: apache/polaris
+    tag: "0.9.0"
+    pullPolicy: IfNotPresent
+
+  # Replica count
+  replicaCount: 1
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8181
+    metricsPort: 8182
+
+  # Persistence configuration
+  persistence:
+    # Type: in-memory (testing), file (dev), external (prod)
+    type: file
+    # Size for file-based persistence
+    size: 1Gi
+    storageClass: ""
+    # External catalog configuration (when type: external)
+    external:
+      type: ""  # jdbc, dynamodb
+      connectionString: ""
+
+  # Health probe configuration
+  livenessProbe:
+    httpGet:
+      path: /healthcheck
+      port: metrics
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /healthcheck
+      port: metrics
+    initialDelaySeconds: 10
+    periodSeconds: 5
+
+  # Polaris server configuration (mounted as ConfigMap)
+  config:
+    # Default realm for authentication
+    defaultRealm: default-realm
+    # Feature flags
+    features:
+      ALLOW_ANONYMOUS_ACCESS: true
+      ALLOW_TABLE_LOCATION_OVERLAP: false
+
+# =============================================================================
+# OpenTelemetry Collector Configuration (Observability)
+# =============================================================================
+otel:
+  # Enable OTel Collector deployment
+  enabled: true
+
+  # Deployment mode: deployment (gateway) or daemonset
+  mode: deployment
+
+  # Replica count (for deployment mode)
+  replicaCount: 1
+
+  # Autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Collector configuration
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch:
+        send_batch_size: 1024
+        timeout: 10s
+
+    exporters:
+      # Debug exporter (for development)
+      debug:
+        verbosity: detailed
+      # OTLP exporter (configure endpoint via values override)
+      otlp:
+        endpoint: ""
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+
+  # Ports configuration (OTel collector schema)
+  ports:
+    otlp:
+      enabled: true
+      containerPort: 4317
+      servicePort: 4317
+      protocol: TCP
+    otlp-http:
+      enabled: true
+      containerPort: 4318
+      servicePort: 4318
+      protocol: TCP
+    metrics:
+      enabled: true
+      containerPort: 8888
+      servicePort: 8888
+      protocol: TCP
+
+# =============================================================================
+# PostgreSQL Configuration (Metadata Store)
+# =============================================================================
+postgresql:
+  # Enable built-in PostgreSQL (disable for external)
+  enabled: true
+
+  # PostgreSQL image
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  # Authentication
+  auth:
+    # Database name
+    database: floe
+    # Username
+    username: floe
+    # Password (use existingSecret in production)
+    password: ""
+    # Existing secret with password
+    existingSecret: ""
+    existingSecretKey: password
+
+  # Persistence
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Primary pod configuration
+  primary:
+    # Init scripts (create databases)
+    initdb:
+      scripts:
+        init-databases.sql: |
+          CREATE DATABASE dagster;
+          CREATE DATABASE marquez;
+          GRANT ALL PRIVILEGES ON DATABASE dagster TO floe;
+          GRANT ALL PRIVILEGES ON DATABASE marquez TO floe;
+
+# =============================================================================
+# MinIO Configuration (Object Storage - Dev/Demo Only)
+# =============================================================================
+minio:
+  # Enable MinIO (DEV/DEMO ONLY - use external S3 for production)
+  enabled: false
+
+  # MinIO image
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Authentication
+  auth:
+    rootUser: minioadmin
+    rootPassword: ""
+    existingSecret: ""
+
+  # Persistence
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Default buckets to create
+  defaultBuckets: "floe-data,floe-artifacts"
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    ports:
+      api: 9000
+      console: 9001
+
+# =============================================================================
+# Marquez Configuration (OpenLineage - Optional)
+# =============================================================================
+marquez:
+  # Enable Marquez deployment (optional - for lineage tracking)
+  enabled: false
+
+  # Marquez image
+  image:
+    repository: marquezproject/marquez
+    tag: "0.49.0"
+    pullPolicy: IfNotPresent
+
+  # Replica count
+  replicaCount: 1
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 5000
+    adminPort: 5001
+
+  # PostgreSQL configuration (uses shared PostgreSQL)
+  postgresql:
+    host: ""  # Auto-configured if postgresql.enabled
+    port: 5432
+    database: marquez
+    existingSecret: ""
+
+# =============================================================================
+# RBAC Configuration
+# =============================================================================
+rbac:
+  # Create RBAC resources
+  create: true
+
+# =============================================================================
+# Service Account Configuration
+# =============================================================================
+serviceAccount:
+  # Create service account
+  create: true
+
+  # Service account name (auto-generated if empty)
+  name: ""
+
+  # Annotations for the service account
+  annotations: {}
+
+  # Automount API credentials
+  automountServiceAccountToken: true
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# =============================================================================
+# Network Policies
+# =============================================================================
+networkPolicy:
+  # Enable network policies
+  enabled: false
+
+  # Ingress rules
+  ingress: []
+
+  # Egress rules
+  egress: []
+
+# =============================================================================
+# Ingress Configuration
+# =============================================================================
+ingress:
+  # Enable ingress
+  enabled: false
+
+  # Ingress class name
+  className: ""
+
+  # Annotations
+  annotations: {}
+
+  # Hosts configuration
+  hosts:
+    - host: floe.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dagster-webserver
+          port: 3000
+
+  # TLS configuration
+  tls: []
+
+# =============================================================================
+# Pod Disruption Budget
+# =============================================================================
+podDisruptionBudget:
+  # Enable PDB
+  enabled: false
+
+  # Minimum available pods
+  minAvailable: 1
+
+  # Maximum unavailable pods (alternative to minAvailable)
+  # maxUnavailable: 1
+
+# =============================================================================
+# Horizontal Pod Autoscaler
+# =============================================================================
+autoscaling:
+  # Enable HPA
+  enabled: false
+
+  # Minimum replicas
+  minReplicas: 1
+
+  # Maximum replicas
+  maxReplicas: 5
+
+  # Target CPU utilization
+  targetCPUUtilizationPercentage: 70
+
+  # Target memory utilization
+  targetMemoryUtilizationPercentage: 80
+
+# =============================================================================
+# Resource Quota
+# =============================================================================
+resourceQuota:
+  # Enable resource quota
+  enabled: false
+
+  # Hard limits
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    pods: "50"
+
+# =============================================================================
+# External Secrets Configuration
+# =============================================================================
+externalSecrets:
+  # Enable External Secrets integration
+  enabled: false
+
+  # Secret store reference
+  secretStoreRef:
+    name: ""
+    kind: ClusterSecretStore
+
+  # Refresh interval
+  refreshInterval: 1h
+
+  # Secret mappings
+  secrets: []
+  # - name: postgresql-credentials
+  #   remoteRef:
+  #     key: floe/postgresql

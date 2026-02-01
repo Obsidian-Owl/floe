@@ -39,6 +39,7 @@ from floe_core.cli.data import (
     test_command,
     validate_command,
 )
+from floe_core.cli.helm import helm
 from floe_core.cli.network import network
 from floe_core.cli.platform import platform
 from floe_core.cli.rbac import rbac
@@ -88,6 +89,7 @@ cli.add_command(platform)
 cli.add_command(rbac)
 cli.add_command(network)
 cli.add_command(artifact)
+cli.add_command(helm)
 
 # Register Data Team stub commands (root level)
 cli.add_command(compile_command)
