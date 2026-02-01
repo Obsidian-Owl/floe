@@ -1,0 +1,31 @@
+apiVersion: v2
+name: floe-jobs
+description: Helm chart for floe data product jobs (dbt runs, data ingestion, etc.)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Chart metadata
+home: https://floe.dev
+sources:
+  - https://github.com/Obsidian-Owl/floe
+maintainers:
+  - name: floe Team
+    email: team@floe.dev
+
+keywords:
+  - floe
+  - data-engineering
+  - dbt
+  - kubernetes-jobs
+  - cronjob
+  - data-pipeline
+
+annotations:
+  # Artifact Hub annotations
+  artifacthub.io/category: data-processing
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "true"
+  # Indicates this chart is designed to work with floe-platform
+  floe.dev/companion-chart: floe-platform

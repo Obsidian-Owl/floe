@@ -1,0 +1,281 @@
+{{/*
+Job template for one-time data jobs (dbt run, data ingestion, etc.)
+This template is used for jobs that run once and complete.
+For scheduled jobs, use cronjob.yaml instead.
+*/}}
+
+{{- /* dbt Job */ -}}
+{{- if and .Values.dbt.enabled (not .Values.dbt.schedule) }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "floe-jobs.fullname" . }}-dbt
+  labels:
+    {{- include "floe-jobs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dbt
+  annotations:
+    {{- with .Values.global.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.defaults.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  {{- with .Values.defaults.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  backoffLimit: {{ .Values.defaults.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "floe-jobs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dbt
+    spec:
+      restartPolicy: {{ .Values.defaults.restartPolicy }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "floe-jobs.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.defaults.securityContext | nindent 8 }}
+      containers:
+        - name: dbt
+          securityContext:
+            {{- toYaml .Values.defaults.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.dbt.image.repository }}:{{ .Values.dbt.image.tag }}"
+          imagePullPolicy: {{ .Values.dbt.image.pullPolicy | default .Values.global.imagePullPolicy }}
+          {{- with .Values.dbt.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.dbt.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- if include "floe-jobs.polarisEndpoint" . }}
+            - name: POLARIS_ENDPOINT
+              value: {{ include "floe-jobs.polarisEndpoint" . | quote }}
+            {{- end }}
+            {{- if include "floe-jobs.otelEndpoint" . }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ include "floe-jobs.otelEndpoint" . | quote }}
+            {{- end }}
+            {{- with .Values.dbt.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.dbt.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.dbt.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- if .Values.dbt.resources }}
+            {{- toYaml .Values.dbt.resources | nindent 12 }}
+            {{- else }}
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+            {{- end }}
+      {{- with .Values.dbt.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaults.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaults.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaults.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+{{- /* Ingestion Job */ -}}
+{{- if and .Values.ingestion.enabled (not .Values.ingestion.schedule) }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "floe-jobs.fullname" . }}-ingestion
+  labels:
+    {{- include "floe-jobs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion
+  annotations:
+    {{- with .Values.global.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.defaults.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  {{- with .Values.defaults.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  backoffLimit: {{ .Values.defaults.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "floe-jobs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ingestion
+    spec:
+      restartPolicy: {{ .Values.defaults.restartPolicy }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "floe-jobs.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.defaults.securityContext | nindent 8 }}
+      containers:
+        - name: ingestion
+          securityContext:
+            {{- toYaml .Values.defaults.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.ingestion.image.repository }}:{{ .Values.ingestion.image.tag }}"
+          imagePullPolicy: {{ .Values.ingestion.image.pullPolicy | default .Values.global.imagePullPolicy }}
+          {{- with .Values.ingestion.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ingestion.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- if include "floe-jobs.polarisEndpoint" . }}
+            - name: POLARIS_ENDPOINT
+              value: {{ include "floe-jobs.polarisEndpoint" . | quote }}
+            {{- end }}
+            {{- if include "floe-jobs.otelEndpoint" . }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ include "floe-jobs.otelEndpoint" . | quote }}
+            {{- end }}
+            {{- with .Values.ingestion.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.ingestion.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ingestion.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- if .Values.ingestion.resources }}
+            {{- toYaml .Values.ingestion.resources | nindent 12 }}
+            {{- else }}
+            {{- toYaml .Values.defaults.resources | nindent 12 }}
+            {{- end }}
+      {{- with .Values.ingestion.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaults.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaults.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaults.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+
+{{- /* Custom Jobs */ -}}
+{{- range .Values.customJobs }}
+{{- if not .schedule }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "floe-jobs.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "floe-jobs.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ .name }}
+  annotations:
+    {{- with $.Values.global.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with $.Values.defaults.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  {{- with $.Values.defaults.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  backoffLimit: {{ $.Values.defaults.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "floe-jobs.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ .name }}
+    spec:
+      restartPolicy: {{ $.Values.defaults.restartPolicy }}
+      {{- with $.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "floe-jobs.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml $.Values.defaults.securityContext | nindent 8 }}
+      containers:
+        - name: {{ .name }}
+          securityContext:
+            {{- toYaml $.Values.defaults.containerSecurityContext | nindent 12 }}
+          image: "{{ .image.repository }}:{{ .image.tag }}"
+          imagePullPolicy: {{ .image.pullPolicy | default $.Values.global.imagePullPolicy }}
+          {{- with .command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- if .resources }}
+            {{- toYaml .resources | nindent 12 }}
+            {{- else }}
+            {{- toYaml $.Values.defaults.resources | nindent 12 }}
+            {{- end }}
+      {{- with .volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.defaults.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.defaults.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.defaults.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
