@@ -1,0 +1,192 @@
+# Flux Kustomization for floe-platform
+#
+# This template orchestrates the deployment of floe-platform using
+# Flux CD's Kustomization CRD for GitOps-based management.
+#
+# Directory structure expected:
+#   clusters/
+#     production/
+#       floe-platform/
+#         kustomization.yaml (this file)
+#         helmrelease.yaml
+#     staging/
+#       floe-platform/
+#         kustomization.yaml
+#         helmrelease.yaml
+#
+# Prerequisites:
+#   1. Flux v2 installed in the cluster
+#   2. GitRepository source configured pointing to this repo
+#
+# Usage:
+#   1. Place this file in your clusters/<env>/floe-platform/ directory
+#   2. Update spec.sourceRef to point to your GitRepository
+#   3. Flux will automatically reconcile
+#
+# Requirements:
+# - 9b-FR-072: Flux Kustomization template
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: floe-platform
+  namespace: flux-system
+spec:
+  # Reconciliation interval
+  interval: 10m
+
+  # Retry interval on failure
+  retryInterval: 2m
+
+  # Timeout for apply operations
+  timeout: 5m
+
+  # Source reference (GitRepository or OCIRepository)
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+
+  # Path to kustomize overlay or resources
+  path: ./clusters/dev/floe-platform
+
+  # Prune resources no longer in source
+  prune: true
+
+  # Wait for resources to be ready
+  wait: true
+
+  # Force apply (use with caution)
+  force: false
+
+  # Target namespace for resources without explicit namespace
+  targetNamespace: floe-dev
+
+  # Health checks for deployed resources
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-dagster-webserver
+      namespace: floe-dev
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-dagster-daemon
+      namespace: floe-dev
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-polaris
+      namespace: floe-dev
+
+  # Patches to apply (optional)
+  # patches:
+  #   - patch: |
+  #       - op: replace
+  #         path: /spec/values/global/environment
+  #         value: dev
+  #     target:
+  #       kind: HelmRelease
+  #       name: floe-platform-dev
+
+  # Decryption for SOPS-encrypted secrets (optional)
+  # decryption:
+  #   provider: sops
+  #   secretRef:
+  #     name: sops-gpg
+
+  # Post-build variable substitution (optional)
+  # postBuild:
+  #   substitute:
+  #     ENVIRONMENT: dev
+  #     CLUSTER_NAME: dev-cluster
+  #   substituteFrom:
+  #     - kind: ConfigMap
+  #       name: cluster-vars
+  #     - kind: Secret
+  #       name: cluster-secrets
+
+  # Dependencies - wait for these before reconciling
+  # dependsOn:
+  #   - name: infrastructure
+  #     namespace: flux-system
+
+---
+# Example: Multi-environment setup with Kustomization per environment
+#
+# Base HelmRelease that other environments inherit from
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: floe-platform-base
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./charts/examples/flux
+  prune: false
+  # Base doesn't apply directly, just defines resources
+  suspend: true
+---
+# Staging environment
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: floe-platform-staging
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./clusters/staging/floe-platform
+  prune: true
+  wait: true
+  targetNamespace: floe-staging
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-dagster-webserver
+      namespace: floe-staging
+  postBuild:
+    substitute:
+      ENVIRONMENT: staging
+---
+# Production environment (with manual gating)
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: floe-platform-prod
+  namespace: flux-system
+spec:
+  interval: 30m  # Less frequent for production
+  retryInterval: 5m
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./clusters/prod/floe-platform
+  prune: false  # Don't auto-prune in production
+  wait: true
+  targetNamespace: floe-prod
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-dagster-webserver
+      namespace: floe-prod
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-dagster-daemon
+      namespace: floe-prod
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: floe-polaris
+      namespace: floe-prod
+  postBuild:
+    substitute:
+      ENVIRONMENT: prod
+  # Production requires the staging deployment to be healthy
+  dependsOn:
+    - name: floe-platform-staging

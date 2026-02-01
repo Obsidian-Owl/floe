@@ -177,6 +177,68 @@ See [Dagster Helm Chart](https://docs.dagster.io/deployment/guides/kubernetes/de
 | `ingress.className` | Ingress class | `nginx` |
 | `ingress.hosts` | Ingress hosts | `[]` |
 
+## GitOps Deployment
+
+### ArgoCD
+
+Use the provided ArgoCD templates for GitOps deployment:
+
+```bash
+# Single environment
+kubectl apply -f charts/examples/argocd/application.yaml
+
+# Multi-environment with ApplicationSet
+kubectl apply -f charts/examples/argocd/applicationset.yaml
+```
+
+The ApplicationSet template includes:
+- Progressive rollout (dev → qa → staging → prod)
+- Automated sync for non-prod, manual for prod
+- Retry policies with exponential backoff
+- Drift detection and self-healing
+
+### Flux CD
+
+Use the provided Flux templates for GitOps deployment:
+
+```bash
+# Apply HelmRelease
+kubectl apply -f charts/examples/flux/helmrelease.yaml
+
+# Apply Kustomization for environment orchestration
+kubectl apply -f charts/examples/flux/kustomization.yaml
+```
+
+The Flux templates include:
+- HelmRepository and HelmRelease CRDs
+- Kustomization with health checks
+- Drift detection with configurable ignore paths
+- SOPS decryption support (optional)
+- Dependency ordering between environments
+
+### GitOps Best Practices
+
+1. **Repository Structure**:
+   ```
+   clusters/
+     dev/
+       floe-platform/
+         kustomization.yaml
+         helmrelease.yaml
+     staging/
+       floe-platform/
+         kustomization.yaml
+         helmrelease.yaml
+     prod/
+       floe-platform/
+         kustomization.yaml
+         helmrelease.yaml
+   ```
+
+2. **Secrets Management**: Use SOPS, Sealed Secrets, or External Secrets Operator
+3. **Progressive Delivery**: Deploy to dev first, then staging, then production
+4. **Health Checks**: Configure health checks for critical deployments
+
 ## Upgrade Guide
 
 ```bash
