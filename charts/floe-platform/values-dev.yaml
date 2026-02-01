@@ -107,7 +107,8 @@ postgresql:
   auth:
     database: floe
     username: floe
-    password: "floe-dev-password"
+    # For local development only - set via --set or environment
+    password: ""
   persistence:
     enabled: true
     size: 1Gi
@@ -126,7 +127,8 @@ minio:
     tag: latest
   auth:
     rootUser: minioadmin
-    rootPassword: "minio-dev-password"
+    # For local development only - set via --set or environment
+    rootPassword: ""
   persistence:
     enabled: true
     size: 5Gi
