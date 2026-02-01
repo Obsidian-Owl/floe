@@ -302,6 +302,28 @@ kubectl logs -l app.kubernetes.io/name=dagster -n floe-staging
 helm template floe ./charts/floe-platform -f values.yaml --debug
 ```
 
+## Compatibility Matrix
+
+| Chart Version | floe-core | Kubernetes | Helm | Dagster Chart | OTel Chart |
+|---------------|-----------|------------|------|---------------|------------|
+| 0.1.x         | >=0.5.0   | >=1.28     | >=3.12 | 1.9.6       | 0.108.0    |
+
+### Subchart Versions
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Dagster   | 1.9.6   | Orchestration platform |
+| OpenTelemetry Collector | 0.108.0 | Observability |
+| MinIO (Bitnami) | 14.8.5 | Dev/Demo only |
+
+### Image Versions
+
+| Component | Default Image | Tag |
+|-----------|---------------|-----|
+| Polaris   | apache/polaris | 0.9.0 |
+| PostgreSQL | postgres | 16-alpine |
+| Marquez (optional) | marquezproject/marquez | 0.49.0 |
+
 ## Related Documentation
 
 - [Epic 9B Specification](../../specs/9b-helm-deployment/spec.md)
