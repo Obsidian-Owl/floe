@@ -95,6 +95,28 @@
           "type": "boolean",
           "description": "Enable HPA",
           "default": false
+        },
+        "dagster": {
+          "type": "object",
+          "description": "Dagster webserver HPA settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "targetMemoryUtilizationPercentage": { "type": ["integer", "string"] }
+          }
+        },
+        "polaris": {
+          "type": "object",
+          "description": "Polaris HPA settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "targetMemoryUtilizationPercentage": { "type": ["integer", "string"] }
+          }
         }
       }
     },
@@ -111,6 +133,112 @@
           "type": "integer",
           "description": "Minimum available pods",
           "minimum": 0
+        },
+        "dagster": {
+          "type": "object",
+          "description": "Dagster PDB settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minAvailable": { "type": "integer", "minimum": 0 },
+            "maxUnavailable": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "polaris": {
+          "type": "object",
+          "description": "Polaris PDB settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minAvailable": { "type": "integer", "minimum": 0 },
+            "maxUnavailable": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "postgresql": {
+          "type": "object",
+          "description": "PostgreSQL PDB settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minAvailable": { "type": "integer", "minimum": 0 },
+            "maxUnavailable": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "resourceQuota": {
+      "type": "object",
+      "description": "ResourceQuota configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable ResourceQuota",
+          "default": false
+        },
+        "hard": {
+          "type": "object",
+          "description": "Hard resource limits",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "podSecurityStandards": {
+      "type": "object",
+      "description": "Pod Security Standards configuration",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["privileged", "baseline", "restricted"],
+          "description": "PSS profile to enforce",
+          "default": "restricted"
+        },
+        "version": {
+          "type": "string",
+          "description": "PSS version (e.g., v1.25, latest)"
+        },
+        "warn": {
+          "type": "boolean",
+          "description": "Enable PSS warnings"
+        },
+        "audit": {
+          "type": "boolean",
+          "description": "Enable PSS auditing"
+        }
+      }
+    },
+    "externalSecrets": {
+      "type": "object",
+      "description": "External Secrets Operator configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "secretStoreRef": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["SecretStore", "ClusterSecretStore"] }
+          }
+        },
+        "refreshInterval": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$"
+        },
+        "postgresql": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "remoteRef": { "type": "object" }
+          }
+        },
+        "minio": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "remoteRef": { "type": "object" }
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "items": { "type": "object" }
         }
       }
     },

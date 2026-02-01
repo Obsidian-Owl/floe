@@ -517,6 +517,21 @@ serviceAccount:
 # =============================================================================
 # Security Configuration
 # =============================================================================
+
+# Pod Security Standards (PSS) profile
+# Values: privileged, baseline, restricted
+# See: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+podSecurityStandards:
+  # Enforce PSS restricted profile for production
+  profile: restricted
+  # Version for PSS enforcement (e.g., v1.25, latest)
+  version: latest
+  # Warn when pods don't meet PSS standards
+  warn: true
+  # Audit when pods don't meet PSS standards
+  audit: true
+
+# Pod-level security context (applied to all containers in a pod)
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
@@ -525,6 +540,7 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# Container-level security context (applied to individual containers)
 containerSecurityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
@@ -579,11 +595,25 @@ podDisruptionBudget:
   # Enable PDB
   enabled: false
 
-  # Minimum available pods
+  # Global minimum available pods (default for all components)
   minAvailable: 1
 
   # Maximum unavailable pods (alternative to minAvailable)
   # maxUnavailable: 1
+
+  # Component-specific PDB settings
+  dagster:
+    enabled: true  # Enabled when parent enabled and dagster.enabled
+    minAvailable: 1
+    # maxUnavailable: 1
+
+  polaris:
+    enabled: true
+    minAvailable: 1
+
+  postgresql:
+    enabled: true
+    minAvailable: 1
 
 # =============================================================================
 # Horizontal Pod Autoscaler
@@ -592,17 +622,24 @@ autoscaling:
   # Enable HPA
   enabled: false
 
-  # Minimum replicas
-  minReplicas: 1
+  # Component-specific HPA settings
+  dagster:
+    enabled: true  # Enabled when parent enabled and dagster.enabled
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: ""  # Empty = disabled
+    scaleDownStabilizationSeconds: 300
+    scaleUpStabilizationSeconds: 0
 
-  # Maximum replicas
-  maxReplicas: 5
-
-  # Target CPU utilization
-  targetCPUUtilizationPercentage: 70
-
-  # Target memory utilization
-  targetMemoryUtilizationPercentage: 80
+  polaris:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: ""
+    scaleDownStabilizationSeconds: 300
+    scaleUpStabilizationSeconds: 0
 
 # =============================================================================
 # Resource Quota
@@ -626,7 +663,7 @@ externalSecrets:
   # Enable External Secrets integration
   enabled: false
 
-  # Secret store reference
+  # Secret store reference (default for all secrets)
   secretStoreRef:
     name: ""
     kind: ClusterSecretStore
@@ -634,8 +671,33 @@ externalSecrets:
   # Refresh interval
   refreshInterval: 1h
 
-  # Secret mappings
+  # Pre-configured PostgreSQL secret
+  postgresql:
+    enabled: false
+    remoteRef:
+      key: ""  # e.g., floe/prod/postgresql
+      property: password
+
+  # Pre-configured MinIO/S3 secret
+  minio:
+    enabled: false
+    remoteRef:
+      key: ""  # e.g., floe/prod/minio
+      userProperty: username
+      passwordProperty: password
+
+  # Custom secret mappings
   secrets: []
-  # - name: postgresql-credentials
-  #   remoteRef:
-  #     key: floe/postgresql
+  # - name: custom-secret
+  #   targetSecretName: my-secret  # Optional: defaults to name
+  #   secretStoreRef:  # Optional: overrides default
+  #     name: my-store
+  #     kind: SecretStore
+  #   data:
+  #     - secretKey: password
+  #       remoteRef:
+  #         key: path/to/secret
+  #         property: password
+  #   dataFrom:  # Alternative: extract all keys
+  #     - extract:
+  #         key: path/to/secret
