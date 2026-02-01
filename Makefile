@@ -182,6 +182,26 @@ helm-uninstall: ## Uninstall floe-platform (NAMESPACE=ns required)
 	@echo "Uninstalling floe from $(NAMESPACE)..."
 	@helm uninstall floe --namespace $(NAMESPACE)
 
+.PHONY: helm-integration-test
+helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
+	@echo "Running Helm integration tests..."
+	@# Ensure Kind cluster exists
+	@if ! kind get clusters 2>/dev/null | grep -q floe-test; then \
+		echo "Creating Kind cluster..."; \
+		kind create cluster --name floe-test --wait 120s; \
+	fi
+	@# Install charts
+	@echo "Installing floe-platform chart..."
+	@helm upgrade --install floe-test charts/floe-platform \
+		--namespace floe-test --create-namespace \
+		--values charts/floe-platform/values.yaml \
+		--values charts/floe-platform/values-dev.yaml \
+		--wait --timeout 5m
+	@# Run Helm tests
+	@echo "Running Helm tests..."
+	@helm test floe-test --namespace floe-test --timeout 5m
+	@echo "Helm integration tests passed!"
+
 # ============================================================
 # Development Helpers
 # ============================================================

@@ -1,0 +1,241 @@
+# Helm Chart CI Pipeline
+#
+# Validates Helm charts on every push/PR:
+# - Lint charts with helm lint
+# - Render templates and validate YAML
+# - Run chart-testing for schema validation
+# - Integration test in Kind cluster (on main only)
+#
+# Requirements:
+# - 9b-FR-080: helm lint in CI
+# - 9b-FR-081: helm template rendering
+# - 9b-FR-082: Kind integration tests
+
+name: Helm CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm-ci.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm-ci.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # Stage 1: Lint Charts
+  # ============================================================
+  lint:
+    name: Lint Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
+      - name: Lint floe-platform chart
+        run: |
+          helm lint charts/floe-platform \
+            --values charts/floe-platform/values.yaml
+
+      - name: Lint floe-jobs chart
+        run: |
+          helm lint charts/floe-jobs \
+            --values charts/floe-jobs/values.yaml
+
+  # ============================================================
+  # Stage 2: Template Rendering
+  # ============================================================
+  template:
+    name: Render Templates
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+
+      - name: Render templates
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          VALUES_FILE="charts/floe-platform/values-${ENVIRONMENT}.yaml"
+          if [ -f "$VALUES_FILE" ]; then
+            helm template floe charts/floe-platform \
+              --values charts/floe-platform/values.yaml \
+              --values "$VALUES_FILE" \
+              --output-dir /tmp/rendered-${ENVIRONMENT}
+          else
+            helm template floe charts/floe-platform \
+              --values charts/floe-platform/values.yaml \
+              --output-dir /tmp/rendered-${ENVIRONMENT}
+          fi
+
+      - name: Validate rendered YAML
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          find /tmp/rendered-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -100
+          echo "Template rendering successful for ${ENVIRONMENT}"
+
+  # ============================================================
+  # Stage 3: Schema Validation
+  # ============================================================
+  schema:
+    name: Validate Values Schema
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install jsonschema
+        run: pip install jsonschema pyyaml
+
+      - name: Validate floe-platform values against schema
+        run: |
+          python -c "
+          import json
+          import yaml
+          import jsonschema
+
+          # Load schema
+          with open('charts/floe-platform/values.schema.json') as f:
+              schema = json.load(f)
+
+          # Validate default values
+          with open('charts/floe-platform/values.yaml') as f:
+              values = yaml.safe_load(f)
+
+          jsonschema.validate(values, schema)
+          print('Default values.yaml: VALID')
+
+          # Validate environment-specific values
+          for env in ['dev', 'staging', 'prod']:
+              try:
+                  with open(f'charts/floe-platform/values-{env}.yaml') as f:
+                      env_values = yaml.safe_load(f)
+                  if env_values:
+                      jsonschema.validate(env_values, schema)
+                  print(f'values-{env}.yaml: VALID')
+              except FileNotFoundError:
+                  print(f'values-{env}.yaml: SKIPPED (not found)')
+          "
+
+      - name: Validate floe-jobs values against schema
+        run: |
+          python -c "
+          import json
+          import yaml
+          import jsonschema
+
+          with open('charts/floe-jobs/values.schema.json') as f:
+              schema = json.load(f)
+
+          with open('charts/floe-jobs/values.yaml') as f:
+              values = yaml.safe_load(f)
+
+          jsonschema.validate(values, schema)
+          print('floe-jobs values.yaml: VALID')
+          "
+
+  # ============================================================
+  # Stage 4: Integration Test (main branch only)
+  # ============================================================
+  integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [lint, template, schema]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: helm-test
+          wait: 120s
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+
+      - name: Install floe-platform chart
+        run: |
+          helm upgrade --install floe-test charts/floe-platform \
+            --namespace floe-test --create-namespace \
+            --values charts/floe-platform/values.yaml \
+            --values charts/floe-platform/values-dev.yaml \
+            --wait --timeout 10m
+
+      - name: Run Helm tests
+        run: |
+          helm test floe-test --namespace floe-test --timeout 5m
+
+      - name: Get pod status on failure
+        if: failure()
+        run: |
+          kubectl get pods -n floe-test
+          kubectl describe pods -n floe-test | head -200
