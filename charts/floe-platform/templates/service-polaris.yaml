@@ -1,0 +1,30 @@
+{{- if .Values.polaris.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "floe-platform.polaris.fullname" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: polaris
+  {{- with .Values.polaris.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.polaris.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ .Values.polaris.service.port | default 8181 }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (eq .Values.polaris.service.type "NodePort") .Values.polaris.service.nodePort }}
+      nodePort: {{ .Values.polaris.service.nodePort }}
+      {{- end }}
+    - name: metrics
+      port: {{ .Values.polaris.service.metricsPort | default 8182 }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "floe-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: polaris
+{{- end }}
