@@ -35,6 +35,10 @@ help: ## Show this help message
 	@echo "  make helm-template   Render templates (ENV=dev|staging|prod)"
 	@echo "  make helm-test       Run Helm tests (RELEASE=..., NAMESPACE=...)"
 	@echo "  make helm-install-dev Install floe-platform for development"
+	@echo "  make helm-install-test Install floe with test values (CI/CD)"
+	@echo "  make helm-upgrade-test Upgrade test installation"
+	@echo "  make helm-uninstall-test Uninstall test installation"
+	@echo "  make helm-test-infra Verify test infrastructure health"
 	@echo "  make helm-uninstall  Uninstall floe (NAMESPACE=... required)"
 	@echo ""
 	@echo "Agent Memory (Cognee):"
@@ -201,6 +205,53 @@ helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
 	@echo "Running Helm tests..."
 	@helm test floe-test --namespace floe-test --timeout 5m
 	@echo "Helm integration tests passed!"
+
+.PHONY: helm-install-test
+helm-install-test: helm-deps ## Install floe-platform with test values (requires Kind cluster)
+	@echo "Installing floe-platform with test configuration..."
+	@helm upgrade --install floe-test charts/floe-platform \
+		--namespace floe-test --create-namespace \
+		--values charts/floe-platform/values-test.yaml \
+		--wait --timeout 10m
+	@echo "Installing floe-jobs with test configuration..."
+	@helm upgrade --install floe-jobs-test charts/floe-jobs \
+		--namespace floe-test \
+		--values charts/floe-jobs/values-test.yaml \
+		--wait --timeout 5m
+	@echo "Test infrastructure installed!"
+
+.PHONY: helm-upgrade-test
+helm-upgrade-test: helm-deps ## Upgrade floe-platform test installation
+	@echo "Upgrading floe-platform test installation..."
+	@helm upgrade floe-test charts/floe-platform \
+		--namespace floe-test \
+		--values charts/floe-platform/values-test.yaml \
+		--wait --timeout 10m
+	@helm upgrade floe-jobs-test charts/floe-jobs \
+		--namespace floe-test \
+		--values charts/floe-jobs/values-test.yaml \
+		--wait --timeout 5m
+	@echo "Test infrastructure upgraded!"
+
+.PHONY: helm-uninstall-test
+helm-uninstall-test: ## Uninstall floe test installation
+	@echo "Uninstalling floe test installation..."
+	@helm uninstall floe-jobs-test --namespace floe-test 2>/dev/null || true
+	@helm uninstall floe-test --namespace floe-test 2>/dev/null || true
+	@kubectl delete namespace floe-test --ignore-not-found --wait=false
+	@echo "Test infrastructure uninstalled!"
+
+.PHONY: helm-test-infra
+helm-test-infra: ## Verify test infrastructure is healthy
+	@echo "Checking test infrastructure health..."
+	@kubectl get pods -n floe-test --no-headers 2>/dev/null || { echo "Test namespace not found. Run: make helm-install-test"; exit 1; }
+	@echo "Checking Polaris..."
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=polaris -n floe-test --timeout=60s 2>/dev/null || echo "Polaris not ready"
+	@echo "Checking PostgreSQL..."
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n floe-test --timeout=60s 2>/dev/null || echo "PostgreSQL not ready"
+	@echo "Checking MinIO..."
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n floe-test --timeout=60s 2>/dev/null || echo "MinIO not ready"
+	@echo "Test infrastructure health check complete!"
 
 # ============================================================
 # Development Helpers

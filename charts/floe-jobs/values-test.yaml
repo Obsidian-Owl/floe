@@ -1,0 +1,111 @@
+# floe-jobs Test Values
+# =====================
+#
+# Minimal configuration for CI/CD testing.
+# Uses reduced resources and simplified job configurations.
+#
+# Usage:
+#   helm install floe-jobs ./charts/floe-jobs \
+#     -f ./charts/floe-jobs/values-test.yaml \
+#     --namespace floe-test
+#
+# Requirements:
+#   - FR-090: Test-specific configuration
+#   - FR-091: Minimal resource usage
+
+# =============================================================================
+# Global Test Configuration
+# =============================================================================
+global:
+  environment: test
+  imagePullPolicy: IfNotPresent
+
+# =============================================================================
+# dbt Job Configuration (Minimal)
+# =============================================================================
+dbt:
+  enabled: true
+  image:
+    repository: ghcr.io/dbt-labs/dbt-core
+    tag: "1.7.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Test with minimal dbt project
+  projectDir: /dbt
+  profilesDir: /dbt/profiles
+  # Default test target
+  target: test
+  # Run in verbose mode for debugging
+  debug: true
+
+# =============================================================================
+# dlt Job Configuration (Disabled for Basic Tests)
+# =============================================================================
+dlt:
+  enabled: false
+
+# =============================================================================
+# CronJob Configuration (Disabled for Tests)
+# =============================================================================
+cronJobs:
+  enabled: false
+
+# =============================================================================
+# Job Defaults (Test Optimized)
+# =============================================================================
+jobDefaults:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 60
+  restartPolicy: Never
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# Service Account (Use Default)
+# =============================================================================
+serviceAccount:
+  create: false
+  name: ""
+
+# =============================================================================
+# Custom Jobs (Test Sample)
+# =============================================================================
+customJobs: []
+# - name: test-job
+#   image: busybox:latest
+#   command: ["echo", "test"]
+
+# =============================================================================
+# Pod Security (Relaxed for Tests)
+# =============================================================================
+podSecurityContext: {}
+
+securityContext: {}
+
+# =============================================================================
+# Iceberg Configuration (For dbt-iceberg Tests)
+# =============================================================================
+iceberg:
+  # Catalog REST endpoint (points to Polaris in test namespace)
+  catalogUri: http://floe-platform-polaris:8181/api/catalog
+  # Warehouse location (points to MinIO in test namespace)
+  warehouse: s3://floe-iceberg/warehouse
+  # S3 configuration for MinIO
+  s3:
+    endpoint: http://floe-platform-minio:9000
+    accessKey: minioadmin
+    secretKey: minioadmin123
+    region: us-east-1
+    pathStyle: true

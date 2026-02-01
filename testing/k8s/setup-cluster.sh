@@ -12,6 +12,7 @@
 #   SKIP_SERVICES: Set to "true" to skip deploying services
 #   SKIP_MONITORING: Set to "true" to skip Prometheus/Grafana stack
 #   VERBOSE: Set to "true" for verbose output
+#   USE_HELM: Set to "true" to use Helm charts (default), "false" for raw manifests
 #
 # After setup, services are accessible via localhost:
 #   Polaris:     http://localhost:8181
@@ -25,9 +26,12 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-floe-test}"
 NAMESPACE="floe-test"
 TIMEOUT="${TIMEOUT:-300}"
+# Use Helm-based deployment (default: true)
+USE_HELM="${USE_HELM:-true}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -260,6 +264,76 @@ init_polaris() {
     fi
 }
 
+# Deploy services via Helm charts
+deploy_services_helm() {
+    if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
+        log_info "Skipping service deployment (SKIP_SERVICES=true)"
+        return
+    fi
+
+    if ! command -v helm &> /dev/null; then
+        log_error "Helm is required for USE_HELM=true deployment"
+        log_error "Install Helm from: https://helm.sh/docs/intro/install/"
+        exit 1
+    fi
+
+    log_info "Deploying services via Helm to namespace: ${NAMESPACE}"
+
+    # Update Helm dependencies
+    log_info "Updating Helm chart dependencies..."
+    helm dependency update "${PROJECT_ROOT}/charts/floe-platform" 2>/dev/null || true
+
+    # Install floe-platform with test values
+    log_info "Installing floe-platform chart..."
+    helm upgrade --install floe-test "${PROJECT_ROOT}/charts/floe-platform" \
+        --namespace "${NAMESPACE}" --create-namespace \
+        --values "${PROJECT_ROOT}/charts/floe-platform/values-test.yaml" \
+        --wait \
+        --timeout 10m
+
+    # Install floe-jobs with test values (if needed for job execution tests)
+    log_info "Installing floe-jobs chart..."
+    helm dependency update "${PROJECT_ROOT}/charts/floe-jobs" 2>/dev/null || true
+    helm upgrade --install floe-jobs-test "${PROJECT_ROOT}/charts/floe-jobs" \
+        --namespace "${NAMESPACE}" \
+        --values "${PROJECT_ROOT}/charts/floe-jobs/values-test.yaml" \
+        --wait \
+        --timeout 5m
+
+    log_info "Helm-based services deployed successfully"
+}
+
+# Wait for Helm-deployed services
+wait_for_services_helm() {
+    log_info "Waiting for Helm-deployed services to be ready..."
+
+    # Check Polaris
+    log_info "Waiting for Polaris..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=polaris -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "Polaris pods not ready within timeout"
+    }
+
+    # Check PostgreSQL
+    log_info "Waiting for PostgreSQL..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "PostgreSQL pods not ready within timeout"
+    }
+
+    # Check MinIO
+    log_info "Waiting for MinIO..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "MinIO pods not ready within timeout"
+    }
+
+    # Check Dagster if enabled
+    log_info "Waiting for Dagster..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=dagster -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "Dagster pods not ready within timeout (may be disabled)"
+    }
+
+    log_info "All Helm-deployed services are ready"
+}
+
 # Print cluster info
 print_info() {
     log_info "Cluster is ready!"
@@ -301,9 +375,19 @@ main() {
     check_prerequisites
     create_cluster
     deploy_metrics_server
-    deploy_services
-    wait_for_services
-    init_polaris
+
+    if [[ "${USE_HELM}" == "true" ]]; then
+        log_info "Using Helm-based deployment (USE_HELM=true)"
+        deploy_services_helm
+        wait_for_services_helm
+        # Polaris init is handled by Helm chart hooks or values
+    else
+        log_info "Using raw K8s manifest deployment (USE_HELM=false)"
+        deploy_services
+        wait_for_services
+        init_polaris
+    fi
+
     deploy_monitoring_stack
     print_info
 }
