@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import click
 
+from floe_core.cli.helm.generate import generate_command
+
 
 @click.group(
     name="helm",
@@ -36,8 +38,10 @@ def helm() -> None:
     pass
 
 
-# Subcommands will be added in future tasks:
-# - generate.py (T062): floe helm generate
+# Register subcommands
+helm.add_command(generate_command)
+
+# Future subcommands:
 # - template.py: floe helm template (wrapper)
 # - lint.py: floe helm lint (wrapper)
 
