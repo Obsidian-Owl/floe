@@ -101,7 +101,7 @@ spec:
     {{- end }}
 
     # Test custom jobs configuration
-    {{- if .Values.custom.jobs }}
+    {{- if .Values.customJobs }}
     - name: test-custom-jobs
       image: busybox:1.36
       command:
@@ -109,15 +109,15 @@ spec:
         - -c
         - |
           echo "Testing custom jobs configuration..."
-          
+
           # Count configured jobs
-          JOB_COUNT={{ len .Values.custom.jobs }}
+          JOB_COUNT={{ len .Values.customJobs }}
           echo "Found ${JOB_COUNT} custom job(s) configured"
-          
-          {{- range .Values.custom.jobs }}
-          echo "  - {{ .name }}: {{ .image }}"
+
+          {{- range .Values.customJobs }}
+          echo "  - {{ .name }}: {{ .image.repository | default "unknown" }}"
           {{- end }}
-          
+
           echo "SUCCESS: Custom jobs configuration validated"
           exit 0
       resources:
@@ -130,7 +130,7 @@ spec:
     {{- end }}
 
     # Fallback test if nothing else is enabled
-    {{- if and (not .Values.dbt.enabled) (not .Values.platform.release) (not .Values.custom.jobs) }}
+    {{- if and (not .Values.dbt.enabled) (not .Values.platform.release) (not .Values.customJobs) }}
     - name: test-basic
       image: busybox:1.36
       command:
