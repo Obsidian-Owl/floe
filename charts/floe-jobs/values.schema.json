@@ -11,7 +11,7 @@
       "properties": {
         "environment": {
           "type": "string",
-          "enum": ["dev", "qa", "staging", "prod"],
+          "enum": ["dev", "qa", "staging", "prod", "test"],
           "default": "dev"
         }
       }

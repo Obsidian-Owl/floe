@@ -11,8 +11,8 @@
       "properties": {
         "environment": {
           "type": "string",
-          "description": "Target environment (dev, staging, prod)",
-          "enum": ["dev", "qa", "staging", "prod"],
+          "description": "Target environment (dev, staging, prod, test)",
+          "enum": ["dev", "qa", "staging", "prod", "test"],
           "default": "dev"
         },
         "commonLabels": {
