@@ -24,6 +24,10 @@ Example:
 
 from __future__ import annotations
 
+from floe_core.helm.generator import (
+    HelmValuesGenerator,
+    generate_values_from_config,
+)
 from floe_core.helm.merger import (
     deep_merge,
     flatten_dict,
@@ -40,6 +44,9 @@ from floe_core.helm.schemas import (
 )
 
 __all__: list[str] = [
+    # Generator
+    "HelmValuesGenerator",
+    "generate_values_from_config",
     # Schemas
     "ClusterConfig",
     "ClusterMapping",
