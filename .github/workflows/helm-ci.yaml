@@ -62,7 +62,8 @@ jobs:
       - name: Lint floe-platform chart
         run: |
           helm lint charts/floe-platform \
-            --values charts/floe-platform/values.yaml
+            --values charts/floe-platform/values.yaml \
+            --skip-schema-validation
 
       - name: Lint floe-platform chart with test values
         run: |

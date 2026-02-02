@@ -9,7 +9,6 @@ Requirements tested:
 from __future__ import annotations
 
 import pytest
-
 from floe_core.helm.merger import (
     deep_merge,
     flatten_dict,

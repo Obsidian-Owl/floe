@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from floe_core.helm.schemas import (
     ClusterConfig,
     ClusterMapping,
