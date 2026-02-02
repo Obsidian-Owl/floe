@@ -31,7 +31,9 @@ def render_helm_templates(
     Returns:
         List of parsed YAML documents
     """
-    cmd = ["helm", "template", "test-release", str(chart_path)]
+    # NOTE: --skip-schema-validation required because Dagster subchart
+    # references external JSON schema URL that returns 404
+    cmd = ["helm", "template", "--skip-schema-validation", "test-release", str(chart_path)]
 
     if values:
         for key, value in values.items():

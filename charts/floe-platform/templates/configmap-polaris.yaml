@@ -23,13 +23,15 @@ data:
     defaultRealm: {{ .Values.polaris.config.defaultRealm | default "default-realm" }}
 
     # Feature flags
+    # SECURITY: Defaults enforce secure configuration when features not explicitly set
     featureConfiguration:
       {{- if .Values.polaris.config.features }}
       {{- range $key, $value := .Values.polaris.config.features }}
       {{ $key }}: {{ $value }}
       {{- end }}
       {{- else }}
-      ALLOW_ANONYMOUS_ACCESS: true
+      # Secure defaults - anonymous access disabled by default
+      ALLOW_ANONYMOUS_ACCESS: false
       ALLOW_TABLE_LOCATION_OVERLAP: false
       {{- end }}
 

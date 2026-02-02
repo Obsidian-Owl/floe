@@ -64,10 +64,22 @@ jobs:
           helm lint charts/floe-platform \
             --values charts/floe-platform/values.yaml
 
+      - name: Lint floe-platform chart with test values
+        run: |
+          helm lint charts/floe-platform \
+            --values charts/floe-platform/values-test.yaml \
+            --skip-schema-validation
+
       - name: Lint floe-jobs chart
         run: |
           helm lint charts/floe-jobs \
             --values charts/floe-jobs/values.yaml
+
+      - name: Lint floe-jobs chart with test values
+        run: |
+          helm lint charts/floe-jobs \
+            --values charts/floe-jobs/values-test.yaml \
+            --skip-schema-validation
 
   # ============================================================
   # Stage 2: Template Rendering
@@ -78,7 +90,7 @@ jobs:
     needs: lint
     strategy:
       matrix:
-        environment: [dev, staging, prod]
+        environment: [dev, staging, prod, test]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -98,28 +110,60 @@ jobs:
       - name: Update chart dependencies
         run: |
           helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
 
-      - name: Render templates
+      - name: Render floe-platform templates
         env:
           ENVIRONMENT: ${{ matrix.environment }}
         run: |
           VALUES_FILE="charts/floe-platform/values-${ENVIRONMENT}.yaml"
           if [ -f "$VALUES_FILE" ]; then
-            helm template floe charts/floe-platform \
-              --values charts/floe-platform/values.yaml \
-              --values "$VALUES_FILE" \
-              --output-dir /tmp/rendered-${ENVIRONMENT}
+            # For test environment, use --skip-schema-validation (Dagster subchart issue)
+            if [ "$ENVIRONMENT" = "test" ]; then
+              helm template floe charts/floe-platform \
+                --values charts/floe-platform/values.yaml \
+                --values "$VALUES_FILE" \
+                --skip-schema-validation \
+                --output-dir /tmp/rendered-platform-${ENVIRONMENT}
+            else
+              helm template floe charts/floe-platform \
+                --values charts/floe-platform/values.yaml \
+                --values "$VALUES_FILE" \
+                --output-dir /tmp/rendered-platform-${ENVIRONMENT}
+            fi
           else
             helm template floe charts/floe-platform \
               --values charts/floe-platform/values.yaml \
-              --output-dir /tmp/rendered-${ENVIRONMENT}
+              --output-dir /tmp/rendered-platform-${ENVIRONMENT}
+          fi
+
+      - name: Render floe-jobs templates
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          VALUES_FILE="charts/floe-jobs/values-${ENVIRONMENT}.yaml"
+          if [ -f "$VALUES_FILE" ]; then
+            helm template floe-jobs charts/floe-jobs \
+              --values charts/floe-jobs/values.yaml \
+              --values "$VALUES_FILE" \
+              --skip-schema-validation \
+              --output-dir /tmp/rendered-jobs-${ENVIRONMENT}
+          else
+            helm template floe-jobs charts/floe-jobs \
+              --values charts/floe-jobs/values.yaml \
+              --output-dir /tmp/rendered-jobs-${ENVIRONMENT}
           fi
 
       - name: Validate rendered YAML
         env:
           ENVIRONMENT: ${{ matrix.environment }}
         run: |
-          find /tmp/rendered-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -100
+          echo "=== floe-platform templates ==="
+          find /tmp/rendered-platform-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -100
+          echo ""
+          echo "=== floe-jobs templates ==="
+          find /tmp/rendered-jobs-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -50
+          echo ""
           echo "Template rendering successful for ${ENVIRONMENT}"
 
   # ============================================================

@@ -170,3 +170,10 @@ Read when working on specific domain:
 - `.claude/rules/security.md` - Input validation, secrets
 - `.claude/rules/agent-delegation.md` - Context preservation
 - `.claude/rules/skill-invocation.md` - Skill triggers
+
+## Active Technologies
+- Python 3.11 (CLI), Go templating (Helm) + Helm 3.12+, Dagster Helm chart 1.12.x, OTel Collector chart 0.85.x (9b-helm-deployment)
+- PostgreSQL (CloudNativePG for prod, StatefulSet for non-prod), S3/MinIO (9b-helm-deployment)
+
+## Recent Changes
+- 9b-helm-deployment: Added Python 3.11 (CLI), Go templating (Helm) + Helm 3.12+, Dagster Helm chart 1.12.x, OTel Collector chart 0.85.x
