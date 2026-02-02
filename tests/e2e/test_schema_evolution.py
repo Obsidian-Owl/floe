@@ -32,6 +32,7 @@ class TestSchemaEvolution(IntegrationTestBase):
     ]
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-086")
     def test_multi_product_no_conflicts(self, dagster_client: Any) -> None:
         """Test that all three products run simultaneously without conflicts.
 
@@ -101,6 +102,7 @@ class TestSchemaEvolution(IntegrationTestBase):
         )
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-022")
     def test_polaris_namespace_isolation(self, polaris_client: Any) -> None:
         """Test that each product has its own isolated Polaris namespace.
 
@@ -158,6 +160,7 @@ class TestSchemaEvolution(IntegrationTestBase):
                     continue
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-022")
     def test_iceberg_schema_evolution(self, polaris_client: Any) -> None:
         """Test Iceberg schema evolution with backward compatibility.
 
@@ -218,6 +221,7 @@ class TestSchemaEvolution(IntegrationTestBase):
         assert "email" in original_fields
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-022")
     def test_iceberg_partition_evolution(self, polaris_client: Any) -> None:
         """Test Iceberg partition evolution with new data.
 

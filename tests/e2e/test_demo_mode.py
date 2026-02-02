@@ -282,6 +282,7 @@ class TestDemoMode(IntegrationTestBase):
         )
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-047")
     def test_jaeger_traces_for_all_products(self, jaeger_client: httpx.Client) -> None:
         """Test that Jaeger shows traces for all three data products.
 
