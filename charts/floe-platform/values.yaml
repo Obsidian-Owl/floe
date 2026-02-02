@@ -461,8 +461,8 @@ minio:
 # Marquez Configuration (OpenLineage - Optional)
 # =============================================================================
 marquez:
-  # Enable Marquez deployment (optional - for lineage tracking)
-  enabled: false
+  # Enable Marquez deployment (for lineage tracking)
+  enabled: true
 
   # Marquez image
   image:
