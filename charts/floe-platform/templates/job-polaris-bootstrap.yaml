@@ -1,0 +1,127 @@
+{{- if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "floe-platform.polaris.fullname" . }}-bootstrap
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: polaris-bootstrap
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "floe-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: polaris-bootstrap
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-polaris
+          image: curlimages/curl:8.5.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Polaris to be ready..."
+              ATTEMPT=0
+              MAX_ATTEMPTS=60
+              until curl -sf http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}/q/health/ready > /dev/null 2>&1; do
+                ATTEMPT=$((ATTEMPT + 1))
+                if [[ $ATTEMPT -ge $MAX_ATTEMPTS ]]; then
+                  echo "ERROR: Polaris not ready after $MAX_ATTEMPTS attempts" >&2
+                  exit 1
+                fi
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Polaris not ready, waiting 5s..."
+                sleep 5
+              done
+              echo "Polaris is ready!"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+      containers:
+        - name: bootstrap
+          image: curlimages/curl:8.5.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
+
+              echo "Acquiring OAuth token..."
+              TOKEN=$(curl -sf -X POST \
+                "$POLARIS_URL/api/catalog/v1/oauth/tokens" \
+                -d "grant_type=client_credentials&client_id={{ .Values.polaris.auth.bootstrapCredentials.clientId }}&client_secret={{ .Values.polaris.auth.bootstrapCredentials.clientSecret }}&scope=PRINCIPAL_ROLE:ALL" \
+                | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+
+              if [ -z "$TOKEN" ]; then
+                echo "ERROR: Failed to acquire OAuth token" >&2
+                exit 1
+              fi
+              echo "Token acquired successfully"
+
+              echo "Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
+              HTTP_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                "$POLARIS_URL/api/management/v1/catalogs" \
+                -d '{
+                  "catalog": {
+                    "name": "{{ .Values.polaris.bootstrap.catalogName }}",
+                    "type": "INTERNAL",
+                    "properties": {
+                      "default-base-location": "{{ .Values.polaris.bootstrap.defaultBaseLocation }}"
+                      {{- if .Values.polaris.storage.s3.enabled }}
+                      ,"s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}"
+                      ,"s3.path-style-access": "true"
+                      ,"s3.access-key-id": "{{ .Values.polaris.storage.s3.accessKey }}"
+                      ,"s3.secret-access-key": "{{ .Values.polaris.storage.s3.secretKey }}"
+                      ,"s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
+                      ,"table-default.s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}"
+                      ,"table-default.s3.path-style-access": "true"
+                      ,"table-default.s3.access-key-id": "{{ .Values.polaris.storage.s3.accessKey }}"
+                      ,"table-default.s3.secret-access-key": "{{ .Values.polaris.storage.s3.secretKey }}"
+                      ,"table-default.s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
+                      {{- end }}
+                    },
+                    "storageConfigInfo": {
+                      "storageType": "S3",
+                      "allowedLocations": {{ .Values.polaris.bootstrap.allowedLocations | toJson }}
+                      {{- if .Values.polaris.storage.s3.enabled }}
+                      ,"endpoint": "{{ .Values.polaris.storage.s3.endpoint }}"
+                      ,"endpointInternal": "{{ .Values.polaris.storage.s3.endpoint }}"
+                      ,"pathStyleAccess": {{ .Values.polaris.storage.s3.pathStyleAccess | default true }}
+                      ,"region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
+                      ,"stsUnavailable": true
+                      {{- end }}
+                    }
+                  }
+                }')
+
+              if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+                echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' created successfully"
+              elif [ "$HTTP_CODE" = "409" ]; then
+                echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' already exists (HTTP 409) - OK"
+              else
+                echo "ERROR: Failed to create catalog (HTTP $HTTP_CODE)" >&2
+                cat /tmp/response.txt >&2
+                exit 1
+              fi
+
+              echo "Bootstrap complete!"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+{{- end }}

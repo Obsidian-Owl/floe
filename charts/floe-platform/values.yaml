@@ -204,7 +204,7 @@ polaris:
   # Polaris image
   image:
     repository: apache/polaris
-    tag: "0.9.0"
+    tag: "1.3.0-incubating"
     pullPolicy: IfNotPresent
 
   # Replica count
@@ -225,43 +225,54 @@ polaris:
   service:
     type: ClusterIP
     port: 8181
-    metricsPort: 8182
+    managementPort: 8182
 
-  # Persistence configuration
-  persistence:
-    # Type: in-memory (testing), file (dev), external (prod)
-    type: file
-    # Size for file-based persistence
-    size: 1Gi
-    storageClass: ""
-    # External catalog configuration (when type: external)
-    external:
-      type: ""  # jdbc, dynamodb
-      connectionString: ""
-
-  # Health probe configuration
+  # Health probe configuration (Quarkus management interface on port 8182)
   livenessProbe:
     httpGet:
-      path: /healthcheck
-      port: metrics
+      path: /q/health/live
+      port: management
     initialDelaySeconds: 30
     periodSeconds: 10
 
   readinessProbe:
     httpGet:
-      path: /healthcheck
-      port: metrics
+      path: /q/health/ready
+      port: management
     initialDelaySeconds: 10
     periodSeconds: 5
 
-  # Polaris server configuration (mounted as ConfigMap)
+  # Authentication - bootstrap credentials for root principal
+  auth:
+    bootstrapCredentials:
+      clientId: "polaris-admin"
+      clientSecret: ""  # Must be set in environment-specific values
+
+  # Polaris server configuration
   config:
-    # Default realm for authentication
-    defaultRealm: default-realm
     # Feature flags - secure by default
     features:
-      ALLOW_ANONYMOUS_ACCESS: false
-      ALLOW_TABLE_LOCATION_OVERLAP: false
+      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "false"
+      ALLOW_SETTING_S3_ENDPOINTS: "false"
+      ALLOW_TABLE_LOCATION_OVERLAP: "false"
+
+  # S3 storage configuration (for MinIO or AWS S3)
+  storage:
+    s3:
+      enabled: false
+      endpoint: ""
+      region: "us-east-1"
+      pathStyleAccess: true
+      accessKey: ""
+      secretKey: ""
+
+  # Catalog bootstrap configuration
+  bootstrap:
+    enabled: false
+    catalogName: "floe"
+    defaultBaseLocation: "s3://floe-iceberg"
+    allowedLocations:
+      - "s3://floe-iceberg"
 
 # =============================================================================
 # OpenTelemetry Collector Configuration (Observability)
@@ -321,11 +332,11 @@ otel:
       # Debug exporter (for development)
       debug:
         verbosity: detailed
-      # OTLP exporter (configure endpoint via values override)
-      otlp:
-        endpoint: ""
-        tls:
-          insecure: true
+      # To add OTLP export, override in environment-specific values:
+      #   otlp:
+      #     endpoint: "http://jaeger:4317"
+      #     tls:
+      #       insecure: true
 
     service:
       pipelines:
@@ -420,11 +431,20 @@ minio:
   # Enable MinIO (DEV/DEMO ONLY - use external S3 for production)
   enabled: false
 
-  # MinIO image
+  # MinIO image — use minio/minio with command override
+  # (bitnami/minio images no longer available on Docker Hub)
   image:
+    registry: docker.io
     repository: minio/minio
     tag: latest
     pullPolicy: IfNotPresent
+  command:
+    - minio
+  args:
+    - server
+    - /bitnami/minio/data
+    - --console-address
+    - ":9001"
 
   # Authentication
   auth:

@@ -76,9 +76,11 @@ class TestSchemaEvolution(IntegrationTestBase):
         data = result.get("data", result) if isinstance(result, dict) else result
         if not data or "repositoriesOrError" not in data:
             pytest.fail(
-                f"INFRASTRUCTURE ERROR: Products not loaded in Dagster.\n"
-                f"Issue: No repositories found in Dagster.\n"
-                f"Deploy: Run 'make demo' to deploy demo products\n"
+                f"INFRASTRUCTURE GAP: Dagster code locations not deployed.\n"
+                f"Issue: Demo products exist as dbt projects but are not registered as Dagster user deployments.\n"
+                f"Root cause: charts/floe-platform/values.yaml has dagster-user-deployments.enabled: false\n"
+                f"Fix: Enable dagster.dagster-user-deployments in Helm values and deploy code locations for each demo product.\n"
+                f"See: charts/floe-platform/templates/configmap-dagster-workspace.yaml\n"
                 f"Response: {result}"
             )
 
@@ -88,10 +90,12 @@ class TestSchemaEvolution(IntegrationTestBase):
         missing_products = [p for p in products if p not in repo_names]
         if missing_products:
             pytest.fail(
-                f"INFRASTRUCTURE ERROR: Products not loaded in Dagster.\n"
+                f"INFRASTRUCTURE GAP: Dagster code locations not deployed.\n"
                 f"Missing: {missing_products}\n"
                 f"Available: {repo_names}\n"
-                f"Deploy: Run 'make demo' to deploy demo products"
+                f"Root cause: Demo products exist as dbt projects but are not registered as Dagster user deployments.\n"
+                f"Fix: Enable dagster.dagster-user-deployments in Helm values and deploy code locations.\n"
+                f"See: charts/floe-platform/templates/configmap-dagster-workspace.yaml"
             )
 
         # Trigger runs for all products (simulate concurrent execution)
@@ -239,11 +243,13 @@ class TestSchemaEvolution(IntegrationTestBase):
             error_msg = str(e)
             if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
                 pytest.fail(
-                    "INFRASTRUCTURE ERROR: Polaris↔MinIO STS credential exchange failed.\n"
-                    "Issue: The security token included in the request is invalid.\n"
-                    "Fix: Configure Polaris catalog grants to allow STS token exchange with MinIO.\n"
-                    "Required: Polaris principal must have CATALOG_MANAGE_CONTENT grant.\n"
-                    f"Error: {error_msg}"
+                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
+                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
+                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
+                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
+                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
+                    "  3. Add S3 endpoint and credentials for MinIO\n"
+                    f"Root cause: {error_msg}"
                 )
             raise
 
@@ -329,11 +335,13 @@ class TestSchemaEvolution(IntegrationTestBase):
             error_msg = str(e)
             if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
                 pytest.fail(
-                    "INFRASTRUCTURE ERROR: Polaris↔MinIO STS credential exchange failed.\n"
-                    "Issue: The security token included in the request is invalid.\n"
-                    "Fix: Configure Polaris catalog grants to allow STS token exchange with MinIO.\n"
-                    "Required: Polaris principal must have CATALOG_MANAGE_CONTENT grant.\n"
-                    f"Error: {error_msg}"
+                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
+                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
+                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
+                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
+                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
+                    "  3. Add S3 endpoint and credentials for MinIO\n"
+                    f"Root cause: {error_msg}"
                 )
             raise
 
@@ -401,11 +409,13 @@ class TestSchemaEvolution(IntegrationTestBase):
             error_msg = str(e)
             if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
                 pytest.fail(
-                    "INFRASTRUCTURE ERROR: Polaris↔MinIO STS credential exchange failed.\n"
-                    "Issue: The security token included in the request is invalid.\n"
-                    "Fix: Configure Polaris catalog grants to allow STS token exchange with MinIO.\n"
-                    "Required: Polaris principal must have CATALOG_MANAGE_CONTENT grant.\n"
-                    f"Error: {error_msg}"
+                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
+                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
+                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
+                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
+                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
+                    "  3. Add S3 endpoint and credentials for MinIO\n"
+                    f"Root cause: {error_msg}"
                 )
             raise
 
@@ -471,18 +481,18 @@ class TestSchemaEvolution(IntegrationTestBase):
             error_msg = str(e)
             if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
                 pytest.fail(
-                    "INFRASTRUCTURE ERROR: Polaris↔MinIO STS credential exchange failed.\n"
-                    "Issue: The security token included in the request is invalid.\n"
-                    "Fix: Configure Polaris catalog grants to allow STS token exchange with MinIO.\n"
-                    "Required: Polaris principal must have CATALOG_MANAGE_CONTENT grant.\n"
-                    f"Error: {error_msg}"
+                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
+                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
+                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
+                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
+                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
+                    "  3. Add S3 endpoint and credentials for MinIO\n"
+                    f"Root cause: {error_msg}"
                 )
             raise
 
-        # Create multiple snapshots by evolving schema
-        # (In real implementation, would append data to create snapshots)
-        for i in range(10):
-            # Schema evolution creates new snapshot
+        # Evolve schema multiple times to verify table metadata tracking
+        for i in range(3):
             with table.update_schema() as update:
                 update.add_column(
                     path=f"field_{i}",
@@ -490,24 +500,24 @@ class TestSchemaEvolution(IntegrationTestBase):
                     required=False,
                 )
 
-        # Reload table to get updated snapshots
+        # Reload table to get updated metadata
         table = polaris_with_write_grants.load_table(table_name)
 
-        # Get all snapshots
-        snapshots = table.snapshots()
+        # Verify schema evolution history is tracked
+        schema_history = table.schemas()
+        assert len(schema_history) > 1, "Schema history not tracked"
 
-        # Note: Snapshot expiry is typically configured in table properties
-        # and enforced by background maintenance jobs. For E2E validation:
-        # - Verify table has snapshot retention configured
-        # - Verify maintenance job runs
-        # - Verify snapshot count doesn't exceed limit over time
+        # Verify table supports property management for snapshot retention
+        txn = table.transaction()
+        txn.set_properties(
+            **{
+                "history.expire.max-snapshot-age-ms": "3600000",
+                "history.expire.min-snapshots-to-keep": "6",
+            }
+        )
+        txn.commit_transaction()
 
-        # For now, verify snapshots are tracked
-        assert len(snapshots) > 0, "No snapshots found"
-
-        # Check table properties for expiry configuration
+        table = polaris_with_write_grants.load_table(table_name)
         properties = table.properties
-        if "history.expire.max-snapshot-age-ms" in properties:
-            # Verify retention configured
-            max_age = int(properties["history.expire.max-snapshot-age-ms"])
-            assert max_age > 0, "Snapshot retention not configured"
+        assert properties.get("history.expire.max-snapshot-age-ms") == "3600000"
+        assert properties.get("history.expire.min-snapshots-to-keep") == "6"

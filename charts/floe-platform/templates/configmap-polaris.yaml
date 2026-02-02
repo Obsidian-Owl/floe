@@ -7,98 +7,26 @@ metadata:
     {{- include "floe-platform.labels" . | nindent 4 }}
     app.kubernetes.io/component: polaris
 data:
-  # Polaris server configuration
-  # See: https://polaris.apache.org/docs/latest/configuration/
-  polaris-server.yml: |
-    # Polaris REST catalog server configuration
-    server:
-      applicationConnectors:
-        - type: http
-          port: {{ .Values.polaris.service.port | default 8181 }}
-      adminConnectors:
-        - type: http
-          port: {{ .Values.polaris.service.metricsPort | default 8182 }}
+  # Quarkus application.properties for Polaris 1.3.0+
+  application.properties: |
+    # HTTP configuration
+    quarkus.http.port={{ .Values.polaris.service.port | default 8181 }}
 
-    # Default realm for authentication
-    defaultRealm: {{ .Values.polaris.config.defaultRealm | default "default-realm" }}
+    # Management interface (health, metrics)
+    quarkus.management.enabled=true
+    quarkus.management.port={{ .Values.polaris.service.managementPort | default 8182 }}
 
     # Feature flags
-    # SECURITY: Defaults enforce secure configuration when features not explicitly set
-    featureConfiguration:
-      {{- if .Values.polaris.config.features }}
-      {{- range $key, $value := .Values.polaris.config.features }}
-      {{ $key }}: {{ $value }}
-      {{- end }}
-      {{- else }}
-      # Secure defaults - anonymous access disabled by default
-      ALLOW_ANONYMOUS_ACCESS: false
-      ALLOW_TABLE_LOCATION_OVERLAP: false
-      {{- end }}
-
-    # Metastore manager configuration
-    metaStoreManager:
-      {{- if eq .Values.polaris.persistence.type "in-memory" }}
-      type: in-memory
-      {{- else if eq .Values.polaris.persistence.type "file" }}
-      type: eclipse-link
-      persistence-unit: polaris
-      conf-file: /opt/polaris/conf/persistence.xml
-      {{- else if eq .Values.polaris.persistence.type "external" }}
-      {{- if eq .Values.polaris.persistence.external.type "jdbc" }}
-      type: eclipse-link
-      persistence-unit: polaris
-      conf-file: /opt/polaris/conf/persistence.xml
-      {{- else if eq .Values.polaris.persistence.external.type "dynamodb" }}
-      type: dynamodb
-      {{- end }}
-      {{- else }}
-      type: in-memory
-      {{- end }}
-
-    # Catalog file IO configuration
-    io:
-      impl: org.apache.polaris.core.storage.PolarisInMemoryFileIOFactory
-
-    # Logging configuration
-    logging:
-      level: INFO
-      loggers:
-        org.apache.polaris: INFO
-        io.dropwizard: WARN
-
-  {{- if or (eq .Values.polaris.persistence.type "file") (and (eq .Values.polaris.persistence.type "external") (eq .Values.polaris.persistence.external.type "jdbc")) }}
-  # EclipseLink persistence configuration for JDBC-backed metastore
-  persistence.xml: |
-    <?xml version="1.0" encoding="UTF-8"?>
-    <persistence version="2.2"
-                 xmlns="http://xmlns.jcp.org/xml/ns/persistence"
-                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                 xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence
-                 http://xmlns.jcp.org/xml/ns/persistence/persistence_2_2.xsd">
-      <persistence-unit name="polaris" transaction-type="RESOURCE_LOCAL">
-        <class>org.apache.polaris.core.persistence.models.ModelEntity</class>
-        <class>org.apache.polaris.core.persistence.models.ModelEntityActive</class>
-        <class>org.apache.polaris.core.persistence.models.ModelEntityChangeTracking</class>
-        <class>org.apache.polaris.core.persistence.models.ModelGrantRecord</class>
-        <class>org.apache.polaris.core.persistence.models.ModelPrincipalSecrets</class>
-        <class>org.apache.polaris.core.persistence.models.ModelSequenceId</class>
-        <properties>
-          {{- if eq .Values.polaris.persistence.type "file" }}
-          <property name="javax.persistence.jdbc.driver" value="org.h2.Driver"/>
-          <property name="javax.persistence.jdbc.url" value="jdbc:h2:file:/data/polaris/polaris;MODE=PostgreSQL"/>
-          <property name="javax.persistence.jdbc.user" value="sa"/>
-          <property name="javax.persistence.jdbc.password" value=""/>
-          {{- else }}
-          <property name="javax.persistence.jdbc.driver" value="org.postgresql.Driver"/>
-          <property name="javax.persistence.jdbc.url" value="{{ .Values.polaris.persistence.external.connectionString }}"/>
-          <property name="javax.persistence.jdbc.user" value="${POLARIS_DB_USER}"/>
-          <property name="javax.persistence.jdbc.password" value="${POLARIS_DB_PASSWORD}"/>
-          {{- end }}
-          <property name="eclipselink.ddl-generation" value="create-or-extend-tables"/>
-          <property name="eclipselink.ddl-generation.output-mode" value="database"/>
-          <property name="eclipselink.logging.level" value="WARNING"/>
-        </properties>
-      </persistence-unit>
-    </persistence>
-  {{- end }}
+    polaris.features."SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION"={{ .Values.polaris.config.features.SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION | default "false" }}
+    polaris.features."ALLOW_SETTING_S3_ENDPOINTS"={{ .Values.polaris.config.features.ALLOW_SETTING_S3_ENDPOINTS | default "false" }}
+    polaris.features."ALLOW_TABLE_LOCATION_OVERLAP"={{ .Values.polaris.config.features.ALLOW_TABLE_LOCATION_OVERLAP | default "false" }}
+    {{- if .Values.polaris.storage.s3.enabled }}
+    # S3 storage configuration
+    quarkus.s3.endpoint-override={{ .Values.polaris.storage.s3.endpoint }}
+    quarkus.s3.path-style-access={{ .Values.polaris.storage.s3.pathStyleAccess | default true }}
+    quarkus.s3.aws.region={{ .Values.polaris.storage.s3.region | default "us-east-1" }}
+    # Server-level S3 credentials for credential vending
+    polaris.storage.aws.access-key={{ .Values.polaris.storage.s3.accessKey }}
+    polaris.storage.aws.secret-key={{ .Values.polaris.storage.s3.secretKey }}
+    {{- end }}
 {{- end }}
