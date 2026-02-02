@@ -28,6 +28,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "floe-platform.serviceAccountName" . }}
+      automountServiceAccountToken: false
       securityContext:
         {{- include "floe-platform.podSecurityContext" . | nindent 8 }}
       {{- if eq .Values.polaris.persistence.type "file" }}
@@ -37,6 +38,15 @@ spec:
           command: ['sh', '-c', 'mkdir -p /data/polaris && chown -R 1000:1000 /data/polaris']
           securityContext:
             runAsUser: 0
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+              ephemeral-storage: 128Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+              ephemeral-storage: 64Mi
           volumeMounts:
             - name: polaris-data
               mountPath: /data

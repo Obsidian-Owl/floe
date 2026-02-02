@@ -355,3 +355,150 @@ class TestSchemaValidation:
 
         assert len(exc.errors) == 2
         assert "field1: error1" in exc.errors
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_schema_validation_error_default_errors(self) -> None:
+        """Test SchemaValidationError with no errors provided."""
+        exc = SchemaValidationError("Validation failed")
+        assert exc.errors == []
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_add_plugin_values_batch(self) -> None:
+        """Test adding multiple plugin values at once."""
+        generator = HelmValuesGenerator()
+        values_list = [
+            {"dagster": {"enabled": True}},
+            {"polaris": {"enabled": True}},
+            {"otel": {"enabled": True}},
+        ]
+        generator.add_plugin_values_batch(values_list)
+        values = generator.generate()
+
+        assert values["dagster"]["enabled"] is True
+        assert values["polaris"]["enabled"] is True
+        assert values["otel"]["enabled"] is True
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_to_helm_set_args_with_null(self) -> None:
+        """Test converting null values to --set arguments."""
+        generator = HelmValuesGenerator()
+        values: dict[str, Any] = {"test": {"nullable": None}}
+
+        args = generator.to_helm_set_args(values)
+
+        assert "--set=test.nullable=null" in args
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_to_helm_set_args_with_float(self) -> None:
+        """Test converting float values to --set arguments."""
+        generator = HelmValuesGenerator()
+        values: dict[str, Any] = {"test": {"ratio": 1.5}}
+
+        args = generator.to_helm_set_args(values)
+
+        assert "--set=test.ratio=1.5" in args
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_write_values_without_values_generates(self, tmp_path: Path) -> None:
+        """Test write_values generates values when none provided."""
+        config = HelmValuesConfig.with_defaults(environment="dev")
+        generator = HelmValuesGenerator(config)
+        output_path = tmp_path / "values.yaml"
+
+        generator.write_values(output_path)
+
+        assert output_path.exists()
+        with output_path.open() as f:
+            loaded = yaml.safe_load(f)
+        assert loaded["global"]["environment"] == "dev"
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_to_helm_set_args_generates_if_none(self) -> None:
+        """Test to_helm_set_args generates values when none provided."""
+        config = HelmValuesConfig.with_defaults(environment="dev")
+        generator = HelmValuesGenerator(config)
+
+        args = generator.to_helm_set_args()
+
+        assert any("global.environment=dev" in arg for arg in args)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_generates_if_none(self, valid_schema: Path) -> None:
+        """Test validate generates values when none provided."""
+        config = HelmValuesConfig.with_defaults(environment="dev")
+        generator = HelmValuesGenerator(config, schema_path=valid_schema)
+        generator.add_plugin_values({"dagster": {"enabled": True, "replicas": 2}})
+
+        errors = generator.validate()
+
+        # Should use generated values
+        assert isinstance(errors, list)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_with_schema_path_override(self, valid_schema: Path, tmp_path: Path) -> None:
+        """Test validate with schema_path parameter override."""
+        # Create alternate schema
+        alt_schema = {
+            "$schema": "https://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {"test": {"type": "string"}},
+        }
+        alt_path = tmp_path / "alt.schema.json"
+        with alt_path.open("w") as f:
+            json.dump(alt_schema, f)
+
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {"test": "value"}
+
+        # Should use alt_path instead of constructor path
+        errors = generator.validate(values, schema_path=alt_path)
+
+        assert errors == []
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_loads_schema_if_not_loaded(self, valid_schema: Path) -> None:
+        """Test validate loads schema automatically if not loaded."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {"global": {"environment": "dev"}}
+
+        # Schema not explicitly loaded yet
+        assert generator._schema is None
+
+        errors = generator.validate(values)
+
+        # Should auto-load
+        assert generator._schema is not None
+        assert isinstance(errors, list)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_missing_jsonschema_package(self, valid_schema: Path) -> None:
+        """Test validate raises helpful error when jsonschema not installed."""
+        # We can't easily test this in a real environment where jsonschema IS installed
+        # This test documents the expected behavior
+        # In practice: pip uninstall jsonschema, then generator.validate() would raise:
+        # ImportError: jsonschema package required for validation
+        # Skip actual test since jsonschema is a required dependency
+        pytest.skip("Cannot test missing optional dependency in test env")
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_validate_error_with_path(self, valid_schema: Path) -> None:
+        """Test validation error messages include field path."""
+        generator = HelmValuesGenerator(schema_path=valid_schema)
+        values = {"dagster": {"replicas": "not-an-int"}}
+
+        errors = generator.validate(values)
+
+        # Should have path prefix
+        assert any("dagster" in e for e in errors)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_load_schema_invalid_json(self, tmp_path: Path) -> None:
+        """Test load_schema fails on invalid JSON."""
+        import json
+
+        invalid_path = tmp_path / "invalid.json"
+        invalid_path.write_text("not valid json {{{")
+
+        generator = HelmValuesGenerator()
+        with pytest.raises(json.JSONDecodeError):
+            generator.load_schema(invalid_path)

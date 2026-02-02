@@ -29,6 +29,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "floe-platform.serviceAccountName" . }}
+      automountServiceAccountToken: false
       securityContext:
         fsGroup: 1000
       initContainers:
@@ -37,6 +38,15 @@ spec:
           command: ['sh', '-c', 'chown -R 1000:1000 /var/lib/postgresql/data']
           securityContext:
             runAsUser: 0
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+              ephemeral-storage: 128Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+              ephemeral-storage: 64Mi
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

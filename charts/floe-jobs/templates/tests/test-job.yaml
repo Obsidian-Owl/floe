@@ -23,6 +23,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  automountServiceAccountToken: false
   containers:
     # Test dbt configuration
     {{- if .Values.dbt.enabled }}
