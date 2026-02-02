@@ -64,8 +64,32 @@ collect_logs() {
     fi
 }
 
-# Set up trap to collect logs on failure
-trap 'collect_logs' ERR
+# Function to wait for localhost port availability
+wait_for_port() {
+    local host=$1 port=$2 timeout=${3:-10}
+    for i in $(seq 1 "$timeout"); do
+        if nc -z "$host" "$port" 2>/dev/null; then return 0; fi
+        sleep 1
+    done
+    echo "ERROR: Port $host:$port not available after ${timeout}s" >&2
+    return 1
+}
+
+# Cleanup function for port-forwards
+cleanup_port_forwards() {
+    [[ -n "${MARQUEZ_PF_PID:-}" ]] && kill "${MARQUEZ_PF_PID}" 2>/dev/null || true
+    [[ -n "${POSTGRES_PF_PID:-}" ]] && kill "${POSTGRES_PF_PID}" 2>/dev/null || true
+}
+
+# Combined cleanup on exit/error
+cleanup_all() {
+    cleanup_port_forwards
+    collect_logs
+}
+
+# Set up traps: cleanup port-forwards on EXIT, full cleanup on ERR
+trap 'cleanup_port_forwards' EXIT
+trap 'cleanup_all' ERR
 
 # Verify all required services are running
 echo "Verifying service readiness..."
@@ -76,6 +100,21 @@ for service in "${REQUIRED_SERVICES[@]}"; do
     fi
 done
 
+echo ""
+echo "Setting up port-forwards for ClusterIP services..."
+
+# Port-forward ClusterIP-only services to localhost
+kubectl port-forward svc/marquez 5001:5001 -n "${TEST_NAMESPACE}" &
+MARQUEZ_PF_PID=$!
+
+kubectl port-forward svc/postgres 5432:5432 -n "${TEST_NAMESPACE}" &
+POSTGRES_PF_PID=$!
+
+# Wait for port-forwards to establish
+wait_for_port localhost 5001 10
+wait_for_port localhost 5432 10
+
+echo "Port-forwards established."
 echo ""
 echo "Running E2E tests..."
 

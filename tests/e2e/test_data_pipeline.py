@@ -54,14 +54,14 @@ class TestDataPipeline(IntegrationTestBase):
     Requires all platform services running:
     - Dagster (orchestrator)
     - Polaris (catalog)
-    - LocalStack (S3-compatible storage)
+    - MinIO (S3-compatible storage)
     """
 
     # Services required for E2E pipeline tests
     required_services: ClassVar[list[tuple[str, int]]] = [
         ("dagster", 3000),
         ("polaris", 8181),
-        ("localstack", 4566),
+        ("minio", 9000),
     ]
 
     def _get_demo_project_path(self) -> Path:
@@ -179,7 +179,7 @@ class TestDataPipeline(IntegrationTestBase):
         # Check infrastructure availability
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("localstack", 4566)
+        self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
 
@@ -285,7 +285,7 @@ class TestDataPipeline(IntegrationTestBase):
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("localstack", 4566)
+        self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
         namespace = f"{e2e_namespace}_customer_360"
@@ -345,7 +345,7 @@ class TestDataPipeline(IntegrationTestBase):
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("localstack", 4566)
+        self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
         namespace = f"{e2e_namespace}_customer_360"
@@ -441,7 +441,7 @@ class TestDataPipeline(IntegrationTestBase):
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("localstack", 4566)
+        self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
         namespace = f"{e2e_namespace}_customer_360"

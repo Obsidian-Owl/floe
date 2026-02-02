@@ -216,7 +216,14 @@ def dagster_client(wait_for_service: Callable[..., None]) -> Any:
     wait_for_service(f"{url}/server_info", timeout=60, description="Dagster webserver")
 
     # Import here to fail properly if not installed
-    dagster_graphql = pytest.importorskip("dagster_graphql")
+    try:
+        import dagster_graphql
+    except ImportError:
+        pytest.fail(
+            "dagster_graphql package not installed.\n"
+            "Install with: uv pip install dagster-graphql\n"
+            "This is a REQUIRED dependency for E2E tests."
+        )
 
     # Extract host:port from URL
     host = url.replace("http://", "").replace("https://", "")
@@ -250,11 +257,18 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     )
 
     # Import here to fail properly if not installed
-    pyiceberg = pytest.importorskip("pyiceberg.catalog")
+    try:
+        from pyiceberg import catalog as pyiceberg_catalog
+    except ImportError:
+        pytest.fail(
+            "pyiceberg package not installed.\n"
+            "Install with: uv pip install pyiceberg\n"
+            "This is a REQUIRED dependency for E2E tests."
+        )
 
     # Load catalog with REST configuration
     default_cred = "principal:root;realm:default-realm"
-    catalog = pyiceberg.load_catalog(
+    catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
             "type": "rest",

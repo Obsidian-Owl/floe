@@ -298,9 +298,13 @@ class TestCodeLocationRegistration:
                 "app.kubernetes.io/component=workspace",
             ]
         )
-        # Skip if no workspace configmap (Dagster disabled)
+        # Fail if no workspace configmap (Dagster disabled)
         if result.returncode != 0:
-            pytest.skip("Dagster workspace not configured (Dagster disabled)")
+            pytest.fail(
+                "Dagster workspace not configured.\n"
+                "The Helm chart must configure Dagster workspace for E2E tests.\n"
+                "Track: Epic 13 - Helm deployment integration"
+            )
 
 
 @pytest.mark.e2e
