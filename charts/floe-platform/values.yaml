@@ -705,3 +705,18 @@ externalSecrets:
   #   dataFrom:  # Alternative: extract all keys
   #     - extract:
   #         key: path/to/secret
+
+# =============================================================================
+# Observability Configuration
+# =============================================================================
+observability:
+  # Grafana dashboard provisioning
+  grafana:
+    # Enable automatic dashboard provisioning via ConfigMap
+    enabled: true
+
+    # Dashboard refresh interval (used in dashboards)
+    refreshInterval: 30s
+
+    # Datasource UID (must match Prometheus datasource in Grafana)
+    datasourceUid: prometheus

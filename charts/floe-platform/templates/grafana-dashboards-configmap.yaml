@@ -1,0 +1,22 @@
+{{- if .Values.observability.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-grafana-dashboards
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: observability
+    grafana_dashboard: "1"
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+data:
+  pipeline-metrics.json: |
+{{ .Files.Get "dashboards/pipeline-metrics.json" | indent 4 }}
+  data-quality.json: |
+{{ .Files.Get "dashboards/data-quality.json" | indent 4 }}
+  lineage-overview.json: |
+{{ .Files.Get "dashboards/lineage-overview.json" | indent 4 }}
+{{- end }}
