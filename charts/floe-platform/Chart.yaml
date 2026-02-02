@@ -1,0 +1,95 @@
+# floe-platform Helm Chart
+# Umbrella chart for floe platform services
+#
+# This chart deploys the complete floe data platform stack:
+# - Dagster (orchestration): webserver, daemon, user code
+# - Polaris (Iceberg catalog): REST API for table management
+# - OpenTelemetry Collector (observability): trace/metric collection
+# - PostgreSQL (metadata): shared database for Dagster/Marquez
+# - MinIO (dev only): S3-compatible object storage for development
+# - Marquez (optional): OpenLineage data lineage tracking
+#
+# See values.yaml for configuration options.
+# See README.md for deployment guide.
+
+apiVersion: v2
+name: floe-platform
+description: Production-ready data platform with Dagster, Polaris, and observability
+type: application
+
+# Chart version - independent from app version
+# Follow SemVer: MAJOR.MINOR.PATCH
+version: 0.1.0
+
+# Application version - floe platform version this chart deploys
+appVersion: "1.0.0"
+
+# Kubernetes version requirement
+kubeVersion: ">=1.28.0-0"
+
+# Chart keywords for discovery
+keywords:
+  - data-platform
+  - dagster
+  - polaris
+  - iceberg
+  - opentelemetry
+  - dbt
+
+# Maintainers
+maintainers:
+  - name: floe Platform Team
+    email: platform@example.com
+
+# Home and sources
+home: https://github.com/Obsidian-Owl/floe-runtime
+sources:
+  - https://github.com/Obsidian-Owl/floe-runtime/tree/main/charts/floe-platform
+
+# Chart dependencies
+# These are pulled via `helm dependency update`
+dependencies:
+  # Dagster - Orchestration platform
+  # https://dagster-io.github.io/helm/
+  - name: dagster
+    version: "1.9.6"
+    repository: "https://dagster-io.github.io/helm"
+    condition: dagster.enabled
+    alias: dagster
+
+  # OpenTelemetry Collector - Observability
+  # https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: opentelemetry-collector
+    version: "0.108.0"
+    repository: "https://open-telemetry.github.io/opentelemetry-helm-charts"
+    condition: otel.enabled
+    alias: otel
+
+  # MinIO - S3-compatible storage (dev/demo only)
+  # https://charts.bitnami.com/bitnami
+  - name: minio
+    version: "14.8.5"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: minio.enabled
+    alias: minio
+
+  # Marquez - OpenLineage lineage tracking (optional)
+  # https://github.com/MarquezProject/marquez/tree/main/chart
+  # Note: Marquez chart is not in a public Helm repo, use values.yaml to configure
+  # a standalone Marquez deployment or external Marquez instance
+  # - name: marquez
+  #   version: "0.49.0"
+  #   repository: ""  # No public repo available
+  #   condition: marquez.enabled
+  #   alias: marquez
+
+# Annotations for artifact hub and other registries
+annotations:
+  # Artifact Hub annotations
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release with Dagster, Polaris, OTel support
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "true"
+  # Compatibility matrix
+  floe.dev/floe-core-version: ">=0.5.0"

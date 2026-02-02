@@ -2,6 +2,29 @@
 
 This document covers Helm-based Kubernetes deployment for floe.
 
+> **Note**: For the latest chart documentation, see:
+> - [floe-platform Chart README](../../../charts/floe-platform/README.md)
+> - [floe-jobs Chart README](../../../charts/floe-jobs/README.md)
+
+---
+
+## Quick Start
+
+```bash
+# From Helm Repository
+helm repo add floe https://obsidian-owl.github.io/floe
+helm repo update
+helm install floe floe/floe-platform --namespace floe-dev --create-namespace
+
+# From OCI Registry (GHCR)
+helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
+  --namespace floe-dev --create-namespace
+
+# From Local Chart
+helm dependency update ./charts/floe-platform
+helm install floe ./charts/floe-platform --namespace floe-dev --create-namespace
+```
+
 ---
 
 ## 1. Chart Structure
@@ -249,6 +272,8 @@ stringData:
 
 ## Related Documentation
 
+- [floe-platform Chart](../../../charts/floe-platform/README.md) - Platform services chart
+- [floe-jobs Chart](../../../charts/floe-jobs/README.md) - Jobs and pipelines chart
 - [Production](production.md) - HA, scaling, monitoring
 - [Two-Layer Model](two-layer-model.md) - Deployment model overview
 - [Local Development](local-development.md) - Development setup

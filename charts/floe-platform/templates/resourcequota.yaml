@@ -1,0 +1,38 @@
+{{/*
+ResourceQuota for floe-platform namespace.
+
+Creates ResourceQuota for:
+- CPU and memory requests/limits
+- Pod count limits
+
+Requirements:
+- 9b-FR-034: ResourceQuota template
+*/}}
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-quota
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- if .Values.resourceQuota.hard }}
+    {{- toYaml .Values.resourceQuota.hard | nindent 4 }}
+    {{- else }}
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    pods: "50"
+    {{- end }}
+  {{- if .Values.resourceQuota.scopeSelector }}
+  scopeSelector:
+    {{- toYaml .Values.resourceQuota.scopeSelector | nindent 4 }}
+  {{- end }}
+  {{- if .Values.resourceQuota.scopes }}
+  scopes:
+    {{- toYaml .Values.resourceQuota.scopes | nindent 4 }}
+  {{- end }}
+{{- end }}

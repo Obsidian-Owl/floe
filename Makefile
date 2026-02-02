@@ -29,6 +29,18 @@ help: ## Show this help message
 	@echo "  make typecheck       Run type checking (mypy)"
 	@echo "  make check           Run all CI checks (lint + typecheck + test)"
 	@echo ""
+	@echo "Helm Charts:"
+	@echo "  make helm-deps       Update Helm chart dependencies"
+	@echo "  make helm-lint       Lint Helm charts"
+	@echo "  make helm-template   Render templates (ENV=dev|staging|prod)"
+	@echo "  make helm-test       Run Helm tests (RELEASE=..., NAMESPACE=...)"
+	@echo "  make helm-install-dev Install floe-platform for development"
+	@echo "  make helm-install-test Install floe with test values (CI/CD)"
+	@echo "  make helm-upgrade-test Upgrade test installation"
+	@echo "  make helm-uninstall-test Uninstall test installation"
+	@echo "  make helm-test-infra Verify test infrastructure health"
+	@echo "  make helm-uninstall  Uninstall floe (NAMESPACE=... required)"
+	@echo ""
 	@echo "Agent Memory (Cognee):"
 	@echo "  make cognee-health   Check Cognee Cloud connectivity"
 	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
@@ -110,6 +122,136 @@ typecheck: ## Run type checking (mypy --strict)
 .PHONY: check
 check: lint typecheck test ## Run all CI checks (lint + typecheck + test)
 	@echo "All checks passed!"
+
+# ============================================================
+# Helm Chart Targets
+# ============================================================
+
+.PHONY: helm-deps
+helm-deps: ## Update Helm chart dependencies
+	@echo "Updating Helm chart dependencies..."
+	@helm dependency update charts/floe-platform
+	@helm dependency update charts/floe-jobs
+
+.PHONY: helm-lint
+helm-lint: ## Lint Helm charts
+	@echo "Linting Helm charts..."
+	@helm lint charts/floe-platform --values charts/floe-platform/values.yaml
+	@helm lint charts/floe-jobs --values charts/floe-jobs/values.yaml
+	@echo "Helm linting passed!"
+
+.PHONY: helm-template
+helm-template: ## Render Helm templates (ENV=dev|staging|prod)
+	@echo "Rendering Helm templates..."
+	@mkdir -p .helm-output
+	@if [ -n "$(ENV)" ] && [ -f "charts/floe-platform/values-$(ENV).yaml" ]; then \
+		helm template floe charts/floe-platform \
+			--values charts/floe-platform/values.yaml \
+			--values charts/floe-platform/values-$(ENV).yaml \
+			--output-dir .helm-output/$(ENV); \
+	else \
+		helm template floe charts/floe-platform \
+			--values charts/floe-platform/values.yaml \
+			--output-dir .helm-output/default; \
+	fi
+	@echo "Templates rendered to .helm-output/"
+
+.PHONY: helm-test
+helm-test: ## Run Helm tests (requires deployed release, RELEASE=name, NAMESPACE=ns)
+	@if [ -z "$(RELEASE)" ]; then \
+		echo "ERROR: RELEASE is required. Usage: make helm-test RELEASE=floe NAMESPACE=floe-dev"; \
+		exit 1; \
+	fi
+	@if [ -z "$(NAMESPACE)" ]; then \
+		echo "ERROR: NAMESPACE is required. Usage: make helm-test RELEASE=floe NAMESPACE=floe-dev"; \
+		exit 1; \
+	fi
+	@echo "Running Helm tests for $(RELEASE) in $(NAMESPACE)..."
+	@helm test $(RELEASE) --namespace $(NAMESPACE)
+
+.PHONY: helm-install-dev
+helm-install-dev: helm-deps ## Install floe-platform for development
+	@echo "Installing floe-platform for development..."
+	@helm upgrade --install floe charts/floe-platform \
+		--namespace floe-dev --create-namespace \
+		--values charts/floe-platform/values.yaml \
+		--values charts/floe-platform/values-dev.yaml
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall floe-platform (NAMESPACE=ns required)
+	@if [ -z "$(NAMESPACE)" ]; then \
+		echo "ERROR: NAMESPACE is required. Usage: make helm-uninstall NAMESPACE=floe-dev"; \
+		exit 1; \
+	fi
+	@echo "Uninstalling floe from $(NAMESPACE)..."
+	@helm uninstall floe --namespace $(NAMESPACE)
+
+.PHONY: helm-integration-test
+helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
+	@echo "Running Helm integration tests..."
+	@# Ensure Kind cluster exists
+	@if ! kind get clusters 2>/dev/null | grep -q floe-test; then \
+		echo "Creating Kind cluster..."; \
+		kind create cluster --name floe-test --wait 120s; \
+	fi
+	@# Install charts
+	@echo "Installing floe-platform chart..."
+	@helm upgrade --install floe-test charts/floe-platform \
+		--namespace floe-test --create-namespace \
+		--values charts/floe-platform/values.yaml \
+		--values charts/floe-platform/values-dev.yaml \
+		--wait --timeout 5m
+	@# Run Helm tests
+	@echo "Running Helm tests..."
+	@helm test floe-test --namespace floe-test --timeout 5m
+	@echo "Helm integration tests passed!"
+
+.PHONY: helm-install-test
+helm-install-test: helm-deps ## Install floe-platform with test values (requires Kind cluster)
+	@echo "Installing floe-platform with test configuration..."
+	@helm upgrade --install floe-test charts/floe-platform \
+		--namespace floe-test --create-namespace \
+		--values charts/floe-platform/values-test.yaml \
+		--wait --timeout 10m
+	@echo "Installing floe-jobs with test configuration..."
+	@helm upgrade --install floe-jobs-test charts/floe-jobs \
+		--namespace floe-test \
+		--values charts/floe-jobs/values-test.yaml \
+		--wait --timeout 5m
+	@echo "Test infrastructure installed!"
+
+.PHONY: helm-upgrade-test
+helm-upgrade-test: helm-deps ## Upgrade floe-platform test installation
+	@echo "Upgrading floe-platform test installation..."
+	@helm upgrade floe-test charts/floe-platform \
+		--namespace floe-test \
+		--values charts/floe-platform/values-test.yaml \
+		--wait --timeout 10m
+	@helm upgrade floe-jobs-test charts/floe-jobs \
+		--namespace floe-test \
+		--values charts/floe-jobs/values-test.yaml \
+		--wait --timeout 5m
+	@echo "Test infrastructure upgraded!"
+
+.PHONY: helm-uninstall-test
+helm-uninstall-test: ## Uninstall floe test installation
+	@echo "Uninstalling floe test installation..."
+	@helm uninstall floe-jobs-test --namespace floe-test 2>/dev/null || true
+	@helm uninstall floe-test --namespace floe-test 2>/dev/null || true
+	@kubectl delete namespace floe-test --ignore-not-found --wait=false
+	@echo "Test infrastructure uninstalled!"
+
+.PHONY: helm-test-infra
+helm-test-infra: ## Verify test infrastructure is healthy
+	@echo "Checking test infrastructure health..."
+	@kubectl get pods -n floe-test --no-headers 2>/dev/null || { echo "Test namespace not found. Run: make helm-install-test"; exit 1; }
+	@echo "Checking Polaris..."
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=polaris -n floe-test --timeout=60s 2>/dev/null || echo "Polaris not ready"
+	@echo "Checking PostgreSQL..."
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n floe-test --timeout=60s 2>/dev/null || echo "PostgreSQL not ready"
+	@echo "Checking MinIO..."
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n floe-test --timeout=60s 2>/dev/null || echo "MinIO not ready"
+	@echo "Test infrastructure health check complete!"
 
 # ============================================================
 # Development Helpers

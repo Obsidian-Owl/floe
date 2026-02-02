@@ -1,0 +1,310 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://floe.dev/schemas/helm-values/floe-platform/v1.0.0",
+  "title": "floe-platform Helm Values Schema",
+  "description": "JSON Schema for floe-platform chart values.yaml validation",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Global configuration shared across subcharts",
+      "properties": {
+        "imageRegistry": {
+          "type": "string",
+          "description": "Default container registry for all images"
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Image pull secrets for private registries"
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "Default storage class for PVCs"
+        }
+      }
+    },
+    "clusterMapping": {
+      "type": "object",
+      "description": "Logical-to-physical environment mapping",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["cluster", "environments"],
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "description": "Kubernetes cluster context or ArgoCD destination"
+          },
+          "environments": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Logical environments mapped to this cluster"
+          },
+          "namespaceTemplate": {
+            "type": "string",
+            "default": "floe-{{.environment}}",
+            "description": "Go template for namespace naming"
+          },
+          "resources": {
+            "type": "object",
+            "properties": {
+              "preset": {
+                "type": "string",
+                "enum": ["small", "medium", "large", "custom"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "dagster": {
+      "type": "object",
+      "description": "Dagster orchestrator configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "postgresql": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Use built-in PostgreSQL (false for external)"
+            },
+            "postgresqlHost": {
+              "type": "string",
+              "description": "External PostgreSQL host"
+            },
+            "postgresqlSecretName": {
+              "type": "string",
+              "description": "Secret containing PostgreSQL credentials"
+            }
+          }
+        },
+        "dagsterWebserver": {
+          "$ref": "#/$defs/deployment"
+        },
+        "dagsterDaemon": {
+          "$ref": "#/$defs/deployment"
+        },
+        "dagster-user-deployments": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "enableSubchart": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "polaris": {
+      "type": "object",
+      "description": "Apache Polaris catalog configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["in-memory", "relational-jdbc"],
+              "default": "relational-jdbc"
+            }
+          }
+        },
+        "resources": { "$ref": "#/$defs/resources" }
+      }
+    },
+    "otel": {
+      "type": "object",
+      "description": "OpenTelemetry Collector configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["deployment", "daemonset"],
+          "default": "deployment"
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2
+        },
+        "autoscaling": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        },
+        "config": {
+          "type": "object",
+          "description": "OTel Collector configuration"
+        }
+      }
+    },
+    "marquez": {
+      "type": "object",
+      "description": "Marquez lineage backend (optional)",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "web": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
+        }
+      }
+    },
+    "minio": {
+      "type": "object",
+      "description": "MinIO for dev/demo (WARNING: use external S3 for production)",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "description": "Shared PostgreSQL for platform services",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable built-in PostgreSQL (false for CloudNativePG/external)"
+        },
+        "operator": {
+          "type": "object",
+          "description": "PostgreSQL Operator configuration (prod only)",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "type": {
+              "type": "string",
+              "enum": ["cloudnative-pg", "zalando"],
+              "default": "cloudnative-pg"
+            }
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "existingSecret": { "type": "string" }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "size": { "type": "string", "default": "8Gi" }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "description": "Ingress configuration for platform services",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": { "type": "string" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string" },
+                    "pathType": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": { "type": "array" }
+      }
+    },
+    "networkPolicies": {
+      "type": "object",
+      "description": "Network isolation policies",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "podSecurityStandards": {
+      "type": "object",
+      "description": "Pod Security Standards configuration",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["privileged", "baseline", "restricted"],
+          "default": "restricted"
+        }
+      }
+    },
+    "externalSecrets": {
+      "type": "object",
+      "description": "External Secrets Operator integration",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "secretStore": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["SecretStore", "ClusterSecretStore"] }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": { "type": "string", "pattern": "^\\d+m?$" },
+            "memory": { "type": "string", "pattern": "^\\d+(Mi|Gi)$" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": { "type": "string", "pattern": "^\\d+m?$" },
+            "memory": { "type": "string", "pattern": "^\\d+(Mi|Gi)$" }
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/$defs/resources" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" }
+      }
+    }
+  }
+}

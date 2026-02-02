@@ -46,9 +46,27 @@ cleanup_kubeconfig() {
     log_info "Kubeconfig cleaned up"
 }
 
+# Uninstall Helm releases
+uninstall_helm_releases() {
+    log_info "Uninstalling Helm releases in namespace: ${NAMESPACE}"
+
+    if command -v helm &> /dev/null; then
+        # Uninstall floe-jobs first (depends on floe-platform)
+        helm uninstall floe-jobs-test --namespace "${NAMESPACE}" 2>/dev/null || true
+        # Uninstall floe-platform
+        helm uninstall floe-test --namespace "${NAMESPACE}" 2>/dev/null || true
+        log_info "Helm releases uninstalled"
+    else
+        log_warn "Helm not found, skipping Helm uninstall"
+    fi
+}
+
 # Delete namespace only (keep cluster)
 delete_namespace() {
     log_info "Deleting namespace: ${NAMESPACE}"
+
+    # Uninstall Helm releases first for clean teardown
+    uninstall_helm_releases
 
     if kubectl get namespace "${NAMESPACE}" &> /dev/null; then
         kubectl delete namespace "${NAMESPACE}" --wait=true --timeout=120s || {

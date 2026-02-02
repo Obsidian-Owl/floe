@@ -1,0 +1,257 @@
+# floe-jobs Helm Chart Values
+# ============================
+#
+# This chart deploys data product jobs (dbt runs, data ingestion, etc.)
+# as Kubernetes Jobs or CronJobs.
+#
+# Use this chart in conjunction with floe-platform for complete deployment.
+
+# =============================================================================
+# Global Configuration
+# =============================================================================
+global:
+  # Image pull policy for all containers
+  imagePullPolicy: IfNotPresent
+
+  # Image pull secrets (if using private registry)
+  imagePullSecrets: []
+
+  # Common labels applied to all resources
+  commonLabels: {}
+
+  # Common annotations applied to all resources
+  commonAnnotations: {}
+
+# =============================================================================
+# Job Defaults
+# =============================================================================
+# Default settings applied to all jobs unless overridden
+defaults:
+  # Restart policy for jobs
+  restartPolicy: Never
+
+  # Backoff limit before marking job as failed
+  backoffLimit: 3
+
+  # TTL for cleaning up finished jobs (seconds)
+  # Set to null to disable automatic cleanup
+  ttlSecondsAfterFinished: 3600
+
+  # Active deadline for job execution (seconds)
+  # Set to null for no deadline
+  activeDeadlineSeconds: null
+
+  # Default resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  # Security context for job pods
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  # Container security context
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Node selector for job pods
+  nodeSelector: {}
+
+  # Tolerations for job pods
+  tolerations: []
+
+  # Affinity rules for job pods
+  affinity: {}
+
+# =============================================================================
+# dbt Job Configuration
+# =============================================================================
+dbt:
+  # Enable dbt job
+  enabled: false
+
+  # dbt image
+  image:
+    repository: ghcr.io/dbt-labs/dbt-core
+    tag: "1.8.0"
+    pullPolicy: IfNotPresent
+
+  # dbt command to run
+  command: ["dbt"]
+  args: ["run", "--profiles-dir", "/etc/dbt", "--project-dir", "/dbt"]
+
+  # Environment variables
+  env: []
+  # - name: DBT_PROFILES_DIR
+  #   value: /etc/dbt
+
+  # Environment variables from secrets/configmaps
+  envFrom: []
+  # - secretRef:
+  #     name: dbt-credentials
+
+  # Volume mounts for dbt project and profiles
+  volumeMounts:
+    - name: dbt-project
+      mountPath: /dbt
+      readOnly: true
+    - name: dbt-profiles
+      mountPath: /etc/dbt
+      readOnly: true
+
+  # Volumes
+  volumes:
+    - name: dbt-project
+      emptyDir: {}
+    - name: dbt-profiles
+      configMap:
+        name: dbt-profiles
+
+  # Override default resources
+  resources: {}
+
+  # Schedule for CronJob (if set, creates CronJob instead of Job)
+  schedule: ""
+
+  # CronJob specific settings
+  cronJob:
+    # Concurrency policy: Allow, Forbid, Replace
+    concurrencyPolicy: Forbid
+    # Suspend the CronJob
+    suspend: false
+    # Successful job history limit
+    successfulJobsHistoryLimit: 3
+    # Failed job history limit
+    failedJobsHistoryLimit: 1
+    # Starting deadline seconds
+    startingDeadlineSeconds: null
+
+# =============================================================================
+# Data Ingestion Job Configuration
+# =============================================================================
+ingestion:
+  # Enable ingestion job
+  enabled: false
+
+  # Ingestion tool image (e.g., dlt, airbyte, custom)
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  # Command and args
+  command: []
+  args: []
+
+  # Environment variables
+  env: []
+
+  # Environment variables from secrets/configmaps
+  envFrom: []
+
+  # Volume mounts
+  volumeMounts: []
+
+  # Volumes
+  volumes: []
+
+  # Override default resources
+  resources: {}
+
+  # Schedule for CronJob
+  schedule: ""
+
+  # CronJob specific settings
+  cronJob:
+    concurrencyPolicy: Forbid
+    suspend: false
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 1
+
+# =============================================================================
+# Custom Jobs
+# =============================================================================
+# Define additional custom jobs
+customJobs: []
+# - name: my-custom-job
+#   image:
+#     repository: my-image
+#     tag: latest
+#   command: ["python"]
+#   args: ["-m", "my_module"]
+#   env: []
+#   envFrom: []
+#   volumeMounts: []
+#   volumes: []
+#   resources: {}
+#   schedule: ""  # Set for CronJob
+#   cronJob:
+#     concurrencyPolicy: Forbid
+
+# =============================================================================
+# Service Account
+# =============================================================================
+serviceAccount:
+  # Create service account
+  create: true
+
+  # Service account name (auto-generated if empty)
+  name: ""
+
+  # Annotations for the service account
+  annotations: {}
+
+# =============================================================================
+# ConfigMaps
+# =============================================================================
+# Define custom ConfigMaps for job configuration
+configMaps: []
+# - name: my-config
+#   labels: {}
+#   annotations: {}
+#   data:
+#     config.yaml: |
+#       key: value
+
+# =============================================================================
+# Secrets
+# =============================================================================
+# Define custom Secrets for job credentials
+# NOTE: For production, use external secrets management (ESO, Vault, etc.)
+secrets: []
+# - name: my-credentials
+#   type: Opaque
+#   data:
+#     username: admin
+#     password: secret
+#   # Or use stringData for unencoded values:
+#   # stringData:
+#   #   config.json: '{"key": "value"}'
+
+# =============================================================================
+# Platform Integration
+# =============================================================================
+# Settings for integrating with floe-platform
+platform:
+  # floe-platform release name (for service discovery)
+  releaseName: ""
+
+  # Namespace where floe-platform is deployed
+  namespace: ""
+
+  # Polaris catalog endpoint (auto-discovered if platform.releaseName set)
+  polarisEndpoint: ""
+
+  # OTel collector endpoint (auto-discovered if platform.releaseName set)
+  otelEndpoint: ""

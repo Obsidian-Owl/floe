@@ -1,0 +1,202 @@
+{{/*
+NetworkPolicy for floe-platform components.
+Provides network isolation between components and external access control.
+Only created when networkPolicy.enabled is true (recommended for staging/prod).
+
+Requirements: 9b-FR-032 - Network isolation between components
+*/}}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-default-deny
+  namespace: {{ include "floe-platform.namespace" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+spec:
+  # Default deny all ingress traffic
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-dagster
+  namespace: {{ include "floe-platform.namespace" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dagster
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dagster
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress access to webserver
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              {{- if .Values.ingress.enabled }}
+              # Allow from ingress controller
+              app.kubernetes.io/name: ingress-nginx
+              {{- end }}
+      ports:
+        - protocol: TCP
+          port: 3000
+    # Allow internal communication from daemon
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dagster
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 4000
+  egress:
+    # Allow egress to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow egress to Polaris catalog
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: polaris
+      ports:
+        - protocol: TCP
+          port: 8181
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-polaris
+  namespace: {{ include "floe-platform.namespace" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: polaris
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: polaris
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from Dagster components
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dagster
+      ports:
+        - protocol: TCP
+          port: 8181
+    # Allow from jobs
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: floe-jobs
+      ports:
+        - protocol: TCP
+          port: 8181
+  egress:
+    # Allow egress to PostgreSQL (Polaris uses PostgreSQL backend)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow egress to MinIO/S3
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-postgresql
+  namespace: {{ include "floe-platform.namespace" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow from Dagster
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dagster
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow from Polaris
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: polaris
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-otel
+  namespace: {{ include "floe-platform.namespace" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-collector
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: otel-collector
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow OTLP from all pods in namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4317  # OTLP gRPC
+        - protocol: TCP
+          port: 4318  # OTLP HTTP
+{{- end }}

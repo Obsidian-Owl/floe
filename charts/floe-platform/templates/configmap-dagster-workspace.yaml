@@ -1,0 +1,32 @@
+{{- if .Values.dagster.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-dagster-workspace
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dagster
+data:
+  workspace.yaml: |
+    # Dagster workspace configuration
+    # Defines code locations (user deployments) that Dagster webserver/daemon can load
+    #
+    # For production, configure user deployments in values.yaml:
+    #   dagster.dagster-user-deployments.enabled: true
+    #   dagster.dagster-user-deployments.deployments: [...]
+    #
+    # For development, this provides a minimal workspace.
+    load_from:
+      {{- if and .Values.dagster (index .Values.dagster "dagster-user-deployments") (index .Values.dagster "dagster-user-deployments" "enabled") }}
+      {{- range (index .Values.dagster "dagster-user-deployments" "deployments") }}
+      - grpc_server:
+          host: {{ .name | default "localhost" }}
+          port: {{ .port | default 3030 }}
+          location_name: {{ .name | default "user-code" }}
+      {{- end }}
+      {{- else }}
+      # No user deployments configured - workspace is empty
+      # Add user code deployments to dagster.dagster-user-deployments.deployments
+      []
+      {{- end }}
+{{- end }}

@@ -1,0 +1,54 @@
+{{- if .Values.otel.enabled }}
+{{/*
+Supplementary OTel configuration for floe platform integration.
+The primary collector config is managed by the opentelemetry-collector subchart.
+This ConfigMap provides additional context-specific configuration.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-platform.otel.fullname" . }}-floe-config
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel
+data:
+  # floe platform resource attributes
+  # These are injected into all telemetry data for platform identification
+  resource-attributes.yaml: |
+    # Resource attributes for floe platform telemetry
+    # Used by Dagster, dbt, and other platform components
+    resource:
+      attributes:
+        service.namespace: {{ .Release.Namespace }}
+        deployment.environment: {{ .Values.global.environment | default "dev" }}
+        floe.platform.version: {{ .Chart.AppVersion | quote }}
+        floe.chart.version: {{ .Chart.Version | quote }}
+
+  # Endpoint configuration for platform components
+  endpoints.yaml: |
+    # OTel Collector endpoints for platform components
+    otlp:
+      grpc:
+        endpoint: {{ include "floe-platform.otel.fullname" . }}:4317
+        insecure: true
+      http:
+        endpoint: http://{{ include "floe-platform.otel.fullname" . }}:4318
+        insecure: true
+
+  # Sampling configuration
+  sampling.yaml: |
+    # Sampling configuration for different environments
+    {{- if eq .Values.global.environment "prod" }}
+    # Production: Sample 10% of traces
+    probabilistic:
+      sampling_percentage: 10
+    {{- else if eq .Values.global.environment "staging" }}
+    # Staging: Sample 50% of traces
+    probabilistic:
+      sampling_percentage: 50
+    {{- else }}
+    # Development: Sample 100% of traces
+    probabilistic:
+      sampling_percentage: 100
+    {{- end }}
+{{- end }}

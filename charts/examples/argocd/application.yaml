@@ -1,0 +1,104 @@
+# ArgoCD Application template for floe-platform
+#
+# This template deploys a single floe-platform environment using ArgoCD.
+# For multi-environment deployments, use applicationset.yaml instead.
+#
+# Usage:
+#   1. Update spec.source.repoURL to your Git repository
+#   2. Update spec.source.targetRevision to your branch/tag
+#   3. Update spec.source.path to your chart location
+#   4. Apply: kubectl apply -f application.yaml
+#
+# Requirements:
+# - 9b-FR-070: ArgoCD Application template
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: floe-platform-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: floe-platform
+    app.kubernetes.io/component: application
+    app.kubernetes.io/managed-by: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # Repository containing the Helm chart
+    repoURL: https://github.com/your-org/floe.git
+    targetRevision: HEAD
+    path: charts/floe-platform
+
+    # Helm-specific configuration
+    helm:
+      # Release name
+      releaseName: floe
+
+      # Values files to use (in order of precedence)
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+
+      # Inline parameter overrides
+      parameters:
+        - name: global.environment
+          value: dev
+        - name: namespace.name
+          value: floe-dev
+
+      # Skip CRD installation (if needed)
+      skipCrds: false
+
+  destination:
+    # Target cluster (use 'https://kubernetes.default.svc' for in-cluster)
+    server: https://kubernetes.default.svc
+    namespace: floe-dev
+
+  syncPolicy:
+    # Automated sync configuration
+    automated:
+      # Prune resources that no longer exist in Git
+      prune: true
+      # Self-heal if resources drift from desired state
+      selfHeal: true
+      # Allow empty resources (for clean uninstall)
+      allowEmpty: false
+
+    # Sync options
+    syncOptions:
+      # Create namespace if it doesn't exist
+      - CreateNamespace=true
+      # Validate manifests before applying
+      - Validate=true
+      # Apply changes in order based on dependencies
+      - ApplyOutOfSyncOnly=true
+      # Respect ignore differences annotations
+      - RespectIgnoreDifferences=true
+
+    # Retry on failed sync
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences for specific fields
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+
+  # Health check configuration
+  # (ArgoCD automatically detects health for standard resources)
+
+  # Revision history limit
+  revisionHistoryLimit: 10

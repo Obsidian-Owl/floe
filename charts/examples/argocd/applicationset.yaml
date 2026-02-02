@@ -1,0 +1,162 @@
+# ArgoCD ApplicationSet for multi-environment floe-platform deployment
+#
+# This template uses the List generator to deploy floe-platform
+# across multiple environments with environment-specific configuration.
+#
+# Environments are defined inline in the generators section.
+# For Git-based environments, use the Git generator instead.
+#
+# Usage:
+#   1. Update spec.template.spec.source.repoURL to your Git repository
+#   2. Customize environments in spec.generators[0].list.elements
+#   3. Apply: kubectl apply -f applicationset.yaml
+#
+# Requirements:
+# - 9b-FR-071: ArgoCD ApplicationSet template
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: floe-platform
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: floe-platform
+    app.kubernetes.io/component: applicationset
+    app.kubernetes.io/managed-by: argocd
+spec:
+  # Generators define how Applications are created
+  generators:
+    # List generator for explicit environment definitions
+    - list:
+        elements:
+          - env: dev
+            namespace: floe-dev
+            cluster: https://kubernetes.default.svc
+            valuesFile: values-dev.yaml
+            autoSync: true
+            prune: true
+            selfHeal: true
+
+          - env: qa
+            namespace: floe-qa
+            cluster: https://kubernetes.default.svc
+            valuesFile: values-dev.yaml
+            autoSync: true
+            prune: true
+            selfHeal: true
+
+          - env: staging
+            namespace: floe-staging
+            cluster: https://kubernetes.default.svc
+            valuesFile: values-staging.yaml
+            autoSync: true
+            prune: true
+            selfHeal: true
+
+          - env: prod
+            namespace: floe-prod
+            cluster: https://kubernetes.default.svc
+            valuesFile: values-prod.yaml
+            autoSync: false  # Manual sync for production
+            prune: false     # No auto-prune for production
+            selfHeal: false  # No auto-heal for production
+
+  # Template for generated Applications
+  template:
+    metadata:
+      name: "floe-platform-{{env}}"
+      labels:
+        app.kubernetes.io/name: floe-platform
+        app.kubernetes.io/instance: "floe-{{env}}"
+        app.kubernetes.io/component: application
+        app.kubernetes.io/managed-by: argocd
+        environment: "{{env}}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+
+      source:
+        repoURL: https://github.com/your-org/floe.git
+        targetRevision: HEAD
+        path: charts/floe-platform
+
+        helm:
+          releaseName: floe
+          valueFiles:
+            - values.yaml
+            - "{{valuesFile}}"
+          parameters:
+            - name: global.environment
+              value: "{{env}}"
+            - name: namespace.name
+              value: "{{namespace}}"
+          skipCrds: false
+
+      destination:
+        server: "{{cluster}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        automated:
+          prune: "{{prune}}"
+          selfHeal: "{{selfHeal}}"
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - Validate=true
+          - ApplyOutOfSyncOnly=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+        - group: ""
+          kind: Secret
+          jsonPointers:
+            - /data
+
+      revisionHistoryLimit: 10
+
+  # Sync policy for the ApplicationSet itself
+  syncPolicy:
+    # How to handle application deletion when removed from generators
+    preserveResourcesOnDeletion: false
+
+  # Strategy for rolling out Application updates
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        # Deploy to dev first
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - dev
+        # Then QA
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - qa
+        # Then staging
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - staging
+        # Finally production (with manual gate)
+        - matchExpressions:
+            - key: environment
+              operator: In
+              values:
+                - prod

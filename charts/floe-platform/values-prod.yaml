@@ -1,0 +1,190 @@
+# =============================================================================
+# Production Environment Values
+# =============================================================================
+# Override values for production environment deployment.
+# Inherits from values.yaml with production-specific adjustments.
+#
+# Usage:
+#   helm upgrade floe-prod ./charts/floe-platform \
+#     -f values.yaml \
+#     -f values-prod.yaml \
+#     --namespace floe-prod
+#
+# Requirements: 9b-FR-050, 9b-FR-051
+# =============================================================================
+
+global:
+  environment: prod
+
+# Namespace configuration
+namespace:
+  name: floe-prod
+  create: true
+
+# =============================================================================
+# Resource Configuration (Large preset for production)
+# =============================================================================
+resourcePresets:
+  default: large
+
+# =============================================================================
+# Security Features (All enabled for production)
+# =============================================================================
+networkPolicy:
+  enabled: true
+
+# =============================================================================
+# High Availability Features
+# =============================================================================
+autoscaling:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# =============================================================================
+# Dagster Configuration (Production-grade)
+# =============================================================================
+dagster:
+  dagster-webserver:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+  dagster-daemon:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+  run_launcher:
+    config:
+      k8sRunLauncher:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+
+# =============================================================================
+# PostgreSQL Configuration (Production-grade)
+# =============================================================================
+postgresql:
+  auth:
+    # REQUIRED: Use External Secrets Operator or set password via --set
+    # Option 1: existingSecret: "floe-postgresql-external"
+    # Option 2: --set postgresql.auth.password="your-secure-password"
+    existingSecret: ""  # Set this or password (min 16 chars)
+  primary:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+    persistence:
+      size: 100Gi
+      storageClass: premium-ssd
+
+# =============================================================================
+# Polaris Configuration (Production-grade)
+# =============================================================================
+polaris:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  # SECURITY: Disable anonymous access in production
+  config:
+    features:
+      ALLOW_ANONYMOUS_ACCESS: false
+      ALLOW_TABLE_LOCATION_OVERLAP: false
+      ALLOW_EXTERNAL_METADATA_FILE_LOCATION: false
+
+# =============================================================================
+# MinIO Configuration (Production-grade)
+# =============================================================================
+minio:
+  mode: distributed
+  replicas: 4
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  persistence:
+    size: 500Gi
+    storageClass: premium-ssd
+
+# =============================================================================
+# OpenTelemetry Configuration
+# =============================================================================
+opentelemetry-collector:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# =============================================================================
+# Ingress Configuration (Production with TLS)
+# =============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: floe.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dagster-webserver
+          port: 3000
+  tls:
+    - secretName: floe-prod-tls
+      hosts:
+        - floe.example.com
+
+# =============================================================================
+# Monitoring and Alerting
+# =============================================================================
+serviceMonitor:
+  enabled: true
+  interval: 30s
+
+# =============================================================================
+# Pod Anti-Affinity (Spread across nodes)
+# =============================================================================
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: floe-platform
+          topologyKey: kubernetes.io/hostname

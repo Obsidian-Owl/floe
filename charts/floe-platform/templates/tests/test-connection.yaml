@@ -1,0 +1,144 @@
+{{/*
+Helm test pod for floe-platform chart.
+Run with: helm test <release-name>
+
+Tests performed:
+1. Dagster webserver connectivity
+2. Polaris API connectivity
+3. PostgreSQL connectivity
+4. MinIO S3 connectivity (if enabled)
+
+Requirements:
+- 9b-FR-084: Helm test pod
+*/}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "floe-platform.fullname" . }}-test-connection"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    # Test Dagster webserver
+    {{- if .Values.dagster.enabled }}
+    - name: test-dagster
+      image: curlimages/curl:8.5.0
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing Dagster webserver connectivity..."
+          DAGSTER_URL="http://{{ .Release.Name }}-dagster-webserver:80"
+          for i in 1 2 3 4 5; do
+            if curl -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
+              echo "SUCCESS: Dagster webserver is reachable"
+              exit 0
+            fi
+            echo "Attempt $i: Dagster not ready, waiting..."
+            sleep 5
+          done
+          echo "FAILED: Dagster webserver not reachable after 5 attempts"
+          exit 1
+      resources:
+        limits:
+          cpu: 100m
+          memory: 64Mi
+        requests:
+          cpu: 50m
+          memory: 32Mi
+    {{- end }}
+
+    # Test Polaris API
+    {{- if .Values.polaris.enabled }}
+    - name: test-polaris
+      image: curlimages/curl:8.5.0
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing Polaris API connectivity..."
+          POLARIS_URL="http://{{ .Release.Name }}-polaris:8181"
+          for i in 1 2 3 4 5; do
+            if curl -sf "${POLARIS_URL}/api/catalog/v1/config" > /dev/null 2>&1; then
+              echo "SUCCESS: Polaris API is reachable"
+              exit 0
+            fi
+            echo "Attempt $i: Polaris not ready, waiting..."
+            sleep 5
+          done
+          echo "FAILED: Polaris API not reachable after 5 attempts"
+          exit 1
+      resources:
+        limits:
+          cpu: 100m
+          memory: 64Mi
+        requests:
+          cpu: 50m
+          memory: 32Mi
+    {{- end }}
+
+    # Test PostgreSQL
+    {{- if .Values.postgresql.enabled }}
+    - name: test-postgresql
+      image: postgres:15-alpine
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing PostgreSQL connectivity..."
+          PG_HOST="{{ .Release.Name }}-postgresql"
+          PG_PORT="5432"
+          for i in 1 2 3 4 5; do
+            if pg_isready -h "${PG_HOST}" -p "${PG_PORT}" > /dev/null 2>&1; then
+              echo "SUCCESS: PostgreSQL is reachable"
+              exit 0
+            fi
+            echo "Attempt $i: PostgreSQL not ready, waiting..."
+            sleep 5
+          done
+          echo "FAILED: PostgreSQL not reachable after 5 attempts"
+          exit 1
+      resources:
+        limits:
+          cpu: 100m
+          memory: 64Mi
+        requests:
+          cpu: 50m
+          memory: 32Mi
+    {{- end }}
+
+    # Test MinIO S3
+    {{- if .Values.minio.enabled }}
+    - name: test-minio
+      image: curlimages/curl:8.5.0
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing MinIO S3 connectivity..."
+          MINIO_URL="http://{{ .Release.Name }}-minio:9000"
+          for i in 1 2 3 4 5; do
+            if curl -sf "${MINIO_URL}/minio/health/live" > /dev/null 2>&1; then
+              echo "SUCCESS: MinIO S3 is reachable"
+              exit 0
+            fi
+            echo "Attempt $i: MinIO not ready, waiting..."
+            sleep 5
+          done
+          echo "FAILED: MinIO S3 not reachable after 5 attempts"
+          exit 1
+      resources:
+        limits:
+          cpu: 100m
+          memory: 64Mi
+        requests:
+          cpu: 50m
+          memory: 32Mi
+    {{- end }}

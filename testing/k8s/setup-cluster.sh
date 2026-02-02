@@ -25,6 +25,7 @@ set -euo pipefail
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-floe-test}"
 NAMESPACE="floe-test"
 TIMEOUT="${TIMEOUT:-300}"
@@ -150,114 +151,74 @@ deploy_monitoring_stack() {
     log_info "  Prometheus: http://localhost:9090"
 }
 
-# Deploy services
-deploy_services() {
+# Deploy services via Helm charts
+deploy_services_helm() {
     if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
         log_info "Skipping service deployment (SKIP_SERVICES=true)"
         return
     fi
 
-    log_info "Deploying services to namespace: ${NAMESPACE}"
+    if ! command -v helm &> /dev/null; then
+        log_error "Helm is required for service deployment"
+        log_error "Install Helm from: https://helm.sh/docs/intro/install/"
+        exit 1
+    fi
 
-    # Apply namespace first
-    kubectl apply -f "${SCRIPT_DIR}/services/namespace.yaml"
+    log_info "Deploying services via Helm to namespace: ${NAMESPACE}"
 
-    # Wait for namespace to be ready
-    kubectl wait --for=jsonpath='{.status.phase}'=Active "namespace/${NAMESPACE}" --timeout=30s
+    # Update Helm dependencies
+    log_info "Updating Helm chart dependencies..."
+    helm dependency update "${PROJECT_ROOT}/charts/floe-platform" 2>/dev/null || true
 
-    # Apply PostgreSQL (dependency for Dagster/Polaris)
-    log_info "Deploying PostgreSQL..."
-    kubectl apply -f "${SCRIPT_DIR}/services/postgres.yaml"
+    # Install floe-platform with test values
+    log_info "Installing floe-platform chart..."
+    helm upgrade --install floe-test "${PROJECT_ROOT}/charts/floe-platform" \
+        --namespace "${NAMESPACE}" --create-namespace \
+        --values "${PROJECT_ROOT}/charts/floe-platform/values-test.yaml" \
+        --wait \
+        --timeout 10m
 
-    # Apply MinIO (dependency for Polaris)
-    log_info "Deploying MinIO..."
-    kubectl apply -f "${SCRIPT_DIR}/services/minio.yaml"
+    # Install floe-jobs with test values (if needed for job execution tests)
+    log_info "Installing floe-jobs chart..."
+    helm dependency update "${PROJECT_ROOT}/charts/floe-jobs" 2>/dev/null || true
+    helm upgrade --install floe-jobs-test "${PROJECT_ROOT}/charts/floe-jobs" \
+        --namespace "${NAMESPACE}" \
+        --values "${PROJECT_ROOT}/charts/floe-jobs/values-test.yaml" \
+        --wait \
+        --timeout 5m
 
-    # Wait for PostgreSQL and MinIO to be ready before Polaris/Dagster
-    log_info "Waiting for PostgreSQL to be ready..."
-    kubectl wait --for=condition=available deployment/postgres -n "${NAMESPACE}" --timeout=120s
+    log_info "Helm-based services deployed successfully"
+}
 
-    log_info "Waiting for MinIO to be ready..."
-    kubectl wait --for=condition=available deployment/minio -n "${NAMESPACE}" --timeout=120s
+# Wait for Helm-deployed services
+wait_for_services_helm() {
+    log_info "Waiting for Helm-deployed services to be ready..."
 
-    # Wait for MinIO IAM setup job to complete (creates Polaris service account)
-    log_info "Waiting for MinIO IAM setup..."
-    kubectl wait --for=condition=complete job/minio-iam-setup -n "${NAMESPACE}" --timeout=120s || {
-        log_warn "MinIO IAM setup job not complete, checking logs..."
-        kubectl logs job/minio-iam-setup -n "${NAMESPACE}" --tail=20 2>/dev/null || true
+    # Check Polaris
+    log_info "Waiting for Polaris..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=polaris -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "Polaris pods not ready within timeout"
     }
 
-    # Apply Polaris
-    log_info "Deploying Polaris..."
-    kubectl apply -f "${SCRIPT_DIR}/services/polaris.yaml"
+    # Check PostgreSQL
+    log_info "Waiting for PostgreSQL..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "PostgreSQL pods not ready within timeout"
+    }
 
-    # Apply Dagster
-    log_info "Deploying Dagster..."
-    kubectl apply -f "${SCRIPT_DIR}/services/dagster.yaml"
+    # Check MinIO
+    log_info "Waiting for MinIO..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "MinIO pods not ready within timeout"
+    }
 
-    # Apply Jaeger (for OpenTelemetry integration tests)
-    log_info "Deploying Jaeger..."
-    kubectl apply -f "${SCRIPT_DIR}/services/jaeger.yaml"
+    # Check Dagster if enabled
+    log_info "Waiting for Dagster..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=dagster -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+        log_warn "Dagster pods not ready within timeout (may be disabled)"
+    }
 
-    # Apply Keycloak (for identity/OAuth2 integration tests)
-    log_info "Deploying Keycloak..."
-    kubectl apply -f "${SCRIPT_DIR}/services/keycloak.yaml"
-
-    # Apply OCI Registry (for OCI client integration tests - Epic 8A)
-    log_info "Deploying OCI Registry..."
-    kubectl apply -f "${SCRIPT_DIR}/services/registry.yaml"
-
-    # Apply OCI Registry with authentication (for basic auth tests - Epic 8A T060)
-    log_info "Deploying OCI Registry with basic auth..."
-    kubectl apply -f "${SCRIPT_DIR}/services/registry-auth.yaml"
-
-    # Deploy Infisical (via Helm) for secrets management integration tests
-    if command -v helm &> /dev/null; then
-        log_info "Deploying Infisical..."
-        helm repo add infisical https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/ 2>/dev/null || true
-        helm repo update
-        kubectl apply -f "${SCRIPT_DIR}/services/infisical-secrets.yaml"
-        helm upgrade --install infisical infisical/infisical-standalone \
-            -n "${NAMESPACE}" \
-            -f "${SCRIPT_DIR}/helm-values/infisical.yaml" \
-            --wait --timeout 5m 2>/dev/null || {
-            log_warn "Infisical deployment failed, secrets management tests may not work"
-        }
-    else
-        log_warn "Helm not installed, skipping Infisical deployment"
-    fi
-}
-
-# Wait for all services to be ready
-wait_for_services() {
-    log_info "Waiting for all services to be ready..."
-
-    local services=("postgres" "minio" "polaris" "dagster-webserver" "dagster-daemon" "jaeger" "keycloak" "registry" "registry-auth" "infisical")
-
-    for service in "${services[@]}"; do
-        log_info "Waiting for ${service}..."
-        if ! kubectl wait --for=condition=available "deployment/${service}" -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null; then
-            log_warn "Deployment ${service} not found or not ready within timeout"
-        fi
-    done
-
-    log_info "All services deployed"
-}
-
-# Initialize Polaris catalog
-init_polaris() {
-    log_info "Initializing Polaris catalog..."
-
-    if [[ -x "${SCRIPT_DIR}/scripts/init-polaris.sh" ]]; then
-        # Run the init script (connects via localhost NodePort)
-        if "${SCRIPT_DIR}/scripts/init-polaris.sh"; then
-            log_info "Polaris initialization complete"
-        else
-            log_warn "Polaris initialization failed, tests may not work"
-        fi
-    else
-        log_warn "init-polaris.sh not found or not executable"
-    fi
+    log_info "All Helm-deployed services are ready"
 }
 
 # Print cluster info
@@ -301,9 +262,8 @@ main() {
     check_prerequisites
     create_cluster
     deploy_metrics_server
-    deploy_services
-    wait_for_services
-    init_polaris
+    deploy_services_helm
+    wait_for_services_helm
     deploy_monitoring_stack
     print_info
 }

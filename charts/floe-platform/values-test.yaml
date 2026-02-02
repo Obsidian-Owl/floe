@@ -1,0 +1,208 @@
+# floe-platform Test Values
+# =========================
+#
+# Minimal configuration for CI/CD testing in Kind clusters.
+# Uses single replicas, in-memory storage where possible,
+# and reduced resources for faster startup.
+#
+# Usage:
+#   helm install floe-platform ./charts/floe-platform \
+#     -f ./charts/floe-platform/values-test.yaml \
+#     --namespace floe-test --create-namespace
+#
+# Requirements:
+#   - FR-090: Test-specific configuration
+#   - FR-091: Minimal resource usage
+#   - SC-011: CI/CD compatibility
+
+# =============================================================================
+# Global Test Configuration
+# =============================================================================
+global:
+  environment: test
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  storageClass: ""
+
+# =============================================================================
+# Namespace Configuration
+# =============================================================================
+namespace:
+  create: true
+  name: floe-test
+
+# =============================================================================
+# Dagster Configuration (Minimal)
+# =============================================================================
+dagster:
+  enabled: true
+  postgresql:
+    # Use in-cluster PostgreSQL for isolation
+    enabled: true
+    auth:
+      username: dagster
+      password: dagster-test-password
+      database: dagster
+    primary:
+      persistence:
+        enabled: false
+        size: 1Gi
+  dagsterWebserver:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  dagsterDaemon:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  dagsterUserDeployments:
+    enabled: false
+
+# =============================================================================
+# Polaris Configuration (In-Memory for Tests)
+# =============================================================================
+polaris:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: apache/polaris
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: false
+  config:
+    # In-memory catalog for test isolation
+    catalogConfig:
+      type: in-memory
+    # Disable authentication for test simplicity
+    authenticator:
+      class: org.apache.polaris.service.auth.TestInlineBearerTokenPolarisAuthenticator
+  service:
+    type: ClusterIP
+    port: 8181
+  healthCheck:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 5
+
+# =============================================================================
+# PostgreSQL Configuration (Test Database)
+# =============================================================================
+postgresql:
+  enabled: true
+  auth:
+    username: floe
+    password: "floe-test-password-1234"
+    database: floe
+  primary:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# =============================================================================
+# MinIO Configuration (Object Storage)
+# =============================================================================
+minio:
+  enabled: true
+  mode: standalone
+  replicas: 1
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  rootUser: minioadmin
+  rootPassword: minioadmin123
+  buckets:
+    - name: floe-iceberg
+      policy: none
+  service:
+    type: ClusterIP
+
+# =============================================================================
+# OpenTelemetry Collector (Disabled for Basic Tests)
+# =============================================================================
+otel:
+  enabled: false
+
+# =============================================================================
+# Observability Components (Disabled for Speed)
+# =============================================================================
+marquez:
+  enabled: false
+
+jaeger:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false
+
+# =============================================================================
+# Security Configuration (Relaxed for Tests)
+# =============================================================================
+podSecurityStandards:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+resourceQuota:
+  enabled: false
+
+# =============================================================================
+# Autoscaling (Disabled for Tests)
+# =============================================================================
+autoscaling:
+  enabled: false
+
+# =============================================================================
+# Pod Disruption Budgets (Disabled for Tests)
+# =============================================================================
+podDisruptionBudget:
+  enabled: false
+
+# =============================================================================
+# Test-Specific Overrides
+# =============================================================================
+test:
+  # Enable test mode features
+  enabled: true
+  # Reduce startup delays
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 3
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+  # Skip optional init containers
+  skipInitContainers: true

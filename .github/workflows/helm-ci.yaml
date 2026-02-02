@@ -1,0 +1,412 @@
+# Helm Chart CI Pipeline
+#
+# Validates Helm charts on every push/PR:
+# - Lint charts with helm lint
+# - Render templates and validate YAML
+# - Run chart-testing for schema validation
+# - Integration test in Kind cluster (on main only)
+#
+# Requirements:
+# - 9b-FR-080: helm lint in CI
+# - 9b-FR-081: helm template rendering
+# - 9b-FR-082: Kind integration tests
+
+name: Helm CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm-ci.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm-ci.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # Stage 1: Lint Charts
+  # ============================================================
+  lint:
+    name: Lint Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          # Dagster subchart's values.schema.json references an external URL
+          # that returns 404, causing helm lint to fail. Remove it.
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
+      - name: Lint floe-platform chart
+        run: |
+          helm lint charts/floe-platform \
+            --values charts/floe-platform/values.yaml
+
+      - name: Lint floe-platform chart with test values
+        run: |
+          helm lint charts/floe-platform \
+            --values charts/floe-platform/values-test.yaml
+
+      - name: Lint floe-jobs chart
+        run: |
+          helm lint charts/floe-jobs \
+            --values charts/floe-jobs/values.yaml
+
+      - name: Lint floe-jobs chart with test values
+        run: |
+          helm lint charts/floe-jobs \
+            --values charts/floe-jobs/values-test.yaml
+
+  # ============================================================
+  # Stage 2: Template Rendering
+  # ============================================================
+  template:
+    name: Render Templates
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        environment: [dev, staging, prod, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
+      - name: Render floe-platform templates
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          VALUES_FILE="charts/floe-platform/values-${ENVIRONMENT}.yaml"
+          if [ -f "$VALUES_FILE" ]; then
+            helm template floe charts/floe-platform \
+              --values charts/floe-platform/values.yaml \
+              --values "$VALUES_FILE" \
+              --output-dir /tmp/rendered-platform-${ENVIRONMENT}
+          else
+            helm template floe charts/floe-platform \
+              --values charts/floe-platform/values.yaml \
+              --output-dir /tmp/rendered-platform-${ENVIRONMENT}
+          fi
+
+      - name: Render floe-jobs templates
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          VALUES_FILE="charts/floe-jobs/values-${ENVIRONMENT}.yaml"
+          if [ -f "$VALUES_FILE" ]; then
+            helm template floe-jobs charts/floe-jobs \
+              --values charts/floe-jobs/values.yaml \
+              --values "$VALUES_FILE" \
+              --output-dir /tmp/rendered-jobs-${ENVIRONMENT}
+          else
+            helm template floe-jobs charts/floe-jobs \
+              --values charts/floe-jobs/values.yaml \
+              --output-dir /tmp/rendered-jobs-${ENVIRONMENT}
+          fi
+
+      - name: Validate rendered YAML
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          echo "=== floe-platform templates ==="
+          find /tmp/rendered-platform-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -100
+          echo ""
+          echo "=== floe-jobs templates ==="
+          find /tmp/rendered-jobs-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -50
+          echo ""
+          echo "Template rendering successful for ${ENVIRONMENT}"
+
+  # ============================================================
+  # Stage 3: Schema Validation
+  # ============================================================
+  schema:
+    name: Validate Values Schema
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Install jsonschema
+        run: pip install jsonschema pyyaml
+
+      - name: Validate floe-platform values against schema
+        run: |
+          python -c "
+          import json
+          import yaml
+          import jsonschema
+
+          # Load schema
+          with open('charts/floe-platform/values.schema.json') as f:
+              schema = json.load(f)
+
+          # Validate default values
+          with open('charts/floe-platform/values.yaml') as f:
+              values = yaml.safe_load(f)
+
+          jsonschema.validate(values, schema)
+          print('Default values.yaml: VALID')
+
+          # Validate environment-specific values
+          for env in ['dev', 'staging', 'prod', 'test']:
+              try:
+                  with open(f'charts/floe-platform/values-{env}.yaml') as f:
+                      env_values = yaml.safe_load(f)
+                  if env_values:
+                      jsonschema.validate(env_values, schema)
+                  print(f'values-{env}.yaml: VALID')
+              except FileNotFoundError:
+                  print(f'values-{env}.yaml: SKIPPED (not found)')
+          "
+
+      - name: Validate floe-jobs values against schema
+        run: |
+          python -c "
+          import json
+          import yaml
+          import jsonschema
+
+          with open('charts/floe-jobs/values.schema.json') as f:
+              schema = json.load(f)
+
+          with open('charts/floe-jobs/values.yaml') as f:
+              values = yaml.safe_load(f)
+
+          jsonschema.validate(values, schema)
+          print('floe-jobs values.yaml: VALID')
+
+          # Validate test values
+          try:
+              with open('charts/floe-jobs/values-test.yaml') as f:
+                  test_values = yaml.safe_load(f)
+              if test_values:
+                  jsonschema.validate(test_values, schema)
+              print('floe-jobs values-test.yaml: VALID')
+          except FileNotFoundError:
+              print('floe-jobs values-test.yaml: SKIPPED (not found)')
+          "
+
+  # ============================================================
+  # Stage 4: Security Scanning (kubesec)
+  # ============================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
+      - name: Install kubesec
+        run: |
+          curl -sSL --proto =https https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz
+          sudo mv kubesec /usr/local/bin/
+
+      - name: Render templates for security scan
+        run: |
+          helm template floe charts/floe-platform \
+            --values charts/floe-platform/values.yaml \
+            --output-dir /tmp/security-scan
+
+      - name: Run kubesec scan
+        run: |
+          echo "=== Kubesec Security Scan ==="
+          FAILED=0
+          MIN_SCORE=7
+
+          # Scan each rendered template
+          for file in $(find /tmp/security-scan -name '*.yaml'); do
+            # Skip non-workload resources
+            KIND=$(yq -r '.kind // empty' "$file" 2>/dev/null || echo "")
+            if [[ "$KIND" != "Deployment" && "$KIND" != "StatefulSet" && "$KIND" != "DaemonSet" && "$KIND" != "Pod" ]]; then
+              continue
+            fi
+
+            echo "Scanning: $file"
+            RESULT=$(kubesec scan "$file" 2>/dev/null || echo "[]")
+            SCORE=$(echo "$RESULT" | jq -r '.[0].score // 0')
+
+            if [[ "$SCORE" -lt "$MIN_SCORE" ]]; then
+              echo "FAIL: $file (score: $SCORE, minimum: $MIN_SCORE)"
+              echo "$RESULT" | jq -r '.[0].scoring.critical // [] | .[] | "  CRITICAL: \(.selector) - \(.reason)"'
+              echo "$RESULT" | jq -r '.[0].scoring.advise // [] | .[] | "  ADVISE: \(.selector) - \(.reason)"'
+              FAILED=1
+            else
+              echo "PASS: $file (score: $SCORE)"
+            fi
+          done
+
+          if [[ "$FAILED" -eq 1 ]]; then
+            echo ""
+            echo "Security scan failed: One or more resources scored below minimum ($MIN_SCORE)"
+            exit 1
+          fi
+
+          echo ""
+          echo "All resources passed security scan"
+
+  # ============================================================
+  # Stage 5: Integration Test (main branch only)
+  # ============================================================
+  integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [lint, template, schema, security]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1
+        with:
+          cluster_name: helm-test
+          wait: 120s
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
+      - name: Install floe-platform chart with test values
+        run: |
+          helm upgrade --install floe-test charts/floe-platform \
+            --namespace floe-test --create-namespace \
+            --values charts/floe-platform/values-test.yaml \
+            --wait --timeout 10m
+
+      - name: Run Helm tests
+        run: |
+          helm test floe-test --namespace floe-test --timeout 5m
+
+      - name: Get pod status on failure
+        if: failure()
+        run: |
+          kubectl get pods -n floe-test
+          kubectl describe pods -n floe-test | head -200

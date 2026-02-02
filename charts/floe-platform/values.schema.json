@@ -1,0 +1,376 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://floe.dev/schemas/floe-platform-values.json",
+  "title": "floe-platform Helm Values",
+  "description": "JSON Schema for floe-platform Helm chart values.yaml",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Global settings applied to all subcharts",
+      "properties": {
+        "environment": {
+          "type": "string",
+          "description": "Target environment (dev, staging, prod, test)",
+          "enum": ["dev", "qa", "staging", "prod", "test"],
+          "default": "dev"
+        },
+        "commonLabels": {
+          "type": "object",
+          "description": "Labels to add to all resources",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "namespace": {
+      "type": "object",
+      "description": "Namespace configuration",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Namespace name for deployment (empty uses release namespace)"
+        },
+        "create": {
+          "type": "boolean",
+          "description": "Create namespace if not exists",
+          "default": true
+        }
+      }
+    },
+    "clusterMapping": {
+      "type": "object",
+      "description": "Logical to physical cluster mapping",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "description": "Kubernetes cluster context name"
+          },
+          "environments": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Logical environments on this cluster"
+          },
+          "namespaceTemplate": {
+            "type": "string",
+            "description": "Namespace naming template"
+          },
+          "resourcePreset": {
+            "type": "string",
+            "enum": ["small", "medium", "large"],
+            "description": "Resource preset for this cluster"
+          }
+        },
+        "required": ["environments"]
+      }
+    },
+    "resourcePresets": {
+      "type": "object",
+      "description": "Resource preset configurations",
+      "properties": {
+        "default": {
+          "type": "string",
+          "enum": ["small", "medium", "large"],
+          "default": "small"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "description": "Network policy configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable NetworkPolicy resources",
+          "default": false
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "description": "HorizontalPodAutoscaler configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable HPA",
+          "default": false
+        },
+        "dagster": {
+          "type": "object",
+          "description": "Dagster webserver HPA settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "targetMemoryUtilizationPercentage": { "type": ["integer", "string"] }
+          }
+        },
+        "polaris": {
+          "type": "object",
+          "description": "Polaris HPA settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "targetMemoryUtilizationPercentage": { "type": ["integer", "string"] }
+          }
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "description": "PodDisruptionBudget configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable PDB",
+          "default": false
+        },
+        "minAvailable": {
+          "type": "integer",
+          "description": "Minimum available pods",
+          "minimum": 0
+        },
+        "dagster": {
+          "type": "object",
+          "description": "Dagster PDB settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minAvailable": { "type": "integer", "minimum": 0 },
+            "maxUnavailable": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "polaris": {
+          "type": "object",
+          "description": "Polaris PDB settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minAvailable": { "type": "integer", "minimum": 0 },
+            "maxUnavailable": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "postgresql": {
+          "type": "object",
+          "description": "PostgreSQL PDB settings",
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "minAvailable": { "type": "integer", "minimum": 0 },
+            "maxUnavailable": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "resourceQuota": {
+      "type": "object",
+      "description": "ResourceQuota configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable ResourceQuota",
+          "default": false
+        },
+        "hard": {
+          "type": "object",
+          "description": "Hard resource limits",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "podSecurityStandards": {
+      "type": "object",
+      "description": "Pod Security Standards configuration",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": ["privileged", "baseline", "restricted"],
+          "description": "PSS profile to enforce",
+          "default": "restricted"
+        },
+        "version": {
+          "type": "string",
+          "description": "PSS version (e.g., v1.25, latest)"
+        },
+        "warn": {
+          "type": "boolean",
+          "description": "Enable PSS warnings"
+        },
+        "audit": {
+          "type": "boolean",
+          "description": "Enable PSS auditing"
+        }
+      }
+    },
+    "externalSecrets": {
+      "type": "object",
+      "description": "External Secrets Operator configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "secretStoreRef": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["SecretStore", "ClusterSecretStore"] }
+          }
+        },
+        "refreshInterval": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$"
+        },
+        "postgresql": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "remoteRef": { "type": "object" }
+          }
+        },
+        "minio": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "remoteRef": { "type": "object" }
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "dagster": {
+      "type": "object",
+      "description": "Dagster subchart configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "description": "PostgreSQL configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "primary": {
+          "type": "object",
+          "properties": {
+            "persistence": {
+              "type": "object",
+              "properties": {
+                "size": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(Gi|Mi)$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "polaris": {
+      "type": "object",
+      "description": "Polaris Iceberg catalog configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "minio": {
+      "type": "object",
+      "description": "MinIO S3 storage configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["standalone", "distributed"]
+        }
+      }
+    },
+    "opentelemetry-collector": {
+      "type": "object",
+      "description": "OpenTelemetry Collector configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "description": "Ingress configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "className": {
+          "type": "string"
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": { "type": "string" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string" },
+                    "pathType": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretName": { "type": "string" },
+              "hosts": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "description": "ServiceAccount configuration",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,160 @@
+# =============================================================================
+# Staging Environment Values
+# =============================================================================
+# Override values for staging environment deployment.
+# Inherits from values.yaml with staging-specific adjustments.
+#
+# Usage:
+#   helm upgrade floe-staging ./charts/floe-platform \
+#     -f values.yaml \
+#     -f values-staging.yaml \
+#     --namespace floe-staging
+#
+# Requirements: 9b-FR-050, 9b-FR-051
+# =============================================================================
+
+global:
+  environment: staging
+
+# Namespace configuration
+namespace:
+  name: floe-staging
+  create: true
+
+# =============================================================================
+# Resource Configuration (Medium preset for staging)
+# =============================================================================
+resourcePresets:
+  default: medium
+
+# =============================================================================
+# Security Features (Enable for staging)
+# =============================================================================
+networkPolicy:
+  enabled: true
+
+# Autoscaling disabled in staging (cost savings)
+autoscaling:
+  enabled: false
+
+# PDB disabled in staging
+podDisruptionBudget:
+  enabled: false
+
+# =============================================================================
+# Dagster Configuration
+# =============================================================================
+dagster:
+  dagster-webserver:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  dagster-daemon:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  run_launcher:
+    config:
+      k8sRunLauncher:
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+
+# =============================================================================
+# PostgreSQL Configuration
+# =============================================================================
+postgresql:
+  auth:
+    # SECURITY: Staging REQUIRES one of these options:
+    # Option 1 (Recommended): Use External Secrets Operator
+    # existingSecret: "floe-postgresql-external"
+    # Option 2: Set a strong password (min 16 characters)
+    # password: "your-secure-staging-password"
+    {}
+  primary:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    persistence:
+      size: 20Gi
+
+# =============================================================================
+# Polaris Configuration
+# =============================================================================
+polaris:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # SECURITY: Disable anonymous access in staging
+  config:
+    features:
+      ALLOW_ANONYMOUS_ACCESS: false
+
+# =============================================================================
+# MinIO Configuration
+# =============================================================================
+minio:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  persistence:
+    size: 50Gi
+
+# =============================================================================
+# OpenTelemetry Configuration
+# =============================================================================
+opentelemetry-collector:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# Ingress Configuration
+# =============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: floe-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dagster-webserver
+          port: 3000
+  tls:
+    - secretName: floe-staging-tls
+      hosts:
+        - floe-staging.example.com

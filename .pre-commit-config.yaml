@@ -221,3 +221,12 @@ repos:
         types: [python]
         stages: [pre-push]
         pass_filenames: false
+
+      # Helm chart linting (matches CI - validates Helm charts before push)
+      - id: helm-lint
+        name: helm lint (charts)
+        entry: ./testing/ci/lint-helm.sh
+        language: script
+        stages: [pre-push]
+        files: ^charts/
+        pass_filenames: false

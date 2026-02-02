@@ -1,0 +1,255 @@
+# Helm Chart Release Pipeline
+#
+# Publishes Helm charts to:
+# 1. GitHub Pages (traditional Helm repo)
+# 2. OCI Registry (GHCR)
+#
+# Triggered by tags matching 'helm-v*' or 'charts-v*'
+#
+# Requirements:
+# - 9b-FR-073: Chart release workflow
+# - 9b-FR-074: OCI registry push
+
+name: Helm Release
+
+on:
+  push:
+    tags:
+      - 'helm-v*'
+      - 'charts-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+      charts:
+        description: 'Charts to release (comma-separated: floe-platform,floe-jobs)'
+        required: true
+        default: 'floe-platform,floe-jobs'
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_PATH: ghcr.io/${{ github.repository_owner }}/charts
+
+jobs:
+  # ============================================================
+  # Stage 1: Validate and Build Charts
+  # ============================================================
+  build:
+    name: Build Charts
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Extract version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            # Extract version from tag (helm-v1.0.0 -> 1.0.0)
+            VERSION=$(echo "${REF_NAME}" | sed -E 's/^(helm|charts)-v//')
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Chart version: ${VERSION}"
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
+      - name: Lint charts
+        run: |
+          helm lint charts/floe-platform --values charts/floe-platform/values.yaml
+          helm lint charts/floe-jobs --values charts/floe-jobs/values.yaml
+
+      - name: Package charts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          helm package charts/floe-platform --version "${VERSION}" --destination dist/
+          helm package charts/floe-jobs --version "${VERSION}" --destination dist/
+          ls -la dist/
+
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: helm-charts
+          path: dist/*.tgz
+          retention-days: 7
+
+  # ============================================================
+  # Stage 2: Publish to GitHub Pages
+  # ============================================================
+  publish-pages:
+    name: Publish to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Download chart artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: helm-charts
+          path: charts-new
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Update repository index
+        run: |
+          # Move new charts to root
+          mv charts-new/*.tgz . 2>/dev/null || true
+          rmdir charts-new 2>/dev/null || true
+
+          # Generate/update index.yaml
+          if [ -f index.yaml ]; then
+            helm repo index . --merge index.yaml
+          else
+            helm repo index .
+          fi
+
+          # List charts
+          echo "Charts in repository:"
+          ls -la *.tgz 2>/dev/null || echo "No chart packages found"
+          echo ""
+          echo "Index content:"
+          cat index.yaml | head -50
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Release Helm charts ${VERSION}" || echo "No changes to commit"
+          git push
+
+  # ============================================================
+  # Stage 3: Push to OCI Registry (GHCR)
+  # ============================================================
+  publish-oci:
+    name: Publish to OCI Registry
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      packages: write
+    steps:
+      - name: Download chart artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: helm-charts
+          path: dist
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+
+      - name: Login to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${GITHUB_TOKEN}" | helm registry login "${REGISTRY}" \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Push charts to OCI registry
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for chart in dist/*.tgz; do
+            echo "Pushing ${chart} to OCI registry..."
+            helm push "${chart}" "oci://${REGISTRY_PATH}"
+          done
+
+          echo ""
+          echo "Charts published to:"
+          echo "  oci://${REGISTRY_PATH}/floe-platform:${VERSION}"
+          echo "  oci://${REGISTRY_PATH}/floe-jobs:${VERSION}"
+          echo ""
+          echo "Install with:"
+          echo "  helm install floe oci://${REGISTRY_PATH}/floe-platform --version ${VERSION}"
+
+  # ============================================================
+  # Stage 4: Create GitHub Release
+  # ============================================================
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build, publish-pages, publish-oci]
+    permissions:
+      contents: write
+    steps:
+      - name: Download chart artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: helm-charts
+          path: dist
+
+      - name: Create release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        with:
+          name: "Helm Charts ${{ needs.build.outputs.version }}"
+          body: |
+            ## Helm Charts Release ${{ needs.build.outputs.version }}
+
+            ### Installation
+
+            **Via Helm Repository:**
+            ```bash
+            helm repo add floe https://${{ github.repository_owner }}.github.io/floe
+            helm repo update
+            helm install floe floe/floe-platform --version ${{ needs.build.outputs.version }}
+            ```
+
+            **Via OCI Registry:**
+            ```bash
+            helm install floe oci://ghcr.io/${{ github.repository_owner }}/charts/floe-platform --version ${{ needs.build.outputs.version }}
+            ```
+
+            ### Charts Included
+            - floe-platform: Platform infrastructure (Dagster, Polaris, PostgreSQL, MinIO)
+            - floe-jobs: Job definitions (dbt, ingestion, custom jobs)
+
+            ### Documentation
+            - [Chart README](charts/floe-platform/README.md)
+            - [Deployment Guide](docs/deployment.md)
+          files: dist/*.tgz
+          fail_on_unmatched_files: true
