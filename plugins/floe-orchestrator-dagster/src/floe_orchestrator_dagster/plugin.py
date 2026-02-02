@@ -843,3 +843,80 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "schedule_name": schedule.name,
             },
         )
+
+    def sensor_definition(self) -> Any | None:
+        """Return health check sensor for auto-triggering demo pipelines.
+
+        Provides the health_check_sensor which monitors platform service
+        health and triggers the first pipeline run automatically when
+        services are ready.
+
+        Returns:
+            Dagster SensorDefinition for health monitoring, or None if
+            sensors module is not available.
+
+        Requirements:
+            FR-029: Auto-trigger demo pipeline on platform health
+            FR-033: Health check integration for platform services
+
+        Example:
+            >>> plugin = DagsterOrchestratorPlugin()
+            >>> sensor = plugin.sensor_definition()
+            >>> definitions = Definitions(assets=[...], sensors=[sensor])
+        """
+        try:
+            from floe_orchestrator_dagster.sensors import health_check_sensor
+
+            logger.info("Health check sensor loaded for auto-triggering")
+            return health_check_sensor
+        except ImportError:
+            logger.warning(
+                "Sensors module not available, sensor_definition returning None"
+            )
+            return None
+
+    def get_default_schedule(self, job_name: str = "demo_pipeline") -> Any:
+        """Create default 10-minute recurring schedule for demo pipelines.
+
+        Provides a pre-configured ScheduleDefinition that runs the demo
+        pipeline every 10 minutes. This enables continuous data refresh
+        for demonstration purposes.
+
+        Args:
+            job_name: Name of the job to schedule (default: "demo_pipeline").
+
+        Returns:
+            Dagster ScheduleDefinition configured for 10-minute intervals.
+
+        Requirements:
+            FR-030: Recurring schedule configuration (10-min default)
+
+        Example:
+            >>> plugin = DagsterOrchestratorPlugin()
+            >>> schedule = plugin.get_default_schedule()
+            >>> definitions = Definitions(
+            ...     assets=[...],
+            ...     schedules=[schedule]
+            ... )
+        """
+        from dagster import ScheduleDefinition
+
+        # 10-minute interval cron: "*/10 * * * *"
+        # Runs at: 00, 10, 20, 30, 40, 50 minutes past each hour
+        schedule = ScheduleDefinition(
+            name=f"{job_name}_recurring_10min",
+            job_name=job_name,
+            cron_schedule="*/10 * * * *",
+            execution_timezone="UTC",
+        )
+
+        logger.info(
+            "Default 10-minute schedule created",
+            extra={
+                "job_name": job_name,
+                "cron": "*/10 * * * *",
+                "schedule_name": schedule.name,
+            },
+        )
+
+        return schedule

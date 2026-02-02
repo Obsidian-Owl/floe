@@ -403,3 +403,25 @@ class OrchestratorPlugin(PluginMetadata):
             ... )
         """
         ...
+
+    def sensor_definition(self) -> Any | None:
+        """Return optional sensor definition for event-driven orchestration.
+
+        Sensors enable event-driven pipeline triggering beyond cron-based
+        scheduling. Examples include health checks, file arrival sensors,
+        or external system event listeners.
+
+        Returns:
+            Platform-specific sensor definition (e.g., Dagster SensorDefinition),
+            or None if the plugin does not provide sensors.
+
+        Example:
+            >>> sensor = plugin.sensor_definition()
+            >>> if sensor:
+            ...     definitions = Definitions(assets=[...], sensors=[sensor])
+
+        Requirements:
+            FR-029: Auto-trigger demo pipeline on platform health
+            FR-033: Health check integration for platform services
+        """
+        return None

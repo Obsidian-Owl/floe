@@ -69,7 +69,7 @@ trap 'collect_logs' ERR
 
 # Verify all required services are running
 echo "Verifying service readiness..."
-REQUIRED_SERVICES=("postgres" "minio" "polaris" "dagster")
+REQUIRED_SERVICES=("postgres" "minio" "polaris" "dagster" "marquez")
 for service in "${REQUIRED_SERVICES[@]}"; do
     if ! kubectl get pods -n "${TEST_NAMESPACE}" -l "app=${service}" --no-headers 2>/dev/null | grep -q "Running"; then
         echo "WARNING: Service ${service} may not be running" >&2

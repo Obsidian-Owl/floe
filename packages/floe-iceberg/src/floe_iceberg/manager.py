@@ -523,27 +523,37 @@ class IcebergTableManager:
         self,
         table: Table,
         older_than_days: int | None = None,
+        keep_last: int | None = None,
     ) -> int:
         """Expire snapshots older than the specified retention period.
 
         Removes old snapshots while respecting min_snapshots_to_keep from config.
         This helps manage storage costs and metadata overhead.
 
+        For demo environments, use keep_last=6 to maintain a rolling window of
+        recent snapshots regardless of age (FR-032).
+
         Delegates to _IcebergSnapshotManager helper (T034 facade pattern).
 
         Args:
             table: PyIceberg Table object.
             older_than_days: Days to retain snapshots. Defaults to config value.
+            keep_last: Number of most recent snapshots to keep. Overrides
+                min_snapshots_to_keep from config. For demo: use keep_last=6.
 
         Returns:
             Number of snapshots expired.
 
+        Requirements:
+            FR-032: Iceberg snapshot expiry with keep_last=6 for demo retention
+
         Example:
             >>> # Expire snapshots older than 30 days
             >>> expired_count = manager.expire_snapshots(table, older_than_days=30)
-            >>> print(f"Expired {expired_count} snapshots")
+            >>> # Demo mode: keep last 6 snapshots
+            >>> expired_count = manager.expire_snapshots(table, keep_last=6)
         """
-        return self._snapshot_manager.expire_snapshots(table, older_than_days)
+        return self._snapshot_manager.expire_snapshots(table, older_than_days, keep_last)
 
     # =========================================================================
     # Write Operations
