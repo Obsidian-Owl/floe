@@ -11,6 +11,8 @@ Requirements tested:
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
+
 from floe_core.helm.schemas import (
     ClusterConfig,
     ClusterMapping,
@@ -19,7 +21,6 @@ from floe_core.helm.schemas import (
     ResourceRequirements,
     ResourceSpec,
 )
-from pydantic import ValidationError
 
 
 class TestResourceSpec:
