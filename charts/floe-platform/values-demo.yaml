@@ -1,0 +1,155 @@
+# Demo-specific overrides for floe-platform
+# Usage: helm install floe-platform ./charts/floe-platform -f charts/floe-platform/values-demo.yaml
+#
+# This file configures the platform for local demonstration:
+# - Reduced resource requirements for Kind cluster
+# - Demo-specific scheduling (10-minute intervals)
+# - Marquez enabled for lineage visualization
+# - Short retention periods for demo data
+
+# =============================================================================
+# Global Demo Configuration
+# =============================================================================
+global:
+  environment: demo
+
+# =============================================================================
+# Dagster Configuration (Orchestration)
+# =============================================================================
+dagster:
+  # Dagster webserver configuration
+  dagsterWebserver:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Dagster daemon configuration
+  dagsterDaemon:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Demo scheduling: 10-minute intervals
+    env:
+      DAGSTER_DEFAULT_SCHEDULE_CRON: "*/10 * * * *"
+
+  # Run launcher configuration
+  runLauncher:
+    type: K8sRunLauncher
+    config:
+      k8sRunLauncher:
+        # Resources for run pods (light for demo)
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+# =============================================================================
+# Polaris Configuration (Iceberg Catalog)
+# =============================================================================
+polaris:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+      ephemeral-storage: 1Gi
+  # File-based persistence for demo (not in-memory, so data persists across restarts)
+  persistence:
+    type: file
+    size: 1Gi
+
+# =============================================================================
+# OpenTelemetry Collector Configuration (Observability)
+# =============================================================================
+otel:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# PostgreSQL Configuration (Metadata Store)
+# =============================================================================
+postgresql:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+      ephemeral-storage: 1Gi
+  persistence:
+    enabled: true
+    size: 2Gi  # Reduced for demo
+
+# =============================================================================
+# MinIO Configuration (Object Storage - Demo)
+# =============================================================================
+minio:
+  # Enable MinIO for demo (not recommended for production)
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    size: 5Gi  # Reduced for demo
+  defaultBuckets: "floe-data,floe-artifacts"
+
+# =============================================================================
+# Marquez Configuration (OpenLineage - Demo Visualization)
+# =============================================================================
+marquez:
+  # Enable Marquez for lineage visualization in demos
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# Demo-Specific Configuration
+# =============================================================================
+demo:
+  enabled: true
+  # Demo data seeding scale (small|medium|large)
+  # Overridable via FLOE_DEMO_SEED_SCALE environment variable
+  seedScale: "small"
+  # Data retention: 1 hour for demo (keeps demo data fresh)
+  retentionHours: 1
+  # Keep last 6 snapshots for time travel demonstration
+  snapshotKeepLast: 6
