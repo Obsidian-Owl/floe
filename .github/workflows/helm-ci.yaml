@@ -59,6 +59,21 @@ jobs:
           helm dependency update charts/floe-platform
           helm dependency update charts/floe-jobs
 
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          # Dagster subchart's values.schema.json references an external URL
+          # that returns 404, causing helm lint to fail. Remove it.
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
       - name: Lint floe-platform chart
         run: |
           helm lint charts/floe-platform \
