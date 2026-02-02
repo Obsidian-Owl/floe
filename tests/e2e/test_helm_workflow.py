@@ -77,13 +77,20 @@ def _wait_for_pods_ready(
     Returns:
         True if all pods ready, False otherwise
     """
+
     def check_pods_ready() -> bool:
-        result = _kubectl([
-            "get", "pods",
-            "-n", namespace,
-            "-l", label_selector,
-            "-o", "jsonpath={.items[*].status.phase}",
-        ])
+        result = _kubectl(
+            [
+                "get",
+                "pods",
+                "-n",
+                namespace,
+                "-l",
+                label_selector,
+                "-o",
+                "jsonpath={.items[*].status.phase}",
+            ]
+        )
         if result.returncode == 0:
             phases = result.stdout.strip().split()
             return bool(phases and all(p == "Running" for p in phases))
@@ -139,19 +146,31 @@ def deployed_platform(
         pytest.fail(f"Failed to update dependencies: {result.stderr}")
 
     # Install platform
-    result = _helm([
-        "upgrade", "--install", release_name,
-        str(platform_chart),
-        "--namespace", e2e_namespace,
-        "--values", str(platform_chart / "values.yaml"),
-        "--set", "postgresql.enabled=true",
-        "--set", "polaris.enabled=true",
-        "--set", "dagster.enabled=false",  # Skip dagster for basic test
-        "--set", "otel.enabled=false",
-        "--set", "minio.enabled=false",
-        "--wait",
-        "--timeout", "10m",
-    ])
+    result = _helm(
+        [
+            "upgrade",
+            "--install",
+            release_name,
+            str(platform_chart),
+            "--namespace",
+            e2e_namespace,
+            "--values",
+            str(platform_chart / "values.yaml"),
+            "--set",
+            "postgresql.enabled=true",
+            "--set",
+            "polaris.enabled=true",
+            "--set",
+            "dagster.enabled=false",  # Skip dagster for basic test
+            "--set",
+            "otel.enabled=false",
+            "--set",
+            "minio.enabled=false",
+            "--wait",
+            "--timeout",
+            "10m",
+        ]
+    )
 
     if result.returncode != 0:
         pytest.fail(f"Platform deployment failed: {result.stderr}")
@@ -169,10 +188,7 @@ class TestHelmWorkflow:
         """Verify kubectl access to cluster."""
         result = _kubectl(["cluster-info"])
         if result.returncode != 0:
-            pytest.fail(
-                "Kubernetes cluster not available.\n"
-                "Start cluster with: make kind-up"
-            )
+            pytest.fail("Kubernetes cluster not available.\nStart cluster with: make kind-up")
 
     @pytest.mark.requirement("E2E-001")
     def test_platform_deployed(
@@ -182,10 +198,14 @@ class TestHelmWorkflow:
     ) -> None:
         """Test that platform services are deployed and running."""
         # Check helm release status
-        result = _helm([
-            "status", deployed_platform,
-            "--namespace", e2e_namespace,
-        ])
+        result = _helm(
+            [
+                "status",
+                deployed_platform,
+                "--namespace",
+                e2e_namespace,
+            ]
+        )
         assert result.returncode == 0, f"Helm status failed: {result.stderr}"
         assert "deployed" in result.stdout.lower(), "Release not in deployed state"
 
@@ -205,11 +225,15 @@ class TestHelmWorkflow:
         assert ready, "Polaris pods not ready"
 
         # Check service exists
-        result = _kubectl([
-            "get", "service",
-            f"{deployed_platform}-polaris",
-            "-n", e2e_namespace,
-        ])
+        result = _kubectl(
+            [
+                "get",
+                "service",
+                f"{deployed_platform}-polaris",
+                "-n",
+                e2e_namespace,
+            ]
+        )
         assert result.returncode == 0, f"Polaris service not found: {result.stderr}"
 
     @pytest.mark.requirement("E2E-001")
@@ -220,19 +244,29 @@ class TestHelmWorkflow:
     ) -> None:
         """Test that PostgreSQL is accessible."""
         # Check PostgreSQL StatefulSet
-        result = _kubectl([
-            "get", "statefulset",
-            "-n", e2e_namespace,
-            "-l", "app.kubernetes.io/component=postgresql",
-        ])
+        result = _kubectl(
+            [
+                "get",
+                "statefulset",
+                "-n",
+                e2e_namespace,
+                "-l",
+                "app.kubernetes.io/component=postgresql",
+            ]
+        )
         # PostgreSQL might be a StatefulSet or managed by parent chart
         if result.returncode != 0:
             # Try checking for any postgresql pods
-            result = _kubectl([
-                "get", "pods",
-                "-n", e2e_namespace,
-                "-l", "app.kubernetes.io/name=postgresql",
-            ])
+            result = _kubectl(
+                [
+                    "get",
+                    "pods",
+                    "-n",
+                    e2e_namespace,
+                    "-l",
+                    "app.kubernetes.io/name=postgresql",
+                ]
+            )
 
         assert result.returncode == 0, f"PostgreSQL not found: {result.stderr}"
 
@@ -254,11 +288,16 @@ class TestCodeLocationRegistration:
         """Test that Dagster workspace ConfigMap is created."""
         _ = deployed_platform  # Used for fixture ordering
         # This test is only valid when Dagster is enabled
-        result = _kubectl([
-            "get", "configmap",
-            "-n", e2e_namespace,
-            "-l", "app.kubernetes.io/component=workspace",
-        ])
+        result = _kubectl(
+            [
+                "get",
+                "configmap",
+                "-n",
+                e2e_namespace,
+                "-l",
+                "app.kubernetes.io/component=workspace",
+            ]
+        )
         # Skip if no workspace configmap (Dagster disabled)
         if result.returncode != 0:
             pytest.skip("Dagster workspace not configured (Dagster disabled)")
@@ -282,11 +321,15 @@ class TestJobExecution:
         """Test that job templates render correctly."""
         jobs_chart = chart_root / "floe-jobs"
 
-        result = _helm([
-            "template", "test-jobs",
-            str(jobs_chart),
-            "--set", "dbt.enabled=true",
-        ])
+        result = _helm(
+            [
+                "template",
+                "test-jobs",
+                str(jobs_chart),
+                "--set",
+                "dbt.enabled=true",
+            ]
+        )
 
         assert result.returncode == 0, f"Template rendering failed: {result.stderr}"
         assert "kind: Job" in result.stdout or "kind: CronJob" in result.stdout, (

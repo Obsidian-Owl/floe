@@ -150,9 +150,7 @@ class TestJobsChartTemplate:
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")
-    def test_template_renders_platform_integration(
-        self, jobs_chart_path: Path
-    ) -> None:
+    def test_template_renders_platform_integration(self, jobs_chart_path: Path) -> None:
         """Test platform integration endpoints are injected."""
         result = subprocess.run(
             [

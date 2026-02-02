@@ -27,7 +27,9 @@ MIN_KUBESEC_SCORE = 7
 WORKLOAD_KINDS: set[str] = {"Deployment", "StatefulSet", "DaemonSet", "Pod", "Job", "CronJob"}
 
 
-def render_helm_templates(chart_path: Path, values_path: Path | None = None) -> list[dict[str, Any]]:
+def render_helm_templates(
+    chart_path: Path, values_path: Path | None = None
+) -> list[dict[str, Any]]:
     """Render Helm templates to YAML documents.
 
     Args:
@@ -151,10 +153,7 @@ class TestKubesecScanning:
         Validates that all Deployments, StatefulSets, DaemonSets, and Pods
         in the rendered templates score at least MIN_KUBESEC_SCORE.
         """
-        workloads = [
-            doc for doc in floe_platform_templates
-            if doc.get("kind") in WORKLOAD_KINDS
-        ]
+        workloads = [doc for doc in floe_platform_templates if doc.get("kind") in WORKLOAD_KINDS]
 
         if not workloads:
             pytest.skip("No workloads found in floe-platform chart")
@@ -181,19 +180,13 @@ class TestKubesecScanning:
 
         if failures:
             pytest.fail(
-                f"Security scan failed for {len(failures)} workload(s):\n"
-                + "\n".join(failures)
+                f"Security scan failed for {len(failures)} workload(s):\n" + "\n".join(failures)
             )
 
     @pytest.mark.requirement("SC-007")
-    def test_floe_jobs_security_score(
-        self, floe_jobs_templates: list[dict[str, Any]]
-    ) -> None:
+    def test_floe_jobs_security_score(self, floe_jobs_templates: list[dict[str, Any]]) -> None:
         """Test that floe-jobs workloads meet minimum kubesec score."""
-        workloads = [
-            doc for doc in floe_jobs_templates
-            if doc.get("kind") in WORKLOAD_KINDS
-        ]
+        workloads = [doc for doc in floe_jobs_templates if doc.get("kind") in WORKLOAD_KINDS]
 
         if not workloads:
             pytest.skip("No workloads found in floe-jobs chart")
@@ -210,9 +203,7 @@ class TestKubesecScanning:
                 failures.append(f"{kind}/{name}: score={score}")
 
         if failures:
-            pytest.fail(
-                f"Security scan failed for {len(failures)} workload(s): {failures}"
-            )
+            pytest.fail(f"Security scan failed for {len(failures)} workload(s): {failures}")
 
 
 @pytest.mark.requirement("9b-FR-036")
@@ -257,8 +248,7 @@ class TestPodSecurityStandards:
 
         if violations:
             pytest.fail(
-                f"Found {len(violations)} container(s) running as root:\n"
-                + "\n".join(violations)
+                f"Found {len(violations)} container(s) running as root:\n" + "\n".join(violations)
             )
 
     @pytest.mark.requirement("9b-FR-036")
@@ -323,6 +313,7 @@ class TestPodSecurityStandards:
         if violations:
             # Log warning but don't fail - some containers need writable fs
             import warnings
+
             warnings.warn(
                 f"Containers without readOnlyRootFilesystem=true: {violations}",
                 UserWarning,

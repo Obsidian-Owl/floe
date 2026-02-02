@@ -33,7 +33,7 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-                # NOTE: --skip-schema-validation required because Dagster subchart
+        # NOTE: --skip-schema-validation required because Dagster subchart
         # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
@@ -66,7 +66,7 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-                # NOTE: --skip-schema-validation required because Dagster subchart
+        # NOTE: --skip-schema-validation required because Dagster subchart
         # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
@@ -103,7 +103,7 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-                # NOTE: --skip-schema-validation required because Dagster subchart
+        # NOTE: --skip-schema-validation required because Dagster subchart
         # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
@@ -146,7 +146,7 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-                # NOTE: --skip-schema-validation required because Dagster subchart
+        # NOTE: --skip-schema-validation required because Dagster subchart
         # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
@@ -215,9 +215,7 @@ class TestPlatformChartTemplate:
                 has_standard_labels = True
                 break
 
-        assert has_standard_labels, (
-            "No resources have standard app.kubernetes.io/name label"
-        )
+        assert has_standard_labels, "No resources have standard app.kubernetes.io/name label"
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -251,9 +249,7 @@ class TestPlatformChartTemplate:
         output = result.stdout.decode()
 
         # Release name should appear in the output
-        assert release_name in output, (
-            f"Release name '{release_name}' not found in template output"
-        )
+        assert release_name in output, f"Release name '{release_name}' not found in template output"
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -292,9 +288,7 @@ class TestPlatformChartTemplate:
 
         # Check that resources have the correct namespace
         namespaced_resources = [
-            doc
-            for doc in documents
-            if doc.get("metadata", {}).get("namespace") == namespace
+            doc for doc in documents if doc.get("metadata", {}).get("namespace") == namespace
         ]
 
         # Some resources should have the namespace set

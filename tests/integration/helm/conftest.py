@@ -106,10 +106,7 @@ def helm_available() -> None:
         pytest.fail: If Helm CLI is not available.
     """
     if not _check_helm_available():
-        _fail(
-            "Helm CLI is not available.\n"
-            "Install Helm: https://helm.sh/docs/intro/install/"
-        )
+        _fail("Helm CLI is not available.\nInstall Helm: https://helm.sh/docs/intro/install/")
 
 
 @pytest.fixture(scope="session")
@@ -129,10 +126,7 @@ def charts_dir() -> Path:
         if charts_path.exists() and charts_path.is_dir():
             return charts_path
 
-    _fail(
-        "Could not find charts/ directory.\n"
-        "Ensure you are running tests from the project root."
-    )
+    _fail("Could not find charts/ directory.\nEnsure you are running tests from the project root.")
 
 
 @pytest.fixture(scope="session")
@@ -150,10 +144,7 @@ def platform_chart_path(charts_dir: Path) -> Path:
     """
     chart_path = charts_dir / "floe-platform"
     if not chart_path.exists():
-        _fail(
-            f"floe-platform chart not found at {chart_path}\n"
-            "Create the chart first."
-        )
+        _fail(f"floe-platform chart not found at {chart_path}\nCreate the chart first.")
     return chart_path
 
 
@@ -172,10 +163,7 @@ def jobs_chart_path(charts_dir: Path) -> Path:
     """
     chart_path = charts_dir / "floe-jobs"
     if not chart_path.exists():
-        _fail(
-            f"floe-jobs chart not found at {chart_path}\n"
-            "Create the chart first."
-        )
+        _fail(f"floe-jobs chart not found at {chart_path}\nCreate the chart first.")
     return chart_path
 
 

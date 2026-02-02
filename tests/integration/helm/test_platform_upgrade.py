@@ -79,12 +79,19 @@ def wait_for_deployment(
     Returns:
         True if deployment is ready, False otherwise
     """
+
     def check_deployment_ready() -> bool:
-        result = _run_kubectl_command([
-            "get", "deployment", name,
-            "-n", namespace,
-            "-o", "jsonpath={.status.readyReplicas}",
-        ])
+        result = _run_kubectl_command(
+            [
+                "get",
+                "deployment",
+                name,
+                "-n",
+                namespace,
+                "-o",
+                "jsonpath={.status.readyReplicas}",
+            ]
+        )
         if result.returncode == 0 and result.stdout.strip():
             try:
                 ready = int(result.stdout.strip())
@@ -142,10 +149,7 @@ class TestPlatformUpgrade:
         """Verify kubectl access to cluster."""
         result = _run_kubectl_command(["cluster-info"])
         if result.returncode != 0:
-            pytest.fail(
-                "Kubernetes cluster not available.\n"
-                "Start cluster with: make kind-up"
-            )
+            pytest.fail("Kubernetes cluster not available.\nStart cluster with: make kind-up")
 
     @pytest.mark.requirement("SC-008")
     def test_initial_install(
@@ -155,24 +159,38 @@ class TestPlatformUpgrade:
     ) -> None:
         """Test initial chart installation succeeds."""
         # Update dependencies
-        result = _run_helm_command([
-            "dependency", "update", str(chart_path),
-        ])
+        result = _run_helm_command(
+            [
+                "dependency",
+                "update",
+                str(chart_path),
+            ]
+        )
         if result.returncode != 0:
             pytest.fail(f"Failed to update dependencies: {result.stderr}")
 
         # Install chart
-        result = _run_helm_command([
-            "upgrade", "--install", "floe-test",
-            str(chart_path),
-            "--namespace", test_namespace,
-            "--values", str(chart_path / "values.yaml"),
-            "--set", "dagster.enabled=false",  # Skip dagster for faster test
-            "--set", "otel.enabled=false",
-            "--set", "minio.enabled=false",
-            "--wait",
-            "--timeout", "5m",
-        ])
+        result = _run_helm_command(
+            [
+                "upgrade",
+                "--install",
+                "floe-test",
+                str(chart_path),
+                "--namespace",
+                test_namespace,
+                "--values",
+                str(chart_path / "values.yaml"),
+                "--set",
+                "dagster.enabled=false",  # Skip dagster for faster test
+                "--set",
+                "otel.enabled=false",
+                "--set",
+                "minio.enabled=false",
+                "--wait",
+                "--timeout",
+                "5m",
+            ]
+        )
 
         assert result.returncode == 0, f"Initial install failed: {result.stderr}"
 
@@ -184,18 +202,28 @@ class TestPlatformUpgrade:
     ) -> None:
         """Test upgrade with configuration change succeeds."""
         # Upgrade with changed replica count
-        result = _run_helm_command([
-            "upgrade", "floe-test",
-            str(chart_path),
-            "--namespace", test_namespace,
-            "--values", str(chart_path / "values.yaml"),
-            "--set", "dagster.enabled=false",
-            "--set", "otel.enabled=false",
-            "--set", "minio.enabled=false",
-            "--set", "polaris.replicaCount=2",
-            "--wait",
-            "--timeout", "5m",
-        ])
+        result = _run_helm_command(
+            [
+                "upgrade",
+                "floe-test",
+                str(chart_path),
+                "--namespace",
+                test_namespace,
+                "--values",
+                str(chart_path / "values.yaml"),
+                "--set",
+                "dagster.enabled=false",
+                "--set",
+                "otel.enabled=false",
+                "--set",
+                "minio.enabled=false",
+                "--set",
+                "polaris.replicaCount=2",
+                "--wait",
+                "--timeout",
+                "5m",
+            ]
+        )
 
         assert result.returncode == 0, f"Upgrade failed: {result.stderr}"
 
@@ -206,23 +234,35 @@ class TestPlatformUpgrade:
     ) -> None:
         """Test rollback to previous revision succeeds."""
         # Get current revision
-        result = _run_helm_command([
-            "history", "floe-test",
-            "--namespace", test_namespace,
-            "--max", "1",
-            "-o", "json",
-        ])
+        result = _run_helm_command(
+            [
+                "history",
+                "floe-test",
+                "--namespace",
+                test_namespace,
+                "--max",
+                "1",
+                "-o",
+                "json",
+            ]
+        )
 
         if result.returncode != 0:
             pytest.skip("No previous revision to rollback to")
 
         # Rollback to previous revision
-        result = _run_helm_command([
-            "rollback", "floe-test", "1",
-            "--namespace", test_namespace,
-            "--wait",
-            "--timeout", "5m",
-        ])
+        result = _run_helm_command(
+            [
+                "rollback",
+                "floe-test",
+                "1",
+                "--namespace",
+                test_namespace,
+                "--wait",
+                "--timeout",
+                "5m",
+            ]
+        )
 
         assert result.returncode == 0, f"Rollback failed: {result.stderr}"
 
@@ -232,10 +272,14 @@ class TestPlatformUpgrade:
         test_namespace: str,
     ) -> None:
         """Clean up test release."""
-        result = _run_helm_command([
-            "uninstall", "floe-test",
-            "--namespace", test_namespace,
-        ])
+        result = _run_helm_command(
+            [
+                "uninstall",
+                "floe-test",
+                "--namespace",
+                test_namespace,
+            ]
+        )
 
         # Allow failure if already uninstalled
         if result.returncode != 0 and "not found" not in result.stderr:

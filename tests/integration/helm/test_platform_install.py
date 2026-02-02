@@ -45,9 +45,7 @@ class TestPlatformChartInstall:
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_dry_run_install(
         self,
         platform_chart_path: Path,
@@ -88,9 +86,7 @@ class TestPlatformChartInstall:
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_install_minimal(
         self,
         platform_chart_path: Path,
@@ -164,9 +160,7 @@ class TestPlatformChartInstall:
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_upgrade_works(
         self,
         platform_chart_path: Path,
@@ -248,9 +242,7 @@ class TestPlatformChartInstall:
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_uninstall_clean(
         self,
         platform_chart_path: Path,
@@ -307,9 +299,8 @@ class TestPlatformChartInstall:
             check=False,
         )
 
-        assert uninstall_result.returncode == 0, (
-            "Uninstall failed: "
-            + (uninstall_result.stderr.decode() if uninstall_result.stderr else "")
+        assert uninstall_result.returncode == 0, "Uninstall failed: " + (
+            uninstall_result.stderr.decode() if uninstall_result.stderr else ""
         )
 
         # Verify release is gone

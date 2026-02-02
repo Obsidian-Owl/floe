@@ -44,9 +44,7 @@ class TestPlatformChartLint:
         stdout = result.stdout.decode() if result.stdout else ""
         stderr = result.stderr.decode() if result.stderr else ""
 
-        assert result.returncode == 0, (
-            f"Chart lint failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-        )
+        assert result.returncode == 0, f"Chart lint failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @pytest.mark.requirement("9b-FR-080")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -158,8 +156,7 @@ class TestPlatformChartLint:
         stderr = result.stderr.decode() if result.stderr else ""
 
         assert result.returncode == 0, (
-            f"Chart lint with disabled components failed:\n"
-            f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            f"Chart lint with disabled components failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
         )
 
     @pytest.mark.requirement("9b-FR-080")

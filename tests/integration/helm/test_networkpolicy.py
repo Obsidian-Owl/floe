@@ -58,10 +58,7 @@ def get_network_policies(documents: list[dict[str, Any]]) -> list[dict[str, Any]
     Returns:
         List of NetworkPolicy manifests
     """
-    return [
-        doc for doc in documents
-        if doc.get("kind") == "NetworkPolicy"
-    ]
+    return [doc for doc in documents if doc.get("kind") == "NetworkPolicy"]
 
 
 @pytest.fixture(scope="module")
@@ -106,9 +103,7 @@ class TestNetworkPolicyEnforcement:
         documents = render_helm_templates(platform_chart)
         policies = get_network_policies(documents)
 
-        assert len(policies) == 0, (
-            "NetworkPolicies should be disabled by default"
-        )
+        assert len(policies) == 0, "NetworkPolicies should be disabled by default"
 
     @pytest.mark.requirement("FR-032")
     def test_network_policies_enabled(
@@ -122,9 +117,7 @@ class TestNetworkPolicyEnforcement:
         )
         policies = get_network_policies(documents)
 
-        assert len(policies) > 0, (
-            "NetworkPolicies should be rendered when enabled"
-        )
+        assert len(policies) > 0, "NetworkPolicies should be rendered when enabled"
 
     @pytest.mark.requirement("FR-032")
     def test_default_deny_policy_exists(
@@ -140,13 +133,10 @@ class TestNetworkPolicyEnforcement:
 
         # Find default deny policy
         deny_policies = [
-            p for p in policies
-            if "default-deny" in p.get("metadata", {}).get("name", "")
+            p for p in policies if "default-deny" in p.get("metadata", {}).get("name", "")
         ]
 
-        assert len(deny_policies) > 0, (
-            "Default deny NetworkPolicy should exist"
-        )
+        assert len(deny_policies) > 0, "Default deny NetworkPolicy should exist"
 
     @pytest.mark.requirement("FR-032")
     def test_dagster_egress_policy(
@@ -165,8 +155,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find Dagster egress policy
         dagster_policies = [
-            p for p in policies
-            if "dagster" in p.get("metadata", {}).get("name", "").lower()
+            p for p in policies if "dagster" in p.get("metadata", {}).get("name", "").lower()
         ]
 
         if not dagster_policies:
@@ -177,9 +166,7 @@ class TestNetworkPolicyEnforcement:
             spec = policy.get("spec", {})
             if "Egress" in spec.get("policyTypes", []):
                 egress = spec.get("egress", [])
-                assert len(egress) > 0, (
-                    "Dagster egress policy should have rules"
-                )
+                assert len(egress) > 0, "Dagster egress policy should have rules"
 
     @pytest.mark.requirement("FR-032")
     def test_polaris_network_policy(
@@ -198,8 +185,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find Polaris policy
         polaris_policies = [
-            p for p in policies
-            if "polaris" in p.get("metadata", {}).get("name", "").lower()
+            p for p in policies if "polaris" in p.get("metadata", {}).get("name", "").lower()
         ]
 
         # Polaris should have ingress allowed from Dagster
@@ -208,9 +194,7 @@ class TestNetworkPolicyEnforcement:
                 spec = policy.get("spec", {})
                 if "Ingress" in spec.get("policyTypes", []):
                     ingress = spec.get("ingress", [])
-                    assert len(ingress) > 0, (
-                        "Polaris should allow ingress from Dagster"
-                    )
+                    assert len(ingress) > 0, "Polaris should allow ingress from Dagster"
 
     @pytest.mark.requirement("E2E-005")
     def test_otel_collector_ingress(
@@ -229,8 +213,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find OTel collector policy
         otel_policies = [
-            p for p in policies
-            if "otel" in p.get("metadata", {}).get("name", "").lower()
+            p for p in policies if "otel" in p.get("metadata", {}).get("name", "").lower()
         ]
 
         # OTel should allow ingress from namespace
@@ -240,6 +223,4 @@ class TestNetworkPolicyEnforcement:
                 ingress = spec.get("ingress", [])
                 # Check that ingress rules exist
                 if ingress:
-                    assert len(ingress) > 0, (
-                        "OTel collector should allow ingress"
-                    )
+                    assert len(ingress) > 0, "OTel collector should allow ingress"

@@ -18,6 +18,7 @@ import yaml
 # Try to import jsonschema, skip tests if not available
 try:
     import jsonschema
+
     HAS_JSONSCHEMA = True
 except ImportError:
     HAS_JSONSCHEMA = False
@@ -60,58 +61,44 @@ class TestFloePlatformSchema:
     """Tests for floe-platform values schema validation."""
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_schema_is_valid_json_schema(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_schema_is_valid_json_schema(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that the schema itself is a valid JSON Schema."""
         # This will raise if schema is invalid
         jsonschema.Draft7Validator.check_schema(floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_default_values_conform_to_schema(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_default_values_conform_to_schema(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that default values.yaml conforms to schema."""
         values = load_values_file("floe-platform")
         jsonschema.validate(values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_dev_values_conform_to_schema(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_dev_values_conform_to_schema(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that values-dev.yaml conforms to schema."""
         values = load_values_file("floe-platform", "values-dev.yaml")
         jsonschema.validate(values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_staging_values_conform_to_schema(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_staging_values_conform_to_schema(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that values-staging.yaml conforms to schema."""
         values = load_values_file("floe-platform", "values-staging.yaml")
         jsonschema.validate(values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_prod_values_conform_to_schema(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_prod_values_conform_to_schema(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that values-prod.yaml conforms to schema."""
         values = load_values_file("floe-platform", "values-prod.yaml")
         jsonschema.validate(values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_invalid_environment_rejected(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_invalid_environment_rejected(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that invalid environment value is rejected."""
         invalid_values = {"global": {"environment": "invalid"}}
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid_values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_schema_has_required_sections(
-        self, floe_platform_schema: dict[str, Any]
-    ) -> None:
+    def test_schema_has_required_sections(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that schema defines expected top-level sections."""
         properties = floe_platform_schema.get("properties", {})
         expected = [
@@ -133,24 +120,18 @@ class TestFloeJobsSchema:
     """Tests for floe-jobs values schema validation."""
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_schema_is_valid_json_schema(
-        self, floe_jobs_schema: dict[str, Any]
-    ) -> None:
+    def test_schema_is_valid_json_schema(self, floe_jobs_schema: dict[str, Any]) -> None:
         """Test that the schema itself is a valid JSON Schema."""
         jsonschema.Draft7Validator.check_schema(floe_jobs_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_default_values_conform_to_schema(
-        self, floe_jobs_schema: dict[str, Any]
-    ) -> None:
+    def test_default_values_conform_to_schema(self, floe_jobs_schema: dict[str, Any]) -> None:
         """Test that default values.yaml conforms to schema."""
         values = load_values_file("floe-jobs")
         jsonschema.validate(values, floe_jobs_schema)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_schema_has_required_sections(
-        self, floe_jobs_schema: dict[str, Any]
-    ) -> None:
+    def test_schema_has_required_sections(self, floe_jobs_schema: dict[str, Any]) -> None:
         """Test that schema defines expected top-level sections."""
         properties = floe_jobs_schema.get("properties", {})
         expected = ["global", "platform", "dbt", "ingestion", "custom", "resources"]
@@ -158,9 +139,7 @@ class TestFloeJobsSchema:
             assert section in properties, f"Missing schema section: {section}"
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_invalid_environment_rejected(
-        self, floe_jobs_schema: dict[str, Any]
-    ) -> None:
+    def test_invalid_environment_rejected(self, floe_jobs_schema: dict[str, Any]) -> None:
         """Test that invalid environment value is rejected."""
         invalid_values = {"global": {"environment": "invalid"}}
         with pytest.raises(jsonschema.ValidationError):
