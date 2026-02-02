@@ -221,7 +221,7 @@ def unflatten_dict(
         parts = key.split(sep)
         current = result
 
-        for i, part in enumerate(parts[:-1]):
+        for part in parts[:-1]:
             # Handle list indices like "items[0]"
             if "[" in part:
                 dict_key, index_str = part.rstrip("]").split("[")

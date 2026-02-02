@@ -19,7 +19,6 @@ from typing import Any
 import pytest
 import yaml
 
-
 # Minimum kubesec score required for all workloads
 MIN_KUBESEC_SCORE = 7
 
@@ -141,7 +140,10 @@ class TestKubesecScanning:
         if not is_kubesec_available():
             pytest.fail(
                 "kubesec not installed. Install with: "
-                "curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz && sudo mv kubesec /usr/local/bin/"
+                "curl -sSL https://github.com/controlplaneio/kubesec/"
+                "releases/download/v2.14.0/"
+                "kubesec_linux_amd64.tar.gz"
+                " | tar xz && sudo mv kubesec /usr/local/bin/"
             )
 
     @pytest.mark.requirement("SC-007")
