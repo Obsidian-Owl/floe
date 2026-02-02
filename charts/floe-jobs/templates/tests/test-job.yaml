@@ -33,14 +33,14 @@ spec:
         - -c
         - |
           echo "Testing dbt configuration..."
-          
+
           # Verify dbt is installed
           if ! dbt --version > /dev/null 2>&1; then
             echo "FAILED: dbt is not available"
             exit 1
           fi
           echo "SUCCESS: dbt is installed"
-          
+
           # Check profiles configuration
           if [ -n "$DBT_PROFILES_DIR" ]; then
             if [ -f "$DBT_PROFILES_DIR/profiles.yml" ]; then
@@ -49,7 +49,7 @@ spec:
               echo "WARNING: DBT_PROFILES_DIR set but profiles.yml not found"
             fi
           fi
-          
+
           echo "SUCCESS: dbt configuration test passed"
           exit 0
       env:
@@ -73,13 +73,13 @@ spec:
         - -c
         - |
           echo "Testing platform connectivity..."
-          
+
           {{- if .Values.platform.namespace }}
           DAGSTER_URL="http://{{ .Values.platform.release }}-dagster-webserver.{{ .Values.platform.namespace }}.svc.cluster.local:80"
           {{- else }}
           DAGSTER_URL="http://{{ .Values.platform.release }}-dagster-webserver:80"
           {{- end }}
-          
+
           for i in 1 2 3 4 5; do
             if curl -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
               echo "SUCCESS: Platform Dagster is reachable"
@@ -88,7 +88,7 @@ spec:
             echo "Attempt $i: Platform not ready, waiting..."
             sleep 5
           done
-          
+
           echo "WARNING: Platform Dagster not reachable (may be expected if platform is separate)"
           exit 0
       resources:

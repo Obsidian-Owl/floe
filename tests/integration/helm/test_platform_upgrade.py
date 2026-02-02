@@ -11,11 +11,12 @@ Requirements:
 from __future__ import annotations
 
 import subprocess
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from testing.fixtures.polling import wait_for_condition
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -78,8 +79,7 @@ def wait_for_deployment(
     Returns:
         True if deployment is ready, False otherwise
     """
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+    def check_deployment_ready() -> bool:
         result = _run_kubectl_command([
             "get", "deployment", name,
             "-n", namespace,
@@ -88,12 +88,18 @@ def wait_for_deployment(
         if result.returncode == 0 and result.stdout.strip():
             try:
                 ready = int(result.stdout.strip())
-                if ready > 0:
-                    return True
+                return ready > 0
             except ValueError:
                 pass
-        time.sleep(interval)
-    return False
+        return False
+
+    return wait_for_condition(
+        check_deployment_ready,
+        timeout=float(timeout),
+        interval=float(interval),
+        description=f"deployment {name} to be ready",
+        raise_on_timeout=False,
+    )
 
 
 # Export for use in other test modules

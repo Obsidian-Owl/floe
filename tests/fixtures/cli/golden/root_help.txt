@@ -9,6 +9,7 @@ Options:
 Commands:
   artifact  OCI artifact management commands.
   compile   Compile Data Team floe.yaml (FR-040).
+  helm      Helm chart management commands for floe deployment.
   network   Network security management commands for Kubernetes...
   platform  Platform team commands for governance and deployment.
   rbac      RBAC management commands for Kubernetes security.

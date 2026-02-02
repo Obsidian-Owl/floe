@@ -15,11 +15,12 @@ Requirements:
 from __future__ import annotations
 
 import subprocess
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from testing.fixtures.polling import wait_for_condition
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -76,8 +77,7 @@ def _wait_for_pods_ready(
     Returns:
         True if all pods ready, False otherwise
     """
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+    def check_pods_ready() -> bool:
         result = _kubectl([
             "get", "pods",
             "-n", namespace,
@@ -86,10 +86,16 @@ def _wait_for_pods_ready(
         ])
         if result.returncode == 0:
             phases = result.stdout.strip().split()
-            if phases and all(p == "Running" for p in phases):
-                return True
-        time.sleep(interval)
-    return False
+            return bool(phases and all(p == "Running" for p in phases))
+        return False
+
+    return wait_for_condition(
+        check_pods_ready,
+        timeout=float(timeout),
+        interval=float(interval),
+        description=f"pods with selector {label_selector} to be ready",
+        raise_on_timeout=False,
+    )
 
 
 @pytest.fixture(scope="module")
