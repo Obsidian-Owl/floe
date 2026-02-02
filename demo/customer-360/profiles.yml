@@ -1,0 +1,7 @@
+customer_360:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ":memory:"
+      threads: 1

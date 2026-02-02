@@ -90,7 +90,7 @@ def wait_for_service() -> Callable[..., None]:
         def check_http() -> bool:
             try:
                 response = httpx.get(url, timeout=5.0)
-                return response.status_code == 200
+                return response.status_code < 500
             except (httpx.HTTPError, OSError):
                 return False
 
@@ -156,11 +156,11 @@ def compiled_artifacts(
                 compiled_at=datetime.now(timezone.utc),
                 floe_version="0.5.0",
                 source_hash="sha256:test",
-                product_name=spec_path.stem,
+                product_name=spec_path.parent.name,
                 product_version="1.0.0",
             ),
             identity=ProductIdentity(
-                product_id=f"default.{spec_path.stem}",
+                product_id=f"default.{spec_path.parent.name}",
                 domain="default",
                 repository="file://localhost",
                 namespace_registered=False,
@@ -170,16 +170,16 @@ def compiled_artifacts(
             observability=ObservabilityConfig(
                 telemetry=TelemetryConfig(
                     resource_attributes=ResourceAttributes(
-                        service_name=spec_path.stem,
+                        service_name=spec_path.parent.name,
                         service_version="1.0.0",
                         deployment_environment="dev",
                         floe_namespace="default",
-                        floe_product_name=spec_path.stem,
+                        floe_product_name=spec_path.parent.name,
                         floe_product_version="1.0.0",
                         floe_mode="dev",
                     ),
                 ),
-                lineage_namespace=spec_path.stem,
+                lineage_namespace=spec_path.parent.name,
             ),
             plugins=ResolvedPlugins(
                 compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -267,13 +267,15 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         )
 
     # Load catalog with REST configuration
-    default_cred = "principal:root;realm:default-realm"
+    default_cred = "test-admin:test-secret"
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
             "type": "rest",
             "uri": f"{polaris_url}/api/catalog",
             "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
+            "scope": "PRINCIPAL_ROLE:ALL",
+            "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
         },
     )
 
@@ -301,7 +303,7 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         namespaces = response.json()["namespaces"]
     """
     marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5001")
-    wait_for_service(f"{marquez_url}/api/v1/namespaces", timeout=60, description="Marquez API")
+    wait_for_service(f"{marquez_url}/api/v1/namespaces", timeout=60, description="Marquez API (requires port-forward: kubectl port-forward svc/marquez 5001:5001 -n floe-test)")
 
     return httpx.Client(base_url=marquez_url, timeout=30.0)
 

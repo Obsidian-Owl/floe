@@ -89,8 +89,11 @@ class TestGovernance(IntegrationTestBase):
                 "NetworkPolicy resources are required for FR-060 compliance."
             )
 
-        # Render Helm templates to validate NetworkPolicy resources exist
-        templates = self._render_helm_templates(chart_root / "floe-platform")
+        # Render Helm templates with networkPolicy enabled
+        templates = self._render_helm_templates(
+            chart_root / "floe-platform",
+            set_values={"networkPolicy.enabled": "true"}
+        )
         network_policies = [
             doc for doc in templates if doc.get("kind") == "NetworkPolicy"
         ]
@@ -106,14 +109,15 @@ class TestGovernance(IntegrationTestBase):
             name = policy.get("metadata", {}).get("name", "unknown")
 
             # Verify pod selector exists (required to apply policy)
-            pod_selector = policy.get("spec", {}).get("podSelector", {})
-            if not pod_selector:
+            # Note: podSelector can be {} (empty dict) which selects all pods - this is valid
+            spec = policy.get("spec", {})
+            if "podSelector" not in spec:
                 pytest.fail(
-                    f"NetworkPolicy {name} has no podSelector - policy will not apply"
+                    f"NetworkPolicy {name} has no podSelector field - policy will not apply"
                 )
 
             # Verify policy types are defined (ingress/egress)
-            policy_types = policy.get("spec", {}).get("policyTypes", [])
+            policy_types = spec.get("policyTypes", [])
             if not policy_types:
                 pytest.fail(
                     f"NetworkPolicy {name} has no policyTypes - policy will not be enforced"
@@ -266,6 +270,7 @@ class TestGovernance(IntegrationTestBase):
             "-f",
             "json",
             "-ll",  # Only report HIGH and CRITICAL
+            "--quiet",  # Suppress progress bar
         ]
 
         try:
@@ -381,8 +386,9 @@ class TestGovernance(IntegrationTestBase):
         violations: list[str] = []
 
         for py_file in (repo_root / "packages").rglob("*.py"):
-            if "test" in str(py_file):
-                continue  # Skip test files
+            # Skip test files and virtual environments
+            if "test" in str(py_file) or ".venv" in str(py_file):
+                continue
 
             content = py_file.read_text()
 
@@ -547,12 +553,14 @@ class TestGovernance(IntegrationTestBase):
         self,
         chart_path: Path,
         values_path: Path | None = None,
+        set_values: dict[str, str] | None = None,
     ) -> list[dict[str, Any]]:
         """Render Helm templates to YAML documents.
 
         Args:
             chart_path: Path to the Helm chart
             values_path: Optional path to values file
+            set_values: Optional dict of values to set via --set
 
         Returns:
             List of parsed YAML documents
@@ -566,6 +574,9 @@ class TestGovernance(IntegrationTestBase):
         ]
         if values_path:
             cmd.extend(["--values", str(values_path)])
+        if set_values:
+            for key, value in set_values.items():
+                cmd.extend(["--set", f"{key}={value}"])
 
         try:
             result = subprocess.run(

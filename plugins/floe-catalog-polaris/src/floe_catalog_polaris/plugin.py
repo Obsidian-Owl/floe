@@ -119,7 +119,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
         Returns:
             The minimum floe API version this plugin requires.
         """
-        return "0.1"
+        return "1.0"
 
     @property
     def description(self) -> str:

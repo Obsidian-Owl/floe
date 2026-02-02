@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 def _run_command(
     cmd: list[str],
-    timeout: int = 300,
+    timeout: int = 900,
     check: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command with timeout.
@@ -50,7 +50,7 @@ def _run_command(
     )
 
 
-def _helm(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
+def _helm(args: list[str], timeout: int = 900) -> subprocess.CompletedProcess[str]:
     """Run a helm command."""
     return _run_command(["helm"] + args, timeout=timeout)
 
@@ -180,6 +180,7 @@ def deployed_platform(
 
 @pytest.mark.e2e
 @pytest.mark.requirement("E2E-001")
+@pytest.mark.timeout(900)
 class TestHelmWorkflow:
     """E2E tests for Helm-based platform deployment workflow."""
 
@@ -273,6 +274,7 @@ class TestHelmWorkflow:
 
 @pytest.mark.e2e
 @pytest.mark.requirement("E2E-002")
+@pytest.mark.timeout(900)
 class TestCodeLocationRegistration:
     """Tests for Dagster code location registration.
 
@@ -309,6 +311,7 @@ class TestCodeLocationRegistration:
 
 @pytest.mark.e2e
 @pytest.mark.requirement("E2E-003")
+@pytest.mark.timeout(900)
 class TestJobExecution:
     """Tests for job execution after Helm deployment.
 

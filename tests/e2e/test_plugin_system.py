@@ -162,13 +162,16 @@ class TestPluginSystem(IntegrationTestBase):
     def test_abc_compliance(self) -> None:
         """Test that all plugins implement their ABC interface correctly.
 
-        For each plugin type, instantiates the plugin and verifies:
+        For each plugin type, loads the plugin and verifies:
         - All abstract methods from the ABC are implemented
         - Required properties (name, version, floe_api_version) exist
         - Methods have correct signatures
+        - Version format is valid (X.Y or X.Y.Z semver)
 
         This validates that plugins satisfy their interface contracts.
         """
+        import re
+
         registry = get_registry()
         registry.discover_all()
 
@@ -182,6 +185,9 @@ class TestPluginSystem(IntegrationTestBase):
             PluginType.INGESTION,
         }
 
+        # Valid version formats: X.Y or X.Y.Z (semver)
+        version_pattern = re.compile(r"^\d+\.\d+(\.\d+)?$")
+
         for plugin_type in PluginType:
             # Skip unimplemented types
             if plugin_type in unimplemented_types:
@@ -192,7 +198,7 @@ class TestPluginSystem(IntegrationTestBase):
 
             for plugin_name in plugin_names:
                 try:
-                    # Load the plugin instance
+                    # Load the plugin instance (registry.get handles instantiation)
                     plugin = registry.get(plugin_type, plugin_name)
 
                     # Verify plugin is an instance of the correct ABC
@@ -221,6 +227,12 @@ class TestPluginSystem(IntegrationTestBase):
                     )
                     assert isinstance(plugin.floe_api_version, str), (
                         f"{plugin_type.name}:{plugin_name} floe_api_version must be str"
+                    )
+
+                    # Verify version format (X.Y or X.Y.Z semver)
+                    assert version_pattern.match(plugin.floe_api_version), (
+                        f"{plugin_type.name}:{plugin_name} floe_api_version "
+                        f"'{plugin.floe_api_version}' must match format X.Y or X.Y.Z"
                     )
 
                     # Verify all abstract methods from ABC are implemented
@@ -380,6 +392,7 @@ class TestPluginSystem(IntegrationTestBase):
 
             for plugin_name in plugin_names:
                 try:
+                    # Load the plugin instance (registry.get handles instantiation)
                     plugin = registry.get(plugin_type, plugin_name)
 
                     # Call health check
@@ -546,18 +559,29 @@ class ThirdPartyTestPlugin(PluginMetadata):
                 "floe_api_version",
             },
             CatalogPlugin: {
-                "create_catalog",
-                "list_catalogs",
-                "delete_catalog",
+                "connect",
+                "create_namespace",
+                "create_table",
+                "delete_namespace",
+                "drop_table",
+                "list_namespaces",
+                "list_tables",
+                "vend_credentials",
                 # From PluginMetadata
                 "name",
                 "version",
                 "floe_api_version",
             },
             DBTPlugin: {
-                "compile",
-                "run",
-                "test",
+                "compile_project",
+                "get_manifest",
+                "get_run_results",
+                "get_runtime_metadata",
+                "lint_project",
+                "run_models",
+                "supports_parallel_execution",
+                "supports_sql_linting",
+                "test_models",
                 # From PluginMetadata
                 "name",
                 "version",

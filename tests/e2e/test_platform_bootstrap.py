@@ -82,15 +82,12 @@ class TestPlatformBootstrap(IntegrationTestBase):
     """
 
     # Required services for all platform bootstrap tests
+    # Only NodePort-accessible services (ClusterIP-only services checked individually)
     required_services = [
-        ("postgres", 5432),
         ("polaris", 8181),
-        ("minio", 9000),
         ("dagster-webserver", 3000),
+        ("minio", 9000),
         ("jaeger-query", 16686),
-        ("grafana", 3001),
-        ("prometheus", 9090),
-        ("marquez", 5001),
     ]
 
     # K8s namespace for E2E tests
@@ -155,9 +152,9 @@ class TestPlatformBootstrap(IntegrationTestBase):
         - MinIO API: localhost:9000
         - MinIO UI: localhost:9001
         - Jaeger query: localhost:16686
-        - Grafana: localhost:3001
-        - Prometheus: localhost:9090
-        - Marquez API: localhost:5001
+
+        Note: Grafana, Prometheus, and Marquez are tested in separate tests
+        as they may not be deployed in all configurations.
 
         Args:
             wait_for_service: Fixture for waiting on HTTP services.
@@ -172,9 +169,6 @@ class TestPlatformBootstrap(IntegrationTestBase):
             ("http://localhost:9000/minio/health/live", "MinIO API"),
             ("http://localhost:9001/minio/health/live", "MinIO UI"),
             ("http://localhost:16686/api/services", "Jaeger query"),
-            ("http://localhost:3001/api/health", "Grafana"),
-            ("http://localhost:9090/-/healthy", "Prometheus"),
-            ("http://localhost:5001/api/v1/namespaces", "Marquez API"),
         ]
 
         # Wait for each service to respond
@@ -194,6 +188,15 @@ class TestPlatformBootstrap(IntegrationTestBase):
         Raises:
             AssertionError: If databases or schemas are missing.
         """
+        # Check PostgreSQL accessibility (ClusterIP-only service)
+        try:
+            self.check_infrastructure("postgres", 5432)
+        except Exception:
+            pytest.fail(
+                "PostgreSQL not accessible at localhost:5432. "
+                "Run via make test-e2e or: kubectl port-forward svc/postgres 5432:5432 -n floe-test"
+            )
+
         # Get PostgreSQL pod name
         result = _run_kubectl(
             [
@@ -365,6 +368,16 @@ class TestPlatformBootstrap(IntegrationTestBase):
         Raises:
             AssertionError: If span not found in Jaeger within timeout.
         """
+        # Check OTel collector accessibility (may not be deployed)
+        try:
+            self.check_infrastructure("otel-collector", 4317)
+        except Exception:
+            pytest.fail(
+                "OTel collector not accessible at localhost:4317. "
+                "OTel collector may not be deployed. "
+                "Run via make test-e2e or check Helm chart configuration."
+            )
+
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.sdk.resources import Resource
@@ -448,27 +461,51 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         Validates FR-007 by querying:
         - Jaeger UI: localhost:16686
-        - Grafana: localhost:3001
-        - Prometheus: localhost:9090
+        - Grafana: localhost:3001 (if deployed)
+        - Prometheus: localhost:9090 (if deployed)
 
         Raises:
             AssertionError: If any UI does not respond with HTTP 200.
         """
-        # Define observability UI endpoints
-        uis = [
-            ("http://localhost:16686/search", "Jaeger UI"),
-            ("http://localhost:3001/api/health", "Grafana"),
-            ("http://localhost:9090/-/healthy", "Prometheus"),
-        ]
+        # Check Jaeger UI (always deployed)
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get("http://localhost:16686/search")
+            assert response.status_code == 200, (
+                f"Jaeger UI not accessible: HTTP {response.status_code}\n"
+                f"URL: http://localhost:16686/search"
+            )
 
-        # Query each UI
-        for url, description in uis:
+        # Check Grafana (may not be deployed)
+        try:
+            self.check_infrastructure("grafana", 3001)
             with httpx.Client(timeout=10.0) as client:
-                response = client.get(url)
+                response = client.get("http://localhost:3001/api/health")
                 assert response.status_code == 200, (
-                    f"{description} not accessible: HTTP {response.status_code}\n"
-                    f"URL: {url}"
+                    f"Grafana not accessible: HTTP {response.status_code}\n"
+                    f"URL: http://localhost:3001/api/health"
                 )
+        except Exception:
+            pytest.fail(
+                "Grafana not accessible at localhost:3001. "
+                "Grafana may not be deployed. "
+                "Run via make test-e2e or check Helm chart configuration."
+            )
+
+        # Check Prometheus (may not be deployed)
+        try:
+            self.check_infrastructure("prometheus", 9090)
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get("http://localhost:9090/-/healthy")
+                assert response.status_code == 200, (
+                    f"Prometheus not accessible: HTTP {response.status_code}\n"
+                    f"URL: http://localhost:9090/-/healthy"
+                )
+        except Exception:
+            pytest.fail(
+                "Prometheus not accessible at localhost:9090. "
+                "Prometheus may not be deployed. "
+                "Run via make test-e2e or check Helm chart configuration."
+            )
 
     @pytest.mark.requirement("FR-049")
     def test_marquez_accessible(self) -> None:
@@ -481,6 +518,16 @@ class TestPlatformBootstrap(IntegrationTestBase):
         Raises:
             AssertionError: If Marquez API or UI does not respond with HTTP 200.
         """
+        # Check Marquez accessibility (may not be deployed)
+        try:
+            self.check_infrastructure("marquez", 5001)
+        except Exception:
+            pytest.fail(
+                "Marquez not accessible at localhost:5001. "
+                "Marquez may not be deployed. "
+                "Run via make test-e2e or check Helm chart configuration."
+            )
+
         # Check Marquez API
         with httpx.Client(timeout=10.0) as client:
             # API endpoint
