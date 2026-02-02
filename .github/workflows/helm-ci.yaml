@@ -125,25 +125,29 @@ jobs:
           helm dependency update charts/floe-platform
           helm dependency update charts/floe-jobs
 
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
       - name: Render floe-platform templates
         env:
           ENVIRONMENT: ${{ matrix.environment }}
         run: |
           VALUES_FILE="charts/floe-platform/values-${ENVIRONMENT}.yaml"
           if [ -f "$VALUES_FILE" ]; then
-            # For test environment, use --skip-schema-validation (Dagster subchart issue)
-            if [ "$ENVIRONMENT" = "test" ]; then
-              helm template floe charts/floe-platform \
-                --values charts/floe-platform/values.yaml \
-                --values "$VALUES_FILE" \
-                --skip-schema-validation \
-                --output-dir /tmp/rendered-platform-${ENVIRONMENT}
-            else
-              helm template floe charts/floe-platform \
-                --values charts/floe-platform/values.yaml \
-                --values "$VALUES_FILE" \
-                --output-dir /tmp/rendered-platform-${ENVIRONMENT}
-            fi
+            helm template floe charts/floe-platform \
+              --values charts/floe-platform/values.yaml \
+              --values "$VALUES_FILE" \
+              --output-dir /tmp/rendered-platform-${ENVIRONMENT}
           else
             helm template floe charts/floe-platform \
               --values charts/floe-platform/values.yaml \
@@ -159,7 +163,6 @@ jobs:
             helm template floe-jobs charts/floe-jobs \
               --values charts/floe-jobs/values.yaml \
               --values "$VALUES_FILE" \
-              --skip-schema-validation \
               --output-dir /tmp/rendered-jobs-${ENVIRONMENT}
           else
             helm template floe-jobs charts/floe-jobs \
@@ -283,6 +286,19 @@ jobs:
           helm dependency update charts/floe-platform
           helm dependency update charts/floe-jobs
 
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
       - name: Install kubesec
         run: |
           curl -sSL --proto =https https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz
@@ -365,12 +381,24 @@ jobs:
         run: |
           helm dependency update charts/floe-platform
 
+      - name: Strip Dagster subchart schema (404 external $ref workaround)
+        run: |
+          cd charts/floe-platform/charts
+          if ls dagster-*.tgz 1>/dev/null 2>&1; then
+            DAGSTER_TGZ=$(ls dagster-*.tgz)
+            mkdir -p dagster-tmp
+            tar xzf "$DAGSTER_TGZ" -C dagster-tmp
+            rm -f dagster-tmp/dagster/values.schema.json
+            rm "$DAGSTER_TGZ"
+            cd dagster-tmp && tar czf "../${DAGSTER_TGZ}" dagster/ && cd ..
+            rm -rf dagster-tmp
+          fi
+
       - name: Install floe-platform chart with test values
         run: |
           helm upgrade --install floe-test charts/floe-platform \
             --namespace floe-test --create-namespace \
             --values charts/floe-platform/values-test.yaml \
-            --skip-schema-validation \
             --wait --timeout 10m
 
       - name: Run Helm tests
