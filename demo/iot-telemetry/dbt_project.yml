@@ -1,0 +1,27 @@
+name: iot_telemetry
+version: '1.0.0'
+config-version: 2
+
+profile: iot_telemetry
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["../macros"]
+
+seeds:
+  iot_telemetry:
+    +schema: raw
+
+models:
+  iot_telemetry:
+    staging:
+      +materialized: view
+      +tags: ['staging']
+    intermediate:
+      +materialized: table
+      +tags: ['intermediate']
+    marts:
+      +materialized: table
+      +tags: ['marts']
+      +post-hook:
+        - "{{ retention_cleanup(this) }}"

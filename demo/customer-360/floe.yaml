@@ -1,0 +1,36 @@
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: customer-360
+  version: 1.0.0
+  description: "Retail customer 360 - consolidated customer profiles, transactions, and support"
+  owner: demo@floe.dev
+  labels:
+    domain: retail
+    tier: gold
+transforms:
+  - name: stg_crm_customers
+    tags: [staging]
+    tier: bronze
+  - name: stg_transactions
+    tags: [staging]
+    tier: bronze
+  - name: stg_support_tickets
+    tags: [staging]
+    tier: bronze
+  - name: int_customer_orders
+    tags: [intermediate]
+    tier: silver
+    dependsOn: [stg_crm_customers, stg_transactions]
+  - name: int_customer_support
+    tags: [intermediate]
+    tier: silver
+    dependsOn: [stg_crm_customers, stg_support_tickets]
+  - name: mart_customer_360
+    tags: [marts]
+    tier: gold
+    dependsOn: [int_customer_orders, int_customer_support]
+schedule:
+  cron: "*/10 * * * *"
+  timezone: UTC
+  enabled: true

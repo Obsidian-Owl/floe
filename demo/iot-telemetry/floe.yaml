@@ -1,0 +1,36 @@
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: iot-telemetry
+  version: 1.0.0
+  description: "Manufacturing IoT telemetry - sensor readings, anomaly detection, equipment health"
+  owner: demo@floe.dev
+  labels:
+    domain: manufacturing
+    tier: gold
+transforms:
+  - name: stg_sensors
+    tags: [staging]
+    tier: bronze
+  - name: stg_readings
+    tags: [staging]
+    tier: bronze
+  - name: stg_maintenance
+    tags: [staging]
+    tier: bronze
+  - name: int_sensor_metrics
+    tags: [intermediate]
+    tier: silver
+    dependsOn: [stg_sensors, stg_readings]
+  - name: int_anomaly_detection
+    tags: [intermediate]
+    tier: silver
+    dependsOn: [stg_readings, int_sensor_metrics]
+  - name: mart_equipment_health
+    tags: [marts]
+    tier: gold
+    dependsOn: [stg_sensors, int_sensor_metrics, int_anomaly_detection, stg_maintenance]
+schedule:
+  cron: "*/10 * * * *"
+  timezone: UTC
+  enabled: true

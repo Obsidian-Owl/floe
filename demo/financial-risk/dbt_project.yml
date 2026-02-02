@@ -1,0 +1,27 @@
+name: financial_risk
+version: '1.0.0'
+config-version: 2
+
+profile: financial_risk
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["../macros"]
+
+seeds:
+  financial_risk:
+    +schema: raw
+
+models:
+  financial_risk:
+    staging:
+      +materialized: view
+      +tags: ['staging']
+    intermediate:
+      +materialized: table
+      +tags: ['intermediate']
+    marts:
+      +materialized: table
+      +tags: ['marts']
+      +post-hook:
+        - "{{ retention_cleanup(this) }}"
