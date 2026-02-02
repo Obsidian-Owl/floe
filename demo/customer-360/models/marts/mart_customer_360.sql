@@ -22,7 +22,7 @@ final as (
         s.ticket_count,
         s.avg_resolution_hours,
         s.open_tickets,
-        extract(epoch from (current_date - c.signup_date)) / 86400.0 as customer_lifetime_days,
+        (current_date - c.signup_date) as customer_lifetime_days,
         {{ current_timestamp() }} as _loaded_at
     from customers c
     left join orders o on c.customer_id = o.customer_id

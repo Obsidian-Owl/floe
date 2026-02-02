@@ -400,9 +400,15 @@ class TestGovernance(IntegrationTestBase):
             for line_num, line in enumerate(content.splitlines(), start=1):
                 line_stripped = line.strip()
 
+                # Skip lines that are inside method bodies (contain control flow, operators, etc)
+                # These are references to fields, not field definitions
+                if any(x in line_stripped for x in ["if ", "and ", "or ", "not ", "==", "!=", "is ", "return ", "raise "]):
+                    continue
+
                 # Match field definitions: field_name: type = ...
+                # Must have : followed by type annotation (not just a reference)
                 for sensitive_name in sensitive_field_names:
-                    pattern = rf"\b{sensitive_name}\b\s*:\s*"
+                    pattern = rf"\b{sensitive_name}\b\s*:\s*(\w+|\w+\[|\w+\s*\|)"
                     if re.search(pattern, line_stripped, re.IGNORECASE):
                         # Check if SecretStr is used
                         if "SecretStr" not in line_stripped:

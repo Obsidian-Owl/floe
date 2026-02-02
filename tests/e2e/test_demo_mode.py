@@ -119,6 +119,14 @@ class TestDemoMode(IntegrationTestBase):
         """
 
         result = dagster_client._execute(query)
+
+        # Check if response has data
+        if isinstance(result, dict) and "data" not in result:
+            pytest.fail(
+                "Dagster returned no data. Demo products may not be loaded.\n"
+                f"Response: {result}"
+            )
+
         repos = result["data"]["repositoriesOrError"]["nodes"]
 
         # Verify three products exist
@@ -147,6 +155,14 @@ class TestDemoMode(IntegrationTestBase):
             """
 
             assets_result = dagster_client._execute(assets_query)
+
+            # Check if response has data
+            if isinstance(assets_result, dict) and "data" not in assets_result:
+                pytest.fail(
+                    f"Dagster returned no data for product {product}.\n"
+                    f"Response: {assets_result}"
+                )
+
             asset_nodes = assets_result["data"]["repositoryOrError"]["assetNodes"]
 
             assert len(asset_nodes) > 0, (
@@ -170,6 +186,8 @@ class TestDemoMode(IntegrationTestBase):
         Raises:
             AssertionError: If lineage graphs incomplete or broken.
         """
+        from dagster_graphql import DagsterGraphQLClientError
+
         products = ["customer-360", "sales-analytics", "inventory-insights"]
 
         for product in products:
@@ -188,12 +206,50 @@ class TestDemoMode(IntegrationTestBase):
                             }}
                         }}
                     }}
+                    ... on RepositoryNotFoundError {{
+                        message
+                    }}
                 }}
             }}
             """
 
-            result = dagster_client._execute(lineage_query)
-            asset_nodes = result["data"]["repositoryOrError"]["assetNodes"]
+            try:
+                result = dagster_client._execute(lineage_query)
+
+                # Check if response has data
+                if isinstance(result, dict) and "data" not in result:
+                    pytest.fail(
+                        f"INFRASTRUCTURE ERROR: Dagster returned no data for product {product}.\n"
+                        f"Issue: Demo products not loaded in Dagster.\n"
+                        f"Deploy: Run 'make demo' to deploy demo products\n"
+                        f"Response: {result}"
+                    )
+
+                repo_response = result["data"]["repositoryOrError"]
+
+                # Check for RepositoryNotFoundError
+                if repo_response.get("__typename") == "RepositoryNotFoundError":
+                    pytest.fail(
+                        f"INFRASTRUCTURE ERROR: Repository '{product}' not found in Dagster.\n"
+                        f"Issue: Demo product not loaded.\n"
+                        f"Deploy: Run 'make demo' to deploy demo products\n"
+                        f"Error: {repo_response.get('message', 'Repository not found')}"
+                    )
+
+                asset_nodes = repo_response.get("assetNodes", [])
+            except DagsterGraphQLClientError as e:
+                error_msg = str(e)
+                if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
+                    pytest.fail(
+                        f"INFRASTRUCTURE ERROR: Repository '{product}' not found in Dagster.\n"
+                        f"Issue: Demo product not loaded.\n"
+                        f"Deploy: Run 'make demo' to deploy demo products\n"
+                        f"GraphQL error: {error_msg}"
+                    )
+                pytest.fail(
+                    f"Failed to query lineage for product {product}.\n"
+                    f"GraphQL error: {error_msg}"
+                )
 
             # Categorize assets by layer
             bronze_assets = [
@@ -256,9 +312,9 @@ class TestDemoMode(IntegrationTestBase):
         project_root = Path("/Users/dmccarthy/Projects/floe")
         chart_path = project_root / "charts" / "floe-platform"
 
-        # Render Helm templates
+        # Render Helm templates with --skip-schema-validation to avoid external URL fetch
         result = subprocess.run(
-            ["helm", "template", "test-release", str(chart_path)],
+            ["helm", "template", "test-release", str(chart_path), "--skip-schema-validation"],
             cwd=project_root,
             capture_output=True,
             text=True,

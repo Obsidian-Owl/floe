@@ -309,6 +309,79 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
 
 
 @pytest.fixture(scope="session")
+def polaris_with_write_grants(
+    polaris_client: Any,
+    wait_for_service: Callable[..., None],
+) -> Any:
+    """Polaris client with write delegation grants configured.
+
+    Sets up the test principal with CREATE_TABLE_DIRECT_WITH_WRITE_DELEGATION
+    permission needed for schema evolution tests.
+
+    Args:
+        polaris_client: PyIceberg REST catalog fixture.
+        wait_for_service: Helper fixture for service polling.
+
+    Returns:
+        PyIceberg REST catalog with write permissions granted.
+
+    Raises:
+        AssertionError: If RBAC setup fails.
+
+    Example:
+        table = polaris_with_write_grants.create_table(...)
+    """
+    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+
+    # Get admin token
+    token_response = httpx.post(
+        f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": "test-admin",
+            "client_secret": "test-secret",
+            "scope": "PRINCIPAL_ROLE:ALL",
+        },
+        timeout=10.0,
+    )
+    if token_response.status_code != 200:
+        pytest.fail(f"Failed to get Polaris admin token: {token_response.text}")
+
+    token = token_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    # Grant catalog-level privileges to catalog_admin role
+    catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+    grant_url = f"{polaris_url}/api/management/v1/catalogs/{catalog_name}/catalog-roles/catalog_admin/grants"
+
+    for privilege in [
+        "TABLE_WRITE_DATA",
+        "TABLE_CREATE",
+        "NAMESPACE_CREATE",
+        "TABLE_READ_DATA",
+        "NAMESPACE_LIST",
+        "TABLE_LIST",
+    ]:
+        grant_response = httpx.put(
+            grant_url,
+            headers=headers,
+            json={
+                "type": "catalog",
+                "privilege": privilege,
+            },
+            timeout=10.0,
+        )
+        # Ignore 409 Conflict (privilege already granted)
+        if grant_response.status_code not in (200, 201, 204, 409):
+            pytest.fail(
+                f"Failed to grant {privilege} privilege: "
+                f"{grant_response.status_code} {grant_response.text}"
+            )
+
+    return polaris_client
+
+
+@pytest.fixture(scope="session")
 def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
     """Create Jaeger query HTTP client.
 
@@ -332,3 +405,34 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
     wait_for_service(f"{jaeger_url}/api/services", timeout=60, description="Jaeger query API")
 
     return httpx.Client(base_url=jaeger_url, timeout=30.0)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_duckdb_files() -> None:
+    """Cleanup DuckDB files after all tests in the module complete.
+
+    This fixture runs after all test functions in the module and removes
+    the persistent DuckDB database files created during test execution.
+
+    The fixture uses autouse=True so it runs automatically for all tests
+    without explicit declaration. Scope is 'module' so database persists
+    across tests within the same test file.
+    """
+    yield  # All tests run here
+
+    # Clean up DuckDB files from all demo projects
+    demo_dirs = [
+        Path(__file__).parent.parent.parent / "demo" / "customer-360",
+        Path(__file__).parent.parent.parent / "demo" / "iot-telemetry",
+        Path(__file__).parent.parent.parent / "demo" / "financial-risk",
+    ]
+
+    for demo_dir in demo_dirs:
+        if demo_dir.exists():
+            db_file = demo_dir / "target" / "demo.duckdb"
+            if db_file.exists():
+                db_file.unlink()
+            # Also remove WAL files if they exist
+            wal_file = demo_dir / "target" / "demo.duckdb.wal"
+            if wal_file.exists():
+                wal_file.unlink()

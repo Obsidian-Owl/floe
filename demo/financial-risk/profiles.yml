@@ -3,5 +3,5 @@ financial_risk:
   outputs:
     dev:
       type: duckdb
-      path: ":memory:"
+      path: "target/demo.duckdb"
       threads: 1

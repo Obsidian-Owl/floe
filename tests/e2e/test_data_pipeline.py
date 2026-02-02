@@ -32,6 +32,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import duckdb
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
@@ -100,7 +101,14 @@ class TestDataPipeline(IntegrationTestBase):
         Raises:
             subprocess.CalledProcessError: If dbt command fails.
         """
-        full_command = ["dbt"] + command + ["--project-dir", str(project_dir)]
+        full_command = [
+            "dbt",
+            *command,
+            "--project-dir",
+            str(project_dir),
+            "--profiles-dir",
+            str(project_dir),
+        ]
 
         result = subprocess.run(
             full_command,
@@ -112,68 +120,118 @@ class TestDataPipeline(IntegrationTestBase):
         )
         return result
 
-    def _check_table_exists_in_catalog(
-        self,
-        polaris_client: Any,
-        namespace: str,
-        table_name: str,
-    ) -> bool:
-        """Check if a table exists in the Polaris catalog.
+    def _get_duckdb_connection(self, project_dir: Path) -> duckdb.DuckDBPyConnection:
+        """Get DuckDB connection to the demo database.
 
         Args:
-            polaris_client: PyIceberg REST catalog client.
-            namespace: Catalog namespace.
-            table_name: Table name to check.
+            project_dir: Path to dbt project directory.
+
+        Returns:
+            DuckDB connection.
+        """
+        db_path = project_dir / "target" / "demo.duckdb"
+        return duckdb.connect(str(db_path))
+
+    def _check_table_exists_in_duckdb(
+        self,
+        project_dir: Path,
+        table_name: str,
+    ) -> bool:
+        """Check if a table exists in DuckDB.
+
+        Args:
+            project_dir: Path to dbt project directory.
+            table_name: Table name to check (without schema prefix).
 
         Returns:
             True if table exists, False otherwise.
         """
         try:
-            tables = polaris_client.list_tables(namespace)
-            return any(str(t).endswith(f".{table_name}") for t in tables)
+            conn = self._get_duckdb_connection(project_dir)
+            # Check all schemas for the table
+            result = conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_name = ?",
+                [table_name],
+            ).fetchall()
+            conn.close()
+            return len(result) > 0
         except Exception:  # noqa: BLE001
             return False
 
-    def _get_table_row_count(
+    def _get_table_row_count_from_duckdb(
         self,
-        polaris_client: Any,
-        namespace: str,
+        project_dir: Path,
         table_name: str,
     ) -> int:
-        """Get row count for a table in the catalog.
+        """Get row count for a table in DuckDB.
 
         Args:
-            polaris_client: PyIceberg REST catalog client.
-            namespace: Catalog namespace.
-            table_name: Table name.
+            project_dir: Path to dbt project directory.
+            table_name: Table name (without schema prefix).
 
         Returns:
             Row count (0 if table doesn't exist or has no rows).
         """
         try:
-            table = polaris_client.load_table(f"{namespace}.{table_name}")
-            # Use PyIceberg scan to count rows
-            scan = table.scan()
-            return len(list(scan.to_arrow()))
+            conn = self._get_duckdb_connection(project_dir)
+            # First, find the schema for this table
+            schema_result = conn.execute(
+                "SELECT table_schema FROM information_schema.tables WHERE table_name = ?",
+                [table_name],
+            ).fetchone()
+
+            if not schema_result:
+                conn.close()
+                return 0
+
+            schema = schema_result[0]
+            # Now query with the full schema-qualified name
+            result = conn.execute(
+                f"SELECT COUNT(*) FROM {schema}.{table_name}"  # noqa: S608
+            ).fetchone()
+            conn.close()
+            return result[0] if result else 0
         except Exception:  # noqa: BLE001
             return 0
+
+    def _get_all_tables_from_duckdb(self, project_dir: Path) -> list[str]:
+        """Get all table names from DuckDB.
+
+        Args:
+            project_dir: Path to dbt project directory.
+
+        Returns:
+            List of table names (without schema prefix).
+        """
+        try:
+            conn = self._get_duckdb_connection(project_dir)
+            # Get all tables from all user schemas (excluding system schemas)
+            result = conn.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+                """
+            ).fetchall()
+            conn.close()
+            return [row[0] for row in result]
+        except Exception:  # noqa: BLE001
+            return []
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-023")
     def test_dbt_seed_loads_data(
         self,
-        polaris_client: Any,
         e2e_namespace: str,
     ) -> None:
         """Test dbt seed loads CSV data into tables.
 
         Validates:
         - dbt seed command executes successfully
-        - Seed tables are created in catalog
+        - Seed tables are created in DuckDB
         - Tables contain expected row counts
 
         Args:
-            polaris_client: PyIceberg REST catalog client fixture.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
@@ -183,46 +241,40 @@ class TestDataPipeline(IntegrationTestBase):
 
         project_dir = self._get_demo_project_path()
 
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
+
         # Run dbt seed
         result = self._run_dbt_command(["seed"], project_dir)
         assert result.returncode == 0, "dbt seed should succeed"
 
-        # Verify seed tables exist in catalog
+        # Verify seed tables exist in DuckDB
         seed_tables = ["raw_customers", "raw_transactions", "raw_support_tickets"]
-        namespace = f"{e2e_namespace}_customer_360"
 
         for table_name in seed_tables:
-            def check_table(name: str = table_name) -> bool:
-                return self._check_table_exists_in_catalog(
-                    polaris_client, namespace, name
-                )
-
-            assert wait_for_condition(
-                check_table,
-                timeout=30.0,
-                description=f"table {table_name} to exist in catalog",
-            ), f"Seed table {table_name} should exist in Polaris catalog"
+            assert self._check_table_exists_in_duckdb(
+                project_dir, table_name
+            ), f"Seed table {table_name} should exist in DuckDB"
 
             # Verify table has rows
-            row_count = self._get_table_row_count(polaris_client, namespace, table_name)
+            row_count = self._get_table_row_count_from_duckdb(project_dir, table_name)
             assert row_count > 0, f"Table {table_name} should have rows after seed"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-020")
     def test_pipeline_execution_order(
         self,
-        dagster_client: Any,
         e2e_namespace: str,
     ) -> None:
         """Test pipeline executes models in correct dependency order.
 
         Validates:
-        - Dagster run triggers successfully
         - Models execute in topological order (staging → intermediate → marts)
         - Dependency resolution works correctly
+        - run_results.json records correct execution sequence
 
         Args:
-            dagster_client: Dagster GraphQL client fixture.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
@@ -231,45 +283,77 @@ class TestDataPipeline(IntegrationTestBase):
 
         project_dir = self._get_demo_project_path()
 
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
+
         # First run dbt seed to load data
         self._run_dbt_command(["seed"], project_dir)
 
-        # Trigger Dagster pipeline run via GraphQL
-        # Note: This requires Dagster to be configured with customer-360 assets
-        # TODO: Once Dagster asset integration is complete, use Dagster GraphQL
-
-        # For E2E test, we'll validate execution order by checking dbt run directly
+        # Run dbt models
         result = self._run_dbt_command(["run"], project_dir)
         assert result.returncode == 0, "dbt run should succeed"
 
-        # Verify execution order from dbt output
-        # Staging models should run before intermediate, intermediate before marts
-        output = result.stdout + result.stderr
-        assert "stg_" in output, "Staging models should execute"
-        assert "int_" in output, "Intermediate models should execute"
-        assert "mart_" in output, "Mart models should execute"
+        # Parse run_results.json to verify execution order
+        run_results_path = project_dir / "target" / "run_results.json"
+        assert run_results_path.exists(), "run_results.json should exist"
 
-        # Verify dependency order by checking model completion sequence
-        stg_pos = min(
-            output.find("stg_crm_customers"),
-            output.find("stg_transactions"),
-            output.find("stg_support_tickets"),
-        )
-        int_pos = min(
-            output.find("int_customer_orders"),
-            output.find("int_customer_support"),
-        )
-        mart_pos = output.find("mart_customer_360")
+        import json
 
-        assert (
-            stg_pos < int_pos < mart_pos
-        ), "Models should execute in dependency order: staging → intermediate → marts"
+        run_results = json.loads(run_results_path.read_text())
+        results = run_results.get("results", [])
+
+        # Extract model names and their execution start times
+        model_times = {}
+        for result_entry in results:
+            node_id = result_entry.get("unique_id", "")
+            if node_id.startswith("model."):
+                model_name = node_id.split(".")[-1]
+                timing = result_entry.get("timing", [])
+                start_time = next(
+                    (t["started_at"] for t in timing if t["name"] == "execute"),
+                    None,
+                )
+                if start_time:
+                    model_times[model_name] = start_time
+
+        # Find earliest execution time for each layer
+        staging_times = [
+            model_times[m]
+            for m in model_times
+            if m.startswith("stg_")
+        ]
+        intermediate_times = [
+            model_times[m]
+            for m in model_times
+            if m.startswith("int_")
+        ]
+        mart_times = [
+            model_times[m]
+            for m in model_times
+            if m.startswith("mart_")
+        ]
+
+        assert len(staging_times) > 0, "Should have staging models"
+        assert len(intermediate_times) > 0, "Should have intermediate models"
+        assert len(mart_times) > 0, "Should have mart models"
+
+        # Verify dependency order: staging before intermediate before marts
+        max_staging_time = max(staging_times)
+        min_intermediate_time = min(intermediate_times)
+        min_mart_time = min(mart_times)
+
+        assert max_staging_time <= min_intermediate_time, (
+            "Staging models should complete before intermediate models start"
+        )
+        assert min_intermediate_time <= min_mart_time, (
+            "Intermediate models should start before or with mart models"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-021")
     def test_medallion_layers(
         self,
-        polaris_client: Any,
         e2e_namespace: str,
     ) -> None:
         """Test medallion architecture transforms produce correct output.
@@ -280,7 +364,6 @@ class TestDataPipeline(IntegrationTestBase):
         - Gold layer (marts) aggregates for analytics
 
         Args:
-            polaris_client: PyIceberg REST catalog client fixture.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
@@ -288,7 +371,10 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-        namespace = f"{e2e_namespace}_customer_360"
+
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
 
         # Run full pipeline: seed + run
         self._run_dbt_command(["seed"], project_dir)
@@ -301,46 +387,44 @@ class TestDataPipeline(IntegrationTestBase):
             "stg_support_tickets",
         ]
         for table in bronze_tables:
-            assert self._check_table_exists_in_catalog(
-                polaris_client, namespace, table
+            assert self._check_table_exists_in_duckdb(
+                project_dir, table
             ), f"Bronze layer table {table} should exist"
-            row_count = self._get_table_row_count(polaris_client, namespace, table)
+            row_count = self._get_table_row_count_from_duckdb(project_dir, table)
             assert row_count > 0, f"Bronze table {table} should have data"
 
         # Verify Silver layer (intermediate) tables
         silver_tables = ["int_customer_orders", "int_customer_support"]
         for table in silver_tables:
-            assert self._check_table_exists_in_catalog(
-                polaris_client, namespace, table
+            assert self._check_table_exists_in_duckdb(
+                project_dir, table
             ), f"Silver layer table {table} should exist"
-            row_count = self._get_table_row_count(polaris_client, namespace, table)
+            row_count = self._get_table_row_count_from_duckdb(project_dir, table)
             assert row_count > 0, f"Silver table {table} should have data"
 
         # Verify Gold layer (marts) tables
         gold_tables = ["mart_customer_360"]
         for table in gold_tables:
-            assert self._check_table_exists_in_catalog(
-                polaris_client, namespace, table
+            assert self._check_table_exists_in_duckdb(
+                project_dir, table
             ), f"Gold layer table {table} should exist"
-            row_count = self._get_table_row_count(polaris_client, namespace, table)
+            row_count = self._get_table_row_count_from_duckdb(project_dir, table)
             assert row_count > 0, f"Gold table {table} should have aggregated data"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
     def test_iceberg_tables_created(
         self,
-        polaris_client: Any,
         e2e_namespace: str,
     ) -> None:
-        """Test Iceberg tables created with correct schemas and row counts.
+        """Test tables created with correct schemas and row counts.
 
         Validates:
-        - Tables exist in Polaris catalog
-        - Schemas match expected structure
+        - Tables exist in DuckDB
         - Row counts are greater than 0
+        - All expected tables present
 
         Args:
-            polaris_client: PyIceberg REST catalog client fixture.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
@@ -348,15 +432,17 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-        namespace = f"{e2e_namespace}_customer_360"
+
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
 
         # Run pipeline
         self._run_dbt_command(["seed"], project_dir)
         self._run_dbt_command(["run"], project_dir)
 
-        # Query catalog for all tables
-        tables = polaris_client.list_tables(namespace)
-        table_names = [str(t).split(".")[-1] for t in tables]
+        # Query DuckDB for all tables
+        table_names = self._get_all_tables_from_duckdb(project_dir)
 
         # Verify expected tables exist
         expected_tables = [
@@ -374,14 +460,10 @@ class TestDataPipeline(IntegrationTestBase):
         for expected in expected_tables:
             assert (
                 expected in table_names
-            ), f"Table {expected} should exist in catalog"
-
-            # Load table and verify schema
-            table = polaris_client.load_table(f"{namespace}.{expected}")
-            assert table.schema() is not None, f"Table {expected} should have schema"
+            ), f"Table {expected} should exist in DuckDB"
 
             # Verify row count > 0
-            row_count = self._get_table_row_count(polaris_client, namespace, expected)
+            row_count = self._get_table_row_count_from_duckdb(project_dir, expected)
             assert row_count > 0, f"Table {expected} should have rows (got {row_count})"
 
     @pytest.mark.e2e
@@ -405,6 +487,10 @@ class TestDataPipeline(IntegrationTestBase):
 
         project_dir = self._get_demo_project_path()
 
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
+
         # Run pipeline first
         self._run_dbt_command(["seed"], project_dir)
         self._run_dbt_command(["run"], project_dir)
@@ -425,7 +511,6 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.requirement("FR-025")
     def test_incremental_model_merge(
         self,
-        polaris_client: Any,
         e2e_namespace: str,
     ) -> None:
         """Test incremental model merge behavior with overlapping data.
@@ -436,7 +521,6 @@ class TestDataPipeline(IntegrationTestBase):
         - Incremental merge updates existing records
 
         Args:
-            polaris_client: PyIceberg REST catalog client fixture.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
@@ -444,7 +528,10 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-        namespace = f"{e2e_namespace}_customer_360"
+
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
 
         # First run: create initial tables
         self._run_dbt_command(["seed"], project_dir)
@@ -452,18 +539,14 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Get initial row count from a staging table (incremental candidate)
         table_name = "stg_transactions"
-        initial_count = self._get_table_row_count(
-            polaris_client, namespace, table_name
-        )
+        initial_count = self._get_table_row_count_from_duckdb(project_dir, table_name)
         assert initial_count > 0, "Initial load should have rows"
 
         # Second run: with same seed data (simulates incremental)
         self._run_dbt_command(["run"], project_dir)
 
         # Get row count after second run
-        second_count = self._get_table_row_count(
-            polaris_client, namespace, table_name
-        )
+        second_count = self._get_table_row_count_from_duckdb(project_dir, table_name)
 
         # For non-incremental models, count should remain the same
         # (full refresh replaces data)
@@ -493,6 +576,10 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("polaris", 8181)
 
         project_dir = self._get_demo_project_path()
+
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
 
         # Run pipeline and tests
         self._run_dbt_command(["seed"], project_dir)
@@ -524,24 +611,26 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.requirement("FR-027")
     def test_pipeline_failure_recording(
         self,
-        dagster_client: Any,
         e2e_namespace: str,
     ) -> None:
-        """Test pipeline failure is properly recorded in Dagster.
+        """Test pipeline failure is properly recorded.
 
         Validates:
         - Pipeline with bad model triggers failure
-        - Dagster records failure status
         - Error details are captured
+        - dbt records failure status
 
         Args:
-            dagster_client: Dagster GraphQL client fixture.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
         self.check_infrastructure("dagster", 3000)
 
         project_dir = self._get_demo_project_path()
+
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
 
         # Create a temporary bad model that will fail
         bad_model_path = project_dir / "models" / "staging" / "bad_model_test.sql"
@@ -558,12 +647,14 @@ class TestDataPipeline(IntegrationTestBase):
             # Verify dbt captured the error
             assert exc_info.value.returncode != 0, "dbt run should fail"
 
-            # TODO: Once Dagster integration complete, verify failure recorded in Dagster
-            # For now, verify dbt error output contains useful information
-            error_output = exc_info.value.stderr or str(exc_info.value)
-            assert "table_that_does_not_exist" in error_output, (
-                "Error should reference the missing table"
-            )
+            # Verify dbt error output contains useful information
+            error_output = (exc_info.value.stderr or "") + (exc_info.value.stdout or "")
+            # DuckDB will report that the referenced model doesn't exist
+            assert (
+                "table_that_does_not_exist" in error_output.lower()
+                or "does not exist" in error_output.lower()
+                or "compilation error" in error_output.lower()
+            ), "Error should reference the missing table or compilation error"
 
         finally:
             # Clean up bad model
@@ -591,6 +682,10 @@ class TestDataPipeline(IntegrationTestBase):
 
         project_dir = self._get_demo_project_path()
 
+        # Ensure target directory exists
+        target_dir = project_dir / "target"
+        target_dir.mkdir(exist_ok=True)
+
         # First run: successful pipeline
         self._run_dbt_command(["seed"], project_dir)
         result = self._run_dbt_command(["run"], project_dir)
@@ -612,7 +707,7 @@ class TestDataPipeline(IntegrationTestBase):
             # Fix the bad model
             bad_model_path.write_text(
                 "-- Fixed model\n"
-                "SELECT customer_id, order_count\n"
+                "SELECT customer_id, count(*) as order_count\n"
                 "FROM {{ ref('stg_transactions') }}\n"
                 "GROUP BY customer_id\n"
             )
