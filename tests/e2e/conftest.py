@@ -9,8 +9,10 @@ All E2E tests require the full platform stack running in K8s (Kind cluster).
 from __future__ import annotations
 
 import os
+import subprocess
 import uuid
 from collections.abc import Callable
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,87 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "e2e: mark test as end-to-end (requires full platform stack)",
     )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Check for common test quality anti-patterns during collection.
+
+    Scans test source code for TQR violations and issues warnings.
+    This is ADVISORY ONLY - does not fail tests.
+
+    Args:
+        config: pytest configuration object.
+        items: List of collected test items.
+    """
+    import inspect
+    import re
+    import warnings
+
+    violations: list[str] = []
+
+    for item in items:
+        if not isinstance(item, pytest.Function):
+            continue
+
+        test_func = item.function
+        test_name = item.nodeid
+
+        try:
+            source = inspect.getsource(test_func)
+        except (OSError, TypeError):
+            # Can't get source (e.g., dynamically generated)
+            continue
+
+        # TQR-001: Bare existence checks (assert X is not None without further checks)
+        if re.search(r"assert\s+\w+\s+is\s+not\s+None", source):
+            # Check if this is the ONLY assertion (crude heuristic)
+            assertion_count = len(re.findall(r"\bassert\s+", source))
+            if assertion_count == 1:
+                violations.append(
+                    f"TQR WARNING: {test_name} - TQR-001 violation: "
+                    "Bare existence check (assert X is not None without behavioral validation)"
+                )
+
+        # TQR-002: Missing data content validation (checks len() > 0 but not content)
+        if re.search(r"assert\s+len\([^)]+\)\s*>\s*0", source):
+            # Check if there's any content validation after the length check
+            if not re.search(r"\[\d+\]|\[.+\]|\.get\(", source):
+                violations.append(
+                    f"TQR WARNING: {test_name} - TQR-002 violation: "
+                    "Length check without data content validation"
+                )
+
+        # TQR-010: dry_run=True in E2E tests
+        if re.search(r"dry_run\s*=\s*True", source):
+            violations.append(
+                f"TQR WARNING: {test_name} - TQR-010 violation: "
+                "dry_run=True found in E2E test (E2E should execute real operations)"
+            )
+
+        # TQR-004: pytest.skip usage
+        if re.search(r"pytest\.skip\(|@pytest\.mark\.skip", source):
+            violations.append(
+                f"TQR WARNING: {test_name} - TQR-004 violation: "
+                "pytest.skip() usage (tests should FAIL, never skip per constitution)"
+            )
+
+    # Emit all warnings
+    for violation in violations:
+        warnings.warn(violation, UserWarning, stacklevel=2)
+
+    # Print summary if violations found
+    if violations:
+        print(f"\n{'=' * 70}")
+        print(f"TQR CHECK SUMMARY: {len(violations)} potential quality issues detected")
+        print("=" * 70)
+        for violation in violations:
+            print(violation)
+        print("=" * 70)
+        print("These are ADVISORY warnings. Review and fix as needed.")
+        print("=" * 70)
 
 
 @pytest.fixture(scope="session")
@@ -55,6 +138,79 @@ def platform_namespace() -> str:
     if env_namespace:
         return env_namespace
     return f"floe-e2e-{uuid.uuid4().hex[:8]}"
+
+
+@pytest.fixture(scope="session")
+def k8s_namespace_teardown(platform_namespace: str) -> Generator[str, None, None]:
+    """Create and teardown K8s namespace for E2E tests.
+
+    Creates a fresh K8s namespace at session start and tears it down after all
+    tests complete, ensuring full isolation between test suites per FR-008.
+
+    Args:
+        platform_namespace: Namespace string from platform_namespace fixture.
+
+    Yields:
+        Kubernetes namespace string for platform services.
+
+    Raises:
+        subprocess.CalledProcessError: If namespace creation fails.
+
+    Example:
+        def test_deployment(k8s_namespace_teardown: str):
+            # Namespace already created, use it
+            namespace = k8s_namespace_teardown
+            kubectl_apply(namespace)
+    """
+    namespace = platform_namespace
+
+    # Create namespace if it doesn't exist
+    try:
+        # Check if namespace exists
+        result = subprocess.run(
+            ["kubectl", "get", "namespace", namespace],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            # Namespace doesn't exist, create it
+            print(f"Creating K8s namespace: {namespace}")
+            subprocess.run(
+                ["kubectl", "create", "namespace", namespace],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            print(f"K8s namespace created: {namespace}")
+        else:
+            print(f"K8s namespace already exists: {namespace}")
+
+    except subprocess.CalledProcessError as e:
+        pytest.fail(
+            f"Failed to create K8s namespace {namespace}: {e.stderr}\n"
+            "Ensure kubectl is installed and cluster is accessible."
+        )
+
+    yield namespace
+
+    # Teardown: delete namespace after all tests complete
+    try:
+        print(f"Tearing down K8s namespace: {namespace}")
+        subprocess.run(
+            ["kubectl", "delete", "namespace", namespace, "--ignore-not-found=true"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout for namespace deletion
+        )
+        print(f"K8s namespace deleted: {namespace}")
+    except subprocess.CalledProcessError as e:
+        # Log error but don't fail teardown (namespace may already be deleted)
+        print(f"Warning: Failed to delete namespace {namespace}: {e.stderr}")
+    except subprocess.TimeoutExpired:
+        print(f"Warning: Namespace deletion timed out for {namespace}")
 
 
 @pytest.fixture(scope="session")
@@ -414,7 +570,7 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def cleanup_duckdb_files() -> None:
+def cleanup_duckdb_files() -> Generator[None, None, None]:
     """Cleanup DuckDB files after all tests in the module complete.
 
     This fixture runs after all test functions in the module and removes

@@ -17,6 +17,27 @@ global:
 # Dagster Configuration (Orchestration)
 # =============================================================================
 dagster:
+  # Demo code locations - Python module-based loading
+  # Each demo product appears as a separate code location in Dagster UI
+  # Data engineers only write: floe.yaml + dbt models
+  # Platform auto-discovers products via definitions.py
+  codeLocations:
+    - name: customer-360
+      pythonModule:
+        moduleName: demo.customer_360.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: iot-telemetry
+      pythonModule:
+        moduleName: demo.iot_telemetry.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: financial-risk
+      pythonModule:
+        moduleName: demo.financial_risk.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+
   # Dagster webserver configuration
   dagsterWebserver:
     replicaCount: 1
@@ -189,6 +210,11 @@ marquez:
     limits:
       cpu: 500m
       memory: 512Mi
+  # Demo uses shared PostgreSQL
+  postgresql:
+    host: ""  # Uses shared PostgreSQL (auto-configured)
+    database: marquez
+    username: floe
 
 # =============================================================================
 # Demo-Specific Configuration

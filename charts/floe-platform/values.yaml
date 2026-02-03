@@ -574,7 +574,10 @@ marquez:
     host: ""  # Auto-configured if postgresql.enabled
     port: 5432
     database: marquez
+    username: floe
+    password: ""  # Use existingSecret in production
     existingSecret: ""
+    existingSecretKey: password
 
 # =============================================================================
 # RBAC Configuration
