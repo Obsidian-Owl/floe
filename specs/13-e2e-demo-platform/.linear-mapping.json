@@ -1,0 +1,362 @@
+{
+  "metadata": {
+    "feature": "13-e2e-demo-platform",
+    "project": "floe-13-e2e-demo-platform",
+    "project_id": "7ab47a9c-a5c3-4810-8717-473fc07cb0d9",
+    "epic_label": "epic:13",
+    "created_at": "2026-02-02T05:15:40.931416+00:00",
+    "last_sync": "2026-02-02T05:15:40.931416+00:00"
+  },
+  "mappings": {
+    "T001": {
+      "linear_id": "3f127ea3-85ea-43f1-93cb-3920e66c02d0",
+      "linear_identifier": "FLO-2293",
+      "title": "T001: Enable Marquez in Helm chart",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2293/t001-enable-marquez-in-helm-chart",
+      "status": "Backlog"
+    },
+    "T002": {
+      "linear_id": "4ef2e279-e28f-4bbe-941d-960c976ef0f1",
+      "linear_identifier": "FLO-2294",
+      "title": "T002: Create demo directory structure",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2294/t002-create-demo-directory-structure",
+      "status": "Backlog"
+    },
+    "T003": {
+      "linear_id": "977a192d-c725-4cad-88ab-f7ea2d68aad2",
+      "linear_identifier": "FLO-2295",
+      "title": "T003: Update tests/e2e/conftest.py with shared fixtures",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2295/t003-update-testse2econftestpy-with-shared-fixtures",
+      "status": "Backlog"
+    },
+    "T004": {
+      "linear_id": "c33ad7b1-e117-46b1-8a99-7cb65c6b44d2",
+      "linear_identifier": "FLO-2296",
+      "title": "T004: Create charts/floe-platform/values-demo.yaml",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2296/t004-create-chartsfloe-platformvalues-demoyaml",
+      "status": "Backlog"
+    },
+    "T005": {
+      "linear_id": "6fc30a36-f7b4-4af0-a4b7-6f06ba35392b",
+      "linear_identifier": "FLO-2297",
+      "title": "T005: Add make demo and make demo-stop targets",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2297/t005-add-make-demo-and-make-demo-stop-targets",
+      "status": "Backlog"
+    },
+    "T006": {
+      "linear_id": "84bc0bda-0c62-4a44-b706-36c584d2abb5",
+      "linear_identifier": "FLO-2298",
+      "title": "T006: Create demo/customer-360/floe.yaml",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2298/t006-create-democustomer-360floeyaml",
+      "status": "Backlog"
+    },
+    "T007": {
+      "linear_id": "7ded3ae7-befa-4108-a9cd-ce307bcc70d0",
+      "linear_identifier": "FLO-2299",
+      "title": "T007: Create seed CSVs for customer-360",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2299/t007-create-seed-csvs-for-customer-360",
+      "status": "Backlog"
+    },
+    "T008": {
+      "linear_id": "af5a98ff-67c9-40d3-8559-e101f5d7fe0e",
+      "linear_identifier": "FLO-2300",
+      "title": "T008: Create staging models for customer-360",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2300/t008-create-staging-models-for-customer-360",
+      "status": "Backlog"
+    },
+    "T009": {
+      "linear_id": "f209129f-efab-489c-8fc2-0ed5700b4346",
+      "linear_identifier": "FLO-2301",
+      "title": "T009: Create intermediate models for customer-360",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2301/t009-create-intermediate-models-for-customer-360",
+      "status": "Backlog"
+    },
+    "T010": {
+      "linear_id": "a2f5f691-f9a5-4408-81fb-e4a01a31c929",
+      "linear_identifier": "FLO-2302",
+      "title": "T010: Create mart model mart_customer_360.sql",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2302/t010-create-mart-model-mart-customer-360sql",
+      "status": "Backlog"
+    },
+    "T011": {
+      "linear_id": "27e6d518-d43e-46ae-9503-1082339abc20",
+      "linear_identifier": "FLO-2303",
+      "title": "T011: Create dbt schema tests for customer-360",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2303/t011-create-dbt-schema-tests-for-customer-360",
+      "status": "Backlog"
+    },
+    "T012": {
+      "linear_id": "4d45991b-6bb6-458d-833d-84a29db17759",
+      "linear_identifier": "FLO-2304",
+      "title": "T012: Create demo/iot-telemetry/floe.yaml",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2304/t012-create-demoiot-telemetryfloeyaml",
+      "status": "Backlog"
+    },
+    "T013": {
+      "linear_id": "924cfae0-c43b-4fc1-83f3-a1b13be457ff",
+      "linear_identifier": "FLO-2305",
+      "title": "T013: Create seed CSVs for iot-telemetry",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2305/t013-create-seed-csvs-for-iot-telemetry",
+      "status": "Backlog"
+    },
+    "T014": {
+      "linear_id": "3122b5b0-501f-4f16-8be4-f0d1409ac099",
+      "linear_identifier": "FLO-2306",
+      "title": "T014: Create staging models for iot-telemetry",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2306/t014-create-staging-models-for-iot-telemetry",
+      "status": "Backlog"
+    },
+    "T015": {
+      "linear_id": "0535cff3-4dc7-4087-b9e2-f47c02d5f75b",
+      "linear_identifier": "FLO-2307",
+      "title": "T015: Create intermediate models for iot-telemetry",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2307/t015-create-intermediate-models-for-iot-telemetry",
+      "status": "Backlog"
+    },
+    "T016": {
+      "linear_id": "0c4f6c3d-2ed1-4dfb-b61e-c45f6f23d405",
+      "linear_identifier": "FLO-2308",
+      "title": "T016: Create mart model mart_equipment_health.sql",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2308/t016-create-mart-model-mart-equipment-healthsql",
+      "status": "Backlog"
+    },
+    "T017": {
+      "linear_id": "ce3e4069-649c-46e9-9e64-48dd171de04b",
+      "linear_identifier": "FLO-2309",
+      "title": "T017: Create dbt schema tests for iot-telemetry",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2309/t017-create-dbt-schema-tests-for-iot-telemetry",
+      "status": "Backlog"
+    },
+    "T018": {
+      "linear_id": "58069671-0d28-4acf-a228-a6894188dbf4",
+      "linear_identifier": "FLO-2310",
+      "title": "T018: Create demo/financial-risk/floe.yaml",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2310/t018-create-demofinancial-riskfloeyaml",
+      "status": "Backlog"
+    },
+    "T019": {
+      "linear_id": "2336d0eb-a6dc-42f9-bd8d-d8b3f384cfa0",
+      "linear_identifier": "FLO-2311",
+      "title": "T019: Create seed CSVs for financial-risk",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2311/t019-create-seed-csvs-for-financial-risk",
+      "status": "Backlog"
+    },
+    "T020": {
+      "linear_id": "b4e9a2fb-6e68-4df3-9aa1-2509670f854d",
+      "linear_identifier": "FLO-2312",
+      "title": "T020: Create staging models for financial-risk",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2312/t020-create-staging-models-for-financial-risk",
+      "status": "Backlog"
+    },
+    "T021": {
+      "linear_id": "a2a3aa57-e0bb-4263-b3a8-7f0daaed66d2",
+      "linear_identifier": "FLO-2313",
+      "title": "T021: Create intermediate models for financial-risk",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2313/t021-create-intermediate-models-for-financial-risk",
+      "status": "Backlog"
+    },
+    "T022": {
+      "linear_id": "acb56d7e-3ed9-4633-abe1-bbe404374fd3",
+      "linear_identifier": "FLO-2314",
+      "title": "T022: Create mart model mart_risk_dashboard.sql",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2314/t022-create-mart-model-mart-risk-dashboardsql",
+      "status": "Backlog"
+    },
+    "T023": {
+      "linear_id": "ec906c4f-5426-40be-acb3-7e46d58d32a5",
+      "linear_identifier": "FLO-2315",
+      "title": "T023: Create dbt schema tests for financial-risk",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2315/t023-create-dbt-schema-tests-for-financial-risk",
+      "status": "Backlog"
+    },
+    "T024a": {
+      "linear_id": "724889c9-3521-48b7-b3ca-b21a68df628d",
+      "linear_identifier": "FLO-2316",
+      "title": "T024a: Add dbt_project.yml for each demo product",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2316/t024a-add-dbt-projectyml-for-each-demo-product",
+      "status": "Backlog"
+    },
+    "T024": {
+      "linear_id": "43e0f30a-8968-442e-9f08-80535dece358",
+      "linear_identifier": "FLO-2317",
+      "title": "T024: Create dbt macro for retention cleanup",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2317/t024-create-dbt-macro-for-retention-cleanup",
+      "status": "Backlog"
+    },
+    "T025": {
+      "linear_id": "440ac4d7-7166-4e3f-99b2-57d892f65a9b",
+      "linear_identifier": "FLO-2318",
+      "title": "T025: Create seed data generator script",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2318/t025-create-seed-data-generator-script",
+      "status": "Backlog"
+    },
+    "T026": {
+      "linear_id": "5c524b9b-1776-405d-8f98-180ffb3c0134",
+      "linear_identifier": "FLO-2319",
+      "title": "T026: Create test_platform_bootstrap.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2319/t026-create-test-platform-bootstrappy",
+      "status": "Backlog"
+    },
+    "T027": {
+      "linear_id": "0eab3078-7a84-48f1-820b-aeeb01659b47",
+      "linear_identifier": "FLO-2320",
+      "title": "T027: Update test-e2e.sh for Marquez service check",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2320/t027-update-test-e2esh-for-marquez-service-check",
+      "status": "Backlog"
+    },
+    "T028": {
+      "linear_id": "ef18a679-362e-4524-806a-660d03ad498a",
+      "linear_identifier": "FLO-2321",
+      "title": "T028: Create test_compilation.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2321/t028-create-test-compilationpy",
+      "status": "Backlog"
+    },
+    "T029": {
+      "linear_id": "8e204195-1d5c-49a1-98b6-68470892f3b5",
+      "linear_identifier": "FLO-2322",
+      "title": "T029: Create test_data_pipeline.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2322/t029-create-test-data-pipelinepy",
+      "status": "Backlog"
+    },
+    "T030": {
+      "linear_id": "60094064-8fd4-4aeb-9c17-290eda4174ce",
+      "linear_identifier": "FLO-2323",
+      "title": "T030: Add auto-trigger health sensor to dagster",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2323/t030-add-auto-trigger-health-sensor-to-dagster",
+      "status": "Backlog"
+    },
+    "T031": {
+      "linear_id": "a6d9fdf0-1a40-4f15-a6b8-99cb04d045d4",
+      "linear_identifier": "FLO-2324",
+      "title": "T031: Add sensor_definition() to OrchestratorPlugin ABC",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2324/t031-add-sensor-definition-to-orchestratorplugin-abc",
+      "status": "Backlog"
+    },
+    "T032": {
+      "linear_id": "5fdc7256-4d52-467e-b479-5559a031bde8",
+      "linear_identifier": "FLO-2325",
+      "title": "T032: Add recurring schedule configuration to Dagster",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2325/t032-add-recurring-schedule-configuration-to-dagster",
+      "status": "Backlog"
+    },
+    "T033": {
+      "linear_id": "365c9562-3cbc-4980-9c6c-4390ae1b1e48",
+      "linear_identifier": "FLO-2326",
+      "title": "T033: Add Iceberg snapshot expiry integration",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2326/t033-add-iceberg-snapshot-expiry-integration",
+      "status": "Backlog"
+    },
+    "T034": {
+      "linear_id": "d1bb09c5-f122-487f-bc5e-53e857fc34e9",
+      "linear_identifier": "FLO-2327",
+      "title": "T034: Add unit tests for auto-trigger sensor",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2327/t034-add-unit-tests-for-auto-trigger-sensor",
+      "status": "Backlog"
+    },
+    "T035": {
+      "linear_id": "1af034a6-fc57-4911-b2bd-455df3a785ba",
+      "linear_identifier": "FLO-2328",
+      "title": "T035: Add unit tests for snapshot expiry retention",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2328/t035-add-unit-tests-for-snapshot-expiry-retention",
+      "status": "Backlog"
+    },
+    "T036": {
+      "linear_id": "1c3b4422-029f-4a06-a1cd-c7467cf71184",
+      "linear_identifier": "FLO-2329",
+      "title": "T036: Create test_observability.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2329/t036-create-test-observabilitypy",
+      "status": "Backlog"
+    },
+    "T037": {
+      "linear_id": "248136bf-7b3d-4a72-864d-5fb08e46bcbe",
+      "linear_identifier": "FLO-2330",
+      "title": "T037: Create test_plugin_system.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2330/t037-create-test-plugin-systempy",
+      "status": "Backlog"
+    },
+    "T038": {
+      "linear_id": "463c601c-22f9-4223-b751-5da7d0f46823",
+      "linear_identifier": "FLO-2331",
+      "title": "T038: Create test_governance.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2331/t038-create-test-governancepy",
+      "status": "Backlog"
+    },
+    "T039": {
+      "linear_id": "f8481a76-d4de-4947-85fb-4960baf441c1",
+      "linear_identifier": "FLO-2332",
+      "title": "T039: Create test_promotion.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2332/t039-create-test-promotionpy",
+      "status": "Backlog"
+    },
+    "T040": {
+      "linear_id": "701d59f6-e157-4ab8-a3a8-5ea1dcb74db8",
+      "linear_identifier": "FLO-2333",
+      "title": "T040: Create test_demo_mode.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2333/t040-create-test-demo-modepy",
+      "status": "Backlog"
+    },
+    "T041": {
+      "linear_id": "3db293bd-5d35-42b4-8d4b-c98a159c0c4f",
+      "linear_identifier": "FLO-2334",
+      "title": "T041: Create Grafana dashboard JSON for pipeline metrics",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2334/t041-create-grafana-dashboard-json-for-pipeline-metrics",
+      "status": "Backlog"
+    },
+    "T042": {
+      "linear_id": "d0c623d3-db88-4e41-beb6-7496582000a3",
+      "linear_identifier": "FLO-2335",
+      "title": "T042: Create Grafana dashboard JSON for data quality",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2335/t042-create-grafana-dashboard-json-for-data-quality",
+      "status": "Backlog"
+    },
+    "T043": {
+      "linear_id": "eb00beb6-e4d2-41fd-90df-872214d65c77",
+      "linear_identifier": "FLO-2336",
+      "title": "T043: Create Grafana dashboard JSON for lineage overview",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2336/t043-create-grafana-dashboard-json-for-lineage-overview",
+      "status": "Backlog"
+    },
+    "T044": {
+      "linear_id": "14d43c6b-1427-4bcc-a934-73f3b7154a19",
+      "linear_identifier": "FLO-2337",
+      "title": "T044: Add Grafana dashboard provisioning to Helm chart",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2337/t044-add-grafana-dashboard-provisioning-to-helm-chart",
+      "status": "Backlog"
+    },
+    "T045": {
+      "linear_id": "d15c58fe-f831-41ea-8e5e-f652c6d8b55e",
+      "linear_identifier": "FLO-2338",
+      "title": "T045: Create test_schema_evolution.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2338/t045-create-test-schema-evolutionpy",
+      "status": "Backlog"
+    },
+    "T046": {
+      "linear_id": "f25451ef-a991-457b-8377-4661f5fd32b3",
+      "linear_identifier": "FLO-2339",
+      "title": "T046: Remove skeleton test_demo_flow.py",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2339/t046-remove-skeleton-test-demo-flowpy",
+      "status": "Backlog"
+    },
+    "T047": {
+      "linear_id": "c4f9188b-d886-4bcc-af97-f797e766ac3e",
+      "linear_identifier": "FLO-2340",
+      "title": "T047: Update demo/README.md with quickstart",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2340/t047-update-demoreadmemd-with-quickstart",
+      "status": "Backlog"
+    },
+    "T049": {
+      "linear_id": "ed5da8a3-f027-431d-99e4-c082da751d1f",
+      "linear_identifier": "FLO-2341",
+      "title": "T049: Run make test-e2e and verify all E2E tests pass",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2341/t049-run-make-test-e2e-and-verify-all-e2e-tests-pass",
+      "status": "Backlog"
+    },
+    "T050": {
+      "linear_id": "aa823235-a82d-4579-b4f5-979192035f72",
+      "linear_identifier": "FLO-2342",
+      "title": "T050: Run traceability verification",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2342/t050-run-traceability-verification",
+      "status": "Backlog"
+    }
+  }
+}
