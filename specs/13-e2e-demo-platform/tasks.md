@@ -17,11 +17,11 @@
 
 **Purpose**: Enable Marquez, create demo directory structure, update shared test infrastructure
 
-- [ ] T001 Enable Marquez in Helm chart by setting `marquez.enabled: true` in charts/floe-platform/values.yaml
-- [ ] T002 [P] Create demo directory structure: demo/customer-360/, demo/iot-telemetry/, demo/financial-risk/ each with seeds/ and models/staging/, models/intermediate/, models/marts/ subdirectories
-- [ ] T003 [P] Update tests/e2e/conftest.py with shared fixtures: `platform_namespace`, `compiled_artifacts`, `dagster_client`, `polaris_client`, `marquez_client`, `jaeger_client`
-- [ ] T004 [P] Create charts/floe-platform/values-demo.yaml with demo-specific overrides (Marquez enabled, 10-min schedule, resource limits for Kind)
-- [ ] T005 Add `make demo` and `make demo-stop` targets to Makefile (bootstrap + deploy 3 products + open dashboards)
+- [x] T001 Enable Marquez in Helm chart by setting `marquez.enabled: true` in charts/floe-platform/values.yaml
+- [x] T002 [P] Create demo directory structure: demo/customer-360/, demo/iot-telemetry/, demo/financial-risk/ each with seeds/ and models/staging/, models/intermediate/, models/marts/ subdirectories
+- [x] T003 [P] Update tests/e2e/conftest.py with shared fixtures: `platform_namespace`, `compiled_artifacts`, `dagster_client`, `polaris_client`, `marquez_client`, `jaeger_client`
+- [x] T004 [P] Create charts/floe-platform/values-demo.yaml with demo-specific overrides (Marquez enabled, 10-min schedule, resource limits for Kind)
+- [x] T005 Add `make demo` and `make demo-stop` targets to Makefile (bootstrap + deploy 3 products + open dashboards)
 - [ ] T048 [P] Add namespace teardown fixture to tests/e2e/conftest.py: session-scoped fixture that creates a fresh K8s namespace per test class and tears it down after (kubectl delete namespace). Ensures full isolation between test suites per FR-008 clarification.
 - [ ] T065 [P] Ensure Marquez DB backend is configurable via manifest.yaml lineage section (FR-049): Update charts/floe-platform/values.yaml and values-demo.yaml to support `marquez.database` config (default: shared PostgreSQL). Platform engineers MUST be able to override this.
 
@@ -35,39 +35,39 @@
 
 ### customer-360 (Retail)
 
-- [ ] T006 [P] Create demo/customer-360/floe.yaml with FloeSpec config (bronze/silver/gold pipeline, compute=duckdb, storage=iceberg via Polaris S3FileIO + MinIO, 10-min schedule)
-- [ ] T007 [P] Create seed CSVs in demo/customer-360/seeds/: raw_customers.csv (500 rows), raw_transactions.csv (1000 rows), raw_support_tickets.csv (300 rows) with _loaded_at timestamp column
-- [ ] T008 [P] Create staging models in demo/customer-360/models/staging/: stg_crm_customers.sql, stg_transactions.sql, stg_support_tickets.sql
-- [ ] T009 [P] Create intermediate models in demo/customer-360/models/intermediate/: int_customer_orders.sql, int_customer_support.sql
-- [ ] T010 [P] Create mart model in demo/customer-360/models/marts/mart_customer_360.sql
-- [ ] T011 [P] Create dbt schema tests in demo/customer-360/models/schema.yml (not_null, unique, accepted_values per layer)
+- [x] T006 [P] Create demo/customer-360/floe.yaml with FloeSpec config (bronze/silver/gold pipeline, compute=duckdb, storage=iceberg via Polaris S3FileIO + MinIO, 10-min schedule)
+- [x] T007 [P] Create seed CSVs in demo/customer-360/seeds/: raw_customers.csv (500 rows), raw_transactions.csv (1000 rows), raw_support_tickets.csv (300 rows) with _loaded_at timestamp column
+- [x] T008 [P] Create staging models in demo/customer-360/models/staging/: stg_crm_customers.sql, stg_transactions.sql, stg_support_tickets.sql
+- [x] T009 [P] Create intermediate models in demo/customer-360/models/intermediate/: int_customer_orders.sql, int_customer_support.sql
+- [x] T010 [P] Create mart model in demo/customer-360/models/marts/mart_customer_360.sql
+- [x] T011 [P] Create dbt schema tests in demo/customer-360/models/schema.yml (not_null, unique, accepted_values per layer)
 
 ### iot-telemetry (Manufacturing)
 
-- [ ] T012 [P] Create demo/iot-telemetry/floe.yaml with FloeSpec config (sensor pipeline, compute=duckdb, storage=iceberg via Polaris S3FileIO + MinIO, 10-min schedule)
-- [ ] T013 [P] Create seed CSVs in demo/iot-telemetry/seeds/: raw_sensors.csv (200 rows), raw_readings.csv (1000 rows), raw_maintenance_log.csv (100 rows) with _loaded_at timestamp column
-- [ ] T014 [P] Create staging models in demo/iot-telemetry/models/staging/: stg_sensors.sql, stg_readings.sql, stg_maintenance.sql
-- [ ] T015 [P] Create intermediate models in demo/iot-telemetry/models/intermediate/: int_sensor_metrics.sql, int_anomaly_detection.sql
-- [ ] T016 [P] Create mart model in demo/iot-telemetry/models/marts/mart_equipment_health.sql
-- [ ] T017 [P] Create dbt schema tests in demo/iot-telemetry/models/schema.yml
+- [x] T012 [P] Create demo/iot-telemetry/floe.yaml with FloeSpec config (sensor pipeline, compute=duckdb, storage=iceberg via Polaris S3FileIO + MinIO, 10-min schedule)
+- [x] T013 [P] Create seed CSVs in demo/iot-telemetry/seeds/: raw_sensors.csv (200 rows), raw_readings.csv (1000 rows), raw_maintenance_log.csv (100 rows) with _loaded_at timestamp column
+- [x] T014 [P] Create staging models in demo/iot-telemetry/models/staging/: stg_sensors.sql, stg_readings.sql, stg_maintenance.sql
+- [x] T015 [P] Create intermediate models in demo/iot-telemetry/models/intermediate/: int_sensor_metrics.sql, int_anomaly_detection.sql
+- [x] T016 [P] Create mart model in demo/iot-telemetry/models/marts/mart_equipment_health.sql
+- [x] T017 [P] Create dbt schema tests in demo/iot-telemetry/models/schema.yml
 
 ### financial-risk (Finance)
 
-- [ ] T018 [P] Create demo/financial-risk/floe.yaml with FloeSpec config (risk pipeline, compute=duckdb, storage=iceberg via Polaris S3FileIO + MinIO, 10-min schedule)
-- [ ] T019 [P] Create seed CSVs in demo/financial-risk/seeds/: raw_positions.csv (500 rows), raw_market_data.csv (1000 rows), raw_counterparties.csv (100 rows) with _loaded_at timestamp column
-- [ ] T020 [P] Create staging models in demo/financial-risk/models/staging/: stg_positions.sql, stg_market_data.sql, stg_counterparties.sql
-- [ ] T021 [P] Create intermediate models in demo/financial-risk/models/intermediate/: int_portfolio_risk.sql, int_counterparty_exposure.sql
-- [ ] T022 [P] Create mart model in demo/financial-risk/models/marts/mart_risk_dashboard.sql
-- [ ] T023 [P] Create dbt schema tests in demo/financial-risk/models/schema.yml
+- [x] T018 [P] Create demo/financial-risk/floe.yaml with FloeSpec config (risk pipeline, compute=duckdb, storage=iceberg via Polaris S3FileIO + MinIO, 10-min schedule)
+- [x] T019 [P] Create seed CSVs in demo/financial-risk/seeds/: raw_positions.csv (500 rows), raw_market_data.csv (1000 rows), raw_counterparties.csv (100 rows) with _loaded_at timestamp column
+- [x] T020 [P] Create staging models in demo/financial-risk/models/staging/: stg_positions.sql, stg_market_data.sql, stg_counterparties.sql
+- [x] T021 [P] Create intermediate models in demo/financial-risk/models/intermediate/: int_portfolio_risk.sql, int_counterparty_exposure.sql
+- [x] T022 [P] Create mart model in demo/financial-risk/models/marts/mart_risk_dashboard.sql
+- [x] T023 [P] Create dbt schema tests in demo/financial-risk/models/schema.yml
 
 ### dbt Project Configuration
 
-- [ ] T024a [P] Add dbt_project.yml for each demo product (demo/customer-360/dbt_project.yml, demo/iot-telemetry/dbt_project.yml, demo/financial-risk/dbt_project.yml). Required before compilation (Phase 4).
+- [x] T024a [P] Add dbt_project.yml for each demo product (demo/customer-360/dbt_project.yml, demo/iot-telemetry/dbt_project.yml, demo/financial-risk/dbt_project.yml). Required before compilation (Phase 4).
 
 ### Data Retention
 
-- [ ] T024 Create dbt macro for retention cleanup in demo/macros/retention_cleanup.sql (DELETE WHERE _loaded_at < now() - interval '1 hour') applied as post-hook to all models
-- [ ] T025 [P] Create seed data generator script in demo/scripts/generate_seeds.py supporting FLOE_DEMO_SEED_SCALE env var (small=default, medium, large). Run with `uv run python demo/scripts/generate_seeds.py`
+- [x] T024 Create dbt macro for retention cleanup in demo/macros/retention_cleanup.sql (DELETE WHERE _loaded_at < now() - interval '1 hour') applied as post-hook to all models
+- [x] T025 [P] Create seed data generator script in demo/scripts/generate_seeds.py supporting FLOE_DEMO_SEED_SCALE env var (small=default, medium, large). Run with `uv run python demo/scripts/generate_seeds.py`
 
 **Checkpoint**: All 3 demo data products ready with seeds, models, tests, and retention. Ready for E2E testing.
 
@@ -83,7 +83,7 @@
 
 ### Tests
 
-- [ ] T026 [US1] Create tests/e2e/test_platform_bootstrap.py with TestPlatformBootstrap class inheriting IntegrationTestBase:
+- [x] T026 [US1] Create tests/e2e/test_platform_bootstrap.py with TestPlatformBootstrap class inheriting IntegrationTestBase:
   - test_all_pods_ready (FR-001, FR-002): Deploy floe-platform chart, verify all pods Ready within 120s
   - test_nodeport_services_respond (FR-003): Query each NodePort (Dagster:3000, Polaris:8181, MinIO:9000/9001, Jaeger:16686, Grafana:3001, Prometheus:9090, Marquez:5001)
   - test_postgresql_databases_exist (FR-004): Verify dagster and polaris databases with correct schemas
@@ -94,7 +94,7 @@
 
 ### Implementation
 
-- [ ] T027 [US1] Update testing/ci/test-e2e.sh to check for Marquez service in addition to existing checks (FR-008)
+- [x] T027 [US1] Update testing/ci/test-e2e.sh to check for Marquez service in addition to existing checks (FR-008)
 
 **Checkpoint**: Platform bootstrap validated. All services healthy including Marquez.
 
@@ -110,7 +110,7 @@
 
 ### Tests
 
-- [ ] T028 [US2] Create tests/e2e/test_compilation.py with TestCompilation class:
+- [x] T028 [US2] Create tests/e2e/test_compilation.py with TestCompilation class:
   - test_compile_customer_360 (FR-010): Compile demo/customer-360/floe.yaml, validate CompiledArtifacts v0.5.0
   - test_compile_iot_telemetry (FR-010): Compile demo/iot-telemetry/floe.yaml
   - test_compile_financial_risk (FR-010): Compile demo/financial-risk/floe.yaml
@@ -137,7 +137,7 @@
 
 ### Tests
 
-- [ ] T029 [US3] Create tests/e2e/test_data_pipeline.py with TestDataPipeline class inheriting IntegrationTestBase:
+- [x] T029 [US3] Create tests/e2e/test_data_pipeline.py with TestDataPipeline class inheriting IntegrationTestBase:
   - test_dbt_seed_loads_data (FR-023): Run dbt seed for customer-360, verify tables populated
   - test_pipeline_execution_order (FR-020): Trigger Dagster run, verify models execute in dependency order
   - test_medallion_layers (FR-021): Verify Bronze→Silver→Gold transforms produce correct output
@@ -151,12 +151,12 @@
 
 ### Implementation
 
-- [ ] T030 [US3] Add auto-trigger health sensor to plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/sensors.py (FR-029, FR-033): SensorDefinition that checks platform service health and triggers first pipeline run
-- [ ] T031 [US3] Add sensor_definition() method to OrchestratorPlugin ABC in packages/floe-core/src/floe_core/plugins/orchestrator.py
-- [ ] T032 [US3] Add recurring schedule configuration (10-min default) to DagsterOrchestratorPlugin in plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/plugin.py (FR-030)
-- [ ] T033 [US3] Add Iceberg snapshot expiry integration to floe-iceberg for demo retention (FR-032): Configure keep_last=6 snapshots in packages/floe-iceberg/src/floe_iceberg/_snapshot_manager.py
-- [ ] T034 [US3] Add unit tests for auto-trigger sensor in plugins/floe-orchestrator-dagster/tests/unit/test_health_sensor.py
-- [ ] T035 [US3] Add unit tests for snapshot expiry retention config in packages/floe-iceberg/tests/unit/test_snapshot_retention.py
+- [x] T030 [US3] Add auto-trigger health sensor to plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/sensors.py (FR-029, FR-033): SensorDefinition that checks platform service health and triggers first pipeline run
+- [x] T031 [US3] Add sensor_definition() method to OrchestratorPlugin ABC in packages/floe-core/src/floe_core/plugins/orchestrator.py
+- [x] T032 [US3] Add recurring schedule configuration (10-min default) to DagsterOrchestratorPlugin in plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/plugin.py (FR-030)
+- [x] T033 [US3] Add Iceberg snapshot expiry integration to floe-iceberg for demo retention (FR-032): Configure keep_last=6 snapshots in packages/floe-iceberg/src/floe_iceberg/_snapshot_manager.py
+- [x] T034 [US3] Add unit tests for auto-trigger sensor in plugins/floe-orchestrator-dagster/tests/unit/test_health_sensor.py
+- [x] T035 [US3] Add unit tests for snapshot expiry retention config in packages/floe-iceberg/tests/unit/test_snapshot_retention.py
 
 **Checkpoint**: Complete data pipeline execution validated. Seeds → Staging → Intermediate → Marts working for all 3 products.
 
@@ -172,7 +172,7 @@
 
 ### Tests
 
-- [ ] T036 [P] [US4] Create tests/e2e/test_observability.py with TestObservability class inheriting IntegrationTestBase:
+- [x] T036 [P] [US4] Create tests/e2e/test_observability.py with TestObservability class inheriting IntegrationTestBase:
   - test_otel_traces_in_jaeger (FR-040, FR-047): Run pipeline, query Jaeger for traces with span-per-model
   - test_openlineage_events_in_marquez (FR-041, FR-048): Query Marquez API for START/COMPLETE events at all 4 emission points
   - test_trace_lineage_correlation (FR-042): Verify trace_id matches between OTel spans and OpenLineage events
@@ -195,7 +195,7 @@
 
 ### Tests
 
-- [ ] T037 [P] [US5] Create tests/e2e/test_plugin_system.py with TestPluginSystem class:
+- [x] T037 [P] [US5] Create tests/e2e/test_plugin_system.py with TestPluginSystem class:
   - test_all_plugin_types_discoverable (FR-050): Load PluginRegistry.discover_all(), verify all 15 plugin ABCs defined and at least 12 have implementations (Ingestion, Semantic, Storage are ABC-only)
   - test_abc_compliance (FR-051): For each plugin type, instantiate and verify all abstract methods implemented
   - test_plugin_swap_via_config (FR-052): Compile with compute=duckdb, then compute=spark, verify both succeed
@@ -218,7 +218,7 @@
 
 ### Tests
 
-- [ ] T038 [P] [US6] Create tests/e2e/test_governance.py with TestGovernance class inheriting IntegrationTestBase:
+- [x] T038 [P] [US6] Create tests/e2e/test_governance.py with TestGovernance class inheriting IntegrationTestBase:
   - test_network_policies_restrict_traffic (FR-060): Deploy test pod, attempt unauthorized connection, verify denied
   - test_secrets_not_hardcoded (FR-061): Inspect all pod specs, verify secrets via K8s Secret refs only
   - test_polaris_rbac_enforcement (FR-062): Create restricted principal, attempt TABLE_READ, verify 403
@@ -242,7 +242,7 @@
 
 ### Tests
 
-- [ ] T039 [US7] Create tests/e2e/test_promotion.py with TestPromotion class inheriting IntegrationTestBase:
+- [x] T039 [US7] Create tests/e2e/test_promotion.py with TestPromotion class inheriting IntegrationTestBase:
   - test_create_environment_namespaces: Create floe-dev, floe-staging, floe-prod K8s namespaces
   - test_promote_dev_to_staging (FR-070, FR-071): Compile artifact, deploy to floe-dev, promote to floe-staging with gate execution
   - test_promotion_gate_blocks_on_failure (FR-072): Deploy OPA with deny policy, verify promotion blocked by real gate service (no mocks)
@@ -264,7 +264,7 @@
 
 ### Tests
 
-- [ ] T040 [US8] Create tests/e2e/test_demo_mode.py with TestDemoMode class inheriting IntegrationTestBase:
+- [x] T040 [US8] Create tests/e2e/test_demo_mode.py with TestDemoMode class inheriting IntegrationTestBase:
   - test_make_demo_completes (FR-087, FR-088): Run `make demo`, verify completion within 10 minutes
   - test_three_products_visible_in_dagster (FR-080, FR-081, FR-082): Verify 3 data products in Dagster UI
   - test_dagster_asset_lineage (FR-084): Verify Bronze→Silver→Gold lineage graphs per product
@@ -275,10 +275,10 @@
 
 ### Implementation
 
-- [ ] T041 [P] [US8] Create Grafana dashboard JSON for pipeline metrics in charts/floe-platform/dashboards/pipeline-metrics.json
-- [ ] T042 [P] [US8] Create Grafana dashboard JSON for data quality in charts/floe-platform/dashboards/data-quality.json
-- [ ] T043 [P] [US8] Create Grafana dashboard JSON for lineage overview in charts/floe-platform/dashboards/lineage-overview.json
-- [ ] T044 [US8] Add Grafana dashboard provisioning to Helm chart in charts/floe-platform/templates/grafana-dashboards-configmap.yaml
+- [x] T041 [P] [US8] Create Grafana dashboard JSON for pipeline metrics in charts/floe-platform/dashboards/pipeline-metrics.json
+- [x] T042 [P] [US8] Create Grafana dashboard JSON for data quality in charts/floe-platform/dashboards/data-quality.json
+- [x] T043 [P] [US8] Create Grafana dashboard JSON for lineage overview in charts/floe-platform/dashboards/lineage-overview.json
+- [x] T044 [US8] Add Grafana dashboard provisioning to Helm chart in charts/floe-platform/templates/grafana-dashboards-configmap.yaml
 
 **Checkpoint**: Live demo mode fully functional. `make demo` runs 3 products with observable dashboards.
 
@@ -292,7 +292,7 @@
 
 ### Tests
 
-- [ ] T045 [US9] Create tests/e2e/test_schema_evolution.py with TestSchemaEvolution class inheriting IntegrationTestBase:
+- [x] T045 [US9] Create tests/e2e/test_schema_evolution.py with TestSchemaEvolution class inheriting IntegrationTestBase:
   - test_multi_product_no_conflicts (FR-093): Run all 3 products simultaneously, verify no resource conflicts or namespace collisions
   - test_polaris_namespace_isolation (FR-093): Verify each product has its own Polaris namespace with isolated tables and independent schema evolution
   - test_iceberg_schema_evolution_add_column (FR-090): Add column to existing Iceberg table (v1→v2), verify old queries return null for new column, new queries can use it
@@ -309,8 +309,8 @@
 
 **Purpose**: Final cleanup, skeleton removal, documentation
 
-- [ ] T046 Remove skeleton test_demo_flow.py (replace pytest.fail placeholders with reference to new test files) in tests/e2e/test_demo_flow.py
-- [ ] T047 [P] Update demo/README.md with quickstart instructions for running all 3 demo products
+- [x] T046 Remove skeleton test_demo_flow.py (replace pytest.fail placeholders with reference to new test files) in tests/e2e/test_demo_flow.py
+- [x] T047 [P] Update demo/README.md with quickstart instructions for running all 3 demo products
 - [ ] T049 Run `make test-e2e` and verify all E2E tests pass with 100% requirement traceability
 - [ ] T050 Run `uv run python -m testing.traceability --all --threshold 100` to verify traceability coverage
 
