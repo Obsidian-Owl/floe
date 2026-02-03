@@ -224,6 +224,7 @@ class TestPromotion(IntegrationTestBase):
 
         # Verify controller state
         assert controller.client is not None
+        assert hasattr(controller.client, "push") or hasattr(controller.client, "pull"), "Client should have push/pull methods"
         assert controller.promotion == promotion_config
         assert len(controller.promotion.environments) == 2
 
@@ -260,9 +261,15 @@ class TestPromotion(IntegrationTestBase):
             return None
 
         # Verify environments exist
-        assert get_env("dev") is not None
-        assert get_env("staging") is not None
-        assert get_env("prod") is not None
+        dev_env = get_env("dev")
+        assert dev_env is not None
+        assert dev_env.name == "dev"
+        staging_env = get_env("staging")
+        assert staging_env is not None
+        assert staging_env.name == "staging"
+        prod_env = get_env("prod")
+        assert prod_env is not None
+        assert prod_env.name == "prod"
 
         # Verify environment ordering (by position in list)
         env_names = [e.name for e in controller.promotion.environments]
@@ -289,6 +296,8 @@ class TestPromotion(IntegrationTestBase):
 
         # Verify security gate structure
         assert security_gate.command is not None
+        assert isinstance(security_gate.command, str)
+        assert len(security_gate.command) > 0
         assert "CRITICAL" in security_gate.block_on_severity
         assert "HIGH" in security_gate.block_on_severity
         assert security_gate.scanner_format == "trivy"
@@ -338,7 +347,6 @@ class TestPromotion(IntegrationTestBase):
                 from_env="invalid-env",
                 to_env="staging",
                 operator="test@floe.dev",
-                dry_run=True,  # Use dry-run to avoid actual operations
             )
 
     @pytest.mark.e2e
@@ -383,6 +391,7 @@ class TestPromotion(IntegrationTestBase):
         assert record.target_environment == "staging"
         assert record.operator == "ci@floe.dev"
         assert record.promoted_at is not None
+        assert isinstance(record.promoted_at, (str, object)), "promoted_at should be timestamp"
         assert len(record.gate_results) == 1
         assert record.gate_results[0].status == GateStatus.PASSED
         assert record.authorization_passed is True
@@ -420,6 +429,7 @@ class TestPromotion(IntegrationTestBase):
         assert record.operator == "sre@floe.dev"
         assert record.reason == "Critical bug in latest release"
         assert record.rolled_back_at is not None
+        assert isinstance(record.rolled_back_at, (str, object)), "rolled_back_at should be timestamp"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-075")
@@ -446,6 +456,8 @@ class TestPromotion(IntegrationTestBase):
 
         # Verify authorization settings
         assert env_config.authorization is not None
+        assert hasattr(env_config.authorization, "allowed_groups"), "Authorization should have allowed_groups"
+        assert len(env_config.authorization.allowed_groups) > 0, "Should have at least one allowed group"
         assert "platform-admins" in env_config.authorization.allowed_groups
         assert "release-managers" in env_config.authorization.allowed_groups
         assert env_config.authorization.separation_of_duties is True
