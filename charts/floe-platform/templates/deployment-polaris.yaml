@@ -100,11 +100,19 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            - name: work
+              mountPath: /work
+            - name: home
+              mountPath: /home/jboss
       volumes:
         - name: config
           configMap:
             name: {{ include "floe-platform.polaris.fullname" . }}-config
         - name: tmp
+          emptyDir: {}
+        - name: work
+          emptyDir: {}
+        - name: home
           emptyDir: {}
       {{- with .Values.polaris.nodeSelector }}
       nodeSelector:

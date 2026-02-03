@@ -116,6 +116,21 @@ polaris:
   service:
     type: ClusterIP
     port: 8181
+  # Adjusted probes for test environment (slower startup)
+  livenessProbe:
+    httpGet:
+      path: /q/health/live
+      port: management
+    initialDelaySeconds: 45
+    periodSeconds: 10
+    failureThreshold: 6
+  readinessProbe:
+    httpGet:
+      path: /q/health/ready
+      port: management
+    initialDelaySeconds: 20
+    periodSeconds: 5
+    failureThreshold: 12
 
 # =============================================================================
 # PostgreSQL Configuration (Test Database)
