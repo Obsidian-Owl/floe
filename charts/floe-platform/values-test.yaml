@@ -191,13 +191,43 @@ otel:
       memory: 256Mi
 
 # =============================================================================
-# Observability Components (Disabled for Speed)
+# Observability Components (Enabled by Default)
 # =============================================================================
 marquez:
-  enabled: false
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 jaeger:
-  enabled: false
+  enabled: true
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  collector:
+    enabled: false
+  query:
+    enabled: false
+  agent:
+    enabled: false
+  cassandra:
+    persistence:
+      enabled: false
+  storage:
+    type: memory
 
 prometheus:
   enabled: false

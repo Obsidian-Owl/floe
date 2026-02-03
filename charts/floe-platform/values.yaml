@@ -335,18 +335,18 @@ otel:
       # Debug exporter (for development)
       debug:
         verbosity: detailed
-      # To add OTLP export, override in environment-specific values:
-      #   otlp:
-      #     endpoint: "http://jaeger:4317"
-      #     tls:
-      #       insecure: true
+      # OTLP export to Jaeger (enabled when jaeger.enabled=true)
+      otlp/jaeger:
+        endpoint: "{{ .Release.Name }}-jaeger-collector:4317"
+        tls:
+          insecure: true
 
     service:
       pipelines:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug]
+          exporters: [debug, otlp/jaeger]
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
@@ -479,6 +479,64 @@ minio:
     ports:
       api: 9000
       console: 9001
+
+# =============================================================================
+# Jaeger Configuration (Distributed Tracing - Observability)
+# =============================================================================
+jaeger:
+  # Enable Jaeger deployment for trace collection
+  enabled: true
+
+  # Disable Cassandra provisioning - use memory storage
+  provisionDataStore:
+    cassandra: false
+
+  # Use all-in-one deployment for dev/test (memory storage)
+  # For production, configure external Jaeger with Cassandra/Elasticsearch
+  allInOne:
+    enabled: true
+    image:
+      repository: jaegertracing/all-in-one
+      tag: "1.54"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Collector configuration
+  collector:
+    enabled: false  # Using all-in-one
+
+  # Query service configuration
+  query:
+    enabled: false  # Using all-in-one
+
+  # Agent configuration
+  agent:
+    enabled: false  # Using sidecar injection or OTel collector
+
+  # Disable Cassandra persistence (using memory)
+  cassandra:
+    persistence:
+      enabled: false
+
+  # Storage backend (all-in-one uses memory by default)
+  storage:
+    type: memory  # Use memory for dev/test, badger or elasticsearch for prod
+
+  # Service ports
+  service:
+    collector:
+      otlp:
+        grpc:
+          port: 4317
+        http:
+          port: 4318
+    query:
+      port: 16686
 
 # =============================================================================
 # Marquez Configuration (OpenLineage - Optional)

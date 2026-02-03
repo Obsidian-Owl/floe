@@ -83,6 +83,7 @@ cleanup_port_forwards() {
     [[ -n "${MINIO_UI_PF_PID:-}" ]] && kill "${MINIO_UI_PF_PID}" 2>/dev/null || true
     [[ -n "${OTEL_PF_PID:-}" ]] && kill "${OTEL_PF_PID}" 2>/dev/null || true
     [[ -n "${MARQUEZ_PF_PID:-}" ]] && kill "${MARQUEZ_PF_PID}" 2>/dev/null || true
+    [[ -n "${JAEGER_PF_PID:-}" ]] && kill "${JAEGER_PF_PID}" 2>/dev/null || true
     [[ -n "${POSTGRES_PF_PID:-}" ]] && kill "${POSTGRES_PF_PID}" 2>/dev/null || true
 }
 
@@ -139,10 +140,16 @@ MINIO_UI_PF_PID=$!
 kubectl port-forward svc/floe-platform-otel 4317:4317 -n "${TEST_NAMESPACE}" &
 OTEL_PF_PID=$!
 
-# Optional: Marquez lineage service (if deployed)
-if kubectl get svc marquez -n "${TEST_NAMESPACE}" &>/dev/null; then
-    kubectl port-forward svc/marquez 5001:5001 -n "${TEST_NAMESPACE}" &
+# Marquez lineage service (if deployed)
+if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; then
+    kubectl port-forward svc/floe-platform-marquez 5001:5001 -n "${TEST_NAMESPACE}" &
     MARQUEZ_PF_PID=$!
+fi
+
+# Jaeger query service (if deployed)
+if kubectl get svc floe-platform-jaeger-query -n "${TEST_NAMESPACE}" &>/dev/null; then
+    kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n "${TEST_NAMESPACE}" &
+    JAEGER_PF_PID=$!
 fi
 
 # PostgreSQL (for direct DB access tests if needed)
@@ -155,6 +162,8 @@ wait_for_port localhost 8181 15
 wait_for_port localhost 9000 15
 wait_for_port localhost 4317 15
 wait_for_port localhost 5432 15
+wait_for_port localhost 5001 15 || true  # Marquez optional
+wait_for_port localhost 16686 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
 echo ""

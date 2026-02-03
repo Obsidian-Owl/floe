@@ -148,6 +148,34 @@ minio:
   defaultBuckets: "floe-data,floe-artifacts"
 
 # =============================================================================
+# Jaeger Configuration (Distributed Tracing - Demo Visualization)
+# =============================================================================
+jaeger:
+  enabled: true
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  collector:
+    enabled: false
+  query:
+    enabled: false
+  agent:
+    enabled: false
+  cassandra:
+    persistence:
+      enabled: false
+  storage:
+    type: memory
+
+# =============================================================================
 # Marquez Configuration (OpenLineage - Demo Visualization)
 # =============================================================================
 marquez:
