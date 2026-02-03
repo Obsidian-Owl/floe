@@ -47,7 +47,7 @@ class TestSchemaEvolution(IntegrationTestBase):
         Raises:
             AssertionError: If conflicts detected or products fail.
         """
-        products = ["customer-360", "sales-analytics", "inventory-insights"]
+        products = ["customer-360", "iot-telemetry", "financial-risk"]
 
         # Verify all products loaded
         query = """
@@ -140,8 +140,8 @@ class TestSchemaEvolution(IntegrationTestBase):
 
         Validates:
         - customer-360 namespace exists
-        - sales-analytics namespace exists
-        - inventory-insights namespace exists
+        - iot-telemetry namespace exists
+        - financial-risk namespace exists
         - Namespaces are isolated (no cross-contamination)
 
         Args:
@@ -153,8 +153,8 @@ class TestSchemaEvolution(IntegrationTestBase):
         # Expected demo product namespaces
         expected_namespaces = {
             "customer_360",
-            "sales_analytics",
-            "inventory_insights",
+            "iot_telemetry",
+            "financial_risk",
         }
 
         # Create demo product namespaces if they don't exist

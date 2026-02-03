@@ -91,8 +91,8 @@ class TestDemoMode(IntegrationTestBase):
 
         Validates:
         - customer-360 product visible
-        - sales-analytics product visible
-        - inventory-insights product visible
+        - iot-telemetry product visible
+        - financial-risk product visible
         - Each product has Bronze, Silver, Gold assets
 
         Args:
@@ -131,7 +131,7 @@ class TestDemoMode(IntegrationTestBase):
 
         # Verify three products exist
         product_names = {repo["name"] for repo in repos}
-        expected_products = {"customer-360", "sales-analytics", "inventory-insights"}
+        expected_products = {"customer-360", "iot-telemetry", "financial-risk"}
 
         assert expected_products.issubset(product_names), (
             f"Missing products. Expected: {expected_products}, Found: {product_names}"
@@ -188,7 +188,7 @@ class TestDemoMode(IntegrationTestBase):
         """
         from dagster_graphql import DagsterGraphQLClientError
 
-        products = ["customer-360", "sales-analytics", "inventory-insights"]
+        products = ["customer-360", "iot-telemetry", "financial-risk"]
 
         for product in products:
             # Query asset dependencies
