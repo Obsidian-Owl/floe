@@ -322,9 +322,21 @@
 
 **CRITICAL**: Phases 3-11 create the test files. Phase 13 hardens them against anti-patterns identified during research (test quality score was 20/100 before this epic).
 
-### GAP Coverage Tasks
+### Triage Protocol (NON-NEGOTIABLE)
 
-- [ ] T051 [US3] Add test_auto_trigger_sensor_e2e to tests/e2e/test_data_pipeline.py (GAP-001, FR-029): Deploy pipeline → health sensor detects all services healthy → fires RunRequest → Dagster run completes. Full sensor execution, not mock.
+When running tests in this phase, every failure MUST be classified and handled according to this protocol. **Do not apply quick fixes. Do not weaken assertions. Be slow and methodical.**
+
+| Category | Symptom | Action | Allowed Changes |
+|----------|---------|--------|-----------------|
+| **INFRA** | Test config wrong, fixture misconfigured, missing K8s resource, wrong port/URL | Fix the infrastructure or test config | Config files, fixtures, setup code. **NEVER loosen assertions.** |
+| **COMPLEX** | Root cause unclear, spans multiple systems, requires architectural investigation | Raise GitHub issue with diagnosis | None. Document findings in the issue. |
+| **PROD-BUG** | Production code has a gap, bug, or missing feature that the test correctly exposes | Raise GitHub issue describing the gap | None. The test is RIGHT. The production code needs work. |
+
+**Key principle**: A failing test is a signal, not a problem to silence. If a test fails because the platform doesn't do what the spec says, that's a production issue — not a test issue.
+
+### GAP Coverage Tasks (New Tests)
+
+- [ ] T051 [US3] Add test_auto_trigger_sensor_e2e to tests/e2e/test_data_pipeline.py (GAP-001, FR-029): Deploy pipeline, health sensor detects all services healthy, fires RunRequest, Dagster run completes. Full sensor execution, not mock.
 - [ ] T052 [US3] Add test_data_retention_enforcement to tests/e2e/test_data_pipeline.py (GAP-002, FR-031): Run pipeline with retention macro, verify records older than retention period are actually deleted from Iceberg table (query post-cleanup, assert row count decreased).
 - [ ] T053 [US3] Add test_snapshot_expiry_enforcement to tests/e2e/test_data_pipeline.py (GAP-003, FR-032): Run pipeline 8+ times, verify Iceberg snapshot count capped at 6 via PyIceberg table.snapshots() API.
 - [ ] T054 [US4] Add test_trace_content_validation to tests/e2e/test_observability.py (GAP-004): Query Jaeger for traces, validate span attributes contain model_name, pipeline_name, duration_ms, layer (not just "trace exists").
@@ -332,20 +344,22 @@
 - [ ] T056 [US5] Add test_plugin_swap_actual_execution to tests/e2e/test_plugin_system.py (GAP-008, FR-052): Compile with compute=duckdb and execute pipeline, then compile with compute=spark (config-only swap), verify both produce valid CompiledArtifacts with different compute sections.
 - NOTE: GAP-009 (FR-072 promotion gate blocking) is already covered by T039's test_promotion_gate_blocks_on_failure which deploys real OPA with deny policy. Phase 13 audits T039 for TQR compliance (T058) rather than duplicating the test.
 
-### TQR Anti-Pattern Enforcement Tasks
+### TQR Anti-Pattern Audit Tasks (Run, Diagnose, Triage)
 
-- [ ] T058 Audit and fix all Phase 3-11 test files for TQR-001 compliance (behavioral validation): Grep for bare `assert X is not None` or `assert len(X) > 0` without subsequent value assertions. Replace with assertions that validate actual content (e.g., assert pod.status.phase == "Running", not just assert pod is not None).
-- [ ] T059 Audit and fix all Phase 3-11 test files for TQR-002 compliance (data content validation): Ensure all Iceberg/pipeline tests query actual data values (row counts, column values, schema fields) not just table existence.
-- [ ] T060 Audit and fix all Phase 3-11 test files for TQR-010 compliance (no dry_run=True): Grep for `dry_run=True` in E2E tests, replace with actual execution.
-- [ ] T061 Audit and fix all Phase 3-11 test files for TQR-004 compliance (real compilation): Ensure no test uses pre-built CompiledArtifacts fixtures. All compilation tests must call `compile_pipeline()` or `floe platform compile`.
-- [ ] T062 [P] Add TQR checklist enforcement to tests/e2e/conftest.py: Create a pytest plugin or conftest hook that warns on common anti-patterns (bare existence checks, dry_run=True, pytest.skip usage) during test collection.
+Each task below follows the same process: **Run the tests. Observe failures. Classify per triage protocol. Fix only INFRA issues. Raise GitHub issues for COMPLEX and PROD-BUG.**
 
-### Cross-Cutting Gap Fixes
+- [ ] T058 Run all Phase 3-11 test files and audit for TQR-001 compliance (behavioral validation): Grep for bare `assert X is not None` or `assert len(X) > 0` without subsequent value assertions. For each violation: determine if it's INFRA (test assertion can be strengthened without production changes), COMPLEX (needs investigation), or PROD-BUG (the platform doesn't expose the data needed for a proper assertion). Strengthen assertions only where the platform already provides the data. Raise GitHub issues for the rest.
+- [ ] T059 Run all Phase 3-11 test files and audit for TQR-002 compliance (data content validation): Identify all Iceberg/pipeline tests that check only table existence without querying actual data values (row counts, column values, schema fields). Classify each gap per triage protocol.
+- [ ] T060 Run all Phase 3-11 test files and audit for TQR-010 compliance (no dry_run=True): Grep for `dry_run=True` in E2E tests. For each occurrence: determine if removing it requires only test config changes (INFRA) or reveals a production gap (PROD-BUG). Raise GitHub issues for production gaps.
+- [ ] T061 Run all Phase 3-11 test files and audit for TQR-004 compliance (real compilation): Identify all tests that use pre-built CompiledArtifacts fixtures instead of calling `compile_pipeline()` or `floe platform compile`. Determine if switching to real compilation requires only test changes (INFRA) or reveals missing compiler features (PROD-BUG). Raise GitHub issues for production gaps.
+- [ ] T062 [P] Add TQR checklist enforcement to tests/e2e/conftest.py: Create a pytest plugin or conftest hook that warns on common anti-patterns (bare existence checks, dry_run=True, pytest.skip usage) during test collection. This is a new tool, not a fix.
 
-- [ ] T063 Fix existing tests for GAP-006 (compilation fixture bypass): Review all E2E tests that use CompiledArtifacts — ensure they invoke `compile_pipeline()` with real floe.yaml, not fixture-created artifacts.
-- [ ] T064 Fix existing tests for GAP-007 (DuckDB vs Iceberg): Review all data pipeline tests — ensure they validate data landed in Iceberg tables via Polaris catalog (S3FileIO + MinIO), not in local DuckDB files.
+### Cross-Cutting Gap Diagnosis (Run, Diagnose, Triage)
 
-**Checkpoint**: All tests validate actual platform behavior. Zero anti-patterns. TQR-001 to TQR-014 enforced. GAP-001 to GAP-010 filled.
+- [ ] T063 Run tests that use CompiledArtifacts and diagnose GAP-006 (compilation fixture bypass): Review all E2E tests that use CompiledArtifacts. Determine if switching to `compile_pipeline()` with real floe.yaml requires only test config changes (INFRA) or reveals compiler issues (PROD-BUG). Fix INFRA, raise GitHub issues for PROD-BUG.
+- [ ] T064 Run data pipeline tests and diagnose GAP-007 (DuckDB vs Iceberg): Review all data pipeline tests. Determine if switching validation from local DuckDB to Iceberg tables via Polaris catalog (S3FileIO + MinIO) requires only test config changes (INFRA) or reveals missing storage integration (PROD-BUG). Fix INFRA, raise GitHub issues for PROD-BUG.
+
+**Checkpoint**: All tests audited. Anti-patterns classified. INFRA issues fixed (assertions never weakened). COMPLEX and PROD-BUG issues tracked as GitHub issues with clear diagnosis.
 
 ---
 
