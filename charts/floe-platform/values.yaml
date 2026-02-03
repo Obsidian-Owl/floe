@@ -127,9 +127,12 @@ dagster:
       type: ClusterIP
       port: 80
     # Workspace configuration - use external ConfigMap from this chart
+    # Note: The ConfigMap name follows the pattern {release-name}-dagster-workspace
+    # where release-name is set by fullnameOverride or computed from the release
     workspace:
       enabled: true
-      externalConfigmap: ""  # Auto-set via _helpers.tpl
+      servers: []  # Must be empty when using externalConfigmap
+      externalConfigmap: "floe-platform-dagster-workspace"
     # Additional environment variables
     env: {}
     envSecrets: []
@@ -187,12 +190,12 @@ dagster:
             memory: 1Gi
 
   # User code deployments (configure in separate values file)
-  # Note: When user-deployments are enabled, workspace.yaml is auto-generated
-  # When disabled, workspace.yaml is NOT created by the Dagster subchart
+  # Note: When user-deployments are enabled, workspace.yaml mounting is enabled
+  # even with empty deployments list. This allows external workspace ConfigMap use.
   dagster-user-deployments:
-    enabled: false
-    enableSubchart: false
-    deployments: []
+    enabled: true  # Required for workspace.yaml to be mounted
+    enableSubchart: false  # Don't deploy the subchart, just enable workspace support
+    deployments: []  # Configure actual code locations in values-*.yaml overrides
 
 # =============================================================================
 # Polaris Configuration (Iceberg Catalog)

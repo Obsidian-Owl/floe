@@ -219,9 +219,11 @@ class TestDemoMode(IntegrationTestBase):
                 # Check if response has data
                 if isinstance(result, dict) and "data" not in result:
                     pytest.fail(
-                        f"INFRASTRUCTURE ERROR: Dagster returned no data for product {product}.\n"
-                        f"Issue: Demo products not loaded in Dagster.\n"
-                        f"Deploy: Run 'make demo' to deploy demo products\n"
+                        f"INFRASTRUCTURE GAP: Dagster code locations not deployed.\n"
+                        f"Missing repository: {product}\n"
+                        f"Root cause: Demo products exist as dbt projects but are not registered as Dagster user deployments.\n"
+                        f"Fix: Enable dagster.dagster-user-deployments in Helm values and deploy code locations.\n"
+                        f"See: charts/floe-platform/templates/configmap-dagster-workspace.yaml\n"
                         f"Response: {result}"
                     )
 
@@ -230,9 +232,11 @@ class TestDemoMode(IntegrationTestBase):
                 # Check for RepositoryNotFoundError
                 if repo_response.get("__typename") == "RepositoryNotFoundError":
                     pytest.fail(
-                        f"INFRASTRUCTURE ERROR: Repository '{product}' not found in Dagster.\n"
-                        f"Issue: Demo product not loaded.\n"
-                        f"Deploy: Run 'make demo' to deploy demo products\n"
+                        f"INFRASTRUCTURE GAP: Dagster code locations not deployed.\n"
+                        f"Missing repository: {product}\n"
+                        f"Root cause: Demo products exist as dbt projects but are not registered as Dagster user deployments.\n"
+                        f"Fix: Enable dagster.dagster-user-deployments in Helm values and deploy code locations.\n"
+                        f"See: charts/floe-platform/templates/configmap-dagster-workspace.yaml\n"
                         f"Error: {repo_response.get('message', 'Repository not found')}"
                     )
 
@@ -241,9 +245,11 @@ class TestDemoMode(IntegrationTestBase):
                 error_msg = str(e)
                 if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
                     pytest.fail(
-                        f"INFRASTRUCTURE ERROR: Repository '{product}' not found in Dagster.\n"
-                        f"Issue: Demo product not loaded.\n"
-                        f"Deploy: Run 'make demo' to deploy demo products\n"
+                        f"INFRASTRUCTURE GAP: Dagster code locations not deployed.\n"
+                        f"Missing repository: {product}\n"
+                        f"Root cause: Demo products exist as dbt projects but are not registered as Dagster user deployments.\n"
+                        f"Fix: Enable dagster.dagster-user-deployments in Helm values and deploy code locations.\n"
+                        f"See: charts/floe-platform/templates/configmap-dagster-workspace.yaml\n"
                         f"GraphQL error: {error_msg}"
                     )
                 pytest.fail(

@@ -145,7 +145,8 @@ def deployed_platform(
     if result.returncode != 0:
         pytest.fail(f"Failed to update dependencies: {result.stderr}")
 
-    # Install platform
+    # Install platform with test values (includes test credentials)
+    # values-test.yaml contains pre-configured credentials suitable for E2E testing
     result = _helm(
         [
             "upgrade",
@@ -155,7 +156,7 @@ def deployed_platform(
             "--namespace",
             e2e_namespace,
             "--values",
-            str(platform_chart / "values.yaml"),
+            str(platform_chart / "values-test.yaml"),
             "--set",
             "postgresql.enabled=true",
             "--set",
@@ -169,6 +170,7 @@ def deployed_platform(
             "--wait",
             "--timeout",
             "10m",
+            "--skip-schema-validation",  # Avoid external schema fetch issues
         ]
     )
 

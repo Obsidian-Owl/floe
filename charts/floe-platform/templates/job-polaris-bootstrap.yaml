@@ -49,6 +49,29 @@ spec:
       containers:
         - name: bootstrap
           image: curlimages/curl:8.5.0
+          env:
+            - name: POLARIS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: client-id
+            - name: POLARIS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: client-secret
+            {{- if .Values.polaris.storage.s3.enabled }}
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: aws-access-key-id
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: aws-secret-access-key
+            {{- end }}
           command:
             - sh
             - -c
@@ -59,7 +82,7 @@ spec:
               echo "Acquiring OAuth token..."
               TOKEN=$(curl -sf -X POST \
                 "$POLARIS_URL/api/catalog/v1/oauth/tokens" \
-                -d "grant_type=client_credentials&client_id={{ .Values.polaris.auth.bootstrapCredentials.clientId }}&client_secret={{ .Values.polaris.auth.bootstrapCredentials.clientSecret }}&scope=PRINCIPAL_ROLE:ALL" \
+                -d "grant_type=client_credentials&client_id=$POLARIS_CLIENT_ID&client_secret=$POLARIS_CLIENT_SECRET&scope=PRINCIPAL_ROLE:ALL" \
                 | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
               if [ -z "$TOKEN" ]; then
@@ -69,42 +92,60 @@ spec:
               echo "Token acquired successfully"
 
               echo "Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
+              {{- if .Values.polaris.storage.s3.enabled }}
+              # Build catalog JSON with S3 credentials from environment
+              CATALOG_JSON=$(cat <<EOJSON
+              {
+                "catalog": {
+                  "name": "{{ .Values.polaris.bootstrap.catalogName }}",
+                  "type": "INTERNAL",
+                  "properties": {
+                    "default-base-location": "{{ .Values.polaris.bootstrap.defaultBaseLocation }}",
+                    "s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}",
+                    "s3.path-style-access": "true",
+                    "s3.access-key-id": "$S3_ACCESS_KEY",
+                    "s3.secret-access-key": "$S3_SECRET_KEY",
+                    "s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}",
+                    "table-default.s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}",
+                    "table-default.s3.path-style-access": "true",
+                    "table-default.s3.access-key-id": "$S3_ACCESS_KEY",
+                    "table-default.s3.secret-access-key": "$S3_SECRET_KEY",
+                    "table-default.s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
+                  },
+                  "storageConfigInfo": {
+                    "storageType": "S3",
+                    "allowedLocations": {{ .Values.polaris.bootstrap.allowedLocations | toJson }},
+                    "endpoint": "{{ .Values.polaris.storage.s3.endpoint }}",
+                    "endpointInternal": "{{ .Values.polaris.storage.s3.endpoint }}",
+                    "pathStyleAccess": {{ .Values.polaris.storage.s3.pathStyleAccess | default true }},
+                    "region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}",
+                    "stsUnavailable": true
+                  }
+                }
+              }
+              EOJSON
+              )
+              {{- else }}
+              CATALOG_JSON='{
+                "catalog": {
+                  "name": "{{ .Values.polaris.bootstrap.catalogName }}",
+                  "type": "INTERNAL",
+                  "properties": {
+                    "default-base-location": "{{ .Values.polaris.bootstrap.defaultBaseLocation }}"
+                  },
+                  "storageConfigInfo": {
+                    "storageType": "S3",
+                    "allowedLocations": {{ .Values.polaris.bootstrap.allowedLocations | toJson }}
+                  }
+                }
+              }'
+              {{- end }}
+
               HTTP_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs" \
-                -d '{
-                  "catalog": {
-                    "name": "{{ .Values.polaris.bootstrap.catalogName }}",
-                    "type": "INTERNAL",
-                    "properties": {
-                      "default-base-location": "{{ .Values.polaris.bootstrap.defaultBaseLocation }}"
-                      {{- if .Values.polaris.storage.s3.enabled }}
-                      ,"s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}"
-                      ,"s3.path-style-access": "true"
-                      ,"s3.access-key-id": "{{ .Values.polaris.storage.s3.accessKey }}"
-                      ,"s3.secret-access-key": "{{ .Values.polaris.storage.s3.secretKey }}"
-                      ,"s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
-                      ,"table-default.s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}"
-                      ,"table-default.s3.path-style-access": "true"
-                      ,"table-default.s3.access-key-id": "{{ .Values.polaris.storage.s3.accessKey }}"
-                      ,"table-default.s3.secret-access-key": "{{ .Values.polaris.storage.s3.secretKey }}"
-                      ,"table-default.s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
-                      {{- end }}
-                    },
-                    "storageConfigInfo": {
-                      "storageType": "S3",
-                      "allowedLocations": {{ .Values.polaris.bootstrap.allowedLocations | toJson }}
-                      {{- if .Values.polaris.storage.s3.enabled }}
-                      ,"endpoint": "{{ .Values.polaris.storage.s3.endpoint }}"
-                      ,"endpointInternal": "{{ .Values.polaris.storage.s3.endpoint }}"
-                      ,"pathStyleAccess": {{ .Values.polaris.storage.s3.pathStyleAccess | default true }}
-                      ,"region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
-                      ,"stsUnavailable": true
-                      {{- end }}
-                    }
-                  }
-                }')
+                -d "$CATALOG_JSON")
 
               if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
                 echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' created successfully"

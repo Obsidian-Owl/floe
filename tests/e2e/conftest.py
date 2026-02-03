@@ -268,6 +268,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
 
     # Load catalog with REST configuration
     default_cred = "test-admin:test-secret"
+    minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
@@ -276,6 +277,11 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
             "scope": "PRINCIPAL_ROLE:ALL",
             "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
+            "s3.endpoint": minio_url,
+            "s3.access-key-id": os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+            "s3.secret-access-key": os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123"),
+            "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
+            "s3.path-style-access": "true",
         },
     )
 

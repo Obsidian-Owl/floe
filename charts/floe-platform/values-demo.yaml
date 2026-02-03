@@ -57,11 +57,13 @@ dagster:
             memory: 512Mi
 
 # =============================================================================
-# Polaris Configuration (Iceberg Catalog)
+# Polaris Configuration (Iceberg Catalog - Demo)
 # =============================================================================
 polaris:
   enabled: true
   replicaCount: 1
+  image:
+    tag: "1.3.0-incubating"
   resources:
     requests:
       cpu: 100m
@@ -71,10 +73,29 @@ polaris:
       cpu: 500m
       memory: 512Mi
       ephemeral-storage: 1Gi
-  # File-based persistence for demo (not in-memory, so data persists across restarts)
-  persistence:
-    type: file
-    size: 1Gi
+  auth:
+    bootstrapCredentials:
+      clientId: "demo-admin"
+      clientSecret: "demo-secret"
+  config:
+    features:
+      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"
+      ALLOW_SETTING_S3_ENDPOINTS: "true"
+      ALLOW_TABLE_LOCATION_OVERLAP: "false"
+  storage:
+    s3:
+      enabled: true
+      endpoint: "http://floe-platform-minio:9000"
+      region: "us-east-1"
+      pathStyleAccess: true
+      accessKey: "minioadmin"
+      secretKey: "minioadmin123"
+  bootstrap:
+    enabled: true
+    catalogName: "floe-demo"
+    defaultBaseLocation: "s3://floe-data"
+    allowedLocations:
+      - "s3://floe-data"
 
 # =============================================================================
 # OpenTelemetry Collector Configuration (Observability)

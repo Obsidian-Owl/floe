@@ -298,14 +298,17 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         dagster_client: Any,
     ) -> None:
-        """Test Prometheus service is deployed in K8s.
+        """Test OTel Collector is deployed for metrics pipeline.
 
         Validates that:
-        1. Prometheus service exists in K8s cluster
+        1. OTel Collector service exists in K8s cluster
         2. Infrastructure is ready for metrics collection
 
-        This infrastructure-check test verifies deployment without requiring
-        metrics flow. Future tests will validate metrics collection.
+        ARCHITECTURE NOTE: Prometheus is NOT part of the floe platform.
+        Metrics flow through OTel Collector → external metrics backend.
+        The platform provides metrics endpoints; consumers bring their own observability stack.
+
+        This infrastructure-check test verifies OTel Collector deployment.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -316,9 +319,9 @@ class TestObservability(IntegrationTestBase):
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
 
-        # Verify Prometheus service exists in K8s
+        # Verify OTel Collector service exists (metrics gateway)
         result = subprocess.run(
-            ["kubectl", "get", "svc", "prometheus", "-n", "floe-test"],
+            ["kubectl", "get", "svc", "-n", "floe-test", "-o", "name"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -327,18 +330,29 @@ class TestObservability(IntegrationTestBase):
 
         if result.returncode != 0:
             pytest.fail(
-                "INFRASTRUCTURE MISSING: Prometheus service not deployed.\n"
-                "Required: service 'prometheus' in namespace 'floe-test'\n"
-                "Deploy: Update Helm chart to include Prometheus service\n"
-                f"Error: {result.stderr.strip()}"
+                "INFRASTRUCTURE ERROR: Failed to query K8s services.\n"
+                f"Error: {result.stderr.strip()}\n"
+                "Check: kubectl access to namespace 'floe-test'"
             )
 
-        # Service exists if we got here
-        if "prometheus" not in result.stdout.lower():
+        # Check for OTel collector service in output
+        services = result.stdout.lower()
+        if "otel" not in services and "opentelemetry" not in services:
             pytest.fail(
-                "INFRASTRUCTURE MISSING: Prometheus service not found in cluster.\n"
-                f"kubectl get svc output:\n{result.stdout}\n"
-                "Deploy: Update Helm chart to include Prometheus service"
+                "INFRASTRUCTURE GAP: OTel Collector not deployed.\n"
+                "\n"
+                "ARCHITECTURE: Prometheus is not part of the floe platform.\n"
+                "Metrics flow: Platform → OTel Collector → External Backend\n"
+                "\n"
+                "ROOT CAUSE: OTel Collector is disabled in test values.\n"
+                "File: charts/floe-platform/values-test.yaml\n"
+                "Setting: otel.enabled: false (line 152)\n"
+                "\n"
+                "FIX: Enable OTel Collector in test values:\n"
+                "  otel:\n"
+                "    enabled: true\n"
+                "\n"
+                f"Services found:\n{result.stdout}"
             )
 
     @pytest.mark.e2e
@@ -436,9 +450,22 @@ class TestObservability(IntegrationTestBase):
         services = result.stdout.lower()
         if "otel" not in services and "opentelemetry" not in services:
             pytest.fail(
-                "INFRASTRUCTURE MISSING: OTel collector service not deployed.\n"
-                "Required: OpenTelemetry collector service in namespace 'floe-test'\n"
-                "Deploy: Update Helm chart to include OTel collector\n"
+                "CONFIGURATION ERROR: OTel Collector is disabled in test environment.\n"
+                "\n"
+                "ROOT CAUSE: OTel Collector is explicitly disabled in test values.\n"
+                "File: charts/floe-platform/values-test.yaml\n"
+                "Setting: otel.enabled: false (line 152)\n"
+                "\n"
+                "REQUIREMENT: FR-046 requires observability to be non-blocking.\n"
+                "This test validates the observability pipeline infrastructure.\n"
+                "\n"
+                "FIX: Enable OTel Collector in test values:\n"
+                "  otel:\n"
+                "    enabled: true\n"
+                "\n"
+                "NOTE: The Helm chart includes OTel Collector configuration.\n"
+                "When enabled, service name: <release>-otel\n"
+                "\n"
                 f"Services found:\n{result.stdout}"
             )
 

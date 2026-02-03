@@ -16,17 +16,21 @@ data:
     #   dagster.dagster-user-deployments.deployments: [...]
     #
     # For development, this provides a minimal workspace.
+    {{- $deployments := list }}
+    {{- if and .Values.dagster (index .Values.dagster "dagster-user-deployments") (index .Values.dagster "dagster-user-deployments" "enabled") }}
+    {{- $deployments = index .Values.dagster "dagster-user-deployments" "deployments" }}
+    {{- end }}
+    {{- if $deployments }}
     load_from:
-      {{- if and .Values.dagster (index .Values.dagster "dagster-user-deployments") (index .Values.dagster "dagster-user-deployments" "enabled") }}
-      {{- range (index .Values.dagster "dagster-user-deployments" "deployments") }}
+      {{- range $deployments }}
       - grpc_server:
           host: {{ .name | default "localhost" }}
           port: {{ .port | default 3030 }}
           location_name: {{ .name | default "user-code" }}
       {{- end }}
-      {{- else }}
-      # No user deployments configured - workspace is empty
-      # Add user code deployments to dagster.dagster-user-deployments.deployments
-      []
-      {{- end }}
+    {{- else }}
+    # No user deployments configured - workspace is empty
+    # Add user code deployments to dagster.dagster-user-deployments.deployments
+    load_from: []
+    {{- end }}
 {{- end }}

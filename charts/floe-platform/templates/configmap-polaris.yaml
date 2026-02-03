@@ -25,8 +25,7 @@ data:
     quarkus.s3.endpoint-override={{ .Values.polaris.storage.s3.endpoint }}
     quarkus.s3.path-style-access={{ .Values.polaris.storage.s3.pathStyleAccess | default true }}
     quarkus.s3.aws.region={{ .Values.polaris.storage.s3.region | default "us-east-1" }}
-    # Server-level S3 credentials for credential vending
-    polaris.storage.aws.access-key={{ .Values.polaris.storage.s3.accessKey }}
-    polaris.storage.aws.secret-key={{ .Values.polaris.storage.s3.secretKey }}
+    # Note: AWS credentials provided via AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars
+    # from secret-polaris.yaml (secretKeyRef) - not stored in ConfigMap for security
     {{- end }}
 {{- end }}

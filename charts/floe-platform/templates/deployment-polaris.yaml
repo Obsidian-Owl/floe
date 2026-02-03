@@ -59,7 +59,10 @@ spec:
             {{- toYaml .Values.polaris.resources | nindent 12 }}
           env:
             - name: POLARIS_BOOTSTRAP_CREDENTIALS
-              value: "POLARIS,{{ .Values.polaris.auth.bootstrapCredentials.clientId }},{{ .Values.polaris.auth.bootstrapCredentials.clientSecret }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: bootstrap-credentials
             - name: JAVA_OPTS_APPEND
               value: >-
                 {{- range $key, $val := .Values.polaris.config.features }}
@@ -70,9 +73,15 @@ spec:
                 {{- end }}
             {{- if .Values.polaris.storage.s3.enabled }}
             - name: AWS_ACCESS_KEY_ID
-              value: {{ .Values.polaris.storage.s3.accessKey | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: aws-access-key-id
             - name: AWS_SECRET_ACCESS_KEY
-              value: {{ .Values.polaris.storage.s3.secretKey | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: aws-secret-access-key
             - name: AWS_REGION
               value: {{ .Values.polaris.storage.s3.region | quote }}
             - name: AWS_ENDPOINT_URL_S3

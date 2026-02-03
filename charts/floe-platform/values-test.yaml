@@ -46,6 +46,10 @@ dagster:
     postgresqlDatabase: dagster
   dagsterWebserver:
     replicaCount: 1
+    workspace:
+      enabled: true
+      servers: []  # Must be empty when using externalConfigmap
+      externalConfigmap: "floe-platform-dagster-workspace"
     resources:
       requests:
         cpu: 100m
@@ -62,8 +66,12 @@ dagster:
       limits:
         cpu: 500m
         memory: 512Mi
-  dagsterUserDeployments:
-    enabled: false
+  # Enable user deployments to allow workspace.yaml to be mounted
+  # Even with no actual code locations, this enables the workspace file mount
+  dagster-user-deployments:
+    enabled: true
+    enableSubchart: false
+    deployments: []
 
 # =============================================================================
 # Polaris Configuration (Quarkus 1.3.0 for Tests)
