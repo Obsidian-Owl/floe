@@ -308,8 +308,8 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         response = marquez_client.get("/api/v1/namespaces")
         namespaces = response.json()["namespaces"]
     """
-    marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5001")
-    wait_for_service(f"{marquez_url}/api/v1/namespaces", timeout=60, description="Marquez API (requires port-forward: kubectl port-forward svc/marquez 5001:5001 -n floe-test)")
+    marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5000")
+    wait_for_service(f"{marquez_url}/api/v1/namespaces", timeout=60, description="Marquez API (requires port-forward: kubectl port-forward svc/floe-platform-marquez 5000:5000 -n floe-test)")
 
     return httpx.Client(base_url=marquez_url, timeout=30.0)
 

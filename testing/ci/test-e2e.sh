@@ -141,8 +141,9 @@ kubectl port-forward svc/floe-platform-otel 4317:4317 -n "${TEST_NAMESPACE}" &
 OTEL_PF_PID=$!
 
 # Marquez lineage service (if deployed)
+# Note: Marquez API is on port 5000, admin is on port 5001
 if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; then
-    kubectl port-forward svc/floe-platform-marquez 5001:5001 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/floe-platform-marquez 5000:5000 -n "${TEST_NAMESPACE}" &
     MARQUEZ_PF_PID=$!
 fi
 
@@ -162,7 +163,7 @@ wait_for_port localhost 8181 15
 wait_for_port localhost 9000 15
 wait_for_port localhost 4317 15
 wait_for_port localhost 5432 15
-wait_for_port localhost 5001 15 || true  # Marquez optional
+wait_for_port localhost 5000 15 || true  # Marquez API port (optional)
 wait_for_port localhost 16686 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
