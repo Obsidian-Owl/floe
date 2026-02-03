@@ -215,7 +215,7 @@ class TestHelmWorkflow:
     @pytest.mark.requirement("E2E-001")
     def test_polaris_accessible(
         self,
-        deployed_platform: str,
+        deployed_platform: str,  # noqa: ARG002 - fixture required for ordering
         e2e_namespace: str,
     ) -> None:
         """Test that Polaris service is accessible."""
@@ -227,22 +227,24 @@ class TestHelmWorkflow:
         )
         assert ready, "Polaris pods not ready"
 
-        # Check service exists
+        # Check Polaris service exists (Helm chart names: {release}-floe-platform-polaris)
         result = _kubectl(
             [
                 "get",
                 "service",
-                f"{deployed_platform}-polaris",
                 "-n",
                 e2e_namespace,
+                "-l",
+                "app.kubernetes.io/component=polaris",
             ]
         )
         assert result.returncode == 0, f"Polaris service not found: {result.stderr}"
+        assert "polaris" in result.stdout, f"No Polaris service in output: {result.stdout}"
 
     @pytest.mark.requirement("E2E-001")
     def test_postgresql_accessible(
         self,
-        deployed_platform: str,
+        deployed_platform: str,  # noqa: ARG002 - fixture required for ordering
         e2e_namespace: str,
     ) -> None:
         """Test that PostgreSQL is accessible."""
