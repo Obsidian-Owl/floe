@@ -1,6 +1,6 @@
 # Epic Index
 
-This directory contains detailed documentation for each of the 22 Epics.
+This directory contains detailed documentation for each of the 26 Epics.
 
 ---
 
@@ -31,17 +31,21 @@ This directory contains detailed documentation for each of the 22 Epics.
 | [3B](03-enforcement/epic-03b-policy-validation.md) | Policy Validation | 21 | Planned | [floe-03b-policy-validation](https://linear.app/obsidianowl/project/floe-03b-policy-validation-388fcbc3817f) |
 | [3C](03-enforcement/epic-03c-data-contracts.md) | Data Contracts | 20 | Planned | [floe-03c-data-contracts](https://linear.app/obsidianowl/project/floe-03c-data-contracts-4b302490a939) |
 | [3D](03-enforcement/epic-03d-contract-monitoring.md) | Contract Monitoring | 15 | Planned | [floe-03d-contract-monitoring](https://linear.app/obsidianowl/project/floe-03d-contract-monitoring-59262510ce7f) |
+| [3E](03-enforcement/epic-03e-governance-integration.md) | Governance Integration | 6 | Planned | [epic-3e-governance-integration](https://linear.app/obsidianowl/project/epic-3e-governance-integration-2ba5462f1c22) |
 | **Core Plugins** |
 | [4A](04-core-plugins/epic-04a-compute-plugin.md) | Compute Plugin | 10 | Planned | [floe-04a-compute-plugin](https://linear.app/obsidianowl/project/floe-04a-compute-plugin-3dce91e48fe9) |
 | [4B](04-core-plugins/epic-04b-orchestrator-plugin.md) | Orchestrator Plugin | 10 | Planned | [floe-04b-orchestrator-plugin](https://linear.app/obsidianowl/project/floe-04b-orchestrator-plugin-1eb3abdc05d5) |
 | [4C](04-core-plugins/epic-04c-catalog-plugin.md) | Catalog Plugin | 10 | Planned | [floe-04c-catalog-plugin](https://linear.app/obsidianowl/project/floe-04c-catalog-plugin-6cda94e2eb31) |
 | [4D](04-core-plugins/epic-04d-storage-plugin.md) | Storage Plugin | 10 | Planned | [floe-04d-storage-plugin](https://linear.app/obsidianowl/project/floe-04d-storage-plugin-bb164b41d4c3) |
+| [4E](04-core-plugins/epic-04e-semantic-layer-plugin.md) | Semantic Layer Plugin | 6 | Planned | [epic-4e-semantic-layer-plugin](https://linear.app/obsidianowl/project/epic-4e-semantic-layer-plugin-3c5addd80c14) |
+| [4F](04-core-plugins/epic-04f-ingestion-plugin.md) | Ingestion Plugin | 6 | Planned | [epic-4f-ingestion-plugin](https://linear.app/obsidianowl/project/epic-4f-ingestion-plugin-0547e9605dc7) |
 | **Transformation** |
 | [5A](05-transformation/epic-05a-dbt-plugin.md) | dbt Plugin | 15 | Planned | [floe-05a-dbt-plugin](https://linear.app/obsidianowl/project/floe-05a-dbt-plugin-fc0710ba388c) |
 | [5B](05-transformation/epic-05b-dataquality-plugin.md) | Data Quality Plugin | 10 | Planned | [floe-05b-dataquality-plugin](https://linear.app/obsidianowl/project/floe-05b-dataquality-plugin-f4a912739ba9) |
 | **Observability** |
 | [6A](06-observability/epic-06a-opentelemetry.md) | OpenTelemetry | 20 | Planned | [floe-06a-opentelemetry](https://linear.app/obsidianowl/project/floe-06a-opentelemetry-0e2e698e1f9b) |
 | [6B](06-observability/epic-06b-openlineage.md) | OpenLineage | 21 | Planned | [floe-06b-openlineage](https://linear.app/obsidianowl/project/floe-06b-openlineage-674cba04e924) |
+| [6C](06-observability/epic-06c-otel-instrumentation.md) | OTel Code Instrumentation | 7 | Planned | [epic-6c-otel-code-instrumentation](https://linear.app/obsidianowl/project/epic-6c-otel-code-instrumentation-390eeee4c4ac) |
 | **Security** |
 | [7A](07-security/epic-07a-identity-secrets.md) | Identity & Secrets | 25 | Planned | [floe-07a-identity-secrets](https://linear.app/obsidianowl/project/floe-07a-identity-secrets-f4ffc9929758) |
 | [7B](07-security/epic-07b-k8s-rbac.md) | K8s RBAC | 16 | Planned | [floe-07b-k8s-rbac](https://linear.app/obsidianowl/project/floe-07b-k8s-rbac-f6aa70e4c792) |
@@ -73,29 +77,33 @@ Schema and compilation pipeline.
 - [Epic 2A: Manifest Schema](02-configuration/epic-02a-manifest-schema.md)
 - [Epic 2B: Compilation Pipeline](02-configuration/epic-02b-compilation-pipeline.md)
 
-### Enforcement (Epics 3A-3D)
-Policy enforcement and data contracts.
+### Enforcement (Epics 3A-3E)
+Policy enforcement, data contracts, and governance integration.
 - [Epic 3A: Policy Enforcer Core](03-enforcement/epic-03a-policy-enforcer-core.md)
 - [Epic 3B: Policy Validation](03-enforcement/epic-03b-policy-validation.md)
 - [Epic 3C: Data Contracts](03-enforcement/epic-03c-data-contracts.md)
 - [Epic 3D: Contract Monitoring](03-enforcement/epic-03d-contract-monitoring.md)
+- [Epic 3E: Governance Integration](03-enforcement/epic-03e-governance-integration.md) - *Compile-time RBAC, secrets, policies*
 
-### Core Plugins (Epics 4A-4D)
+### Core Plugins (Epics 4A-4F)
 Plugin interfaces and reference implementations.
 - [Epic 4A: Compute Plugin](04-core-plugins/epic-04a-compute-plugin.md)
 - [Epic 4B: Orchestrator Plugin](04-core-plugins/epic-04b-orchestrator-plugin.md)
 - [Epic 4C: Catalog Plugin](04-core-plugins/epic-04c-catalog-plugin.md)
 - [Epic 4D: Storage Plugin](04-core-plugins/epic-04d-storage-plugin.md)
+- [Epic 4E: Semantic Layer Plugin](04-core-plugins/epic-04e-semantic-layer-plugin.md) - *Cube integration*
+- [Epic 4F: Ingestion Plugin](04-core-plugins/epic-04f-ingestion-plugin.md) - *dlt integration*
 
 ### Transformation (Epics 5A-5B)
 dbt and data quality.
 - [Epic 5A: dbt Plugin](05-transformation/epic-05a-dbt-plugin.md)
 - [Epic 5B: Data Quality Plugin](05-transformation/epic-05b-dataquality-plugin.md)
 
-### Observability (Epics 6A-6B)
-OpenTelemetry and OpenLineage.
-- [Epic 6A: OpenTelemetry](06-observability/epic-06a-opentelemetry.md)
-- [Epic 6B: OpenLineage](06-observability/epic-06b-openlineage.md)
+### Observability (Epics 6A-6C)
+OpenTelemetry, OpenLineage, and code instrumentation.
+- [Epic 6A: OpenTelemetry](06-observability/epic-06a-opentelemetry.md) - *SDK setup, provider config*
+- [Epic 6B: OpenLineage](06-observability/epic-06b-openlineage.md) - *Lineage backend*
+- [Epic 6C: OTel Code Instrumentation](06-observability/epic-06c-otel-instrumentation.md) - *Spans in floe-core, Dagster*
 
 ### Security (Epics 7A-7C)
 Identity, RBAC, and network security.

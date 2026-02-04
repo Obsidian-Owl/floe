@@ -127,9 +127,12 @@ dagster:
       type: ClusterIP
       port: 80
     # Workspace configuration - use external ConfigMap from this chart
+    # Note: The ConfigMap name follows the pattern {release-name}-dagster-workspace
+    # where release-name is set by fullnameOverride or computed from the release
     workspace:
       enabled: true
-      externalConfigmap: ""  # Auto-set via _helpers.tpl
+      servers: []  # Must be empty when using externalConfigmap
+      externalConfigmap: "floe-platform-dagster-workspace"
     # Additional environment variables
     env: {}
     envSecrets: []
@@ -187,12 +190,12 @@ dagster:
             memory: 1Gi
 
   # User code deployments (configure in separate values file)
-  # Note: When user-deployments are enabled, workspace.yaml is auto-generated
-  # When disabled, workspace.yaml is NOT created by the Dagster subchart
+  # Note: When user-deployments are enabled, workspace.yaml mounting is enabled
+  # even with empty deployments list. This allows external workspace ConfigMap use.
   dagster-user-deployments:
-    enabled: false
-    enableSubchart: false
-    deployments: []
+    enabled: true  # Required for workspace.yaml to be mounted
+    enableSubchart: false  # Don't deploy the subchart, just enable workspace support
+    deployments: []  # Configure actual code locations in values-*.yaml overrides
 
 # =============================================================================
 # Polaris Configuration (Iceberg Catalog)
@@ -204,7 +207,7 @@ polaris:
   # Polaris image
   image:
     repository: apache/polaris
-    tag: "0.9.0"
+    tag: "1.3.0-incubating"
     pullPolicy: IfNotPresent
 
   # Replica count
@@ -225,43 +228,54 @@ polaris:
   service:
     type: ClusterIP
     port: 8181
-    metricsPort: 8182
+    managementPort: 8182
 
-  # Persistence configuration
-  persistence:
-    # Type: in-memory (testing), file (dev), external (prod)
-    type: file
-    # Size for file-based persistence
-    size: 1Gi
-    storageClass: ""
-    # External catalog configuration (when type: external)
-    external:
-      type: ""  # jdbc, dynamodb
-      connectionString: ""
-
-  # Health probe configuration
+  # Health probe configuration (Quarkus management interface on port 8182)
   livenessProbe:
     httpGet:
-      path: /healthcheck
-      port: metrics
+      path: /q/health/live
+      port: management
     initialDelaySeconds: 30
     periodSeconds: 10
 
   readinessProbe:
     httpGet:
-      path: /healthcheck
-      port: metrics
+      path: /q/health/ready
+      port: management
     initialDelaySeconds: 10
     periodSeconds: 5
 
-  # Polaris server configuration (mounted as ConfigMap)
+  # Authentication - bootstrap credentials for root principal
+  auth:
+    bootstrapCredentials:
+      clientId: "polaris-admin"
+      clientSecret: ""  # Must be set in environment-specific values
+
+  # Polaris server configuration
   config:
-    # Default realm for authentication
-    defaultRealm: default-realm
     # Feature flags - secure by default
     features:
-      ALLOW_ANONYMOUS_ACCESS: false
-      ALLOW_TABLE_LOCATION_OVERLAP: false
+      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "false"
+      ALLOW_SETTING_S3_ENDPOINTS: "false"
+      ALLOW_TABLE_LOCATION_OVERLAP: "false"
+
+  # S3 storage configuration (for MinIO or AWS S3)
+  storage:
+    s3:
+      enabled: false
+      endpoint: ""
+      region: "us-east-1"
+      pathStyleAccess: true
+      accessKey: ""
+      secretKey: ""
+
+  # Catalog bootstrap configuration
+  bootstrap:
+    enabled: false
+    catalogName: "floe"
+    defaultBaseLocation: "s3://floe-iceberg"
+    allowedLocations:
+      - "s3://floe-iceberg"
 
 # =============================================================================
 # OpenTelemetry Collector Configuration (Observability)
@@ -321,9 +335,9 @@ otel:
       # Debug exporter (for development)
       debug:
         verbosity: detailed
-      # OTLP exporter (configure endpoint via values override)
-      otlp:
-        endpoint: ""
+      # OTLP export to Jaeger (enabled when jaeger.enabled=true)
+      otlp/jaeger:
+        endpoint: "{{ .Release.Name }}-jaeger-collector:4317"
         tls:
           insecure: true
 
@@ -332,7 +346,7 @@ otel:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug]
+          exporters: [debug, otlp/jaeger]
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
@@ -420,11 +434,20 @@ minio:
   # Enable MinIO (DEV/DEMO ONLY - use external S3 for production)
   enabled: false
 
-  # MinIO image
+  # MinIO image — use minio/minio with command override
+  # (bitnami/minio images no longer available on Docker Hub)
   image:
+    registry: docker.io
     repository: minio/minio
     tag: latest
     pullPolicy: IfNotPresent
+  command:
+    - minio
+  args:
+    - server
+    - /bitnami/minio/data
+    - --console-address
+    - ":9001"
 
   # Authentication
   auth:
@@ -458,11 +481,69 @@ minio:
       console: 9001
 
 # =============================================================================
+# Jaeger Configuration (Distributed Tracing - Observability)
+# =============================================================================
+jaeger:
+  # Enable Jaeger deployment for trace collection
+  enabled: true
+
+  # Disable Cassandra provisioning - use memory storage
+  provisionDataStore:
+    cassandra: false
+
+  # Use all-in-one deployment for dev/test (memory storage)
+  # For production, configure external Jaeger with Cassandra/Elasticsearch
+  allInOne:
+    enabled: true
+    image:
+      repository: jaegertracing/all-in-one
+      tag: "1.54"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Collector configuration
+  collector:
+    enabled: false  # Using all-in-one
+
+  # Query service configuration
+  query:
+    enabled: false  # Using all-in-one
+
+  # Agent configuration
+  agent:
+    enabled: false  # Using sidecar injection or OTel collector
+
+  # Disable Cassandra persistence (using memory)
+  cassandra:
+    persistence:
+      enabled: false
+
+  # Storage backend (all-in-one uses memory by default)
+  storage:
+    type: memory  # Use memory for dev/test, badger or elasticsearch for prod
+
+  # Service ports
+  service:
+    collector:
+      otlp:
+        grpc:
+          port: 4317
+        http:
+          port: 4318
+    query:
+      port: 16686
+
+# =============================================================================
 # Marquez Configuration (OpenLineage - Optional)
 # =============================================================================
 marquez:
-  # Enable Marquez deployment (optional - for lineage tracking)
-  enabled: false
+  # Enable Marquez deployment (for lineage tracking)
+  enabled: true
 
   # Marquez image
   image:
@@ -493,7 +574,10 @@ marquez:
     host: ""  # Auto-configured if postgresql.enabled
     port: 5432
     database: marquez
+    username: floe
+    password: ""  # Use existingSecret in production
     existingSecret: ""
+    existingSecretKey: password
 
 # =============================================================================
 # RBAC Configuration
@@ -705,3 +789,18 @@ externalSecrets:
   #   dataFrom:  # Alternative: extract all keys
   #     - extract:
   #         key: path/to/secret
+
+# =============================================================================
+# Observability Configuration
+# =============================================================================
+observability:
+  # Grafana dashboard provisioning
+  grafana:
+    # Enable automatic dashboard provisioning via ConfigMap
+    enabled: true
+
+    # Dashboard refresh interval (used in dashboards)
+    refreshInterval: 30s
+
+    # Datasource UID (must match Prometheus datasource in Grafana)
+    datasourceUid: prometheus

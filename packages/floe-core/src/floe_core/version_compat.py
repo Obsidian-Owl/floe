@@ -5,8 +5,8 @@ for plugins to ensure API compatibility between plugins and the
 floe platform.
 
 Version Format:
-    Versions follow semver MAJOR.MINOR format (e.g., "1.0", "2.1").
-    PATCH versions are not used for API compatibility.
+    Versions follow semver MAJOR.MINOR or MAJOR.MINOR.PATCH format.
+    PATCH versions are ignored for API compatibility.
 
 Compatibility Rules:
     - Major versions must match exactly
@@ -15,6 +15,8 @@ Compatibility Rules:
 Example:
     >>> from floe_core.version_compat import is_compatible, FLOE_PLUGIN_API_VERSION
     >>> is_compatible("1.0", FLOE_PLUGIN_API_VERSION)
+    True
+    >>> is_compatible("1.0.0", FLOE_PLUGIN_API_VERSION)
     True
     >>> is_compatible("2.0", "1.0")  # Major version mismatch
     False
@@ -39,8 +41,8 @@ def is_compatible(plugin_api_version: str, platform_api_version: str) -> bool:
     on a platform providing `platform_api_version`.
 
     Args:
-        plugin_api_version: The API version required by the plugin (X.Y format).
-        platform_api_version: The API version provided by the platform (X.Y format).
+        plugin_api_version: The API version required by the plugin (X.Y or X.Y.Z format).
+        platform_api_version: The API version provided by the platform (X.Y or X.Y.Z format).
 
     Returns:
         True if the plugin is compatible with the platform, False otherwise.
@@ -49,9 +51,12 @@ def is_compatible(plugin_api_version: str, platform_api_version: str) -> bool:
         - Major version must match exactly (breaking changes)
         - Plugin minor version must be <= platform minor version
           (platform can provide newer features, plugin can use older features)
+        - Patch version is ignored for API compatibility
 
     Examples:
         >>> is_compatible("1.0", "1.0")  # Exact match
+        True
+        >>> is_compatible("1.0.0", "1.0")  # Semver format accepted
         True
         >>> is_compatible("1.0", "1.2")  # Platform has newer minor
         True
@@ -61,7 +66,7 @@ def is_compatible(plugin_api_version: str, platform_api_version: str) -> bool:
         False
 
     Raises:
-        ValueError: If version strings are not in valid X.Y format.
+        ValueError: If version strings are not in valid X.Y or X.Y.Z format.
     """
     plugin_major, plugin_minor = _parse_version(plugin_api_version)
     platform_major, platform_minor = _parse_version(platform_api_version)
@@ -78,28 +83,35 @@ def _parse_version(version: str) -> tuple[int, int]:
     """Parse a version string into major and minor components.
 
     Args:
-        version: Version string in X.Y format (e.g., "1.0", "2.1").
+        version: Version string in X.Y or X.Y.Z format (e.g., "1.0", "2.1", "1.0.0").
 
     Returns:
         Tuple of (major, minor) version numbers as integers.
+        Patch version is ignored if present.
 
     Raises:
-        ValueError: If version string is not in valid X.Y format.
+        ValueError: If version string is not in valid X.Y or X.Y.Z format.
 
     Examples:
         >>> _parse_version("1.0")
         (1, 0)
         >>> _parse_version("2.10")
         (2, 10)
+        >>> _parse_version("1.0.0")
+        (1, 0)
+        >>> _parse_version("1.2.3")
+        (1, 2)
     """
     try:
         parts = version.split(".")
-        if len(parts) != 2:
-            raise ValueError(f"Invalid version format: {version!r}. Expected X.Y format.")
+        if len(parts) not in (2, 3):
+            raise ValueError(f"Invalid version format: {version!r}. Expected X.Y or X.Y.Z format.")
         major = int(parts[0])
         minor = int(parts[1])
+        # Ignore patch version if present (parts[2])
         return major, minor
     except (ValueError, IndexError) as e:
         raise ValueError(
-            f"Invalid version format: {version!r}. Expected X.Y format (e.g., '1.0')."
+            f"Invalid version format: {version!r}. "
+            f"Expected X.Y or X.Y.Z format (e.g., '1.0' or '1.0.0')."
         ) from e

@@ -1,0 +1,33 @@
+{{- if .Values.marquez.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-marquez-config
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: marquez
+data:
+  marquez.yml: |
+    # Marquez configuration
+    # See: https://github.com/MarquezProject/marquez/blob/main/api/src/main/resources/marquez.example.yml
+    server:
+      applicationConnectors:
+        - type: http
+          port: ${MARQUEZ_PORT:-5000}
+      adminConnectors:
+        - type: http
+          port: ${MARQUEZ_ADMIN_PORT:-5001}
+
+    db:
+      driverClass: org.postgresql.Driver
+      url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+
+    migrateOnStartup: true
+
+    logging:
+      level: INFO
+      appenders:
+        - type: console
+{{- end }}

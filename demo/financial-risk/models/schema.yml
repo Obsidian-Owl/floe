@@ -1,0 +1,195 @@
+version: 2
+
+models:
+  # Staging Layer
+  - name: stg_positions
+    description: "Clean positions with validated quantity > 0"
+    columns:
+      - name: position_id
+        description: "Unique position identifier"
+        tests:
+          - unique
+          - not_null
+      - name: portfolio_id
+        description: "Portfolio identifier"
+        tests:
+          - not_null
+      - name: instrument_id
+        description: "Instrument identifier"
+        tests:
+          - not_null
+      - name: quantity
+        description: "Position quantity (validated > 0)"
+        tests:
+          - not_null
+      - name: entry_price
+        description: "Entry price for position"
+        tests:
+          - not_null
+      - name: entry_date
+        description: "Date position was entered"
+        tests:
+          - not_null
+
+  - name: stg_market_data
+    description: "Clean market data with daily returns"
+    columns:
+      - name: instrument_id
+        description: "Instrument identifier"
+        tests:
+          - not_null
+      - name: date
+        description: "Market data date"
+        tests:
+          - not_null
+      - name: close_price
+        description: "Closing price"
+        tests:
+          - not_null
+      - name: volume
+        description: "Trading volume"
+        tests:
+          - not_null
+      - name: volatility
+        description: "Volatility metric"
+        tests:
+          - not_null
+      - name: daily_return
+        description: "Daily return computed as (close - prev_close) / prev_close"
+
+  - name: stg_counterparties
+    description: "Clean counterparty records with validated ratings"
+    columns:
+      - name: counterparty_id
+        description: "Unique counterparty identifier"
+        tests:
+          - unique
+          - not_null
+      - name: name
+        description: "Counterparty name"
+        tests:
+          - not_null
+      - name: rating
+        description: "Credit rating"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC']
+      - name: country
+        description: "Country code"
+        tests:
+          - not_null
+      - name: exposure_limit
+        description: "Maximum exposure limit"
+        tests:
+          - not_null
+
+  # Intermediate Layer
+  - name: int_portfolio_risk
+    description: "Per-portfolio risk metrics: total value, volatility, position count"
+    columns:
+      - name: portfolio_id
+        description: "Portfolio identifier"
+        tests:
+          - unique
+          - not_null
+      - name: total_value
+        description: "Total portfolio value (sum of quantity * latest close price)"
+        tests:
+          - not_null
+      - name: avg_volatility
+        description: "Average volatility across positions"
+        tests:
+          - not_null
+      - name: position_count
+        description: "Number of positions in portfolio"
+        tests:
+          - not_null
+      - name: max_single_position_pct
+        description: "Max single position as percentage of total portfolio value"
+        tests:
+          - not_null
+
+  - name: int_counterparty_exposure
+    description: "Per-counterparty exposure metrics: total exposure, utilization"
+    columns:
+      - name: counterparty_id
+        description: "Counterparty identifier"
+        tests:
+          - unique
+          - not_null
+      - name: total_exposure
+        description: "Total exposure to counterparty (sum of position values)"
+        tests:
+          - not_null
+      - name: exposure_limit
+        description: "Exposure limit for counterparty"
+        tests:
+          - not_null
+      - name: utilization_pct
+        description: "Exposure utilization percentage (total_exposure / exposure_limit * 100)"
+        tests:
+          - not_null
+
+  # Marts Layer
+  - name: mart_risk_dashboard
+    description: "Cross-portfolio risk summary with counterparty exposure"
+    columns:
+      - name: portfolio_id
+        description: "Portfolio identifier"
+        tests:
+          - unique
+          - not_null
+      - name: total_value
+        description: "Total portfolio value"
+        tests:
+          - not_null
+      - name: avg_volatility
+        description: "Average volatility"
+        tests:
+          - not_null
+      - name: position_count
+        description: "Number of positions"
+        tests:
+          - not_null
+      - name: max_single_position_pct
+        description: "Max single position percentage"
+        tests:
+          - not_null
+      - name: top_counterparty
+        description: "Counterparty ID with highest exposure"
+      - name: top_counterparty_exposure
+        description: "Exposure to top counterparty"
+      - name: counterparty_utilization_pct
+        description: "Top counterparty utilization percentage"
+
+seeds:
+  - name: raw_positions
+    description: "Raw position data"
+    columns:
+      - name: position_id
+        description: "Unique position identifier"
+        tests:
+          - unique
+          - not_null
+
+  - name: raw_market_data
+    description: "Raw market data"
+    columns:
+      - name: instrument_id
+        description: "Instrument identifier"
+        tests:
+          - not_null
+      - name: date
+        description: "Market data date"
+        tests:
+          - not_null
+
+  - name: raw_counterparties
+    description: "Raw counterparty data"
+    columns:
+      - name: counterparty_id
+        description: "Unique counterparty identifier"
+        tests:
+          - unique
+          - not_null

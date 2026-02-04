@@ -1,0 +1,27 @@
+name: customer_360
+version: '1.0.0'
+config-version: 2
+
+profile: customer_360
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["../macros"]
+
+seeds:
+  customer_360:
+    +schema: raw
+
+models:
+  customer_360:
+    staging:
+      +materialized: view
+      +tags: ['staging']
+    intermediate:
+      +materialized: table
+      +tags: ['intermediate']
+    marts:
+      +materialized: table
+      +tags: ['marts']
+      +post-hook:
+        - "{{ retention_cleanup(this) }}"

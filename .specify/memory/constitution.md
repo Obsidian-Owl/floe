@@ -40,7 +40,7 @@ All configurable components MUST use the plugin system with entry point discover
 
 - **Entry Points**: All plugins register via `pyproject.toml` entry points (`floe.computes`, `floe.orchestrators`, etc.)
 - **Interface > Implementation**: Define ABCs (ComputePlugin, OrchestratorPlugin, etc.), not concrete classes in core
-- **11 Plugin Types**: Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Secrets, Identity
+- **15 Plugin Types**: Catalog, Compute, DBT, Identity, Ingestion, Lineage, NetworkSecurity, Orchestrator, Quality, RBAC, Secrets, SemanticLayer, Storage, Telemetry, PluginLoader. 12 have concrete implementations; 3 are ABC-only (Ingestion, Semantic, Storage)
 - **PluginMetadata**: Every plugin MUST declare name, version, and floe_api_version
 
 **Rationale**: Plugin architecture enables flexibility without configuration sprawl. Entry points ensure consistent discovery. ABCs enforce contracts while allowing multiple implementations.

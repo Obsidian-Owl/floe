@@ -20,9 +20,9 @@ spec:
       {{- if and (eq .Values.polaris.service.type "NodePort") .Values.polaris.service.nodePort }}
       nodePort: {{ .Values.polaris.service.nodePort }}
       {{- end }}
-    - name: metrics
-      port: {{ .Values.polaris.service.metricsPort | default 8182 }}
-      targetPort: metrics
+    - name: management
+      port: {{ .Values.polaris.service.managementPort | default 8182 }}
+      targetPort: management
       protocol: TCP
   selector:
     {{- include "floe-platform.selectorLabels" . | nindent 4 }}

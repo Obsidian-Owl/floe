@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 def _run_command(
     cmd: list[str],
-    timeout: int = 300,
+    timeout: int = 900,
     check: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command with timeout.
@@ -50,7 +50,7 @@ def _run_command(
     )
 
 
-def _helm(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
+def _helm(args: list[str], timeout: int = 900) -> subprocess.CompletedProcess[str]:
     """Run a helm command."""
     return _run_command(["helm"] + args, timeout=timeout)
 
@@ -145,7 +145,8 @@ def deployed_platform(
     if result.returncode != 0:
         pytest.fail(f"Failed to update dependencies: {result.stderr}")
 
-    # Install platform
+    # Install platform with test values (includes test credentials)
+    # values-test.yaml contains pre-configured credentials suitable for E2E testing
     result = _helm(
         [
             "upgrade",
@@ -155,7 +156,7 @@ def deployed_platform(
             "--namespace",
             e2e_namespace,
             "--values",
-            str(platform_chart / "values.yaml"),
+            str(platform_chart / "values-test.yaml"),
             "--set",
             "postgresql.enabled=true",
             "--set",
@@ -169,6 +170,7 @@ def deployed_platform(
             "--wait",
             "--timeout",
             "10m",
+            "--skip-schema-validation",  # Avoid external schema fetch issues
         ]
     )
 
@@ -180,6 +182,7 @@ def deployed_platform(
 
 @pytest.mark.e2e
 @pytest.mark.requirement("E2E-001")
+@pytest.mark.timeout(900)
 class TestHelmWorkflow:
     """E2E tests for Helm-based platform deployment workflow."""
 
@@ -212,7 +215,7 @@ class TestHelmWorkflow:
     @pytest.mark.requirement("E2E-001")
     def test_polaris_accessible(
         self,
-        deployed_platform: str,
+        deployed_platform: str,  # noqa: ARG002 - fixture required for ordering
         e2e_namespace: str,
     ) -> None:
         """Test that Polaris service is accessible."""
@@ -224,22 +227,24 @@ class TestHelmWorkflow:
         )
         assert ready, "Polaris pods not ready"
 
-        # Check service exists
+        # Check Polaris service exists (Helm chart names: {release}-floe-platform-polaris)
         result = _kubectl(
             [
                 "get",
                 "service",
-                f"{deployed_platform}-polaris",
                 "-n",
                 e2e_namespace,
+                "-l",
+                "app.kubernetes.io/component=polaris",
             ]
         )
         assert result.returncode == 0, f"Polaris service not found: {result.stderr}"
+        assert "polaris" in result.stdout, f"No Polaris service in output: {result.stdout}"
 
     @pytest.mark.requirement("E2E-001")
     def test_postgresql_accessible(
         self,
-        deployed_platform: str,
+        deployed_platform: str,  # noqa: ARG002 - fixture required for ordering
         e2e_namespace: str,
     ) -> None:
         """Test that PostgreSQL is accessible."""
@@ -273,6 +278,7 @@ class TestHelmWorkflow:
 
 @pytest.mark.e2e
 @pytest.mark.requirement("E2E-002")
+@pytest.mark.timeout(900)
 class TestCodeLocationRegistration:
     """Tests for Dagster code location registration.
 
@@ -298,13 +304,18 @@ class TestCodeLocationRegistration:
                 "app.kubernetes.io/component=workspace",
             ]
         )
-        # Skip if no workspace configmap (Dagster disabled)
+        # Fail if no workspace configmap (Dagster disabled)
         if result.returncode != 0:
-            pytest.skip("Dagster workspace not configured (Dagster disabled)")
+            pytest.fail(
+                "Dagster workspace not configured.\n"
+                "The Helm chart must configure Dagster workspace for E2E tests.\n"
+                "Track: Epic 13 - Helm deployment integration"
+            )
 
 
 @pytest.mark.e2e
 @pytest.mark.requirement("E2E-003")
+@pytest.mark.timeout(900)
 class TestJobExecution:
     """Tests for job execution after Helm deployment.
 

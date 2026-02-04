@@ -1,0 +1,42 @@
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: financial-risk
+  version: 1.0.0
+  description: "Financial risk scoring - positions, market data, counterparty exposure"
+  owner: demo@floe.dev
+  labels:
+    domain: finance
+    tier: gold
+
+# Reference the platform manifest for plugin/governance configuration
+# Data engineers inherit all platform settings - just write SQL
+platform:
+  manifest: "../manifest.yaml"
+
+transforms:
+  - name: stg_positions
+    tags: [staging]
+    tier: bronze
+  - name: stg_market_data
+    tags: [staging]
+    tier: bronze
+  - name: stg_counterparties
+    tags: [staging]
+    tier: bronze
+  - name: int_portfolio_risk
+    tags: [intermediate]
+    tier: silver
+    dependsOn: [stg_positions, stg_market_data]
+  - name: int_counterparty_exposure
+    tags: [intermediate]
+    tier: silver
+    dependsOn: [stg_positions, stg_counterparties]
+  - name: mart_risk_dashboard
+    tags: [marts]
+    tier: gold
+    dependsOn: [int_portfolio_risk, int_counterparty_exposure, stg_counterparties]
+schedule:
+  cron: "*/10 * * * *"
+  timezone: UTC
+  enabled: true

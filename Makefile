@@ -41,6 +41,10 @@ help: ## Show this help message
 	@echo "  make helm-test-infra Verify test infrastructure health"
 	@echo "  make helm-uninstall  Uninstall floe (NAMESPACE=... required)"
 	@echo ""
+	@echo "Demo:"
+	@echo "  make demo            Deploy platform with all 3 demo data products (PRODUCTS=...)"
+	@echo "  make demo-stop       Stop demo and clean up resources"
+	@echo ""
 	@echo "Agent Memory (Cognee):"
 	@echo "  make cognee-health   Check Cognee Cloud connectivity"
 	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
@@ -252,6 +256,46 @@ helm-test-infra: ## Verify test infrastructure is healthy
 	@echo "Checking MinIO..."
 	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n floe-test --timeout=60s 2>/dev/null || echo "MinIO not ready"
 	@echo "Test infrastructure health check complete!"
+
+# ============================================================
+# Demo Targets
+# ============================================================
+
+.PHONY: demo demo-stop
+
+demo: ## Deploy platform and run all 3 demo data products with dashboards
+	@echo "=== Starting floe Platform Demo ==="
+	@echo "Ensuring Kind cluster is running..."
+	$(MAKE) kind-up
+	@echo "Installing floe-platform Helm chart with demo overrides..."
+	@helm upgrade --install floe-platform ./charts/floe-platform \
+		-f ./charts/floe-platform/values-demo.yaml \
+		-n floe-dev --create-namespace --wait --timeout 300s
+	@echo "Compiling demo data products..."
+	@if [ -n "$(PRODUCTS)" ]; then \
+		for product in $(shell echo $(PRODUCTS) | tr ',' ' '); do \
+			echo "Compiling $$product..."; \
+			uv run floe compile demo/$$product/floe.yaml || exit 1; \
+		done; \
+	else \
+		for product in customer-360 iot-telemetry financial-risk; do \
+			echo "Compiling $$product..."; \
+			uv run floe compile demo/$$product/floe.yaml || exit 1; \
+		done; \
+	fi
+	@echo "Deploying to Dagster..."
+	@echo "=== Demo Ready ==="
+	@echo "Dagster UI:    http://localhost:3000"
+	@echo "Polaris:       http://localhost:8181"
+	@echo "Marquez:       http://localhost:5001"
+	@echo "Jaeger:        http://localhost:16686"
+	@echo "Grafana:       http://localhost:3001"
+	@echo "MinIO Console: http://localhost:9001"
+
+demo-stop: ## Stop demo and clean up resources
+	@echo "=== Stopping floe Platform Demo ==="
+	@helm uninstall floe-platform -n floe-dev --ignore-not-found
+	@echo "Demo stopped. Run 'make kind-down' to destroy cluster."
 
 # ============================================================
 # Development Helpers

@@ -95,6 +95,13 @@ Examples:
     help="Enable schema drift detection against actual table schemas. "
     "Requires database connection. Validates contract schema matches reality.",
 )
+@click.option(
+    "--generate-definitions",
+    is_flag=True,
+    default=False,
+    help="Generate Dagster definitions.py file alongside CompiledArtifacts. "
+    "The generated file can be used as a Dagster code location entry point.",
+)
 def compile_command(
     spec: Path | None,
     manifest: Path | None,
@@ -103,6 +110,7 @@ def compile_command(
     enforcement_format: str,
     skip_contracts: bool,
     drift_detection: bool,
+    generate_definitions: bool,
 ) -> None:
     """Compile FloeSpec and Manifest into CompiledArtifacts.
 
@@ -118,6 +126,7 @@ def compile_command(
         enforcement_format: Enforcement report format (json, sarif, html).
         skip_contracts: Skip data contract validation if True.
         drift_detection: Enable schema drift detection if True.
+        generate_definitions: Generate Dagster definitions.py if True.
     """
     # Validate required inputs
     if spec is None:
@@ -173,6 +182,15 @@ def compile_command(
                 artifacts=artifacts,
             )
             success(f"Enforcement report written to: {enforcement_report}")
+
+        # Step 6: Generate orchestrator entry point if requested
+        # Respects component ownership: plugin owns its code generation
+        if generate_definitions:
+            entry_point_path = _generate_orchestrator_entry_point(
+                artifacts=artifacts,
+                output_dir=output.parent,
+            )
+            success(f"Entry point generated: {entry_point_path}")
 
         success("Compilation complete.")
 
@@ -258,6 +276,73 @@ def _export_enforcement_report(
             f"Unknown enforcement format: {enforcement_format}",
             exit_code=ExitCode.USAGE_ERROR,
         )
+
+
+def _generate_orchestrator_entry_point(
+    artifacts: object,
+    output_dir: Path,
+) -> str:
+    """Generate orchestrator-specific entry point via plugin.
+
+    Respects component ownership: floe-core provides data (CompiledArtifacts),
+    the orchestrator plugin owns code generation. This function dynamically
+    loads the configured orchestrator plugin and delegates code generation to it.
+
+    Args:
+        artifacts: CompiledArtifacts containing plugin configuration.
+        output_dir: Directory to write the entry point file.
+
+    Returns:
+        Path to the generated entry point file.
+
+    Raises:
+        click.ClickException: If orchestrator plugin cannot be loaded.
+    """
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+    # Type narrow artifacts
+    if not isinstance(artifacts, CompiledArtifacts):
+        error_exit(
+            "Invalid artifacts type for code generation.",
+            exit_code=ExitCode.COMPILATION_ERROR,
+        )
+
+    # Get orchestrator type from artifacts
+    orchestrator_type = artifacts.plugins.orchestrator.type
+
+    info(f"Loading orchestrator plugin: {orchestrator_type}")
+
+    # Load the appropriate orchestrator plugin
+    # Currently only Dagster is supported
+    if orchestrator_type == "dagster":
+        try:
+            from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+            plugin = DagsterOrchestratorPlugin()
+        except ImportError as e:
+            error_exit(
+                f"Failed to load Dagster orchestrator plugin: {e}. "
+                "Install with: pip install floe-orchestrator-dagster",
+                exit_code=ExitCode.COMPILATION_ERROR,
+            )
+    else:
+        error_exit(
+            f"Unsupported orchestrator type: {orchestrator_type}. "
+            "Currently supported: dagster",
+            exit_code=ExitCode.COMPILATION_ERROR,
+        )
+
+    # Get product name from artifacts metadata
+    product_name = artifacts.metadata.product_name
+
+    # Delegate code generation to the plugin
+    # This respects component ownership: plugin owns its code generation
+    entry_point_path = plugin.generate_entry_point_code(
+        product_name=product_name,
+        output_dir=str(output_dir),
+    )
+
+    return entry_point_path
 
 
 # Export for use in platform group

@@ -1,0 +1,23 @@
+{{- if .Values.marquez.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-marquez
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: marquez
+spec:
+  type: {{ .Values.marquez.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ .Values.marquez.service.port | default 5000 }}
+      targetPort: http
+      protocol: TCP
+    - name: admin
+      port: {{ .Values.marquez.service.adminPort | default 5001 }}
+      targetPort: admin
+      protocol: TCP
+  selector:
+    {{- include "floe-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: marquez
+{{- end }}

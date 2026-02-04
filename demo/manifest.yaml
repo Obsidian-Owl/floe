@@ -1,0 +1,126 @@
+# Demo Platform Manifest
+# =======================
+#
+# This file defines the platform configuration for the floe demo.
+# Platform teams own this file - it rarely changes.
+#
+# Data engineers reference this manifest in their floe.yaml files
+# to inherit plugin configurations, governance policies, and resource presets.
+#
+# Usage:
+#   In data product floe.yaml:
+#     platform:
+#       manifest: "../manifest.yaml"
+
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: floe-demo-platform
+  version: 1.0.0
+  description: Demo platform for showcasing floe data products
+  owner: platform-team@floe.dev
+
+# =============================================================================
+# Plugin Configuration
+# =============================================================================
+# These plugins are automatically used by all data products referencing this manifest.
+# Data engineers don't need to configure these - they just write SQL.
+
+plugins:
+  # Compute: DuckDB for local/demo, can be swapped to Spark/Snowflake in production
+  compute:
+    type: duckdb
+    config:
+      threads: 4
+      memory_limit: "2GB"
+
+  # Orchestrator: Dagster for scheduling, monitoring, and lineage
+  orchestrator:
+    type: dagster
+    config:
+      default_schedule: "*/10 * * * *"  # 10-minute intervals for demo
+
+  # Catalog: Polaris REST catalog for Iceberg table management
+  catalog:
+    type: polaris
+    config:
+      uri: http://floe-platform-polaris:8181/api/catalog
+      warehouse: floe-demo
+      # Demo credentials for local development only
+      # Production: use polaris.auth.existingSecret with K8s secrets
+      credential: demo-admin:demo-secret  # pragma: allowlist secret
+
+  # Storage: MinIO S3-compatible storage for demo
+  storage:
+    type: s3
+    config:
+      endpoint: http://floe-platform-minio:9000
+      bucket: floe-data
+      region: us-east-1
+      path_style_access: true
+
+# =============================================================================
+# Observability Configuration
+# =============================================================================
+# Full observability stack - data engineers get this for free.
+
+observability:
+  # OpenTelemetry traces for distributed tracing
+  tracing:
+    enabled: true
+    exporter: otlp
+    endpoint: http://floe-platform-otel:4317
+
+  # OpenLineage for data lineage tracking
+  lineage:
+    enabled: true
+    transport: http
+    endpoint: http://floe-platform-marquez:5000/api/v1/lineage
+
+  # Structured logging
+  logging:
+    level: INFO
+    format: json
+
+# =============================================================================
+# Governance Policies
+# =============================================================================
+# Platform-wide governance that all data products must adhere to.
+
+governance:
+  # Policy enforcement level: off|warn|strict
+  policy_enforcement_level: warn
+
+  # Audit logging: enabled|disabled
+  audit_logging: enabled
+
+  # Data retention period in days (short for demo)
+  data_retention_days: 1
+
+  # Quality gates configuration
+  quality_gates:
+    minimum_test_coverage: 80
+    require_descriptions: false
+    block_on_failure: false
+
+# =============================================================================
+# Resource Presets
+# =============================================================================
+# Standard resource allocations for K8s deployments.
+
+resource_presets:
+  small:
+    cpu_request: "100m"
+    cpu_limit: "500m"
+    memory_request: "256Mi"
+    memory_limit: "512Mi"
+  medium:
+    cpu_request: "250m"
+    cpu_limit: "1000m"
+    memory_request: "512Mi"
+    memory_limit: "1Gi"
+  large:
+    cpu_request: "500m"
+    cpu_limit: "2000m"
+    memory_request: "1Gi"
+    memory_limit: "2Gi"

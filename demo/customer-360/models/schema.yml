@@ -1,0 +1,190 @@
+version: 2
+
+models:
+  - name: stg_crm_customers
+    description: "Staging table for CRM customer data with cleaned and standardized fields"
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier"
+        tests:
+          - not_null
+          - unique
+      - name: customer_name
+        description: "Customer full name (trimmed)"
+      - name: email
+        description: "Customer email address (lowercase, trimmed)"
+        tests:
+          - not_null
+      - name: signup_date
+        description: "Date customer signed up"
+        tests:
+          - not_null
+      - name: segment
+        description: "Customer segment classification"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['enterprise', 'mid_market', 'smb', 'startup', 'unknown']
+      - name: _loaded_at
+        description: "Timestamp when record was loaded"
+
+  - name: stg_transactions
+    description: "Staging table for transaction data with cleaned and validated fields"
+    columns:
+      - name: txn_id
+        description: "Unique transaction identifier"
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Customer who made the transaction"
+        tests:
+          - not_null
+      - name: amount
+        description: "Transaction amount in USD"
+        tests:
+          - not_null
+      - name: product_id
+        description: "Product identifier"
+      - name: txn_date
+        description: "Date of transaction"
+        tests:
+          - not_null
+      - name: status
+        description: "Transaction status"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['completed', 'pending', 'refunded', 'cancelled', 'unknown']
+      - name: _loaded_at
+        description: "Timestamp when record was loaded"
+
+  - name: stg_support_tickets
+    description: "Staging table for support ticket data with resolution metrics"
+    columns:
+      - name: ticket_id
+        description: "Unique ticket identifier"
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Customer who opened the ticket"
+        tests:
+          - not_null
+      - name: category
+        description: "Ticket category"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['billing', 'technical', 'account', 'shipping', 'general', 'unknown']
+      - name: priority
+        description: "Ticket priority level"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['low', 'medium', 'high', 'critical']
+      - name: created_at
+        description: "Timestamp when ticket was created"
+        tests:
+          - not_null
+      - name: resolved_at
+        description: "Timestamp when ticket was resolved (null if still open)"
+      - name: resolution_hours
+        description: "Hours taken to resolve ticket (null if still open)"
+      - name: _loaded_at
+        description: "Timestamp when record was loaded"
+
+  - name: int_customer_orders
+    description: "Intermediate table with customer order aggregations"
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier"
+        tests:
+          - not_null
+          - unique
+      - name: customer_name
+        description: "Customer full name"
+      - name: email
+        description: "Customer email address"
+      - name: segment
+        description: "Customer segment"
+      - name: total_orders
+        description: "Total number of completed orders"
+      - name: total_spend
+        description: "Total amount spent on completed orders"
+      - name: avg_order_value
+        description: "Average order value"
+      - name: first_order_date
+        description: "Date of first order"
+      - name: last_order_date
+        description: "Date of most recent order"
+      - name: _loaded_at
+        description: "Timestamp when record was loaded"
+
+  - name: int_customer_support
+    description: "Intermediate table with customer support aggregations"
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier"
+        tests:
+          - not_null
+          - unique
+      - name: customer_name
+        description: "Customer full name"
+      - name: email
+        description: "Customer email address"
+      - name: segment
+        description: "Customer segment"
+      - name: ticket_count
+        description: "Total number of support tickets"
+      - name: avg_resolution_hours
+        description: "Average hours to resolve tickets"
+      - name: open_tickets
+        description: "Number of currently open tickets"
+      - name: _loaded_at
+        description: "Timestamp when record was loaded"
+
+  - name: mart_customer_360
+    description: "Final customer 360 view with consolidated profile, order, and support metrics"
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier"
+        tests:
+          - not_null
+          - unique
+      - name: customer_name
+        description: "Customer full name"
+        tests:
+          - not_null
+      - name: email
+        description: "Customer email address"
+        tests:
+          - not_null
+      - name: segment
+        description: "Customer segment"
+        tests:
+          - not_null
+      - name: signup_date
+        description: "Date customer signed up"
+        tests:
+          - not_null
+      - name: total_orders
+        description: "Total number of completed orders"
+      - name: total_spend
+        description: "Total amount spent on completed orders"
+      - name: avg_order_value
+        description: "Average order value"
+      - name: first_order_date
+        description: "Date of first order"
+      - name: last_order_date
+        description: "Date of most recent order"
+      - name: ticket_count
+        description: "Total number of support tickets"
+      - name: avg_resolution_hours
+        description: "Average hours to resolve tickets"
+      - name: open_tickets
+        description: "Number of currently open tickets"
+      - name: customer_lifetime_days
+        description: "Number of days since customer signup"
+      - name: _loaded_at
+        description: "Timestamp when record was loaded"

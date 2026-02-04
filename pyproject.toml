@@ -24,6 +24,7 @@ dependencies = [
     "types-requests>=2.31",  # Type stubs for requests
     "requests>=2.31",  # HTTP client for telemetry fixture tests
     "jsonschema>=4.0",  # For JSON Schema validation in tests
+    "dagster-graphql",  # GraphQL API for Dagster integration testing
     # Include floe-core for development
     "floe-core",
     # Include floe-iceberg for development

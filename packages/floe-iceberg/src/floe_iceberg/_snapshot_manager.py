@@ -197,40 +197,61 @@ class _IcebergSnapshotManager:
         self,
         table: Table,
         older_than_days: int | None = None,
+        keep_last: int | None = None,
     ) -> int:
         """Expire snapshots older than the specified retention period.
 
         Removes old snapshots while respecting min_snapshots_to_keep from config.
         This helps manage storage costs and metadata overhead.
 
+        For demo environments, use keep_last=6 to maintain a rolling window of
+        recent snapshots regardless of age (FR-032).
+
         Args:
             table: PyIceberg Table object.
             older_than_days: Days to retain snapshots. Defaults to config value.
+            keep_last: Number of most recent snapshots to keep. Overrides
+                min_snapshots_to_keep from config. For demo: use keep_last=6.
 
         Returns:
             Number of snapshots expired.
 
         Example:
-            >>> # Expire snapshots older than 30 days
+            >>> # Expire with default retention
             >>> expired_count = snapshot_mgr.expire_snapshots(table, older_than_days=30)
-            >>> print(f"Expired {expired_count} snapshots")
+            >>> # Demo mode: keep last 6 snapshots
+            >>> expired_count = snapshot_mgr.expire_snapshots(table, keep_last=6)
+
+        Requirements:
+            FR-032: Iceberg snapshot expiry with keep_last=6 for demo retention
         """
         if older_than_days is not None:
             retention_days = older_than_days
         else:
             retention_days = self._config.default_retention_days
 
+        # Determine snapshots to keep
+        if keep_last is not None:
+            min_to_keep = keep_last
+            self._log.debug(
+                "snapshot_retention_override",
+                keep_last=keep_last,
+            )
+        else:
+            min_to_keep = self._config.min_snapshots_to_keep
+
         # Set span attributes for observability
         from opentelemetry import trace
 
         span = trace.get_current_span()
         span.set_attribute("table.identifier", str(getattr(table, "identifier", "unknown")))
+        span.set_attribute("retention.keep_last", min_to_keep)
 
         self._log.debug(
             "expire_snapshots_requested",
             table_identifier=getattr(table, "identifier", None),
             retention_days=retention_days,
-            min_to_keep=self._config.min_snapshots_to_keep,
+            min_to_keep=min_to_keep,
         )
 
         # Get current snapshots to count before/after
@@ -257,13 +278,12 @@ class _IcebergSnapshotManager:
             # PyIceberg 0.11+ has expire_snapshots method
             expire_op = table.expire_snapshots()
             expire_op.expire_older_than(cutoff_datetime)
-            expire_op.retain_last(self._config.min_snapshots_to_keep)
+            expire_op.retain_last(min_to_keep)
             expire_op.commit()
         elif hasattr(table, "manage_snapshots"):
             # Alternative: use ManageSnapshots API
             manage_snapshots = table.manage_snapshots()
             # Identify snapshots to expire
-            min_to_keep = self._config.min_snapshots_to_keep
             snapshots_sorted = sorted(
                 snapshots_before,
                 key=lambda s: s.timestamp_ms,

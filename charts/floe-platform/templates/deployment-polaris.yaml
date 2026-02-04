@@ -30,39 +30,26 @@ spec:
       serviceAccountName: {{ include "floe-platform.serviceAccountName" . }}
       automountServiceAccountToken: false
       securityContext:
-        {{- include "floe-platform.podSecurityContext" . | nindent 8 }}
-      {{- if eq .Values.polaris.persistence.type "file" }}
-      initContainers:
-        - name: init-data-dir
-          image: busybox:1.36
-          command: ['sh', '-c', 'mkdir -p /data/polaris && chown -R 1000:1000 /data/polaris']
-          securityContext:
-            runAsUser: 0
-          resources:
-            limits:
-              cpu: 100m
-              memory: 64Mi
-              ephemeral-storage: 128Mi
-            requests:
-              cpu: 50m
-              memory: 32Mi
-              ephemeral-storage: 64Mi
-          volumeMounts:
-            - name: polaris-data
-              mountPath: /data
-      {{- end }}
+        runAsUser: 10000
+        runAsGroup: 10000
+        runAsNonRoot: true
+        fsGroup: 10000
       containers:
         - name: polaris
           securityContext:
-            {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           image: "{{ .Values.polaris.image.repository }}:{{ .Values.polaris.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.polaris.image.pullPolicy | default .Values.global.imagePullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.polaris.service.port | default 8181 }}
               protocol: TCP
-            - name: metrics
-              containerPort: {{ .Values.polaris.service.metricsPort | default 8182 }}
+            - name: management
+              containerPort: {{ .Values.polaris.service.managementPort | default 8182 }}
               protocol: TCP
           livenessProbe:
             {{- toYaml .Values.polaris.livenessProbe | nindent 12 }}
@@ -71,43 +58,61 @@ spec:
           resources:
             {{- toYaml .Values.polaris.resources | nindent 12 }}
           env:
-            - name: POLARIS_CONFIG_FILE
-              value: /opt/polaris/conf/polaris-server.yml
-            {{- if and (eq .Values.polaris.persistence.type "external") .Values.polaris.persistence.external.connectionString }}
-            - name: POLARIS_DB_USER
+            - name: POLARIS_BOOTSTRAP_CREDENTIALS
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.fullname" . }}-secret
-                  key: db-user
-            - name: POLARIS_DB_PASSWORD
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: bootstrap-credentials
+            - name: JAVA_OPTS_APPEND
+              value: >-
+                {{- range $key, $val := .Values.polaris.config.features }}
+                -Dpolaris.features."{{ $key }}"={{ $val }}
+                {{- end }}
+                {{- if and .Values.polaris.storage.s3.enabled .Values.polaris.storage.s3.pathStyleAccess }}
+                -Daws.s3UsePathStyle=true
+                {{- end }}
+            {{- if .Values.polaris.storage.s3.enabled }}
+            - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.fullname" . }}-secret
-                  key: db-password
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  key: aws-secret-access-key
+            - name: AWS_REGION
+              value: {{ .Values.polaris.storage.s3.region | quote }}
+            - name: AWS_ENDPOINT_URL_S3
+              value: {{ .Values.polaris.storage.s3.endpoint | quote }}
+            {{- if .Values.polaris.storage.s3.stsEndpoint }}
+            - name: AWS_ENDPOINT_URL_STS
+              value: {{ .Values.polaris.storage.s3.stsEndpoint | quote }}
+            {{- end }}
             {{- end }}
             {{- with .Values.polaris.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /opt/polaris/conf
+              mountPath: /deployments/config
               readOnly: true
-            {{- if eq .Values.polaris.persistence.type "file" }}
-            - name: polaris-data
-              mountPath: /data/polaris
-            {{- end }}
             - name: tmp
               mountPath: /tmp
+            - name: work
+              mountPath: /work
+            - name: home
+              mountPath: /home/jboss
       volumes:
         - name: config
           configMap:
             name: {{ include "floe-platform.polaris.fullname" . }}-config
-        {{- if eq .Values.polaris.persistence.type "file" }}
-        - name: polaris-data
-          persistentVolumeClaim:
-            claimName: {{ include "floe-platform.polaris.fullname" . }}-data
-        {{- end }}
         - name: tmp
+          emptyDir: {}
+        - name: work
+          emptyDir: {}
+        - name: home
           emptyDir: {}
       {{- with .Values.polaris.nodeSelector }}
       nodeSelector:

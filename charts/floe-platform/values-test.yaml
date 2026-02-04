@@ -36,19 +36,39 @@ namespace:
 # =============================================================================
 dagster:
   enabled: true
+  # Disable Dagster's internal PostgreSQL subchart — use parent chart's PostgreSQL
+  # to avoid duplicate StatefulSet name conflict
   postgresql:
-    # Use in-cluster PostgreSQL for isolation
-    enabled: true
-    auth:
-      username: dagster
-      password: dagster-test-password
-      database: dagster
-    primary:
-      persistence:
-        enabled: false
-        size: 1Gi
+    enabled: false
+    postgresqlHost: floe-platform-postgresql
+    postgresqlUsername: floe
+    postgresqlPassword: "floe-test-password-1234"
+    postgresqlDatabase: dagster
+  # Demo code locations for E2E tests
+  # These use Python module loading pattern - no separate container images needed
+  # Tests verify these products appear in Dagster UI
+  codeLocations:
+    - name: customer-360
+      pythonModule:
+        moduleName: demo.customer_360.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: iot-telemetry
+      pythonModule:
+        moduleName: demo.iot_telemetry.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: financial-risk
+      pythonModule:
+        moduleName: demo.financial_risk.definitions
+        workingDirectory: /app/demo
+        attribute: defs
   dagsterWebserver:
     replicaCount: 1
+    workspace:
+      enabled: true
+      servers: []  # Must be empty when using externalConfigmap
+      externalConfigmap: "floe-platform-dagster-workspace"
     resources:
       requests:
         cpu: 100m
@@ -65,18 +85,22 @@ dagster:
       limits:
         cpu: 500m
         memory: 512Mi
-  dagsterUserDeployments:
-    enabled: false
+  # Enable user deployments to allow workspace.yaml to be mounted
+  # Even with no actual code locations, this enables the workspace file mount
+  dagster-user-deployments:
+    enabled: true
+    enableSubchart: false
+    deployments: []
 
 # =============================================================================
-# Polaris Configuration (In-Memory for Tests)
+# Polaris Configuration (Quarkus 1.3.0 for Tests)
 # =============================================================================
 polaris:
   enabled: true
   replicaCount: 1
   image:
     repository: apache/polaris
-    tag: latest
+    tag: "1.3.0-incubating"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -85,22 +109,48 @@ polaris:
     limits:
       cpu: 500m
       memory: 512Mi
-  persistence:
-    enabled: false
+  auth:
+    # Demo credentials for local testing only - production MUST use existingSecret
+    bootstrapCredentials:
+      clientId: "demo-admin"  # pragma: allowlist secret
+      clientSecret: "demo-secret"  # pragma: allowlist secret
   config:
-    # In-memory catalog for test isolation
-    catalogConfig:
-      type: in-memory
-    # Disable authentication for test simplicity
-    authenticator:
-      class: org.apache.polaris.service.auth.TestInlineBearerTokenPolarisAuthenticator
+    features:
+      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"
+      ALLOW_SETTING_S3_ENDPOINTS: "true"
+      ALLOW_TABLE_LOCATION_OVERLAP: "false"
+  storage:
+    s3:
+      enabled: true
+      endpoint: "http://floe-platform-minio:9000"
+      region: "us-east-1"
+      pathStyleAccess: true
+      accessKey: "minioadmin"
+      secretKey: "minioadmin123"
+  bootstrap:
+    enabled: true
+    catalogName: "floe-e2e"
+    defaultBaseLocation: "s3://floe-iceberg"
+    allowedLocations:
+      - "s3://floe-iceberg"
   service:
     type: ClusterIP
     port: 8181
-  healthCheck:
-    enabled: true
-    initialDelaySeconds: 10
+  # Adjusted probes for test environment (slower startup)
+  livenessProbe:
+    httpGet:
+      path: /q/health/live
+      port: management
+    initialDelaySeconds: 45
+    periodSeconds: 10
+    failureThreshold: 6
+  readinessProbe:
+    httpGet:
+      path: /q/health/ready
+      port: management
+    initialDelaySeconds: 20
     periodSeconds: 5
+    failureThreshold: 12
 
 # =============================================================================
 # PostgreSQL Configuration (Test Database)
@@ -138,8 +188,9 @@ minio:
     limits:
       cpu: 500m
       memory: 512Mi
-  rootUser: minioadmin
-  rootPassword: minioadmin123
+  auth:
+    rootUser: minioadmin
+    rootPassword: minioadmin123
   buckets:
     - name: floe-iceberg
       policy: none
@@ -150,16 +201,53 @@ minio:
 # OpenTelemetry Collector (Disabled for Basic Tests)
 # =============================================================================
 otel:
-  enabled: false
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
 
 # =============================================================================
-# Observability Components (Disabled for Speed)
+# Observability Components (Enabled by Default)
 # =============================================================================
 marquez:
-  enabled: false
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 jaeger:
-  enabled: false
+  enabled: true
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  collector:
+    enabled: false
+  query:
+    enabled: false
+  agent:
+    enabled: false
+  cassandra:
+    persistence:
+      enabled: false
+  storage:
+    type: memory
 
 prometheus:
   enabled: false

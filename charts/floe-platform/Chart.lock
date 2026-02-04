@@ -8,5 +8,8 @@ dependencies:
 - name: minio
   repository: https://charts.bitnami.com/bitnami
   version: 14.8.5
-digest: sha256:bc90859844cbf22564a2664e6e326ef7befa1555e279ff3638afbed9134ad44d
-generated: "2026-02-01T16:34:50.12575+11:00"
+- name: jaeger
+  repository: https://jaegertracing.github.io/helm-charts
+  version: 3.4.1
+digest: sha256:2a064a5292563046f4c40d5d0a57d18e1ae302e89ed51c6475e2408b4cc00c49
+generated: "2026-02-03T18:13:20.758123+11:00"

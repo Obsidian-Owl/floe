@@ -1,0 +1,218 @@
+version: 2
+
+models:
+  # Staging Layer (Bronze)
+  - name: stg_sensors
+    description: Cleaned sensor metadata with validated sensor types
+    columns:
+      - name: sensor_id
+        description: Unique sensor identifier
+        tests:
+          - unique
+          - not_null
+      - name: equipment_id
+        description: Equipment this sensor is attached to
+        tests:
+          - not_null
+      - name: sensor_type
+        description: Type of sensor measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['temperature', 'pressure', 'vibration', 'humidity', 'flow_rate']
+      - name: location
+        description: Physical location of the sensor
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['line_a', 'line_b', 'line_c', 'warehouse_1', 'warehouse_2']
+      - name: installed_at
+        description: Date sensor was installed
+        tests:
+          - not_null
+      - name: _loaded_at
+        description: Timestamp when data was loaded
+        tests:
+          - not_null
+
+  - name: stg_readings
+    description: Cleaned sensor readings with outlier filtering
+    columns:
+      - name: reading_id
+        description: Unique reading identifier
+        tests:
+          - unique
+          - not_null
+      - name: sensor_id
+        description: Sensor that produced this reading
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_sensors')
+              field: sensor_id
+      - name: timestamp
+        description: When the reading was taken
+        tests:
+          - not_null
+      - name: value
+        description: Numeric reading value
+        tests:
+          - not_null
+      - name: unit
+        description: Unit of measurement
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['celsius', 'bar', 'mm_s', 'percent', 'l_min']
+      - name: _loaded_at
+        description: Timestamp when data was loaded
+        tests:
+          - not_null
+
+  - name: stg_maintenance
+    description: Cleaned maintenance log with validated maintenance types
+    columns:
+      - name: log_id
+        description: Unique maintenance log identifier
+        tests:
+          - unique
+          - not_null
+      - name: equipment_id
+        description: Equipment that was maintained
+        tests:
+          - not_null
+      - name: maintenance_type
+        description: Type of maintenance performed
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['preventive', 'corrective', 'predictive', 'emergency']
+      - name: performed_at
+        description: When maintenance was performed
+        tests:
+          - not_null
+      - name: technician
+        description: Technician who performed maintenance
+        tests:
+          - not_null
+      - name: _loaded_at
+        description: Timestamp when data was loaded
+        tests:
+          - not_null
+
+  # Intermediate Layer (Silver)
+  - name: int_sensor_metrics
+    description: Per-sensor aggregate statistics
+    columns:
+      - name: sensor_id
+        description: Unique sensor identifier
+        tests:
+          - unique
+          - not_null
+      - name: equipment_id
+        description: Equipment this sensor is attached to
+        tests:
+          - not_null
+      - name: sensor_type
+        description: Type of sensor measurement
+        tests:
+          - not_null
+      - name: location
+        description: Physical location of the sensor
+        tests:
+          - not_null
+      - name: avg_value
+        description: Average reading value
+        tests:
+          - not_null
+      - name: min_value
+        description: Minimum reading value
+        tests:
+          - not_null
+      - name: max_value
+        description: Maximum reading value
+        tests:
+          - not_null
+      - name: stddev_value
+        description: Standard deviation of readings
+        tests:
+          - not_null
+      - name: reading_count
+        description: Total number of readings
+        tests:
+          - not_null
+
+  - name: int_anomaly_detection
+    description: Sensor readings with anomaly detection (3-sigma rule)
+    columns:
+      - name: reading_id
+        description: Unique reading identifier
+        tests:
+          - unique
+          - not_null
+      - name: sensor_id
+        description: Sensor that produced this reading
+        tests:
+          - not_null
+      - name: timestamp
+        description: When the reading was taken
+        tests:
+          - not_null
+      - name: value
+        description: Numeric reading value
+        tests:
+          - not_null
+      - name: unit
+        description: Unit of measurement
+        tests:
+          - not_null
+      - name: avg_value
+        description: Average value for this sensor
+        tests:
+          - not_null
+      - name: stddev_value
+        description: Standard deviation for this sensor
+        tests:
+          - not_null
+      - name: deviation_factor
+        description: How many standard deviations from mean
+        tests:
+          - not_null
+      - name: is_anomaly
+        description: Whether this reading is an anomaly (>3-sigma)
+        tests:
+          - not_null
+
+  # Marts Layer (Gold)
+  - name: mart_equipment_health
+    description: Per-equipment health metrics and maintenance tracking
+    columns:
+      - name: equipment_id
+        description: Unique equipment identifier
+        tests:
+          - unique
+          - not_null
+      - name: sensor_count
+        description: Number of sensors on this equipment
+        tests:
+          - not_null
+      - name: total_readings
+        description: Total number of readings across all sensors
+        tests:
+          - not_null
+      - name: anomaly_count
+        description: Number of anomalous readings
+        tests:
+          - not_null
+      - name: anomaly_percentage
+        description: Percentage of readings that are anomalous
+        tests:
+          - not_null
+      - name: health_score
+        description: Equipment health score (100 - anomaly_percentage)
+        tests:
+          - not_null
+      - name: last_maintenance_date
+        description: Date of last maintenance (nullable if no maintenance)
+      - name: days_since_maintenance
+        description: Days since last maintenance (nullable if no maintenance)

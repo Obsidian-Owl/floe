@@ -403,3 +403,67 @@ class OrchestratorPlugin(PluginMetadata):
             ... )
         """
         ...
+
+    def sensor_definition(self) -> Any | None:
+        """Return optional sensor definition for event-driven orchestration.
+
+        Sensors enable event-driven pipeline triggering beyond cron-based
+        scheduling. Examples include health checks, file arrival sensors,
+        or external system event listeners.
+
+        Returns:
+            Platform-specific sensor definition (e.g., Dagster SensorDefinition),
+            or None if the plugin does not provide sensors.
+
+        Example:
+            >>> sensor = plugin.sensor_definition()
+            >>> if sensor:
+            ...     definitions = Definitions(assets=[...], sensors=[sensor])
+
+        Requirements:
+            FR-029: Auto-trigger demo pipeline on platform health
+            FR-033: Health check integration for platform services
+        """
+        return None
+
+    @abstractmethod
+    def generate_entry_point_code(
+        self,
+        product_name: str,
+        output_dir: str,
+    ) -> str:
+        """Generate orchestrator-specific entry point code file.
+
+        Creates the entry point file that enables workspace discovery.
+        Each orchestrator has its own format:
+        - Dagster: definitions.py with Definitions object
+        - Airflow: dag.py with DAG object
+        - Prefect: flow.py with Flow object
+
+        This method respects component ownership: floe-core provides data
+        (CompiledArtifacts), orchestrator plugins own code generation.
+
+        Args:
+            product_name: Name from FloeSpec metadata (e.g., "customer-360").
+            output_dir: Directory path where the entry point will be written.
+
+        Returns:
+            Path to the generated entry point file as string.
+
+        Example:
+            >>> path = plugin.generate_entry_point_code(
+            ...     product_name="customer-360",
+            ...     output_dir="/path/to/product",
+            ... )
+            >>> # For Dagster: returns "/path/to/product/definitions.py"
+            >>> # For Airflow: returns "/path/to/product/dag.py"
+
+        Requirements:
+            - Component ownership: Orchestrator plugin owns its code generation
+            - Spec 2b-compilation-pipeline: floe-core provides DATA, plugins own code
+
+        See Also:
+            - create_definitions(): Runtime definitions from artifacts
+            - specs/2b-compilation-pipeline/spec.md: Technology ownership boundaries
+        """
+        ...

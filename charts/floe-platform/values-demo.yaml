@@ -1,0 +1,232 @@
+# Demo-specific overrides for floe-platform
+# Usage: helm install floe-platform ./charts/floe-platform -f charts/floe-platform/values-demo.yaml
+#
+# This file configures the platform for local demonstration:
+# - Reduced resource requirements for Kind cluster
+# - Demo-specific scheduling (10-minute intervals)
+# - Marquez enabled for lineage visualization
+# - Short retention periods for demo data
+
+# =============================================================================
+# Global Demo Configuration
+# =============================================================================
+global:
+  environment: demo
+
+# =============================================================================
+# Dagster Configuration (Orchestration)
+# =============================================================================
+dagster:
+  # Demo code locations - Python module-based loading
+  # Each demo product appears as a separate code location in Dagster UI
+  # Data engineers only write: floe.yaml + dbt models
+  # Platform auto-discovers products via definitions.py
+  codeLocations:
+    - name: customer-360
+      pythonModule:
+        moduleName: demo.customer_360.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: iot-telemetry
+      pythonModule:
+        moduleName: demo.iot_telemetry.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: financial-risk
+      pythonModule:
+        moduleName: demo.financial_risk.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+
+  # Dagster webserver configuration
+  dagsterWebserver:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Dagster daemon configuration
+  dagsterDaemon:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Demo scheduling: 10-minute intervals
+    env:
+      DAGSTER_DEFAULT_SCHEDULE_CRON: "*/10 * * * *"
+
+  # Run launcher configuration
+  runLauncher:
+    type: K8sRunLauncher
+    config:
+      k8sRunLauncher:
+        # Resources for run pods (light for demo)
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+# =============================================================================
+# Polaris Configuration (Iceberg Catalog - Demo)
+# =============================================================================
+polaris:
+  enabled: true
+  replicaCount: 1
+  image:
+    tag: "1.3.0-incubating"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+      ephemeral-storage: 1Gi
+  auth:
+    # Demo credentials for local development only - production MUST use existingSecret
+    bootstrapCredentials:
+      clientId: "demo-admin"  # pragma: allowlist secret
+      clientSecret: "demo-secret"  # pragma: allowlist secret
+  config:
+    features:
+      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"
+      ALLOW_SETTING_S3_ENDPOINTS: "true"
+      ALLOW_TABLE_LOCATION_OVERLAP: "false"
+  storage:
+    s3:
+      enabled: true
+      endpoint: "http://floe-platform-minio:9000"
+      region: "us-east-1"
+      pathStyleAccess: true
+      # MinIO default credentials for local development - production uses IAM/IRSA
+      accessKey: "minioadmin"  # pragma: allowlist secret
+      secretKey: "minioadmin123"  # pragma: allowlist secret
+  bootstrap:
+    enabled: true
+    catalogName: "floe-demo"
+    defaultBaseLocation: "s3://floe-data"
+    allowedLocations:
+      - "s3://floe-data"
+
+# =============================================================================
+# OpenTelemetry Collector Configuration (Observability)
+# =============================================================================
+otel:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# PostgreSQL Configuration (Metadata Store)
+# =============================================================================
+postgresql:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+      ephemeral-storage: 1Gi
+  persistence:
+    enabled: true
+    size: 2Gi  # Reduced for demo
+
+# =============================================================================
+# MinIO Configuration (Object Storage - Demo)
+# =============================================================================
+minio:
+  # Enable MinIO for demo (not recommended for production)
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    size: 5Gi  # Reduced for demo
+  defaultBuckets: "floe-data,floe-artifacts"
+
+# =============================================================================
+# Jaeger Configuration (Distributed Tracing - Demo Visualization)
+# =============================================================================
+jaeger:
+  enabled: true
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  collector:
+    enabled: false
+  query:
+    enabled: false
+  agent:
+    enabled: false
+  cassandra:
+    persistence:
+      enabled: false
+  storage:
+    type: memory
+
+# =============================================================================
+# Marquez Configuration (OpenLineage - Demo Visualization)
+# =============================================================================
+marquez:
+  # Enable Marquez for lineage visualization in demos
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Demo uses shared PostgreSQL
+  postgresql:
+    host: ""  # Uses shared PostgreSQL (auto-configured)
+    database: marquez
+    username: floe
+
+# =============================================================================
+# Demo-Specific Configuration
+# =============================================================================
+demo:
+  enabled: true
+  # Demo data seeding scale (small|medium|large)
+  # Overridable via FLOE_DEMO_SEED_SCALE environment variable
+  seedScale: "small"
+  # Data retention: 1 hour for demo (keeps demo data fresh)
+  retentionHours: 1
+  # Keep last 6 snapshots for time travel demonstration
+  snapshotKeepLast: 6
