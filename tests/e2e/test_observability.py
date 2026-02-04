@@ -20,8 +20,7 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import datetime, timezone
+import re
 from typing import Any, ClassVar
 
 import httpx
@@ -116,7 +115,7 @@ class TestObservability(IntegrationTestBase):
         first_span = first_trace["spans"][0]
         assert "operationName" in first_span, "Span missing operationName"
         assert len(first_span["operationName"]) > 0, (
-            "Span has empty operationName — OTel instrumentation not setting span names"
+            "Span has empty operationName -- OTel instrumentation not setting span names"
         )
 
         # Verify services list includes floe-platform
@@ -148,6 +147,7 @@ class TestObservability(IntegrationTestBase):
         1. Marquez API is accessible and namespace creation works
         2. Real OpenLineage jobs exist in at least one namespace
         3. Pipeline execution has emitted RunEvent.START/COMPLETE events
+        4. Jobs match the product name from this pipeline run
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -194,19 +194,20 @@ class TestObservability(IntegrationTestBase):
         verify_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}")
         assert verify_response.status_code == 200, f"Created namespace not found: {test_namespace}"
 
-        # Query for REAL jobs — not just API responds
+        # Query for REAL jobs -- not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
         assert jobs_response.status_code == 200, (
             f"Jobs endpoint failed: {jobs_response.status_code}"
         )
 
-        # Check for jobs in the default namespace too (where pipeline would emit)
+        # Check for jobs in the default namespace (where pipeline would emit)
         default_jobs = marquez_client.get("/api/v1/namespaces/default/jobs")
-        if default_jobs.status_code == 200:
-            default_jobs_json = default_jobs.json()
-            all_jobs = default_jobs_json.get("jobs", [])
-        else:
-            all_jobs = []
+        assert default_jobs.status_code == 200, (
+            f"Marquez default namespace jobs query failed: {default_jobs.status_code}. "
+            "Marquez API must be accessible for OpenLineage validation."
+        )
+        default_jobs_json = default_jobs.json()
+        all_jobs: list[dict[str, Any]] = default_jobs_json.get("jobs", [])
 
         # Also check customer-360 namespace
         c360_jobs = marquez_client.get("/api/v1/namespaces/customer-360/jobs")
@@ -223,6 +224,17 @@ class TestObservability(IntegrationTestBase):
             f"Namespaces checked: default, customer-360, {test_namespace}"
         )
 
+        # Validate jobs are from THIS pipeline (match expected product names)
+        job_names = [job.get("name", "") for job in all_jobs]
+        has_pipeline_job = any(
+            "customer" in name.lower() or "pipeline" in name.lower() for name in job_names
+        )
+        assert has_pipeline_job, (
+            f"OBSERVABILITY GAP: Jobs found but none match expected pipeline products.\n"
+            f"Job names found: {job_names}\n"
+            "Expected job names containing 'customer' or 'pipeline'."
+        )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-042")
     def test_trace_lineage_correlation(
@@ -232,12 +244,13 @@ class TestObservability(IntegrationTestBase):
         marquez_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Validate Jaeger and Marquez contain pipeline data for correlation.
+        """Validate that trace_id correlates between Jaeger traces and Marquez lineage events.
 
         Demands that:
-        1. Jaeger has floe-related or dagster-related service traces
-        2. Marquez has floe-related namespaces with pipeline data
-        3. At least one system has real pipeline data for correlation
+        1. Jaeger has floe-related service traces (AND condition)
+        2. Marquez has floe-related namespaces with pipeline data (AND condition)
+        3. A trace_id from Jaeger matches a run_id or trace_id in Marquez events
+        4. BOTH systems must have data for correlation to be meaningful
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -277,13 +290,70 @@ class TestObservability(IntegrationTestBase):
             or "financial" in ns["name"].lower()
         ]
 
-        # Both systems must have pipeline data for correlation to work
-        assert len(floe_services) > 0 or len(floe_namespaces) > 0, (
-            "CORRELATION GAP: Neither Jaeger nor Marquez has pipeline data.\n"
-            f"Jaeger services: {all_services}\n"
-            f"Marquez namespaces: {[ns['name'] for ns in all_namespaces]}\n"
+        # BOTH systems must have pipeline data for correlation to work (AND, not OR)
+        assert len(floe_services) > 0 and len(floe_namespaces) > 0, (
+            "CORRELATION GAP: Both Jaeger AND Marquez must have pipeline data.\n"
+            f"Jaeger floe services: {floe_services} (found: {len(floe_services)})\n"
+            f"Marquez floe namespaces: {floe_namespaces} (found: {len(floe_namespaces)})\n"
+            f"All Jaeger services: {all_services}\n"
+            f"All Marquez namespaces: {[ns['name'] for ns in all_namespaces]}\n"
             "Fix: Run a pipeline with both OTel tracing and OpenLineage emission enabled, "
             "using the same run_id for correlation."
+        )
+
+        # Now verify actual correlation: get a trace_id from Jaeger
+        # and check Marquez has a lineage event with matching run_id/trace_id
+        jaeger_trace_id: str | None = None
+        for service in floe_services:
+            traces_response = jaeger_client.get(
+                "/api/traces",
+                params={"service": service, "limit": 5},
+            )
+            if traces_response.status_code == 200:
+                traces = traces_response.json().get("data", [])
+                if traces:
+                    jaeger_trace_id = traces[0].get("traceID")
+                    break
+
+        assert jaeger_trace_id is not None, (
+            "CORRELATION GAP: Floe services exist in Jaeger but no traces found.\n"
+            f"Services checked: {floe_services}"
+        )
+
+        # Query Marquez for lineage events that reference this trace_id
+        correlation_found = False
+        for ns_name in floe_namespaces:
+            jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
+            if jobs_response.status_code != 200:
+                continue
+            jobs = jobs_response.json().get("jobs", [])
+            for job in jobs:
+                runs_response = marquez_client.get(
+                    f"/api/v1/namespaces/{ns_name}/jobs/{job['name']}/runs"
+                )
+                if runs_response.status_code != 200:
+                    continue
+                runs = runs_response.json().get("runs", [])
+                for run in runs:
+                    # Check if run_id or facets contain the trace_id
+                    run_id = run.get("id", "")
+                    facets = run.get("facets", {})
+                    # Check for trace_id in parent run facet or custom facets
+                    facets_str = json.dumps(facets)
+                    if jaeger_trace_id in run_id or jaeger_trace_id in facets_str:
+                        correlation_found = True
+                        break
+                if correlation_found:
+                    break
+            if correlation_found:
+                break
+
+        assert correlation_found, (
+            "CORRELATION GAP: trace_id from Jaeger not found in Marquez lineage events.\n"
+            f"Jaeger trace_id: {jaeger_trace_id}\n"
+            f"Namespaces searched: {floe_namespaces}\n"
+            "Fix: Pipeline must propagate OTel trace_id into OpenLineage run facets "
+            "so that traces and lineage events can be correlated."
         )
 
     @pytest.mark.e2e
@@ -332,7 +402,7 @@ class TestObservability(IntegrationTestBase):
             "INFRASTRUCTURE GAP: OTel Collector not deployed.\n"
             "\n"
             "ARCHITECTURE: Metrics flow through OTel Collector.\n"
-            "Platform → OTel Collector → External Backend\n"
+            "Platform -> OTel Collector -> External Backend\n"
             "\n"
             "ROOT CAUSE: OTel Collector is disabled in test values.\n"
             "File: charts/floe-platform/values-test.yaml\n"
@@ -363,11 +433,22 @@ class TestObservability(IntegrationTestBase):
             timeout=30,
             check=False,
         )
-        if pod_result.returncode == 0 and pod_result.stdout.strip():
-            phases = pod_result.stdout.strip().split()
-            assert all(p == "Running" for p in phases), (
-                f"OTel Collector pods not all running. Phases: {phases}"
-            )
+
+        # Pod query MUST succeed -- no silent fallback
+        assert pod_result.returncode == 0, (
+            f"INFRASTRUCTURE ERROR: Failed to query OTel Collector pods.\n"
+            f"Error: {pod_result.stderr.strip()}\n"
+            "kubectl must be able to query pods in 'floe-test' namespace."
+        )
+        assert pod_result.stdout.strip(), (
+            "INFRASTRUCTURE GAP: No OTel Collector pods found matching label "
+            "app.kubernetes.io/component=opentelemetry-collector.\n"
+            "OTel Collector service exists but no pods are scheduled."
+        )
+        phases = pod_result.stdout.strip().split()
+        assert all(p == "Running" for p in phases), (
+            f"OTel Collector pods not all running. Phases: {phases}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-045")
@@ -376,11 +457,13 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         dagster_client: Any,
     ) -> None:
-        """Validate that compilation emits structured logs and Dagster runs endpoint is queryable.
+        """Validate that compilation emits structured logs containing trace_id context.
 
         Demands that:
-        1. Compilation produces log output with trace context
-        2. Dagster runs endpoint is accessible for log correlation
+        1. Compilation produces log output
+        2. Log lines contain trace_id field in 32-hex-char format
+        3. trace_id in logs matches the span trace_id from compilation
+        4. Dagster runs endpoint is accessible for log correlation
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -419,6 +502,41 @@ class TestObservability(IntegrationTestBase):
         assert len(log_output) > 0, (
             "OBSERVABILITY GAP: Compilation produces no log output.\n"
             "Fix: Add structured logging to compilation stages with trace_id context."
+        )
+
+        # Parse each log line and validate trace_id presence and format
+        trace_ids_found: list[str] = []
+        for line in log_output.strip().splitlines():
+            # Look for trace_id in structured log output (JSON or key=value format)
+            # JSON format: {"trace_id": "abc123..."}
+            # Key-value format: trace_id=abc123...
+            trace_id_match = re.search(
+                r'["\']?trace_id["\']?\s*[:=]\s*["\']?([a-f0-9]{32})["\']?',
+                line,
+            )
+            if trace_id_match:
+                trace_ids_found.append(trace_id_match.group(1))
+
+        assert len(trace_ids_found) > 0, (
+            "OBSERVABILITY GAP: No trace_id found in compilation log output.\n"
+            "Log output exists but does not contain trace_id fields.\n"
+            "Fix: Inject OTel trace_id into structured log context during compilation.\n"
+            "Expected: trace_id as 32-hex-char string in each log line.\n"
+            f"Sample log output (first 500 chars): {log_output[:500]}"
+        )
+
+        # Validate all found trace_ids match 32-hex-char format
+        for tid in trace_ids_found:
+            assert re.match(r"^[a-f0-9]{32}$", tid), (
+                f"Invalid trace_id format: '{tid}'. Expected 32 hex characters."
+            )
+
+        # All trace_ids from a single compilation should be the same
+        unique_trace_ids = set(trace_ids_found)
+        assert len(unique_trace_ids) == 1, (
+            f"OBSERVABILITY GAP: Multiple distinct trace_ids in single compilation.\n"
+            f"Found {len(unique_trace_ids)} unique trace_ids: {unique_trace_ids}\n"
+            "A single compilation run should propagate one trace_id across all stages."
         )
 
         # Verify Dagster API is also accessible for runtime log correlation
@@ -593,12 +711,12 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Validate that trace spans contain required attributes for pipeline observability.
+        """Validate that trace spans contain floe-specific attributes for pipeline observability.
 
         Demands that:
-        1. Jaeger API supports attribute-based trace queries
-        2. Traces exist with real span data
-        3. Spans have operation names and tag attributes
+        1. Jaeger contains traces for the 'floe-platform' service
+        2. Traces contain spans with floe-specific attributes
+        3. Spans have attributes like floe.product_name or floe.stage
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -609,20 +727,17 @@ class TestObservability(IntegrationTestBase):
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
 
-        # Test 1: Verify Jaeger supports attribute-based trace queries
-        # Query for any traces with tag filtering capability
-        service_name = f"floe-test-{e2e_namespace}"
+        # Query for traces from floe-platform service (real service name)
+        service_name = "floe-platform"
         response = jaeger_client.get(
             "/api/traces",
             params={
                 "service": service_name,
                 "limit": 10,
-                # Test tag filtering capability (Jaeger supports this)
-                "tags": json.dumps({"model_name": "any"}),
             },
         )
         assert response.status_code == 200, (
-            f"Jaeger trace query with tag filtering failed: {response.status_code}"
+            f"Jaeger trace query for {service_name} failed: {response.status_code}"
         )
 
         response_json = response.json()
@@ -630,11 +745,12 @@ class TestObservability(IntegrationTestBase):
         traces = response_json["data"]
         assert isinstance(traces, list), f"Traces should be a list, got: {type(traces)}"
 
-        # Test 2: Traces MUST exist for pipeline observability
+        # Traces MUST exist for pipeline observability
         assert len(traces) > 0, (
-            "TRACE GAP: No traces found with tag filtering.\n"
+            "TRACE GAP: No traces found for 'floe-platform' service.\n"
             "OTel instrumentation is not emitting traces with pipeline attributes.\n"
-            "Fix: Add model_name and pipeline_name attributes to OTel spans."
+            "Fix: Configure OTel SDK with service.name='floe-platform' and "
+            "add floe.product_name, floe.stage attributes to spans."
         )
 
         # Validate trace structure
@@ -661,6 +777,20 @@ class TestObservability(IntegrationTestBase):
             assert "key" in tag, "Tag missing 'key' field"
             assert "value" in tag or "vStr" in tag or "vLong" in tag, "Tag missing value field"
 
+        # Check for floe-specific attributes across all spans in the trace
+        all_tag_keys: set[str] = set()
+        for span in first_trace["spans"]:
+            for tag in span.get("tags", []):
+                all_tag_keys.add(tag.get("key", ""))
+
+        floe_attributes = [k for k in all_tag_keys if "floe" in k.lower()]
+        assert len(floe_attributes) > 0, (
+            "TRACE GAP: No floe-specific attributes found in trace spans.\n"
+            f"Tag keys found: {sorted(all_tag_keys)}\n"
+            "Expected attributes like: floe.product_name, floe.stage, floe.pipeline_name\n"
+            "Fix: Add floe.* attributes to OTel spans during compilation and execution."
+        )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-041")
     def test_openlineage_four_emission_points(
@@ -669,22 +799,29 @@ class TestObservability(IntegrationTestBase):
         marquez_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Test OpenLineage events are emitted at all 4 required lifecycle points.
+        """Validate platform emits OpenLineage events at all 4 required lifecycle points.
 
-        Validates that the platform emits OpenLineage events at:
+        Triggers real compilation and then queries Marquez for events emitted
+        BY the platform. Does NOT manually POST synthetic events.
+
+        The 4 required emission points are:
         1. dbt model start (RunEvent.START for each model)
         2. dbt model complete (RunEvent.COMPLETE for each model)
         3. Pipeline start (job-level RunEvent.START)
         4. Pipeline complete (job-level RunEvent.COMPLETE)
 
-        This test validates the Marquez API can receive and store all 4 event types.
-        Full emission testing requires pipeline execution with OpenLineage integration.
+        WILL FAIL if the platform does not emit OpenLineage events during compilation.
+        This is expected until OpenLineage integration is wired.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
         """
+        from pathlib import Path
+
+        from floe_core.compilation.stages import compile_pipeline
+
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         try:
@@ -695,120 +832,189 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
             )
 
-        # Test namespace for emission point validation
-        test_ns = f"floe-emission-{e2e_namespace}"
+        # Trigger real compilation (should emit OpenLineage events)
+        project_root = Path(__file__).parent.parent.parent
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
 
-        # Create namespace
-        ns_response = marquez_client.put(
-            f"/api/v1/namespaces/{test_ns}",
-            json={
-                "ownerName": "floe-e2e",
-                "description": "OpenLineage emission points test",
-            },
-        )
-        assert ns_response.status_code in (200, 201), (
-            f"Failed to create namespace: {ns_response.status_code}"
-        )
+        artifacts = compile_pipeline(spec_path, manifest_path)
+        assert artifacts is not None, "Compilation must succeed before checking emission points"
 
-        # Define the 4 emission points as test jobs
-        emission_points = [
-            {
-                "job_name": "dbt_model_customers_run",
-                "event_type": "START",
-                "description": "dbt model start (per-model RunEvent.START)",
-            },
-            {
-                "job_name": "dbt_model_customers_run",
-                "event_type": "COMPLETE",
-                "description": "dbt model complete (per-model RunEvent.COMPLETE)",
-            },
-            {
-                "job_name": "pipeline_daily_run",
-                "event_type": "START",
-                "description": "Pipeline start (job-level RunEvent.START)",
-            },
-            {
-                "job_name": "pipeline_daily_run",
-                "event_type": "COMPLETE",
-                "description": "Pipeline complete (job-level RunEvent.COMPLETE)",
-            },
-        ]
+        # Query Marquez for events emitted BY the platform after compilation
+        # Check known namespaces where the platform would emit events
+        namespaces_to_check = ["default", "customer-360", "floe-platform"]
+        all_jobs: list[dict[str, Any]] = []
+        all_runs: list[dict[str, Any]] = []
 
-        # Test 1: Validate Marquez can receive all 4 event types
-        for point in emission_points:
-            job_name = point["job_name"]
-            event_type = point["event_type"]
-            run_id = str(uuid.uuid4())
+        for ns_name in namespaces_to_check:
+            jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
+            if jobs_response.status_code != 200:
+                continue
+            jobs = jobs_response.json().get("jobs", [])
+            all_jobs.extend(jobs)
 
-            # Create a minimal OpenLineage event for this emission point
-            event = {
-                "eventType": event_type,
-                "eventTime": datetime.now(timezone.utc).isoformat(),
-                "run": {
-                    "runId": run_id,
-                },
-                "job": {
-                    "namespace": test_ns,
-                    "name": job_name,
-                },
-                "inputs": [],
-                "outputs": [],
-                "producer": "https://github.com/Obsidian-Owl/floe-runtime",
-            }
+            # Get runs for each job to check event types
+            for job in jobs:
+                runs_response = marquez_client.get(
+                    f"/api/v1/namespaces/{ns_name}/jobs/{job['name']}/runs"
+                )
+                if runs_response.status_code == 200:
+                    runs = runs_response.json().get("runs", [])
+                    for run in runs:
+                        run["_job_name"] = job["name"]
+                        run["_namespace"] = ns_name
+                    all_runs.extend(runs)
 
-            # Send event to Marquez
-            event_response = marquez_client.post(
-                "/api/v1/lineage",
-                json=event,
-            )
-
-            # Marquez should accept the event (200 or 201)
-            assert event_response.status_code in (200, 201), (
-                f"Failed to emit {event_type} event for {job_name}: "
-                f"{event_response.status_code} - {event_response.text}"
-            )
-
-        # Test 2: Verify all events were stored and are queryable
-        # Query jobs endpoint - should show both jobs
-        jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_ns}/jobs")
-        assert jobs_response.status_code == 200, f"Jobs query failed: {jobs_response.status_code}"
-
-        jobs_json = jobs_response.json()
-        assert "jobs" in jobs_json, "Jobs response missing 'jobs' key"
-        job_names = {job["name"] for job in jobs_json["jobs"]}
-
-        # Should have both dbt model job and pipeline job
-        assert "dbt_model_customers_run" in job_names, (
-            "dbt model job not found in Marquez after emitting events"
-        )
-        assert "pipeline_daily_run" in job_names, (
-            "Pipeline job not found in Marquez after emitting events"
+        # Platform must have emitted OpenLineage jobs
+        assert len(all_jobs) > 0, (
+            "EMISSION GAP: No OpenLineage jobs found after compilation.\n"
+            f"Namespaces checked: {namespaces_to_check}\n"
+            "The platform is not emitting OpenLineage events during compilation.\n"
+            "Fix: Wire OpenLineage emission into compilation stages and pipeline execution."
         )
 
-        # Test 3: Verify we can query runs for each job (validates event storage)
-        for job_name in ["dbt_model_customers_run", "pipeline_daily_run"]:
-            runs_response = marquez_client.get(f"/api/v1/namespaces/{test_ns}/jobs/{job_name}/runs")
-            assert runs_response.status_code == 200, (
-                f"Runs query failed for {job_name}: {runs_response.status_code}"
-            )
+        # Validate the 4 emission points exist
+        # Look for: dbt model START, dbt model COMPLETE, pipeline START, pipeline COMPLETE
+        job_names = {job.get("name", "") for job in all_jobs}
+        has_dbt_model_job = any(
+            "dbt" in name.lower() or "model" in name.lower() for name in job_names
+        )
+        has_pipeline_job = any(
+            "pipeline" in name.lower() or "daily" in name.lower() for name in job_names
+        )
 
-            runs_json = runs_response.json()
-            assert "runs" in runs_json, f"Runs response missing 'runs' key for {job_name}"
-            assert len(runs_json["runs"]) > 0, (
-                f"No runs found for {job_name} - events were not stored"
-            )
+        # Check run states for START and COMPLETE events
+        run_states: set[str] = set()
+        for run in all_runs:
+            current_state = run.get("state", run.get("currentState", ""))
+            if current_state:
+                run_states.add(current_state.upper())
 
-            # Verify both START and COMPLETE events are present
-            # (Each job had 2 events emitted)
-            # Marquez may combine runs, but we should see run state transitions
-            for run in runs_json["runs"]:
-                assert "id" in run, "Run missing 'id' field"
-                # Run may have state: COMPLETED if both START and COMPLETE were received
+        assert has_dbt_model_job, (
+            "EMISSION GAP: No dbt model jobs found in Marquez.\n"
+            f"Job names found: {sorted(job_names)}\n"
+            "Expected: Jobs with 'dbt' or 'model' in the name for per-model emission points.\n"
+            "Fix: Emit RunEvent.START and RunEvent.COMPLETE for each dbt model execution."
+        )
 
-        # All 4 emission points validated:
-        # 1. dbt model START - event accepted and stored
-        # 2. dbt model COMPLETE - event accepted and stored
-        # 3. Pipeline START - event accepted and stored
-        # 4. Pipeline COMPLETE - event accepted and stored
+        assert has_pipeline_job, (
+            "EMISSION GAP: No pipeline-level jobs found in Marquez.\n"
+            f"Job names found: {sorted(job_names)}\n"
+            "Expected: Jobs with 'pipeline' in the name for pipeline-level emission.\n"
+            "Fix: Emit RunEvent.START and RunEvent.COMPLETE for pipeline execution."
+        )
 
-        # Infrastructure supports all 4 OpenLineage emission points per FR-041
+        # Validate START and COMPLETE states exist (proving both emission points fired)
+        has_start = "RUNNING" in run_states or "NEW" in run_states or "START" in run_states
+        has_complete = "COMPLETED" in run_states or "COMPLETE" in run_states
+
+        assert has_start and has_complete, (
+            "EMISSION GAP: Not all lifecycle events found.\n"
+            f"Run states found: {sorted(run_states)}\n"
+            "Expected both START and COMPLETE lifecycle events.\n"
+            "Fix: Emit RunEvent.START at job begin and RunEvent.COMPLETE at job end.\n"
+            "All 4 emission points per FR-041: "
+            "dbt model START, dbt model COMPLETE, pipeline START, pipeline COMPLETE."
+        )
+
+    @pytest.mark.e2e
+    @pytest.mark.requirement("FR-040")
+    def test_compilation_emits_otel_spans(
+        self,
+        e2e_namespace: str,
+        jaeger_client: httpx.Client,
+        dagster_client: Any,
+    ) -> None:
+        """Validate that compile_pipeline() emits OTel spans queryable in Jaeger.
+
+        This is the TRIGGER test -- other observability tests depend on compilation
+        actually emitting OTel spans. Runs compile_pipeline() for customer-360 and
+        immediately queries Jaeger for traces from the 'floe-platform' service.
+
+        WILL FAIL if compilation does not emit OTel spans -- this is expected until
+        OTel SDK instrumentation is wired into compilation stages.
+
+        Args:
+            e2e_namespace: Unique namespace for test isolation.
+            jaeger_client: Jaeger query HTTP client.
+            dagster_client: Dagster GraphQL client.
+        """
+        import time
+        from pathlib import Path
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        # Check infrastructure availability - FAIL if not available
+        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("jaeger-query", 16686)
+
+        project_root = Path(__file__).parent.parent.parent
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        # Record timestamp before compilation (microseconds for Jaeger API)
+        start_time_us = int(time.time() * 1_000_000)
+
+        # Run real compilation -- should emit OTel spans
+        artifacts = compile_pipeline(spec_path, manifest_path)
+        assert artifacts is not None, "Compilation must succeed"
+        assert artifacts.metadata.product_name == "customer-360", (
+            "Compiled wrong product -- expected customer-360"
+        )
+
+        # Small delay to allow OTel exporter to flush spans to Jaeger
+        time.sleep(2)
+
+        # Query Jaeger for traces from 'floe-platform' service within the last 60 seconds
+        end_time_us = int(time.time() * 1_000_000)
+        traces_response = jaeger_client.get(
+            "/api/traces",
+            params={
+                "service": "floe-platform",
+                "start": start_time_us,
+                "end": end_time_us,
+                "limit": 20,
+            },
+        )
+        assert traces_response.status_code == 200, (
+            f"Jaeger traces query failed: {traces_response.status_code}"
+        )
+
+        traces_json = traces_response.json()
+        assert "data" in traces_json, "Jaeger response missing 'data' key"
+        traces = traces_json["data"]
+
+        assert len(traces) > 0, (
+            "COMPILATION OTEL GAP: No traces emitted by compile_pipeline().\n"
+            "Compilation completed successfully but no OTel spans were recorded in Jaeger.\n"
+            f"Time window: {start_time_us} to {end_time_us}\n"
+            "Fix: Wire OTel SDK into compile_pipeline() stages to emit spans.\n"
+            "Each compilation stage (LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, GENERATE) "
+            "should emit a span under the 'floe-platform' service."
+        )
+
+        # Validate that spans match compilation stages
+        all_operation_names: list[str] = []
+        for trace in traces:
+            for span in trace.get("spans", []):
+                op_name = span.get("operationName", "")
+                if op_name:
+                    all_operation_names.append(op_name)
+
+        assert len(all_operation_names) > 0, (
+            "Traces found but all spans have empty operation names."
+        )
+
+        # Check for compilation stage spans
+        compilation_keywords = ["compile", "load", "validate", "resolve", "enforce", "generate"]
+        has_compilation_span = any(
+            any(kw in op.lower() for kw in compilation_keywords) for op in all_operation_names
+        )
+
+        assert has_compilation_span, (
+            "COMPILATION OTEL GAP: Traces exist but no compilation stage spans found.\n"
+            f"Operation names found: {all_operation_names}\n"
+            "Expected spans matching compilation stages: "
+            "LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, GENERATE.\n"
+            "Fix: Name OTel spans after compilation stages in compile_pipeline()."
+        )

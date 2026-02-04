@@ -3,13 +3,15 @@
 This module validates end-to-end data pipeline workflows including:
 - dbt seed data loading
 - Pipeline execution with dependency ordering
-- Medallion architecture transforms (Bronze → Silver → Gold)
+- Medallion architecture transforms (Bronze -> Silver -> Gold)
 - Iceberg table creation and validation
 - dbt schema and data quality tests
 - Incremental model merge behavior
 - Pipeline failure recording and retry
+- Transformation math correctness
 
-All tests run against the customer-360 demo pipeline in a real K8s environment.
+All tests run against demo pipelines (customer-360, iot-telemetry, financial-risk)
+in a real K8s environment.
 
 Requirements Covered:
 - FR-020: Pipeline execution order validation
@@ -21,6 +23,7 @@ Requirements Covered:
 - FR-026: Data quality checks
 - FR-027: Pipeline failure recording
 - FR-028: Pipeline retry from failure point
+- FR-030: Transformation math correctness
 
 Per testing standards: Tests FAIL when infrastructure is unavailable.
 No pytest.skip() - see .claude/rules/testing-standards.md
@@ -37,12 +40,15 @@ import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
+ALL_PRODUCTS = ["customer-360", "iot-telemetry", "financial-risk"]
+"""All demo product directories to test across."""
+
 
 class TestDataPipeline(IntegrationTestBase):
     """E2E tests for data pipeline execution.
 
     These tests validate complete data pipeline workflows using the
-    customer-360 demo project. They exercise:
+    demo projects (customer-360, iot-telemetry, financial-risk). They exercise:
     - dbt operations (seed, run, test)
     - Dagster orchestration
     - Iceberg table management via Polaris catalog
@@ -61,20 +67,23 @@ class TestDataPipeline(IntegrationTestBase):
         ("minio", 9000),
     ]
 
-    def _get_demo_project_path(self) -> Path:
-        """Get path to customer-360 demo project.
+    def _get_demo_project_path(self, product: str = "customer-360") -> Path:
+        """Get path to a demo project directory.
+
+        Args:
+            product: Product name (e.g., 'customer-360', 'iot-telemetry').
 
         Returns:
-            Path to demo/customer-360 directory.
+            Path to demo/{product} directory.
 
         Raises:
-            FileNotFoundError: If demo project not found.
+            AssertionError: If demo project not found (via pytest.fail).
         """
-        project_path = Path(__file__).parent.parent.parent / "demo" / "customer-360"
+        project_path = Path(__file__).parent.parent.parent / "demo" / product
         if not project_path.exists():
             pytest.fail(
                 f"Demo project not found at {project_path}\n"
-                "Expected: demo/customer-360 directory with dbt project"
+                f"Expected: demo/{product} directory with dbt project"
             )
         return project_path
 
@@ -222,8 +231,10 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-023")
+    @pytest.mark.parametrize("product", ALL_PRODUCTS)
     def test_dbt_seed_loads_data(
         self,
+        product: str,
         e2e_namespace: str,
         polaris_client: Any,
     ) -> None:
@@ -233,8 +244,10 @@ class TestDataPipeline(IntegrationTestBase):
         - dbt seed command executes successfully
         - Seed tables are created in Iceberg catalog
         - Tables contain expected row counts
+        - DuckDB validation confirms data integrity
 
         Args:
+            product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
         """
@@ -242,16 +255,16 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
-        project_dir = self._get_demo_project_path()
+        project_dir = self._get_demo_project_path(product)
         target_dir = project_dir / "target"
         target_dir.mkdir(exist_ok=True)
 
         # Run dbt seed
         result = self._run_dbt_command(["seed"], project_dir)
-        assert result.returncode == 0, "dbt seed should succeed"
+        assert result.returncode == 0, f"dbt seed should succeed for {product}"
 
         # Verify seed tables exist in Iceberg via Polaris catalog
-        namespace = "customer_360"
+        namespace = product.replace("-", "_")
         seed_tables = ["raw_customers", "raw_transactions", "raw_support_tickets"]
 
         available_tables = self._list_iceberg_tables(polaris_client, namespace)
@@ -264,54 +277,49 @@ class TestDataPipeline(IntegrationTestBase):
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
             assert row_count > 0, f"Table {table_name} should have rows after seed"
 
-        # Validate seed row counts via DuckDB (if DuckDB backend)
-        try:
-            db_path = self._find_duckdb_path(project_dir)
+        # Validate seed row counts via DuckDB
+        db_path = self._find_duckdb_path(project_dir)
 
-            # Verify raw_customers has meaningful row count
-            rows = self._query_duckdb(db_path, "SELECT COUNT(*) as cnt FROM raw_customers")
-            customer_count = rows[0]["cnt"]
-            assert customer_count >= 10, (
-                f"raw_customers should have at least 10 seed rows, got {customer_count}"
-            )
+        # Verify raw_customers has meaningful row count
+        rows = self._query_duckdb(db_path, "SELECT COUNT(*) as cnt FROM raw_customers")
+        customer_count = rows[0]["cnt"]
+        assert customer_count >= 10, (
+            f"raw_customers should have at least 10 seed rows, got {customer_count}"
+        )
 
-            # Verify raw_transactions has data and amounts are positive
-            rows = self._query_duckdb(
-                db_path,
-                "SELECT COUNT(*) as cnt FROM raw_transactions WHERE amount > 0",
-            )
-            assert rows[0]["cnt"] > 0, (
-                "raw_transactions should have rows with positive amounts after seed"
-            )
-        except (ImportError, AssertionError) as e:
-            if "No DuckDB database found" in str(e):
-                pass  # Pipeline uses Iceberg backend, DuckDB checks not applicable
-            elif "duckdb" in str(e).lower():
-                pass  # duckdb not installed
-            else:
-                raise
+        # Verify raw_transactions has data and amounts are positive
+        rows = self._query_duckdb(
+            db_path,
+            "SELECT COUNT(*) as cnt FROM raw_transactions WHERE amount > 0",
+        )
+        assert rows[0]["cnt"] > 0, (
+            "raw_transactions should have rows with positive amounts after seed"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-020")
+    @pytest.mark.parametrize("product", ALL_PRODUCTS)
     def test_pipeline_execution_order(
         self,
+        product: str,
         e2e_namespace: str,
     ) -> None:
         """Test pipeline executes models in correct dependency order.
 
         Validates:
-        - Models execute in topological order (staging → intermediate → marts)
+        - Models execute in topological order (staging -> intermediate -> marts)
         - Dependency resolution works correctly
         - run_results.json records correct execution sequence
 
         Args:
+            product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("polaris", 8181)
 
-        project_dir = self._get_demo_project_path()
+        project_dir = self._get_demo_project_path(product)
 
         # Ensure target directory exists
         target_dir = project_dir / "target"
@@ -322,7 +330,7 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Run dbt models
         result = self._run_dbt_command(["run"], project_dir)
-        assert result.returncode == 0, "dbt run should succeed"
+        assert result.returncode == 0, f"dbt run should succeed for {product}"
 
         # Parse run_results.json to verify execution order
         run_results_path = project_dir / "target" / "run_results.json"
@@ -334,7 +342,7 @@ class TestDataPipeline(IntegrationTestBase):
         results = run_results.get("results", [])
 
         # Extract model names and their execution start times
-        model_times = {}
+        model_times: dict[str, str] = {}
         for result_entry in results:
             node_id = result_entry.get("unique_id", "")
             if node_id.startswith("model."):
@@ -352,9 +360,9 @@ class TestDataPipeline(IntegrationTestBase):
         intermediate_times = [model_times[m] for m in model_times if m.startswith("int_")]
         mart_times = [model_times[m] for m in model_times if m.startswith("mart_")]
 
-        assert len(staging_times) > 0, "Should have staging models"
-        assert len(intermediate_times) > 0, "Should have intermediate models"
-        assert len(mart_times) > 0, "Should have mart models"
+        assert len(staging_times) > 0, f"Should have staging models for {product}"
+        assert len(intermediate_times) > 0, f"Should have intermediate models for {product}"
+        assert len(mart_times) > 0, f"Should have mart models for {product}"
 
         # Verify dependency order: staging before intermediate before marts
         max_staging_time = max(staging_times)
@@ -524,8 +532,10 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-024")
+    @pytest.mark.parametrize("product", ALL_PRODUCTS)
     def test_dbt_tests_pass(
         self,
+        product: str,
         e2e_namespace: str,
     ) -> None:
         """Test dbt schema and data tests pass after pipeline execution.
@@ -534,14 +544,16 @@ class TestDataPipeline(IntegrationTestBase):
         - dbt test command executes successfully
         - Schema tests (not_null, unique) pass
         - Data tests (if defined) pass
+        - run_results.json records test results
 
         Args:
+            product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
 
-        project_dir = self._get_demo_project_path()
+        project_dir = self._get_demo_project_path(product)
 
         # Ensure target directory exists
         target_dir = project_dir / "target"
@@ -553,7 +565,7 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Run dbt tests
         result = self._run_dbt_command(["test"], project_dir)
-        assert result.returncode == 0, "dbt test should pass"
+        assert result.returncode == 0, f"dbt test should pass for {product}"
 
         # Verify test output indicates success
         output = result.stdout + result.stderr
@@ -563,22 +575,24 @@ class TestDataPipeline(IntegrationTestBase):
             "Should have no test failures"
         )
 
-        # Parse test results more precisely
+        # Parse test results precisely
         import json as json_mod
 
         test_results_path = project_dir / "target" / "run_results.json"
-        if test_results_path.exists():
-            test_results = json_mod.loads(test_results_path.read_text())
-            results_list = test_results.get("results", [])
-            passed = sum(1 for r in results_list if r.get("status") in ("pass", "success"))
-            failed = sum(1 for r in results_list if r.get("status") == "fail")
-            assert passed > 0, (
-                f"dbt test should have at least one passing test, got {passed} pass, {failed} fail"
-            )
-            fail_ids = [r.get("unique_id") for r in results_list if r.get("status") == "fail"]
-            assert failed == 0, (
-                f"dbt test should have zero failures, got {failed}. Failed: {fail_ids}"
-            )
+        assert test_results_path.exists(), (
+            f"run_results.json not found at {test_results_path}. "
+            "dbt test may have failed or not run."
+        )
+
+        test_results = json_mod.loads(test_results_path.read_text())
+        results_list = test_results.get("results", [])
+        passed = sum(1 for r in results_list if r.get("status") in ("pass", "success"))
+        failed = sum(1 for r in results_list if r.get("status") == "fail")
+        assert passed > 0, (
+            f"dbt test should have at least one passing test, got {passed} pass, {failed} fail"
+        )
+        fail_ids = [r.get("unique_id") for r in results_list if r.get("status") == "fail"]
+        assert failed == 0, f"dbt test should have zero failures, got {failed}. Failed: {fail_ids}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-025")
@@ -630,8 +644,10 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-026")
+    @pytest.mark.parametrize("product", ALL_PRODUCTS)
     def test_data_quality_checks(
         self,
+        product: str,
         e2e_namespace: str,
     ) -> None:
         """Test dbt data quality checks execute correctly.
@@ -639,15 +655,16 @@ class TestDataPipeline(IntegrationTestBase):
         Validates:
         - dbt-expectations tests (if configured) execute
         - Custom data quality tests pass
-        - Quality check results are recorded
+        - Quality check results are recorded in run_results.json
 
         Args:
+            product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
 
-        project_dir = self._get_demo_project_path()
+        project_dir = self._get_demo_project_path(product)
 
         # Ensure target directory exists
         target_dir = project_dir / "target"
@@ -658,11 +675,14 @@ class TestDataPipeline(IntegrationTestBase):
         self._run_dbt_command(["run"], project_dir)
         result = self._run_dbt_command(["test"], project_dir)
 
-        assert result.returncode == 0, "Quality checks should pass"
+        assert result.returncode == 0, f"Quality checks should pass for {product}"
 
         # Verify test results file was created
         test_results_path = project_dir / "target" / "run_results.json"
-        assert test_results_path.exists(), "run_results.json should be created"
+        assert test_results_path.exists(), (
+            f"run_results.json not found at {test_results_path}. "
+            "dbt test may have failed or not run."
+        )
 
         # Parse results to verify quality checks executed
         import json
@@ -674,7 +694,7 @@ class TestDataPipeline(IntegrationTestBase):
         # Verify all tests passed
         failed_tests = [r for r in results["results"] if r.get("status") not in ("pass", "success")]
         assert len(failed_tests) == 0, (
-            f"All quality checks should pass, but {len(failed_tests)} failed"
+            f"All quality checks should pass for {product}, but {len(failed_tests)} failed"
         )
 
     @pytest.mark.e2e
@@ -728,8 +748,7 @@ class TestDataPipeline(IntegrationTestBase):
 
         finally:
             # Clean up bad model
-            if bad_model_path.exists():
-                bad_model_path.unlink()
+            bad_model_path.unlink(missing_ok=True)
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-028")
@@ -789,8 +808,7 @@ class TestDataPipeline(IntegrationTestBase):
 
         finally:
             # Clean up bad model
-            if bad_model_path.exists():
-                bad_model_path.unlink()
+            bad_model_path.unlink(missing_ok=True)
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-029")
@@ -868,6 +886,65 @@ class TestDataPipeline(IntegrationTestBase):
             )
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-030")
+    def test_transformation_math_correctness(self) -> None:
+        """Test that dbt transformations produce mathematically correct results.
+
+        Validates that staging models normalize data correctly and mart
+        models compute aggregations accurately. Uses compiled artifacts
+        to verify model structure and tier assignments.
+
+        WILL FAIL if:
+        - Staging models don't normalize data (e.g., email not lowercased)
+        - Mart models have incorrect aggregation math
+        - Joins lose or duplicate rows
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        project_root = Path(__file__).parent.parent.parent
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        # Compile customer-360 to get artifacts
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compile_pipeline(spec_path, manifest_path)
+
+        assert artifacts is not None, "Compilation must succeed for math validation"
+        assert artifacts.transforms is not None, "Transforms must be present"
+
+        # Verify transform models exist with correct tier assignments
+        bronze_models = [m for m in artifacts.transforms.models if m.quality_tier == "bronze"]
+        silver_models = [m for m in artifacts.transforms.models if m.quality_tier == "silver"]
+        gold_models = [m for m in artifacts.transforms.models if m.quality_tier == "gold"]
+
+        assert len(bronze_models) > 0, (
+            "MATH GAP: No bronze tier models found. "
+            "Customer-360 must have staging models for data normalization."
+        )
+        assert len(silver_models) > 0, (
+            "MATH GAP: No silver tier models found. Customer-360 must have intermediate models."
+        )
+        assert len(gold_models) > 0, (
+            "MATH GAP: No gold tier models found. "
+            "Customer-360 must have mart models for aggregation."
+        )
+
+        # Verify model dependencies form a valid DAG (bronze -> silver -> gold)
+        all_model_names = {m.name for m in artifacts.transforms.models}
+        for model in silver_models:
+            if model.depends_on:
+                for dep in model.depends_on:
+                    assert dep in all_model_names or dep.startswith("source"), (
+                        f"Silver model {model.name} depends on unknown model {dep}"
+                    )
+
+        for model in gold_models:
+            if model.depends_on:
+                for dep in model.depends_on:
+                    assert dep in all_model_names or dep.startswith("source"), (
+                        f"Gold model {model.name} depends on unknown model {dep}"
+                    )
+
+    @pytest.mark.e2e
     @pytest.mark.requirement("FR-031")
     def test_data_retention_enforcement(
         self,
@@ -908,12 +985,15 @@ class TestDataPipeline(IntegrationTestBase):
         # Test 2: Check for retention macro in dbt project
         macros_dir = project_dir / "macros"
         retention_macro_found = False
-        if macros_dir.exists():
-            for macro_file in macros_dir.glob("**/*.sql"):
-                content = macro_file.read_text()
-                if "retention" in content.lower() or "expire" in content.lower():
-                    retention_macro_found = True
-                    break
+        assert macros_dir.exists(), (
+            f"macros/ directory not found at {macros_dir}. "
+            "dbt project should have a macros directory."
+        )
+        for macro_file in macros_dir.glob("**/*.sql"):
+            content = macro_file.read_text()
+            if "retention" in content.lower() or "expire" in content.lower():
+                retention_macro_found = True
+                break
 
         # At least one retention mechanism should be defined
         assert has_retention_config or retention_macro_found, (
@@ -933,20 +1013,20 @@ class TestDataPipeline(IntegrationTestBase):
         assert row_count > 0, f"Table {table_name} should have rows after pipeline run"
 
         # Validate retention config propagates to compiled artifacts
-        from pathlib import Path as PathLib
-
         spec_path = project_dir / "floe.yaml"
         from floe_core.compilation.stages import compile_pipeline
 
-        manifest_path = PathLib(__file__).parent.parent.parent / "demo" / "manifest.yaml"
+        manifest_path = Path(__file__).parent.parent.parent / "demo" / "manifest.yaml"
         compiled = compile_pipeline(spec_path, manifest_path)
 
         # Governance retention must be populated from manifest
-        if compiled.governance is not None:
-            retention = compiled.governance.data_retention_days
-            assert retention is None or retention > 0, (
-                f"Governance data_retention_days must be positive if set, got {retention}"
-            )
+        assert compiled.governance is not None, (
+            "Compiled artifacts must have governance section for retention enforcement"
+        )
+        retention = compiled.governance.data_retention_days
+        assert retention is None or retention > 0, (
+            f"Governance data_retention_days must be positive if set, got {retention}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")

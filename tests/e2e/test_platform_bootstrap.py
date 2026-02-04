@@ -199,26 +199,12 @@ class TestPlatformBootstrap(IntegrationTestBase):
         for url, description in core_services:
             wait_for_service(url, timeout=60.0, description=description)
 
-        # Optional services - only test if pods are running
-        # Jaeger is optional (jaeger.enabled in values)
-        jaeger_result = _run_kubectl(
-            [
-                "get",
-                "pods",
-                "-n",
-                self.namespace,
-                "-l",
-                "app.kubernetes.io/name=jaeger",
-                "-o",
-                "jsonpath={.items[*].status.phase}",
-            ]
+        # Jaeger MUST be deployed and functional for observability
+        wait_for_service(
+            "http://localhost:16686/api/services",
+            timeout=60.0,
+            description="Jaeger query",
         )
-        if jaeger_result.returncode == 0 and "Running" in jaeger_result.stdout:
-            wait_for_service(
-                "http://localhost:16686/api/services",
-                timeout=30.0,
-                description="Jaeger query (optional)",
-            )
 
     @pytest.mark.requirement("FR-004")
     def test_postgresql_databases_exist(self) -> None:
@@ -628,44 +614,28 @@ class TestPlatformBootstrap(IntegrationTestBase):
             f"Check pod status: kubectl get pods -n {self.namespace} -l app.kubernetes.io/name=otel"
         )
 
-        # Check Jaeger UI if deployed (optional)
-        jaeger_result = _run_kubectl(
-            [
-                "get",
-                "pods",
-                "-n",
-                self.namespace,
-                "-l",
-                "app.kubernetes.io/name=jaeger",
-                "-o",
-                "jsonpath={.items[*].status.phase}",
-            ]
-        )
-        if jaeger_result.returncode == 0 and "Running" in jaeger_result.stdout:
-            with httpx.Client(timeout=10.0) as client:
-                # Verify UI is accessible
-                response = client.get("http://localhost:16686/search")
-                assert response.status_code == 200, (
-                    f"Jaeger UI not accessible: HTTP {response.status_code}\n"
-                    f"URL: http://localhost:16686/search"
-                )
+        # Jaeger UI MUST be accessible and functional
+        with httpx.Client(timeout=10.0) as client:
+            # Verify UI is accessible
+            response = client.get("http://localhost:16686/search")
+            assert response.status_code == 200, (
+                f"Jaeger UI not accessible: HTTP {response.status_code}\n"
+                f"URL: http://localhost:16686/search"
+            )
 
-                # Verify Jaeger can list services (functional query, not just HTTP 200)
-                services_response = client.get("http://localhost:16686/api/services")
-                assert services_response.status_code == 200, (
-                    f"Jaeger services API failed: HTTP {services_response.status_code}"
-                )
-                services_data = services_response.json()
-                assert "data" in services_data, (
-                    "Jaeger services response missing 'data' key - API not functional"
-                )
-                # data should be a list (even if empty)
-                assert isinstance(services_data["data"], list), (
-                    "Jaeger services data should be a list"
-                )
+            # Verify Jaeger can list services (functional query, not just HTTP 200)
+            services_response = client.get("http://localhost:16686/api/services")
+            assert services_response.status_code == 200, (
+                f"Jaeger services API failed: HTTP {services_response.status_code}"
+            )
+            services_data = services_response.json()
+            assert "data" in services_data, (
+                "Jaeger services response missing 'data' key - API not functional"
+            )
+            # data should be a list (even if empty)
+            assert isinstance(services_data["data"], list), "Jaeger services data should be a list"
 
-        # Check Grafana dashboards ConfigMap (may not be deployed)
-        # Grafana service itself is not deployed in base platform, only dashboard definitions
+        # Grafana dashboards ConfigMap MUST exist
         result = _run_kubectl(
             [
                 "get",
@@ -678,17 +648,14 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "jsonpath={.items[*].metadata.name}",
             ]
         )
-        # Grafana ConfigMap is optional - only verify if it exists that it has correct format
-        if result.returncode == 0 and result.stdout.strip():
-            configmaps = result.stdout.strip().split()
-            # At least one observability ConfigMap should exist if Grafana is configured
-            assert configmaps, (
-                "Observability ConfigMaps not found\n"
-                f"Check: kubectl get configmap -n {self.namespace}"
-                f" -l app.kubernetes.io/component=observability"
-            )
+        assert result.returncode == 0 and result.stdout.strip(), (
+            "OBSERVABILITY GAP: No observability ConfigMaps found.\n"
+            "Grafana dashboard definitions must be deployed.\n"
+            f"Check: kubectl get configmap -n {self.namespace}"
+            f" -l app.kubernetes.io/component=observability"
+        )
 
-        # Check Prometheus resources (may not be deployed)
+        # Prometheus MUST be deployed and running
         result = _run_kubectl(
             [
                 "get",
@@ -701,14 +668,16 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "jsonpath={.items[*].status.phase}",
             ]
         )
-        # Prometheus is optional - only check if pods exist
-        if result.returncode == 0 and result.stdout.strip():
-            phases = result.stdout.strip().split()
-            # If Prometheus deployed, verify pods are Running
-            assert all(p == "Running" for p in phases), (
-                f"Prometheus pods not running. Phases: {phases}\n"
-                f"Check pod status: kubectl get pods -n {self.namespace} -l app=prometheus"
-            )
+        assert result.returncode == 0 and result.stdout.strip(), (
+            "OBSERVABILITY GAP: No Prometheus pods found.\n"
+            "Prometheus is required for metrics collection.\n"
+            f"Check: kubectl get pods -n {self.namespace} -l app=prometheus"
+        )
+        phases = result.stdout.strip().split()
+        assert all(p == "Running" for p in phases), (
+            f"Prometheus pods not running. Phases: {phases}\n"
+            f"Check pod status: kubectl get pods -n {self.namespace} -l app=prometheus"
+        )
 
     @pytest.mark.requirement("FR-003")
     def test_dagster_graphql_operational(self) -> None:

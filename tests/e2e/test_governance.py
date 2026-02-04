@@ -592,29 +592,41 @@ class TestGovernance(IntegrationTestBase):
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
         manifest_path = project_root / "demo" / "manifest.yaml"
 
-        if spec_path.exists() and manifest_path.exists():
-            from floe_core.compilation.stages import compile_pipeline
+        assert spec_path.exists(), (
+            f"Demo spec not found at {spec_path}.\n"
+            "Demo products must exist for governance validation."
+        )
+        assert manifest_path.exists(), (
+            f"Manifest not found at {manifest_path}.\n"
+            "Platform manifest is required for governance validation."
+        )
 
-            try:
-                artifacts = compile_pipeline(spec_path, manifest_path)
+        from floe_core.compilation.stages import compile_pipeline
 
-                # Governance enforcement should be present in artifacts
-                assert artifacts.governance is not None, (
-                    "Compiled artifacts must include governance section.\n"
-                    "Governance configuration is mandatory for FR-067 compliance."
-                )
+        try:
+            artifacts = compile_pipeline(spec_path, manifest_path)
 
-                # If enforcement ran, validate it contains results
-                if artifacts.enforcement_result is not None:
-                    assert hasattr(artifacts.enforcement_result, "passed"), (
-                        "Enforcement result must indicate pass/fail status"
-                    )
+            # Governance section must exist AND contain meaningful content
+            assert artifacts.governance is not None, (
+                "Compiled artifacts must include governance section.\n"
+                "Governance configuration is mandatory for FR-067 compliance."
+            )
 
-            except Exception as e:
-                pytest.fail(
-                    f"Failed to compile demo spec for governance validation: {e}\n"
-                    "Governance enforcement logging requires successful compilation."
-                )
+            # Enforcement result is mandatory — governance must actually run
+            assert artifacts.enforcement_result is not None, (
+                "GOVERNANCE GAP: Compiled artifacts have no enforcement_result.\n"
+                "Governance policies must be checked during compilation.\n"
+                "enforcement_result being None means no policies were evaluated."
+            )
+            assert hasattr(artifacts.enforcement_result, "passed"), (
+                "Enforcement result must indicate pass/fail status"
+            )
+
+        except Exception as e:
+            pytest.fail(
+                f"Failed to compile demo spec for governance validation: {e}\n"
+                "Governance enforcement logging requires successful compilation."
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-060")
@@ -647,20 +659,24 @@ class TestGovernance(IntegrationTestBase):
             "Governance is required for FR-060 compliance."
         )
 
-        # Enforcement must have run
-        if artifacts.enforcement_result is not None:
-            assert hasattr(artifacts.enforcement_result, "passed"), (
-                "Enforcement result must indicate pass/fail status"
-            )
-            assert artifacts.enforcement_result.models_validated > 0, (
-                "Enforcement must validate at least one model.\n"
-                f"Got models_validated={artifacts.enforcement_result.models_validated}\n"
-                "This indicates governance policies are not being checked."
-            )
-            assert artifacts.enforcement_result.enforcement_level is not None, (
-                "Enforcement must specify enforcement level (strict/warn/none).\n"
-                "Enforcement level determines whether policy violations block deployment."
-            )
+        # Enforcement MUST have run — not optional
+        assert artifacts.enforcement_result is not None, (
+            "GOVERNANCE GAP: No enforcement_result in compiled artifacts.\n"
+            "Governance policies must be checked during compilation.\n"
+            "enforcement_result being None means no policies were evaluated."
+        )
+        assert hasattr(artifacts.enforcement_result, "passed"), (
+            "Enforcement result must indicate pass/fail status"
+        )
+        assert artifacts.enforcement_result.models_validated > 0, (
+            "Enforcement must validate at least one model.\n"
+            f"Got models_validated={artifacts.enforcement_result.models_validated}\n"
+            "This indicates governance policies are not being checked."
+        )
+        assert artifacts.enforcement_result.enforcement_level is not None, (
+            "Enforcement must specify enforcement level (strict/warn/none).\n"
+            "Enforcement level determines whether policy violations block deployment."
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-063")

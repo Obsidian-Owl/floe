@@ -110,52 +110,29 @@ class TestPluginSystem(IntegrationTestBase):
             "Update test if plugin types changed."
         )
 
-        # Types that MUST have implementations (10 groups registered)
-        required_types = {
-            PluginType.COMPUTE,
-            PluginType.ORCHESTRATOR,
-            PluginType.CATALOG,
-            PluginType.TELEMETRY_BACKEND,
-            PluginType.LINEAGE_BACKEND,
-            PluginType.DBT,
-            PluginType.SECRETS,
-            PluginType.IDENTITY,
-            PluginType.QUALITY,
-            PluginType.RBAC,
-        }
-
-        # Types with no implementations yet (tracked for future work)
-        unimplemented_types = {
-            PluginType.STORAGE,
-            PluginType.SEMANTIC_LAYER,
-            PluginType.INGESTION,
-        }
-
-        # Verify required plugin types have at least one implementation
+        # ALL 13 plugin types MUST have implementations
+        # No exclusion list — if a plugin type has no implementation, the test FAILS
+        # to expose that as a platform gap
         missing_types: list[str] = []
-        for plugin_type in required_types:
+        for plugin_type in PluginType:
             plugin_names = all_plugins.get(plugin_type, [])
             if not plugin_names:
                 missing_types.append(plugin_type.name)
 
         assert not missing_types, (
-            f"Missing plugin implementations for types: {', '.join(missing_types)}. "
-            "Each required plugin type must have at least one registered implementation."
+            f"PLUGIN GAP: Missing implementations for {len(missing_types)} plugin types: "
+            f"{', '.join(missing_types)}.\n"
+            "Every plugin type in PluginType enum must have at least one registered "
+            "implementation. Unimplemented plugins are platform gaps, not test exclusions."
         )
 
         # Log discovered plugin counts for observability
         for plugin_type in PluginType:
             plugin_names = all_plugins.get(plugin_type, [])
-            if plugin_type in unimplemented_types and not plugin_names:
-                self.logger.warning(
-                    f"Plugin discovery: {plugin_type.name} - "
-                    f"No implementations yet (tracked for future work)"
-                )
-            else:
-                self.logger.info(
-                    f"Plugin discovery: {plugin_type.name} - "
-                    f"{len(plugin_names)} plugins: {plugin_names}"
-                )
+            self.logger.info(
+                f"Plugin discovery: {plugin_type.name} - "
+                f"{len(plugin_names)} plugins: {plugin_names}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-051")
@@ -178,21 +155,11 @@ class TestPluginSystem(IntegrationTestBase):
         all_plugins = registry.list_all()
         non_compliant: list[str] = []
 
-        # Types with no implementations yet (skip ABC validation)
-        unimplemented_types = {
-            PluginType.STORAGE,
-            PluginType.SEMANTIC_LAYER,
-            PluginType.INGESTION,
-        }
-
         # Valid version formats: X.Y or X.Y.Z (semver)
         version_pattern = re.compile(r"^\d+\.\d+(\.\d+)?$")
 
+        # Check ALL plugin types — no exclusion list
         for plugin_type in PluginType:
-            # Skip unimplemented types
-            if plugin_type in unimplemented_types:
-                continue
-
             abc_class = self.PLUGIN_ABC_MAP[plugin_type]
             plugin_names = all_plugins.get(plugin_type, [])
 
@@ -268,25 +235,17 @@ class TestPluginSystem(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-052")
     def test_plugin_swap_via_config(self) -> None:
-        """Test that plugins can be swapped via configuration.
+        """Test that swapping compute plugins produces different compilation output.
 
         Validates that the platform supports changing plugin implementations
-        by updating floe.yaml configuration without code changes. Tests compute
-        plugin swapping between different implementations.
+        by compiling a demo spec with different compute plugins and verifying
+        the outputs differ. This proves plugins are truly pluggable.
 
-        This ensures plugins are truly pluggable and configuration-driven.
+        WILL FAIL if compilation doesn't respect plugin configuration.
         """
-        from datetime import datetime, timezone
+        from pathlib import Path
 
-        from floe_core.schemas.compiled_artifacts import (
-            CompilationMetadata,
-            CompiledArtifacts,
-            ObservabilityConfig,
-            PluginRef,
-            ProductIdentity,
-            ResolvedPlugins,
-        )
-        from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
+        from floe_core.compilation.stages import compile_pipeline
 
         registry = get_registry()
         registry.discover_all()
@@ -298,73 +257,46 @@ class TestPluginSystem(IntegrationTestBase):
             f"Need at least 1 compute plugin for swap test, found {len(compute_plugins)}"
         )
 
-        # Test compilation with each available compute plugin
-        successful_configs: list[str] = []
+        project_root = Path(__file__).parent.parent.parent
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
 
-        for compute_name in compute_plugins:
-            try:
-                # Load the compute plugin
-                compute_plugin = registry.get(PluginType.COMPUTE, compute_name)
-
-                # Create CompiledArtifacts with this compute plugin
-                artifacts = CompiledArtifacts(
-                    version="0.5.0",
-                    metadata=CompilationMetadata(
-                        compiled_at=datetime.now(timezone.utc),
-                        floe_version="0.5.0",
-                        source_hash="sha256:test",
-                        product_name="test_swap",
-                        product_version="1.0.0",
-                    ),
-                    identity=ProductIdentity(
-                        product_id="test.swap",
-                        domain="test",
-                        repository="memory://",
-                        namespace_registered=False,
-                    ),
-                    mode="simple",
-                    inheritance_chain=[],
-                    observability=ObservabilityConfig(
-                        telemetry=TelemetryConfig(
-                            resource_attributes=ResourceAttributes(
-                                service_name="test_swap",
-                                service_version="1.0.0",
-                                deployment_environment="dev",
-                                floe_namespace="test",
-                                floe_product_name="test_swap",
-                                floe_product_version="1.0.0",
-                                floe_mode="dev",
-                            ),
-                        ),
-                        lineage_namespace="test",
-                    ),
-                    plugins=ResolvedPlugins(
-                        compute=PluginRef(type=compute_name, version=compute_plugin.version),
-                        orchestrator=PluginRef(type="dagster", version="1.5.0"),
-                    ),
-                    dbt_profiles={},
-                )
-
-                # Verify compilation succeeded
-                assert artifacts.plugins is not None
-                assert artifacts.plugins.compute is not None
-                assert artifacts.plugins.compute.type == compute_name
-                assert isinstance(artifacts.plugins.compute.version, str)
-                successful_configs.append(compute_name)
-
-                self.logger.info(
-                    f"Plugin swap succeeded: compute={compute_name} "
-                    f"version={compute_plugin.version}"
-                )
-
-            except Exception as e:
-                self.logger.error(f"Plugin swap failed: compute={compute_name} - {e}")
-                raise
-
-        # Verify at least one swap configuration worked
-        assert len(successful_configs) >= 1, (
-            "Plugin swap test requires at least one successful configuration"
+        # Compile with default configuration
+        artifacts = compile_pipeline(spec_path, manifest_path)
+        assert artifacts.plugins is not None, "Compiled artifacts must have plugins section"
+        assert artifacts.plugins.compute is not None, (
+            "Compiled artifacts must specify compute plugin"
         )
+
+        default_compute = artifacts.plugins.compute.type
+        assert default_compute in compute_plugins, (
+            f"Default compute plugin '{default_compute}' not in "
+            f"discovered plugins: {compute_plugins}"
+        )
+
+        self.logger.info(
+            f"Plugin swap test: default compute={default_compute}, available={compute_plugins}"
+        )
+
+        # If multiple compute plugins available, verify they produce different dbt profiles
+        if len(compute_plugins) >= 2:
+            profiles_by_plugin: dict[str, Any] = {}
+            for compute_name in compute_plugins:
+                plugin = registry.get(PluginType.COMPUTE, compute_name)
+                if hasattr(plugin, "generate_dbt_profile") and callable(
+                    plugin.generate_dbt_profile
+                ):
+                    profile = plugin.generate_dbt_profile(target="dev", config={})
+                    profiles_by_plugin[compute_name] = profile
+
+            if len(profiles_by_plugin) >= 2:
+                profile_types = {
+                    p.get("type") for p in profiles_by_plugin.values() if isinstance(p, dict)
+                }
+                assert len(profile_types) >= 2, (
+                    f"SWAP GAP: Different compute plugins produce same dbt profile type: "
+                    f"{profile_types}. Plugin swap should produce functionally different configs."
+                )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-055")
@@ -386,18 +318,8 @@ class TestPluginSystem(IntegrationTestBase):
         all_plugins = registry.list_all()
         health_check_failures: list[str] = []
 
-        # Types with no implementations yet (skip health checks)
-        unimplemented_types = {
-            PluginType.STORAGE,
-            PluginType.SEMANTIC_LAYER,
-            PluginType.INGESTION,
-        }
-
+        # Check ALL plugin types — no exclusion list
         for plugin_type in PluginType:
-            # Skip unimplemented types
-            if plugin_type in unimplemented_types:
-                continue
-
             plugin_names = all_plugins.get(plugin_type, [])
 
             for plugin_name in plugin_names:

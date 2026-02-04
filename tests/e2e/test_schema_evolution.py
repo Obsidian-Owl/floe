@@ -17,15 +17,15 @@ import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
-POLARIS_STORAGE_ERROR_MSG = (
-    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
-    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
+STORAGE_BACKEND_ERROR_MSG = (
+    "STORAGE GAP: Polaris table operation failed. This likely means the storage "
+    "backend (S3/MinIO) is not properly configured.\n"
     "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
     "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
     "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
     "  3. Add S3 endpoint and credentials for MinIO"
 )
-"""Error message for Polaris InMemoryFileIOFactory limitation."""
+"""Error message for storage backend configuration gap."""
 
 
 class TestSchemaEvolution(IntegrationTestBase):
@@ -277,14 +277,11 @@ class TestSchemaEvolution(IntegrationTestBase):
                 schema=initial_schema,
             )
         except RESTError as e:
-            error_msg = str(e)
-            if (
-                "security token" in error_msg.lower()
-                or "credentials" in error_msg.lower()
-                or "sts" in error_msg.lower()
-            ):
-                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
-            raise
+            pytest.fail(
+                f"{STORAGE_BACKEND_ERROR_MSG}\n"
+                f"Root cause: {e}\n"
+                "Table creation must succeed for schema evolution testing."
+            )
 
         # Verify initial schema
         assert len(table.schema().fields) == 2
@@ -365,14 +362,11 @@ class TestSchemaEvolution(IntegrationTestBase):
                 partition_spec=initial_partition_spec,
             )
         except RESTError as e:
-            error_msg = str(e)
-            if (
-                "security token" in error_msg.lower()
-                or "credentials" in error_msg.lower()
-                or "sts" in error_msg.lower()
-            ):
-                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
-            raise
+            pytest.fail(
+                f"{STORAGE_BACKEND_ERROR_MSG}\n"
+                f"Root cause: {e}\n"
+                "Table creation must succeed for this test."
+            )
 
         # Verify initial partition spec
         assert len(table.spec().fields) == 1
@@ -437,14 +431,11 @@ class TestSchemaEvolution(IntegrationTestBase):
                 schema=schema,
             )
         except RESTError as e:
-            error_msg = str(e)
-            if (
-                "security token" in error_msg.lower()
-                or "credentials" in error_msg.lower()
-                or "sts" in error_msg.lower()
-            ):
-                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
-            raise
+            pytest.fail(
+                f"{STORAGE_BACKEND_ERROR_MSG}\n"
+                f"Root cause: {e}\n"
+                "Table creation must succeed for this test."
+            )
 
         # Verify table exists and has accessible metadata (prerequisite for retention)
         reloaded_table = polaris_with_write_grants.load_table(table_name)
@@ -473,25 +464,30 @@ class TestSchemaEvolution(IntegrationTestBase):
         project_root = Path(__file__).parent.parent.parent
         manifest_path = project_root / "demo" / "manifest.yaml"
 
-        if manifest_path.exists():
-            with open(manifest_path) as f:
-                manifest = yaml.safe_load(f)
+        assert manifest_path.exists(), (
+            "demo/manifest.yaml must exist for governance retention validation"
+        )
 
-            # Extract TTL from manifest governance config
-            governance = manifest.get("governance", {})
-            default_ttl = governance.get("default_ttl_hours")
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
 
-            if default_ttl is not None:
-                # Verify our retention config matches manifest TTL
-                ttl_ms = int(default_ttl) * 3600 * 1000
-                actual_ms = int(
-                    reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0")
-                )
-                assert actual_ms == ttl_ms, (
-                    f"Retention must match manifest TTL. "
-                    f"Expected {ttl_ms}ms ({default_ttl}h), "
-                    f"got {actual_ms}ms."
-                )
+        # Extract TTL from manifest governance config
+        governance = manifest.get("governance", {})
+        default_ttl = governance.get("default_ttl_hours")
+
+        assert default_ttl is not None, (
+            "GOVERNANCE GAP: manifest.yaml must define governance.default_ttl_hours. "
+            "Data retention policy is mandatory."
+        )
+
+        # Verify our retention config matches manifest TTL
+        ttl_ms = int(default_ttl) * 3600 * 1000
+        actual_ms = int(reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0"))
+        assert actual_ms == ttl_ms, (
+            f"Retention must match manifest TTL. "
+            f"Expected {ttl_ms}ms ({default_ttl}h), "
+            f"got {actual_ms}ms."
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
@@ -536,14 +532,11 @@ class TestSchemaEvolution(IntegrationTestBase):
                 schema=schema,
             )
         except RESTError as e:
-            error_msg = str(e)
-            if (
-                "security token" in error_msg.lower()
-                or "credentials" in error_msg.lower()
-                or "sts" in error_msg.lower()
-            ):
-                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
-            raise
+            pytest.fail(
+                f"{STORAGE_BACKEND_ERROR_MSG}\n"
+                f"Root cause: {e}\n"
+                "Table creation must succeed for this test."
+            )
 
         # Evolve schema multiple times to verify table metadata tracking
         for i in range(3):
@@ -582,16 +575,23 @@ class TestSchemaEvolution(IntegrationTestBase):
         project_root = Path(__file__).parent.parent.parent
         manifest_path = project_root / "demo" / "manifest.yaml"
 
-        if manifest_path.exists():
-            with open(manifest_path) as f:
-                manifest = yaml.safe_load(f)
+        assert manifest_path.exists(), (
+            "demo/manifest.yaml must exist for governance snapshot validation"
+        )
 
-            governance = manifest.get("governance", {})
-            snapshot_keep_last = governance.get("snapshot_keep_last")
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
 
-            if snapshot_keep_last is not None:
-                actual_keep = properties.get("history.expire.min-snapshots-to-keep")
-                assert actual_keep == str(snapshot_keep_last), (
-                    f"Snapshot retention mismatch: manifest says keep {snapshot_keep_last} "
-                    f"but table property is '{actual_keep}'"
-                )
+        governance = manifest.get("governance", {})
+        snapshot_keep_last = governance.get("snapshot_keep_last")
+
+        assert snapshot_keep_last is not None, (
+            "GOVERNANCE GAP: manifest.yaml must define governance.snapshot_keep_last. "
+            "Snapshot retention policy is mandatory."
+        )
+
+        actual_keep = properties.get("history.expire.min-snapshots-to-keep")
+        assert actual_keep == str(snapshot_keep_last), (
+            f"Snapshot retention mismatch: manifest says keep {snapshot_keep_last} "
+            f"but table property is '{actual_keep}'"
+        )

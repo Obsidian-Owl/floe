@@ -414,18 +414,21 @@ class TestDemoMode(IntegrationTestBase):
             "Dashboard ConfigMap exists but appears to lack dashboard definitions"
         )
 
-        # Validate dashboard JSON is parseable
-        # If panels key is present, the dashboard template rendered valid JSON
-        if '"panels"' in rendered_output:
-            # Dashboard content found -- Helm template rendered valid JSON structure
-            pass
+        # Validate dashboard JSON contains actual panel definitions
+        assert '"panels"' in rendered_output, (
+            "DASHBOARD GAP: Dashboard ConfigMap has no 'panels' key. "
+            "Grafana dashboards must contain panel definitions with queries."
+        )
 
         # Verify dashboard references real data sources (not dummy)
-        if "datasource" in rendered_output.lower():
-            assert "prometheus" in rendered_output.lower() or "jaeger" in rendered_output.lower(), (
-                "DASHBOARD GAP: Grafana dashboards exist but don't reference "
-                "Prometheus or Jaeger data sources. Dashboards may show no data."
-            )
+        assert "datasource" in rendered_output.lower(), (
+            "DASHBOARD GAP: Dashboard ConfigMap has no 'datasource' references. "
+            "Grafana dashboards must reference Prometheus or Jaeger data sources."
+        )
+        assert "prometheus" in rendered_output.lower() or "jaeger" in rendered_output.lower(), (
+            "DASHBOARD GAP: Grafana dashboards exist but don't reference "
+            "Prometheus or Jaeger data sources. Dashboards may show no data."
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-047")
@@ -479,22 +482,35 @@ class TestDemoMode(IntegrationTestBase):
             "Fix: Configure OTel SDK in demo product definitions.py to emit spans."
         )
 
-        # Check if any demo product names appear in services
-        demo_products = {
+        # Check that demo product services are emitting traces
+        # Only match actual product names and floe-platform, NOT generic infrastructure
+        required_product_services = {
             "customer-360",
             "iot-telemetry",
             "financial-risk",
-            "floe-platform",
-            "dagster",
         }
-        matching_services = [s for s in services if any(p in s.lower() for p in demo_products)]
+        matching_services = [
+            s for s in services if any(p in s.lower() for p in required_product_services)
+        ]
 
-        if not matching_services:
-            pytest.fail(
-                f"TRACE GAP: Jaeger has services {services} but none match demo products.\n"
-                "Expected services containing: customer-360, iot-telemetry, financial-risk, "
-                "floe-platform, or dagster."
-            )
+        assert len(matching_services) >= 1, (
+            f"TRACE GAP: Jaeger has services {services} but none match demo products.\n"
+            f"Expected services containing at least one of: "
+            f"{', '.join(sorted(required_product_services))}.\n"
+            "Generic infrastructure services (dagster, otel-collector) do not count — "
+            "demo products must emit their own traces."
+        )
+
+        # Verify ALL 3 products are emitting (not just one)
+        products_found = {
+            p for p in required_product_services if any(p in s.lower() for s in services)
+        }
+        missing_products = required_product_services - products_found
+        assert not missing_products, (
+            f"TRACE GAP: Products not emitting traces: {', '.join(sorted(missing_products))}.\n"
+            f"Products found in Jaeger: {', '.join(sorted(products_found))}.\n"
+            "All 3 demo products must emit OTel traces."
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-086")
