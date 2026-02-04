@@ -45,9 +45,7 @@ class TestCompilation:
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-010")
-    def test_compile_customer_360(
-        self, tmp_path: Path, compiled_artifacts: Any
-    ) -> None:
+    def test_compile_customer_360(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test compilation of customer-360 demo pipeline.
 
         Validates that demo/customer-360/floe.yaml compiles to valid CompiledArtifacts v0.5.0.
@@ -94,11 +92,41 @@ class TestCompilation:
         assert isinstance(artifacts.observability.telemetry.resource_attributes, object)
         assert artifacts.observability.lineage_namespace == "customer-360"
 
+        # Plugin type assertions (exact values)
+        assert artifacts.plugins.compute.type == "duckdb", (
+            f"Expected duckdb compute, got {artifacts.plugins.compute.type}"
+        )
+        assert artifacts.plugins.orchestrator.type == "dagster", (
+            f"Expected dagster orchestrator, got {artifacts.plugins.orchestrator.type}"
+        )
+
+        # Observability assertions
+        assert artifacts.observability.lineage is True, "Lineage must be enabled for customer-360"
+
+        # Source hash format (SHA256 produces 64 hex chars after prefix)
+        source_hash = artifacts.metadata.source_hash
+        assert source_hash.startswith("sha256:"), (
+            f"Source hash must start with 'sha256:', got '{source_hash[:10]}...'"
+        )
+        hash_value = source_hash.split(":", 1)[1] if ":" in source_hash else source_hash
+        assert len(hash_value) == 64 and all(c in "0123456789abcdef" for c in hash_value), (
+            f"Source hash must be 64-char hex (SHA256), got {len(hash_value)} chars"
+        )
+
+        # Transforms resolved
+        assert artifacts.transforms is not None, "Transforms must be resolved for customer-360"
+        assert len(artifacts.transforms.models) > 0, (
+            "customer-360 must have at least one transform model"
+        )
+        # Every model must have compute populated
+        for model in artifacts.transforms.models:
+            assert model.compute is not None and len(model.compute) > 0, (
+                f"Model {model.name} must have compute target resolved, got {model.compute!r}"
+            )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-010")
-    def test_compile_iot_telemetry(
-        self, tmp_path: Path, compiled_artifacts: Any
-    ) -> None:
+    def test_compile_iot_telemetry(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test compilation of iot-telemetry demo pipeline.
 
         Validates that demo/iot-telemetry/floe.yaml compiles successfully.
@@ -124,11 +152,24 @@ class TestCompilation:
         assert artifacts.identity.product_id.endswith("iot-telemetry")
         assert artifacts.plugins.compute.type in ["duckdb", "spark", "trino"]
 
+        assert artifacts.plugins.compute.type == "duckdb", (
+            f"Expected duckdb compute for iot-telemetry, got {artifacts.plugins.compute.type}"
+        )
+        assert artifacts.plugins.orchestrator.type == "dagster", (
+            f"Expected dagster orchestrator, got {artifacts.plugins.orchestrator.type}"
+        )
+        ns = artifacts.observability.lineage_namespace
+        assert ns == "iot-telemetry", f"Lineage namespace should be iot-telemetry, got {ns}"
+        assert isinstance(artifacts.identity.domain, str) and len(artifacts.identity.domain) > 0, (
+            "Domain must be populated"
+        )
+        assert artifacts.transforms is not None and len(artifacts.transforms.models) > 0, (
+            "iot-telemetry must have transform models"
+        )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-010")
-    def test_compile_financial_risk(
-        self, tmp_path: Path, compiled_artifacts: Any
-    ) -> None:
+    def test_compile_financial_risk(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test compilation of financial-risk demo pipeline.
 
         Validates that demo/financial-risk/floe.yaml compiles successfully.
@@ -142,9 +183,7 @@ class TestCompilation:
             - Product name is "financial-risk"
             - All required fields present
         """
-        spec_path = (
-            Path(__file__).parent.parent.parent / "demo" / "financial-risk" / "floe.yaml"
-        )
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "financial-risk" / "floe.yaml"
         assert spec_path.exists(), f"Demo spec not found: {spec_path}"
 
         # Compile spec
@@ -156,11 +195,21 @@ class TestCompilation:
         assert artifacts.identity.product_id.endswith("financial-risk")
         assert artifacts.plugins.orchestrator.type in ["dagster", "airflow", "prefect"]
 
+        assert artifacts.plugins.compute.type == "duckdb", (
+            f"Expected duckdb compute for financial-risk, got {artifacts.plugins.compute.type}"
+        )
+        assert artifacts.plugins.orchestrator.type == "dagster", (
+            f"Expected dagster orchestrator, got {artifacts.plugins.orchestrator.type}"
+        )
+        ns = artifacts.observability.lineage_namespace
+        assert ns == "financial-risk", f"Lineage namespace should be financial-risk, got {ns}"
+        assert artifacts.transforms is not None and len(artifacts.transforms.models) > 0, (
+            "financial-risk must have transform models"
+        )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-011")
-    def test_compilation_stages_execute(
-        self, tmp_path: Path, compiled_artifacts: Any
-    ) -> None:
+    def test_compilation_stages_execute(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test that all 6 compilation stages execute successfully.
 
         Validates the complete stage sequence:
@@ -192,6 +241,20 @@ class TestCompilation:
         assert isinstance(artifacts.version, str)
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.metadata.product_name == "customer-360"
+
+        # Enforcement must have run
+        assert artifacts.enforcement_result is not None, (
+            "Enforcement stage must produce an EnforcementResultSummary"
+        )
+        assert isinstance(artifacts.enforcement_result.passed, bool), (
+            "Enforcement result must have a boolean passed field"
+        )
+        validated = artifacts.enforcement_result.models_validated
+        assert validated > 0, f"Enforcement must validate at least one model, got {validated}"
+        level = artifacts.enforcement_result.enforcement_level
+        assert level in ("off", "warn", "strict"), (
+            f"Enforcement level must be off/warn/strict, got {level}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-012")
@@ -226,11 +289,28 @@ class TestCompilation:
         loaded = CompiledArtifacts.from_json_file(output_path)
         assert loaded.mode == artifacts.mode
 
+        # Inheritance chain must be populated when manifest is used
+        chain_len = len(artifacts.inheritance_chain)
+        assert chain_len >= 1, (
+            f"Manifest merge should populate inheritance_chain, got {chain_len} entries"
+        )
+        first_ancestor = artifacts.inheritance_chain[0]
+        assert isinstance(first_ancestor.name, str) and len(first_ancestor.name) > 0, (
+            f"First ancestor must have a name, got {first_ancestor.name!r}"
+        )
+        assert first_ancestor.scope in ("enterprise", "domain"), (
+            f"Manifest scope must be enterprise or domain, got {first_ancestor.scope!r}"
+        )
+
+        # Plugins must be resolved from manifest (not empty)
+        assert artifacts.plugins is not None, "Plugins must be resolved from manifest"
+        assert artifacts.plugins.compute.type == "duckdb", (
+            "Compute plugin must be resolved from manifest"
+        )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-013")
-    def test_dbt_profiles_generated(
-        self, tmp_path: Path, compiled_artifacts: Any
-    ) -> None:
+    def test_dbt_profiles_generated(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test dbt profiles.yml generation in CompiledArtifacts.
 
         Validates that compiled artifacts contain valid dbt profiles configuration.
@@ -259,11 +339,17 @@ class TestCompilation:
             "dbt_profiles should contain a 'default' profile"
         )
 
+        default_profile = artifacts.dbt_profiles["default"]
+        assert isinstance(default_profile, dict), "Default profile should be a dict"
+        # Profile should have a target
+        profile_keys = list(default_profile.keys())
+        assert "target" in default_profile or "outputs" in default_profile, (
+            f"Default profile needs target or outputs key. Keys: {profile_keys}"
+        )
+
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-014")
-    def test_dagster_config_generated(
-        self, tmp_path: Path, compiled_artifacts: Any
-    ) -> None:
+    def test_dagster_config_generated(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test Dagster resource config generation in CompiledArtifacts.
 
         Validates that compiled artifacts contain Dagster-compatible configuration.
@@ -288,6 +374,12 @@ class TestCompilation:
         # Verify version is valid semver (matches pattern)
         version = artifacts.plugins.orchestrator.version
         assert len(version.split(".")) == 3, "Orchestrator version must be semver"
+
+        # Compute plugin config should flow through
+        assert (
+            artifacts.plugins.compute.config is not None
+            or artifacts.plugins.compute.type == "duckdb"
+        ), "Compute plugin must have config or be a known type"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-015")

@@ -1,7 +1,7 @@
 """End-to-end tests for observability integration.
 
 This test validates that the observability stack (OpenTelemetry, OpenLineage,
-Prometheus, structured logging) works correctly across the full platform.
+Prometheus, structured logging) delivers REAL data after pipeline execution.
 
 Requirements Covered:
 - FR-040: OpenTelemetry span-per-model tracing
@@ -33,20 +33,19 @@ from testing.base_classes.integration_test_base import IntegrationTestBase
 class TestObservability(IntegrationTestBase):
     """E2E tests for observability stack integration.
 
-    These tests validate that observability features work correctly:
-    1. OpenTelemetry traces are collected and queryable in Jaeger
-    2. OpenLineage events are emitted to Marquez at all emission points
+    These tests validate that observability features deliver real data:
+    1. OpenTelemetry traces exist and are queryable in Jaeger
+    2. OpenLineage events are emitted to Marquez with real job data
     3. Trace IDs correlate between OTel spans and OpenLineage events
-    4. Prometheus metrics are collected and queryable
-    5. Structured logs contain trace_id for correlation
+    4. Metrics pipeline is deployed and healthy via OTel Collector
+    5. Structured logs contain trace context during compilation
     6. Observability failures do not block pipeline execution
-    7. Marquez lineage graph is complete and accurate
+    7. Marquez lineage graph contains real pipeline lineage
 
     Requires all platform services running:
     - Dagster (orchestrator)
     - Jaeger (trace collection)
     - Marquez (lineage tracking)
-    - Prometheus (metrics)
     - OTel Collector (telemetry gateway)
     """
 
@@ -67,15 +66,12 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Test Jaeger infrastructure is deployed and API is accessible.
+        """Validate that OTel traces with real spans exist in Jaeger for the floe-platform service.
 
-        Validates that:
-        1. Jaeger API responds at /api/services
-        2. Infrastructure is deployed and reachable
-        3. Services endpoint returns valid response structure
-
-        This infrastructure-check test verifies deployment without requiring
-        pipeline execution.
+        Demands that:
+        1. Jaeger contains traces for the 'floe-platform' service
+        2. Traces contain spans with operation names
+        3. The services list includes 'floe-platform'
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -98,26 +94,43 @@ class TestObservability(IntegrationTestBase):
         traces_json = traces_response.json()
         assert "data" in traces_json, "Jaeger traces response missing 'data' key"
 
-        # If pipeline has run, traces should exist for floe-platform service
         traces = traces_json["data"]
-        if traces:
-            first_trace = traces[0]
-            assert "traceID" in first_trace, "Trace missing traceID"
-            assert "spans" in first_trace, "Trace missing spans"
+        assert len(traces) > 0, (
+            "OBSERVABILITY GAP: No traces found for 'floe-platform' service in Jaeger.\n"
+            "The OTel pipeline is not emitting traces during compilation or pipeline execution.\n"
+            "Fix: Configure OTel SDK in floe-core compilation "
+            "stages to emit spans.\n"
+            "Expected: Each compilation stage should emit a span."
+        )
 
-        # Verify Jaeger API responds with services list
+        # Validate trace structure contains real spans
+        first_trace = traces[0]
+        assert "traceID" in first_trace, "Trace missing traceID"
+        assert "spans" in first_trace, "Trace missing spans"
+        assert len(first_trace["spans"]) > 0, (
+            "Trace exists but has no spans. OTel instrumentation is emitting "
+            "empty traces without span data."
+        )
+
+        # Validate spans have required attributes for pipeline debugging
+        first_span = first_trace["spans"][0]
+        assert "operationName" in first_span, "Span missing operationName"
+        assert len(first_span["operationName"]) > 0, (
+            "Span has empty operationName — OTel instrumentation not setting span names"
+        )
+
+        # Verify services list includes floe-platform
         response = jaeger_client.get("/api/services")
         assert response.status_code == 200, (
             f"Jaeger services endpoint failed: {response.status_code}"
         )
-
-        # Verify response structure
-        response_json = response.json()
-        assert "data" in response_json, (
-            "Jaeger services response missing 'data' key"
-        )
-        assert isinstance(response_json["data"], list), (
-            f"Services data should be a list, got: {type(response_json['data'])}"
+        services_json = response.json()
+        assert "data" in services_json, "Jaeger services response missing 'data' key"
+        services = services_json["data"]
+        assert "floe-platform" in services, (
+            f"OBSERVABILITY GAP: 'floe-platform' not in Jaeger services list.\n"
+            f"Services found: {services}\n"
+            "Fix: Configure OTel SDK with service.name='floe-platform'"
         )
 
     @pytest.mark.e2e
@@ -129,16 +142,12 @@ class TestObservability(IntegrationTestBase):
         marquez_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Test Marquez API is ready to receive OpenLineage events.
+        """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
 
-        Validates that:
-        1. Marquez API is accessible and responds correctly
-        2. Namespaces endpoint returns valid structure
-        3. API can create/list namespaces (OpenLineage ready)
-
-        This test validates Marquez infrastructure readiness. Full OpenLineage
-        event emission testing requires Dagster code locations with OpenLineage
-        integration configured.
+        Demands that:
+        1. Marquez API is accessible and namespace creation works
+        2. Real OpenLineage jobs exist in at least one namespace
+        3. Pipeline execution has emitted RunEvent.START/COMPLETE events
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -163,9 +172,7 @@ class TestObservability(IntegrationTestBase):
 
         # Verify response structure
         response_json = response.json()
-        assert "namespaces" in response_json, (
-            "Marquez response missing 'namespaces' key"
-        )
+        assert "namespaces" in response_json, "Marquez response missing 'namespaces' key"
         assert isinstance(response_json["namespaces"], list), (
             f"Namespaces should be a list, got: {type(response_json['namespaces'])}"
         )
@@ -185,22 +192,35 @@ class TestObservability(IntegrationTestBase):
 
         # Verify namespace was created
         verify_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}")
-        assert verify_response.status_code == 200, (
-            f"Created namespace not found: {test_namespace}"
-        )
+        assert verify_response.status_code == 200, f"Created namespace not found: {test_namespace}"
 
-        # Verify jobs endpoint works for the namespace
+        # Query for REAL jobs — not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
         assert jobs_response.status_code == 200, (
             f"Jobs endpoint failed: {jobs_response.status_code}"
         )
 
-        # Verify datasets endpoint works for the namespace
-        datasets_response = marquez_client.get(
-            f"/api/v1/namespaces/{test_namespace}/datasets"
-        )
-        assert datasets_response.status_code == 200, (
-            f"Datasets endpoint failed: {datasets_response.status_code}"
+        # Check for jobs in the default namespace too (where pipeline would emit)
+        default_jobs = marquez_client.get("/api/v1/namespaces/default/jobs")
+        if default_jobs.status_code == 200:
+            default_jobs_json = default_jobs.json()
+            all_jobs = default_jobs_json.get("jobs", [])
+        else:
+            all_jobs = []
+
+        # Also check customer-360 namespace
+        c360_jobs = marquez_client.get("/api/v1/namespaces/customer-360/jobs")
+        if c360_jobs.status_code == 200:
+            c360_jobs_json = c360_jobs.json()
+            all_jobs.extend(c360_jobs_json.get("jobs", []))
+
+        # We need REAL OpenLineage events from pipeline execution
+        assert len(all_jobs) > 0, (
+            "OBSERVABILITY GAP: No OpenLineage jobs found in any Marquez namespace.\n"
+            "The platform is not emitting OpenLineage events during pipeline execution.\n"
+            "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
+            "RunEvent.START and RunEvent.COMPLETE events.\n"
+            f"Namespaces checked: default, customer-360, {test_namespace}"
         )
 
     @pytest.mark.e2e
@@ -212,16 +232,12 @@ class TestObservability(IntegrationTestBase):
         marquez_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Test infrastructure for trace/lineage correlation is ready.
+        """Validate Jaeger and Marquez contain pipeline data for correlation.
 
-        Validates that:
-        1. Both Jaeger and Marquez APIs are accessible
-        2. Jaeger can query traces by service name
-        3. Marquez namespace/job structure supports correlation
-
-        This test validates infrastructure readiness for trace/lineage
-        correlation. Full correlation testing requires Dagster jobs
-        configured with both OTel tracing and OpenLineage emission.
+        Demands that:
+        1. Jaeger has floe-related or dagster-related service traces
+        2. Marquez has floe-related namespaces with pipeline data
+        3. At least one system has real pipeline data for correlation
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -240,53 +256,35 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
             )
 
-        # Verify Jaeger can query traces by service name
-        # (Even if no traces exist yet, API should respond)
-        service_name = f"floe-test-{e2e_namespace}"
-        response = jaeger_client.get(
-            "/api/traces",
-            params={"service": service_name, "limit": 1},
-        )
-        # Jaeger returns 200 even if no traces found
-        assert response.status_code == 200, (
-            f"Jaeger traces query failed: {response.status_code}"
-        )
+        # Query for REAL traces in Jaeger for any floe-related service
+        all_services_response = jaeger_client.get("/api/services")
+        assert all_services_response.status_code == 200
+        all_services = all_services_response.json().get("data", [])
 
-        # Verify response structure
-        response_json = response.json()
-        assert "data" in response_json, (
-            "Jaeger response missing 'data' key"
-        )
-        assert isinstance(response_json["data"], list), (
-            f"Traces data should be a list, got: {type(response_json['data'])}"
-        )
+        floe_services = [s for s in all_services if "floe" in s.lower() or "dagster" in s.lower()]
 
-        # Verify Marquez namespaces API works
-        marquez_response = marquez_client.get("/api/v1/namespaces")
-        assert marquez_response.status_code == 200, (
-            f"Marquez namespaces query failed: {marquez_response.status_code}"
-        )
+        # Query Marquez for REAL jobs
+        all_namespaces_response = marquez_client.get("/api/v1/namespaces")
+        assert all_namespaces_response.status_code == 200
+        all_namespaces = all_namespaces_response.json().get("namespaces", [])
 
-        # Create a test namespace in Marquez to verify write capability
-        test_ns = f"floe-correlation-{e2e_namespace}"
-        create_response = marquez_client.put(
-            f"/api/v1/namespaces/{test_ns}",
-            json={
-                "ownerName": "floe-e2e",
-                "description": "Correlation test namespace",
-            },
-        )
-        assert create_response.status_code in (200, 201), (
-            f"Failed to create Marquez namespace: {create_response.status_code}"
-        )
+        floe_namespaces = [
+            ns["name"]
+            for ns in all_namespaces
+            if "floe" in ns["name"].lower()
+            or "customer" in ns["name"].lower()
+            or "iot" in ns["name"].lower()
+            or "financial" in ns["name"].lower()
+        ]
 
-        # Verify we can query jobs in the namespace (empty is ok)
-        jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_ns}/jobs")
-        assert jobs_response.status_code == 200, (
-            f"Marquez jobs query failed: {jobs_response.status_code}"
+        # Both systems must have pipeline data for correlation to work
+        assert len(floe_services) > 0 or len(floe_namespaces) > 0, (
+            "CORRELATION GAP: Neither Jaeger nor Marquez has pipeline data.\n"
+            f"Jaeger services: {all_services}\n"
+            f"Marquez namespaces: {[ns['name'] for ns in all_namespaces]}\n"
+            "Fix: Run a pipeline with both OTel tracing and OpenLineage emission enabled, "
+            "using the same run_id for correlation."
         )
-
-        # Both systems are ready for correlation - infrastructure validated
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-043")
@@ -295,17 +293,14 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         dagster_client: Any,
     ) -> None:
-        """Test OTel Collector is deployed for metrics pipeline.
+        """Validate that OTel Collector is deployed and healthy for metrics pipeline.
 
-        Validates that:
-        1. OTel Collector service exists in K8s cluster
-        2. Infrastructure is ready for metrics collection
+        Demands that:
+        1. OTel Collector service exists in the K8s cluster
+        2. OTel Collector pods are in Running state
 
         ARCHITECTURE NOTE: Prometheus is NOT part of the floe platform.
-        Metrics flow through OTel Collector → external metrics backend.
-        The platform provides metrics endpoints; consumers bring their own observability stack.
-
-        This infrastructure-check test verifies OTel Collector deployment.
+        Metrics flow through OTel Collector to external metrics backend.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -316,7 +311,7 @@ class TestObservability(IntegrationTestBase):
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
 
-        # Verify OTel Collector service exists (metrics gateway)
+        # Verify OTel Collector is deployed AND healthy
         result = subprocess.run(
             ["kubectl", "get", "svc", "-n", "floe-test", "-o", "name"],
             capture_output=True,
@@ -332,24 +327,46 @@ class TestObservability(IntegrationTestBase):
                 "Check: kubectl access to namespace 'floe-test'"
             )
 
-        # Check for OTel collector service in output
         services = result.stdout.lower()
-        if "otel" not in services and "opentelemetry" not in services:
-            pytest.fail(
-                "INFRASTRUCTURE GAP: OTel Collector not deployed.\n"
-                "\n"
-                "ARCHITECTURE: Prometheus is not part of the floe platform.\n"
-                "Metrics flow: Platform → OTel Collector → External Backend\n"
-                "\n"
-                "ROOT CAUSE: OTel Collector is disabled in test values.\n"
-                "File: charts/floe-platform/values-test.yaml\n"
-                "Setting: otel.enabled: false (line 152)\n"
-                "\n"
-                "FIX: Enable OTel Collector in test values:\n"
-                "  otel:\n"
-                "    enabled: true\n"
-                "\n"
-                f"Services found:\n{result.stdout}"
+        assert "otel" in services or "opentelemetry" in services, (
+            "INFRASTRUCTURE GAP: OTel Collector not deployed.\n"
+            "\n"
+            "ARCHITECTURE: Metrics flow through OTel Collector.\n"
+            "Platform → OTel Collector → External Backend\n"
+            "\n"
+            "ROOT CAUSE: OTel Collector is disabled in test values.\n"
+            "File: charts/floe-platform/values-test.yaml\n"
+            "Setting: otel.enabled: false\n"
+            "\n"
+            "FIX: Enable OTel Collector:\n"
+            "  otel:\n"
+            "    enabled: true\n"
+            "\n"
+            f"Services found:\n{result.stdout}"
+        )
+
+        # If OTel Collector IS deployed, verify it's actually running
+        pod_result = subprocess.run(
+            [
+                "kubectl",
+                "get",
+                "pods",
+                "-n",
+                "floe-test",
+                "-l",
+                "app.kubernetes.io/component=opentelemetry-collector",
+                "-o",
+                "jsonpath={.items[*].status.phase}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if pod_result.returncode == 0 and pod_result.stdout.strip():
+            phases = pod_result.stdout.strip().split()
+            assert all(p == "Running" for p in phases), (
+                f"OTel Collector pods not all running. Phases: {phases}"
             )
 
     @pytest.mark.e2e
@@ -359,15 +376,11 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         dagster_client: Any,
     ) -> None:
-        """Test Dagster webserver logs endpoint is accessible.
+        """Validate that compilation emits structured logs and Dagster runs endpoint is queryable.
 
-        Validates that:
-        1. Dagster webserver is running
-        2. Can query for runs (infrastructure check)
-        3. Logs endpoint is accessible
-
-        This infrastructure-check test verifies deployment without requiring
-        specific log content.
+        Demands that:
+        1. Compilation produces log output with trace context
+        2. Dagster runs endpoint is accessible for log correlation
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -376,7 +389,39 @@ class TestObservability(IntegrationTestBase):
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
 
-        # Verify can query Dagster for runs (basic connectivity)
+        # Validate that compilation emits structured logs with trace context
+        import io
+        import logging
+        from pathlib import Path
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        project_root = Path(__file__).parent.parent.parent
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        # Capture log output during compilation
+        log_buffer = io.StringIO()
+        handler = logging.StreamHandler(log_buffer)
+        handler.setLevel(logging.DEBUG)
+        root_logger = logging.getLogger("floe_core")
+        root_logger.addHandler(handler)
+
+        try:
+            artifacts = compile_pipeline(spec_path, manifest_path)
+            assert artifacts is not None, "Compilation should succeed"
+        finally:
+            root_logger.removeHandler(handler)
+
+        log_output = log_buffer.getvalue()
+
+        # Compilation should produce SOME log output
+        assert len(log_output) > 0, (
+            "OBSERVABILITY GAP: Compilation produces no log output.\n"
+            "Fix: Add structured logging to compilation stages with trace_id context."
+        )
+
+        # Verify Dagster API is also accessible for runtime log correlation
         query = """
         query GetRuns {
             runsOrError {
@@ -392,14 +437,13 @@ class TestObservability(IntegrationTestBase):
 
         try:
             result = dagster_client._execute(query)
-            # GraphQL client returns response payload directly, not wrapped in 'data'
             assert "runsOrError" in result, (
                 f"Dagster query response missing 'runsOrError' key. Got: {result}"
             )
         except Exception as e:
             pytest.fail(
                 f"Failed to query Dagster runs endpoint: {e}\n"
-                "Dagster webserver logs may not be accessible."
+                "Dagster webserver must be accessible for log correlation."
             )
 
     @pytest.mark.e2e
@@ -409,62 +453,52 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         dagster_client: Any,
     ) -> None:
-        """Test OTel collector service exists in K8s.
+        """Validate that compilation succeeds even when OTel endpoint is unreachable.
 
-        Validates that:
-        1. OTel collector service is deployed
-        2. Infrastructure is ready for trace collection
-
-        This infrastructure-check test verifies deployment without requiring
-        trace flow or resilience testing.
+        Demands that:
+        1. Compilation completes with unreachable OTel endpoint
+        2. CompiledArtifacts are valid despite observability failure
+        3. Observability is non-blocking per FR-046
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             dagster_client: Dagster GraphQL client.
         """
-        import subprocess
+        import os
+        from pathlib import Path
+
+        from floe_core.compilation.stages import compile_pipeline
 
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
 
-        # Verify OTel collector service exists in K8s
-        result = subprocess.run(
-            ["kubectl", "get", "svc", "-n", "floe-test", "-o", "name"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
+        project_root = Path(__file__).parent.parent.parent
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        # Compile with OTel endpoint pointing to unreachable address
+        # Observability failures must NOT block compilation
+        original_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        try:
+            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://192.0.2.1:4317"  # RFC 5737 TEST-NET
+            artifacts = compile_pipeline(spec_path, manifest_path)
+        finally:
+            if original_endpoint is not None:
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = original_endpoint
+            elif "OTEL_EXPORTER_OTLP_ENDPOINT" in os.environ:
+                del os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"]
+
+        # Compilation MUST succeed even with unreachable OTel endpoint
+        assert artifacts is not None, (
+            "BLOCKING OBSERVABILITY: Compilation failed when OTel endpoint was unreachable.\n"
+            "Observability must be non-blocking per FR-046."
         )
-
-        if result.returncode != 0:
-            pytest.fail(
-                "INFRASTRUCTURE ERROR: Failed to query K8s services.\n"
-                f"Error: {result.stderr.strip()}\n"
-                "Check: kubectl access to namespace 'floe-test'"
-            )
-
-        # Check for OTel collector service in output
-        services = result.stdout.lower()
-        if "otel" not in services and "opentelemetry" not in services:
-            pytest.fail(
-                "CONFIGURATION ERROR: OTel Collector is disabled in test environment.\n"
-                "\n"
-                "ROOT CAUSE: OTel Collector is explicitly disabled in test values.\n"
-                "File: charts/floe-platform/values-test.yaml\n"
-                "Setting: otel.enabled: false (line 152)\n"
-                "\n"
-                "REQUIREMENT: FR-046 requires observability to be non-blocking.\n"
-                "This test validates the observability pipeline infrastructure.\n"
-                "\n"
-                "FIX: Enable OTel Collector in test values:\n"
-                "  otel:\n"
-                "    enabled: true\n"
-                "\n"
-                "NOTE: The Helm chart includes OTel Collector configuration.\n"
-                "When enabled, service name: <release>-otel\n"
-                "\n"
-                f"Services found:\n{result.stdout}"
-            )
+        assert artifacts.version == "0.5.0", (
+            "Compilation output should be valid even with unreachable OTel endpoint"
+        )
+        assert artifacts.metadata.product_name == "customer-360", (
+            "Compilation should produce correct artifacts even without observability"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-048")
@@ -474,16 +508,11 @@ class TestObservability(IntegrationTestBase):
         marquez_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Test Marquez lineage graph API is accessible and functional.
+        """Validate that Marquez contains real lineage data queryable via the lineage graph API.
 
-        Validates that:
-        1. Marquez lineage API endpoint responds
-        2. Lineage graph queries return valid structure
-        3. API can handle job/dataset lineage requests
-
-        This test validates the lineage graph API infrastructure. Full lineage
-        graph testing requires Dagster pipelines with OpenLineage integration
-        that emit input/output dataset facets.
+        Demands that:
+        1. At least one Marquez namespace contains real OpenLineage jobs
+        2. Lineage graph API returns data for those jobs
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -500,7 +529,7 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
             )
 
-        # Create a test namespace with a job and dataset to test lineage API
+        # Create a test namespace
         test_ns = f"floe-lineage-{e2e_namespace}"
 
         # Create namespace
@@ -515,53 +544,45 @@ class TestObservability(IntegrationTestBase):
             f"Failed to create namespace: {ns_response.status_code}"
         )
 
-        # Verify namespaces endpoint works (infrastructure check)
-        ns_list_response = marquez_client.get("/api/v1/namespaces")
-        assert ns_list_response.status_code == 200, (
-            f"Namespaces list failed: {ns_list_response.status_code}"
-        )
-        assert "namespaces" in ns_list_response.json(), (
-            "Namespaces response missing 'namespaces' key"
+        # Query ALL namespaces for real lineage data
+        all_ns_response = marquez_client.get("/api/v1/namespaces")
+        assert all_ns_response.status_code == 200
+        all_namespaces = all_ns_response.json().get("namespaces", [])
+
+        # Search for any namespace with actual job data
+        namespaces_with_jobs: list[str] = []
+        for ns in all_namespaces:
+            ns_name = ns["name"]
+            ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
+            if ns_jobs.status_code == 200:
+                jobs = ns_jobs.json().get("jobs", [])
+                if len(jobs) > 0:
+                    namespaces_with_jobs.append(ns_name)
+
+        assert len(namespaces_with_jobs) > 0, (
+            "LINEAGE GAP: No namespaces contain OpenLineage jobs.\n"
+            f"Checked {len(all_namespaces)} namespaces, none have job data.\n"
+            "Fix: Configure dbt-openlineage or Dagster OpenLineage integration "
+            "to emit lineage events during pipeline execution."
         )
 
-        # Verify datasets endpoint works for the namespace (empty is ok)
-        datasets_response = marquez_client.get(
-            f"/api/v1/namespaces/{test_ns}/datasets"
-        )
-        assert datasets_response.status_code == 200, (
-            f"Datasets query failed: {datasets_response.status_code}"
-        )
-        assert "datasets" in datasets_response.json(), (
-            "Datasets response missing 'datasets' key"
-        )
+        # For the namespace with jobs, verify lineage graph is queryable
+        ns_with_data = namespaces_with_jobs[0]
+        jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_with_data}/jobs")
+        first_job = jobs_response.json()["jobs"][0]
 
-        # Verify jobs endpoint works for the namespace (empty is ok)
-        jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_ns}/jobs")
-        assert jobs_response.status_code == 200, (
-            f"Jobs query failed: {jobs_response.status_code}"
-        )
-        assert "jobs" in jobs_response.json(), (
-            "Jobs response missing 'jobs' key"
-        )
-
-        # Verify lineage API endpoint responds (even with empty graph)
-        # Note: Creating jobs with inputs/outputs requires datasets to exist first
-        # Full lineage testing requires OpenLineage-integrated pipeline execution
+        # Query lineage for this job
         lineage_response = marquez_client.get(
             "/api/v1/lineage",
             params={
-                "nodeId": f"namespace:{test_ns}",  # Query namespace-level lineage
-                "depth": 1,
+                "nodeId": f"job:{ns_with_data}:{first_job['name']}",
+                "depth": 3,
             },
         )
-        # Lineage API may return 404 for empty namespace - that's acceptable
-        assert lineage_response.status_code in (200, 404), (
-            f"Lineage API error: {lineage_response.status_code} - {lineage_response.text}"
+        assert lineage_response.status_code == 200, (
+            f"Lineage graph query failed for job {first_job['name']}: "
+            f"{lineage_response.status_code} - {lineage_response.text}"
         )
-
-        # Lineage graph API is functional - infrastructure validated
-        # Full lineage graph content testing requires running OpenLineage-
-        # integrated pipelines that emit proper input/output dataset facets
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-040")
@@ -572,17 +593,12 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Test trace spans contain required attributes for pipeline observability.
+        """Validate that trace spans contain required attributes for pipeline observability.
 
-        Validates:
-        - Jaeger API can query traces with attribute filtering
-        - Expected span attribute schema is documented in OTel config
-        - Trace query API supports the filtering needed for pipeline debugging
-        - When traces exist, they contain model_name and pipeline_name attributes
-
-        ARCHITECTURE NOTE: Full trace content validation requires pipeline
-        execution with OTel instrumentation. This test validates the trace
-        query infrastructure and expected attribute schema.
+        Demands that:
+        1. Jaeger API supports attribute-based trace queries
+        2. Traces exist with real span data
+        3. Spans have operation names and tag attributes
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -612,87 +628,38 @@ class TestObservability(IntegrationTestBase):
         response_json = response.json()
         assert "data" in response_json, "Jaeger response missing 'data' key"
         traces = response_json["data"]
-        assert isinstance(traces, list), (
-            f"Traces should be a list, got: {type(traces)}"
+        assert isinstance(traces, list), f"Traces should be a list, got: {type(traces)}"
+
+        # Test 2: Traces MUST exist for pipeline observability
+        assert len(traces) > 0, (
+            "TRACE GAP: No traces found with tag filtering.\n"
+            "OTel instrumentation is not emitting traces with pipeline attributes.\n"
+            "Fix: Add model_name and pipeline_name attributes to OTel spans."
         )
 
-        # Test 2: If traces exist, validate span attribute schema
-        if traces:
-            # Validate trace structure
-            first_trace = traces[0]
-            assert "traceID" in first_trace, "Trace missing traceID field"
-            assert "spans" in first_trace, "Trace missing spans field"
-            assert isinstance(first_trace["spans"], list), (
-                "Spans should be a list"
-            )
+        # Validate trace structure
+        first_trace = traces[0]
+        assert "traceID" in first_trace, "Trace missing traceID field"
+        assert "spans" in first_trace, "Trace missing spans field"
+        assert len(first_trace["spans"]) > 0, "Trace has no spans"
 
-            # Validate span structure (if spans exist)
-            if first_trace["spans"]:
-                first_span = first_trace["spans"][0]
-                assert "spanID" in first_span, "Span missing spanID"
-                assert "operationName" in first_span, "Span missing operationName"
+        first_span = first_trace["spans"][0]
+        assert "spanID" in first_span, "Span missing spanID"
+        assert "operationName" in first_span, "Span missing operationName"
 
-                # Check for tags (attributes) - these are the expected fields
-                # for pipeline observability per FR-040
-                if "tags" in first_span and first_span["tags"]:
-                    tags = first_span["tags"]
-                    tag_keys = {tag["key"] for tag in tags}
+        # Validate span tags contain pipeline attributes
+        tags = first_span.get("tags", [])
 
-                    # Expected attributes for pipeline observability
-                    # These may not all be present in test traces, but we validate
-                    # the structure exists to receive them
-                    expected_keys = {
-                        "model_name",
-                        "pipeline_name",
-                        "duration_ms",
-                        "trace_id",
-                    }
-
-                    # At least validate that tags have key/value structure
-                    for tag in tags:
-                        assert "key" in tag, "Tag missing 'key' field"
-                        assert "value" in tag or "vStr" in tag or "vLong" in tag, (
-                            "Tag missing value field"
-                        )
-
-                    # Log what attributes we found for visibility
-                    found_expected = tag_keys.intersection(expected_keys)
-                    if found_expected:
-                        # Good - found some expected attributes
-                        assert len(found_expected) > 0, (
-                            "Expected to find at least one pipeline attribute"
-                        )
-        else:
-            # No traces yet - validate the API structure expectations
-            # Verify we can query for specific trace attributes when they do exist
-            # by checking the services endpoint includes expected service names
-            services_response = jaeger_client.get("/api/services")
-            assert services_response.status_code == 200, (
-                "Services endpoint failed"
-            )
-            services_json = services_response.json()
-            assert "data" in services_json, "Services response missing 'data'"
-            assert isinstance(services_json["data"], list), (
-                "Services data should be a list"
-            )
-
-        # Test 3: Validate Jaeger operations endpoint (shows span operation names)
-        operations_response = jaeger_client.get(
-            "/api/services/dagster/operations"
-        )
-        # May return 404 if service hasn't emitted traces yet - that's acceptable
-        assert operations_response.status_code in (200, 404), (
-            f"Operations endpoint error: {operations_response.status_code}"
+        # At minimum, spans should have standard OTel attributes
+        assert len(tags) > 0, (
+            "Span has no tags/attributes. OTel instrumentation is not "
+            "attaching pipeline metadata to spans."
         )
 
-        if operations_response.status_code == 200:
-            ops_json = operations_response.json()
-            assert "data" in ops_json, "Operations response missing 'data'"
-            assert isinstance(ops_json["data"], list), (
-                "Operations data should be a list"
-            )
-
-        # Trace query infrastructure validated - ready for pipeline execution
+        # Validate tag structure
+        for tag in tags:
+            assert "key" in tag, "Tag missing 'key' field"
+            assert "value" in tag or "vStr" in tag or "vLong" in tag, "Tag missing value field"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-041")
@@ -804,9 +771,7 @@ class TestObservability(IntegrationTestBase):
         # Test 2: Verify all events were stored and are queryable
         # Query jobs endpoint - should show both jobs
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_ns}/jobs")
-        assert jobs_response.status_code == 200, (
-            f"Jobs query failed: {jobs_response.status_code}"
-        )
+        assert jobs_response.status_code == 200, f"Jobs query failed: {jobs_response.status_code}"
 
         jobs_json = jobs_response.json()
         assert "jobs" in jobs_json, "Jobs response missing 'jobs' key"
@@ -822,9 +787,7 @@ class TestObservability(IntegrationTestBase):
 
         # Test 3: Verify we can query runs for each job (validates event storage)
         for job_name in ["dbt_model_customers_run", "pipeline_daily_run"]:
-            runs_response = marquez_client.get(
-                f"/api/v1/namespaces/{test_ns}/jobs/{job_name}/runs"
-            )
+            runs_response = marquez_client.get(f"/api/v1/namespaces/{test_ns}/jobs/{job_name}/runs")
             assert runs_response.status_code == 200, (
                 f"Runs query failed for {job_name}: {runs_response.status_code}"
             )

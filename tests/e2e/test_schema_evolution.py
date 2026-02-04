@@ -91,6 +91,7 @@ class TestSchemaEvolution(IntegrationTestBase):
             assert dbt_project.exists(), f"Missing dbt_project.yml for {product}"
 
             import yaml
+
             with open(dbt_project) as f:
                 config = yaml.safe_load(f)
 
@@ -106,8 +107,12 @@ class TestSchemaEvolution(IntegrationTestBase):
         chart_path = project_root / "charts" / "floe-platform"
         result = subprocess.run(
             [
-                "helm", "template", "test-release", str(chart_path),
-                "-f", str(chart_path / "values-test.yaml"),
+                "helm",
+                "template",
+                "test-release",
+                str(chart_path),
+                "-f",
+                str(chart_path / "values-test.yaml"),
                 "--skip-schema-validation",
             ],
             cwd=project_root,
@@ -133,6 +138,39 @@ class TestSchemaEvolution(IntegrationTestBase):
         assert "data" in api_result or "errors" not in api_result, (
             "Dagster API should return valid response"
         )
+
+        # 5. Compile artifacts for each product and verify unique identity
+        from floe_core.compilation.stages import compile_pipeline
+
+        manifest_path = project_root / "demo" / "manifest.yaml"
+        if manifest_path.exists():
+            product_identities: dict[str, str] = {}
+            lineage_namespaces: dict[str, str] = {}
+
+            for product in products:
+                spec_path = project_root / "demo" / product / "floe.yaml"
+                if spec_path.exists():
+                    artifacts = compile_pipeline(spec_path, manifest_path)
+
+                    # Each product must have unique product_id
+                    pid = artifacts.identity.product_id
+                    assert pid not in product_identities.values(), (
+                        f"Duplicate product_id '{pid}' for {product}. "
+                        f"Already used by: {[k for k, v in product_identities.items() if v == pid]}"
+                    )
+                    product_identities[product] = pid
+
+                    # Each product must have unique lineage namespace
+                    lns = artifacts.observability.lineage_namespace
+                    assert lns not in lineage_namespaces.values(), (
+                        f"Duplicate lineage_namespace '{lns}' for {product}. "
+                        f"Already used by: {[k for k, v in lineage_namespaces.items() if v == lns]}"
+                    )
+                    lineage_namespaces[product] = lns
+
+            assert len(product_identities) == 3, (
+                f"Expected 3 products compiled, got {len(product_identities)}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -171,10 +209,7 @@ class TestSchemaEvolution(IntegrationTestBase):
         namespaces = polaris_with_write_grants.list_namespaces()
 
         # Convert to set of namespace tuples for easier checking
-        namespace_names = {
-            ns[0] if isinstance(ns, tuple) else str(ns)
-            for ns in namespaces
-        }
+        namespace_names = {ns[0] if isinstance(ns, tuple) else str(ns) for ns in namespaces}
 
         for expected in expected_namespaces:
             # Allow for variations in naming (- vs _)
@@ -182,10 +217,7 @@ class TestSchemaEvolution(IntegrationTestBase):
                 expected.replace("_", "-") in ns or expected.replace("-", "_") in ns
                 for ns in namespace_names
             )
-            assert found, (
-                f"Namespace {expected} not found. "
-                f"Available namespaces: {namespace_names}"
-            )
+            assert found, f"Namespace {expected} not found. Available namespaces: {namespace_names}"
 
         # Verify namespaces are isolated by checking table counts
         for namespace in expected_namespaces:
@@ -201,8 +233,7 @@ class TestSchemaEvolution(IntegrationTestBase):
                 except Exception:  # noqa: BLE001
                     continue
             assert tables_listed, (
-                f"Cannot list tables for namespace {namespace} "
-                f"(tried variants: {ns_variants})"
+                f"Cannot list tables for namespace {namespace} (tried variants: {ns_variants})"
             )
 
     @pytest.mark.e2e
@@ -379,6 +410,8 @@ class TestSchemaEvolution(IntegrationTestBase):
         Raises:
             AssertionError: If retention policy not enforced.
         """
+        from pathlib import Path
+
         from pyiceberg.exceptions import RESTError
 
         # Create unique namespace for test
@@ -430,10 +463,35 @@ class TestSchemaEvolution(IntegrationTestBase):
         txn.commit_transaction()
 
         reloaded_table = polaris_with_write_grants.load_table(table_name)
-        assert (
-            reloaded_table.properties.get("history.expire.max-snapshot-age-ms")
-            == "3600000"
-        ), "Table should accept retention configuration via properties"
+        assert reloaded_table.properties.get("history.expire.max-snapshot-age-ms") == "3600000", (
+            "Table should accept retention configuration via properties"
+        )
+
+        # Verify retention config matches manifest governance values
+        import yaml
+
+        project_root = Path(__file__).parent.parent.parent
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        if manifest_path.exists():
+            with open(manifest_path) as f:
+                manifest = yaml.safe_load(f)
+
+            # Extract TTL from manifest governance config
+            governance = manifest.get("governance", {})
+            default_ttl = governance.get("default_ttl_hours")
+
+            if default_ttl is not None:
+                # Verify our retention config matches manifest TTL
+                ttl_ms = int(default_ttl) * 3600 * 1000
+                actual_ms = int(
+                    reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0")
+                )
+                assert actual_ms == ttl_ms, (
+                    f"Retention must match manifest TTL. "
+                    f"Expected {ttl_ms}ms ({default_ttl}h), "
+                    f"got {actual_ms}ms."
+                )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
@@ -451,6 +509,8 @@ class TestSchemaEvolution(IntegrationTestBase):
         Raises:
             AssertionError: If snapshot expiry not enforced.
         """
+        from pathlib import Path
+
         from pyiceberg.exceptions import RESTError
 
         # Create unique namespace for test
@@ -515,3 +575,23 @@ class TestSchemaEvolution(IntegrationTestBase):
         properties = table.properties
         assert properties.get("history.expire.max-snapshot-age-ms") == "3600000"
         assert properties.get("history.expire.min-snapshots-to-keep") == "6"
+
+        # Verify snapshot retention matches manifest governance
+        import yaml
+
+        project_root = Path(__file__).parent.parent.parent
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        if manifest_path.exists():
+            with open(manifest_path) as f:
+                manifest = yaml.safe_load(f)
+
+            governance = manifest.get("governance", {})
+            snapshot_keep_last = governance.get("snapshot_keep_last")
+
+            if snapshot_keep_last is not None:
+                actual_keep = properties.get("history.expire.min-snapshots-to-keep")
+                assert actual_keep == str(snapshot_keep_last), (
+                    f"Snapshot retention mismatch: manifest says keep {snapshot_keep_last} "
+                    f"but table property is '{actual_keep}'"
+                )

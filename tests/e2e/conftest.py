@@ -522,5 +522,3 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
     wait_for_service(f"{jaeger_url}/api/services", timeout=60, description="Jaeger query API")
 
     return httpx.Client(base_url=jaeger_url, timeout=30.0)
-
-

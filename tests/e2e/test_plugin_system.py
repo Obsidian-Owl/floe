@@ -235,6 +235,12 @@ class TestPluginSystem(IntegrationTestBase):
                         f"'{plugin.floe_api_version}' must match format X.Y or X.Y.Z"
                     )
 
+                    # Verify plugin version follows semver (X.Y.Z or X.Y)
+                    assert version_pattern.match(plugin.version), (
+                        f"{plugin_type.name}:{plugin_name} version "
+                        f"'{plugin.version}' must match format X.Y or X.Y.Z"
+                    )
+
                     # Verify all abstract methods from ABC are implemented
                     for name, member in inspect.getmembers(abc_class):
                         if getattr(member, "__isabstractmethod__", False):
@@ -372,6 +378,8 @@ class TestPluginSystem(IntegrationTestBase):
 
         This validates plugin health check infrastructure works across all types.
         """
+        import time
+
         registry = get_registry()
         registry.discover_all()
 
@@ -397,8 +405,16 @@ class TestPluginSystem(IntegrationTestBase):
                     # Load the plugin instance (registry.get handles instantiation)
                     plugin = registry.get(plugin_type, plugin_name)
 
-                    # Call health check
+                    # Call health check with timing
+                    start = time.monotonic()
                     health_status = plugin.health_check()
+                    elapsed = time.monotonic() - start
+
+                    # Verify health checks complete promptly (not hung)
+                    assert elapsed < 5.0, (
+                        f"{plugin_type.name}:{plugin_name} health check took {elapsed:.1f}s "
+                        "(must complete within 5 seconds)"
+                    )
 
                     # Verify return type
                     assert hasattr(health_status, "state"), (
@@ -414,7 +430,8 @@ class TestPluginSystem(IntegrationTestBase):
 
                     self.logger.info(
                         f"Plugin health check: {plugin_type.name}:{plugin_name} "
-                        f"state={health_status.state.value} message={health_status.message}"
+                        f"state={health_status.state.value} message={health_status.message} "
+                        f"elapsed={elapsed:.2f}s"
                     )
 
                 except Exception as e:
@@ -625,6 +642,55 @@ class ThirdPartyTestPlugin(PluginMetadata):
         )
 
     @pytest.mark.e2e
+    @pytest.mark.requirement("FR-051")
+    def test_all_13_plugin_types_have_abc(self) -> None:
+        """Test that every PluginType enum has a corresponding ABC class.
+
+        Validates the plugin contract is complete - every plugin type
+        must have an Abstract Base Class defining its interface.
+        """
+        # Verify we cover all 13 plugin types in PLUGIN_ABC_MAP
+        assert len(self.PLUGIN_ABC_MAP) == len(PluginType), (
+            f"PLUGIN_ABC_MAP has {len(self.PLUGIN_ABC_MAP)} entries but "
+            f"PluginType has {len(PluginType)} members. "
+            f"Missing: {set(PluginType) - set(self.PLUGIN_ABC_MAP.keys())}"
+        )
+
+        # Verify each ABC has required abstract methods from PluginMetadata
+        required_base_methods = {"name", "version", "floe_api_version"}
+
+        for plugin_type, abc_class in self.PLUGIN_ABC_MAP.items():
+            # ABC must be a class (not a module or instance)
+            assert inspect.isclass(abc_class), (
+                f"PLUGIN_ABC_MAP[{plugin_type.name}] = {abc_class} is not a class"
+            )
+
+            # ABC must have the required base methods
+            abc_methods = {
+                name
+                for name, member in inspect.getmembers(abc_class)
+                if getattr(member, "__isabstractmethod__", False)
+            }
+
+            missing_base = required_base_methods - abc_methods
+            assert not missing_base, (
+                f"{abc_class.__name__} missing required base abstract methods: {missing_base}. "
+                "All plugin ABCs must inherit from PluginMetadata."
+            )
+
+            # ABC must have at least one domain-specific abstract method
+            domain_methods = abc_methods - required_base_methods
+            assert len(domain_methods) > 0, (
+                f"{abc_class.__name__} has no domain-specific abstract methods. "
+                "Plugin ABCs must define at least one method beyond PluginMetadata basics."
+            )
+
+            self.logger.info(
+                f"ABC completeness check: {plugin_type.name} -> {abc_class.__name__} "
+                f"(base={len(required_base_methods)}, domain={len(domain_methods)})"
+            )
+
+    @pytest.mark.e2e
     @pytest.mark.requirement("FR-052")
     def test_plugin_swap_actual_execution(self) -> None:
         """Test that swapping compute plugins produces functionally different configs.
@@ -706,8 +772,7 @@ class ThirdPartyTestPlugin(PluginMetadata):
                         plugin_config["resource_requirements"] = resource_reqs
 
                         self.logger.info(
-                            f"Plugin {compute_name} resource requirements: "
-                            f"{resource_reqs}"
+                            f"Plugin {compute_name} resource requirements: {resource_reqs}"
                         )
                     except Exception as e:
                         self.logger.warning(
@@ -718,9 +783,7 @@ class ThirdPartyTestPlugin(PluginMetadata):
                 plugin_configs[compute_name] = plugin_config
 
             except Exception as e:
-                self.logger.error(
-                    f"Plugin execution test failed: compute={compute_name} - {e}"
-                )
+                self.logger.error(f"Plugin execution test failed: compute={compute_name} - {e}")
                 raise
 
         # Verify at least one plugin configuration was collected
@@ -739,9 +802,7 @@ class ThirdPartyTestPlugin(PluginMetadata):
 
             if len(dbt_profiles) >= 2:
                 # Check that profiles have different 'type' fields (e.g., duckdb vs postgres)
-                profile_types = {
-                    profile.get("type") for profile in dbt_profiles if profile
-                }
+                profile_types = {profile.get("type") for profile in dbt_profiles if profile}
 
                 assert len(profile_types) >= 2, (
                     f"Expected different dbt profile types, but got: {profile_types}. "

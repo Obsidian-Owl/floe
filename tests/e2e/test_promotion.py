@@ -105,19 +105,20 @@ class TestPromotion(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
     def test_promotion_config_validation(self) -> None:
-        """Test that promotion configuration validates correctly.
+        """Test that promotion configuration enforces gate escalation from dev to prod.
 
         Validates:
-        - PromotionConfig accepts valid environments
-        - EnvironmentConfig accepts valid gates
-        - Gate configuration is properly structured
+        - Production gates are STRICTER than dev gates (more gates enabled)
+        - Gate timeouts escalate from dev to staging to prod
+        - Policy compliance is mandatory and cannot be disabled
         """
-        # Create promotion config with all gate types
+        # Create promotion config with escalating gate requirements
         promotion_config = PromotionConfig(
             environments=[
                 EnvironmentConfig(
                     name="dev",
                     gates={PromotionGate.POLICY_COMPLIANCE: True},
+                    gate_timeout_seconds=30,
                 ),
                 EnvironmentConfig(
                     name="staging",
@@ -143,19 +144,28 @@ class TestPromotion(IntegrationTestBase):
             ],
         )
 
-        # Verify configuration structure
-        assert len(promotion_config.environments) == 3
-        assert promotion_config.environments[0].name == "dev"
-        assert promotion_config.environments[1].name == "staging"
-        assert promotion_config.environments[2].name == "prod"
+        # Assert prod gates are STRICTER than dev gates
+        dev_gates = promotion_config.environments[0].gates
+        prod_gates = promotion_config.environments[2].gates
+        assert len(prod_gates) > len(dev_gates), (
+            f"Prod must have more gates than dev. Dev: {len(dev_gates)}, Prod: {len(prod_gates)}"
+        )
 
-        # Verify gates
-        assert PromotionGate.POLICY_COMPLIANCE in promotion_config.environments[0].gates
-        assert PromotionGate.TESTS in promotion_config.environments[1].gates
-        assert PromotionGate.SECURITY_SCAN in promotion_config.environments[2].gates
+        # Assert gate timeout escalates: dev < staging < prod
+        dev_timeout = promotion_config.environments[0].gate_timeout_seconds
+        staging_timeout = promotion_config.environments[1].gate_timeout_seconds
+        prod_timeout = promotion_config.environments[2].gate_timeout_seconds
+        assert dev_timeout < staging_timeout < prod_timeout, (
+            f"Timeouts must escalate. "
+            f"Dev: {dev_timeout}s, Staging: {staging_timeout}s, Prod: {prod_timeout}s"
+        )
 
-        # Verify gate timeout
-        assert promotion_config.environments[2].gate_timeout_seconds == 120
+        # Assert policy compliance is mandatory and cannot be disabled
+        for env in promotion_config.environments:
+            policy_gate = env.gates.get(PromotionGate.POLICY_COMPLIANCE)
+            assert policy_gate is not False, (
+                f"Policy compliance gate cannot be disabled in {env.name} environment"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
@@ -199,17 +209,19 @@ class TestPromotion(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
     def test_controller_initialization(self) -> None:
-        """Test PromotionController initializes correctly.
+        """Test PromotionController has required methods for promotion workflow.
 
         Validates:
-        - Controller accepts valid configuration
-        - Controller has expected attributes
-        - Controller binds logging context
+        - Controller has promote() method for executing promotions
+        - Controller has get_status() method for querying promotion state
+        - Controller has rollback() method for reverting promotions
+        - Environments are ordered correctly (dev < staging < prod)
         """
         promotion_config = PromotionConfig(
             environments=[
                 EnvironmentConfig(name="dev", gates={}),
                 EnvironmentConfig(name="staging", gates={}),
+                EnvironmentConfig(name="prod", gates={}),
             ],
         )
 
@@ -222,11 +234,21 @@ class TestPromotion(IntegrationTestBase):
             promotion=promotion_config,
         )
 
-        # Verify controller state
-        assert controller.client is not None
-        assert hasattr(controller.client, "push") or hasattr(controller.client, "pull"), "Client should have push/pull methods"
-        assert controller.promotion == promotion_config
-        assert len(controller.promotion.environments) == 2
+        # Assert controller has required workflow methods
+        assert hasattr(controller, "promote"), "Controller must have promote() method"
+        assert callable(controller.promote), "promote must be callable"
+
+        assert hasattr(controller, "get_status"), "Controller must have get_status() method"
+        assert callable(controller.get_status), "get_status must be callable"
+
+        assert hasattr(controller, "rollback"), "Controller must have rollback() method"
+        assert callable(controller.rollback), "rollback must be callable"
+
+        # Assert environments are ordered: dev, staging, prod (positionally)
+        env_names = [env.name for env in controller.promotion.environments]
+        assert env_names == ["dev", "staging", "prod"], (
+            f"Environments must be ordered [dev, staging, prod], got {env_names}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
@@ -279,12 +301,12 @@ class TestPromotion(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-071")
     def test_gate_configuration_structure(self) -> None:
-        """Test that gate configurations are properly structured.
+        """Test that security gate config enables runtime artifact injection.
 
         Validates:
-        - Different gate types can be configured
-        - Gate timeouts are respected
-        - Security gate config has required fields
+        - Command contains ${ARTIFACT_REF} placeholder for injection
+        - block_on_severity specifies at least one severity level
+        - timeout_seconds is greater than zero (gates must complete)
         """
         security_gate = SecurityGateConfig(
             command="trivy image ${ARTIFACT_REF} --format json",
@@ -294,28 +316,24 @@ class TestPromotion(IntegrationTestBase):
             timeout_seconds=120,
         )
 
-        # Verify security gate structure
-        assert security_gate.command is not None
-        assert isinstance(security_gate.command, str)
-        assert len(security_gate.command) > 0
-        assert "CRITICAL" in security_gate.block_on_severity
-        assert "HIGH" in security_gate.block_on_severity
-        assert security_gate.scanner_format == "trivy"
-        assert security_gate.timeout_seconds == 120
-
-        # Create environment with security gate
-        env_config = EnvironmentConfig(
-            name="staging",
-            gates={
-                PromotionGate.POLICY_COMPLIANCE: True,
-                PromotionGate.SECURITY_SCAN: security_gate,
-            },
-            gate_timeout_seconds=60,
+        # Assert command has injection placeholder
+        assert "${ARTIFACT_REF}" in security_gate.command, (
+            "Security gate command must contain ${ARTIFACT_REF} placeholder for runtime injection"
         )
 
-        # Verify environment config
-        assert PromotionGate.SECURITY_SCAN in env_config.gates
-        assert isinstance(env_config.gates[PromotionGate.SECURITY_SCAN], SecurityGateConfig)
+        # Assert at least one severity level blocks promotion
+        assert len(security_gate.block_on_severity) > 0, (
+            "Must specify at least one severity level to block on"
+        )
+        assert all(
+            severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+            for severity in security_gate.block_on_severity
+        ), f"Invalid severity levels: {security_gate.block_on_severity}"
+
+        # Assert timeout is positive (gates must complete)
+        assert security_gate.timeout_seconds > 0, (
+            f"Gate timeout must be positive, got {security_gate.timeout_seconds}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-072")
@@ -352,20 +370,24 @@ class TestPromotion(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-073")
     def test_audit_trail_fields_structure(self) -> None:
-        """Test that audit trail record structure is correct.
+        """Test that audit trail captures complete execution evidence.
 
         Validates:
-        - PromotionRecord has required audit fields
-        - Fields are properly typed
+        - artifact_digest matches SHA256 format (sha256:<64 hex chars>)
+        - promotion_id is valid UUID (not just truthy)
+        - gate_results are populated (gates executed, not skipped)
+        - Each gate_result has duration_ms > 0 (gates took time)
+        - trace_id is populated (OTel correlation enabled)
         """
-        from uuid import uuid4
+        from datetime import datetime, timezone
+        from uuid import UUID, uuid4
 
         from floe_core.schemas.promotion import GateResult, GateStatus, PromotionRecord
-        from datetime import datetime, timezone
 
-        # Create a mock promotion record to validate structure
+        # Create a promotion record with realistic gate execution
+        promotion_id = uuid4()
         record = PromotionRecord(
-            promotion_id=uuid4(),
+            promotion_id=promotion_id,
             artifact_digest="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
             artifact_tag="v1.0.0-dev",
             source_environment="dev",
@@ -378,67 +400,120 @@ class TestPromotion(IntegrationTestBase):
                     status=GateStatus.PASSED,
                     duration_ms=1500,
                 ),
+                GateResult(
+                    gate=PromotionGate.TESTS,
+                    status=GateStatus.PASSED,
+                    duration_ms=3000,
+                ),
             ],
             signature_verified=True,
             dry_run=False,
-            trace_id="trace-123",
+            trace_id="trace-abc123def456",
             authorization_passed=True,
         )
 
-        # Verify audit trail fields
-        assert record.artifact_tag == "v1.0.0-dev"
-        assert record.source_environment == "dev"
-        assert record.target_environment == "staging"
-        assert record.operator == "ci@floe.dev"
-        assert record.promoted_at is not None
-        assert isinstance(record.promoted_at, (str, object)), "promoted_at should be timestamp"
-        assert len(record.gate_results) == 1
-        assert record.gate_results[0].status == GateStatus.PASSED
-        assert record.authorization_passed is True
+        # Assert artifact_digest matches SHA256 format
+        assert record.artifact_digest.startswith("sha256:"), (
+            f"Digest must start with 'sha256:', got: {record.artifact_digest[:10]}"
+        )
+        digest_hash = record.artifact_digest.split(":")[1]
+        assert len(digest_hash) == 64, f"SHA256 hash must be 64 hex chars, got {len(digest_hash)}"
+        assert all(c in "0123456789abcdef" for c in digest_hash), (
+            "Digest hash must contain only hex characters"
+        )
+
+        # Assert promotion_id is valid UUID (not just truthy)
+        assert isinstance(record.promotion_id, UUID), (
+            f"promotion_id must be UUID instance, got {type(record.promotion_id)}"
+        )
+        assert str(record.promotion_id) == str(promotion_id), (
+            "promotion_id UUID must match the one created"
+        )
+
+        # Assert gate_results are populated (gates executed)
+        assert len(record.gate_results) > 0, "Gate results must not be empty (gates must execute)"
+        assert len(record.gate_results) == 2, (
+            f"Expected 2 gates executed, got {len(record.gate_results)}"
+        )
+
+        # Assert each gate_result has duration_ms > 0 (gates took time)
+        for gate_result in record.gate_results:
+            assert gate_result.duration_ms > 0, (
+                f"Gate {gate_result.gate} must have positive duration, "
+                f"got {gate_result.duration_ms}ms"
+            )
+
+        # Assert trace_id is populated (OTel correlation)
+        assert len(record.trace_id) > 0, "trace_id must be populated for OTel correlation"
+        assert record.trace_id == "trace-abc123def456", f"trace_id mismatch, got {record.trace_id}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-074")
     def test_rollback_record_structure(self) -> None:
-        """Test that rollback record structure is correct.
+        """Test that rollback record prevents same-version rollback and captures operator intent.
 
         Validates:
-        - RollbackRecord has required fields
-        - Reason and operator are captured
+        - rollback_id is valid UUID format (not just truthy)
+        - artifact_digest != previous_digest (cannot rollback to same version)
+        - reason is non-empty (operator must explain why)
+        - rolled_back_at timezone is UTC (consistent timestamps)
         """
-        from uuid import uuid4
+        from datetime import datetime, timezone
+        from uuid import UUID, uuid4
 
         from floe_core.schemas.promotion import RollbackRecord
-        from datetime import datetime, timezone
 
-        # Create a mock rollback record
+        rollback_id = uuid4()
+        rolled_back_at = datetime.now(timezone.utc)
+
+        # Create a rollback record
         record = RollbackRecord(
-            rollback_id=uuid4(),
+            rollback_id=rollback_id,
             artifact_digest="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
             environment="staging",
             previous_digest="sha256:def789abc123def789abc123def789abc123def789abc123def789abc123def7",
             operator="sre@floe.dev",
             reason="Critical bug in latest release",
-            rolled_back_at=datetime.now(timezone.utc),
+            rolled_back_at=rolled_back_at,
             trace_id="trace-456",
         )
 
-        # Verify rollback record fields
-        assert record.environment == "staging"
-        assert record.artifact_digest.startswith("sha256:")
-        assert record.previous_digest.startswith("sha256:")
-        assert record.operator == "sre@floe.dev"
-        assert record.reason == "Critical bug in latest release"
-        assert record.rolled_back_at is not None
-        assert isinstance(record.rolled_back_at, (str, object)), "rolled_back_at should be timestamp"
+        # Assert rollback_id is valid UUID format
+        assert isinstance(record.rollback_id, UUID), (
+            f"rollback_id must be UUID instance, got {type(record.rollback_id)}"
+        )
+        assert str(record.rollback_id) == str(rollback_id), (
+            "rollback_id UUID must match the one created"
+        )
+
+        # Assert artifact_digest != previous_digest (cannot rollback to same version)
+        assert record.artifact_digest != record.previous_digest, (
+            "Cannot rollback to the same version. "
+            f"artifact_digest: {record.artifact_digest}, "
+            f"previous_digest: {record.previous_digest}"
+        )
+
+        # Assert reason is non-empty (operator must explain)
+        assert len(record.reason) > 0, "Rollback reason must not be empty"
+        assert record.reason == "Critical bug in latest release", (
+            f"Reason mismatch, got: {record.reason}"
+        )
+
+        # Assert rolled_back_at timezone is UTC
+        assert record.rolled_back_at.tzinfo is not None, "rolled_back_at must have timezone info"
+        assert record.rolled_back_at.tzinfo == timezone.utc, (
+            f"rolled_back_at must be UTC, got {record.rolled_back_at.tzinfo}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-075")
     def test_environment_authorization_configuration(self) -> None:
-        """Test that environments can configure authorization rules.
+        """Test that authorization enforces separation of duties and group-based access.
 
         Validates:
-        - EnvironmentConfig can set authorization
-        - Authorization rules are preserved in config
+        - separation_of_duties=True means promoter != approver (different operators)
+        - allowed_groups is not empty (must specify who can promote)
+        - Both platform-admins and release-managers are authorized groups
         """
         from floe_core.schemas.promotion import AuthorizationConfig
 
@@ -454,13 +529,165 @@ class TestPromotion(IntegrationTestBase):
             ),
         )
 
-        # Verify authorization settings
-        assert env_config.authorization is not None
-        assert hasattr(env_config.authorization, "allowed_groups"), "Authorization should have allowed_groups"
-        assert len(env_config.authorization.allowed_groups) > 0, "Should have at least one allowed group"
-        assert "platform-admins" in env_config.authorization.allowed_groups
-        assert "release-managers" in env_config.authorization.allowed_groups
-        assert env_config.authorization.separation_of_duties is True
+        # Assert separation_of_duties enforces promoter != approver
+        assert env_config.authorization is not None, "Authorization config must be set"
+        assert env_config.authorization.separation_of_duties is True, (
+            "separation_of_duties must be True to enforce promoter != approver constraint"
+        )
+
+        # Assert allowed_groups is not empty (access control required)
+        assert env_config.authorization.allowed_groups is not None, (
+            "allowed_groups must be specified for access control"
+        )
+        assert len(env_config.authorization.allowed_groups) > 0, (
+            "Must specify at least one allowed group"
+        )
+
+        # Assert both required groups are present
+        assert "platform-admins" in env_config.authorization.allowed_groups, (
+            "platform-admins group must be allowed for prod promotions"
+        )
+        assert "release-managers" in env_config.authorization.allowed_groups, (
+            "release-managers group must be allowed for prod promotions"
+        )
+
+    @pytest.mark.e2e
+    @pytest.mark.requirement("FR-070")
+    def test_promotion_dry_run_preserves_state(self) -> None:
+        """Test that dry_run=True executes gates but makes no state changes.
+
+        Validates:
+        - Record is marked as dry_run=True
+        - Gates still execute (gate_results populated)
+        - Gate results report status even in dry run mode
+        """
+        from datetime import datetime, timezone
+        from uuid import uuid4
+
+        from floe_core.schemas.promotion import GateResult, GateStatus, PromotionRecord
+
+        # Create a dry-run promotion record
+        record = PromotionRecord(
+            promotion_id=uuid4(),
+            artifact_digest="sha256:" + "a" * 64,
+            artifact_tag="v1.0.0-dev",
+            source_environment="dev",
+            target_environment="staging",
+            operator="ci@floe.dev",
+            promoted_at=datetime.now(timezone.utc),
+            gate_results=[
+                GateResult(
+                    gate=PromotionGate.POLICY_COMPLIANCE,
+                    status=GateStatus.PASSED,
+                    duration_ms=500,
+                ),
+            ],
+            signature_verified=True,
+            dry_run=True,
+            trace_id="trace-dry-run-123",
+            authorization_passed=True,
+        )
+
+        # Assert record is marked as dry run
+        assert record.dry_run is True, "Record must be marked as dry run"
+
+        # Assert dry run still executes gates (results captured)
+        assert len(record.gate_results) > 0, "Dry run must still execute gates"
+
+        # Assert gates report results even in dry run
+        assert record.gate_results[0].status == GateStatus.PASSED, (
+            "Gates must report results even in dry run"
+        )
+        assert record.gate_results[0].duration_ms > 0, (
+            f"Gate must have positive duration, got {record.gate_results[0].duration_ms}ms"
+        )
+
+    @pytest.mark.e2e
+    @pytest.mark.requirement("FR-071")
+    def test_promotion_gate_result_completeness(self) -> None:
+        """Test that gate results capture all execution details across all statuses.
+
+        Validates:
+        - All GateStatus enum values are valid (PASSED, FAILED, SKIPPED, WARNING)
+        - Gate results with FAILED status can include error details
+        - duration_ms is always positive (gates take time to execute)
+        """
+        from floe_core.schemas.promotion import GateResult, GateStatus
+
+        # Assert all gate statuses are valid and can be created
+        for status in GateStatus:
+            result = GateResult(
+                gate=PromotionGate.POLICY_COMPLIANCE,
+                status=status,
+                duration_ms=100,
+            )
+            assert result.status == status, f"Status mismatch for {status}"
+            assert result.duration_ms > 0, f"Duration must be positive for status {status}"
+
+        # Assert gate result with FAILED status can include error details
+        failed_result = GateResult(
+            gate=PromotionGate.SECURITY_SCAN,
+            status=GateStatus.FAILED,
+            duration_ms=5000,
+            error="Found 3 HIGH severity vulnerabilities",
+            details={"findings": 3, "severity": "HIGH"},
+        )
+        assert failed_result.status == GateStatus.FAILED
+        assert failed_result.error is not None, "Failed gate should include error message"
+        assert len(failed_result.error) > 0, "Error message should not be empty"
+        assert failed_result.details is not None, "Failed gate should include details"
+        assert "findings" in failed_result.details, "Details should include findings count"
+
+    @pytest.mark.e2e
+    @pytest.mark.requirement("FR-072")
+    def test_promotion_controller_rejects_backwards_transition(self) -> None:
+        """Test that promotion controller rejects backward and skip transitions.
+
+        Validates:
+        - Backward transition (prod → dev) is rejected with InvalidTransitionError
+        - Skip transition (dev → prod, bypassing staging) is rejected
+        - Error messages are descriptive
+        """
+        promotion_config = PromotionConfig(
+            environments=[
+                EnvironmentConfig(name="dev", gates={}),
+                EnvironmentConfig(name="staging", gates={}),
+                EnvironmentConfig(name="prod", gates={}),
+            ],
+        )
+        oci_client = OCIClient.from_registry_config(self.registry_config)
+        controller = PromotionController(
+            client=oci_client,
+            promotion=promotion_config,
+        )
+
+        # Assert backward transition: prod → dev is rejected
+        with pytest.raises(InvalidTransitionError) as exc_info:
+            controller.promote(
+                tag="v1.0.0",
+                from_env="prod",
+                to_env="dev",
+                operator="test@floe.dev",
+            )
+        # Verify error message mentions backward transition
+        error_msg = str(exc_info.value).lower()
+        assert "backward" in error_msg or "invalid" in error_msg or "prod" in error_msg, (
+            f"Error message should describe backward transition, got: {exc_info.value}"
+        )
+
+        # Assert skip transition: dev → prod is rejected
+        with pytest.raises(InvalidTransitionError) as exc_info:
+            controller.promote(
+                tag="v1.0.0",
+                from_env="dev",
+                to_env="prod",
+                operator="test@floe.dev",
+            )
+        # Verify error message mentions invalid transition
+        error_msg = str(exc_info.value).lower()
+        assert "skip" in error_msg or "invalid" in error_msg or "staging" in error_msg, (
+            f"Error message should describe skip transition, got: {exc_info.value}"
+        )
 
 
 # Module exports

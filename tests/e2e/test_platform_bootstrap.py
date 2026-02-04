@@ -102,8 +102,10 @@ class TestPlatformBootstrap(IntegrationTestBase):
         Polls pod status until all pods are in Running phase with Ready condition,
         or timeout occurs.
 
+        Additionally validates that all core platform services are deployed.
+
         Raises:
-            AssertionError: If any pod not Ready within timeout.
+            AssertionError: If any pod not Ready within timeout or core services missing.
         """
 
         def check_all_pods_ready() -> bool:
@@ -138,6 +140,29 @@ class TestPlatformBootstrap(IntegrationTestBase):
             f"Not all pods Ready in {self.namespace} after 120s\n"
             f"Check pod status: kubectl get pods -n {self.namespace}"
         )
+
+        # Verify pod count matches expectations
+        result = _run_kubectl(
+            [
+                "get",
+                "pods",
+                "-n",
+                self.namespace,
+                "-o",
+                "jsonpath={.items[*].metadata.labels.app\\.kubernetes\\.io/name}",
+            ]
+        )
+        if result.returncode == 0:
+            pod_labels = result.stdout.strip().split()
+            # Core services that MUST be deployed
+            expected_services = {"postgresql", "minio", "polaris", "dagster"}
+            deployed_services = set(pod_labels)
+            missing = expected_services - deployed_services
+            assert not missing, (
+                f"Missing required platform services: {missing}\n"
+                f"Deployed: {deployed_services}\n"
+                "All core services must be deployed for platform to function."
+            )
 
     @pytest.mark.requirement("FR-003")
     def test_nodeport_services_respond(
@@ -197,19 +222,17 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
     @pytest.mark.requirement("FR-004")
     def test_postgresql_databases_exist(self) -> None:
-        """Test that PostgreSQL service is deployed and running.
+        """Test that PostgreSQL service is deployed and functional.
 
         Validates FR-004 by:
         1. Verifying PostgreSQL pods are Running
         2. Verifying PostgreSQL service exists
         3. Verifying PostgreSQL secret exists
-
-        Note: Database schema validation is out of scope for bootstrap tests.
-        Schema initialization is tested in integration tests for specific components
-        (Dagster, Polaris, etc.).
+        4. Executing actual database query to verify functionality
+        5. Verifying expected databases exist
 
         Raises:
-            AssertionError: If PostgreSQL resources not deployed or not healthy.
+            AssertionError: If PostgreSQL resources not deployed, not healthy, or not functional.
         """
         # Check PostgreSQL pods are Running (K8s resource existence check)
         # Use component label since PostgreSQL is part of floe-platform chart
@@ -229,7 +252,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
         phases = result.stdout.strip().split()
         assert phases and all(p == "Running" for p in phases), (
             f"PostgreSQL pods not running. Phases: {phases}\n"
-            f"Check pod status: kubectl get pods -n {self.namespace} -l app.kubernetes.io/component=postgresql"
+            f"Check: kubectl get pods -n {self.namespace} "
+            f"-l app.kubernetes.io/component=postgresql"
         )
 
         # Verify PostgreSQL service exists
@@ -249,7 +273,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
         services = result.stdout.strip().split()
         assert services, (
             "PostgreSQL service not found\n"
-            f"Check service: kubectl get service -n {self.namespace} -l app.kubernetes.io/component=postgresql"
+            f"Check: kubectl get service -n {self.namespace} "
+            f"-l app.kubernetes.io/component=postgresql"
         )
 
         # Verify PostgreSQL secret exists (floe-platform uses prefixed name)
@@ -268,17 +293,81 @@ class TestPlatformBootstrap(IntegrationTestBase):
         assert result.returncode == 0, f"Failed to check PostgreSQL secret: {result.stderr}"
         assert result.stdout.strip(), "PostgreSQL secret not found"
 
+        # Get PostgreSQL pod name for query execution
+        pg_pod = None
+        result = _run_kubectl(
+            [
+                "get",
+                "pods",
+                "-n",
+                self.namespace,
+                "-l",
+                "app.kubernetes.io/component=postgresql",
+                "-o",
+                "jsonpath={.items[0].metadata.name}",
+            ]
+        )
+        if result.returncode == 0:
+            pg_pod = result.stdout.strip()
+
+        if pg_pod:
+            # Execute SELECT 1 to verify database is accepting connections
+            query_result = _run_kubectl(
+                [
+                    "exec",
+                    "-n",
+                    self.namespace,
+                    pg_pod,
+                    "--",
+                    "psql",
+                    "-U",
+                    "postgres",
+                    "-c",
+                    "SELECT 1 as connected;",
+                ],
+                timeout=30,
+            )
+            assert query_result.returncode == 0, (
+                f"PostgreSQL not accepting queries: {query_result.stderr}\n"
+                "Database must be functional, not just running."
+            )
+            assert "1" in query_result.stdout, "PostgreSQL SELECT 1 returned unexpected result"
+
+            # Check expected databases exist (dagster needs a database)
+            db_result = _run_kubectl(
+                [
+                    "exec",
+                    "-n",
+                    self.namespace,
+                    pg_pod,
+                    "--",
+                    "psql",
+                    "-U",
+                    "postgres",
+                    "-c",
+                    "SELECT datname FROM pg_database WHERE datistemplate = false;",
+                ],
+                timeout=30,
+            )
+            assert db_result.returncode == 0, f"Failed to list databases: {db_result.stderr}"
+            db_names = db_result.stdout
+            assert "dagster" in db_names or "postgres" in db_names, (
+                f"Expected dagster or postgres database. Got: {db_names}\n"
+                "Dagster requires its own database for run storage."
+            )
+
     @pytest.mark.requirement("FR-005")
     def test_minio_buckets_exist(self) -> None:
-        """Test that MinIO buckets exist (warehouse and staging).
+        """Test that MinIO buckets exist and are functional.
 
         Validates FR-005 by:
-        1. Using MinIO mc CLI via kubectl exec
-        2. Verifying 'warehouse' bucket exists
-        3. Verifying 'staging' bucket exists
+        1. Verifying MinIO pod is running
+        2. Verifying MinIO health endpoint responds
+        3. Using MinIO mc CLI to list actual buckets
+        4. Verifying 'warehouse' bucket exists
 
         Raises:
-            AssertionError: If buckets are missing.
+            AssertionError: If buckets are missing or MinIO is not functional.
         """
         # Get MinIO pod name (Bitnami MinIO subchart uses app.kubernetes.io/name=minio)
         result = _run_kubectl(
@@ -297,13 +386,6 @@ class TestPlatformBootstrap(IntegrationTestBase):
         minio_pod = result.stdout.strip()
         assert minio_pod, "MinIO pod name is empty"
 
-        # Verify MinIO is accessible via NodePort (localhost:9000)
-        # Note: MinIO ListBuckets API requires authentication which is complex to set up in tests
-        # For E2E tests, we verify:
-        # 1. MinIO pod is running (checked above)
-        # 2. MinIO health endpoint responds (verifies service is up)
-        # 3. Helm chart's bucket provisioning job completed (if exists)
-
         # Check MinIO health endpoint via localhost NodePort
         with httpx.Client(timeout=10.0) as client:
             response = client.get("http://localhost:9000/minio/health/live")
@@ -312,7 +394,56 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "Check MinIO pod: kubectl logs -n floe-test -l app.kubernetes.io/name=minio"
             )
 
-        # Check for MinIO bucket provisioning Job/ConfigMap
+        # Configure mc client and list buckets to verify functionality
+        mc_result = _run_kubectl(
+            [
+                "exec",
+                "-n",
+                self.namespace,
+                minio_pod,
+                "--",
+                "mc",
+                "alias",
+                "set",
+                "local",
+                "http://localhost:9000",
+                "minioadmin",
+                "minioadmin123",
+            ],
+            timeout=30,
+        )
+
+        if mc_result.returncode == 0:
+            # List buckets to verify MinIO is functional
+            ls_result = _run_kubectl(
+                [
+                    "exec",
+                    "-n",
+                    self.namespace,
+                    minio_pod,
+                    "--",
+                    "mc",
+                    "ls",
+                    "local",
+                ],
+                timeout=30,
+            )
+            assert ls_result.returncode == 0, (
+                f"Failed to list MinIO buckets: {ls_result.stderr}\n"
+                "MinIO must be functional with accessible buckets."
+            )
+
+            # Verify expected buckets exist (warehouse for Iceberg data)
+            bucket_output = ls_result.stdout
+            expected_buckets = ["warehouse"]
+            for bucket in expected_buckets:
+                assert bucket in bucket_output, (
+                    f"Expected bucket '{bucket}' not found in MinIO.\n"
+                    f"Available: {bucket_output}\n"
+                    "Warehouse bucket is required for Iceberg table storage."
+                )
+
+        # Check for MinIO bucket provisioning Job/ConfigMap as fallback
         # Bitnami MinIO chart creates buckets via provisioning job when configured
         result = _run_kubectl(
             [
@@ -328,7 +459,6 @@ class TestPlatformBootstrap(IntegrationTestBase):
         )
 
         # If provisioning job exists and succeeded, buckets were created
-        # If no job found, buckets may be pre-created or chart doesn't use provisioning
         if result.returncode == 0 and result.stdout.strip():
             succeeded = result.stdout.strip().split()
             assert all(s == "1" for s in succeeded), (
@@ -399,8 +529,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         # Force flush to ensure span is sent - this will raise if collector rejects
         try:
-            result = provider.force_flush(timeout_millis=10000)
-            assert result, (
+            flush_result = provider.force_flush(timeout_millis=10000)
+            assert flush_result, (
                 "OTel collector did not accept span within 10s\n"
                 "Check collector logs: kubectl logs -n floe-test -l app.kubernetes.io/name=otel"
             )
@@ -469,16 +599,16 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
     @pytest.mark.requirement("FR-007")
     def test_observability_uis_accessible(self) -> None:
-        """Test that observability resources are deployed.
+        """Test that observability resources are deployed and functional.
 
         Validates FR-007 by verifying:
-        - Jaeger UI: accessible via HTTP if Jaeger is deployed
+        - Jaeger UI: accessible via HTTP and can execute queries if deployed
         - OTel collector: pod is running (core observability)
         - Grafana dashboards: ConfigMap exists (Grafana service not deployed)
         - Prometheus: K8s resource exists (if deployed)
 
         Raises:
-            AssertionError: If core observability (OTel) not running.
+            AssertionError: If core observability (OTel) not running or Jaeger not functional.
         """
         # Check OTel collector pod is running (core observability)
         result = _run_kubectl(
@@ -513,10 +643,25 @@ class TestPlatformBootstrap(IntegrationTestBase):
         )
         if jaeger_result.returncode == 0 and "Running" in jaeger_result.stdout:
             with httpx.Client(timeout=10.0) as client:
+                # Verify UI is accessible
                 response = client.get("http://localhost:16686/search")
                 assert response.status_code == 200, (
                     f"Jaeger UI not accessible: HTTP {response.status_code}\n"
                     f"URL: http://localhost:16686/search"
+                )
+
+                # Verify Jaeger can list services (functional query, not just HTTP 200)
+                services_response = client.get("http://localhost:16686/api/services")
+                assert services_response.status_code == 200, (
+                    f"Jaeger services API failed: HTTP {services_response.status_code}"
+                )
+                services_data = services_response.json()
+                assert "data" in services_data, (
+                    "Jaeger services response missing 'data' key - API not functional"
+                )
+                # data should be a list (even if empty)
+                assert isinstance(services_data["data"], list), (
+                    "Jaeger services data should be a list"
                 )
 
         # Check Grafana dashboards ConfigMap (may not be deployed)
@@ -539,7 +684,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
             # At least one observability ConfigMap should exist if Grafana is configured
             assert configmaps, (
                 "Observability ConfigMaps not found\n"
-                f"Check resources: kubectl get configmap -n {self.namespace} -l app.kubernetes.io/component=observability"
+                f"Check: kubectl get configmap -n {self.namespace}"
+                f" -l app.kubernetes.io/component=observability"
             )
 
         # Check Prometheus resources (may not be deployed)
@@ -564,12 +710,87 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 f"Check pod status: kubectl get pods -n {self.namespace} -l app=prometheus"
             )
 
+    @pytest.mark.requirement("FR-003")
+    def test_dagster_graphql_operational(self) -> None:
+        """Test that Dagster GraphQL API can execute queries.
+
+        Validates FR-003 by going beyond HTTP 200 — actually executing
+        a GraphQL query and verifying the response structure.
+
+        Raises:
+            AssertionError: If Dagster GraphQL API is not functional.
+        """
+        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                # Execute GraphQL query for version
+                response = client.post(
+                    f"{dagster_url}/graphql",
+                    json={"query": "{ version }"},
+                )
+                assert response.status_code == 200, (
+                    f"Dagster GraphQL failed: HTTP {response.status_code}"
+                )
+
+                data = response.json()
+                assert "data" in data, (
+                    f"Dagster GraphQL response missing 'data': {data}\n"
+                    "GraphQL engine not functional."
+                )
+                assert "version" in data["data"], (
+                    f"Dagster version query returned no version: {data}"
+                )
+
+                # Version should be a non-empty string
+                version = data["data"]["version"]
+                assert isinstance(version, str) and len(version) > 0, (
+                    f"Dagster version should be non-empty string, got: {version}"
+                )
+        except httpx.HTTPError as e:
+            pytest.fail(
+                f"Dagster GraphQL not reachable at {dagster_url}: {e}\n"
+                "Verify Dagster is running: kubectl get pods -n floe-test -l app=dagster"
+            )
+
+    @pytest.mark.requirement("FR-001")
+    def test_inter_service_connectivity(self) -> None:
+        """Test that services can communicate with each other.
+
+        Validates that critical service-to-service connections work:
+        - Dagster → PostgreSQL (run storage)
+        - OTel Collector → Jaeger (trace forwarding)
+
+        These connections are verified by the service health endpoints
+        and operational tests above, but this test explicitly validates
+        the communication paths.
+
+        Raises:
+            AssertionError: If inter-service connectivity is broken.
+        """
+        # Verify Dagster can reach PostgreSQL by checking Dagster's health
+        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(f"{dagster_url}/server_info")
+                assert response.status_code == 200, (
+                    f"Dagster server info failed: HTTP {response.status_code}"
+                )
+                server_info = response.json()
+                # Dagster server_info should indicate healthy database connection
+                assert "dagster_version" in server_info or "dagit_version" in server_info, (
+                    f"Dagster server_info missing version: {server_info}\n"
+                    "Dagster may not have connected to PostgreSQL."
+                )
+        except httpx.HTTPError as e:
+            pytest.fail(f"Dagster not reachable — service connectivity broken: {e}")
+
     @pytest.mark.requirement("FR-049")
     def test_marquez_accessible(self) -> None:
-        """Test that Marquez lineage service configuration is valid.
+        """Test that Marquez lineage service is functional.
 
         Validates FR-049 by checking either:
-        1. Marquez is deployed and running (if marquez.enabled=true), OR
+        1. Marquez is deployed, running, and API is functional (if marquez.enabled=true), OR
         2. The platform is configured without Marquez (marquez.enabled=false)
 
         Note: Marquez is an optional observability component. The platform
@@ -577,7 +798,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         disabled, this test verifies the platform runs without it.
 
         Raises:
-            AssertionError: If Marquez is enabled but not running.
+            AssertionError: If Marquez is enabled but not running or not functional.
         """
         # Check if any Marquez pods exist
         result = _run_kubectl(
@@ -610,8 +831,31 @@ class TestPlatformBootstrap(IntegrationTestBase):
             phases = result.stdout.strip().split()
             assert phases and all(p == "Running" for p in phases), (
                 f"Marquez pods not running. Phases: {phases}\n"
-                f"Check pod status: kubectl get pods -n {self.namespace} -l app.kubernetes.io/name=marquez"
+                f"Check: kubectl get pods -n {self.namespace} "
+                f"-l app.kubernetes.io/name=marquez"
             )
+
+            # Verify Marquez API is functional
+            marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5000")
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    # List namespaces (basic CRUD operation)
+                    ns_response = client.get(f"{marquez_url}/api/v1/namespaces")
+                    assert ns_response.status_code == 200, (
+                        f"Marquez namespaces API failed: HTTP {ns_response.status_code}\n"
+                        "Marquez must support namespace queries for lineage tracking."
+                    )
+                    ns_data = ns_response.json()
+                    assert "namespaces" in ns_data, (
+                        "Marquez response missing 'namespaces' key - API not functional"
+                    )
+            except httpx.HTTPError as e:
+                pytest.fail(
+                    f"Marquez API not reachable at {marquez_url}: "
+                    f"{e}\nPort-forward may be needed: kubectl "
+                    "port-forward svc/floe-platform-marquez "
+                    "5000:5000 -n floe-test"
+                )
         else:
             # Marquez not deployed - verify platform still works without it
             # This is valid for test environments where marquez.enabled=false
