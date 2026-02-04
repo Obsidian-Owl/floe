@@ -425,3 +425,45 @@ class OrchestratorPlugin(PluginMetadata):
             FR-033: Health check integration for platform services
         """
         return None
+
+    @abstractmethod
+    def generate_entry_point_code(
+        self,
+        product_name: str,
+        output_dir: str,
+    ) -> str:
+        """Generate orchestrator-specific entry point code file.
+
+        Creates the entry point file that enables workspace discovery.
+        Each orchestrator has its own format:
+        - Dagster: definitions.py with Definitions object
+        - Airflow: dag.py with DAG object
+        - Prefect: flow.py with Flow object
+
+        This method respects component ownership: floe-core provides data
+        (CompiledArtifacts), orchestrator plugins own code generation.
+
+        Args:
+            product_name: Name from FloeSpec metadata (e.g., "customer-360").
+            output_dir: Directory path where the entry point will be written.
+
+        Returns:
+            Path to the generated entry point file as string.
+
+        Example:
+            >>> path = plugin.generate_entry_point_code(
+            ...     product_name="customer-360",
+            ...     output_dir="/path/to/product",
+            ... )
+            >>> # For Dagster: returns "/path/to/product/definitions.py"
+            >>> # For Airflow: returns "/path/to/product/dag.py"
+
+        Requirements:
+            - Component ownership: Orchestrator plugin owns its code generation
+            - Spec 2b-compilation-pipeline: floe-core provides DATA, plugins own code
+
+        See Also:
+            - create_definitions(): Runtime definitions from artifacts
+            - specs/2b-compilation-pipeline/spec.md: Technology ownership boundaries
+        """
+        ...

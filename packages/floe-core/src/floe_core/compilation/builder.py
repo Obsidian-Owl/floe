@@ -33,13 +33,11 @@ from floe_core.schemas.compiled_artifacts import (
 from floe_core.schemas.floe_spec import FloeSpec
 from floe_core.schemas.manifest import PlatformManifest
 from floe_core.schemas.quality_config import QualityConfig
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION, FLOE_VERSION
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
-# Package version - should match pyproject.toml
-FLOE_VERSION = "0.3.0"
-
-# Contract version - see compiled_artifacts.py version history
-CONTRACT_VERSION = "0.5.0"
+# Contract version alias for backwards compatibility
+CONTRACT_VERSION = COMPILED_ARTIFACTS_VERSION
 
 
 def build_artifacts(

@@ -8,6 +8,12 @@ metadata:
   labels:
     domain: retail
     tier: gold
+
+# Reference the platform manifest for plugin/governance configuration
+# Data engineers inherit all platform settings - just write SQL
+platform:
+  manifest: "../manifest.yaml"
+
 transforms:
   - name: stg_crm_customers
     tags: [staging]

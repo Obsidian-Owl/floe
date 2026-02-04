@@ -8,6 +8,12 @@ metadata:
   labels:
     domain: finance
     tier: gold
+
+# Reference the platform manifest for plugin/governance configuration
+# Data engineers inherit all platform settings - just write SQL
+platform:
+  manifest: "../manifest.yaml"
+
 transforms:
   - name: stg_positions
     tags: [staging]

@@ -34,7 +34,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedPlugins,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION, FLOE_VERSION
 from pydantic import ValidationError
 
 
@@ -68,13 +68,12 @@ class TestCompilation:
         # Compile spec
         artifacts = compiled_artifacts(spec_path)
 
-        # Validate version
+        # Validate version (contract version)
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
-        assert artifacts.version == "0.5.0"
 
         # Validate metadata
         assert artifacts.metadata.product_name == "customer-360"
-        assert artifacts.metadata.floe_version == "0.5.0"
+        assert artifacts.metadata.floe_version == FLOE_VERSION
 
         # Validate identity
         assert artifacts.identity.product_id.endswith("customer-360")

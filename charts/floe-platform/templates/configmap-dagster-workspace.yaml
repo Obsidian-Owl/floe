@@ -11,17 +11,48 @@ data:
     # Dagster workspace configuration
     # Defines code locations (user deployments) that Dagster webserver/daemon can load
     #
-    # For production, configure user deployments in values.yaml:
-    #   dagster.dagster-user-deployments.enabled: true
-    #   dagster.dagster-user-deployments.deployments: [...]
+    # Code location patterns:
+    # 1. Python modules (demo products): dagster.codeLocations[].pythonModule
+    # 2. gRPC servers (production): dagster.dagster-user-deployments.deployments[].grpc_server
     #
-    # For development, this provides a minimal workspace.
+    # For demo mode, use values-demo.yaml which enables python_module code locations
+    # For production, use dagster-user-deployments with gRPC servers
+    {{- $codeLocations := list }}
+    {{- if .Values.dagster.codeLocations }}
+    {{- $codeLocations = .Values.dagster.codeLocations }}
+    {{- end }}
     {{- $deployments := list }}
     {{- if and .Values.dagster (index .Values.dagster "dagster-user-deployments") (index .Values.dagster "dagster-user-deployments" "enabled") }}
     {{- $deployments = index .Values.dagster "dagster-user-deployments" "deployments" }}
     {{- end }}
-    {{- if $deployments }}
+    {{- if or $codeLocations $deployments }}
     load_from:
+      {{- /* Python module code locations (for demo products) */}}
+      {{- range $codeLocations }}
+      {{- if .pythonModule }}
+      - python_module:
+          module_name: {{ .pythonModule.moduleName }}
+          {{- if .pythonModule.workingDirectory }}
+          working_directory: {{ .pythonModule.workingDirectory }}
+          {{- end }}
+          {{- if .pythonModule.attribute }}
+          attribute: {{ .pythonModule.attribute }}
+          {{- end }}
+          location_name: {{ .name }}
+      {{- end }}
+      {{- if .pythonFile }}
+      - python_file:
+          relative_path: {{ .pythonFile.relativePath }}
+          {{- if .pythonFile.workingDirectory }}
+          working_directory: {{ .pythonFile.workingDirectory }}
+          {{- end }}
+          {{- if .pythonFile.attribute }}
+          attribute: {{ .pythonFile.attribute }}
+          {{- end }}
+          location_name: {{ .name }}
+      {{- end }}
+      {{- end }}
+      {{- /* gRPC server deployments (for production) */}}
       {{- range $deployments }}
       - grpc_server:
           host: {{ .name | default "localhost" }}
@@ -29,8 +60,9 @@ data:
           location_name: {{ .name | default "user-code" }}
       {{- end }}
     {{- else }}
-    # No user deployments configured - workspace is empty
-    # Add user code deployments to dagster.dagster-user-deployments.deployments
+    # No code locations configured - workspace is empty
+    # For demo: Add dagster.codeLocations in values-demo.yaml
+    # For production: Add dagster.dagster-user-deployments.deployments
     load_from: []
     {{- end }}
 {{- end }}

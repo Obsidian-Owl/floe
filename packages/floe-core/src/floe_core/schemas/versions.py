@@ -21,6 +21,10 @@ Usage:
 
 from __future__ import annotations
 
+# floe-core package version (tracks the CLI/library release)
+# This appears in compiled artifacts metadata.floe_version
+FLOE_VERSION: str = "0.3.0"
+
 # CompiledArtifacts contract version
 # Increment MAJOR for breaking changes (remove fields, change types)
 # Increment MINOR for backward-compatible additions (new optional fields)
@@ -53,6 +57,7 @@ def get_compiled_artifacts_version() -> str:
 
 
 __all__: list[str] = [
+    "FLOE_VERSION",
     "COMPILED_ARTIFACTS_VERSION",
     "COMPILED_ARTIFACTS_VERSION_HISTORY",
     "get_compiled_artifacts_version",
