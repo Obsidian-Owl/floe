@@ -507,9 +507,8 @@ class TestObservability(IntegrationTestBase):
         # Parse each log line and validate trace_id presence and format
         trace_ids_found: list[str] = []
         for line in log_output.strip().splitlines():
-            # Look for trace_id in structured log output (JSON or key=value format)
-            # JSON format: {"trace_id": "abc123..."}
-            # Key-value format: trace_id=abc123...
+            # Look for trace_id in structured log output
+            # Matches both JSON and key-value structured log formats
             trace_id_match = re.search(
                 r'["\']?trace_id["\']?\s*[:=]\s*["\']?([a-f0-9]{32})["\']?',
                 line,
