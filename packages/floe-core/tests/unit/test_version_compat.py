@@ -47,10 +47,18 @@ class TestParseVersion:
             _parse_version("1")
 
     @pytest.mark.requirement("FR-003")
-    def test_parse_version_invalid_format_three_parts(self) -> None:
-        """Test that X.Y.Z format raises ValueError (we use X.Y only)."""
+    def test_parse_version_accepts_semver_format(self) -> None:
+        """Test that X.Y.Z semver format is accepted, ignoring patch version."""
+        # Implementation accepts X.Y.Z and extracts (X, Y), ignoring Z
+        assert _parse_version("1.0.0") == (1, 0)
+        assert _parse_version("1.2.3") == (1, 2)
+        assert _parse_version("2.10.5") == (2, 10)
+
+    @pytest.mark.requirement("FR-003")
+    def test_parse_version_invalid_format_four_parts(self) -> None:
+        """Test that 4+ part versions raise ValueError."""
         with pytest.raises(ValueError, match="Invalid version format"):
-            _parse_version("1.0.0")
+            _parse_version("1.0.0.0")
 
     @pytest.mark.requirement("FR-003")
     def test_parse_version_invalid_format_non_numeric(self) -> None:

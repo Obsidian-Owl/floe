@@ -15,10 +15,17 @@ def generate_positions(output_path: Path, num_rows: int = 500) -> None:
 
     with output_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "position_id", "portfolio_id", "instrument_id", "quantity",
-            "entry_price", "entry_date", "_loaded_at"
-        ])
+        writer.writerow(
+            [
+                "position_id",
+                "portfolio_id",
+                "instrument_id",
+                "quantity",
+                "entry_price",
+                "entry_date",
+                "_loaded_at",
+            ]
+        )
 
         for i in range(1, num_rows + 1):
             position_id = f"POS{i:04d}"
@@ -35,10 +42,17 @@ def generate_positions(output_path: Path, num_rows: int = 500) -> None:
 
             loaded_at = "2026-01-15T00:00:00Z"
 
-            writer.writerow([
-                position_id, portfolio_id, instrument_id, quantity,
-                f"{entry_price:.2f}", entry_date.strftime("%Y-%m-%d"), loaded_at
-            ])
+            writer.writerow(
+                [
+                    position_id,
+                    portfolio_id,
+                    instrument_id,
+                    quantity,
+                    f"{entry_price:.2f}",
+                    entry_date.strftime("%Y-%m-%d"),
+                    loaded_at,
+                ]
+            )
 
 
 def generate_market_data(output_path: Path, num_rows: int = 1000) -> None:
@@ -47,9 +61,9 @@ def generate_market_data(output_path: Path, num_rows: int = 1000) -> None:
 
     with output_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "instrument_id", "date", "close_price", "volume", "volatility", "_loaded_at"
-        ])
+        writer.writerow(
+            ["instrument_id", "date", "close_price", "volume", "volatility", "_loaded_at"]
+        )
 
         # Generate daily data for instruments across Oct-Dec 2025
         start_date = datetime(2025, 10, 1)
@@ -72,10 +86,16 @@ def generate_market_data(output_path: Path, num_rows: int = 1000) -> None:
                 volatility = round(random.uniform(0.01, 0.80), 4)
                 loaded_at = "2026-01-15T00:00:00Z"
 
-                writer.writerow([
-                    instrument_id, date.strftime("%Y-%m-%d"),
-                    f"{close_price:.2f}", volume, f"{volatility:.4f}", loaded_at
-                ])
+                writer.writerow(
+                    [
+                        instrument_id,
+                        date.strftime("%Y-%m-%d"),
+                        f"{close_price:.2f}",
+                        volume,
+                        f"{volatility:.4f}",
+                        loaded_at,
+                    ]
+                )
 
                 rows_generated += 1
 
@@ -91,9 +111,9 @@ def generate_counterparties(output_path: Path, num_rows: int = 100) -> None:
 
     with output_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "counterparty_id", "name", "rating", "country", "exposure_limit", "_loaded_at"
-        ])
+        writer.writerow(
+            ["counterparty_id", "name", "rating", "country", "exposure_limit", "_loaded_at"]
+        )
 
         for i in range(1, num_rows + 1):
             counterparty_id = f"CP{i:03d}"
@@ -103,9 +123,7 @@ def generate_counterparties(output_path: Path, num_rows: int = 100) -> None:
             exposure_limit = random.randint(1000000, 500000000)
             loaded_at = "2026-01-15T00:00:00Z"
 
-            writer.writerow([
-                counterparty_id, name, rating, country, exposure_limit, loaded_at
-            ])
+            writer.writerow([counterparty_id, name, rating, country, exposure_limit, loaded_at])
 
 
 if __name__ == "__main__":

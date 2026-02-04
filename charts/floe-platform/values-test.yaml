@@ -44,6 +44,25 @@ dagster:
     postgresqlUsername: floe
     postgresqlPassword: "floe-test-password-1234"
     postgresqlDatabase: dagster
+  # Demo code locations for E2E tests
+  # These use Python module loading pattern - no separate container images needed
+  # Tests verify these products appear in Dagster UI
+  codeLocations:
+    - name: customer-360
+      pythonModule:
+        moduleName: demo.customer_360.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: iot-telemetry
+      pythonModule:
+        moduleName: demo.iot_telemetry.definitions
+        workingDirectory: /app/demo
+        attribute: defs
+    - name: financial-risk
+      pythonModule:
+        moduleName: demo.financial_risk.definitions
+        workingDirectory: /app/demo
+        attribute: defs
   dagsterWebserver:
     replicaCount: 1
     workspace:
@@ -91,9 +110,10 @@ polaris:
       cpu: 500m
       memory: 512Mi
   auth:
+    # Demo credentials for local testing only - production MUST use existingSecret
     bootstrapCredentials:
-      clientId: "test-admin"
-      clientSecret: "test-secret"
+      clientId: "demo-admin"  # pragma: allowlist secret
+      clientSecret: "demo-secret"  # pragma: allowlist secret
   config:
     features:
       SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"

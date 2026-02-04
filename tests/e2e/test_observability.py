@@ -25,6 +25,7 @@ from typing import Any, ClassVar
 
 import httpx
 import pytest
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
@@ -610,7 +611,7 @@ class TestObservability(IntegrationTestBase):
             "BLOCKING OBSERVABILITY: Compilation failed when OTel endpoint was unreachable.\n"
             "Observability must be non-blocking per FR-046."
         )
-        assert artifacts.version == "0.5.0", (
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION, (
             "Compilation output should be valid even with unreachable OTel endpoint"
         )
         assert artifacts.metadata.product_name == "customer-360", (
@@ -961,8 +962,32 @@ class TestObservability(IntegrationTestBase):
             "Compiled wrong product -- expected customer-360"
         )
 
-        # Small delay to allow OTel exporter to flush spans to Jaeger
-        time.sleep(2)
+        # Poll for traces to appear in Jaeger (OTel exporter needs time to flush)
+        def check_jaeger_traces() -> bool:
+            """Check if Jaeger has traces from floe-platform service."""
+            end_time_us = int(time.time() * 1_000_000)
+            resp = jaeger_client.get(
+                "/api/traces",
+                params={
+                    "service": "floe-platform",
+                    "start": start_time_us,
+                    "end": end_time_us,
+                    "limit": 20,
+                },
+            )
+            if resp.status_code != 200:
+                return False
+            traces = resp.json().get("data", [])
+            return len(traces) > 0
+
+        from testing.fixtures.polling import wait_for_condition
+
+        traces_available = wait_for_condition(
+            check_jaeger_traces,
+            timeout=10.0,
+            interval=1.0,
+            description="Jaeger traces to appear",
+        )
 
         # Query Jaeger for traces from 'floe-platform' service within the last 60 seconds
         end_time_us = int(time.time() * 1_000_000)
@@ -975,7 +1000,7 @@ class TestObservability(IntegrationTestBase):
                 "limit": 20,
             },
         )
-        assert traces_response.status_code == 200, (
+        assert traces_response.status_code == 200 and traces_available, (
             f"Jaeger traces query failed: {traces_response.status_code}"
         )
 

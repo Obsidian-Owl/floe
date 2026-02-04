@@ -95,9 +95,10 @@ polaris:
       memory: 512Mi
       ephemeral-storage: 1Gi
   auth:
+    # Demo credentials for local development only - production MUST use existingSecret
     bootstrapCredentials:
-      clientId: "demo-admin"
-      clientSecret: "demo-secret"
+      clientId: "demo-admin"  # pragma: allowlist secret
+      clientSecret: "demo-secret"  # pragma: allowlist secret
   config:
     features:
       SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"
@@ -109,8 +110,9 @@ polaris:
       endpoint: "http://floe-platform-minio:9000"
       region: "us-east-1"
       pathStyleAccess: true
-      accessKey: "minioadmin"
-      secretKey: "minioadmin123"
+      # MinIO default credentials for local development - production uses IAM/IRSA
+      accessKey: "minioadmin"  # pragma: allowlist secret
+      secretKey: "minioadmin123"  # pragma: allowlist secret
   bootstrap:
     enabled: true
     catalogName: "floe-demo"

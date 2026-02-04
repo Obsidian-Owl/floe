@@ -105,14 +105,13 @@ def _parse_version(version: str) -> tuple[int, int]:
     try:
         parts = version.split(".")
         if len(parts) not in (2, 3):
-            raise ValueError(
-                f"Invalid version format: {version!r}. Expected X.Y or X.Y.Z format."
-            )
+            raise ValueError(f"Invalid version format: {version!r}. Expected X.Y or X.Y.Z format.")
         major = int(parts[0])
         minor = int(parts[1])
         # Ignore patch version if present (parts[2])
         return major, minor
     except (ValueError, IndexError) as e:
         raise ValueError(
-            f"Invalid version format: {version!r}. Expected X.Y or X.Y.Z format (e.g., '1.0' or '1.0.0')."
+            f"Invalid version format: {version!r}. "
+            f"Expected X.Y or X.Y.Z format (e.g., '1.0' or '1.0.0')."
         ) from e

@@ -129,8 +129,7 @@ class TestSnapshotRetentionKeepLast:
 
         # Create 10 snapshots
         snapshots = [
-            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000)
-            for i in range(10)
+            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000) for i in range(10)
         ]
 
         # First call: 10 snapshots, second call: 6 snapshots (4 expired)
@@ -170,8 +169,7 @@ class TestSnapshotRetentionKeepLast:
         table.expire_snapshots.return_value = expire_op
 
         snapshots = [
-            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000)
-            for i in range(10)
+            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000) for i in range(10)
         ]
 
         table.snapshots.side_effect = [
@@ -201,8 +199,7 @@ class TestSnapshotRetentionKeepLast:
         table.expire_snapshots.return_value = expire_op
 
         snapshots = [
-            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000)
-            for i in range(10)
+            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000) for i in range(10)
         ]
 
         table.snapshots.side_effect = [
@@ -233,8 +230,7 @@ class TestSnapshotRetentionKeepLast:
 
         # Create 12 snapshots (simulating multiple pipeline runs)
         snapshots = [
-            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000)
-            for i in range(12)
+            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000) for i in range(12)
         ]
 
         # After expiry: keep last 6 (IDs 6-11)
@@ -278,10 +274,7 @@ class TestSnapshotRetentionFallback:
 
         # Create 10 snapshots, all old
         old_time = 1000000  # Very old
-        snapshots = [
-            _create_mock_snapshot_simple(i, old_time + i * 1000)
-            for i in range(10)
-        ]
+        snapshots = [_create_mock_snapshot_simple(i, old_time + i * 1000) for i in range(10)]
 
         # After expiry: keep last 6
         table.snapshots.side_effect = [
@@ -352,8 +345,7 @@ class TestSnapshotRetentionEdgeCases:
 
         # Only 3 snapshots
         snapshots = [
-            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000)
-            for i in range(3)
+            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000) for i in range(3)
         ]
 
         table.snapshots.side_effect = [
@@ -386,8 +378,7 @@ class TestSnapshotRetentionEdgeCases:
         table.expire_snapshots.return_value = expire_op
 
         snapshots = [
-            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000)
-            for i in range(10)
+            _create_mock_snapshot_simple(i, 1705500000000 + i * 100000000) for i in range(10)
         ]
 
         table.snapshots.side_effect = [

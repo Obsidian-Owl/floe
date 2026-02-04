@@ -46,7 +46,9 @@ plugins:
     config:
       uri: http://floe-platform-polaris:8181/api/catalog
       warehouse: floe-demo
-      credential: demo-admin:demo-secret
+      # Demo credentials for local development only
+      # Production: use polaris.auth.existingSecret with K8s secrets
+      credential: demo-admin:demo-secret  # pragma: allowlist secret
 
   # Storage: MinIO S3-compatible storage for demo
   storage:

@@ -388,6 +388,14 @@ class TestOrchestratorPluginInstantiationContract:
             def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
                 _ = job_name, cron, timezone
 
+            def generate_entry_point_code(
+                self,
+                product_name: str,
+                output_dir: str,
+            ) -> str:
+                _ = product_name, output_dir
+                return "mock_definitions.py"
+
         # Should not raise
         plugin = CompleteMockPlugin()
 

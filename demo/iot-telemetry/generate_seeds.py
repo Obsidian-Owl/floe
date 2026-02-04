@@ -63,14 +63,16 @@ def generate_sensors() -> None:
                 days=random.randint(0, 1095)  # 3 years
             )
 
-            writer.writerow({
-                "sensor_id": f"S{sensor_num:03d}",
-                "equipment_id": f"EQ{equipment_num:03d}",
-                "sensor_type": random.choice(SENSOR_TYPES),
-                "location": random.choice(LOCATIONS),
-                "installed_at": installed_date.strftime("%Y-%m-%d"),
-                "_loaded_at": LOADED_AT,
-            })
+            writer.writerow(
+                {
+                    "sensor_id": f"S{sensor_num:03d}",
+                    "equipment_id": f"EQ{equipment_num:03d}",
+                    "sensor_type": random.choice(SENSOR_TYPES),
+                    "location": random.choice(LOCATIONS),
+                    "installed_at": installed_date.strftime("%Y-%m-%d"),
+                    "_loaded_at": LOADED_AT,
+                }
+            )
 
     print(f"Generated {output_path} (200 rows)")
 
@@ -109,14 +111,16 @@ def generate_readings() -> None:
             timestamp = start_date + timedelta(seconds=random.randint(0, total_seconds))
             value = round(random.uniform(min_val, max_val), 2)
 
-            writer.writerow({
-                "reading_id": f"R{reading_num:04d}",
-                "sensor_id": sensor_id,
-                "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S"),
-                "value": value,
-                "unit": UNITS[sensor_type],
-                "_loaded_at": LOADED_AT,
-            })
+            writer.writerow(
+                {
+                    "reading_id": f"R{reading_num:04d}",
+                    "sensor_id": sensor_id,
+                    "timestamp": timestamp.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "value": value,
+                    "unit": UNITS[sensor_type],
+                    "_loaded_at": LOADED_AT,
+                }
+            )
 
     print(f"Generated {output_path} (1000 rows)")
 
@@ -146,14 +150,16 @@ def generate_maintenance_log() -> None:
             equipment_id = f"EQ{random.randint(1, 50):03d}"
             performed_at = start_date + timedelta(seconds=random.randint(0, total_seconds))
 
-            writer.writerow({
-                "log_id": f"ML{log_num:03d}",
-                "equipment_id": equipment_id,
-                "maintenance_type": random.choice(MAINTENANCE_TYPES),
-                "performed_at": performed_at.strftime("%Y-%m-%dT%H:%M:%S"),
-                "technician": random.choice(TECHNICIANS),
-                "_loaded_at": LOADED_AT,
-            })
+            writer.writerow(
+                {
+                    "log_id": f"ML{log_num:03d}",
+                    "equipment_id": equipment_id,
+                    "maintenance_type": random.choice(MAINTENANCE_TYPES),
+                    "performed_at": performed_at.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "technician": random.choice(TECHNICIANS),
+                    "_loaded_at": LOADED_AT,
+                }
+            )
 
     print(f"Generated {output_path} (100 rows)")
 
