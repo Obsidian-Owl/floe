@@ -17,6 +17,16 @@ import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
+POLARIS_STORAGE_ERROR_MSG = (
+    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
+    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
+    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
+    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
+    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
+    "  3. Add S3 endpoint and credentials for MinIO"
+)
+"""Error message for Polaris InMemoryFileIOFactory limitation."""
+
 
 class TestSchemaEvolution(IntegrationTestBase):
     """E2E tests for schema evolution and lifecycle management.
@@ -58,7 +68,7 @@ class TestSchemaEvolution(IntegrationTestBase):
         _ = dagster_client
 
         products = ["customer-360", "iot-telemetry", "financial-risk"]
-        project_root = Path("/Users/dmccarthy/Projects/floe")
+        project_root = Path(__file__).parent.parent.parent
 
         # 1. Verify each product has unique Polaris namespace in floe.yaml
         namespaces: set[str] = set()
@@ -120,7 +130,9 @@ class TestSchemaEvolution(IntegrationTestBase):
         api_result = dagster_client._execute(query)
         assert api_result is not None, "Dagster API not responding"
         assert isinstance(api_result, dict), "Dagster API should return dict"
-        assert "data" in api_result or "errors" not in api_result, "Dagster API should return valid response"
+        assert "data" in api_result or "errors" not in api_result, (
+            "Dagster API should return valid response"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -150,9 +162,10 @@ class TestSchemaEvolution(IntegrationTestBase):
         for ns_name in expected_namespaces:
             try:
                 polaris_with_write_grants.create_namespace(ns_name)
-            except Exception:
-                # Namespace already exists, continue
-                pass
+            except Exception as e:  # noqa: BLE001
+                # Namespace may already exist — check error message
+                if "already exists" not in str(e).lower() and "conflict" not in str(e).lower():
+                    raise
 
         # List all namespaces in Polaris
         namespaces = polaris_with_write_grants.list_namespaces()
@@ -179,14 +192,18 @@ class TestSchemaEvolution(IntegrationTestBase):
             # Try both naming conventions
             ns_variants = [namespace, namespace.replace("_", "-")]
 
+            tables_listed = False
             for ns in ns_variants:
                 try:
-                    tables = polaris_with_write_grants.list_tables(ns)
-                    # Each namespace should have its own tables
-                    assert len(tables) >= 0, f"Cannot list tables in {ns}"
+                    _ = polaris_with_write_grants.list_tables(ns)
+                    tables_listed = True
                     break
-                except Exception:
+                except Exception:  # noqa: BLE001
                     continue
+            assert tables_listed, (
+                f"Cannot list tables for namespace {namespace} "
+                f"(tried variants: {ns_variants})"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -230,16 +247,12 @@ class TestSchemaEvolution(IntegrationTestBase):
             )
         except RESTError as e:
             error_msg = str(e)
-            if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
-                pytest.fail(
-                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
-                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
-                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
-                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
-                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
-                    "  3. Add S3 endpoint and credentials for MinIO\n"
-                    f"Root cause: {error_msg}"
-                )
+            if (
+                "security token" in error_msg.lower()
+                or "credentials" in error_msg.lower()
+                or "sts" in error_msg.lower()
+            ):
+                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
             raise
 
         # Verify initial schema
@@ -322,16 +335,12 @@ class TestSchemaEvolution(IntegrationTestBase):
             )
         except RESTError as e:
             error_msg = str(e)
-            if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
-                pytest.fail(
-                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
-                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
-                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
-                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
-                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
-                    "  3. Add S3 endpoint and credentials for MinIO\n"
-                    f"Root cause: {error_msg}"
-                )
+            if (
+                "security token" in error_msg.lower()
+                or "credentials" in error_msg.lower()
+                or "sts" in error_msg.lower()
+            ):
+                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
             raise
 
         # Verify initial partition spec
@@ -396,37 +405,35 @@ class TestSchemaEvolution(IntegrationTestBase):
             )
         except RESTError as e:
             error_msg = str(e)
-            if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
-                pytest.fail(
-                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
-                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
-                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
-                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
-                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
-                    "  3. Add S3 endpoint and credentials for MinIO\n"
-                    f"Root cause: {error_msg}"
-                )
+            if (
+                "security token" in error_msg.lower()
+                or "credentials" in error_msg.lower()
+                or "sts" in error_msg.lower()
+            ):
+                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
             raise
 
-        # Insert test records with old timestamps
-        # (In real implementation, would use actual data insertion)
-
-        # Note: Full retention testing requires:
-        # 1. Data insertion (via DuckDB or direct Iceberg API)
-        # 2. Waiting for TTL (or simulating time passage)
-        # 3. Running cleanup job
-        # 4. Verifying old data removed
-
-        # For now, verify table exists and is accessible
+        # Verify table exists and has accessible metadata (prerequisite for retention)
         reloaded_table = polaris_with_write_grants.load_table(table_name)
-        assert reloaded_table is not None
         assert hasattr(reloaded_table, "metadata"), "Table should have metadata"
-        assert reloaded_table.metadata is not None, "Table metadata should be populated"
+        assert reloaded_table.metadata.format_version >= 1, (
+            "Table should use Iceberg format version 1 or 2"
+        )
 
-        # Verify snapshot metadata tracking (preparation for cleanup)
-        snapshots = reloaded_table.snapshots()
-        # New table has at least 1 snapshot (create table)
-        assert len(snapshots) >= 0
+        # Verify table supports property management for retention configuration
+        txn = reloaded_table.transaction()
+        txn.set_properties(
+            **{
+                "history.expire.max-snapshot-age-ms": "3600000",
+            }
+        )
+        txn.commit_transaction()
+
+        reloaded_table = polaris_with_write_grants.load_table(table_name)
+        assert (
+            reloaded_table.properties.get("history.expire.max-snapshot-age-ms")
+            == "3600000"
+        ), "Table should accept retention configuration via properties"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
@@ -470,16 +477,12 @@ class TestSchemaEvolution(IntegrationTestBase):
             )
         except RESTError as e:
             error_msg = str(e)
-            if "security token" in error_msg.lower() or "credentials" in error_msg.lower() or "sts" in error_msg.lower():
-                pytest.fail(
-                    "INFRASTRUCTURE GAP: Polaris catalog is configured with InMemoryFileIOFactory.\n"
-                    "Cannot create Iceberg tables with data - requires S3 storage backend.\n"
-                    "Fix: Configure Polaris with S3FileIO pointing to MinIO:\n"
-                    "  1. Update charts/floe-platform/templates/configmap-polaris.yaml\n"
-                    "  2. Change CATALOG_STORAGE_DEFAULT_STORAGE_TYPE to S3\n"
-                    "  3. Add S3 endpoint and credentials for MinIO\n"
-                    f"Root cause: {error_msg}"
-                )
+            if (
+                "security token" in error_msg.lower()
+                or "credentials" in error_msg.lower()
+                or "sts" in error_msg.lower()
+            ):
+                pytest.fail(f"{POLARIS_STORAGE_ERROR_MSG}\nRoot cause: {error_msg}")
             raise
 
         # Evolve schema multiple times to verify table metadata tracking

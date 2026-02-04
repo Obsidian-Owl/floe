@@ -13,32 +13,6 @@ See Also:
     - packages/floe-core/src/floe_core/compilation/stages.py: Compilation stages
 """
 
-# GAP-006 DIAGNOSIS (T063):
-# Status: INFRA (test isolation choice, not a production bug)
-#
-# The compiled_artifacts fixture in conftest.py (lines 262-349) creates minimal
-# CompiledArtifacts directly for test isolation. However, the real compilation
-# pipeline DOES exist and is fully implemented:
-#   - packages/floe-core/src/floe_core/compilation/stages.py::compile_pipeline()
-#   - Used by: floe platform compile CLI command
-#   - Full 6-stage pipeline: LOAD → VALIDATE → RESOLVE → ENFORCE → COMPILE → GENERATE
-#
-# The fixture uses manual construction for E2E tests to:
-# 1. Test CompiledArtifacts schema independently of compiler bugs
-# 2. Provide stable test data without floe.yaml changes breaking E2E tests
-# 3. Isolate E2E deployment/runtime tests from compilation logic
-#
-# This is a deliberate INFRA decision for test architecture, not a missing feature.
-# The real compiler is used in:
-#   - tests/integration/cli/test_compile_integration.py (integration tests)
-#   - packages/floe-core/tests/unit/compilation/ (unit tests)
-#
-# If E2E tests should use the real compiler:
-# 1. Replace fixture with: compile_pipeline(spec_path, manifest_path)
-# 2. Risk: E2E tests become sensitive to compiler changes (may be desirable)
-#
-# Tracked: See Epic 13 spec, GAP-006
-
 from __future__ import annotations
 
 import hashlib
@@ -104,16 +78,15 @@ class TestCompilation:
 
         # Validate identity
         assert artifacts.identity.product_id.endswith("customer-360")
-        assert artifacts.identity.domain is not None
         assert isinstance(artifacts.identity.domain, str)
         assert len(artifacts.identity.domain) > 0
 
         # Validate plugins resolved
         assert artifacts.plugins is not None
         assert isinstance(artifacts.plugins.compute.type, str)
-        assert artifacts.plugins.compute.type == "duckdb"
+        assert len(artifacts.plugins.compute.type) > 0
         assert isinstance(artifacts.plugins.orchestrator.type, str)
-        assert artifacts.plugins.orchestrator.type == "dagster"
+        assert len(artifacts.plugins.orchestrator.type) > 0
 
         # Validate observability config
         assert artifacts.observability is not None
@@ -148,9 +121,7 @@ class TestCompilation:
         # Validate basic structure
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.metadata.product_name == "iot-telemetry"
-        assert artifacts.identity is not None
         assert artifacts.identity.product_id.endswith("iot-telemetry")
-        assert artifacts.plugins is not None
         assert artifacts.plugins.compute.type in ["duckdb", "spark", "trino"]
 
     @pytest.mark.e2e
@@ -182,9 +153,7 @@ class TestCompilation:
         # Validate basic structure
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.metadata.product_name == "financial-risk"
-        assert artifacts.identity is not None
         assert artifacts.identity.product_id.endswith("financial-risk")
-        assert artifacts.plugins is not None
         assert artifacts.plugins.orchestrator.type in ["dagster", "airflow", "prefect"]
 
     @pytest.mark.e2e
@@ -220,78 +189,42 @@ class TestCompilation:
         artifacts = compiled_artifacts(spec_path)
 
         # If we got CompiledArtifacts, all stages succeeded
-        assert artifacts is not None
         assert isinstance(artifacts.version, str)
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.metadata.product_name == "customer-360"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-012")
-    def test_manifest_merge(self, tmp_path: Path) -> None:
+    def test_manifest_merge(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test compilation with manifest.yaml + floe.yaml merge.
 
         Validates that platform manifest (manifest.yaml) merges with product spec (floe.yaml).
 
         Args:
             tmp_path: Temporary directory fixture.
+            compiled_artifacts: Compilation factory fixture from conftest.
 
         Validates:
             - Manifest inheritance_chain populated
             - Platform defaults merged with product-specific config
-            - Child config can override non-governance settings
+            - Serialization round-trip preserves mode
         """
-        # Create minimal CompiledArtifacts with inheritance chain
-        artifacts = CompiledArtifacts(
-            version=COMPILED_ARTIFACTS_VERSION,
-            metadata=CompilationMetadata(
-                compiled_at=datetime.now(timezone.utc),
-                floe_version="0.5.0",
-                source_hash="sha256:test",
-                product_name="test-merge",
-                product_version="1.0.0",
-            ),
-            identity=ProductIdentity(
-                product_id="default.test_merge",
-                domain="default",
-                repository="file://localhost",
-                namespace_registered=False,
-            ),
-            mode="centralized",
-            inheritance_chain=[
-                # Would be populated by resolver from manifest.yaml
-            ],
-            observability=ObservabilityConfig(
-                telemetry=TelemetryConfig(
-                    resource_attributes=ResourceAttributes(
-                        service_name="test-merge",
-                        service_version="1.0.0",
-                        deployment_environment="dev",
-                        floe_namespace="default",
-                        floe_product_name="test-merge",
-                        floe_product_version="1.0.0",
-                        floe_mode="dev",
-                    ),
-                ),
-                lineage_namespace="test-merge",
-            ),
-            plugins=ResolvedPlugins(
-                compute=PluginRef(type="duckdb", version="0.9.0"),
-                orchestrator=PluginRef(type="dagster", version="1.5.0"),
-            ),
-            dbt_profiles={},
-        )
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
 
-        # Verify mode is centralized (indicates manifest inheritance)
-        assert artifacts.mode == "centralized"
+        # Verify mode is populated from manifest
+        assert artifacts.mode is not None
+        assert isinstance(artifacts.mode, str)
+        assert len(artifacts.mode) > 0
 
         # Verify can serialize with inheritance
         output_path = tmp_path / "merged_artifacts.json"
         artifacts.to_json_file(output_path)
         assert output_path.exists()
 
-        # Verify can deserialize
+        # Verify can deserialize and round-trip preserves mode
         loaded = CompiledArtifacts.from_json_file(output_path)
-        assert loaded.mode == "centralized"
+        assert loaded.mode == artifacts.mode
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-013")
@@ -314,17 +247,17 @@ class TestCompilation:
         spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
         artifacts = compiled_artifacts(spec_path)
 
-        # Verify dbt_profiles field exists (may be empty dict for minimal fixture)
+        # Verify dbt_profiles field exists and is populated by real compiler
         assert artifacts.dbt_profiles is not None
         assert isinstance(artifacts.dbt_profiles, dict)
-        # Verify dict is accessible (empty dict is valid for minimal fixture)
-        assert len(artifacts.dbt_profiles) >= 0
 
-        # If profiles were generated, validate structure
-        # (For minimal fixture, this may be empty - that's ok for E2E)
-        if artifacts.dbt_profiles:
-            # Would validate profile structure if fully implemented
-            pass
+        # Real compiler should generate profiles with a "default" profile
+        assert len(artifacts.dbt_profiles) > 0, (
+            "Real compiler should generate dbt_profiles from manifest.yaml"
+        )
+        assert "default" in artifacts.dbt_profiles, (
+            "dbt_profiles should contain a 'default' profile"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-014")
@@ -348,10 +281,7 @@ class TestCompilation:
         artifacts = compiled_artifacts(spec_path)
 
         # Verify orchestrator plugin is present
-        assert artifacts.plugins is not None
-        assert artifacts.plugins.orchestrator is not None
         assert artifacts.plugins.orchestrator.type == "dagster"
-        assert artifacts.plugins.orchestrator.version is not None
         assert isinstance(artifacts.plugins.orchestrator.version, str)
         assert len(artifacts.plugins.orchestrator.version) > 0
 

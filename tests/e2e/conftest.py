@@ -11,15 +11,13 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
-# Import the polling utilities
 from testing.fixtures.polling import wait_for_condition
 
 
@@ -260,91 +258,37 @@ def wait_for_service() -> Callable[..., None]:
 
 
 @pytest.fixture(scope="session")
-def compiled_artifacts(
-    tmp_path_factory: pytest.TempPathFactory,
-) -> Callable[[Path], Any]:
-    """Create factory fixture for compiling floe.yaml files.
+def compiled_artifacts() -> Callable[[Path], Any]:
+    """Factory fixture that compiles floe.yaml through the real 6-stage pipeline.
 
-    Returns callable that compiles a floe.yaml path and returns CompiledArtifacts.
-
-    Args:
-        tmp_path_factory: pytest fixture for temp directories.
+    Uses the real compile_pipeline() function from floe-core, ensuring E2E tests
+    validate actual compilation behavior rather than hand-crafted test doubles.
 
     Returns:
-        Factory function that compiles specs.
+        Factory function that compiles specs via the real compiler.
 
     Example:
-        artifacts = compiled_artifacts(Path("demo/floe.yaml"))
+        artifacts = compiled_artifacts(Path("demo/customer-360/floe.yaml"))
         assert artifacts.version == "0.5.0"
     """
+    from floe_core.compilation.stages import compile_pipeline
+
+    project_root = Path(__file__).parent.parent.parent
+    manifest_path = project_root / "demo" / "manifest.yaml"
 
     def _compile_artifacts(spec_path: Path) -> Any:
-        """Compile floe.yaml to CompiledArtifacts.
+        """Compile floe.yaml to CompiledArtifacts via real 6-stage pipeline.
 
         Args:
             spec_path: Path to floe.yaml file.
 
         Returns:
-            CompiledArtifacts object.
+            CompiledArtifacts object from real compilation.
 
         Raises:
-            ValidationError: If spec validation fails.
-            CompilationError: If compilation fails.
+            CompilationException: If any compilation stage fails.
         """
-        # Import here to fail properly if not available
-        from datetime import datetime, timezone
-
-        from floe_core.schemas.compiled_artifacts import (
-            CompilationMetadata,
-            CompiledArtifacts,
-            ObservabilityConfig,
-            PluginRef,
-            ProductIdentity,
-            ResolvedPlugins,
-        )
-        from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
-
-        # For E2E tests, create minimal valid CompiledArtifacts
-        # (full compilation logic would use the actual compiler once available)
-        artifacts = CompiledArtifacts(
-            version="0.5.0",
-            metadata=CompilationMetadata(
-                compiled_at=datetime.now(timezone.utc),
-                floe_version="0.5.0",
-                source_hash="sha256:test",
-                product_name=spec_path.parent.name,
-                product_version="1.0.0",
-            ),
-            identity=ProductIdentity(
-                product_id=f"default.{spec_path.parent.name}",
-                domain="default",
-                repository="file://localhost",
-                namespace_registered=False,
-            ),
-            mode="simple",
-            inheritance_chain=[],
-            observability=ObservabilityConfig(
-                telemetry=TelemetryConfig(
-                    resource_attributes=ResourceAttributes(
-                        service_name=spec_path.parent.name,
-                        service_version="1.0.0",
-                        deployment_environment="dev",
-                        floe_namespace="default",
-                        floe_product_name=spec_path.parent.name,
-                        floe_product_version="1.0.0",
-                        floe_mode="dev",
-                    ),
-                ),
-                lineage_namespace=spec_path.parent.name,
-            ),
-            plugins=ResolvedPlugins(
-                compute=PluginRef(type="duckdb", version="0.9.0"),
-                orchestrator=PluginRef(type="dagster", version="1.5.0"),
-            ),
-            dbt_profiles={},
-        )
-
-        return artifacts
+        return compile_pipeline(spec_path, manifest_path)
 
     return _compile_artifacts
 
@@ -465,7 +409,15 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         namespaces = response.json()["namespaces"]
     """
     marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5000")
-    wait_for_service(f"{marquez_url}/api/v1/namespaces", timeout=60, description="Marquez API (requires port-forward: kubectl port-forward svc/floe-platform-marquez 5000:5000 -n floe-test)")
+    marquez_description = (
+        "Marquez API (requires port-forward: "
+        "kubectl port-forward svc/floe-platform-marquez 5000:5000 -n floe-test)"
+    )
+    wait_for_service(
+        f"{marquez_url}/api/v1/namespaces",
+        timeout=60,
+        description=marquez_description,
+    )
 
     return httpx.Client(base_url=marquez_url, timeout=30.0)
 
@@ -514,7 +466,10 @@ def polaris_with_write_grants(
 
     # Grant catalog-level privileges to catalog_admin role
     catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
-    grant_url = f"{polaris_url}/api/management/v1/catalogs/{catalog_name}/catalog-roles/catalog_admin/grants"
+    grant_url = (
+        f"{polaris_url}/api/management/v1/catalogs/"
+        f"{catalog_name}/catalog-roles/catalog_admin/grants"
+    )
 
     for privilege in [
         "TABLE_WRITE_DATA",
@@ -569,32 +524,3 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
     return httpx.Client(base_url=jaeger_url, timeout=30.0)
 
 
-@pytest.fixture(scope="module", autouse=True)
-def cleanup_duckdb_files() -> Generator[None, None, None]:
-    """Cleanup DuckDB files after all tests in the module complete.
-
-    This fixture runs after all test functions in the module and removes
-    the persistent DuckDB database files created during test execution.
-
-    The fixture uses autouse=True so it runs automatically for all tests
-    without explicit declaration. Scope is 'module' so database persists
-    across tests within the same test file.
-    """
-    yield  # All tests run here
-
-    # Clean up DuckDB files from all demo projects
-    demo_dirs = [
-        Path(__file__).parent.parent.parent / "demo" / "customer-360",
-        Path(__file__).parent.parent.parent / "demo" / "iot-telemetry",
-        Path(__file__).parent.parent.parent / "demo" / "financial-risk",
-    ]
-
-    for demo_dir in demo_dirs:
-        if demo_dir.exists():
-            db_file = demo_dir / "target" / "demo.duckdb"
-            if db_file.exists():
-                db_file.unlink()
-            # Also remove WAL files if they exist
-            wal_file = demo_dir / "target" / "demo.duckdb.wal"
-            if wal_file.exists():
-                wal_file.unlink()

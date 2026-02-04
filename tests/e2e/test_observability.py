@@ -75,20 +75,35 @@ class TestObservability(IntegrationTestBase):
         3. Services endpoint returns valid response structure
 
         This infrastructure-check test verifies deployment without requiring
-        pipeline execution. Future tests will validate trace collection.
+        pipeline execution.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             jaeger_client: Jaeger query HTTP client.
             dagster_client: Dagster GraphQL client.
         """
-        # Parameters used by pytest fixtures but not directly in test body
-        _ = e2e_namespace  # For future trace filtering by namespace
-        _ = dagster_client  # For future pipeline triggering
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
+
+        # Query Jaeger for floe-platform service traces
+        service_name = "floe-platform"
+        traces_response = jaeger_client.get(
+            "/api/traces",
+            params={"service": service_name, "limit": 5},
+        )
+        assert traces_response.status_code == 200, (
+            f"Jaeger traces query failed: {traces_response.status_code}"
+        )
+        traces_json = traces_response.json()
+        assert "data" in traces_json, "Jaeger traces response missing 'data' key"
+
+        # If pipeline has run, traces should exist for floe-platform service
+        traces = traces_json["data"]
+        if traces:
+            first_trace = traces[0]
+            assert "traceID" in first_trace, "Trace missing traceID"
+            assert "spans" in first_trace, "Trace missing spans"
 
         # Verify Jaeger API responds with services list
         response = jaeger_client.get("/api/services")
@@ -130,9 +145,6 @@ class TestObservability(IntegrationTestBase):
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
         """
-        # Parameter used by pytest fixture but not directly in test body
-        _ = dagster_client  # For future pipeline triggering
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         try:
@@ -217,9 +229,6 @@ class TestObservability(IntegrationTestBase):
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
         """
-        # Parameter for pytest fixture injection
-        _ = dagster_client  # For future pipeline triggering
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
@@ -304,10 +313,6 @@ class TestObservability(IntegrationTestBase):
         """
         import subprocess
 
-        # Parameters for pytest fixture injection
-        _ = e2e_namespace  # For future namespace-specific checks
-        _ = dagster_client  # For future metrics endpoint checks
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
 
@@ -362,15 +367,12 @@ class TestObservability(IntegrationTestBase):
         3. Logs endpoint is accessible
 
         This infrastructure-check test verifies deployment without requiring
-        specific log content. Future tests will validate trace_id in logs.
+        specific log content.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             dagster_client: Dagster GraphQL client.
         """
-        # Parameter for pytest fixture injection
-        _ = e2e_namespace  # For future log filtering by namespace
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
 
@@ -414,17 +416,13 @@ class TestObservability(IntegrationTestBase):
         2. Infrastructure is ready for trace collection
 
         This infrastructure-check test verifies deployment without requiring
-        trace flow or resilience testing. Future tests will validate non-blocking behavior.
+        trace flow or resilience testing.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             dagster_client: Dagster GraphQL client.
         """
         import subprocess
-
-        # Parameters for pytest fixture injection
-        _ = e2e_namespace  # For future namespace-specific checks
-        _ = dagster_client  # For future pipeline resilience tests
 
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
@@ -492,9 +490,6 @@ class TestObservability(IntegrationTestBase):
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client (for infrastructure check).
         """
-        # Parameter for pytest fixture injection
-        _ = dagster_client  # For future pipeline lineage tests
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         try:
@@ -594,9 +589,6 @@ class TestObservability(IntegrationTestBase):
             jaeger_client: Jaeger query HTTP client.
             dagster_client: Dagster GraphQL client.
         """
-        # Parameter for pytest fixture injection
-        _ = dagster_client  # For future pipeline triggering
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
@@ -726,9 +718,6 @@ class TestObservability(IntegrationTestBase):
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
         """
-        # Parameter for pytest fixture injection
-        _ = dagster_client  # For future pipeline triggering
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         try:

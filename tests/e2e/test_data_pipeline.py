@@ -26,59 +26,16 @@ Per testing standards: Tests FAIL when infrastructure is unavailable.
 No pytest.skip() - see .claude/rules/testing-standards.md
 """
 
-# GAP-007 DIAGNOSIS (T064):
-# Status: DESIGN (DuckDB is the chosen compute engine, not an infrastructure gap)
-#
-# Data pipeline tests use DuckDB directly because the demo dbt projects are
-# configured to use DuckDB as the compute engine:
-#   - demo/customer-360/profiles.yml: type: duckdb, path: target/demo.duckdb
-#   - demo/iot-telemetry/profiles.yml: type: duckdb
-#   - demo/financial-risk/profiles.yml: type: duckdb
-#
-# Polaris + MinIO storage IS correctly configured in the demo:
-#   - charts/floe-platform/values-demo.yaml lines 106-120
-#   - Polaris storage.s3.enabled: true
-#   - Polaris storage.s3.endpoint: http://floe-platform-minio:9000
-#   - Bootstrap catalog: floe-demo with base location s3://floe-data
-#
-# Why tests use DuckDB instead of querying Iceberg via Polaris:
-# 1. DuckDB is the configured compute engine (dbt-duckdb adapter)
-# 2. DuckDB writes local .duckdb files, not Iceberg tables
-# 3. Polaris catalog exists but is not used by these dbt projects
-#
-# This is a DELIBERATE DESIGN for simplicity in demos:
-# - DuckDB: Simple, fast, no external dependencies for compute
-# - Iceberg/Polaris: Available for production data products
-#
-# To switch tests to validate Iceberg tables instead:
-# 1. Update dbt profiles to use dbt-iceberg adapter (when available)
-# 2. Configure dbt models to write to Iceberg tables via Polaris REST catalog
-# 3. Replace test helpers:
-#    - Remove: _get_duckdb_connection(), _check_table_exists_in_duckdb()
-#    - Add: PyIceberg catalog.load_table(), table.scan() queries
-# 4. Update assertions to query via PyIceberg catalog
-#
-# This would change the compute layer from DuckDB to Spark/Trino + Iceberg.
-# Currently, the platform supports BOTH patterns:
-# - Simple demos: DuckDB (file-based, local)
-# - Production: Polaris + Iceberg (catalog-based, distributed)
-#
-# The tests correctly validate the currently configured stack (DuckDB).
-# Tracked: See Epic 13 spec, GAP-007
-
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
-import duckdb
+# PyIceberg imported in helper methods to fail properly if not installed
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestDataPipeline(IntegrationTestBase):
@@ -159,128 +116,74 @@ class TestDataPipeline(IntegrationTestBase):
         )
         return result
 
-    def _get_duckdb_connection(self, project_dir: Path) -> duckdb.DuckDBPyConnection:
-        """Get DuckDB connection to the demo database.
+    def _load_iceberg_table(self, catalog: Any, namespace: str, table_name: str) -> Any:
+        """Load Iceberg table from Polaris catalog.
 
         Args:
-            project_dir: Path to dbt project directory.
+            catalog: PyIceberg REST catalog instance.
+            namespace: Polaris namespace name.
+            table_name: Table name within the namespace.
 
         Returns:
-            DuckDB connection.
-        """
-        db_path = project_dir / "target" / "demo.duckdb"
-        return duckdb.connect(str(db_path))
+            PyIceberg Table object.
 
-    def _check_table_exists_in_duckdb(
-        self,
-        project_dir: Path,
-        table_name: str,
-    ) -> bool:
-        """Check if a table exists in DuckDB.
+        Raises:
+            NoSuchTableError: If table does not exist.
+        """
+        return catalog.load_table(f"{namespace}.{table_name}")
+
+    def _get_iceberg_row_count(self, catalog: Any, namespace: str, table_name: str) -> int:
+        """Get row count from Iceberg table via PyIceberg scan.
 
         Args:
-            project_dir: Path to dbt project directory.
-            table_name: Table name to check (without schema prefix).
+            catalog: PyIceberg REST catalog instance.
+            namespace: Polaris namespace name.
+            table_name: Table name within the namespace.
 
         Returns:
-            True if table exists, False otherwise.
-        """
-        try:
-            conn = self._get_duckdb_connection(project_dir)
-            # Check all schemas for the table
-            result = conn.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_name = ?",
-                [table_name],
-            ).fetchall()
-            conn.close()
-            return len(result) > 0
-        except Exception:  # noqa: BLE001
-            return False
+            Row count from the table scan.
 
-    def _get_table_row_count_from_duckdb(
-        self,
-        project_dir: Path,
-        table_name: str,
-    ) -> int:
-        """Get row count for a table in DuckDB.
+        Raises:
+            NoSuchTableError: If table does not exist.
+        """
+        table = self._load_iceberg_table(catalog, namespace, table_name)
+        return len(table.scan().to_arrow())
+
+    def _list_iceberg_tables(self, catalog: Any, namespace: str) -> list[str]:
+        """List all tables in a Polaris namespace.
 
         Args:
-            project_dir: Path to dbt project directory.
-            table_name: Table name (without schema prefix).
+            catalog: PyIceberg REST catalog instance.
+            namespace: Polaris namespace name.
 
         Returns:
-            Row count (0 if table doesn't exist or has no rows).
+            List of table names in the namespace.
         """
-        try:
-            conn = self._get_duckdb_connection(project_dir)
-            # First, find the schema for this table
-            schema_result = conn.execute(
-                "SELECT table_schema FROM information_schema.tables WHERE table_name = ?",
-                [table_name],
-            ).fetchone()
-
-            if not schema_result:
-                conn.close()
-                return 0
-
-            schema = schema_result[0]
-            # Now query with the full schema-qualified name
-            result = conn.execute(
-                f"SELECT COUNT(*) FROM {schema}.{table_name}"  # noqa: S608
-            ).fetchone()
-            conn.close()
-            return result[0] if result else 0
-        except Exception:  # noqa: BLE001
-            return 0
-
-    def _get_all_tables_from_duckdb(self, project_dir: Path) -> list[str]:
-        """Get all table names from DuckDB.
-
-        Args:
-            project_dir: Path to dbt project directory.
-
-        Returns:
-            List of table names (without schema prefix).
-        """
-        try:
-            conn = self._get_duckdb_connection(project_dir)
-            # Get all tables from all user schemas (excluding system schemas)
-            result = conn.execute(
-                """
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-                """
-            ).fetchall()
-            conn.close()
-            return [row[0] for row in result]
-        except Exception:  # noqa: BLE001
-            return []
+        return [t[1] for t in catalog.list_tables(namespace)]
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-023")
     def test_dbt_seed_loads_data(
         self,
         e2e_namespace: str,
+        polaris_client: Any,
     ) -> None:
-        """Test dbt seed loads CSV data into tables.
+        """Test dbt seed loads CSV data into Iceberg tables via Polaris.
 
         Validates:
         - dbt seed command executes successfully
-        - Seed tables are created in DuckDB
+        - Seed tables are created in Iceberg catalog
         - Tables contain expected row counts
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            polaris_client: PyIceberg REST catalog fixture.
         """
-        # Check infrastructure availability
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-
-        # Ensure target directory exists
         target_dir = project_dir / "target"
         target_dir.mkdir(exist_ok=True)
 
@@ -288,16 +191,18 @@ class TestDataPipeline(IntegrationTestBase):
         result = self._run_dbt_command(["seed"], project_dir)
         assert result.returncode == 0, "dbt seed should succeed"
 
-        # Verify seed tables exist in DuckDB
+        # Verify seed tables exist in Iceberg via Polaris catalog
+        namespace = "customer_360"
         seed_tables = ["raw_customers", "raw_transactions", "raw_support_tickets"]
 
+        available_tables = self._list_iceberg_tables(polaris_client, namespace)
         for table_name in seed_tables:
-            assert self._check_table_exists_in_duckdb(
-                project_dir, table_name
-            ), f"Seed table {table_name} should exist in DuckDB"
+            assert table_name in available_tables, (
+                f"Seed table {table_name} should exist in Polaris namespace {namespace}. "
+                f"Available tables: {available_tables}"
+            )
 
-            # Verify table has rows
-            row_count = self._get_table_row_count_from_duckdb(project_dir, table_name)
+            row_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
             assert row_count > 0, f"Table {table_name} should have rows after seed"
 
     @pytest.mark.e2e
@@ -394,24 +299,24 @@ class TestDataPipeline(IntegrationTestBase):
     def test_medallion_layers(
         self,
         e2e_namespace: str,
+        polaris_client: Any,
     ) -> None:
-        """Test medallion architecture transforms produce correct output.
+        """Test medallion architecture transforms produce correct output in Iceberg.
 
         Validates:
         - Bronze layer (staging) extracts and loads raw data
         - Silver layer (intermediate) cleanses and enriches
         - Gold layer (marts) aggregates for analytics
+        - All data lands in Iceberg tables via Polaris catalog
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            polaris_client: PyIceberg REST catalog fixture.
         """
-        # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-
-        # Ensure target directory exists
         target_dir = project_dir / "target"
         target_dir.mkdir(exist_ok=True)
 
@@ -419,35 +324,37 @@ class TestDataPipeline(IntegrationTestBase):
         self._run_dbt_command(["seed"], project_dir)
         self._run_dbt_command(["run"], project_dir)
 
+        namespace = "customer_360"
+        available_tables = self._list_iceberg_tables(polaris_client, namespace)
+
         # Verify Bronze layer (staging) tables
-        bronze_tables = [
-            "stg_crm_customers",
-            "stg_transactions",
-            "stg_support_tickets",
-        ]
+        bronze_tables = ["stg_crm_customers", "stg_transactions", "stg_support_tickets"]
         for table in bronze_tables:
-            assert self._check_table_exists_in_duckdb(
-                project_dir, table
-            ), f"Bronze layer table {table} should exist"
-            row_count = self._get_table_row_count_from_duckdb(project_dir, table)
+            assert table in available_tables, (
+                f"Bronze layer table {table} should exist in Polaris. "
+                f"Available: {available_tables}"
+            )
+            row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Bronze table {table} should have data"
 
         # Verify Silver layer (intermediate) tables
         silver_tables = ["int_customer_orders", "int_customer_support"]
         for table in silver_tables:
-            assert self._check_table_exists_in_duckdb(
-                project_dir, table
-            ), f"Silver layer table {table} should exist"
-            row_count = self._get_table_row_count_from_duckdb(project_dir, table)
+            assert table in available_tables, (
+                f"Silver layer table {table} should exist in Polaris. "
+                f"Available: {available_tables}"
+            )
+            row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Silver table {table} should have data"
 
         # Verify Gold layer (marts) tables
         gold_tables = ["mart_customer_360"]
         for table in gold_tables:
-            assert self._check_table_exists_in_duckdb(
-                project_dir, table
-            ), f"Gold layer table {table} should exist"
-            row_count = self._get_table_row_count_from_duckdb(project_dir, table)
+            assert table in available_tables, (
+                f"Gold layer table {table} should exist in Polaris. "
+                f"Available: {available_tables}"
+            )
+            row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Gold table {table} should have aggregated data"
 
     @pytest.mark.e2e
@@ -455,24 +362,23 @@ class TestDataPipeline(IntegrationTestBase):
     def test_iceberg_tables_created(
         self,
         e2e_namespace: str,
+        polaris_client: Any,
     ) -> None:
-        """Test tables created with correct schemas and row counts.
+        """Test Iceberg tables created with correct schemas and row counts.
 
         Validates:
-        - Tables exist in DuckDB
+        - Tables exist in Polaris catalog
         - Row counts are greater than 0
-        - All expected tables present
+        - All expected tables present in Iceberg format
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            polaris_client: PyIceberg REST catalog fixture.
         """
-        # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-
-        # Ensure target directory exists
         target_dir = project_dir / "target"
         target_dir.mkdir(exist_ok=True)
 
@@ -480,10 +386,11 @@ class TestDataPipeline(IntegrationTestBase):
         self._run_dbt_command(["seed"], project_dir)
         self._run_dbt_command(["run"], project_dir)
 
-        # Query DuckDB for all tables
-        table_names = self._get_all_tables_from_duckdb(project_dir)
+        # Query Polaris catalog for all tables
+        namespace = "customer_360"
+        table_names = self._list_iceberg_tables(polaris_client, namespace)
 
-        # Verify expected tables exist
+        # Verify expected tables exist in Iceberg
         expected_tables = [
             "raw_customers",
             "raw_transactions",
@@ -497,12 +404,13 @@ class TestDataPipeline(IntegrationTestBase):
         ]
 
         for expected in expected_tables:
-            assert (
-                expected in table_names
-            ), f"Table {expected} should exist in DuckDB"
+            assert expected in table_names, (
+                f"Table {expected} should exist in Polaris namespace {namespace}. "
+                f"Available: {table_names}"
+            )
 
-            # Verify row count > 0
-            row_count = self._get_table_row_count_from_duckdb(project_dir, expected)
+            # Verify row count > 0 via Iceberg scan
+            row_count = self._get_iceberg_row_count(polaris_client, namespace, expected)
             assert row_count > 0, f"Table {expected} should have rows (got {row_count})"
 
     @pytest.mark.e2e
@@ -551,24 +459,23 @@ class TestDataPipeline(IntegrationTestBase):
     def test_incremental_model_merge(
         self,
         e2e_namespace: str,
+        polaris_client: Any,
     ) -> None:
         """Test incremental model merge behavior with overlapping data.
 
         Validates:
-        - First run creates base table
+        - First run creates base table in Iceberg
         - Second run with same data doesn't duplicate rows
         - Incremental merge updates existing records
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            polaris_client: PyIceberg REST catalog fixture.
         """
-        # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-
-        # Ensure target directory exists
         target_dir = project_dir / "target"
         target_dir.mkdir(exist_ok=True)
 
@@ -577,18 +484,18 @@ class TestDataPipeline(IntegrationTestBase):
         self._run_dbt_command(["run"], project_dir)
 
         # Get initial row count from a staging table (incremental candidate)
+        namespace = "customer_360"
         table_name = "stg_transactions"
-        initial_count = self._get_table_row_count_from_duckdb(project_dir, table_name)
+        initial_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
         assert initial_count > 0, "Initial load should have rows"
 
         # Second run: with same seed data (simulates incremental)
         self._run_dbt_command(["run"], project_dir)
 
         # Get row count after second run
-        second_count = self._get_table_row_count_from_duckdb(project_dir, table_name)
+        second_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
 
         # For non-incremental models, count should remain the same
-        # (full refresh replaces data)
         # For incremental models, count should not double (merge/upsert behavior)
         assert second_count <= initial_count * 1.1, (
             f"Row count should not significantly increase on re-run "
@@ -818,57 +725,56 @@ class TestDataPipeline(IntegrationTestBase):
                 "Sensor function should accept context parameter"
             )
 
-        # Test 4: If Dagster API is available, check if sensor is registered
-        if dagster_client:
-            try:
-                # Query Dagster for sensor status
-                # Note: dagster_client may not be fully implemented yet
-                # This is aspirational - validates the API contract
-                # If this fails, it documents the infrastructure gap
-                _query = """
-                {
-                    sensors {
+        # Test 4: Query Dagster GraphQL for sensor registration status
+        query = """
+        query GetSensors {
+            sensorsOrError {
+                __typename
+                ... on Sensors {
+                    results {
                         name
                         sensorState {
                             status
                         }
                     }
                 }
-                """
-                # Would execute: dagster_client.execute(_query)
-                pass
-            except Exception:  # noqa: BLE001
-                # Expected if Dagster GraphQL client not fully configured
-                # This documents the gap but doesn't fail the test
-                pass
+            }
+        }
+        """
+
+        try:
+            result = dagster_client._execute(query)
+            assert "sensorsOrError" in result, (
+                f"Dagster sensor query response missing 'sensorsOrError'. Got: {result}"
+            )
+        except Exception as e:
+            pytest.fail(
+                f"Failed to query Dagster sensors endpoint: {e}\n"
+                "Dagster must expose sensor information via GraphQL."
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-031")
     def test_data_retention_enforcement(
         self,
         e2e_namespace: str,
+        polaris_client: Any,
     ) -> None:
-        """Test data retention cleanup removes old records.
+        """Test data retention cleanup configuration and enforcement.
 
         Validates:
-        - Retention macro or mechanism exists in dbt project
-        - Retention can be configured via floe.yaml
-        - Records older than retention period are cleaned up
-
-        INFRASTRUCTURE NOTE: Currently validates DuckDB-based retention.
-        Full Iceberg retention (via expire_snapshots) requires Polaris↔MinIO
-        storage backend integration (tracked as infrastructure gap).
+        - Retention configuration exists in floe.yaml or dbt macros
+        - Pipeline executes and tables contain data
+        - Retention mechanism is defined (even if not yet enforced at runtime)
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            polaris_client: PyIceberg REST catalog fixture.
         """
-        # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
         project_dir = self._get_demo_project_path()
-
-        # Ensure target directory exists
         target_dir = project_dir / "target"
         target_dir.mkdir(exist_ok=True)
 
@@ -879,16 +785,11 @@ class TestDataPipeline(IntegrationTestBase):
         import yaml
 
         floe_config = yaml.safe_load(floe_yaml_path.read_text())
-        # Look for retention configuration (may be under tables, policies, etc.)
         has_retention_config = (
             "retention" in str(floe_config).lower()
             or "expiry" in str(floe_config).lower()
             or "keep_last" in str(floe_config).lower()
         )
-        # Document if retention config not found (aspirational)
-        if not has_retention_config:
-            # This is expected for MVP - document the gap
-            pass
 
         # Test 2: Check for retention macro in dbt project
         macros_dir = project_dir / "macros"
@@ -900,36 +801,29 @@ class TestDataPipeline(IntegrationTestBase):
                     retention_macro_found = True
                     break
 
+        # At least one retention mechanism should be defined
+        assert has_retention_config or retention_macro_found, (
+            "No retention mechanism found. Expected either:\n"
+            "  - 'retention' or 'expiry' configuration in floe.yaml\n"
+            "  - Retention macro in dbt macros/ directory"
+        )
+
         # Test 3: Run pipeline and verify tables exist
         self._run_dbt_command(["seed"], project_dir)
         self._run_dbt_command(["run"], project_dir)
 
-        # Get initial row count from a table
-        test_table = "stg_transactions"
-        initial_count = self._get_table_row_count_from_duckdb(
-            project_dir, test_table
-        )
-        assert initial_count > 0, f"Table {test_table} should have rows"
-
-        # Test 4: If retention macro exists, test it
-        if retention_macro_found:
-            # Try running retention cleanup (if macro is runnable)
-            # This would typically be: dbt run-operation <retention_macro>
-            # For now, document that this capability should exist
-            pass
-
-        # INFRASTRUCTURE GAP DOCUMENTATION:
-        # Full Iceberg retention via expire_snapshots requires:
-        # 1. Polaris catalog connected to MinIO storage backend
-        # 2. PyIceberg snapshot management enabled
-        # 3. Retention policies in manifest.yaml or floe.yaml
-        # Currently testing DuckDB-based retention (data-level cleanup)
+        # Verify data exists (retention should preserve recent data)
+        namespace = "customer_360"
+        table_name = "stg_transactions"
+        row_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
+        assert row_count > 0, f"Table {table_name} should have rows after pipeline run"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
     def test_snapshot_expiry_enforcement(
         self,
         e2e_namespace: str,
+        polaris_client: Any,
     ) -> None:
         """Test Iceberg snapshot expiry keeps only configured number of snapshots.
 
@@ -938,15 +832,10 @@ class TestDataPipeline(IntegrationTestBase):
         - floe.yaml specifies retention policy
         - Platform configuration supports snapshot management
 
-        INFRASTRUCTURE NOTE: Full Iceberg snapshot expiry testing requires
-        Polaris↔MinIO storage backend integration. This test validates the
-        configuration layer. See test_schema_evolution.py for Polaris-based
-        snapshot tests (which handle InMemoryFileIOFactory gracefully).
-
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            polaris_client: PyIceberg REST catalog fixture.
         """
-        # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
@@ -959,69 +848,33 @@ class TestDataPipeline(IntegrationTestBase):
             / "floe-platform"
             / "values-demo.yaml"
         )
-        if values_demo_path.exists():
-            import yaml
+        assert values_demo_path.exists(), (
+            f"Demo values file not found at {values_demo_path}\n"
+            "Expected: charts/floe-platform/values-demo.yaml"
+        )
 
-            values_content = yaml.safe_load(values_demo_path.read_text())
-            # Check for snapshotKeepLast configuration
-            has_snapshot_config = (
-                "snapshotKeepLast" in str(values_content)
-                or "snapshot" in str(values_content).lower()
-            )
-            # If not found, document the gap (aspirational configuration)
-            if not has_snapshot_config:
-                # Expected for MVP - this is configuration we should have
-                pass
-        else:
-            # values-demo.yaml should exist for demo mode
-            pytest.fail(
-                f"Demo values file not found at {values_demo_path}\n"
-                "Expected: charts/floe-platform/values-demo.yaml"
-            )
+        import yaml
+
+        values_content = yaml.safe_load(values_demo_path.read_text())
+        has_snapshot_config = (
+            "snapshotKeepLast" in str(values_content)
+            or "snapshot" in str(values_content).lower()
+        )
+        assert has_snapshot_config, (
+            "Demo values should contain snapshot retention configuration "
+            "(snapshotKeepLast or similar snapshot policy)"
+        )
 
         # Test 2: Verify floe.yaml has retention configuration
         floe_yaml_path = project_dir / "floe.yaml"
         assert floe_yaml_path.exists(), "floe.yaml should exist"
 
-        import yaml
-
         floe_config = yaml.safe_load(floe_yaml_path.read_text())
-        # Check for retention/expiry/snapshot configuration
-        _has_retention = (
+        has_retention = (
             "retention" in str(floe_config).lower()
             or "snapshot" in str(floe_config).lower()
             or "expiry" in str(floe_config).lower()
         )
-        # Document if not found (this is aspirational - we should have this)
-        # Variable prefixed with _ to indicate intentionally unused (config check)
-
-        # Test 3: If Polaris catalog is available, verify namespace exists
-        try:
-            import requests
-
-            polaris_url = "http://polaris:8181"
-            response = requests.get(
-                f"{polaris_url}/api/catalog/v1/config",
-                timeout=5.0,
-            )
-            if response.status_code == 200:
-                # Polaris is responsive - could check for namespace
-                # but actual storage backend integration is the gap
-                pass
-        except Exception:  # noqa: BLE001
-            # Polaris not accessible or not configured
-            # This is expected in MVP - document the gap
-            pass
-
-        # INFRASTRUCTURE GAP DOCUMENTATION:
-        # Full Iceberg snapshot expiry requires:
-        # 1. Polaris catalog with storage backend (not InMemoryFileIOFactory)
-        # 2. MinIO buckets properly configured and accessible from Polaris
-        # 3. PyIceberg snapshot management APIs enabled
-        # 4. expire_snapshots operation integrated into platform
-        #
-        # Current state: Configuration layer exists (values.yaml, floe.yaml)
-        # Missing: Runtime enforcement of snapshot expiry via PyIceberg
-        #
-        # See test_schema_evolution.py::TestSchemaEvolution for Polaris-based
-        # tests that handle the InMemoryFileIOFactory limitation gracefully.
+        assert has_retention, (
+            "floe.yaml should contain retention or snapshot configuration"
+        )
