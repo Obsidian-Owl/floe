@@ -65,6 +65,10 @@ class ConcreteOrchestratorPlugin(OrchestratorPlugin):
     def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
         pass
 
+    def generate_entry_point_code(self, product_name: str, output_dir: str) -> str:
+        _ = product_name, output_dir
+        return "mock_definitions.py"
+
 
 class TestEmitLineageEvent:
     """Tests for the upgraded emit_lineage_event signature."""

@@ -381,9 +381,13 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             "scope": "PRINCIPAL_ROLE:ALL",
             "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
             "s3.endpoint": minio_url,
-            # MinIO default credentials for local testing - production uses IAM/IRSA
-            "s3.access-key-id": os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),  # pragma: allowlist secret
-            "s3.secret-access-key": os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123"),  # pragma: allowlist secret
+            # MinIO credentials for local testing - production uses IAM/IRSA
+            "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
+                "AWS_ACCESS_KEY_ID", "minioadmin"
+            ),
+            "s3.secret-access-key": os.environ.get(  # pragma: allowlist secret
+                "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+            ),
             "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
             "s3.path-style-access": "true",
         },
@@ -457,8 +461,8 @@ def polaris_with_write_grants(
         f"{polaris_url}/api/catalog/v1/oauth/tokens",
         data={
             "grant_type": "client_credentials",
-            "client_id": "test-admin",
-            "client_secret": "test-secret",
+            "client_id": "demo-admin",  # pragma: allowlist secret
+            "client_secret": "demo-secret",  # pragma: allowlist secret
             "scope": "PRINCIPAL_ROLE:ALL",
         },
         timeout=10.0,

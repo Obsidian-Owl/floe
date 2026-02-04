@@ -98,3 +98,14 @@ credentials.json
 secrets.yaml
 secrets.yml
 coverage*.xml
+
+# Demo generated files (floe compile --generate-definitions)
+demo/**/definitions.py
+demo/**/.user.yml
+demo/**/logs/
+
+# Coverage reports
+coverage.json
+
+# Test artifacts
+test-logs/

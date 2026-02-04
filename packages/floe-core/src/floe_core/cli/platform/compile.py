@@ -307,6 +307,13 @@ def _generate_orchestrator_entry_point(
             exit_code=ExitCode.COMPILATION_ERROR,
         )
 
+    # Validate plugins are configured
+    if artifacts.plugins is None:
+        error_exit(
+            "CompiledArtifacts must have plugins configured for code generation.",
+            exit_code=ExitCode.COMPILATION_ERROR,
+        )
+
     # Get orchestrator type from artifacts
     orchestrator_type = artifacts.plugins.orchestrator.type
 
@@ -314,6 +321,9 @@ def _generate_orchestrator_entry_point(
 
     # Load the appropriate orchestrator plugin
     # Currently only Dagster is supported
+    from floe_core.plugins.orchestrator import OrchestratorPlugin
+
+    plugin: OrchestratorPlugin
     if orchestrator_type == "dagster":
         try:
             from floe_orchestrator_dagster import DagsterOrchestratorPlugin
@@ -327,8 +337,7 @@ def _generate_orchestrator_entry_point(
             )
     else:
         error_exit(
-            f"Unsupported orchestrator type: {orchestrator_type}. "
-            "Currently supported: dagster",
+            f"Unsupported orchestrator type: {orchestrator_type}. Currently supported: dagster",
             exit_code=ExitCode.COMPILATION_ERROR,
         )
 
