@@ -33,7 +33,6 @@ Note:
 
 from __future__ import annotations
 
-import functools
 import os
 import uuid
 from typing import TYPE_CHECKING, Any, Generator
@@ -51,52 +50,10 @@ if TYPE_CHECKING:
     from pyiceberg.catalog import Catalog
     from pyiceberg.io import FileIO
 
-# K8s-internal S3 hostnames that need localhost replacement for host-based testing.
-# Polaris stores these in catalog properties; PyIceberg uses them for table IO.
-_K8S_MINIO_HOSTNAMES = [
-    "http://floe-platform-minio:9000",
-    "http://floe-platform-minio.floe-test.svc.cluster.local:9000",
-]
-
 
 # =============================================================================
 # Protocol definitions for plugins
 # =============================================================================
-
-
-def _patch_catalog_s3_endpoint(catalog: Any, minio_endpoint: str) -> None:
-    """Patch RestCatalog to replace K8s-internal S3 hostnames with localhost.
-
-    Problem: Polaris stores K8s-internal S3 hostnames (e.g. floe-platform-minio:9000)
-    in catalog properties. PyIceberg's REST catalog fetches these via ``_fetch_config``
-    and ``_response_to_table``, where server-provided ``config`` overrides client-side
-    properties. This means client-side ``s3.endpoint`` is ignored for table IO.
-
-    Solution: Monkey-patch ``_load_file_io`` to replace K8s hostnames in the final
-    merged property dict, right before FileIO creation. This catches all sources
-    (catalog defaults, client overrides, AND server overrides).
-
-    This is a test-only concern — production code runs inside K8s where the
-    internal hostnames resolve correctly.
-    """
-    from pyiceberg.io import load_file_io
-
-    original_load_file_io = catalog._load_file_io
-
-    @functools.wraps(original_load_file_io)
-    def _patched_load_file_io(
-        properties: dict[str, str] | None = None,
-        location: str | None = None,
-    ) -> Any:
-        merged: dict[str, str] = {**catalog.properties, **(properties or {})}
-        for key, val in merged.items():
-            if isinstance(val, str):
-                for k8s_host in _K8S_MINIO_HOSTNAMES:
-                    if k8s_host in val:
-                        merged[key] = val.replace(k8s_host, minio_endpoint)
-        return load_file_io(merged, location)
-
-    catalog._load_file_io = _patched_load_file_io
 
 
 class IntegrationPolarisCatalogPlugin:
@@ -109,18 +66,13 @@ class IntegrationPolarisCatalogPlugin:
     def __init__(
         self,
         config: PolarisConfig,
-        minio_endpoint: str = "http://localhost:9000",
     ) -> None:
         """Initialize with Polaris config.
 
         Args:
             config: Polaris connection configuration.
-            minio_endpoint: Local MinIO endpoint for S3 hostname patching.
-                Polaris stores K8s-internal hostnames; this replaces them
-                so host-based tests can reach MinIO via port-forward.
         """
         self._config = config
-        self._minio_endpoint = minio_endpoint
         self._catalog: Catalog | None = None
         self._namespaces: list[str] = []
         self._tables: dict[str, Any] = {}
@@ -155,9 +107,6 @@ class IntegrationPolarisCatalogPlugin:
                 self._catalog = load_catalog("polaris", **catalog_kwargs)
             else:
                 self._catalog = create_polaris_catalog(self._config)
-
-            # Patch S3 endpoint for host-based testing (see docstring above)
-            _patch_catalog_s3_endpoint(self._catalog, self._minio_endpoint)
         return self._catalog
 
     def create_namespace(
@@ -372,11 +321,9 @@ def integration_catalog_plugin(
     """Get real CatalogPlugin wrapping Polaris.
 
     Yields plugin and cleans up created namespaces after test.
-    Passes MinIO endpoint for S3 hostname patching (K8s → localhost).
+    Tests run inside K8s where service hostnames resolve natively.
     """
-    minio_host = get_effective_host("minio", "floe-test")
-    minio_endpoint = f"http://{minio_host}:9000"
-    plugin = IntegrationPolarisCatalogPlugin(polaris_config, minio_endpoint=minio_endpoint)
+    plugin = IntegrationPolarisCatalogPlugin(polaris_config)
     yield plugin
     plugin.cleanup_namespaces()
 
@@ -415,8 +362,9 @@ def real_table_manager(
     Passes catalog_connection_config to override the default memory://
     fallback in IcebergTableManager._connect_to_catalog().
 
-    Also overrides S3 endpoint properties so PyIceberg writes to localhost
-    MinIO instead of the K8s-internal hostname stored in Polaris catalog.
+    S3 credentials are included so PyIceberg can write to MinIO.
+    When tests run inside K8s (Option B), hostnames resolve natively
+    via K8s DNS — no monkey-patching required.
     """
     from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
 
@@ -424,7 +372,6 @@ def real_table_manager(
     # to avoid PyIceberg's memory:// fallback (pyiceberg#10537)
     oauth2_server_uri = polaris_config.uri.replace("/api/catalog", "") + "/api/catalog/v1/oauth/tokens"
     minio_host = get_effective_host("minio", "floe-test")
-    minio_endpoint = f"http://{minio_host}:9000"
 
     return IcebergTableManager(
         catalog_plugin=integration_catalog_plugin,
@@ -436,9 +383,7 @@ def real_table_manager(
                 "credential": polaris_config.credential.get_secret_value(),
                 "scope": polaris_config.scope,
                 "oauth2-server-uri": oauth2_server_uri,
-                # Override S3 endpoint: Polaris catalog stores K8s-internal
-                # hostname (floe-platform-minio) but we connect from localhost
-                "s3.endpoint": minio_endpoint,
+                "s3.endpoint": f"http://{minio_host}:9000",
                 "s3.access-key-id": os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
                 "s3.secret-access-key": os.environ.get("MINIO_SECRET_KEY", "minioadmin123"),
                 "s3.region": "us-east-1",

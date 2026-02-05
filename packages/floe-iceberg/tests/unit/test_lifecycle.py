@@ -132,7 +132,6 @@ class TestIcebergTableLifecycleCreate:
         """Test creating a table with valid configuration succeeds."""
         table = lifecycle_manager.create_table(sample_table_config)
 
-        assert table is not None
         assert table.identifier == "bronze.customers"
 
     @pytest.mark.requirement("FR-012")
@@ -164,7 +163,7 @@ class TestIcebergTableLifecycleCreate:
         # Second creation with if_not_exists=True should return existing
         existing_table = lifecycle_manager.create_table(sample_table_config, if_not_exists=True)
 
-        assert existing_table is not None
+        assert existing_table.identifier == "bronze.customers"
         assert existing_table.identifier == original_table.identifier
 
     @pytest.mark.requirement("FR-012")
@@ -345,7 +344,7 @@ class TestIcebergTableLifecycleLoad:
         # Load table
         table = lifecycle_manager.load_table("bronze.customers")
 
-        assert table is not None
+        assert table.identifier == "bronze.customers"
         assert table.identifier == "bronze.customers"
 
     @pytest.mark.requirement("FR-014")

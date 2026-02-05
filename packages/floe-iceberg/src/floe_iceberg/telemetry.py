@@ -173,7 +173,9 @@ def traced(
                         for key, value in dynamic_attrs.items():
                             span.set_attribute(key, value)
                     except Exception:
-                        # Don't fail the operation if attribute extraction fails
+                        # TODO(FLO-2377): The except Exception: pass here is intentional —
+                        # OTel span attribute extraction is best-effort and should not
+                        # fail the traced operation. Consider logging at DEBUG level.
                         pass
 
                 try:

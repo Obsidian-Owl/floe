@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import structlog
 
-from floe_iceberg.errors import CompactionError
+from floe_iceberg.errors import CompactionAnalysisError, CompactionError
 from floe_iceberg.models import CompactionStrategy, CompactionStrategyType
 
 if TYPE_CHECKING:
@@ -184,6 +184,9 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
 
         Returns:
             Tuple of (small_file_count, total_file_count).
+
+        Raises:
+            CompactionAnalysisError: If manifest access or entry reading fails.
         """
         try:
             # Get current snapshot's data files
@@ -204,11 +207,17 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
 
             # Try to access manifest files
             manifests = getattr(snapshot, "manifests", None)
-            if manifests is None and callable(getattr(snapshot, "manifests", None)):
+            if callable(manifests):
                 try:
-                    manifests = snapshot.manifests(table.io)
-                except Exception:
-                    manifests = None
+                    manifests = manifests(table.io)
+                except Exception as e:
+                    logger.exception(
+                        "Failed to access snapshot manifests",
+                        extra={"snapshot_id": getattr(snapshot, "snapshot_id", "unknown")},
+                    )
+                    raise CompactionAnalysisError(
+                        f"Cannot access manifests for snapshot: {e}"
+                    ) from e
 
             if manifests:
                 for manifest in manifests:
@@ -224,14 +233,26 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
                                 total_file_count += 1
                                 if file_size < target_file_size_bytes:
                                     small_file_count += 1
-                    except Exception:
-                        continue
+                    except CompactionAnalysisError:
+                        raise
+                    except Exception as e:
+                        logger.exception(
+                            "Failed to read manifest entry",
+                            extra={"manifest": str(manifest)},
+                        )
+                        raise CompactionAnalysisError(
+                            f"Cannot read manifest entry: {e}"
+                        ) from e
 
             return (small_file_count, total_file_count)
 
-        except Exception:
-            # If analysis fails, return zeros
-            return (0, 0)
+        except CompactionAnalysisError:
+            raise
+        except Exception as e:
+            logger.exception("Compaction analysis failed unexpectedly")
+            raise CompactionAnalysisError(
+                f"Unexpected error during compaction analysis: {e}"
+            ) from e
 
     def execute(
         self,
@@ -506,6 +527,7 @@ def execute_compaction(
 
 
 __all__ = [
+    "CompactionAnalysisError",
     "CompactionResult",
     "CompactionExecutor",
     "BaseCompactionExecutor",

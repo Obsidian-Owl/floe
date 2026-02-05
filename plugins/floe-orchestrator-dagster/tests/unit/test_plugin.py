@@ -57,7 +57,8 @@ class TestDagsterOrchestratorPluginMetadata:
     @pytest.mark.requirement("FR-003")
     def test_plugin_description(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin has a meaningful description."""
-        assert len(dagster_plugin.description) > 0
+        assert isinstance(dagster_plugin.description, str)
+        assert len(dagster_plugin.description) >= 10
         assert "dagster" in dagster_plugin.description.lower()
 
 
@@ -133,22 +134,25 @@ class TestDagsterOrchestratorPluginInstantiation:
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         plugin = DagsterOrchestratorPlugin()
-        assert plugin is not None
+        assert isinstance(plugin, DagsterOrchestratorPlugin)
+        assert plugin.name == "dagster"
 
     @pytest.mark.requirement("FR-002")
     def test_plugin_can_be_imported_from_package(self) -> None:
         """Test plugin is exported from package __init__.py."""
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+        from floe_core.plugins.orchestrator import OrchestratorPlugin
 
-        assert DagsterOrchestratorPlugin is not None
+        assert issubclass(DagsterOrchestratorPlugin, OrchestratorPlugin)
 
     @pytest.mark.requirement("FR-003")
     def test_version_exported_from_package(self) -> None:
         """Test __version__ is exported from package."""
         from floe_orchestrator_dagster import __version__
 
-        assert __version__ is not None
         assert isinstance(__version__, str)
+        assert len(__version__) > 0
+        assert "." in __version__
 
 
 class TestDagsterOrchestratorPluginCreateDefinitions:
@@ -187,7 +191,7 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
         assert isinstance(result, Definitions)
         # Verify definitions were created - check that assets are accessible
         # The number of models in the fixture is 3
-        assert result.assets is not None
+        assert len(result.assets) == 3
 
 
 class TestDagsterOrchestratorPluginValidation:
@@ -346,7 +350,7 @@ class TestDagsterOrchestratorPluginSkeletonMethods:
 
         assert isinstance(result, ValidationResult)
         assert result.success is False
-        assert len(result.errors) > 0
+        assert len(result.errors) >= 1
 
     @pytest.mark.requirement("FR-012")
     def test_get_resource_requirements_small(

@@ -151,7 +151,9 @@ spec:
               cpu: 1000m
               memory: 1Gi
 ---
-# Job for running integration tests
+# Job for running integration tests inside K8s (Option B)
+# Tests run in-cluster where K8s DNS resolves service hostnames natively.
+# This eliminates the need for S3 endpoint monkey-patching in conftest.py.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -175,14 +177,24 @@ spec:
         - name: test-runner
           image: floe-test-runner:latest
           imagePullPolicy: IfNotPresent
+          # Discover integration test directories dynamically.
+          # The entrypoint is "uv run pytest"; args are appended.
           args:
             - "--tb=short"
             - "-v"
             - "--color=yes"
+            - "-x"
+            - "packages/"
+            - "plugins/"
+            - "--ignore=packages/floe-iceberg/tests/unit"
+            - "--ignore=plugins/floe-orchestrator-dagster/tests/unit"
             - "-m"
             - "integration"
-            - "tests/"
           env:
+            # Forces get_effective_host() to use K8s DNS names
+            - name: INTEGRATION_TEST_HOST
+              value: "k8s"
+            # Database connection
             - name: POSTGRES_HOST
               value: postgres
             - name: POSTGRES_PORT
@@ -194,6 +206,7 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: POSTGRES_PASSWORD
+            # MinIO / S3
             - name: MINIO_ENDPOINT
               value: "http://minio:9000"
             - name: AWS_ACCESS_KEY_ID
@@ -208,8 +221,16 @@ spec:
                   key: MINIO_ROOT_PASSWORD
             - name: AWS_REGION
               value: us-east-1
+            # Polaris catalog
             - name: POLARIS_URI
               value: "http://polaris:8181/api/catalog"
+            - name: POLARIS_CREDENTIAL
+              value: "demo-admin:demo-secret"
+            - name: POLARIS_WAREHOUSE
+              value: "floe-e2e"
+            - name: POLARIS_SCOPE
+              value: "PRINCIPAL_ROLE:ALL"
+            # Python
             - name: PYTHONPATH
               value: "/app:/app/testing"
             - name: PYTHONUNBUFFERED

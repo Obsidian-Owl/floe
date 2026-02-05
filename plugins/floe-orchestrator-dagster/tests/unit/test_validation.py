@@ -182,7 +182,7 @@ class TestValidateConnectionHTTPErrors:
 
             result = dagster_plugin.validate_connection("http://localhost:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "Ensure Dagster webserver is running" in result.errors[0]
 
 
@@ -241,7 +241,7 @@ class TestValidateConnectionTimeout:
 
             result = dagster_plugin.validate_connection("http://localhost:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "network connectivity" in result.errors[0].lower()
 
     def test_validate_connection_uses_configured_timeout(
@@ -317,7 +317,7 @@ class TestValidateConnectionConnectError:
 
             result = dagster_plugin.validate_connection("http://dagster.example.com:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "http://dagster.example.com:3000" in result.errors[0]
 
 
@@ -466,5 +466,5 @@ class TestValidateConnectionUnexpectedError:
 
             result = dagster_plugin.validate_connection("http://localhost:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "Something went wrong" in result.errors[0]

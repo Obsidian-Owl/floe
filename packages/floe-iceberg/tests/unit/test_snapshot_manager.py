@@ -265,7 +265,7 @@ class TestSnapshotManagerRollback:
         """Test rolling back to an existing snapshot succeeds."""
         result = snapshot_manager.rollback_to_snapshot(table_with_snapshots, 2000)
 
-        assert result is not None
+        assert result.identifier == table_with_snapshots.identifier
         # Verify set_current_snapshot was called with correct ID
         table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(2000)
 
@@ -290,7 +290,7 @@ class TestSnapshotManagerRollback:
         """Test rolling back to the oldest snapshot succeeds."""
         result = snapshot_manager.rollback_to_snapshot(table_with_snapshots, 1000)
 
-        assert result is not None
+        assert result.identifier == table_with_snapshots.identifier
         table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(1000)
 
     @pytest.mark.requirement("FR-019")

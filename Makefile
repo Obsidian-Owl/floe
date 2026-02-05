@@ -103,6 +103,12 @@ test-integration: ## Run integration tests (requires Kind cluster)
 	@echo "Running integration tests..."
 	@./testing/ci/test-integration.sh
 
+.PHONY: test-integration-image
+test-integration-image: ## Build test runner Docker image
+	@echo "Building test runner Docker image..."
+	@docker build -t floe-test-runner:latest -f testing/Dockerfile .
+	@echo "Image built: floe-test-runner:latest"
+
 .PHONY: test-e2e
 test-e2e: ## Run E2E tests (requires Kind cluster + full stack)
 	@echo "Running E2E tests..."

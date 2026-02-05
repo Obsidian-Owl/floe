@@ -181,11 +181,10 @@ def try_create_iceberg_resources(
             storage_ref=plugins.storage,
         )
     except Exception:
-        logger.warning(
-            "Failed to create Iceberg resources, continuing without Iceberg support",
-            exc_info=True,
+        logger.exception(
+            "Failed to create Iceberg resources — this will prevent Iceberg IO from working"
         )
-        return {}
+        raise
 
 
 __all__ = [

@@ -347,7 +347,8 @@ class TestLoadInput:
 
         # Should load table and scan
         mock_table_manager.load_table.assert_called_once()
-        assert result is not None
+        # Result should be the to_arrow() return value (MagicMock in this test)
+        assert result == mock_table_manager.load_table.return_value.scan.return_value.to_arrow.return_value
 
     @pytest.mark.requirement("FR-039")
     def test_load_input_uses_upstream_asset_key(

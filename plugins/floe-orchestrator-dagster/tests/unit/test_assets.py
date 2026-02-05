@@ -279,7 +279,8 @@ class TestAssetDescription:
 
         asset = result[0]
         spec = asset.specs_by_key[asset.key]
-        assert spec.description is not None
+        assert isinstance(spec.description, str)
+        assert len(spec.description) > 0
 
     def test_asset_description_includes_model_name(
         self,

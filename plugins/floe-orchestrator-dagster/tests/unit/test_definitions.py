@@ -48,7 +48,7 @@ class TestCreateDefinitionsWithValidArtifacts:
         result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
 
         assert isinstance(result, Definitions)
-        assert result.assets is not None
+        assert len(result.assets) > 0
 
     def test_create_definitions_preserves_model_count(
         self,
@@ -56,11 +56,13 @@ class TestCreateDefinitionsWithValidArtifacts:
         valid_compiled_artifacts_with_models: dict[str, Any],
     ) -> None:
         """Test create_definitions creates correct number of assets."""
+        from dagster import Definitions
+
         result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
 
         # Fixture has 3 models - verify assets were created
-        # We can't easily count assets on Definitions, but we verify it succeeds
-        assert result is not None
+        assert isinstance(result, Definitions)
+        assert len(result.assets) == 3
 
 
 class TestCreateDefinitionsWithEmptyTransforms:
@@ -173,8 +175,11 @@ class TestCreateDefinitionsEdgeCases:
 
         # The plugin should accept this - Dagster will handle the circular deps
         # at materialize time, not at definition creation time
+        from dagster import Definitions
+
         result = dagster_plugin.create_definitions(artifacts)
-        assert result is not None
+        assert isinstance(result, Definitions)
+        assert len(result.assets) == 2
 
     def test_duplicate_transform_names_create_separate_assets(
         self,
@@ -197,10 +202,12 @@ class TestCreateDefinitionsEdgeCases:
         ]
 
         # Plugin creates the assets - Dagster validates at load time
+        from dagster import Definitions
+
         result = dagster_plugin.create_definitions(artifacts)
-        assert result is not None
+        assert isinstance(result, Definitions)
         # Both assets are created (validation happens at load time)
-        assert result.assets is not None
+        assert len(result.assets) == 2
 
     def test_model_with_nonexistent_dependency_accepted(
         self,
@@ -222,8 +229,11 @@ class TestCreateDefinitionsEdgeCases:
         ]
 
         # Should succeed - external deps are allowed
+        from dagster import Definitions
+
         result = dagster_plugin.create_definitions(artifacts)
-        assert result is not None
+        assert isinstance(result, Definitions)
+        assert len(result.assets) == 1
 
     def test_model_with_many_dependencies(
         self,
@@ -238,8 +248,11 @@ class TestCreateDefinitionsEdgeCases:
             {"name": "model_with_many_deps", "compute": "duckdb", "depends_on": deps},
         ]
 
+        from dagster import Definitions
+
         result = dagster_plugin.create_definitions(artifacts)
-        assert result is not None
+        assert isinstance(result, Definitions)
+        assert len(result.assets) == 1
 
     def test_model_names_with_special_characters(
         self,
@@ -253,5 +266,8 @@ class TestCreateDefinitionsEdgeCases:
             {"name": "fct_orders_2024", "compute": "duckdb"},
         ]
 
+        from dagster import Definitions
+
         result = dagster_plugin.create_definitions(artifacts)
-        assert result is not None
+        assert isinstance(result, Definitions)
+        assert len(result.assets) == 2

@@ -47,8 +47,8 @@ class TestIdentifierPattern:
     @pytest.mark.requirement("FR-045")
     def test_pattern_exists(self) -> None:
         """Test IDENTIFIER_PATTERN is defined."""
-        assert IDENTIFIER_PATTERN is not None
         assert isinstance(IDENTIFIER_PATTERN, str)
+        assert len(IDENTIFIER_PATTERN) > 0
 
     @pytest.mark.requirement("FR-045")
     def test_valid_identifiers(self) -> None:
@@ -847,7 +847,7 @@ class TestTableConfig:
                 ]
             ),
         )
-        assert config.partition_spec is not None
+        assert len(config.partition_spec.fields) > 0
         assert len(config.partition_spec.fields) == 1
 
     @pytest.mark.requirement("FR-013")
@@ -1065,7 +1065,7 @@ class TestTableConfig:
                 ]
             ),
         )
-        assert config.partition_spec is not None
+        assert len(config.partition_spec.fields) > 0
         assert len(config.partition_spec.fields) == 2
 
 
@@ -1085,7 +1085,7 @@ class TestSchemaChange:
             field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
         )
         assert change.change_type == SchemaChangeType.ADD_COLUMN
-        assert change.field is not None
+        assert change.field.name == "email"
         assert change.field.name == "email"
 
     @pytest.mark.requirement("FR-017")

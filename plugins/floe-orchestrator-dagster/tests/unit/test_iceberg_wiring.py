@@ -187,7 +187,7 @@ class TestCreateDefinitionsWithIcebergResources:
             assert isinstance(result, Definitions)
 
             # Verify resources dict has "iceberg" key
-            assert result.resources is not None
+            assert isinstance(result.resources, dict)
             assert "iceberg" in result.resources
             assert result.resources["iceberg"] == mock_io_manager
 
@@ -212,8 +212,8 @@ class TestCreateDefinitionsWithIcebergResources:
 
             # Verify has both assets and resources
             assert isinstance(result, Definitions)
-            assert result.assets is not None
-            assert result.resources is not None
+            assert len(result.assets) > 0
+            assert isinstance(result.resources, dict)
             assert "iceberg" in result.resources
 
 
@@ -284,8 +284,12 @@ class TestGracefulDegradation:
         assert result == {}
 
     @pytest.mark.requirement("004d-FR-117")
-    def test_plugin_loading_exception_returns_empty_dict(self) -> None:
-        """Test try_create_iceberg_resources() returns {} when plugin loading fails."""
+    def test_plugin_loading_exception_propagates(self) -> None:
+        """Test try_create_iceberg_resources() raises when plugin loading fails.
+
+        Exceptions are no longer silently swallowed — they propagate so callers
+        can handle failures explicitly rather than receiving an empty dict.
+        """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
@@ -299,13 +303,10 @@ class TestGracefulDegradation:
         with patch(
             "floe_orchestrator_dagster.resources.iceberg.create_iceberg_resources"
         ) as mock_create:
-            # Simulate plugin loading failure
             mock_create.side_effect = Exception("Plugin not found")
 
-            result = try_create_iceberg_resources(plugins=plugins)
-
-            # Should catch exception and return empty dict
-            assert result == {}
+            with pytest.raises(Exception, match="Plugin not found"):
+                try_create_iceberg_resources(plugins=plugins)
 
     @pytest.mark.requirement("004d-FR-117")
     def test_create_definitions_without_plugins_omits_iceberg_resource(
@@ -369,10 +370,10 @@ class TestTryCreateIcebergResourcesEdgeCases:
             assert result["iceberg"] == mock_io_manager
 
     @pytest.mark.requirement("004d-FR-118")
-    def test_exception_during_plugin_loading_returns_empty_dict_and_logs_warning(
+    def test_exception_during_plugin_loading_logs_and_raises(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Test try_create_iceberg_resources() logs warning when plugin loading fails."""
+        """Test try_create_iceberg_resources() logs error and raises when plugin loading fails."""
         import logging
 
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
@@ -390,18 +391,20 @@ class TestTryCreateIcebergResourcesEdgeCases:
         ) as mock_create:
             mock_create.side_effect = RuntimeError("Plugin loading failed")
 
-            with caplog.at_level(logging.WARNING):
-                result = try_create_iceberg_resources(plugins=plugins)
+            with caplog.at_level(logging.ERROR):
+                with pytest.raises(RuntimeError, match="Plugin loading failed"):
+                    try_create_iceberg_resources(plugins=plugins)
 
-            # Verify returns empty dict
-            assert result == {}
-
-            # Verify warning was logged
+            # Verify error was logged before raising
             assert any("Failed to create Iceberg resources" in record.message for record in caplog.records)
 
     @pytest.mark.requirement("004d-FR-118")
-    def test_exception_during_table_manager_creation_returns_empty_dict(self) -> None:
-        """Test try_create_iceberg_resources() returns {} when IcebergTableManager creation fails."""
+    def test_exception_during_table_manager_creation_propagates(self) -> None:
+        """Test try_create_iceberg_resources() raises when IcebergTableManager creation fails.
+
+        Exceptions are no longer silently swallowed — they propagate so callers
+        can handle failures explicitly.
+        """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
@@ -429,7 +432,5 @@ class TestTryCreateIcebergResourcesEdgeCases:
             # Simulate IcebergTableManager creation failure
             mock_table_manager_cls.side_effect = ValueError("Invalid catalog")
 
-            result = try_create_iceberg_resources(plugins=plugins)
-
-            # Should catch exception and return empty dict
-            assert result == {}
+            with pytest.raises(ValueError, match="Invalid catalog"):
+                try_create_iceberg_resources(plugins=plugins)
