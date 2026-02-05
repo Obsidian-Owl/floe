@@ -241,6 +241,8 @@ A data engineer needs to use Iceberg tables as inputs and outputs for Dagster as
 
 - **IcebergTableManager**: Internal utility class that wraps PyIceberg table operations. Provides methods for table creation, schema evolution, snapshot management, and data writes. Accepts CatalogPlugin and StoragePlugin via dependency injection. Not a plugin ABC itself.
 
+  **create_table() Delegation Boundary**: Both CatalogPlugin and IcebergTableManager expose `create_table()`, but with different responsibilities. CatalogPlugin.create_table() performs basic catalog registration (namespace + schema → catalog entry). IcebergTableManager.create_table() DELEGATES to the PyIceberg Catalog (obtained via CatalogPlugin.connect()), adding: config validation via Pydantic TableConfig, retry logic for concurrent conflicts, partition spec application, default property merging, OTel tracing spans, and typed exception handling. In short: CatalogPlugin manages catalog lifecycle; IcebergTableManager manages table lifecycle with richer operational behavior.
+
 - **StoragePlugin** (existing ABC): Object storage backend interface from floe-core. Provides `get_pyiceberg_fileio()` for S3/GCS/Azure FileIO, `get_warehouse_uri()` for storage locations. IcebergTableManager uses this for storage configuration.
 
 - **TableConfig**: Configuration model for table creation. Includes table identifier (namespace + name), schema definition, partition spec, storage location, and custom properties.
@@ -250,6 +252,8 @@ A data engineer needs to use Iceberg tables as inputs and outputs for Dagster as
 - **SnapshotInfo**: Metadata about a table snapshot. Includes snapshot ID, timestamp, operation type (append, overwrite, delete), summary statistics, and parent snapshot reference.
 
 - **IcebergIOManager**: Dagster IOManager implementation for Iceberg tables. Handles asset outputs by writing to configured tables and asset inputs by reading from tables. Supports configurable write modes and partitioned assets.
+
+  **Serialization & Location**: Dagster's ConfigurableIOManager requires all config fields to be serializable (JSON-safe types). IcebergTableManager holds live connections (PyIceberg Catalog, FileIO) that are NOT serializable. The solution uses Pydantic `PrivateAttr` to bypass Dagster config serialization — the manager is injected at runtime, not serialized. IcebergIOManager lives in `plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/io_manager.py` (NOT in `packages/floe-iceberg/`), following the component ownership principle: Dagster-specific integration code belongs in the orchestrator plugin.
 
 - **WriteMode**: Enumeration of supported write operations (APPEND, OVERWRITE, UPSERT). Determines how new data is combined with existing table data.
 
@@ -269,7 +273,7 @@ A data engineer needs to use Iceberg tables as inputs and outputs for Dagster as
 ## Assumptions
 
 - Catalog plugin (Epic 4C) is available for table registration operations
-- PyIceberg library (>=0.5.0) provides the underlying Iceberg client operations
+- PyIceberg library (>=0.10.0,<0.11.0) provides the underlying Iceberg client operations (native upsert via table.upsert() requires >=0.10.0)
 - Object storage (S3, GCS, Azure Blob, or local) is configured and accessible
 - Plugin registry from Epic 1 is available for plugin discovery
 - Iceberg REST catalog or Polaris is the catalog backend
@@ -296,3 +300,34 @@ A data engineer needs to use Iceberg tables as inputs and outputs for Dagster as
 - Data encryption at rest (handled by underlying storage provider)
 - Cross-table transactions
 - Table cloning or branching operations
+
+## Integration & Wiring
+
+### Full Wiring Path
+
+The complete integration chain from configuration to Dagster execution:
+
+```
+CompiledArtifacts (floe-core)
+  → PluginRegistry.get(CATALOG, "polaris") → CatalogPlugin
+  → PluginRegistry.get(STORAGE, "s3")      → StoragePlugin
+  → IcebergTableManager(catalog_plugin, storage_plugin)
+  → IcebergIOManager(table_manager=..., default_write_mode=...)
+  → Dagster Definitions(resources={"iceberg": io_manager})
+```
+
+### Current Gaps (to be addressed in implementation)
+
+1. **DagsterOrchestratorPlugin.create_definitions()** does not yet wire IcebergIOManager into the resource dict. Phase 14 (Wiring & Integration) tasks address this.
+2. **No concrete StoragePlugin implementations exist** — the `floe.storage` entry point group has zero registrations. IcebergTableManager can be tested with a MockStoragePlugin fixture until a real implementation (e.g., floe-storage-s3) is built.
+3. **DriftDetector soft circular dependency** — DriftDetector in `packages/floe-iceberg/` imports from `floe_core` which may transitively reference iceberg types. Mitigated via lazy imports; a formal `DriftDetectorProtocol` in floe-core is a future improvement.
+
+### Component Boundary Summary
+
+| Component | Package | Responsibility |
+|-----------|---------|---------------|
+| IcebergTableManager | `packages/floe-iceberg/` | Table lifecycle (create, evolve, write, compact) |
+| IcebergIOManager | `plugins/floe-orchestrator-dagster/` | Dagster asset ↔ Iceberg bridge |
+| CatalogPlugin | `packages/floe-core/` (ABC) | Catalog lifecycle (connect, namespaces, registration) |
+| StoragePlugin | `packages/floe-core/` (ABC) | FileIO and warehouse URI provision |
+| DagsterOrchestratorPlugin | `plugins/floe-orchestrator-dagster/` | Wires everything into Dagster Definitions |
