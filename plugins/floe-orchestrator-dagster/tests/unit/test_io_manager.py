@@ -74,7 +74,8 @@ def mock_output_context() -> MagicMock:
     context = MagicMock()
     context.asset_key = MagicMock()
     context.asset_key.path = ["customers_silver"]
-    context.metadata = {}
+    context.definition_metadata = {}
+    context.output_metadata = {}
     context.partition_key = None
     return context
 
@@ -86,7 +87,7 @@ def mock_input_context() -> MagicMock:
     context.upstream_output = MagicMock()
     context.upstream_output.asset_key = MagicMock()
     context.upstream_output.asset_key.path = ["customers_bronze"]
-    context.upstream_output.metadata = {}
+    context.upstream_output.definition_metadata = {}
     context.partition_key = None
     return context
 
@@ -275,7 +276,7 @@ class TestHandleOutput:
         """Test handle_output uses custom table name from metadata."""
         from floe_orchestrator_dagster.io_manager import ICEBERG_TABLE_KEY
 
-        mock_output_context.metadata = {ICEBERG_TABLE_KEY: "custom_table"}
+        mock_output_context.definition_metadata = {ICEBERG_TABLE_KEY: "custom_table"}
         mock_table_manager.table_exists.return_value = True
 
         io_manager.handle_output(mock_output_context, mock_pyarrow_table)
@@ -295,7 +296,7 @@ class TestHandleOutput:
         """Test handle_output uses custom namespace from metadata."""
         from floe_orchestrator_dagster.io_manager import ICEBERG_NAMESPACE_KEY
 
-        mock_output_context.metadata = {ICEBERG_NAMESPACE_KEY: "custom_namespace"}
+        mock_output_context.definition_metadata = {ICEBERG_NAMESPACE_KEY: "custom_namespace"}
         mock_table_manager.table_exists.return_value = True
 
         io_manager.handle_output(mock_output_context, mock_pyarrow_table)
@@ -315,7 +316,7 @@ class TestHandleOutput:
         """Test handle_output uses write mode from metadata."""
         from floe_orchestrator_dagster.io_manager import ICEBERG_WRITE_MODE_KEY
 
-        mock_output_context.metadata = {ICEBERG_WRITE_MODE_KEY: "overwrite"}
+        mock_output_context.definition_metadata = {ICEBERG_WRITE_MODE_KEY: "overwrite"}
         mock_table_manager.table_exists.return_value = True
 
         io_manager.handle_output(mock_output_context, mock_pyarrow_table)
@@ -372,7 +373,7 @@ class TestLoadInput:
         """Test load_input uses custom table name from upstream metadata."""
         from floe_orchestrator_dagster.io_manager import ICEBERG_TABLE_KEY
 
-        mock_input_context.upstream_output.metadata = {ICEBERG_TABLE_KEY: "custom_upstream"}
+        mock_input_context.upstream_output.definition_metadata = {ICEBERG_TABLE_KEY: "custom_upstream"}
 
         io_manager.load_input(mock_input_context)
 
@@ -408,7 +409,7 @@ class TestPartitionedAssets:
         )
 
         mock_output_context.partition_key = "2026-01-17"
-        mock_output_context.metadata = {
+        mock_output_context.definition_metadata = {
             ICEBERG_WRITE_MODE_KEY: "overwrite",
             ICEBERG_PARTITION_COLUMN_KEY: "date",
         }
@@ -438,7 +439,7 @@ class TestPartitionedAssets:
         from floe_orchestrator_dagster.io_manager import ICEBERG_PARTITION_COLUMN_KEY
 
         mock_input_context.partition_key = "2026-01-17"
-        mock_input_context.upstream_output.metadata = {ICEBERG_PARTITION_COLUMN_KEY: "date"}
+        mock_input_context.upstream_output.definition_metadata = {ICEBERG_PARTITION_COLUMN_KEY: "date"}
 
         io_manager.load_input(mock_input_context)
 

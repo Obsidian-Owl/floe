@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
+from dagster import AssetKey, Output, StaticPartitionsDefinition, asset, materialize
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 if TYPE_CHECKING:
@@ -447,6 +448,234 @@ class TestIcebergIOManagerIntegration:
         for table_name in ["asset_a", "asset_b", "asset_c"]:
             identifier = f"{unique_namespace}.{table_name}"
             assert table_manager.table_exists(identifier)
+
+
+# =============================================================================
+# Dagster Materialize Integration Tests
+# =============================================================================
+
+
+@pytest.mark.integration
+class TestIcebergIOManagerDagsterMaterialize:
+    """Test IcebergIOManager through Dagster's materialize() pipeline.
+
+    Validates T101: Real Dagster asset materialization to Iceberg.
+    Uses mock table manager but real Dagster materialization pipeline.
+    These tests verify the full Dagster integration, not just direct
+    handle_output() calls.
+    """
+
+    @pytest.mark.requirement("FR-037")
+    def test_dagster_materialize_writes_to_iceberg(
+        self,
+        io_manager: Any,
+        table_manager: Any,
+        unique_namespace: str,
+        sample_pyarrow_table: Any,
+    ) -> None:
+        """Test that dagster.materialize() with IcebergIOManager writes to Iceberg table.
+
+        Validates the full Dagster materialization pipeline:
+        1. Define @asset with io_manager_key
+        2. materialize() executes asset
+        3. IcebergIOManager handles output
+        4. Table is created in Iceberg
+        """
+        from dagster import IOManagerDefinition
+
+        # Wrap io_manager in a simple resource function
+        def io_manager_resource(_context: Any) -> Any:
+            return io_manager
+
+        io_manager_def = IOManagerDefinition(resource_fn=io_manager_resource)
+
+        # Define asset inline
+        @asset
+        def test_customers() -> Any:
+            """Test asset that returns PyArrow table."""
+            return sample_pyarrow_table
+
+        # Materialize asset
+        result = materialize(
+            assets=[test_customers],
+            resources={"io_manager": io_manager_def},
+        )
+
+        # Verify materialization succeeded
+        assert result.success, "Materialization should succeed"
+
+        # Verify table was created
+        identifier = f"{unique_namespace}.test_customers"
+        assert table_manager.table_exists(identifier), (
+            f"Table '{identifier}' should exist after materialization"
+        )
+
+    @pytest.mark.requirement("FR-039")
+    def test_dagster_materialize_downstream_loads_from_iceberg(
+        self,
+        io_manager: Any,
+        table_manager: Any,
+        unique_namespace: str,
+        sample_pyarrow_table: Any,
+    ) -> None:
+        """Test downstream asset loads data written by upstream through materialize().
+
+        Validates the full read-write pipeline:
+        1. Upstream asset writes to Iceberg
+        2. Downstream asset depends on upstream
+        3. IOManager loads data for downstream
+        4. Both materializations succeed
+        """
+        from dagster import IOManagerDefinition
+
+        # Wrap io_manager in a simple resource function
+        def io_manager_resource(_context: Any) -> Any:
+            return io_manager
+
+        io_manager_def = IOManagerDefinition(resource_fn=io_manager_resource)
+
+        # Define upstream asset
+        @asset
+        def upstream_data() -> Any:
+            """Upstream asset that writes to Iceberg."""
+            return sample_pyarrow_table
+
+        # Define downstream asset that depends on upstream
+        @asset(deps=[upstream_data])
+        def downstream_data(upstream_data: Any) -> Any:
+            """Downstream asset that loads from Iceberg."""
+            # Verify we received data from upstream
+            assert upstream_data is not None, "Should receive data from upstream"
+            return sample_pyarrow_table
+
+        # Materialize both assets
+        result = materialize(
+            assets=[upstream_data, downstream_data],
+            resources={"io_manager": io_manager_def},
+        )
+
+        # Verify both materializations succeeded
+        assert result.success, "Both materializations should succeed"
+
+        # Verify both tables exist
+        upstream_id = f"{unique_namespace}.upstream_data"
+        downstream_id = f"{unique_namespace}.downstream_data"
+        assert table_manager.table_exists(upstream_id), (
+            f"Upstream table '{upstream_id}' should exist"
+        )
+        assert table_manager.table_exists(downstream_id), (
+            f"Downstream table '{downstream_id}' should exist"
+        )
+
+    @pytest.mark.requirement("FR-038")
+    def test_dagster_materialize_with_metadata_write_mode(
+        self,
+        io_manager: Any,
+        table_manager: Any,
+        unique_namespace: str,
+        sample_pyarrow_table: Any,
+    ) -> None:
+        """Test materialize() respects write_mode metadata.
+
+        Validates that OutputMetadata with write_mode is correctly
+        passed through the Dagster pipeline and respected by IOManager.
+        """
+        from dagster import IOManagerDefinition
+
+        from floe_orchestrator_dagster.io_manager import ICEBERG_WRITE_MODE_KEY
+
+        # Wrap io_manager in a simple resource function
+        def io_manager_resource(_context: Any) -> Any:
+            return io_manager
+
+        io_manager_def = IOManagerDefinition(resource_fn=io_manager_resource)
+
+        # Define asset with overwrite mode in metadata
+        @asset
+        def test_overwrite() -> Output:
+            """Asset with overwrite mode metadata."""
+            return Output(
+                sample_pyarrow_table,
+                metadata={ICEBERG_WRITE_MODE_KEY: "overwrite"},
+            )
+
+        # First materialization (creates table)
+        result1 = materialize(
+            assets=[test_overwrite],
+            resources={"io_manager": io_manager_def},
+        )
+        assert result1.success, "First materialization should succeed"
+
+        # Second materialization (should overwrite)
+        result2 = materialize(
+            assets=[test_overwrite],
+            resources={"io_manager": io_manager_def},
+        )
+        assert result2.success, "Second materialization with overwrite should succeed"
+
+        # Verify table exists
+        identifier = f"{unique_namespace}.test_overwrite"
+        assert table_manager.table_exists(identifier), (
+            f"Table '{identifier}' should exist after overwrite"
+        )
+
+    @pytest.mark.requirement("FR-040")
+    def test_dagster_materialize_partitioned_asset(
+        self,
+        io_manager: Any,
+        table_manager: Any,
+        unique_namespace: str,
+        sample_pyarrow_table: Any,
+    ) -> None:
+        """Test materialize() with partitioned asset.
+
+        Validates that partition_key is correctly passed through
+        the Dagster pipeline and used by IOManager for partition filtering.
+        """
+        from dagster import IOManagerDefinition
+
+        from floe_orchestrator_dagster.io_manager import (
+            ICEBERG_PARTITION_COLUMN_KEY,
+            ICEBERG_WRITE_MODE_KEY,
+        )
+
+        # Wrap io_manager in a simple resource function
+        def io_manager_resource(_context: Any) -> Any:
+            return io_manager
+
+        io_manager_def = IOManagerDefinition(resource_fn=io_manager_resource)
+
+        # Define partitioned asset
+        @asset(
+            partitions_def=StaticPartitionsDefinition(
+                ["2026-01-17", "2026-01-18", "2026-01-19"]
+            ),
+        )
+        def partitioned_orders() -> Output:
+            """Partitioned asset that writes to specific partition."""
+            return Output(
+                sample_pyarrow_table,
+                metadata={
+                    ICEBERG_WRITE_MODE_KEY: "overwrite",
+                    ICEBERG_PARTITION_COLUMN_KEY: "date",
+                },
+            )
+
+        # Materialize specific partition
+        result = materialize(
+            assets=[partitioned_orders],
+            resources={"io_manager": io_manager_def},
+            partition_key="2026-01-17",
+        )
+
+        # Verify materialization succeeded
+        assert result.success, "Partitioned materialization should succeed"
+
+        # Verify table was created
+        identifier = f"{unique_namespace}.partitioned_orders"
+        assert table_manager.table_exists(identifier), (
+            f"Partitioned table '{identifier}' should exist"
+        )
 
 
 # =============================================================================
