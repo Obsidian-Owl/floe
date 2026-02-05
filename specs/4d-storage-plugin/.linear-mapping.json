@@ -10,7 +10,7 @@
   },
   "label": "epic-4d",
   "created_at": "2026-01-17T06:48:00Z",
-  "total_issues": 113,
+  "total_issues": 128,
   "tasks": {
     "T001": {"linear_id": "FLO-699", "uuid": "f0b1e2c3-d4e5-6789-abcd-ef0123456789"},
     "T002": {"linear_id": "FLO-700", "uuid": "a1b2c3d4-e5f6-7890-abcd-ef0123456790"},
@@ -124,7 +124,22 @@
     "T105": {"linear_id": "FLO-809", "uuid": "79df6dbf-cc0a-46ff-b8c7-f299dde1ebb9"},
     "T105a": {"linear_id": "FLO-810", "uuid": "2368c084-fccf-46c9-8a08-378ef2b0f8da"},
     "T106": {"linear_id": "FLO-811", "uuid": "8e7a773d-8a92-492d-a22f-2c7a2941ed20"},
-    "T107": {"linear_id": "FLO-812", "uuid": "c0512d7f-5859-4b57-9eaa-e11b89d7f19e"}
+    "T107": {"linear_id": "FLO-812", "uuid": "c0512d7f-5859-4b57-9eaa-e11b89d7f19e"},
+    "T007a": {"linear_id": "FLO-2358", "uuid": "4d8be191-8c20-4e85-a159-ccd15b52a44e"},
+    "T108": {"linear_id": "FLO-2359", "uuid": "b7bffd9d-917f-42ec-b35c-3886fd00bf87"},
+    "T109": {"linear_id": "FLO-2360", "uuid": "da2e4d2a-57ea-4eac-869d-fd52b134999d"},
+    "T110": {"linear_id": "FLO-2361", "uuid": "86598dad-7ac2-44fd-9fe6-3e8fbdd28acb"},
+    "T111": {"linear_id": "FLO-2362", "uuid": "6cdf92c1-c1cb-4b5b-8653-eff0b0e7c4ea"},
+    "T112": {"linear_id": "FLO-2363", "uuid": "2235dacb-549a-4689-933c-98df94f084c9"},
+    "T113": {"linear_id": "FLO-2364", "uuid": "1afa62d3-b560-4f3f-9987-a3c297117ea3"},
+    "T114": {"linear_id": "FLO-2365", "uuid": "266830ea-4c01-47ea-8aea-140db6749dbb"},
+    "T115": {"linear_id": "FLO-2366", "uuid": "39d7b3f3-2547-4a8d-a326-72b08d0ca44b"},
+    "T116": {"linear_id": "FLO-2367", "uuid": "40295093-5487-4b38-b7a4-64dd6bf31401"},
+    "T117": {"linear_id": "FLO-2368", "uuid": "8ed0737d-e8f8-4586-88ad-75ba83a0838d"},
+    "T118": {"linear_id": "FLO-2369", "uuid": "b81c4bf8-0d96-4557-8a75-8643c2742d0f"},
+    "T119": {"linear_id": "FLO-2370", "uuid": "bf66ceec-966c-4b67-81d2-6dc1d7dc95c2"},
+    "T120": {"linear_id": "FLO-2371", "uuid": "5839f4aa-e962-4c41-8a1f-1a53e07fcbd2"},
+    "T121": {"linear_id": "FLO-2372", "uuid": "6e4c2006-e068-4436-95ab-081ca1de6432"}
   },
   "phases": {
     "1_setup": ["T001", "T002"],
@@ -139,6 +154,8 @@
     "10_us8_iomanager": ["T077", "T078", "T079", "T080", "T081", "T082", "T083", "T084", "T085", "T086", "T087", "T088", "T089"],
     "11_compaction": ["T090", "T091", "T092", "T093", "T094", "T095", "T096"],
     "12_integration_tests": ["T097", "T098", "T099", "T100", "T101"],
-    "13_polish": ["T102", "T103", "T104", "T105", "T105a", "T106", "T107"]
+    "13_polish": ["T102", "T103", "T104", "T105", "T105a", "T106", "T107"],
+    "14_wiring_integration": ["T108", "T109", "T110", "T111", "T112", "T113", "T114", "T115", "T116", "T117", "T118"],
+    "15_driftdetector_boundary": ["T119", "T120", "T121"]
   }
 }
