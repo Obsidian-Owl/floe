@@ -20,8 +20,11 @@ Example:
 from __future__ import annotations
 
 from .dbt_resource import DBTResource, load_dbt_plugin
+from .iceberg import create_iceberg_resources, try_create_iceberg_resources
 
 __all__: list[str] = [
     "DBTResource",
     "load_dbt_plugin",
+    "create_iceberg_resources",
+    "try_create_iceberg_resources",
 ]

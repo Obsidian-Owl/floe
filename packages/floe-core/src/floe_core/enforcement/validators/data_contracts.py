@@ -958,6 +958,12 @@ class ContractValidator:
             contract_columns=len(contract_columns),
         )
 
+        # NOTE: Intentional lazy import — DriftDetector lives in floe-iceberg which
+        # depends on floe-core, creating a circular dependency at import time.
+        # This lazy import inside try/except ImportError allows floe-core to function
+        # without floe-iceberg installed (graceful degradation). A future improvement
+        # (T121) will define a DriftDetectorProtocol in floe-core to formalize this
+        # boundary and eliminate the lazy import.
         try:
             from floe_iceberg.drift_detector import DriftDetector
 

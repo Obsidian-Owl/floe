@@ -51,6 +51,10 @@ if TYPE_CHECKING:
         IcebergIOManagerConfig,
         create_iceberg_io_manager,
     )
+    from floe_orchestrator_dagster.resources.iceberg import (
+        create_iceberg_resources,
+        try_create_iceberg_resources,
+    )
 
 __all__ = [
     # Plugin (eager)
@@ -59,6 +63,9 @@ __all__ = [
     "IcebergIOManager",
     "IcebergIOManagerConfig",
     "create_iceberg_io_manager",
+    # Resource factory (lazy - triggers plugin registry + iceberg imports)
+    "create_iceberg_resources",
+    "try_create_iceberg_resources",
     # Metadata keys (eager - string constants)
     "ICEBERG_TABLE_KEY",
     "ICEBERG_NAMESPACE_KEY",
@@ -77,6 +84,8 @@ _LAZY_IMPORTS = {
     "IcebergIOManager": "floe_orchestrator_dagster.io_manager",
     "IcebergIOManagerConfig": "floe_orchestrator_dagster.io_manager",
     "create_iceberg_io_manager": "floe_orchestrator_dagster.io_manager",
+    "create_iceberg_resources": "floe_orchestrator_dagster.resources.iceberg",
+    "try_create_iceberg_resources": "floe_orchestrator_dagster.resources.iceberg",
 }
 
 
