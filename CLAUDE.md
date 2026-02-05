@@ -37,6 +37,7 @@ bd linear sync --pull        # Sync from Linear
 6. **Security First**: Pydantic validation, SecretStr, no eval/exec/shell=True
 7. **Four Layers**: Foundation→Config→Services→Data (config flows DOWN only)
 8. **Observability**: OTel traces, OpenLineage lineage, structured logging
+9. **Escalation Over Assumption**: Claude MUST escalate via `AskUserQuestion` for ANY design decision, trade-off, or assumption. Only mechanical tasks (formatting, type hints, clear bug fixes) are autonomous. Testing is the hard quality gate — NEVER weaken it. See `.claude/rules/quality-escalation.md`
 
 ---
 
@@ -163,9 +164,34 @@ Session start hook auto-queries for prior context.
 
 ---
 
+## Decision Authority (CRITICAL)
+
+**Claude is NOT empowered to make design decisions, trade-offs, or assumptions autonomously.**
+
+ALL choices between valid approaches MUST be presented to the user via `AskUserQuestion`. Only mechanical tasks with objectively correct outcomes (formatting, type hints, clear bug fixes) are autonomous. Testing is the hard quality gate that validates these decisions — it must NEVER be weakened.
+
+| Decision | Claude Authority | Required Action |
+|----------|-----------------|-----------------|
+| Design choice (>1 valid approach) | **Escalate** | Present options with trade-offs |
+| Technology/library selection | **Escalate** | Research and present options |
+| Scope decisions (include/exclude) | **Escalate** | Confirm with user |
+| Infrastructure assumptions | **Escalate** | Present evidence, ask |
+| Weaken test assertions | **NEVER** | The code is wrong, not the test |
+| Introduce workarounds | **NEVER** | Escalate with root cause + options |
+| Deviate from spec/plan | **NEVER** | Escalate with analysis |
+| Simple bug fix (clear cause) | Autonomous | Fix and verify |
+| Code style/formatting | Autonomous | Follow tooling |
+
+**When hitting a hard problem**: STOP. Diagnose root cause. Present options via `AskUserQuestion`. Wait for approval. **NEVER silently choose an approach.**
+
+**See**: `.claude/rules/quality-escalation.md` for complete escalation protocol
+
+---
+
 ## Rules (Progressive Disclosure)
 
 Read when working on specific domain:
+- `.claude/rules/quality-escalation.md` - **Escalation protocol (READ FIRST)**
 - `.claude/rules/python-standards.md` - Type hints, Pydantic v2
 - `.claude/rules/testing-standards.md` - Test organization, markers
 - `.claude/rules/component-ownership.md` - Technology boundaries
