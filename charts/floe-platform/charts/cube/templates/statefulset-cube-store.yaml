@@ -1,0 +1,63 @@
+{{- if and .Values.enabled .Values.cubeStore.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cube.fullname" . }}-cube-store
+  labels:
+    {{- include "cube.cubeStore.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "cube.fullname" . }}-cube-store
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "cube.cubeStore.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cube.cubeStore.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: cube-store
+          image: "{{ .Values.cubeStore.image.repository }}:{{ .Values.cubeStore.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.cubeStore.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: {{ .Values.cubeStore.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.cubeStore.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.cubeStore.persistence.enabled }}
+            - name: data
+              mountPath: /cube/data
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  {{- if .Values.cubeStore.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.cubeStore.persistence.storageClass }}
+        storageClassName: {{ .Values.cubeStore.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.cubeStore.persistence.size }}
+  {{- end }}
+{{- end }}

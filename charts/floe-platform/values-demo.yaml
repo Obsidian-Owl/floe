@@ -230,3 +230,9 @@ demo:
   retentionHours: 1
   # Keep last 6 snapshots for time travel demonstration
   snapshotKeepLast: 6
+
+# =============================================================================
+# Cube Configuration (Semantic Layer - Demo)
+# =============================================================================
+cube:
+  enabled: true

@@ -1,0 +1,56 @@
+{{- if and .Values.enabled .Values.refreshWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cube.fullname" . }}-refresh-worker
+  labels:
+    {{- include "cube.refreshWorker.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.refreshWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cube.refreshWorker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "cube.refreshWorker.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: cube-refresh-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: CUBEJS_SCHEDULED_REFRESH_TIMER
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: {{ include "cube.fullname" . }}
+            - secretRef:
+                name: {{ include "cube.fullname" . }}
+          resources:
+            {{- toYaml .Values.refreshWorker.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cube-conf
+              mountPath: /cube/conf
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cube-conf
+          emptyDir: {}
+{{- end }}

@@ -158,3 +158,9 @@ ingress:
     - secretName: floe-staging-tls
       hosts:
         - floe-staging.example.com
+
+# =============================================================================
+# Cube Configuration (Semantic Layer - Staging)
+# =============================================================================
+cube:
+  enabled: false
