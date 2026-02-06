@@ -458,6 +458,37 @@ class DuckDBComputePlugin(ComputePlugin):
 
         return statements
 
+    def get_cube_datasource_config(
+        self,
+        *,
+        catalog_config: CatalogConfig | None = None,
+        database_path: str = ":memory:",
+    ) -> dict[str, Any]:
+        """Generate Cube datasource configuration for DuckDB.
+
+        Returns a dictionary that Cube can use to configure DuckDB as its
+        datasource. Optionally includes initSql with Iceberg extension
+        INSTALL/LOAD/ATTACH statements when a catalog config is provided.
+
+        Args:
+            catalog_config: Optional Iceberg catalog config for initSql generation.
+            database_path: DuckDB database file path. Defaults to :memory:.
+
+        Returns:
+            Cube-compatible datasource configuration dictionary.
+        """
+        config: dict[str, Any] = {
+            "type": "duckdb",
+            "database_path": database_path,
+        }
+
+        if catalog_config is not None:
+            sql_statements = self.get_catalog_attachment_sql(catalog_config)
+            if sql_statements:
+                config["init_sql"] = " ".join(sql_statements)
+
+        return config
+
     def get_config_schema(self) -> type[BaseModel] | None:
         """Return Pydantic model for DuckDB configuration validation.
 
