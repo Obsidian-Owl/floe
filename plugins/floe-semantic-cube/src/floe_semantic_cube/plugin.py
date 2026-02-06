@@ -28,6 +28,7 @@ from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.semantic import SemanticLayerPlugin
 
 from floe_semantic_cube.config import CubeSemanticConfig
+from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 
 if TYPE_CHECKING:
     from floe_core.plugins.compute import ComputePlugin
@@ -97,6 +98,9 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
     ) -> list[Path]:
         """Generate Cube schema files from dbt manifest.
 
+        Creates a CubeSchemaGenerator with filter settings from config,
+        then converts dbt model nodes to Cube YAML definitions.
+
         Args:
             manifest_path: Path to dbt manifest.json file.
             output_dir: Directory to write generated Cube YAML files.
@@ -104,7 +108,25 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
         Returns:
             List of paths to generated schema files.
         """
-        raise NotImplementedError("Schema generation not yet implemented")
+        generator = CubeSchemaGenerator(
+            model_filter_schemas=self._config.model_filter_schemas or None,
+            model_filter_tags=self._config.model_filter_tags or None,
+        )
+
+        logger.info(
+            "sync_from_dbt_manifest_started",
+            manifest_path=str(manifest_path),
+            output_dir=str(output_dir),
+        )
+
+        result = generator.generate(manifest_path, output_dir)
+
+        logger.info(
+            "sync_from_dbt_manifest_complete",
+            files_generated=len(result),
+        )
+
+        return result
 
     def get_security_context(
         self,
