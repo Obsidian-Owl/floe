@@ -316,8 +316,8 @@ class TestContractValidatorIntegrationPerformance:
         for i in range(50):
             col_type = ["string", "integer", "timestamp"][i % 3]
             columns.append(f"""      - name: col_{i:03d}
-         logicalType: {col_type}
-         required: true""")
+        logicalType: {col_type}
+        required: true""")
 
         columns_yaml = "\n".join(columns)
 
@@ -328,9 +328,9 @@ version: 1.0.0
 name: combined-performance-test
 status: active
 schema:
-   - name: test_table
-     physicalName: test_table
-     columns:
+  - name: test_table
+    physicalName: test_table
+    columns:
 {columns_yaml}
 """
         contract_path = tmp_path / "datacontract.yaml"
