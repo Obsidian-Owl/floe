@@ -199,10 +199,10 @@ def sample_transform_configs() -> list[Any]:
 
 @pytest.fixture
 def sample_dataset() -> Any:
-    """Create a sample Dataset for lineage testing."""
-    from floe_core.plugins.orchestrator import Dataset
+    """Create a sample LineageDataset for lineage testing."""
+    from floe_core.lineage import LineageDataset
 
-    return Dataset(
+    return LineageDataset(
         namespace="floe-test",
         name="staging.stg_customers",
         facets={"schema": {"fields": [{"name": "id", "type": "INTEGER"}]}},

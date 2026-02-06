@@ -13,7 +13,6 @@ from uuid import UUID
 
 import pytest
 from floe_core.lineage import LineageDataset, RunState
-from floe_core.plugins.orchestrator import Dataset
 
 if TYPE_CHECKING:
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
@@ -223,8 +222,8 @@ class TestOpenLineageEventStructure:
     def test_build_event_contains_inputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test built event contains inputs list."""
         inputs = [
-            Dataset(namespace="floe", name="raw.customers"),
-            Dataset(namespace="external", name="api.data"),
+            LineageDataset(namespace="floe", name="raw.customers"),
+            LineageDataset(namespace="external", name="api.data"),
         ]
 
         event = dagster_plugin._build_openlineage_event("START", "job", inputs, [])
@@ -240,7 +239,7 @@ class TestOpenLineageEventStructure:
     def test_build_event_contains_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test built event contains outputs list."""
         outputs = [
-            Dataset(namespace="floe", name="staging.stg_customers"),
+            LineageDataset(namespace="floe", name="staging.stg_customers"),
         ]
 
         event = dagster_plugin._build_openlineage_event("COMPLETE", "job", [], outputs)

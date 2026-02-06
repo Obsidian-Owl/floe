@@ -27,7 +27,6 @@ from uuid import UUID, uuid4
 from dagster import AssetKey, AssetsDefinition, asset
 from floe_core.lineage import LineageDataset, RunState
 from floe_core.plugins.orchestrator import (
-    Dataset,
     OrchestratorPlugin,
     ResourceSpec,
     TransformConfig,
@@ -636,8 +635,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         event_type: str,
         job: str,
-        inputs: list[Dataset],
-        outputs: list[Dataset],
+        inputs: list[LineageDataset],
+        outputs: list[LineageDataset],
     ) -> dict[str, Any]:
         """Build OpenLineage event structure.
 

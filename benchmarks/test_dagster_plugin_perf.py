@@ -320,10 +320,10 @@ def test_emit_lineage_event_noop() -> None:
 
     Measures no-op path overhead.
     """
-    from floe_core.plugins.orchestrator import Dataset
+    from floe_core.lineage import LineageDataset
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
     plugin = DagsterOrchestratorPlugin()
-    inputs = [Dataset(namespace="floe", name="input")]
-    outputs = [Dataset(namespace="floe", name="output")]
+    inputs = [LineageDataset(namespace="floe", name="input")]
+    outputs = [LineageDataset(namespace="floe", name="output")]
     plugin.emit_lineage_event("START", "benchmark_job", inputs, outputs)
