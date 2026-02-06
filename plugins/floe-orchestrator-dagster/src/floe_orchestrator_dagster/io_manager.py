@@ -358,9 +358,7 @@ class IcebergIOManager(ConfigurableIOManager):
         result: dict[str, Any] = {}
         for key, value in metadata.items():
             # Dagster MetadataValue objects expose a .value property
-            if hasattr(value, "value") and not isinstance(
-                value, (str, bytes, int, float, bool)
-            ):
+            if hasattr(value, "value") and not isinstance(value, (str, bytes, int, float, bool)):
                 result[key] = value.value
             else:
                 result[key] = value
@@ -529,7 +527,11 @@ class IcebergIOManager(ConfigurableIOManager):
             )
             partition_column = upstream_metadata.get(ICEBERG_PARTITION_COLUMN_KEY)
 
-            if partition_column and getattr(context, "has_partition_key", False) and context.partition_key:
+            if (
+                partition_column
+                and getattr(context, "has_partition_key", False)
+                and context.partition_key
+            ):
                 # Use PyIceberg expression API (type-safe, no parsing)
                 return EqualTo(
                     Reference(partition_column),

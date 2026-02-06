@@ -240,9 +240,7 @@ class BinPackCompactionExecutor(BaseCompactionExecutor):
                             "Failed to read manifest entry",
                             extra={"manifest": str(manifest)},
                         )
-                        raise CompactionAnalysisError(
-                            f"Cannot read manifest entry: {e}"
-                        ) from e
+                        raise CompactionAnalysisError(f"Cannot read manifest entry: {e}") from e
 
             return (small_file_count, total_file_count)
 

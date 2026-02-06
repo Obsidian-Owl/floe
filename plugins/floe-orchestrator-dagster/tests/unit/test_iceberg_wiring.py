@@ -1,7 +1,8 @@
 """Unit tests for Iceberg resource wiring in DagsterOrchestratorPlugin.
 
 These tests verify the integration chain:
-    PluginRegistry → CatalogPlugin/StoragePlugin → IcebergTableManager → IcebergIOManager → Definitions
+    PluginRegistry → CatalogPlugin/StoragePlugin →
+    IcebergTableManager → IcebergIOManager → Definitions
 
 Tests cover:
 - Full wiring chain from registry to Definitions
@@ -31,7 +32,7 @@ class TestCreateIcebergResourcesFullWiring:
 
     @pytest.mark.requirement("004d-FR-115")
     def test_create_iceberg_resources_chains_correctly(self) -> None:
-        """Test that create_iceberg_resources() correctly chains registry → plugins → manager → io_manager.
+        """Test create_iceberg_resources() chains registry → plugins → manager.
 
         Validates the complete wiring:
         1. PluginRegistry.get() called for catalog and storage
@@ -41,6 +42,7 @@ class TestCreateIcebergResourcesFullWiring:
         5. Returns dict with "iceberg" key
         """
         from floe_core.schemas.compiled_artifacts import PluginRef
+
         from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
 
         # Create plugin refs with config
@@ -63,12 +65,8 @@ class TestCreateIcebergResourcesFullWiring:
 
         # Patch where imports happen (inside create_iceberg_resources function)
         with (
-            patch(
-                "floe_core.plugin_registry.get_registry"
-            ) as mock_get_registry,
-            patch(
-                "floe_iceberg.IcebergTableManager"
-            ) as mock_table_manager_cls,
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
             patch(
                 "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
             ) as mock_create_io_manager,
@@ -122,6 +120,7 @@ class TestCreateIcebergResourcesFullWiring:
     def test_create_iceberg_resources_skips_configure_without_config(self) -> None:
         """Test that registry.configure() is not called when config is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef
+
         from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
 
         # Create plugin refs without config
@@ -130,12 +129,8 @@ class TestCreateIcebergResourcesFullWiring:
 
         # Mock the chain (patch where imports happen)
         with (
-            patch(
-                "floe_core.plugin_registry.get_registry"
-            ) as mock_get_registry,
-            patch(
-                "floe_iceberg.IcebergTableManager"
-            ) as mock_table_manager_cls,
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
             patch(
                 "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
             ) as mock_create_io_manager,
@@ -236,6 +231,7 @@ class TestGracefulDegradation:
     def test_try_create_with_catalog_but_no_storage_returns_empty_dict(self) -> None:
         """Test try_create_iceberg_resources() returns {} when storage is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -253,6 +249,7 @@ class TestGracefulDegradation:
     def test_try_create_with_storage_but_no_catalog_returns_empty_dict(self) -> None:
         """Test try_create_iceberg_resources() returns {} when catalog is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -270,6 +267,7 @@ class TestGracefulDegradation:
     def test_try_create_with_both_none_returns_empty_dict(self) -> None:
         """Test try_create_iceberg_resources() returns {} when both catalog and storage are None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -291,6 +289,7 @@ class TestGracefulDegradation:
         can handle failures explicitly rather than receiving an empty dict.
         """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -341,6 +340,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
     def test_complete_resolved_plugins_returns_iceberg_dict(self) -> None:
         """Test try_create_iceberg_resources() returns dict with "iceberg" key when successful."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -377,6 +377,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
         import logging
 
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -396,7 +397,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
                     try_create_iceberg_resources(plugins=plugins)
 
             # Verify error was logged before raising
-            assert any("Failed to create Iceberg resources" in record.message for record in caplog.records)
+            assert any(
+                "Failed to create Iceberg resources" in record.message for record in caplog.records
+            )
 
     @pytest.mark.requirement("004d-FR-118")
     def test_exception_during_table_manager_creation_propagates(self) -> None:
@@ -406,6 +409,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
         can handle failures explicitly.
         """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         plugins = ResolvedPlugins(
@@ -417,12 +421,8 @@ class TestTryCreateIcebergResourcesEdgeCases:
 
         # Patch where imports happen
         with (
-            patch(
-                "floe_core.plugin_registry.get_registry"
-            ) as mock_get_registry,
-            patch(
-                "floe_iceberg.IcebergTableManager"
-            ) as mock_table_manager_cls,
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
         ):
             # Setup registry mocks
             mock_registry = MagicMock()

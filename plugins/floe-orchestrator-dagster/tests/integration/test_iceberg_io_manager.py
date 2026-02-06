@@ -18,7 +18,9 @@ Note:
     - minio (port 9000)
 
     Run with:
-        .venv/bin/python -m pytest plugins/floe-orchestrator-dagster/tests/integration/test_iceberg_io_manager.py -v -c pyproject.toml
+        .venv/bin/python -m pytest \
+            plugins/floe-orchestrator-dagster/tests/integration/ \
+            -v -c pyproject.toml
 """
 
 from __future__ import annotations
@@ -343,9 +345,7 @@ class TestIcebergIOManagerRealIntegration(IntegrationTestBase):
         io_manager_def = IOManagerDefinition(resource_fn=_io_manager_resource)
 
         @asset(
-            partitions_def=StaticPartitionsDefinition(
-                ["2026-01-17", "2026-01-18", "2026-01-19"]
-            ),
+            partitions_def=StaticPartitionsDefinition(["2026-01-17", "2026-01-18", "2026-01-19"]),
         )
         def partitioned_orders() -> Output:
             """Partitioned asset with date partition column."""

@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-
 from floe_core.plugins.orchestrator import TransformConfig
 
 if TYPE_CHECKING:

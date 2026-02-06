@@ -10,8 +10,6 @@ data_contracts.py ensures floe-core functions independently.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 
@@ -77,9 +75,7 @@ class TestDriftDetectorImportResilience:
         )
         # table_schema should default to None (drift detection is optional)
         param = sig.parameters["table_schema"]
-        assert param.default is None, (
-            "table_schema should default to None for graceful degradation"
-        )
+        assert param.default is None, "table_schema should default to None for graceful degradation"
 
 
 class TestDriftDetectorExportBoundary:

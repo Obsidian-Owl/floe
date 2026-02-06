@@ -348,7 +348,10 @@ class TestLoadInput:
         # Should load table and scan
         mock_table_manager.load_table.assert_called_once()
         # Result should be the to_arrow() return value (MagicMock in this test)
-        assert result == mock_table_manager.load_table.return_value.scan.return_value.to_arrow.return_value
+        assert (
+            result
+            == mock_table_manager.load_table.return_value.scan.return_value.to_arrow.return_value
+        )
 
     @pytest.mark.requirement("FR-039")
     def test_load_input_uses_upstream_asset_key(
@@ -374,7 +377,9 @@ class TestLoadInput:
         """Test load_input uses custom table name from upstream metadata."""
         from floe_orchestrator_dagster.io_manager import ICEBERG_TABLE_KEY
 
-        mock_input_context.upstream_output.definition_metadata = {ICEBERG_TABLE_KEY: "custom_upstream"}
+        mock_input_context.upstream_output.definition_metadata = {
+            ICEBERG_TABLE_KEY: "custom_upstream"
+        }
 
         io_manager.load_input(mock_input_context)
 
@@ -440,7 +445,9 @@ class TestPartitionedAssets:
         from floe_orchestrator_dagster.io_manager import ICEBERG_PARTITION_COLUMN_KEY
 
         mock_input_context.partition_key = "2026-01-17"
-        mock_input_context.upstream_output.definition_metadata = {ICEBERG_PARTITION_COLUMN_KEY: "date"}
+        mock_input_context.upstream_output.definition_metadata = {
+            ICEBERG_PARTITION_COLUMN_KEY: "date"
+        }
 
         io_manager.load_input(mock_input_context)
 

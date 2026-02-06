@@ -35,7 +35,8 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import TYPE_CHECKING, Any, Generator
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any
 
 import pyarrow as pa
 import pytest
@@ -378,7 +379,9 @@ def real_table_manager(
 
     # Build catalog connection config with explicit OAuth2 server URI
     # to avoid PyIceberg's memory:// fallback (pyiceberg#10537)
-    oauth2_server_uri = polaris_config.uri.replace("/api/catalog", "") + "/api/catalog/v1/oauth/tokens"
+    oauth2_server_uri = (
+        polaris_config.uri.replace("/api/catalog", "") + "/api/catalog/v1/oauth/tokens"
+    )
     minio_host = get_effective_host("minio", "floe-test")
 
     return IcebergTableManager(

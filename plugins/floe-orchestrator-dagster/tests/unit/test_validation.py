@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from floe_core.plugins.orchestrator import ValidationResult
 
 if TYPE_CHECKING:
@@ -25,8 +24,11 @@ if TYPE_CHECKING:
 @pytest.fixture
 def mock_httpx_client():
     """Factory fixture for mocked httpx.Client."""
+
     @contextmanager
-    def _make(status_code: int = 200, side_effect: Exception | None = None) -> Generator[MagicMock, None, None]:
+    def _make(
+        status_code: int = 200, side_effect: Exception | None = None
+    ) -> Generator[MagicMock, None, None]:
         with patch("httpx.Client") as mock_cls:
             mock_response = MagicMock(status_code=status_code)
             mock_client = MagicMock()
@@ -38,6 +40,7 @@ def mock_httpx_client():
                 mock_client.post.return_value = mock_response
             mock_cls.return_value = mock_client
             yield mock_client
+
     return _make
 
 

@@ -104,9 +104,7 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert isinstance(result, dict)
 
     @pytest.mark.requirement("SC-001")
-    def test_validate_connection_callable(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_validate_connection_callable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements validate_connection method."""
         # ABC compliance already validated by isinstance check above
         from floe_core.plugins.orchestrator import ValidationResult
@@ -160,8 +158,9 @@ class TestDagsterOrchestratorPluginInstantiation:
     @pytest.mark.requirement("FR-002")
     def test_plugin_can_be_imported_from_package(self) -> None:
         """Test plugin is exported from package __init__.py."""
-        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
         from floe_core.plugins.orchestrator import OrchestratorPlugin
+
+        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         assert issubclass(DagsterOrchestratorPlugin, OrchestratorPlugin)
 
