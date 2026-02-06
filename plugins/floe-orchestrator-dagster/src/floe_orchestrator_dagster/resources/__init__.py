@@ -21,10 +21,13 @@ from __future__ import annotations
 
 from .dbt_resource import DBTResource, load_dbt_plugin
 from .iceberg import create_iceberg_resources, try_create_iceberg_resources
+from .semantic import create_semantic_resources, try_create_semantic_resources
 
 __all__: list[str] = [
     "DBTResource",
     "load_dbt_plugin",
     "create_iceberg_resources",
     "try_create_iceberg_resources",
+    "create_semantic_resources",
+    "try_create_semantic_resources",
 ]
