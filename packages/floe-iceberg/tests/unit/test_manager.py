@@ -138,8 +138,8 @@ class TestIcebergTableManagerInit:
             storage_plugin=mock_storage_plugin,
         )
 
-        # Verify logger exists and is bound with context
-        assert hasattr(manager._log, "bind")  # Structlog logger
+        # Verify logger exists and can be used for logging
+        assert manager._log is not None
 
     @pytest.mark.requirement("FR-008")
     def test_init_requires_catalog_plugin(
@@ -379,8 +379,7 @@ class TestIcebergTableManagerCreateTable:
 
         table = manager.create_table(config)
 
-        # Table should have identifier attribute matching config
-        assert hasattr(table, "identifier")
+        # Table should have identifier matching config
         assert table.identifier == "bronze.orders"
 
     @pytest.mark.requirement("FR-012")

@@ -77,52 +77,72 @@ class TestDagsterOrchestratorPluginABCCompliance:
         assert isinstance(dagster_plugin, OrchestratorPlugin)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_create_definitions_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_create_definitions_callable(
+        self, dagster_plugin: DagsterOrchestratorPlugin, valid_compiled_artifacts: Any
+    ) -> None:
         """Test plugin implements create_definitions method."""
-        assert hasattr(dagster_plugin, "create_definitions")
-        assert callable(dagster_plugin.create_definitions)
+        # ABC compliance already validated by isinstance check above
+        from dagster import Definitions
+
+        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
+        assert isinstance(result, Definitions)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_create_assets_from_transforms_method(
+    def test_create_assets_from_transforms_callable(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
         """Test plugin implements create_assets_from_transforms method."""
-        assert hasattr(dagster_plugin, "create_assets_from_transforms")
-        assert callable(dagster_plugin.create_assets_from_transforms)
+        # ABC compliance already validated by isinstance check above
+        result = dagster_plugin.create_assets_from_transforms([])
+        assert isinstance(result, list)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_get_helm_values_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_get_helm_values_callable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements get_helm_values method."""
-        assert hasattr(dagster_plugin, "get_helm_values")
-        assert callable(dagster_plugin.get_helm_values)
+        # ABC compliance already validated by isinstance check above
+        result = dagster_plugin.get_helm_values()
+        assert isinstance(result, dict)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_validate_connection_method(
+    def test_validate_connection_callable(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
         """Test plugin implements validate_connection method."""
-        assert hasattr(dagster_plugin, "validate_connection")
-        assert callable(dagster_plugin.validate_connection)
+        # ABC compliance already validated by isinstance check above
+        from floe_core.plugins.orchestrator import ValidationResult
+
+        result = dagster_plugin.validate_connection("http://localhost:9999", timeout=0.1)
+        assert isinstance(result, ValidationResult)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_get_resource_requirements_method(
+    def test_get_resource_requirements_callable(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
         """Test plugin implements get_resource_requirements method."""
-        assert hasattr(dagster_plugin, "get_resource_requirements")
-        assert callable(dagster_plugin.get_resource_requirements)
+        # ABC compliance already validated by isinstance check above
+        from floe_core.plugins.orchestrator import ResourceSpec
+
+        result = dagster_plugin.get_resource_requirements("small")
+        assert isinstance(result, ResourceSpec)
 
     @pytest.mark.requirement("SC-001")
-    def test_has_emit_lineage_event_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_emit_lineage_event_callable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements emit_lineage_event method."""
-        assert hasattr(dagster_plugin, "emit_lineage_event")
-        assert callable(dagster_plugin.emit_lineage_event)
+        # ABC compliance already validated by isinstance check above
+        from floe_core.lineage import LineageDataset, RunState
+
+        dagster_plugin.emit_lineage_event(
+            RunState.START,
+            "test_job",
+            inputs=[LineageDataset(namespace="floe", name="input")],
+            outputs=[LineageDataset(namespace="floe", name="output")],
+        )
 
     @pytest.mark.requirement("SC-001")
-    def test_has_schedule_job_method(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_schedule_job_callable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test plugin implements schedule_job method."""
-        assert hasattr(dagster_plugin, "schedule_job")
-        assert callable(dagster_plugin.schedule_job)
+        # ABC compliance already validated by isinstance check above
+        dagster_plugin.schedule_job("daily_refresh", "0 8 * * *", "UTC")
 
 
 class TestDagsterOrchestratorPluginInstantiation:

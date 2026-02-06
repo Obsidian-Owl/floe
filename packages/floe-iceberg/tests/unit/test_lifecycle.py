@@ -345,7 +345,6 @@ class TestIcebergTableLifecycleLoad:
         table = lifecycle_manager.load_table("bronze.customers")
 
         assert table.identifier == "bronze.customers"
-        assert table.identifier == "bronze.customers"
 
     @pytest.mark.requirement("FR-014")
     def test_load_table_raises_for_nonexistent_table(

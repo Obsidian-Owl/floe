@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from floe_core.plugins.orchestrator import TransformConfig
 
 if TYPE_CHECKING:
@@ -23,6 +25,7 @@ class TestAssetCreationBasics:
     from TransformConfig list.
     """
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_returns_list(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -33,6 +36,7 @@ class TestAssetCreationBasics:
 
         assert isinstance(result, list)
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_returns_assets_definitions(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -46,6 +50,7 @@ class TestAssetCreationBasics:
         assert len(result) == 1
         assert isinstance(result[0], AssetsDefinition)
 
+    @pytest.mark.requirement("FR-006")
     def test_asset_has_correct_key(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -57,6 +62,7 @@ class TestAssetCreationBasics:
         asset = result[0]
         assert asset.key.path[-1] == sample_transform_config.name
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_empty_list(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -66,6 +72,7 @@ class TestAssetCreationBasics:
 
         assert result == []
 
+    @pytest.mark.requirement("FR-006")
     def test_create_assets_multiple_transforms(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -84,6 +91,7 @@ class TestAssetDependencies:
     Dagster asset dependencies.
     """
 
+    @pytest.mark.requirement("FR-007")
     def test_asset_with_single_dependency(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -101,6 +109,7 @@ class TestAssetDependencies:
         asset = result[0]
         assert AssetKey(["parent_model"]) in asset.dependency_keys
 
+    @pytest.mark.requirement("FR-007")
     def test_asset_with_multiple_dependencies(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -120,6 +129,7 @@ class TestAssetDependencies:
         assert AssetKey(["stg_customers"]) in asset.dependency_keys
         assert AssetKey(["stg_products"]) in asset.dependency_keys
 
+    @pytest.mark.requirement("FR-007")
     def test_asset_without_dependencies(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -140,6 +150,7 @@ class TestAssetDependencies:
         # Asset should only have 'dbt' resource dependency, no model deps
         assert asset.dependency_keys == {AssetKey(["dbt"])}
 
+    @pytest.mark.requirement("FR-007")
     def test_dependency_chain_preserved(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -173,6 +184,7 @@ class TestAssetMetadata:
     compute target, schema) in asset metadata.
     """
 
+    @pytest.mark.requirement("FR-008")
     def test_asset_includes_compute_target(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -185,6 +197,7 @@ class TestAssetMetadata:
         metadata = asset.specs_by_key[asset.key].metadata
         assert metadata["compute"] == sample_transform_config.compute
 
+    @pytest.mark.requirement("FR-008")
     def test_asset_includes_schema_name(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -197,6 +210,7 @@ class TestAssetMetadata:
         metadata = asset.specs_by_key[asset.key].metadata
         assert metadata["schema"] == sample_transform_config.schema_name
 
+    @pytest.mark.requirement("FR-008")
     def test_asset_includes_materialization(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -209,6 +223,7 @@ class TestAssetMetadata:
         metadata = asset.specs_by_key[asset.key].metadata
         assert metadata["materialization"] == sample_transform_config.materialization
 
+    @pytest.mark.requirement("FR-008")
     def test_asset_includes_tags(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -221,6 +236,7 @@ class TestAssetMetadata:
         metadata = asset.specs_by_key[asset.key].metadata
         assert metadata["tags"] == sample_transform_config.tags
 
+    @pytest.mark.requirement("FR-008")
     def test_asset_includes_path(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -233,6 +249,7 @@ class TestAssetMetadata:
         metadata = asset.specs_by_key[asset.key].metadata
         assert metadata["path"] == sample_transform_config.path
 
+    @pytest.mark.requirement("FR-008")
     def test_asset_metadata_omits_none_values(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -249,6 +266,7 @@ class TestAssetMetadata:
         assert "compute" not in metadata
         assert "schema" not in metadata
 
+    @pytest.mark.requirement("FR-008")
     def test_all_metadata_fields_included(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -269,6 +287,7 @@ class TestAssetMetadata:
 class TestAssetDescription:
     """Test asset description generation."""
 
+    @pytest.mark.requirement("FR-006")
     def test_asset_has_description(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -282,6 +301,7 @@ class TestAssetDescription:
         assert isinstance(spec.description, str)
         assert len(spec.description) > 0
 
+    @pytest.mark.requirement("FR-006")
     def test_asset_description_includes_model_name(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -298,6 +318,7 @@ class TestAssetDescription:
 class TestAssetEdgeCases:
     """Test edge cases in asset creation."""
 
+    @pytest.mark.requirement("FR-006")
     def test_transform_with_empty_tags(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -320,6 +341,7 @@ class TestAssetEdgeCases:
         # Empty tags list is omitted from metadata (falsy check)
         assert "tags" not in metadata
 
+    @pytest.mark.requirement("FR-007")
     def test_transform_with_empty_depends_on(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -341,6 +363,7 @@ class TestAssetEdgeCases:
         # Only 'dbt' resource dependency, no model dependencies
         assert asset.dependency_keys == {AssetKey(["dbt"])}
 
+    @pytest.mark.requirement("FR-006")
     def test_transform_name_with_underscores(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -353,6 +376,7 @@ class TestAssetEdgeCases:
         asset = result[0]
         assert asset.key.path[-1] == "stg_customer_orders_v2"
 
+    @pytest.mark.requirement("FR-006")
     def test_transform_with_long_name(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,

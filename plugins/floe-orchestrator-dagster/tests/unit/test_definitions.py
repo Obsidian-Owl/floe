@@ -25,6 +25,7 @@ class TestCreateDefinitionsWithValidArtifacts:
     object from CompiledArtifacts.
     """
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_returns_definitions_object(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -37,6 +38,7 @@ class TestCreateDefinitionsWithValidArtifacts:
 
         assert isinstance(result, Definitions)
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_creates_assets_from_models(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -50,6 +52,7 @@ class TestCreateDefinitionsWithValidArtifacts:
         assert isinstance(result, Definitions)
         assert len(result.assets) > 0
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_preserves_model_count(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -71,6 +74,7 @@ class TestCreateDefinitionsWithEmptyTransforms:
     Validates FR-005: System returns empty Definitions when no transforms exist.
     """
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_no_transforms_field(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -87,6 +91,7 @@ class TestCreateDefinitionsWithEmptyTransforms:
 
         assert isinstance(result, Definitions)
 
+    @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_empty_models_list(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -112,6 +117,7 @@ class TestCreateDefinitionsWithInvalidArtifacts:
     before generating definitions.
     """
 
+    @pytest.mark.requirement("FR-009")
     def test_create_definitions_rejects_empty_dict(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
@@ -119,6 +125,7 @@ class TestCreateDefinitionsWithInvalidArtifacts:
         with pytest.raises(ValueError, match="CompiledArtifacts validation failed"):
             dagster_plugin.create_definitions({})
 
+    @pytest.mark.requirement("FR-009")
     def test_create_definitions_rejects_missing_required_fields(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -131,6 +138,7 @@ class TestCreateDefinitionsWithInvalidArtifacts:
         with pytest.raises(ValueError, match="metadata"):
             dagster_plugin.create_definitions(artifacts)
 
+    @pytest.mark.requirement("FR-009")
     def test_create_definitions_rejects_invalid_version(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -143,6 +151,7 @@ class TestCreateDefinitionsWithInvalidArtifacts:
         with pytest.raises(ValueError, match="version"):
             dagster_plugin.create_definitions(artifacts)
 
+    @pytest.mark.requirement("FR-009")
     def test_error_message_is_actionable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test validation error includes actionable guidance."""
         with pytest.raises(ValueError, match="Ensure you are passing output from 'floe compile'"):
@@ -155,6 +164,7 @@ class TestCreateDefinitionsEdgeCases:
     Tests edge cases like circular dependencies and duplicate transform names.
     """
 
+    @pytest.mark.requirement("FR-007")
     def test_circular_dependencies_are_accepted(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -181,6 +191,7 @@ class TestCreateDefinitionsEdgeCases:
         assert isinstance(result, Definitions)
         assert len(result.assets) == 2
 
+    @pytest.mark.requirement("FR-005")
     def test_duplicate_transform_names_create_separate_assets(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -209,6 +220,7 @@ class TestCreateDefinitionsEdgeCases:
         # Both assets are created (validation happens at load time)
         assert len(result.assets) == 2
 
+    @pytest.mark.requirement("FR-007")
     def test_model_with_nonexistent_dependency_accepted(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -235,6 +247,7 @@ class TestCreateDefinitionsEdgeCases:
         assert isinstance(result, Definitions)
         assert len(result.assets) == 1
 
+    @pytest.mark.requirement("FR-007")
     def test_model_with_many_dependencies(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
@@ -254,6 +267,7 @@ class TestCreateDefinitionsEdgeCases:
         assert isinstance(result, Definitions)
         assert len(result.assets) == 1
 
+    @pytest.mark.requirement("FR-006")
     def test_model_names_with_special_characters(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,

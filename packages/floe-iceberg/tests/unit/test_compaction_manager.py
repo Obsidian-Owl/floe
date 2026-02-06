@@ -265,8 +265,10 @@ class TestExecuteCompaction:
         result = execute_compaction(mock_table, strategy)
 
         # Verify result has expected attributes from CompactionResult
-        assert hasattr(result, "files_rewritten")
-        assert hasattr(result, "bytes_rewritten")
+        assert isinstance(result.files_rewritten, int)
+        assert result.files_rewritten >= 0
+        assert isinstance(result.bytes_rewritten, int)
+        assert result.bytes_rewritten >= 0
 
     @pytest.mark.requirement("FR-016")
     def test_execute_compaction_with_sort_strategy(self) -> None:
@@ -285,8 +287,10 @@ class TestExecuteCompaction:
         result = execute_compaction(mock_table, strategy)
 
         # Verify result has expected attributes from CompactionResult
-        assert hasattr(result, "files_rewritten")
-        assert hasattr(result, "bytes_rewritten")
+        assert isinstance(result.files_rewritten, int)
+        assert result.files_rewritten >= 0
+        assert isinstance(result.bytes_rewritten, int)
+        assert result.bytes_rewritten >= 0
 
     @pytest.mark.requirement("FR-016")
     def test_execute_compaction_sort_without_columns_rejected_by_pydantic(self) -> None:

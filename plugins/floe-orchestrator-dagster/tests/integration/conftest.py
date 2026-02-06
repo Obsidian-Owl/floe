@@ -123,8 +123,12 @@ class IntegrationPolarisCatalogPlugin:
         try:
             self._catalog.create_namespace(ns_tuple, properties or {})
             self._namespaces.append(namespace)
-        except Exception:
-            pass
+        except Exception as e:
+            # Namespace might already exist - catch specific exception if available
+            # PyIceberg doesn't expose NamespaceAlreadyExistsError directly,
+            # so catch general exceptions but re-raise unexpected ones
+            if "already exists" not in str(e).lower():
+                raise
 
     def create_table(
         self,
@@ -199,13 +203,17 @@ class IntegrationPolarisCatalogPlugin:
 
     def cleanup_namespaces(self) -> None:
         """Clean up all created namespaces."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         if self._catalog is None:
             return
         for ns in self._namespaces:
             try:
                 drop_test_namespace(self._catalog, (ns,), cascade=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to clean up namespace %s: %s", ns, e)
 
     @property
     def name(self) -> str:

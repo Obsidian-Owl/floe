@@ -5,13 +5,9 @@ T093: Tests for compaction.py module including strategy pattern and executors.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
-
-if TYPE_CHECKING:
-    pass
 
 
 # =============================================================================
@@ -90,6 +86,7 @@ class TestBinPackCompactionExecutor:
 
         assert isinstance(result, CompactionResult)
         assert isinstance(result.files_rewritten, int)
+        assert result.files_rewritten == 0  # mock table with no snapshot returns 0
 
     @pytest.mark.requirement("FR-031")
     def test_execute_with_custom_target_size(self) -> None:
