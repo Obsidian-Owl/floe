@@ -40,6 +40,8 @@ __all__ = [
     "IcebergTableManagerConfig",
     # Schema drift detection
     "DriftDetector",
+    # Errors
+    "CompactionAnalysisError",
     # Note: IOManager is NOT exported here - it belongs in orchestrator plugins
     # See: plugins/floe-orchestrator-dagster/ (Epic 4B)
 ]
@@ -60,6 +62,10 @@ def __getattr__(name: str) -> object:
         from floe_iceberg.drift_detector import DriftDetector
 
         return DriftDetector
+    if name == "CompactionAnalysisError":
+        from floe_iceberg.errors import CompactionAnalysisError
+
+        return CompactionAnalysisError
     # Note: IcebergIOManager is NOT available from floe-iceberg
     # IOManager belongs in orchestrator plugins (e.g., floe-orchestrator-dagster)
     msg = f"module {__name__!r} has no attribute {name!r}"

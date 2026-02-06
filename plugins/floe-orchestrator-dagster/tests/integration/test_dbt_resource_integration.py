@@ -142,7 +142,8 @@ test_profile:
 
         plugin = resource.get_plugin()
 
-        assert plugin is not None
+        # Plugin should be a dbt adapter plugin
+        assert hasattr(plugin, "name")
         assert plugin.name == "core"
 
     @pytest.mark.integration
@@ -397,8 +398,8 @@ test_profile:
         )
 
         # Verify definitions are valid
-        assert definitions is not None
-        assert definitions.assets is not None
+        assert isinstance(definitions, Definitions)
+        assert len(definitions.assets) == 1
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-037")

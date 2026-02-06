@@ -12,7 +12,7 @@ Implement `IcebergTableManager`, an internal utility class in `packages/floe-ice
 ## Technical Context
 
 **Language/Version**: Python 3.10+ (required for `importlib.metadata.entry_points()` improved API)
-**Primary Dependencies**: PyIceberg >=0.9.0 (required for native upsert support), Pydantic v2, structlog, opentelemetry-api >=1.20.0, pyarrow
+**Primary Dependencies**: PyIceberg >=0.10.0,<0.11.0 (pinned in pyproject.toml; required for native upsert and API stability), Pydantic >=2.12.5,<3.0, structlog, opentelemetry-api >=1.20.0, pyarrow
 **Storage**: Iceberg tables via PyIceberg (S3/GCS/Azure via StoragePlugin FileIO)
 **Testing**: pytest with K8s-native integration tests (Kind cluster)
 **Target Platform**: Kubernetes (Linux containers)
@@ -88,7 +88,6 @@ packages/floe-iceberg/
 │   └── floe_iceberg/
 │       ├── __init__.py           # Public exports
 │       ├── manager.py            # IcebergTableManager class
-│       ├── io_manager.py         # IcebergIOManager for Dagster
 │       ├── models.py             # Pydantic models (TableConfig, etc.)
 │       ├── errors.py             # Custom exceptions
 │       ├── compaction.py         # Compaction strategies
@@ -107,6 +106,8 @@ packages/floe-iceberg/
 tests/contract/                   # ROOT LEVEL - cross-package contracts
 └── test_floe_iceberg_contract.py # Validate manager accepts plugin interfaces
 ```
+
+**IcebergIOManager Location**: IcebergIOManager lives in `plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/io_manager.py`, NOT in `packages/floe-iceberg/`. Per component ownership (Principle I), Dagster-specific integration code belongs in the orchestrator plugin. The `io_manager.py` was intentionally omitted from `packages/floe-iceberg/` above.
 
 **Structure Decision**: Single package in `packages/floe-iceberg/`. Not a plugin, so no entry points. Contract tests at root level validate integration with CatalogPlugin and StoragePlugin interfaces.
 
@@ -194,6 +195,19 @@ All 8 principles verified:
    - Root-level contract tests
    - Plugin interface validation
 
+7. **Wiring & Integration** (T108-T114)
+   - Wire IcebergIOManager into DagsterOrchestratorPlugin.create_definitions()
+   - Create reusable factory function `create_iceberg_resources()`
+   - Load CatalogPlugin and StoragePlugin via PluginRegistry
+   - Instantiate IcebergTableManager and IcebergIOManager
+   - Document no concrete StoragePlugin exists yet; create MockStoragePlugin test fixture
+
+8. **Integration Test Phase** (T115-T118)
+   - Contract test for full wiring chain (artifacts → registry → manager → io_manager → definitions)
+   - Contract test that create_definitions() returns Definitions with "iceberg" resource
+   - Negative test for graceful degradation when no storage/catalog configured
+   - E2E wiring test (compile → discover → create → materialize → verify)
+
 ### Requirement Traceability
 
 | FR | Task | Description |
@@ -206,15 +220,52 @@ All 8 principles verified:
 | FR-026-029 | T011 | ACID transactions |
 | FR-030-032 | T015 | Compaction |
 | FR-033-036 | T010 | Partitioning |
-| FR-037-040 | T016-T019 | Dagster IOManager |
+| FR-037-040 | T016-T019, T108-T112 | Dagster IOManager + Wiring |
 | FR-041-044 | T020-T022 | Observability |
 | FR-045-047 | T003-T008 | Configuration models |
+| WIRING-001 | T115-T118 | End-to-end wiring integration tests |
 
 ## Next Steps
 
 1. **Generate tasks**: Run `/speckit.tasks` to create `tasks.md`
 2. **Create Linear issues**: Run `/speckit.taskstolinear` to sync with Linear
 3. **Begin implementation**: Follow task order with TDD
+
+## Checks and Balances
+
+Four quality gates that MUST pass before Epic 4D can be considered complete:
+
+### Gate 1: Version Alignment
+
+All spec documents MUST reference `pyiceberg>=0.10.0,<0.11.0`. No references to `>=0.5.0` or `>=0.9.0` may remain.
+
+**Verification**: `grep -rn "pyiceberg>=0.5.0\|pyiceberg>=0.9.0" specs/4d-storage-plugin/` returns no output.
+
+### Gate 2: Wiring Completeness
+
+The full chain MUST be validated end-to-end before US8 (Dagster integration) is considered complete:
+
+```
+CompiledArtifacts → PluginRegistry → CatalogPlugin + StoragePlugin
+  → IcebergTableManager → IcebergIOManager → Dagster Definitions
+```
+
+**Verification**: T115 contract test passes — `create_definitions()` returns Definitions containing an "iceberg" resource key.
+
+### Gate 3: Component Boundary
+
+IcebergIOManager MUST live in `plugins/floe-orchestrator-dagster/`, NOT in `packages/floe-iceberg/`. No cross-boundary imports that violate component ownership.
+
+**Verification**: `grep -rn "packages/floe-iceberg.*io_manager" specs/4d-storage-plugin/` returns no matches (or only explicit notes about where it does NOT go).
+
+### Gate 4: Test Coverage
+
+- All FRs (FR-001 through FR-047) have at least one test with `@pytest.mark.requirement()` marker
+- Contract tests exist for cross-package integration points
+- Integration tests use `IntegrationTestBase` and unique namespaces
+- No `pytest.skip()`, no `time.sleep()`, no hardcoded float equality
+
+**Verification**: `python -m testing.traceability --all --threshold 100` passes.
 
 ## References
 

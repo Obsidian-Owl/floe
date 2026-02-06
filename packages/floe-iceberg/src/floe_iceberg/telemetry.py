@@ -27,6 +27,7 @@ Attributes:
 from __future__ import annotations
 
 import functools
+import logging
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, overload
 
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
@@ -34,6 +35,8 @@ from opentelemetry.trace import Status, StatusCode, Tracer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 # Type variables for generic decorator typing
 P = ParamSpec("P")
@@ -173,8 +176,11 @@ def traced(
                         for key, value in dynamic_attrs.items():
                             span.set_attribute(key, value)
                     except Exception:
-                        # Don't fail the operation if attribute extraction fails
-                        pass
+                        logger.debug(
+                            "Span attribute extraction failed for %s",
+                            span_name,
+                            exc_info=True,
+                        )
 
                 try:
                     return fn(*args, **kwargs)

@@ -94,7 +94,6 @@ from floe_core.plugins.network_security import NetworkSecurityPlugin
 
 # Orchestrator plugin
 from floe_core.plugins.orchestrator import (
-    Dataset,
     OrchestratorPlugin,
     TransformConfig,
     ValidationResult,
@@ -154,7 +153,6 @@ __all__ = [
     # Network Security (Epic 7C)
     "NetworkSecurityPlugin",
     # Orchestrator
-    "Dataset",
     "OrchestratorPlugin",
     "OrchestratorResourceSpec",
     "TransformConfig",

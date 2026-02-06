@@ -339,6 +339,54 @@ class IcebergIOManager(ConfigurableIOManager):
     # Private Helper Methods
     # =========================================================================
 
+    @staticmethod
+    def _unwrap_metadata_values(metadata: Any) -> dict[str, Any]:
+        """Unwrap Dagster MetadataValue wrappers to raw Python values.
+
+        Dagster wraps Output(metadata={...}) values in MetadataValue objects
+        (e.g., TextMetadataValue(text='overwrite')). This extracts the
+        underlying raw values so the IOManager can use them directly.
+
+        Args:
+            metadata: Raw metadata dict (may contain MetadataValue objects).
+
+        Returns:
+            Dict with raw Python values.
+        """
+        if not metadata:
+            return {}
+        result: dict[str, Any] = {}
+        for key, value in metadata.items():
+            # Dagster MetadataValue objects expose a .value property
+            if hasattr(value, "value") and not isinstance(value, (str, bytes, int, float, bool)):
+                result[key] = value.value
+            else:
+                result[key] = value
+        return result
+
+    @staticmethod
+    def _get_merged_metadata(context: Any) -> dict[str, Any]:
+        """Get merged metadata from Dagster OutputContext.
+
+        Merges definition_metadata (from @asset decorator) with output_metadata
+        (from Output() return value). Output metadata takes precedence for
+        runtime overrides like write_mode.
+
+        Args:
+            context: Dagster OutputContext.
+
+        Returns:
+            Merged metadata dict with raw Python values.
+        """
+        definition_meta = IcebergIOManager._unwrap_metadata_values(
+            getattr(context, "definition_metadata", None),
+        )
+        output_meta = IcebergIOManager._unwrap_metadata_values(
+            getattr(context, "output_metadata", None),
+        )
+        # Merge with output_metadata taking precedence (runtime overrides static)
+        return {**definition_meta, **output_meta}
+
     def _get_table_identifier(self, context: Any) -> str:
         """Generate table identifier from output context.
 
@@ -352,7 +400,7 @@ class IcebergIOManager(ConfigurableIOManager):
             Full table identifier (e.g., "silver.customers").
         """
         # Check for custom table name in metadata
-        metadata = getattr(context, "metadata", {}) or {}
+        metadata = self._get_merged_metadata(context)
         custom_table = metadata.get(ICEBERG_TABLE_KEY)
         custom_namespace = metadata.get(ICEBERG_NAMESPACE_KEY)
 
@@ -386,8 +434,11 @@ class IcebergIOManager(ConfigurableIOManager):
         if hasattr(context, "upstream_output") and hasattr(context.upstream_output, "asset_key"):
             upstream_asset_key = context.upstream_output.asset_key
 
-            # Check upstream metadata for custom table name
-            upstream_metadata = getattr(context.upstream_output, "metadata", {}) or {}
+            # Read upstream definition_metadata only (not output_metadata) because
+            # Dagster does not expose output_metadata on InputContext (dagster#20094)
+            upstream_metadata = self._unwrap_metadata_values(
+                getattr(context.upstream_output, "definition_metadata", None),
+            )
             custom_table = upstream_metadata.get(ICEBERG_TABLE_KEY)
             custom_namespace = upstream_metadata.get(ICEBERG_NAMESPACE_KEY)
 
@@ -419,7 +470,7 @@ class IcebergIOManager(ConfigurableIOManager):
         """
         from floe_iceberg.models import WriteConfig, WriteMode
 
-        metadata = getattr(context, "metadata", {}) or {}
+        metadata = self._get_merged_metadata(context)
 
         # Get write mode from metadata or default
         write_mode_str = metadata.get(ICEBERG_WRITE_MODE_KEY, self._config.default_write_mode)
@@ -443,7 +494,9 @@ class IcebergIOManager(ConfigurableIOManager):
             config_kwargs["join_columns"] = upsert_keys
 
         # Handle partitioned assets - map Dagster partition to Iceberg partition
-        if hasattr(context, "partition_key") and context.partition_key is not None:
+        # Use has_partition_key (not hasattr) because Dagster's partition_key property
+        # raises CheckError when accessed on non-partitioned runs.
+        if getattr(context, "has_partition_key", False) and context.partition_key is not None:
             partition_column = metadata.get(ICEBERG_PARTITION_COLUMN_KEY)
             if partition_column and write_mode == WriteMode.OVERWRITE:
                 # Build expression and convert to string for WriteConfig compatibility
@@ -467,10 +520,18 @@ class IcebergIOManager(ConfigurableIOManager):
         """
         # Check if upstream was a partitioned asset
         if hasattr(context, "upstream_output"):
-            upstream_metadata = getattr(context.upstream_output, "metadata", {}) or {}
+            # Read upstream definition_metadata only (not output_metadata) because
+            # Dagster does not expose output_metadata on InputContext (dagster#20094)
+            upstream_metadata = self._unwrap_metadata_values(
+                getattr(context.upstream_output, "definition_metadata", None),
+            )
             partition_column = upstream_metadata.get(ICEBERG_PARTITION_COLUMN_KEY)
 
-            if partition_column and hasattr(context, "partition_key") and context.partition_key:
+            if (
+                partition_column
+                and getattr(context, "has_partition_key", False)
+                and context.partition_key
+            ):
                 # Use PyIceberg expression API (type-safe, no parsing)
                 return EqualTo(
                     Reference(partition_column),
@@ -519,7 +580,9 @@ class IcebergIOManager(ConfigurableIOManager):
             "uint64": FieldType.LONG,
             "float16": FieldType.FLOAT,
             "float32": FieldType.FLOAT,
+            "float": FieldType.FLOAT,
             "float64": FieldType.DOUBLE,
+            "double": FieldType.DOUBLE,
             "string": FieldType.STRING,
             "large_string": FieldType.STRING,
             "utf8": FieldType.STRING,

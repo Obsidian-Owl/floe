@@ -19,7 +19,6 @@ Example:
 
 from __future__ import annotations
 
-import warnings
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -103,40 +102,6 @@ class ValidationResult:
     message: str = ""
     errors: list[str] = field(default_factory=lambda: [])
     warnings: list[str] = field(default_factory=lambda: [])
-
-
-# Deprecated: Use LineageDataset from floe_core.lineage instead
-@dataclass
-class Dataset:
-    """OpenLineage dataset representation.
-
-    .. deprecated::
-        Use :class:`floe_core.lineage.LineageDataset` instead.
-
-    Attributes:
-        namespace: Dataset namespace (e.g., "floe-prod").
-        name: Dataset name (e.g., "bronze.raw_customers").
-        facets: Additional OpenLineage facets for the dataset.
-
-    Example:
-        >>> dataset = Dataset(
-        ...     namespace="floe-prod",
-        ...     name="silver.dim_customers",
-        ...     facets={"schema": {"fields": [{"name": "id", "type": "INTEGER"}]}}
-        ... )
-    """
-
-    namespace: str
-    name: str
-    facets: dict[str, Any] = field(default_factory=lambda: {})
-
-    def __post_init__(self) -> None:
-        """Emit deprecation warning on instantiation."""
-        warnings.warn(
-            "Dataset is deprecated, use LineageDataset from floe_core.lineage instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
 
 
 @dataclass

@@ -152,7 +152,7 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
 
         # Verify we got a valid Definitions object
         assert isinstance(definitions, Definitions)
-        assert definitions.assets is not None
+        assert len(definitions.assets) > 0
 
     @pytest.mark.integration
     @pytest.mark.requirement("SC-002")
@@ -194,5 +194,6 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
                 fct_orders = asset
                 break
 
-        assert fct_orders is not None, "fct_orders asset not found"
+        # fct_orders should have been found
+        assert fct_orders.key.path[-1] == "fct_orders"
         assert AssetKey(["stg_customers"]) in fct_orders.dependency_keys

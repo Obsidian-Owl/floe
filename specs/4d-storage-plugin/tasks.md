@@ -25,7 +25,7 @@
 **Purpose**: Package initialization and project structure
 
 - [ ] T001 Create package structure `packages/floe-iceberg/src/floe_iceberg/__init__.py` with public exports
-- [ ] T002 Create `packages/floe-iceberg/pyproject.toml` with dependencies (pyiceberg>=0.9.0 for upsert support, pydantic>=2.0, structlog, opentelemetry-api>=1.20.0, pyarrow)
+- [ ] T002 Create `packages/floe-iceberg/pyproject.toml` with dependencies (pyiceberg>=0.10.0,<0.11.0 for native upsert and API stability, pydantic>=2.12.5,<3.0, structlog, opentelemetry-api>=1.20.0, pyarrow)
 - [ ] T003 [P] Create test structure `packages/floe-iceberg/tests/conftest.py` with shared fixtures (mock CatalogPlugin, mock StoragePlugin)
 - [ ] T004 [P] Create `packages/floe-iceberg/tests/unit/` directory structure
 
@@ -285,7 +285,7 @@
 
 ### Implementation for User Story 8
 
-- [ ] T082 [US8] Create `packages/floe-iceberg/src/floe_iceberg/io_manager.py` with IcebergIOManager class inheriting ConfigurableIOManager
+- [ ] T082 [US8] Validate existing IcebergIOManager at `plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/io_manager.py` (NOT in packages/floe-iceberg/ — per component ownership, Dagster-specific code belongs in the orchestrator plugin). Verify it inherits ConfigurableIOManager and uses PrivateAttr for IcebergTableManager injection.
 - [ ] T083 [US8] Implement handle_output(context, obj) method for writing PyArrow tables
 - [ ] T084 [US8] Implement load_input(context) method for reading PyArrow tables
 - [ ] T085 [US8] Implement _get_table_identifier(context) for asset key to table mapping
@@ -352,6 +352,46 @@
 
 ---
 
+## Phase 14: Wiring & Integration
+
+**Purpose**: Wire IcebergIOManager into DagsterOrchestratorPlugin so the full chain is connected end-to-end
+
+### Wiring Tasks
+
+- [ ] T108 [US8] Modify DagsterOrchestratorPlugin.create_definitions() in `plugins/floe-orchestrator-dagster/` to extract catalog and storage config from CompiledArtifacts
+- [ ] T109 [US8] Use PluginRegistry to load CatalogPlugin and StoragePlugin instances in create_definitions()
+- [ ] T110 [US8] Instantiate IcebergTableManager(catalog_plugin, storage_plugin) inside create_definitions()
+- [ ] T111 [US8] Instantiate IcebergIOManager(table_manager=...) and add to Definitions resources dict as "iceberg"
+- [ ] T112 [US8] Create reusable factory function `create_iceberg_resources(registry, config)` → dict of Dagster resources
+
+### StoragePlugin Stub
+
+- [ ] T113 Document that no concrete StoragePlugin implementation exists yet (floe.storage entry point has zero registrations) — add note to quickstart.md
+- [ ] T114 [P] Create MockStoragePlugin test fixture in `packages/floe-iceberg/tests/conftest.py` for use in wiring tests
+
+### Wiring Tests
+
+- [ ] T115 [P] Write contract test for full wiring chain (CompiledArtifacts → PluginRegistry → IcebergTableManager → IcebergIOManager → Dagster Definitions) in `tests/contract/test_wiring_chain.py`
+- [ ] T116 [P] Write contract test that create_definitions() returns Definitions with "iceberg" resource key in `tests/contract/test_wiring_chain.py`
+- [ ] T117 [P] Write negative test for graceful degradation when no storage/catalog is configured (should skip iceberg resource, not crash) in `tests/contract/test_wiring_chain.py`
+- [ ] T118 Write E2E wiring test (compile → discover plugins → create table → materialize asset → verify data) in `tests/e2e/test_iceberg_wiring_e2e.py`
+
+**Checkpoint**: Full chain from CompiledArtifacts to Dagster materialization validated
+
+---
+
+## Phase 15: DriftDetector Boundary
+
+**Purpose**: Document and test the DriftDetector lazy import pattern
+
+- [ ] T119 Document lazy import pattern in DriftDetector as intentional (add inline comment explaining circular dependency mitigation)
+- [ ] T120 [P] Write contract test for DriftDetector import resilience — importing floe_iceberg should not fail when floe_core is not installed in `tests/contract/test_drift_detector_boundary.py`
+- [ ] T121 Future task: Define DriftDetectorProtocol in floe-core to formalize the interface and eliminate lazy imports
+
+**Checkpoint**: DriftDetector boundary documented and tested
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -369,6 +409,8 @@
 - **Compaction (Phase 11)**: Depends on US2 - Compacts existing tables
 - **Integration (Phase 12)**: Depends on all user stories
 - **Polish (Phase 13)**: Depends on all phases
+- **Wiring (Phase 14)**: Depends on US1, US2, US5, US8 — requires IcebergTableManager and IcebergIOManager
+- **DriftDetector (Phase 15)**: Can start after Phase 2 — independent boundary concern
 
 ### User Story Dependencies
 
@@ -469,9 +511,11 @@ With multiple developers:
 | FR-026-029 | T059-T064 | US5 |
 | FR-030-032 | T093-T096 | Phase 11 |
 | FR-033-036 | T067-T068 | US6 |
-| FR-037-040 | T082-T089 | US8 |
+| FR-037-040 | T082-T089, T108-T112 | US8, Phase 14 |
 | FR-041-044 | T069-T076 | US7 |
 | FR-045-047 | T009-T010, T022 | Phase 2, US2 |
+| WIRING-001 | T115-T118 | Phase 14 (Wiring Tests) |
+| BOUNDARY-001 | T119-T121 | Phase 15 (DriftDetector) |
 
 ---
 

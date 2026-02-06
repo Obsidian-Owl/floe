@@ -27,7 +27,6 @@ from uuid import UUID, uuid4
 from dagster import AssetKey, AssetsDefinition, asset
 from floe_core.lineage import LineageDataset, RunState
 from floe_core.plugins.orchestrator import (
-    Dataset,
     OrchestratorPlugin,
     ResourceSpec,
     TransformConfig,
@@ -170,7 +169,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         The method first validates the artifacts against the CompiledArtifacts
         schema, then extracts transforms and creates Dagster assets preserving
-        the dependency graph.
+        the dependency graph. If catalog and storage plugins are configured,
+        it also wires IcebergIOManager as the "iceberg" resource.
 
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
@@ -185,6 +185,12 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         Example:
             >>> definitions = plugin.create_definitions(compiled_artifacts)
             >>> # Returns Dagster Definitions with assets from dbt models
+
+        Requirements:
+            FR-005: Generate valid Dagster Definitions from CompiledArtifacts
+            FR-009: Validate CompiledArtifacts schema
+            T108: Extract catalog/storage config from CompiledArtifacts
+            T111: Wire IcebergIOManager into Definitions resources
         """
         from dagster import Definitions
 
@@ -210,12 +216,45 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # Create assets from transforms
         assets = self.create_assets_from_transforms(transform_configs)
 
+        # T108-T111: Wire Iceberg resources if catalog and storage are configured
+        resources = self._create_iceberg_resources(validated.plugins)
+
         logger.info(
             "Created Dagster Definitions",
-            extra={"asset_count": len(assets), "model_count": len(models)},
+            extra={
+                "asset_count": len(assets),
+                "model_count": len(models),
+                "has_iceberg": "iceberg" in resources,
+            },
         )
 
-        return Definitions(assets=assets)
+        return Definitions(assets=assets, resources=resources if resources else {})
+
+    def _create_iceberg_resources(
+        self,
+        plugins: Any | None,
+    ) -> dict[str, Any]:
+        """Create Iceberg resources from resolved plugins configuration.
+
+        Attempts to load catalog and storage plugins and create an
+        IcebergIOManager resource. Returns empty dict if either plugin
+        is not configured or if plugin loading fails.
+
+        Args:
+            plugins: ResolvedPlugins from CompiledArtifacts, or None.
+
+        Returns:
+            Dictionary with "iceberg" key if successful, empty dict otherwise.
+
+        Requirements:
+            T108: Extract catalog/storage config
+            T109: Load via PluginRegistry
+            T110: Instantiate IcebergTableManager
+            T111: Wire IcebergIOManager
+        """
+        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+
+        return try_create_iceberg_resources(plugins)
 
     def _models_to_transform_configs(self, models: list[dict[str, Any]]) -> list[TransformConfig]:
         """Convert ResolvedModel dicts to TransformConfig objects.
@@ -596,8 +635,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         event_type: str,
         job: str,
-        inputs: list[Dataset],
-        outputs: list[Dataset],
+        inputs: list[LineageDataset],
+        outputs: list[LineageDataset],
     ) -> dict[str, Any]:
         """Build OpenLineage event structure.
 

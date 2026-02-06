@@ -199,10 +199,10 @@ def sample_transform_configs() -> list[Any]:
 
 @pytest.fixture
 def sample_dataset() -> Any:
-    """Create a sample Dataset for lineage testing."""
-    from floe_core.plugins.orchestrator import Dataset
+    """Create a sample LineageDataset for lineage testing."""
+    from floe_core.lineage import LineageDataset
 
-    return Dataset(
+    return LineageDataset(
         namespace="floe-test",
         name="staging.stg_customers",
         facets={"schema": {"fields": [{"name": "id", "type": "INTEGER"}]}},
@@ -307,3 +307,60 @@ def mock_httpx_client(mock_httpx_success_response: MagicMock) -> MagicMock:
     mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.post.return_value = mock_httpx_success_response
     return mock_client
+
+
+@pytest.fixture
+def valid_compiled_artifacts_with_iceberg() -> dict[str, Any]:
+    """Create a valid CompiledArtifacts dict with catalog and storage plugins.
+
+    This fixture extends valid_compiled_artifacts by adding catalog and
+    storage plugin references to the plugins configuration. Used for testing
+    Iceberg resource wiring.
+
+    Returns:
+        CompiledArtifacts dict with catalog and storage plugins configured.
+    """
+    return {
+        "version": "0.3.0",
+        "metadata": {
+            "compiled_at": datetime.now(timezone.utc).isoformat(),
+            "floe_version": "0.3.0",
+            "source_hash": "sha256:abc123def456",
+            "product_name": "test-pipeline",
+            "product_version": "1.0.0",
+        },
+        "identity": {
+            "product_id": "default.test_pipeline",
+            "domain": "default",
+            "repository": "github.com/test/test-pipeline",
+        },
+        "mode": "simple",
+        "observability": {
+            "telemetry": {
+                "enabled": True,
+                "resource_attributes": {
+                    "service_name": "test-pipeline",
+                    "service_version": "1.0.0",
+                    "deployment_environment": "dev",
+                    "floe_namespace": "default",
+                    "floe_product_name": "test-pipeline",
+                    "floe_product_version": "1.0.0",
+                    "floe_mode": "dev",
+                },
+            },
+            "lineage": True,
+            "lineage_namespace": "test-pipeline",
+        },
+        "plugins": {
+            "compute": {"type": "duckdb", "version": "0.9.0"},
+            "orchestrator": {"type": "dagster", "version": "1.5.0"},
+            "catalog": {"type": "mock-catalog", "version": "1.0.0", "config": {}},
+            "storage": {"type": "mock-storage", "version": "1.0.0", "config": {}},
+        },
+        "transforms": {
+            "models": [
+                {"name": "stg_customers", "compute": "duckdb"},
+            ],
+            "default_compute": "duckdb",
+        },
+    }

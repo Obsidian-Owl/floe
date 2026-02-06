@@ -477,6 +477,20 @@ class CompactionError(SnapshotError):
         self.strategy = strategy
 
 
+class CompactionAnalysisError(IcebergError):
+    """Raised when compaction analysis fails.
+
+    This replaces silent swallowing of exceptions during snapshot
+    manifest traversal. Callers should handle this explicitly rather
+    than receiving misleading (0, 0) return values.
+
+    Example:
+        >>> raise CompactionAnalysisError(
+        ...     "Cannot access manifests for snapshot: connection refused"
+        ... )
+    """
+
+
 # Export all exception types
 __all__ = [
     # Base
@@ -499,4 +513,5 @@ __all__ = [
     "SnapshotNotFoundError",
     "RollbackError",
     "CompactionError",
+    "CompactionAnalysisError",
 ]

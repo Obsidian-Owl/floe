@@ -430,7 +430,7 @@ table_manager.expire_snapshots(table, older_than_days=validated_retention)
 ## 7. Dependencies
 
 ### Required
-- `pyiceberg>=0.5.0` - Core Iceberg operations
+- `pyiceberg>=0.10.0,<0.11.0` - Core Iceberg operations (0.10.0+ required for native table.upsert())
 - `pydantic>=2.0` - Configuration models
 - `structlog` - Structured logging
 - `opentelemetry-api>=1.20.0` - Tracing
@@ -440,6 +440,40 @@ table_manager.expire_snapshots(table, older_than_days=validated_retention)
 - `pytest>=7.0` - Testing
 - `pytest-cov` - Coverage
 - `mypy` - Type checking
+
+## 9. Post-Research Findings (Integration Analysis)
+
+These findings emerged during integration analysis after the initial research was complete. They document gaps between the spec documents and the actual codebase.
+
+### Finding 1: create_table() Overlap Between CatalogPlugin and IcebergTableManager
+
+**Issue**: Both CatalogPlugin and IcebergTableManager expose a `create_table()` method, which could confuse implementors.
+
+**Resolution**: Clear boundary documented in spec.md. CatalogPlugin.create_table() = basic catalog registration (thin wrapper). IcebergTableManager.create_table() = rich table lifecycle operation that DELEGATES to PyIceberg Catalog (obtained via CatalogPlugin.connect()), adding config validation, retry logic, partition specs, default properties, OTel tracing, and typed exceptions. CatalogPlugin manages catalog lifecycle; IcebergTableManager manages table lifecycle.
+
+### Finding 2: IOManager Location Mismatch in Plan Docs
+
+**Issue**: plan.md listed `io_manager.py` inside `packages/floe-iceberg/`, but it actually lives in `plugins/floe-orchestrator-dagster/src/floe_orchestrator_dagster/io_manager.py`.
+
+**Resolution**: Plan docs corrected. Per component ownership (Principle I), Dagster-specific integration code belongs in the orchestrator plugin, not in the iceberg package. The `PrivateAttr` pattern is used to bypass Dagster's ConfigurableIOManager serialization requirements for the live IcebergTableManager connection.
+
+### Finding 3: Missing Wiring in DagsterOrchestratorPlugin
+
+**Issue**: `DagsterOrchestratorPlugin.create_definitions()` does not yet wire IcebergIOManager into the Dagster resource dict. This means even after IcebergIOManager is implemented, it won't be discoverable by Dagster assets without manual wiring.
+
+**Resolution**: Phase 14 (Wiring & Integration) added to tasks.md with tasks T108-T118. A reusable `create_iceberg_resources()` factory function will be created to extract catalog/storage config from CompiledArtifacts, load plugins via PluginRegistry, and return the resource dict.
+
+### Finding 4: No Concrete StoragePlugin Exists
+
+**Issue**: The `floe.storage` entry point group has zero registrations. IcebergTableManager requires a StoragePlugin for FileIO configuration, but no implementation (e.g., floe-storage-s3) has been built.
+
+**Resolution**: A MockStoragePlugin test fixture (T114) is created for testing. The wiring code will gracefully degrade when no StoragePlugin is configured (T117 negative test). A concrete implementation is out of scope for Epic 4D but documented as a dependency.
+
+### Finding 5: DriftDetector Circular Dependency
+
+**Issue**: DriftDetector in `packages/floe-iceberg/` imports from `floe_core`, which may transitively reference iceberg types, creating a soft circular dependency.
+
+**Resolution**: Mitigated via lazy imports (documented in T119). A formal `DriftDetectorProtocol` defined in floe-core (T121, future task) will eliminate the lazy import pattern entirely.
 
 ## 8. References
 

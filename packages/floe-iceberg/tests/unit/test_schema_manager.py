@@ -167,7 +167,7 @@ class TestSchemaManagerAddColumn:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-016")
     def test_add_required_column_requires_incompatible_flag(
@@ -235,7 +235,7 @@ class TestSchemaManagerAddColumn:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-016")
     def test_add_column_with_various_types(
@@ -286,7 +286,7 @@ class TestSchemaManagerAddColumn:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
 
 # =============================================================================
@@ -318,7 +318,7 @@ class TestSchemaManagerRenameColumn:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-016")
     def test_rename_nonexistent_column_raises(
@@ -378,7 +378,7 @@ class TestSchemaManagerWidenType:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-017")
     def test_widen_float_to_double_succeeds(
@@ -406,7 +406,7 @@ class TestSchemaManagerWidenType:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-017")
     def test_invalid_type_widening_raises(
@@ -493,7 +493,7 @@ class TestSchemaManagerMakeOptional:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-016")
     def test_make_nonexistent_column_optional_raises(
@@ -570,7 +570,7 @@ class TestSchemaManagerDeleteColumn:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-016")
     def test_delete_nonexistent_column_raises(
@@ -625,7 +625,7 @@ class TestSchemaManagerUpdateDoc:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-016")
     def test_update_doc_for_nonexistent_column_raises(
@@ -703,7 +703,7 @@ class TestSchemaManagerMultipleChanges:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
     @pytest.mark.requirement("FR-014")
     def test_mixed_changes_with_incompatible_requires_flag(
@@ -848,7 +848,7 @@ class TestSchemaManagerEdgeCases:
 
         result = schema_manager.evolve_schema(test_table, evolution)
 
-        assert result is not None
+        assert result.identifier == test_table.identifier
 
 
 __all__ = [

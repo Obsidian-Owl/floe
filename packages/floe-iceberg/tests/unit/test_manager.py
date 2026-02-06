@@ -105,7 +105,7 @@ class TestIcebergTableManagerInit:
 
         # Verify connect was called
         assert mock_catalog_plugin._connected is True
-        assert manager._catalog is not None
+        assert manager._catalog is mock_catalog_plugin._catalog
 
     @pytest.mark.requirement("FR-010")
     def test_init_retrieves_fileio(
@@ -122,7 +122,6 @@ class TestIcebergTableManagerInit:
         )
 
         # Verify FileIO was retrieved
-        assert manager._fileio is not None
         assert manager._fileio is mock_storage_plugin._fileio
 
     @pytest.mark.requirement("FR-011")
@@ -139,7 +138,7 @@ class TestIcebergTableManagerInit:
             storage_plugin=mock_storage_plugin,
         )
 
-        # Verify logger exists and is bound with context
+        # Verify logger exists and can be used for logging
         assert manager._log is not None
 
     @pytest.mark.requirement("FR-008")
@@ -344,9 +343,9 @@ class TestIcebergTableManagerCreateTable:
 
         table = manager.create_table(config)
 
-        assert table is not None
         # Verify table was registered in catalog
         assert "bronze.customers" in mock_catalog_plugin._tables
+        assert table.identifier == "bronze.customers"
 
     @pytest.mark.requirement("FR-001")
     def test_create_table_returns_table_instance(
@@ -380,9 +379,8 @@ class TestIcebergTableManagerCreateTable:
 
         table = manager.create_table(config)
 
-        # Table should have identifier attribute matching config
-        assert table is not None
-        assert hasattr(table, "identifier")
+        # Table should have identifier matching config
+        assert table.identifier == "bronze.orders"
 
     @pytest.mark.requirement("FR-012")
     def test_create_table_with_partitioning(
@@ -432,8 +430,8 @@ class TestIcebergTableManagerCreateTable:
 
         table = manager.create_table(config)
 
-        assert table is not None
         assert "silver.events" in mock_catalog_plugin._tables
+        assert table.identifier == "silver.events"
 
     @pytest.mark.requirement("FR-013")
     def test_create_table_with_properties(
@@ -471,10 +469,11 @@ class TestIcebergTableManagerCreateTable:
 
         table = manager.create_table(config)
 
-        assert table is not None
         # Properties should be passed to catalog
         table_entry = mock_catalog_plugin._tables.get("gold.metrics")
         assert table_entry is not None
+        assert table_entry["properties"]["write.format.default"] == "parquet"
+        assert table.identifier == "gold.metrics"
 
     @pytest.mark.requirement("FR-015")
     def test_create_table_raises_on_existing_table(
@@ -550,9 +549,9 @@ class TestIcebergTableManagerCreateTable:
         # Second creation with if_not_exists should return existing
         table2 = manager.create_table(config, if_not_exists=True)
 
-        assert table1 is not None
-        assert table2 is not None
         # Both should reference the same table (same identifier)
+        assert table1.identifier == "bronze.idempotent"
+        assert table2.identifier == "bronze.idempotent"
 
     @pytest.mark.requirement("FR-016")
     def test_create_table_raises_on_missing_namespace(
@@ -619,9 +618,10 @@ class TestIcebergTableManagerCreateTable:
 
         table = manager.create_table(config)
 
-        assert table is not None
         table_entry = mock_catalog_plugin._tables.get("bronze.custom_location")
         assert table_entry is not None
+        assert table_entry["location"] == "s3://custom-bucket/warehouse/bronze/custom_location"
+        assert table.identifier == "bronze.custom_location"
 
 
 # =============================================================================
@@ -667,7 +667,7 @@ class TestIcebergTableManagerLoadTable:
         # Now load it
         table = manager.load_table("bronze.loadtest")
 
-        assert table is not None
+        assert table.identifier == "bronze.loadtest"
 
     @pytest.mark.requirement("FR-001")
     def test_load_table_raises_on_nonexistent(
@@ -723,7 +723,7 @@ class TestIcebergTableManagerLoadTable:
         # Load using full identifier
         table = manager.load_table("silver.identified")
 
-        assert table is not None
+        assert table.identifier == "silver.identified"
 
     @pytest.mark.requirement("FR-001")
     def test_load_table_raises_on_invalid_identifier(
@@ -779,7 +779,7 @@ class TestIcebergTableManagerLoadTable:
         # Load using underscore namespace identifier
         table = manager.load_table("bronze_raw.nested")
 
-        assert table is not None
+        assert table.identifier == "bronze_raw.nested"
 
 
 # =============================================================================
@@ -1033,7 +1033,7 @@ class TestIcebergTableManagerEvolveSchemaAddColumn:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-017")
     def test_evolve_schema_add_required_column_fails(
@@ -1141,7 +1141,7 @@ class TestIcebergTableManagerEvolveSchemaAddColumn:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-017")
     def test_evolve_schema_add_multiple_columns(
@@ -1199,7 +1199,7 @@ class TestIcebergTableManagerEvolveSchemaAddColumn:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
 
 # =============================================================================
@@ -1260,7 +1260,7 @@ class TestIcebergTableManagerEvolveSchemaRenameColumn:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-018")
     def test_evolve_schema_rename_nonexistent_column_fails(
@@ -1370,7 +1370,7 @@ class TestIcebergTableManagerEvolveSchemaWidenType:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-019")
     def test_evolve_schema_widen_float_to_double(
@@ -1422,7 +1422,7 @@ class TestIcebergTableManagerEvolveSchemaWidenType:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-019")
     def test_evolve_schema_invalid_widen_fails(
@@ -1587,7 +1587,7 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-020")
     def test_evolve_schema_mixed_changes_with_incompatible(
@@ -1700,7 +1700,7 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
     @pytest.mark.requirement("FR-020")
     def test_evolve_schema_make_optional(
@@ -1756,7 +1756,7 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
 
         updated_table = manager.evolve_schema(table, evolution)
 
-        assert updated_table is not None
+        assert updated_table.identifier == table.identifier
 
 
 # =============================================================================
@@ -1933,7 +1933,7 @@ class TestIcebergTableManagerRollbackToSnapshot:
         if len(snapshots) > 0:
             snapshot_id = snapshots[0].snapshot_id
             result = manager.rollback_to_snapshot(table, snapshot_id)
-            assert result is not None
+            assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-024")
     def test_rollback_to_snapshot_invalid_id_raises_error(
@@ -2251,7 +2251,7 @@ class TestIcebergTableManagerWriteDataAppend:
         result = manager.write_data(table, arrow_table, write_config)
 
         # Verify write succeeded
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-005")
     def test_write_data_append_fast_append_strategy(
@@ -2299,7 +2299,7 @@ class TestIcebergTableManagerWriteDataAppend:
         )
 
         result = manager.write_data(table, arrow_table, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-005")
     def test_write_data_append_merge_commit_strategy(
@@ -2347,7 +2347,7 @@ class TestIcebergTableManagerWriteDataAppend:
         )
 
         result = manager.write_data(table, arrow_table, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-005")
     def test_write_data_append_with_snapshot_properties(
@@ -2397,7 +2397,7 @@ class TestIcebergTableManagerWriteDataAppend:
         )
 
         result = manager.write_data(table, arrow_table, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
         # Verify snapshot has properties (after implementation)
         snapshots = manager.list_snapshots(result)
@@ -2472,7 +2472,7 @@ class TestIcebergTableManagerWriteDataOverwrite:
         write_config = WriteConfig(mode=WriteMode.OVERWRITE)
 
         result = manager.write_data(table, new_data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-026")
     def test_write_data_overwrite_with_filter(
@@ -2525,7 +2525,7 @@ class TestIcebergTableManagerWriteDataOverwrite:
         )
 
         result = manager.write_data(table, new_data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-026")
     def test_write_data_overwrite_creates_snapshot(
@@ -2637,7 +2637,7 @@ class TestIcebergTableManagerWriteDataUpsert:
         )
 
         result = manager.write_data(table, data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-027")
     def test_write_data_upsert_multiple_join_columns(
@@ -2692,7 +2692,7 @@ class TestIcebergTableManagerWriteDataUpsert:
         )
 
         result = manager.write_data(table, data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-027")
     def test_write_data_upsert_inserts_new_rows(
@@ -2744,7 +2744,7 @@ class TestIcebergTableManagerWriteDataUpsert:
         )
 
         result = manager.write_data(table, upsert_data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-027")
     def test_write_data_upsert_updates_existing_rows(
@@ -2796,7 +2796,7 @@ class TestIcebergTableManagerWriteDataUpsert:
         )
 
         result = manager.write_data(table, upsert_data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-027")
     def test_write_data_upsert_validation_join_columns_in_schema(
@@ -2898,7 +2898,7 @@ class TestIcebergTableManagerWriteDataCommitRetry:
 
         # Write should succeed (mock doesn't fail)
         result = manager.write_data(table, data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-028")
     def test_write_data_respects_max_commit_retries(
@@ -2949,7 +2949,7 @@ class TestIcebergTableManagerWriteDataCommitRetry:
         write_config = WriteConfig(mode=WriteMode.APPEND)
 
         result = manager.write_data(table, data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-029")
     def test_write_data_exponential_backoff_config(
@@ -3000,7 +3000,7 @@ class TestIcebergTableManagerWriteDataCommitRetry:
         write_config = WriteConfig(mode=WriteMode.APPEND)
 
         result = manager.write_data(table, data, write_config)
-        assert result is not None
+        assert result.identifier == table.identifier
 
     @pytest.mark.requirement("FR-028")
     def test_write_data_commit_conflict_error_after_max_retries(
@@ -3173,8 +3173,6 @@ class TestCompactTableBinPack:
         mock_storage_plugin: MockStoragePlugin,
     ) -> None:
         """Test compact_table emits OTel span with compaction metrics."""
-        # Reset the cached tracer so it picks up the new provider
-        # (the factory caches tracers by name on first use)
         from floe_core.telemetry.tracer_factory import reset_tracer
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider

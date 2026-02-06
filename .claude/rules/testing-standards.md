@@ -10,6 +10,78 @@
 
 ---
 
+## Test Assertion Integrity (NON-NEGOTIABLE)
+
+**YOU MUST NEVER weaken test assertions to make failing tests pass.**
+
+When a test fails, the **code under test** is wrong, not the test. Test assertions encode architectural intent and expected behavior. Weakening them hides bugs.
+
+### FORBIDDEN: Assertion Softening
+
+```python
+# ❌ FORBIDDEN - Weakening assertion to avoid fixing real bug
+# Original (strong - validates actual data):
+assert scanned.num_rows == 3
+assert set(scanned["name"].to_pylist()) == {"Alice", "Bob", "Charlie"}
+
+# Softened (weak - proves nothing):
+assert scanned is not None  # "simplified"
+assert scanned.num_rows > 0  # "relaxed for reliability"
+```
+
+### FORBIDDEN: Mock Substitution in Integration Tests
+
+```python
+# ❌ FORBIDDEN - Replacing real service with mock in integration test
+# Plan specified: "real Polaris + real MinIO, no mocks"
+# Implementation sneaks in:
+table_manager = MagicMock()  # NOT a real integration test
+```
+
+### FORBIDDEN: Exception Swallowing
+
+```python
+# ❌ FORBIDDEN - Hiding failures to make tests green
+try:
+    result = real_operation()
+    assert result.success
+except Exception:
+    pass  # "sometimes flaky"
+```
+
+### REQUIRED: Escalation on Test Failure
+
+When a test reveals a genuine problem (not a typo or simple bug):
+
+1. **STOP** - Do not modify the test assertion
+2. **Diagnose** - Identify the root cause
+3. **Escalate** - Use `AskUserQuestion` to present the problem and options
+4. **Wait** - Do not proceed until the user approves a path forward
+
+```python
+# Test fails: assert scanned.num_rows == 3 (actual: 0)
+# Root cause: S3 endpoint mismatch
+# CORRECT RESPONSE: Escalate via AskUserQuestion
+#   "Test reveals S3 endpoint resolution issue. Options: ..."
+# WRONG RESPONSE: Change assertion to `assert scanned is not None`
+```
+
+### Assertion Strength Hierarchy
+
+Always use the strongest possible assertion:
+
+| Strength | Pattern | When to Use |
+|----------|---------|-------------|
+| **Strongest** | `assert value == expected_exact_value` | Default - always prefer |
+| **Strong** | `assert set(values) == {"a", "b", "c"}` | When order doesn't matter |
+| **Moderate** | `assert len(values) == 3` | When exact values vary (e.g., UUIDs) |
+| **Weak** | `assert len(values) > 0` | ONLY when count genuinely varies |
+| **Forbidden** | `assert value is not None` | NEVER for values that should have specific content |
+
+**See also**: `.claude/rules/quality-escalation.md` for the full escalation protocol.
+
+---
+
 ## Tests FAIL, Never Skip (NON-NEGOTIABLE)
 
 **YOU MUST NEVER use `pytest.skip()` or `@pytest.mark.skip`:**

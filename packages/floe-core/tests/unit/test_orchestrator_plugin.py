@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -10,7 +9,6 @@ import pytest
 
 from floe_core.lineage import LineageDataset, RunState
 from floe_core.plugins.orchestrator import (
-    Dataset,
     OrchestratorPlugin,
     ResourceSpec,
     TransformConfig,
@@ -135,32 +133,3 @@ class TestGetLineageEmitter:
         """get_lineage_emitter returns None when not overridden."""
         plugin = ConcreteOrchestratorPlugin()
         assert plugin.get_lineage_emitter() is None
-
-
-class TestDatasetDeprecation:
-    """Tests for backward-compatible Dataset deprecation."""
-
-    @pytest.mark.requirement("REQ-519")
-    def test_dataset_import_still_works(self) -> None:
-        """Dataset can still be imported from orchestrator module."""
-        assert Dataset is not None
-
-    @pytest.mark.requirement("REQ-519")
-    def test_dataset_instantiation_emits_deprecation_warning(self) -> None:
-        """Creating a Dataset emits DeprecationWarning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            Dataset(namespace="ns", name="tbl")
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "LineageDataset" in str(w[0].message)
-
-    @pytest.mark.requirement("REQ-519")
-    def test_dataset_fields_accessible(self) -> None:
-        """Deprecated Dataset still has namespace, name, facets fields."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            ds = Dataset(namespace="ns", name="tbl", facets={"k": "v"})
-        assert ds.namespace == "ns"
-        assert ds.name == "tbl"
-        assert ds.facets == {"k": "v"}

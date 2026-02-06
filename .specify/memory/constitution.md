@@ -1,19 +1,18 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: N/A → 1.0.0 (initial constitution)
-Modified principles: N/A (new constitution)
+Version change: 1.0.0 → 1.1.0 (MINOR: added principle)
+Modified principles: None
 Added sections:
-  - 8 Core Principles (I-VIII)
-  - Technology Ownership section
-  - Development Workflow section
-  - Governance section
-Removed sections: N/A (template replaced)
+  - Principle IX: Escalation Over Workaround (NON-NEGOTIABLE)
+Removed sections: None
 Templates requiring updates:
-  - .specify/templates/plan-template.md - UPDATED (Constitution Check gates added)
+  - .specify/templates/plan-template.md - no changes needed (escalation is behavioral)
   - .specify/templates/spec-template.md - no changes needed
   - .specify/templates/tasks-template.md - no changes needed
-Follow-up TODOs: None
+Follow-up TODOs:
+  - Audit existing codebase for workaround anti-patterns (pytest.skip, except:pass, weak assertions)
+  - Review all Skills for escalation trigger integration
 -->
 
 # floe Constitution
@@ -129,6 +128,20 @@ Every operation MUST be observable via enforced telemetry standards.
 
 **Rationale**: Data platforms are complex distributed systems. Without observability, debugging production issues is impossible. OpenTelemetry and OpenLineage are industry standards with broad tool support.
 
+### IX. Escalation Over Assumption (NON-NEGOTIABLE)
+
+ALL design decisions, trade-offs, and assumptions MUST be escalated to the user. AI agents are autonomous ONLY for mechanical tasks with objectively correct outcomes. Everything involving judgment requires explicit user approval.
+
+- **Design Decisions**: Any choice between valid approaches (technology, architecture, scope, configuration, error handling) MUST be presented to the user via `AskUserQuestion` with options and trade-offs. Claude MUST NOT silently choose an approach.
+- **Assumptions**: Any assumption about user intent, infrastructure behavior, or project conventions MUST be confirmed before acting on it. "Probably" and "I assume" are escalation triggers, not action triggers.
+- **Test Integrity**: Tests are the hard quality gate that validates design decisions. NEVER weaken assertions to make failing tests pass. If a test fails, the code is wrong, not the test.
+- **Workaround Prohibition**: Monkey-patches, exception swallowing, mock substitution, and complexity-absorbing code are FORBIDDEN without explicit user approval.
+- **Tracking**: When escalation identifies a problem that won't be fixed immediately, create a GitHub Issue with label `tech-debt` or `architecture`.
+
+**FORBIDDEN**: Making design choices silently, embedding assumptions without confirming, softening tests, introducing workarounds without user approval, reducing planned scope.
+
+**Rationale**: Silent design decisions compound into architectural drift. Hidden workarounds compound into systemic quality debt. A 30-second `AskUserQuestion` costs nothing; a wrong assumption embedded in the codebase costs hours to find and fix. The user is the architect — Claude is the implementer.
+
 ## Technology Ownership
 
 **Detailed Boundaries for Implementation**:
@@ -203,4 +216,4 @@ This constitution supersedes all other development practices. When in conflict, 
 - **Component Ownership**: `.claude/rules/component-ownership.md`
 - **Workflow Integration**: `docs/guides/linear-workflow.md`
 
-**Version**: 1.0.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-08
+**Version**: 1.1.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-02-05

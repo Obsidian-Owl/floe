@@ -8,13 +8,40 @@ Note: @pytest.mark.requirement markers are used for traceability to spec.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import pytest
 from floe_core.plugins.orchestrator import ValidationResult
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+
+@pytest.fixture
+def mock_httpx_client():
+    """Factory fixture for mocked httpx.Client."""
+
+    @contextmanager
+    def _make(
+        status_code: int = 200, side_effect: Exception | None = None
+    ) -> Generator[MagicMock, None, None]:
+        with patch("httpx.Client") as mock_cls:
+            mock_response = MagicMock(status_code=status_code)
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            if side_effect:
+                mock_client.post.side_effect = side_effect
+            else:
+                mock_client.post.return_value = mock_response
+            mock_cls.return_value = mock_client
+            yield mock_client
+
+    return _make
 
 
 class TestValidateConnectionSuccess:
@@ -23,38 +50,22 @@ class TestValidateConnectionSuccess:
     Validates FR-010: System MUST validate connectivity to Dagster service.
     """
 
+    @pytest.mark.requirement("FR-010")
     def test_validate_connection_returns_validation_result(
-        self, dagster_plugin: DagsterOrchestratorPlugin
+        self, dagster_plugin: DagsterOrchestratorPlugin, mock_httpx_client
     ) -> None:
         """Test validate_connection returns ValidationResult type."""
-        with patch("httpx.Client") as mock_client_class:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.return_value = mock_response
-            mock_client_class.return_value = mock_client
-
+        with mock_httpx_client():
             result = dagster_plugin.validate_connection("http://localhost:3000")
-
             assert isinstance(result, ValidationResult)
 
+    @pytest.mark.requirement("FR-010")
     def test_validate_connection_success_status(
-        self, dagster_plugin: DagsterOrchestratorPlugin
+        self, dagster_plugin: DagsterOrchestratorPlugin, mock_httpx_client
     ) -> None:
         """Test validate_connection returns success=True on 200 response."""
-        with patch("httpx.Client") as mock_client_class:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_client = MagicMock()
-            mock_client.__enter__ = MagicMock(return_value=mock_client)
-            mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.post.return_value = mock_response
-            mock_client_class.return_value = mock_client
-
+        with mock_httpx_client():
             result = dagster_plugin.validate_connection("http://localhost:3000")
-
             assert result.success is True
 
     def test_validate_connection_success_message(
@@ -182,7 +193,7 @@ class TestValidateConnectionHTTPErrors:
 
             result = dagster_plugin.validate_connection("http://localhost:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "Ensure Dagster webserver is running" in result.errors[0]
 
 
@@ -241,7 +252,7 @@ class TestValidateConnectionTimeout:
 
             result = dagster_plugin.validate_connection("http://localhost:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "network connectivity" in result.errors[0].lower()
 
     def test_validate_connection_uses_configured_timeout(
@@ -317,7 +328,7 @@ class TestValidateConnectionConnectError:
 
             result = dagster_plugin.validate_connection("http://dagster.example.com:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "http://dagster.example.com:3000" in result.errors[0]
 
 
@@ -466,5 +477,5 @@ class TestValidateConnectionUnexpectedError:
 
             result = dagster_plugin.validate_connection("http://localhost:3000")
 
-            assert len(result.errors) > 0
+            assert len(result.errors) == 1
             assert "Something went wrong" in result.errors[0]

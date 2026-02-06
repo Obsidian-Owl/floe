@@ -265,8 +265,10 @@ class TestExecuteCompaction:
         result = execute_compaction(mock_table, strategy)
 
         # Verify result has expected attributes from CompactionResult
-        assert hasattr(result, "files_rewritten")
-        assert hasattr(result, "bytes_rewritten")
+        assert isinstance(result.files_rewritten, int)
+        assert result.files_rewritten >= 0
+        assert isinstance(result.bytes_rewritten, int)
+        assert result.bytes_rewritten >= 0
 
     @pytest.mark.requirement("FR-016")
     def test_execute_compaction_with_sort_strategy(self) -> None:
@@ -285,8 +287,10 @@ class TestExecuteCompaction:
         result = execute_compaction(mock_table, strategy)
 
         # Verify result has expected attributes from CompactionResult
-        assert hasattr(result, "files_rewritten")
-        assert hasattr(result, "bytes_rewritten")
+        assert isinstance(result.files_rewritten, int)
+        assert result.files_rewritten >= 0
+        assert isinstance(result.bytes_rewritten, int)
+        assert result.bytes_rewritten >= 0
 
     @pytest.mark.requirement("FR-016")
     def test_execute_compaction_sort_without_columns_rejected_by_pydantic(self) -> None:
@@ -552,14 +556,15 @@ class TestCompactionEdgeCases:
             )
 
     @pytest.mark.requirement("FR-016")
-    def test_bin_pack_executor_handles_analysis_exceptions_gracefully(self) -> None:
-        """Test BinPackCompactionExecutor handles analysis exceptions gracefully.
+    def test_bin_pack_executor_raises_compaction_error_on_analysis_failure(self) -> None:
+        """Test BinPackCompactionExecutor raises CompactionError when analysis fails.
 
-        The _analyze_files_for_compaction method catches exceptions internally
-        and returns (0, 0) rather than propagating them. This ensures compaction
-        attempts don't fail due to transient issues accessing manifest metadata.
+        When _analyze_files_for_compaction raises CompactionAnalysisError,
+        execute() wraps it in CompactionError and propagates rather than
+        silently returning (0, 0).
         """
         from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.errors import CompactionError
         from floe_iceberg.models import CompactionStrategy
 
         executor = BinPackCompactionExecutor()
@@ -571,11 +576,9 @@ class TestCompactionEdgeCases:
 
         strategy = CompactionStrategy()
 
-        # Executor handles analysis exceptions gracefully - returns 0 files rewritten
-        result = executor.execute(mock_table, strategy)
-
-        assert result.files_rewritten == 0
-        assert result.files_added == 0
+        # Executor wraps analysis errors in CompactionError
+        with pytest.raises(CompactionError, match="Bin-pack compaction failed"):
+            executor.execute(mock_table, strategy)
 
 
 __all__ = [

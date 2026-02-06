@@ -64,7 +64,7 @@ fi
 
 # 2. Run pre-commit framework (ruff, bandit, etc.)
 if command -v uv >/dev/null 2>&1; then
-    exec uv run pre-commit run --hook-stage pre-commit
+    exec uv run --no-sync pre-commit run --hook-stage pre-commit
 elif command -v pre-commit >/dev/null 2>&1; then
     exec pre-commit run --hook-stage pre-commit
 else
@@ -107,7 +107,7 @@ fi
 
 # 2. Run pre-commit framework (mypy, pytest)
 if command -v uv >/dev/null 2>&1; then
-    exec uv run pre-commit run --hook-stage pre-push --all-files
+    exec uv run --no-sync pre-commit run --hook-stage pre-push --all-files
 elif command -v pre-commit >/dev/null 2>&1; then
     exec pre-commit run --hook-stage pre-push --all-files
 else

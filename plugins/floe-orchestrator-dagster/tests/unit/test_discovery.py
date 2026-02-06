@@ -83,7 +83,7 @@ class TestDagsterOrchestratorPluginDiscovery(BasePluginDiscoveryTests):
         plugin = self.create_plugin_instance(matching[0].load())
 
         # Basic properties should be accessible without external deps
-        assert plugin.name is not None
-        assert plugin.version is not None
-        assert plugin.floe_api_version is not None
-        assert plugin.description is not None
+        assert plugin.name == "dagster"
+        assert isinstance(plugin.version, str) and len(plugin.version) > 0
+        assert plugin.floe_api_version == "1.0"
+        assert isinstance(plugin.description, str) and len(plugin.description) > 0

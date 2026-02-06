@@ -5,14 +5,9 @@ T093: Tests for compaction.py module including strategy pattern and executors.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
-
-if TYPE_CHECKING:
-    pass
-
 
 # =============================================================================
 # CompactionResult Tests
@@ -90,6 +85,7 @@ class TestBinPackCompactionExecutor:
 
         assert isinstance(result, CompactionResult)
         assert isinstance(result.files_rewritten, int)
+        assert result.files_rewritten == 0  # mock table with no snapshot returns 0
 
     @pytest.mark.requirement("FR-031")
     def test_execute_with_custom_target_size(self) -> None:
@@ -117,7 +113,7 @@ class TestBinPackCompactionExecutor:
     @pytest.mark.requirement("FR-031")
     def test_execute_with_custom_parallelism(self) -> None:
         """Test executor respects max_concurrent_file_group_rewrites."""
-        from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.compaction import BinPackCompactionExecutor, CompactionResult
         from floe_iceberg.models import CompactionStrategy, CompactionStrategyType
 
         executor = BinPackCompactionExecutor()
@@ -130,7 +126,7 @@ class TestBinPackCompactionExecutor:
         )
 
         result = executor.execute(mock_table, strategy)
-        assert result is not None
+        assert isinstance(result, CompactionResult)
 
     @pytest.mark.requirement("FR-031")
     def test_analyze_files_for_compaction_with_no_snapshot(self) -> None:
@@ -149,21 +145,56 @@ class TestBinPackCompactionExecutor:
         assert total_files == 0
 
     @pytest.mark.requirement("FR-031")
-    def test_analyze_files_returns_zeros_on_error(self) -> None:
-        """Test file analysis returns zeros on error."""
+    def test_analyze_files_raises_on_unexpected_error(self) -> None:
+        """Test file analysis raises CompactionAnalysisError on unexpected error."""
         from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.errors import CompactionAnalysisError
 
         executor = BinPackCompactionExecutor()
         mock_table = MagicMock()
         # Make current_snapshot raise an exception
         mock_table.current_snapshot.side_effect = Exception("Test error")
 
-        small_files, total_files = executor._analyze_files_for_compaction(
-            mock_table, target_file_size_bytes=134217728
-        )
+        with pytest.raises(CompactionAnalysisError, match="Unexpected error"):
+            executor._analyze_files_for_compaction(mock_table, target_file_size_bytes=134217728)
 
-        assert small_files == 0
-        assert total_files == 0
+    @pytest.mark.requirement("FR-031")
+    def test_analyze_files_raises_on_manifest_access_failure(self) -> None:
+        """Test file analysis raises CompactionAnalysisError when manifest access fails.
+
+        The code calls snapshot.manifests(table.io) to list manifest files.
+        When this call raises, it should be wrapped in CompactionAnalysisError.
+        """
+        from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.errors import CompactionAnalysisError
+
+        executor = BinPackCompactionExecutor()
+        mock_table = MagicMock()
+        mock_snapshot = MagicMock()
+        # manifests is callable and raises when invoked with table.io
+        mock_snapshot.manifests.side_effect = Exception("Connection refused")
+        mock_table.current_snapshot.return_value = mock_snapshot
+
+        with pytest.raises(CompactionAnalysisError, match="Cannot access manifests"):
+            executor._analyze_files_for_compaction(mock_table, target_file_size_bytes=134217728)
+
+    @pytest.mark.requirement("FR-031")
+    def test_analyze_files_raises_on_entry_read_failure(self) -> None:
+        """Test file analysis raises CompactionAnalysisError when entry reading fails."""
+        from floe_iceberg.compaction import BinPackCompactionExecutor
+        from floe_iceberg.errors import CompactionAnalysisError
+
+        executor = BinPackCompactionExecutor()
+        mock_table = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_manifest = MagicMock()
+        # Make fetch_manifest_entry raise when called
+        mock_manifest.fetch_manifest_entry.side_effect = Exception("Corrupt manifest")
+        mock_snapshot.manifests.return_value = [mock_manifest]
+        mock_table.current_snapshot.return_value = mock_snapshot
+
+        with pytest.raises(CompactionAnalysisError, match="Cannot read manifest entry"):
+            executor._analyze_files_for_compaction(mock_table, target_file_size_bytes=134217728)
 
     @pytest.mark.requirement("FR-031")
     def test_execute_logs_pyiceberg_limitation(self) -> None:
@@ -315,7 +346,7 @@ class TestExecuteCompaction:
     @pytest.mark.requirement("FR-030")
     def test_default_strategy(self) -> None:
         """Test execute_compaction with default CompactionStrategy."""
-        from floe_iceberg.compaction import execute_compaction
+        from floe_iceberg.compaction import CompactionResult, execute_compaction
         from floe_iceberg.models import CompactionStrategy
 
         mock_table = MagicMock()
@@ -325,4 +356,4 @@ class TestExecuteCompaction:
         strategy = CompactionStrategy()
 
         result = execute_compaction(mock_table, strategy)
-        assert result is not None
+        assert isinstance(result, CompactionResult)
