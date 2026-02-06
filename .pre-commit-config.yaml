@@ -128,7 +128,7 @@ repos:
       # Pre-commit auto-fixes, pre-push verifies no issues slip through
       - id: ruff-check
         name: ruff check (lint)
-        entry: uv run ruff check .
+        entry: uv run --no-sync ruff check .
         language: system
         types: [python]
         stages: [pre-push]
@@ -138,7 +138,7 @@ repos:
       # Pre-commit auto-fixes, pre-push verifies no unformatted code slips through
       - id: ruff-format-check
         name: ruff format (check)
-        entry: uv run ruff format --check .
+        entry: uv run --no-sync ruff format --check .
         language: system
         types: [python]
         stages: [pre-push]
@@ -147,7 +147,7 @@ repos:
       # Type checking with mypy (matches CI exactly)
       - id: mypy-strict
         name: mypy (strict)
-        entry: uv run mypy --strict packages/ testing/
+        entry: uv run --no-sync mypy --strict packages/ testing/
         language: system
         types: [python]
         stages: [pre-push]
@@ -156,7 +156,7 @@ repos:
       # Security: Bandit static analysis (matches CI)
       - id: bandit-security
         name: bandit (security scan)
-        entry: uv run bandit -c pyproject.toml -r packages/ -ll
+        entry: uv run --no-sync bandit -c pyproject.toml -r packages/ -ll
         language: system
         types: [python]
         stages: [pre-push]
@@ -169,7 +169,7 @@ repos:
       # GHSA-wp53-j4wj-2cfg: python-multipart in devtools/agent-memory - internal tool only
       - id: uv-secure
         name: uv-secure (vulnerability audit)
-        entry: uv run uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg .
+        entry: uv run --no-sync uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg .
         language: system
         stages: [pre-push]
         pass_filenames: false
@@ -177,7 +177,7 @@ repos:
       # Architecture boundary enforcement
       - id: import-linter
         name: import-linter (architecture)
-        entry: uv run lint-imports
+        entry: uv run --no-sync lint-imports
         language: system
         types: [python]
         stages: [pre-push]
@@ -188,7 +188,7 @@ repos:
       # Must match CI's test-unit.sh behavior: only tests/unit/ directories
       - id: pytest-unit
         name: pytest (unit tests)
-        entry: bash -c 'uv run pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" --ignore-glob="**/tests/contract/**" -v --tb=short -x'
+        entry: bash -c 'uv run --no-sync pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" --ignore-glob="**/tests/contract/**" -v --tb=short -x'
         language: system
         types: [python]
         stages: [pre-push]
@@ -198,7 +198,7 @@ repos:
       # Includes both root-level and package-level contract tests
       - id: pytest-contract
         name: pytest (contract tests)
-        entry: bash -c 'uv run pytest tests/contract/ packages/*/tests/contract/ --ignore-glob="**/tests/contract/__pycache__/**" -v --tb=short -x 2>/dev/null || uv run pytest tests/contract/ -v --tb=short -x'
+        entry: bash -c 'uv run --no-sync pytest tests/contract/ packages/*/tests/contract/ --ignore-glob="**/tests/contract/__pycache__/**" -v --tb=short -x 2>/dev/null || uv run --no-sync pytest tests/contract/ -v --tb=short -x'
         language: system
         types: [python]
         stages: [pre-push]
@@ -216,7 +216,7 @@ repos:
       # Requirement traceability (matches CI threshold)
       - id: traceability
         name: requirement traceability (80%)
-        entry: uv run python -m testing.traceability --all --threshold 80
+        entry: uv run --no-sync python -m testing.traceability --all --threshold 80
         language: system
         types: [python]
         stages: [pre-push]
