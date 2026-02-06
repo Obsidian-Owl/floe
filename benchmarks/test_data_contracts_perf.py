@@ -98,8 +98,8 @@ schema:
         result = validator.validate(large_contract_yaml, enforcement_level="strict")
 
         # Basic assertion to ensure operation completed
-        assert result is not None
-        assert result.validated_at is not None
+        assert result.valid is True
+        assert result.validated_at is not None  # type guard: datetime always set
 
     @pytest.mark.benchmark
     @pytest.mark.requirement("3C-SC-001")
@@ -111,18 +111,19 @@ schema:
 
         SC-001: Verifies consistent validation performance across
         multiple runs. CodSpeed will track performance regression.
+
+        Note: CodSpeed repeats the entire test function for statistical
+        accuracy, so the inner loop is kept small (2 iterations) to
+        avoid timeouts on GitHub Actions runners.
         """
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 
         validator = ContractValidator()
 
-        # Warm-up run to ensure JIT compilation, caching, etc. are complete
-        validator.validate(large_contract_yaml, enforcement_level="strict")
-
-        # Run validation 5 times (after warm-up)
-        for _ in range(5):
+        # CodSpeed handles repetition for benchmarking — keep inner loop small
+        for _ in range(2):
             result = validator.validate(large_contract_yaml, enforcement_level="strict")
-            assert result is not None
+            assert result.valid is True
 
 
 class TestDriftDetectionPerformance:
@@ -235,9 +236,8 @@ schema:
                 table_schema=mock_iceberg_schema_100_columns,
             )
 
-            # Drift detection should produce valid result
-            assert result is not None
-            assert hasattr(result, "matches")
+            # Drift detection should produce valid result (mocked)
+            assert result.matches is True
         finally:
             for mod_name in fake_mods:
                 sys.modules.pop(mod_name, None)
@@ -275,19 +275,13 @@ schema:
                 for i in range(100)
             ]
 
-            # Warm-up run
-            detector.compare_schemas(
-                contract_columns=contract_columns,
-                table_schema=mock_iceberg_schema_100_columns,
-            )
-
-            # Run drift detection 5 times (after warm-up)
-            for _ in range(5):
+            # CodSpeed handles repetition — keep inner loop small
+            for _ in range(2):
                 result = detector.compare_schemas(
                     contract_columns=contract_columns,
                     table_schema=mock_iceberg_schema_100_columns,
                 )
-                assert result is not None
+                assert result.matches is True
         finally:
             for mod_name in fake_mods:
                 sys.modules.pop(mod_name, None)
@@ -373,8 +367,8 @@ schema:
             )
 
             # Should produce valid result
-            assert result is not None
-            assert result.validated_at is not None
+            assert result.valid is True
+            assert result.validated_at is not None  # type guard: datetime always set
         finally:
             for mod_name in fake_mods:
                 sys.modules.pop(mod_name, None)
