@@ -139,7 +139,8 @@ class CubeSchemaGenerator:
 
         try:
             text = manifest_path.read_text(encoding="utf-8")
-            return json.loads(text)
+            result: dict[str, Any] = json.loads(text)
+            return result
         except json.JSONDecodeError as exc:
             raise SchemaGenerationError(
                 f"Invalid JSON in manifest: {exc}"

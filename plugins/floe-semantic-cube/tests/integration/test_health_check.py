@@ -22,11 +22,11 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-
 from floe_core.plugin_metadata import HealthState, HealthStatus
+from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
+
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.plugin import CubeSemanticPlugin
-from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
 
 
 def _mock_healthy_response(*args: Any, **kwargs: Any) -> httpx.Response:

@@ -13,10 +13,10 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import pytest
-
 from floe_core.plugins.semantic import SemanticLayerPlugin
-from floe_semantic_cube.config import CubeSemanticConfig
 from testing.base_classes.plugin_discovery_tests import BasePluginDiscoveryTests
+
+from floe_semantic_cube.config import CubeSemanticConfig
 
 
 @pytest.mark.requirement("SC-001")

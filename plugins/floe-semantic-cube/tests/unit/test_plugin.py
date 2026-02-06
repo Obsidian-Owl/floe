@@ -16,12 +16,10 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
-
 from floe_core.plugin_metadata import HealthState, HealthStatus, PluginMetadata
 from floe_core.plugins.semantic import SemanticLayerPlugin
+
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.plugin import CubeSemanticPlugin
 

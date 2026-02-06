@@ -38,7 +38,6 @@ import yaml
 from floe_semantic_cube.errors import SchemaGenerationError
 from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

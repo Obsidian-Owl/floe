@@ -29,11 +29,13 @@ from floe_semantic_cube.errors import (
     SchemaGenerationError,
 )
 from floe_semantic_cube.plugin import CubeSemanticPlugin
+from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 
 __all__ = [
     "__version__",
     "CubeSemanticPlugin",
     "CubeSemanticConfig",
+    "CubeSchemaGenerator",
     "CubeSemanticError",
     "SchemaGenerationError",
     "CubeHealthCheckError",

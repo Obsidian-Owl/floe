@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import structlog
-
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.semantic import SemanticLayerPlugin
 
@@ -168,7 +167,8 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
         # Duck-type check for Cube-specific method
         cube_config_method = getattr(compute_plugin, "get_cube_datasource_config", None)
         if callable(cube_config_method):
-            return cube_config_method()
+            result: dict[str, Any] = cube_config_method()
+            return result
 
         # Fallback for compute plugins without Cube-specific config
         return {
@@ -224,7 +224,10 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
         effective_timeout = timeout if timeout is not None else self._config.health_check_timeout
 
         if effective_timeout < _MIN_TIMEOUT or effective_timeout > _MAX_TIMEOUT:
-            msg = f"timeout must be between {_MIN_TIMEOUT} and {_MAX_TIMEOUT}, got {effective_timeout}"
+            msg = (
+                f"timeout must be between {_MIN_TIMEOUT} and "
+                f"{_MAX_TIMEOUT}, got {effective_timeout}"
+            )
             raise ValueError(msg)
 
         if not self._started:

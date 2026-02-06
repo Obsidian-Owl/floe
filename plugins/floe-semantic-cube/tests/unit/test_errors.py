@@ -34,7 +34,7 @@ class TestCubeSemanticError:
     @pytest.mark.requirement("FR-008")
     def test_base_error_catchable(self) -> None:
         """Test that CubeSemanticError can be caught as Exception."""
-        with pytest.raises(Exception):
+        with pytest.raises(CubeSemanticError):
             raise CubeSemanticError("test")
 
 
