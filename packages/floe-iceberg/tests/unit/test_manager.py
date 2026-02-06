@@ -3174,9 +3174,6 @@ class TestCompactTableBinPack:
         mock_storage_plugin: MockStoragePlugin,
     ) -> None:
         """Test compact_table emits OTel span with compaction metrics."""
-        # TODO(FLO-2377): Accessing OTel private API (reset_tracer, set_tracer_provider)
-        # for test isolation. This is accepted per architectural decision (2026-02-06)
-        # but should be replaced if OTel exposes a public reset API in future versions.
         from floe_core.telemetry.tracer_factory import reset_tracer
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider

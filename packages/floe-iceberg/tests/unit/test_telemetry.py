@@ -296,9 +296,6 @@ class TestTracerConfiguration:
     @pytest.mark.requirement("FR-041")
     def test_get_tracer_returns_tracer_with_correct_name(self) -> None:
         """Test get_tracer returns tracer from trace.get_tracer with correct name."""
-        # TODO(FLO-2377): Accessing OTel private API (reset_tracer) for test isolation.
-        # This is accepted per architectural decision (2026-02-06) but should be
-        # replaced if OTel exposes a public reset API in future versions.
         from floe_core.telemetry.tracer_factory import reset_tracer
 
         with patch("floe_core.telemetry.tracer_factory.trace.get_tracer") as mock_get_tracer:
