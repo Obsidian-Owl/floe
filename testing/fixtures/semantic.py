@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.plugin import CubeSemanticPlugin
@@ -37,7 +38,7 @@ def cube_config() -> CubeSemanticConfig:
     """
     return CubeSemanticConfig(
         server_url="http://localhost:4000",
-        api_secret="test-secret",
+        api_secret=SecretStr("test-secret"),
         database_name="test_analytics",
     )
 
