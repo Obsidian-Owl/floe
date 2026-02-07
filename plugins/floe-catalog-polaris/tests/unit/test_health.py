@@ -259,18 +259,18 @@ class TestHealthCheckTimeout:
 
         assert isinstance(result, HealthStatus)
 
-    def test_health_check_default_timeout_is_one_second(
+    def test_health_check_default_timeout_is_none(
         self,
         polaris_plugin: PolarisCatalogPlugin,
     ) -> None:
-        """Test that default timeout is 1.0 second."""
+        """Test that default timeout is None (plugin chooses its own default)."""
         import inspect
 
         sig = inspect.signature(polaris_plugin.health_check)
         timeout_param = sig.parameters.get("timeout")
 
         assert timeout_param is not None
-        assert timeout_param.default == 1.0
+        assert timeout_param.default is None
 
     @pytest.mark.requirement("SC-007")
     def test_health_check_respects_timeout(
