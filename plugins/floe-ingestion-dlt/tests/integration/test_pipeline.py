@@ -15,6 +15,11 @@ import pytest
 # per testing standards (tests FAIL never skip).
 # Run via: make test-integration
 
+_K8S_INFRA_REQUIRED_MSG = (
+    "Integration test requires K8s infrastructure — "
+    "start services via make test-integration"
+)
+
 
 class TestPipelineAppendMode:
     """Integration tests for write_mode=append (T025).
@@ -34,7 +39,7 @@ class TestPipelineAppendMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-021")
@@ -46,7 +51,7 @@ class TestPipelineAppendMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-029")
@@ -58,7 +63,7 @@ class TestPipelineAppendMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
 
 class TestPipelineReplaceMode:
@@ -74,7 +79,7 @@ class TestPipelineReplaceMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
 
 class TestPipelineMergeMode:
@@ -91,7 +96,7 @@ class TestPipelineMergeMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-025")
@@ -103,7 +108,7 @@ class TestPipelineMergeMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-030")
@@ -115,7 +120,7 @@ class TestPipelineMergeMode:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
 
 class TestSchemaContractEnforcement:
@@ -132,7 +137,7 @@ class TestSchemaContractEnforcement:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-032")
@@ -144,7 +149,7 @@ class TestSchemaContractEnforcement:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-033")
@@ -157,7 +162,7 @@ class TestSchemaContractEnforcement:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-037")
@@ -169,4 +174,74 @@ class TestSchemaContractEnforcement:
 
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
-        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+
+class TestIncrementalLoading:
+    """Integration tests for incremental loading (T042-T043)."""
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-038")
+    def test_incremental_loads_only_new_records(self) -> None:
+        """Test incremental loading with cursor_field loads only new records.
+
+        Given a pipeline configured with cursor_field, when run() is executed
+        twice with different data, then the second run loads only records with
+        cursor values greater than the last loaded cursor position.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-041")
+    def test_incremental_resumes_from_last_cursor(self) -> None:
+        """Test incremental state persists across pipeline restarts.
+
+        Given a pipeline that has previously loaded data with cursor_field,
+        when the pipeline is restarted and run() is executed, then it resumes
+        from the last cursor position (not loading already-seen records).
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-042")
+    def test_incremental_state_isolated_per_pipeline(self) -> None:
+        """Test incremental state is isolated per pipeline name.
+
+        Given two pipelines with different names loading from the same source,
+        when both run() with cursor_field, then each maintains separate
+        cursor state (loading all records independently).
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-042")
+    def test_incremental_merge_upserts_by_primary_key(self) -> None:
+        """Test incremental merge upserts records by primary key.
+
+        Given a pipeline configured with cursor_field, primary_key, and
+        write_disposition="merge", when run() is executed with records
+        containing existing primary keys, then existing records are updated
+        (upserted) rather than duplicated.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-043")
+    def test_incremental_rows_loaded_reflects_increment(self) -> None:
+        """Test rows_loaded metric reflects only incrementally-loaded rows.
+
+        Given a pipeline with cursor_field that has previously loaded N rows,
+        when run() is executed with M new rows, then IngestionResult.rows_loaded
+        equals M (not N+M).
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)

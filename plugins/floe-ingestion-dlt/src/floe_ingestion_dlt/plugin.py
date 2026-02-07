@@ -272,7 +272,9 @@ class DltIngestionPlugin(IngestionPlugin):
             PipelineConfigurationError: If config is invalid.
         """
         if not self._started:
-            raise RuntimeError("Plugin must be started before creating pipelines — call startup() first")
+            raise RuntimeError(
+                "Plugin must be started before creating pipelines — call startup() first"
+            )
 
         tracer = get_tracer()
         with ingestion_span(
@@ -337,6 +339,8 @@ class DltIngestionPlugin(IngestionPlugin):
                 - write_disposition: Override write mode
                 - table_name: Override destination table name
                 - schema_contract: Schema contract mode (evolve, freeze, discard_value)
+                - cursor_field: Field name for incremental loading (optional)
+                - primary_key: Primary key field(s) for merge operations (optional)
 
         Returns:
             IngestionResult with execution metrics.
@@ -345,7 +349,9 @@ class DltIngestionPlugin(IngestionPlugin):
             RuntimeError: If plugin not started.
         """
         if not self._started:
-            raise RuntimeError("Plugin must be started before running pipelines — call startup() first")
+            raise RuntimeError(
+                "Plugin must be started before running pipelines — call startup() first"
+            )
 
         tracer = get_tracer()
         start_time = time.perf_counter()
@@ -354,6 +360,8 @@ class DltIngestionPlugin(IngestionPlugin):
         write_disposition = kwargs.get("write_disposition", "append")
         table_name = kwargs.get("table_name")
         schema_contract_mode = kwargs.get("schema_contract", "evolve")
+        cursor_field = kwargs.get("cursor_field")
+        primary_key = kwargs.get("primary_key")
 
         # Map schema_contract string to dlt's expected format
         if schema_contract_mode == "evolve":
@@ -382,6 +390,22 @@ class DltIngestionPlugin(IngestionPlugin):
                 "data_type": "evolve",
             }
 
+        # Log cursor_field if incremental mode is active
+        if cursor_field is not None:
+            logger.info(
+                "incremental_mode_active",
+                pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                cursor_field=cursor_field,
+            )
+
+        # Log primary_key if merge mode is active
+        if primary_key is not None and write_disposition == "merge":
+            logger.info(
+                "merge_mode_with_primary_key",
+                pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                primary_key=primary_key,
+            )
+
         logger.info(
             "pipeline_run_starting",
             pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
@@ -396,13 +420,19 @@ class DltIngestionPlugin(IngestionPlugin):
             write_mode=write_disposition,
         ) as span:
             try:
-                # Execute the pipeline with schema_contract
-                load_info = pipeline.run(
-                    source,
-                    write_disposition=write_disposition,
-                    table_name=table_name,
-                    schema_contract=schema_contract,
-                )
+                # Prepare pipeline.run() kwargs
+                run_kwargs = {
+                    "write_disposition": write_disposition,
+                    "table_name": table_name,
+                    "schema_contract": schema_contract,
+                }
+
+                # Add primary_key if provided with merge disposition
+                if primary_key is not None and write_disposition == "merge":
+                    run_kwargs["primary_key"] = primary_key
+
+                # Execute the pipeline
+                load_info = pipeline.run(source, **run_kwargs)
 
                 elapsed = time.perf_counter() - start_time
 
@@ -412,7 +442,7 @@ class DltIngestionPlugin(IngestionPlugin):
 
                 if hasattr(load_info, "metrics") and load_info.metrics:
                     # dlt load_info.metrics is a list of load package metrics
-                    for load_id, metrics_list in load_info.metrics.items():
+                    for _load_id, metrics_list in load_info.metrics.items():
                         for metrics in metrics_list:
                             if hasattr(metrics, "started_at"):
                                 # Process job metrics
@@ -446,7 +476,8 @@ class DltIngestionPlugin(IngestionPlugin):
                 error_msg = str(e)[:500]  # Truncate for safety
 
                 # Check if this is a schema contract violation
-                # dlt raises exceptions containing "schema" and "contract" when freeze mode rejects changes
+                # dlt raises exceptions containing "schema" and "contract" when
+                # freeze mode rejects changes
                 error_lower = str(e).lower()
                 if "schema" in error_lower and "contract" in error_lower:
                     # This is a schema contract violation

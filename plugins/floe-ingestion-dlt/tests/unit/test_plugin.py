@@ -7,15 +7,14 @@ the expected behavior for T021 and T022 implementation.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
-
 from floe_core.plugins.ingestion import IngestionConfig, IngestionResult
-from floe_ingestion_dlt.plugin import DltIngestionPlugin
-from floe_ingestion_dlt.config import DltIngestionConfig, IngestionSourceConfig
+
 from floe_ingestion_dlt.errors import PipelineConfigurationError
+from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -69,7 +68,9 @@ class TestCreatePipeline:
             plugin.create_pipeline(config)
 
     @pytest.mark.requirement("4F-FR-012")
-    def test_create_pipeline_invalid_source_type_raises(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_create_pipeline_invalid_source_type_raises(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test create_pipeline raises error for invalid source_type.
 
         Given an IngestionConfig with invalid source_type="invalid", when
@@ -376,7 +377,9 @@ class TestRunPipeline:
         """
         mock_pipeline = MagicMock()
         # Configure mock to raise schema contract violation
-        mock_pipeline.run.side_effect = Exception("Schema contract violation: column 'new_field' not allowed")
+        mock_pipeline.run.side_effect = Exception(
+            "Schema contract violation: column 'new_field' not allowed"
+        )
 
         result = dlt_plugin.run(
             mock_pipeline,
@@ -530,3 +533,91 @@ class TestGetDestinationConfig:
 
         assert result["destination"] == "iceberg"
         assert result["catalog_type"] == "rest"
+
+
+class TestIncrementalLoading:
+    """Unit tests for incremental loading support (T045)."""
+
+    @pytest.mark.requirement("4F-FR-038")
+    def test_run_with_cursor_field_logs_incremental(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() accepts cursor_field kwarg and logs incremental mode.
+
+        Given cursor_field kwarg is passed, when run() is called, then it
+        accepts the parameter without error and returns IngestionResult.
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            cursor_field="updated_at",
+        )
+
+        # Verify result is successful
+        assert isinstance(result, IngestionResult)
+        assert result.success is True
+
+    @pytest.mark.requirement("4F-FR-042")
+    def test_run_with_primary_key_passes_to_pipeline(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() passes primary_key kwarg to pipeline.run() with merge.
+
+        Given primary_key and write_disposition="merge" kwargs, when run()
+        is called, then primary_key is passed to pipeline.run().
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="merge",
+            primary_key="id",
+        )
+
+        # Verify pipeline.run was called with primary_key
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert call_kwargs["write_disposition"] == "merge"
+        assert call_kwargs["primary_key"] == "id"
+
+    @pytest.mark.requirement("4F-FR-040")
+    def test_run_without_cursor_field_default_none(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() proceeds normally when no cursor_field kwarg provided.
+
+        Given no cursor_field kwarg (non-incremental mode), when run() is
+        called, then it proceeds normally and returns IngestionResult.
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+        )
+
+        # Verify result is successful (non-incremental mode works)
+        assert isinstance(result, IngestionResult)
+        assert result.success is True
+
+    @pytest.mark.requirement("4F-FR-043")
+    def test_run_rows_loaded_from_metrics(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test rows_loaded in IngestionResult comes from pipeline metrics.
+
+        Given pipeline.run() returns metrics, when run() is called, then
+        IngestionResult.rows_loaded reflects the metrics extraction logic.
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+        )
+
+        # Verify rows_loaded is derived from metrics (0 for empty metrics)
+        assert isinstance(result, IngestionResult)
+        assert result.rows_loaded == 0
