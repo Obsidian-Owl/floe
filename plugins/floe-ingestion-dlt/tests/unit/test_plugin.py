@@ -469,7 +469,7 @@ class TestGetDestinationConfig:
         assert result["catalog_type"] == "rest"
         assert result["s3_endpoint"] == "http://minio:9000"
         assert result["s3_access_key"] == "minioadmin"
-        assert result["s3_secret_key"] == "minioadmin"
+        assert result["s3_secret_key"] == "minioadmin"  # pragma: allowlist secret
         assert result["s3_region"] == "us-east-1"
 
     @pytest.mark.requirement("4F-FR-019")

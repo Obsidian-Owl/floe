@@ -405,7 +405,7 @@ type: Opaque
 data:
   postgresql-password: (base64-encoded from postgresql.auth.password)
 stringData:
-  postgresql-connection: postgresql://user:password@host:5432/dagster
+  postgresql-connection: postgresql://user:password@host:5432/dagster  # pragma: allowlist secret
 ```
 
 **Conditional Creation**:
