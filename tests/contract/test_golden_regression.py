@@ -148,13 +148,14 @@ class TestPluginInterfaceContract:
         assert "interfaces" in golden, "Missing 'interfaces' section"
         interfaces = golden["interfaces"]
 
-        # All five plugin interfaces MUST exist
+        # All six plugin interfaces MUST exist
         required_interfaces = [
             "ComputePlugin",
             "OrchestratorPlugin",
             "CatalogPlugin",
             "StoragePlugin",
             "SemanticLayerPlugin",
+            "IngestionPlugin",
         ]
         for interface in required_interfaces:
             assert interface in interfaces, (
@@ -273,6 +274,33 @@ class TestPluginInterfaceContract:
             )
 
 
+    @pytest.mark.requirement("CONTRACT-002")
+    def test_ingestion_plugin_methods_stable(self) -> None:
+        """Test IngestionPlugin interface hasn't lost methods."""
+        golden = load_golden("plugin_interfaces_v1.json")
+        interfaces = golden["interfaces"]
+
+        assert "IngestionPlugin" in interfaces, "Missing IngestionPlugin"
+        ingestion = interfaces["IngestionPlugin"]
+
+        assert "methods" in ingestion, (
+            "IngestionPlugin missing 'methods' key. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
+        methods = ingestion["methods"]
+        required_methods = [
+            "is_external",
+            "create_pipeline",
+            "run",
+            "get_destination_config",
+        ]
+        for method in required_methods:
+            assert method in methods, (
+                f"IngestionPlugin.{method}() removed. This is a MAJOR version change."
+            )
+
+
 class TestV05SemanticArtifacts:
     """Test v0.5.0 golden artifacts with semantic plugin."""
 
@@ -353,6 +381,65 @@ class TestV05SemanticArtifacts:
         assert orders_model.tags is not None, "orders model has no tags"
         assert "cube" in orders_model.tags, (
             f"orders model missing 'cube' tag, has: {orders_model.tags}"
+        )
+
+
+class TestV06IngestionArtifacts:
+    """Test v0.6.0 golden artifacts with ingestion plugin."""
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v06_with_ingestion_can_be_parsed(self) -> None:
+        """Test that v0.6.0 golden artifact with ingestion plugin parses correctly."""
+        golden = load_golden("v0.6_compiled_artifacts_with_ingestion.json")
+
+        assert golden["version"] == "0.6.0", (
+            f"Expected version 0.6.0, got {golden.get('version')}"
+        )
+        assert "plugins" in golden, "Missing 'plugins' section"
+        assert "ingestion" in golden["plugins"], "Missing 'ingestion' plugin"
+        assert golden["plugins"]["ingestion"]["type"] == "dlt", (
+            "Expected ingestion plugin type 'dlt', "
+            f"got {golden['plugins']['ingestion'].get('type')}"
+        )
+        assert golden["plugins"]["ingestion"]["version"] == "0.1.0", (
+            "Expected ingestion plugin version 0.1.0, "
+            f"got {golden['plugins']['ingestion'].get('version')}"
+        )
+        assert "config" in golden["plugins"]["ingestion"], (
+            "Ingestion plugin missing 'config' section"
+        )
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v06_with_ingestion_round_trips_via_pydantic(self) -> None:
+        """Test that v0.6.0 golden artifact with ingestion survives Pydantic round-trip."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        golden = load_golden("v0.6_compiled_artifacts_with_ingestion.json")
+
+        # Remove $comment before Pydantic validation (it's not part of the schema)
+        golden_without_comment = {k: v for k, v in golden.items() if k != "$comment"}
+
+        # Validate via Pydantic
+        artifacts = CompiledArtifacts.model_validate(golden_without_comment)
+        assert artifacts.version == "0.6.0", (
+            f"Expected version 0.6.0 after round-trip, got {artifacts.version}"
+        )
+        assert artifacts.plugins is not None, "Plugins became None after round-trip"
+        assert artifacts.plugins.ingestion is not None, (
+            "Ingestion plugin became None after round-trip"
+        )
+        assert artifacts.plugins.ingestion.type == "dlt", (
+            "Expected ingestion type 'dlt' after round-trip, "
+            f"got {artifacts.plugins.ingestion.type}"
+        )
+        assert artifacts.plugins.ingestion.version == "0.1.0", (
+            "Expected ingestion version 0.1.0 after round-trip, "
+            f"got {artifacts.plugins.ingestion.version}"
+        )
+
+        # Verify ingestion config survived round-trip
+        assert artifacts.plugins.ingestion.config is not None, (
+            "Ingestion plugin config became None after round-trip"
         )
 
 

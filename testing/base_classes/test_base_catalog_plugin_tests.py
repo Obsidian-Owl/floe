@@ -92,7 +92,7 @@ class MockCatalogPlugin(CatalogPlugin):
         _ = table_path, operations
         return {"access_key": "mock", "secret_key": "mock"}
 
-    def health_check(self, timeout: float = 1.0) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         _ = timeout
         return HealthStatus(
             state=HealthState.HEALTHY,

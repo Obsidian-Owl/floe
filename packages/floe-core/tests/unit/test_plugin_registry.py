@@ -1885,7 +1885,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 return HealthStatus(state=HealthState.HEALTHY)
 
         registry = PluginRegistry()
@@ -1917,7 +1917,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 return HealthStatus(
                     state=HealthState.DEGRADED,
                     message="Connection pool low",
@@ -1952,7 +1952,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 raise RuntimeError("Health check failed!")
 
         registry = PluginRegistry()
@@ -1986,7 +1986,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 time.sleep(2)  # Slow health check
                 return HealthStatus(state=HealthState.HEALTHY)
 
@@ -2019,7 +2019,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 return HealthStatus(state=HealthState.HEALTHY)
 
         class PluginB(PluginMetadata):
@@ -2035,7 +2035,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 return HealthStatus(state=HealthState.DEGRADED)
 
         registry = PluginRegistry()
@@ -2081,7 +2081,7 @@ class TestPluginRegistryHealthChecks:
             def floe_api_version(self) -> str:
                 return "1.0"
 
-            def health_check(self) -> HealthStatus:
+            def health_check(self, timeout: float | None = None) -> HealthStatus:
                 return HealthStatus(state=HealthState.HEALTHY)
 
         registry = PluginRegistry()

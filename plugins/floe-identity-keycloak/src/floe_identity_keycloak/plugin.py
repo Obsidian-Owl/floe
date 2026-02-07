@@ -155,8 +155,11 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         self._realm_validators.clear()
         self._started = False
 
-    def health_check(self) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check if plugin is healthy.
+
+        Args:
+            timeout: Optional timeout in seconds (unused, reserved for base ABC).
 
         Returns:
             HealthStatus indicating current health state.
