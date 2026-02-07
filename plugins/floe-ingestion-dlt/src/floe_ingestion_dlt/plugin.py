@@ -182,9 +182,11 @@ class DltIngestionPlugin(IngestionPlugin):
         if not self._started:
             return
 
-        self._started = False
-        self._dlt_version = None
-        logger.info("ingestion_plugin_stopped", plugin_name=self.name)
+        tracer = get_tracer()
+        with ingestion_span(tracer, "plugin.shutdown"):
+            self._started = False
+            self._dlt_version = None
+            logger.info("ingestion_plugin_stopped", plugin_name=self.name)
 
     def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check plugin health (FR-007).
@@ -212,51 +214,74 @@ class DltIngestionPlugin(IngestionPlugin):
             )
             raise ValueError(msg)
 
-        checked_at = datetime.now(timezone.utc)
-        start = time.perf_counter()
+        tracer = get_tracer()
+        with ingestion_span(tracer, "health_check"):
+            checked_at = datetime.now(timezone.utc)
+            start = time.perf_counter()
 
-        # Check 1: Plugin started
-        if not self._started:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message="Plugin not started — call startup() first",
-                details={
-                    "reason": "not_started",
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": effective_timeout,
-                },
-            )
+            # Check 1: Plugin started
+            if not self._started:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                status = HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message="Plugin not started — call startup() first",
+                    details={
+                        "reason": "not_started",
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": effective_timeout,
+                    },
+                )
+                logger.info(
+                    "health_check_completed",
+                    state=status.state.value,
+                    reason="not_started",
+                    response_time_ms=elapsed_ms,
+                )
+                return status
 
-        # Check 2: dlt is importable
-        try:
-            import dlt as _dlt  # noqa: F401
+            # Check 2: dlt is importable
+            try:
+                import dlt as _dlt  # noqa: F401
 
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            return HealthStatus(
-                state=HealthState.HEALTHY,
-                message="dlt ingestion plugin is healthy",
-                details={
-                    "dlt_version": self._dlt_version,
-                    "started": self._started,
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": effective_timeout,
-                },
-            )
-        except ImportError:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message="dlt package is not installed",
-                details={
-                    "reason": "dlt_not_importable",
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": effective_timeout,
-                },
-            )
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                status = HealthStatus(
+                    state=HealthState.HEALTHY,
+                    message="dlt ingestion plugin is healthy",
+                    details={
+                        "dlt_version": self._dlt_version,
+                        "started": self._started,
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": effective_timeout,
+                    },
+                )
+                logger.info(
+                    "health_check_completed",
+                    state=status.state.value,
+                    dlt_version=self._dlt_version,
+                    response_time_ms=elapsed_ms,
+                )
+                return status
+            except ImportError:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                status = HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message="dlt package is not installed",
+                    details={
+                        "reason": "dlt_not_importable",
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": effective_timeout,
+                    },
+                )
+                logger.info(
+                    "health_check_completed",
+                    state=status.state.value,
+                    reason="dlt_not_importable",
+                    response_time_ms=elapsed_ms,
+                )
+                return status
 
     def create_pipeline(self, config: IngestionConfig) -> Any:
         """Create a dlt pipeline from configuration.
@@ -543,35 +568,37 @@ class DltIngestionPlugin(IngestionPlugin):
         Returns:
             dlt destination configuration dict for Iceberg.
         """
-        dest_config: dict[str, Any] = {
-            "destination": "iceberg",
-            "catalog_type": "rest",
-        }
+        tracer = get_tracer()
+        with ingestion_span(tracer, "get_destination_config"):
+            dest_config: dict[str, Any] = {
+                "destination": "iceberg",
+                "catalog_type": "rest",
+            }
 
-        # Map catalog URI
-        if "uri" in catalog_config:
-            dest_config["catalog_uri"] = catalog_config["uri"]
+            # Map catalog URI
+            if "uri" in catalog_config:
+                dest_config["catalog_uri"] = catalog_config["uri"]
 
-        # Map warehouse
-        if "warehouse" in catalog_config:
-            dest_config["warehouse"] = catalog_config["warehouse"]
+            # Map warehouse
+            if "warehouse" in catalog_config:
+                dest_config["warehouse"] = catalog_config["warehouse"]
 
-        # Map S3/MinIO storage config
-        if "s3_endpoint" in catalog_config:
-            dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
-        if "s3_access_key" in catalog_config:
-            dest_config["s3_access_key"] = catalog_config["s3_access_key"]
-        if "s3_secret_key" in catalog_config:
-            dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
-        if "s3_region" in catalog_config:
-            dest_config["s3_region"] = catalog_config["s3_region"]
+            # Map S3/MinIO storage config
+            if "s3_endpoint" in catalog_config:
+                dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
+            if "s3_access_key" in catalog_config:
+                dest_config["s3_access_key"] = catalog_config["s3_access_key"]
+            if "s3_secret_key" in catalog_config:
+                dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
+            if "s3_region" in catalog_config:
+                dest_config["s3_region"] = catalog_config["s3_region"]
 
-        logger.info(
-            "destination_config_generated",
-            catalog_type="rest",
-            has_uri="uri" in catalog_config,
-            has_warehouse="warehouse" in catalog_config,
-            has_s3="s3_endpoint" in catalog_config,
-        )
+            logger.info(
+                "destination_config_generated",
+                catalog_type="rest",
+                has_uri="uri" in catalog_config,
+                has_warehouse="warehouse" in catalog_config,
+                has_s3="s3_endpoint" in catalog_config,
+            )
 
-        return dest_config
+            return dest_config

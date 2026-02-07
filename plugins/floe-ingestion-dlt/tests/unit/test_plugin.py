@@ -621,3 +621,321 @@ class TestIncrementalLoading:
         # Verify rows_loaded is derived from metrics (0 for empty metrics)
         assert isinstance(result, IngestionResult)
         assert result.rows_loaded == 0
+
+
+class TestOTelSpanEmission:
+    """Unit tests for T046 - OTel span emission verification."""
+
+    @pytest.mark.requirement("4F-FR-044")
+    def test_create_pipeline_emits_otel_span(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test create_pipeline() emits OTel span via tracer.
+
+        Given a valid config, when create_pipeline() is called, then
+        get_tracer() is called and tracer.start_as_current_span is invoked
+        with span name containing "create_pipeline".
+        """
+        from unittest.mock import patch
+
+        config = IngestionConfig(
+            source_type="rest_api",
+            source_config={"url": "https://api.example.com"},
+            destination_table="bronze.raw_data",
+        )
+
+        with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+
+            # Call create_pipeline
+            dlt_plugin.create_pipeline(config)
+
+            # Verify get_tracer was called
+            mock_get_tracer.assert_called_once()
+
+            # Verify tracer.start_as_current_span was called with correct name
+            mock_tracer.start_as_current_span.assert_called()
+            call_args = mock_tracer.start_as_current_span.call_args
+            span_name = call_args[0][0]
+            assert "create_pipeline" in span_name
+
+    @pytest.mark.requirement("4F-FR-044")
+    def test_run_emits_otel_span(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() emits OTel span via tracer.
+
+        Given a mock pipeline, when run() is called, then get_tracer() is
+        called and tracer.start_as_current_span is invoked with span name
+        containing "run".
+        """
+        from unittest.mock import patch
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+
+            # Call run
+            dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+            # Verify get_tracer was called
+            mock_get_tracer.assert_called()
+
+            # Verify tracer.start_as_current_span was called with correct name
+            mock_tracer.start_as_current_span.assert_called()
+            call_args = mock_tracer.start_as_current_span.call_args
+            span_name = call_args[0][0]
+            assert "run" in span_name
+
+    @pytest.mark.requirement("4F-FR-046")
+    def test_run_span_records_result_attributes(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() calls record_ingestion_result with span and result.
+
+        Given a successful pipeline run, when run() completes, then
+        record_ingestion_result() is called with the span and result.
+        """
+        from unittest.mock import patch
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        with patch("floe_ingestion_dlt.plugin.record_ingestion_result") as mock_record:
+            result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+            # Verify record_ingestion_result was called with span and result
+            mock_record.assert_called_once()
+            call_args = mock_record.call_args
+            # First arg is span, second arg is result
+            recorded_result = call_args[0][1]
+            assert recorded_result == result
+
+    @pytest.mark.requirement("4F-FR-047")
+    def test_run_span_records_error_on_failure(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() calls record_ingestion_error when pipeline fails.
+
+        Given pipeline.run() raises exception, when run() handles error,
+        then record_ingestion_error() is called with span and exception.
+        """
+        from unittest.mock import patch
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
+
+        with patch("floe_ingestion_dlt.plugin.record_ingestion_error") as mock_record:
+            # Call run (doesn't raise, returns failed result)
+            result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+            # Verify record_ingestion_error was called
+            mock_record.assert_called_once()
+            call_args = mock_record.call_args
+            # First arg is span, second arg is exception
+            recorded_error = call_args[0][1]
+            assert isinstance(recorded_error, Exception)
+            assert str(recorded_error) == "Pipeline execution failed"
+
+            # Verify result indicates failure
+            assert result.success is False
+
+    @pytest.mark.requirement("4F-FR-044")
+    def test_startup_emits_otel_span(self) -> None:
+        """Test startup() emits OTel span via tracer.
+
+        Given a plugin that hasn't been started, when startup() is called,
+        then get_tracer() is called and tracer.start_as_current_span is
+        invoked with span name containing "startup".
+        """
+        from unittest.mock import patch
+
+        plugin = DltIngestionPlugin()
+
+        with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+
+            # Call startup
+            plugin.startup()
+
+            # Verify get_tracer was called
+            mock_get_tracer.assert_called_once()
+
+            # Verify tracer.start_as_current_span was called with correct name
+            mock_tracer.start_as_current_span.assert_called()
+            call_args = mock_tracer.start_as_current_span.call_args
+            span_name = call_args[0][0]
+            assert "startup" in span_name
+
+
+class TestStructuredLogging:
+    """Unit tests for T047 - structured logging verification."""
+
+    @pytest.mark.requirement("4F-FR-048")
+    def test_create_pipeline_logs_pipeline_created(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test create_pipeline() logs 'pipeline_created' event.
+
+        Given a valid config, when create_pipeline() is called, then
+        logger.info is called with event="pipeline_created" and includes
+        pipeline_name, source_type, destination_table.
+        """
+        from unittest.mock import patch
+
+        config = IngestionConfig(
+            source_type="rest_api",
+            source_config={"url": "https://api.example.com"},
+            destination_table="bronze.raw_data",
+        )
+
+        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
+            dlt_plugin.create_pipeline(config)
+
+            # Verify logger.info was called with pipeline_created
+            mock_logger.info.assert_called()
+            # Find the pipeline_created call
+            found = False
+            for call in mock_logger.info.call_args_list:
+                if call[0][0] == "pipeline_created":
+                    found = True
+                    kwargs = call[1]
+                    assert "source_type" in kwargs
+                    assert "destination_table" in kwargs
+                    assert kwargs["source_type"] == "rest_api"
+                    assert kwargs["destination_table"] == "bronze.raw_data"
+            assert found, "pipeline_created event not logged"
+
+    @pytest.mark.requirement("4F-FR-048")
+    def test_run_logs_pipeline_run_starting(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() logs 'pipeline_run_starting' event.
+
+        Given a mock pipeline, when run() is called, then logger.info is
+        called with event="pipeline_run_starting".
+        """
+        from unittest.mock import patch
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.pipeline_name = "test_pipeline"
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
+            dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+            # Verify logger.info was called with pipeline_run_starting
+            mock_logger.info.assert_called()
+            # Find the pipeline_run_starting call
+            found = False
+            for call in mock_logger.info.call_args_list:
+                if call[0][0] == "pipeline_run_starting":
+                    found = True
+            assert found, "pipeline_run_starting event not logged"
+
+    @pytest.mark.requirement("4F-FR-048")
+    def test_run_logs_pipeline_run_completed(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() logs 'pipeline_run_completed' event on success.
+
+        Given a successful pipeline run, when run() completes, then
+        logger.info is called with event="pipeline_run_completed" and
+        includes rows_loaded and duration_seconds.
+        """
+        from unittest.mock import patch
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.pipeline_name = "test_pipeline"
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
+            dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+            # Verify logger.info was called with pipeline_run_completed
+            mock_logger.info.assert_called()
+            # Find the pipeline_run_completed call
+            found = False
+            for call in mock_logger.info.call_args_list:
+                if call[0][0] == "pipeline_run_completed":
+                    found = True
+                    kwargs = call[1]
+                    assert "rows_loaded" in kwargs
+                    assert "duration_seconds" in kwargs
+            assert found, "pipeline_run_completed event not logged"
+
+    @pytest.mark.requirement("4F-FR-048")
+    def test_run_logs_pipeline_run_failed(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run() logs 'pipeline_run_failed' event on failure.
+
+        Given pipeline.run() raises exception, when run() handles error,
+        then logger.error is called with event="pipeline_run_failed".
+        """
+        from unittest.mock import patch
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.pipeline_name = "test_pipeline"
+        mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
+
+        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
+            # Call run (doesn't raise, returns failed result)
+            dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+            # Verify logger.error was called with pipeline_run_failed
+            mock_logger.error.assert_called()
+            # Find the pipeline_run_failed call
+            found = False
+            for call in mock_logger.error.call_args_list:
+                if call[0][0] == "pipeline_run_failed":
+                    found = True
+            assert found, "pipeline_run_failed event not logged"
+
+    @pytest.mark.requirement("4F-FR-048")
+    def test_get_destination_config_logs_config_generated(self) -> None:
+        """Test get_destination_config() logs 'destination_config_generated' event.
+
+        Given catalog_config dict, when get_destination_config() is called,
+        then logger.info is called with event="destination_config_generated".
+        """
+        from unittest.mock import patch
+
+        plugin = DltIngestionPlugin()
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+        }
+
+        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
+            plugin.get_destination_config(catalog_config)
+
+            # Verify logger.info was called with destination_config_generated
+            mock_logger.info.assert_called()
+            # Find the destination_config_generated call
+            found = False
+            for call in mock_logger.info.call_args_list:
+                if call[0][0] == "destination_config_generated":
+                    found = True
+            assert found, "destination_config_generated event not logged"
+
+    @pytest.mark.requirement("4F-FR-049")
+    def test_secrets_not_logged(self) -> None:
+        """Test get_destination_config() does not log secret values.
+
+        Given catalog_config with s3_secret_key and s3_access_key, when
+        get_destination_config() is called, then logger.info calls do NOT
+        include the actual secret values in any arguments.
+        """
+        from unittest.mock import patch
+
+        plugin = DltIngestionPlugin()
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+            "s3_endpoint": "http://minio:9000",
+            "s3_access_key": "sensitive-access-key-12345",
+            "s3_secret_key": "super-secret-key-67890",
+        }
+
+        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
+            plugin.get_destination_config(catalog_config)
+
+            # Verify secrets are NOT in any logger call
+            for call in mock_logger.info.call_args_list:
+                call_str = str(call)
+                assert "sensitive-access-key-12345" not in call_str, (
+                    "s3_access_key value leaked in logs"
+                )
+                assert "super-secret-key-67890" not in call_str, (
+                    "s3_secret_key value leaked in logs"
+                )
