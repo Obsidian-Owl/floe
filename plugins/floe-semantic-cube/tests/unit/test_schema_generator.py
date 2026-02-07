@@ -437,13 +437,16 @@ class TestRefToJoinConversion:
         gen.generate(manifest_path, output_dir)
 
         yaml_files = list(output_dir.glob("*.yaml")) + list(output_dir.glob("*.yml"))
+        orders_found = False
         for f in yaml_files:
             content = _read_generated_yaml(f)
             if content["cubes"][0]["name"] == "orders":
+                orders_found = True
                 joins = content["cubes"][0]["joins"]
                 customer_join = next(j for j in joins if j["name"] == "customers")
                 assert customer_join["relationship"] == "belongs_to"
                 break
+        assert orders_found, "orders cube not found in generated files"
 
     def test_meta_cube_join_relationship_overrides_default(
         self, tmp_path: Path
@@ -472,13 +475,16 @@ class TestRefToJoinConversion:
         gen.generate(manifest_path, output_dir)
 
         yaml_files = list(output_dir.glob("*.yaml")) + list(output_dir.glob("*.yml"))
+        orders_found = False
         for f in yaml_files:
             content = _read_generated_yaml(f)
             if content["cubes"][0]["name"] == "orders":
+                orders_found = True
                 joins = content["cubes"][0]["joins"]
                 customer_join = next(j for j in joins if j["name"] == "customers")
                 assert customer_join["relationship"] == "has_many"
                 break
+        assert orders_found, "orders cube not found in generated files"
 
 
 # ---------------------------------------------------------------------------
@@ -925,6 +931,51 @@ class TestEdgeCases:
         result = gen.generate(manifest_path, output_dir)
 
         assert len(result) == 1
+
+    @pytest.mark.requirement("FR-008")
+    def test_path_traversal_attack_raises_error(self, tmp_path: Path) -> None:
+        """Test that malicious model names with path traversal are rejected.
+
+        Validates that a model name like '../../etc/evil' raises SchemaGenerationError
+        to prevent writing outside the output directory.
+        """
+        manifest = _make_manifest({
+            "model.analytics.evil": _make_model(
+                "../../etc/cron.d/exploit",
+                columns={"id": _make_column("id", "integer")},
+            ),
+        })
+        manifest_path = _write_manifest(tmp_path, manifest)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        gen = CubeSchemaGenerator()
+        with pytest.raises(SchemaGenerationError, match="path traversal"):
+            gen.generate(manifest_path, output_dir)
+
+    @pytest.mark.requirement("FR-008")
+    def test_normal_model_names_work_fine(self, tmp_path: Path) -> None:
+        """Test that normal model names without traversal work correctly.
+
+        Validates that standard model names like 'orders', 'customers', etc. are
+        accepted and produce valid output files.
+        """
+        manifest = _make_manifest({
+            "model.analytics.orders": _make_model(
+                "orders",
+                columns={"order_id": _make_column("order_id", "integer")},
+            ),
+        })
+        manifest_path = _write_manifest(tmp_path, manifest)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        gen = CubeSchemaGenerator()
+        result = gen.generate(manifest_path, output_dir)
+
+        assert len(result) == 1
+        assert result[0].parent == output_dir
+        assert result[0].name == "orders.yaml"
 
 
 # ---------------------------------------------------------------------------

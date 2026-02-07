@@ -48,10 +48,7 @@ _DEFAULT_OUTPUT_DIR = Path("cube/schema")
     description="Synchronize semantic layer schemas from dbt manifest",
     required_resource_keys={"semantic_layer"},
 )
-def sync_semantic_schemas(
-    context: AssetExecutionContext,
-    semantic_layer: SemanticLayerPlugin,
-) -> list[str]:
+def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
     """Synchronize semantic layer schemas from dbt manifest.
 
     This asset runs after dbt models are materialized to generate or update
@@ -60,8 +57,10 @@ def sync_semantic_schemas(
     operation to the plugin implementation.
 
     Args:
-        context: Dagster asset execution context.
+        context: AssetExecutionContext (Dagster asset execution context).
+            Type hint omitted due to Dagster limitations with future annotations.
         semantic_layer: SemanticLayerPlugin resource instance.
+            Type hint omitted due to Dagster limitations with future annotations.
 
     Returns:
         List of generated schema file paths as strings.

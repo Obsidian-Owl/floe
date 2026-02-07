@@ -39,7 +39,8 @@ def load_golden(filename: str) -> dict[str, Any]:
             f"Golden file not found: {filepath}\n"
             "Run './scripts/generate-contract-golden' to create baseline."
         )
-    return json.loads(filepath.read_text())
+    result: dict[str, Any] = json.loads(filepath.read_text())
+    return result
 
 
 class TestCompiledArtifactsContract:
@@ -147,12 +148,13 @@ class TestPluginInterfaceContract:
         assert "interfaces" in golden, "Missing 'interfaces' section"
         interfaces = golden["interfaces"]
 
-        # All four plugin interfaces MUST exist
+        # All five plugin interfaces MUST exist
         required_interfaces = [
             "ComputePlugin",
             "OrchestratorPlugin",
             "CatalogPlugin",
             "StoragePlugin",
+            "SemanticLayerPlugin",
         ]
         for interface in required_interfaces:
             assert interface in interfaces, (
@@ -242,6 +244,123 @@ class TestPluginInterfaceContract:
             assert method in methods, (
                 f"StoragePlugin.{method}() removed. This is a MAJOR version change."
             )
+
+    @pytest.mark.requirement("CONTRACT-002")
+    def test_semantic_layer_plugin_methods_stable(self) -> None:
+        """Test SemanticLayerPlugin interface hasn't lost methods."""
+        golden = load_golden("plugin_interfaces_v1.json")
+        interfaces = golden["interfaces"]
+
+        assert "SemanticLayerPlugin" in interfaces, "Missing SemanticLayerPlugin"
+        semantic = interfaces["SemanticLayerPlugin"]
+
+        assert "methods" in semantic, (
+            "SemanticLayerPlugin missing 'methods' key. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
+        methods = semantic["methods"]
+        required_methods = [
+            "sync_from_dbt_manifest",
+            "get_security_context",
+            "get_datasource_config",
+            "get_api_endpoints",
+            "get_helm_values_override",
+        ]
+        for method in required_methods:
+            assert method in methods, (
+                f"SemanticLayerPlugin.{method}() removed. This is a MAJOR version change."
+            )
+
+
+class TestV05SemanticArtifacts:
+    """Test v0.5.0 golden artifacts with semantic plugin."""
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v05_with_semantic_can_be_parsed(self) -> None:
+        """Test that v0.5.0 golden artifact with semantic plugin parses correctly."""
+        golden = load_golden("v0.5_compiled_artifacts_with_semantic.json")
+
+        assert golden["version"] == "0.5.0", (
+            f"Expected version 0.5.0, got {golden.get('version')}"
+        )
+        assert "plugins" in golden, "Missing 'plugins' section"
+        assert "semantic" in golden["plugins"], "Missing 'semantic' plugin"
+        assert golden["plugins"]["semantic"]["type"] == "cube", (
+            f"Expected semantic plugin type 'cube', got {golden['plugins']['semantic'].get('type')}"
+        )
+        assert golden["plugins"]["semantic"]["version"] == "0.1.0", (
+            "Expected semantic plugin version 0.1.0, "
+            f"got {golden['plugins']['semantic'].get('version')}"
+        )
+        assert "config" in golden["plugins"]["semantic"], (
+            "Semantic plugin missing 'config' section"
+        )
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v05_with_semantic_round_trips_via_pydantic(self) -> None:
+        """Test that v0.5.0 golden artifact with semantic survives Pydantic round-trip."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        golden = load_golden("v0.5_compiled_artifacts_with_semantic.json")
+
+        # Remove $comment before Pydantic validation (it's not part of the schema)
+        golden_without_comment = {k: v for k, v in golden.items() if k != "$comment"}
+
+        # Validate via Pydantic
+        artifacts = CompiledArtifacts.model_validate(golden_without_comment)
+        assert artifacts.version == "0.5.0", (
+            f"Expected version 0.5.0 after round-trip, got {artifacts.version}"
+        )
+        assert artifacts.plugins is not None, "Plugins became None after round-trip"
+        assert artifacts.plugins.semantic is not None, (
+            "Semantic plugin became None after round-trip"
+        )
+        assert artifacts.plugins.semantic.type == "cube", (
+            f"Expected semantic type 'cube' after round-trip, got {artifacts.plugins.semantic.type}"
+        )
+        assert artifacts.plugins.semantic.version == "0.1.0", (
+            "Expected semantic version 0.1.0 after round-trip, "
+            f"got {artifacts.plugins.semantic.version}"
+        )
+
+        # Verify semantic config survived round-trip
+        assert artifacts.plugins.semantic.config is not None, (
+            "Semantic plugin config became None after round-trip"
+        )
+        assert "server_url" in artifacts.plugins.semantic.config, (
+            "Semantic plugin config missing 'server_url' after round-trip"
+        )
+        assert artifacts.plugins.semantic.config["server_url"] == "http://cube:4000", (
+            "Expected server_url 'http://cube:4000', "
+            f"got {artifacts.plugins.semantic.config.get('server_url')}"
+        )
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v05_transforms_have_cube_tags(self) -> None:
+        """Test that v0.5.0 transforms include cube tag for semantic integration."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        golden = load_golden("v0.5_compiled_artifacts_with_semantic.json")
+
+        # Remove $comment before Pydantic validation (it's not part of the schema)
+        golden_without_comment = {k: v for k, v in golden.items() if k != "$comment"}
+
+        artifacts = CompiledArtifacts.model_validate(golden_without_comment)
+
+        assert artifacts.transforms is not None, "Transforms section is None"
+        assert len(artifacts.transforms.models) > 0, "No models in transforms"
+
+        # Find the orders model which should have cube tag
+        orders_model = next(
+            (m for m in artifacts.transforms.models if m.name == "orders"),
+            None
+        )
+        assert orders_model is not None, "Missing 'orders' model in transforms"
+        assert orders_model.tags is not None, "orders model has no tags"
+        assert "cube" in orders_model.tags, (
+            f"orders model missing 'cube' tag, has: {orders_model.tags}"
+        )
 
 
 class TestQualityThresholds:

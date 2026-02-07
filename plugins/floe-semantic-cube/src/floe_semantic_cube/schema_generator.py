@@ -470,9 +470,18 @@ class CubeSchemaGenerator:
 
         Returns:
             Path to the written YAML file.
+
+        Raises:
+            SchemaGenerationError: If model_name contains path traversal.
         """
         content: dict[str, Any] = {"cubes": [cube_def]}
         file_path = output_dir / f"{model_name}.yaml"
+        # Guard against path traversal from untrusted model names
+        if not file_path.resolve().is_relative_to(output_dir.resolve()):
+            raise SchemaGenerationError(
+                f"Model name contains path traversal: {model_name}",
+                model_name=model_name,
+            )
         file_path.write_text(
             yaml.safe_dump(content, default_flow_style=False, sort_keys=False),
             encoding="utf-8",
