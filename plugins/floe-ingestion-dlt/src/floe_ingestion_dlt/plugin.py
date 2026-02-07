@@ -29,7 +29,7 @@ from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import IngestionConfig, IngestionPlugin, IngestionResult
 
 from floe_ingestion_dlt.config import VALID_SCHEMA_CONTRACTS, VALID_SOURCE_TYPES, VALID_WRITE_MODES
-from floe_ingestion_dlt.errors import PipelineConfigurationError
+from floe_ingestion_dlt.errors import PipelineConfigurationError, SchemaContractViolation
 from floe_ingestion_dlt.tracing import (
     get_tracer,
     ingestion_span,
@@ -336,6 +336,7 @@ class DltIngestionPlugin(IngestionPlugin):
                 - source: dlt source/resource to load
                 - write_disposition: Override write mode
                 - table_name: Override destination table name
+                - schema_contract: Schema contract mode (evolve, freeze, discard_value)
 
         Returns:
             IngestionResult with execution metrics.
@@ -352,6 +353,41 @@ class DltIngestionPlugin(IngestionPlugin):
         source = kwargs.get("source")
         write_disposition = kwargs.get("write_disposition", "append")
         table_name = kwargs.get("table_name")
+        schema_contract_mode = kwargs.get("schema_contract", "evolve")
+
+        # Map schema_contract string to dlt's expected format
+        if schema_contract_mode == "evolve":
+            schema_contract = {
+                "columns": "evolve",
+                "tables": "evolve",
+                "data_type": "evolve",
+            }
+        elif schema_contract_mode == "freeze":
+            schema_contract = {
+                "columns": "freeze",
+                "tables": "freeze",
+                "data_type": "freeze",
+            }
+        elif schema_contract_mode == "discard_value":
+            schema_contract = {
+                "columns": "discard_value",
+                "tables": "evolve",
+                "data_type": "discard_value",
+            }
+        else:
+            # Default to evolve for unknown values
+            schema_contract = {
+                "columns": "evolve",
+                "tables": "evolve",
+                "data_type": "evolve",
+            }
+
+        logger.info(
+            "pipeline_run_starting",
+            pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+            write_disposition=write_disposition,
+            schema_contract_mode=schema_contract_mode,
+        )
 
         with ingestion_span(
             tracer,
@@ -360,11 +396,12 @@ class DltIngestionPlugin(IngestionPlugin):
             write_mode=write_disposition,
         ) as span:
             try:
-                # Execute the pipeline
+                # Execute the pipeline with schema_contract
                 load_info = pipeline.run(
                     source,
                     write_disposition=write_disposition,
                     table_name=table_name,
+                    schema_contract=schema_contract,
                 )
 
                 elapsed = time.perf_counter() - start_time
@@ -408,6 +445,38 @@ class DltIngestionPlugin(IngestionPlugin):
                 elapsed = time.perf_counter() - start_time
                 error_msg = str(e)[:500]  # Truncate for safety
 
+                # Check if this is a schema contract violation
+                # dlt raises exceptions containing "schema" and "contract" when freeze mode rejects changes
+                error_lower = str(e).lower()
+                if "schema" in error_lower and "contract" in error_lower:
+                    # This is a schema contract violation
+                    record_ingestion_error(span, e)
+
+                    logger.error(
+                        "schema_contract_violation",
+                        pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                        schema_contract_mode=schema_contract_mode,
+                        error=error_msg,
+                        duration_seconds=elapsed,
+                    )
+
+                    # Return IngestionResult with SchemaContractViolation info in errors
+                    violation = SchemaContractViolation(
+                        error_msg,
+                        source_type=None,  # Would need to track from config
+                        destination_table=table_name,
+                        pipeline_name=getattr(pipeline, "pipeline_name", None),
+                    )
+
+                    return IngestionResult(
+                        success=False,
+                        rows_loaded=0,
+                        bytes_written=0,
+                        duration_seconds=elapsed,
+                        errors=[str(violation)],
+                    )
+
+                # Generic error handling
                 record_ingestion_error(span, e)
 
                 logger.error(

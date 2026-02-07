@@ -282,6 +282,141 @@ class TestRunPipeline:
         assert call_kwargs["write_disposition"] == "merge"
         assert call_kwargs["table_name"] == "bronze.raw_data"
 
+    @pytest.mark.requirement("4F-FR-031")
+    def test_run_passes_schema_contract_evolve(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes schema_contract dict to pipeline.run() for evolve.
+
+        Given schema_contract="evolve" kwarg, when run() is called, then
+        pipeline.run() is invoked with schema_contract dict with all fields
+        set to "evolve".
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            schema_contract="evolve",
+        )
+
+        # Verify pipeline.run was called with schema_contract dict
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert "schema_contract" in call_kwargs
+        assert call_kwargs["schema_contract"] == {
+            "columns": "evolve",
+            "tables": "evolve",
+            "data_type": "evolve",
+        }
+
+    @pytest.mark.requirement("4F-FR-032")
+    def test_run_passes_schema_contract_freeze(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes schema_contract dict to pipeline.run() for freeze.
+
+        Given schema_contract="freeze" kwarg, when run() is called, then
+        pipeline.run() is invoked with schema_contract dict with all fields
+        set to "freeze".
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            schema_contract="freeze",
+        )
+
+        # Verify pipeline.run was called with schema_contract dict
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert "schema_contract" in call_kwargs
+        assert call_kwargs["schema_contract"] == {
+            "columns": "freeze",
+            "tables": "freeze",
+            "data_type": "freeze",
+        }
+
+    @pytest.mark.requirement("4F-FR-033")
+    def test_run_passes_schema_contract_discard_value(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes schema_contract dict to pipeline.run() for discard_value.
+
+        Given schema_contract="discard_value" kwarg, when run() is called, then
+        pipeline.run() is invoked with schema_contract dict with columns and
+        data_type set to "discard_value", tables set to "evolve".
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            schema_contract="discard_value",
+        )
+
+        # Verify pipeline.run was called with schema_contract dict
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert "schema_contract" in call_kwargs
+        assert call_kwargs["schema_contract"] == {
+            "columns": "discard_value",
+            "tables": "evolve",
+            "data_type": "discard_value",
+        }
+
+    @pytest.mark.requirement("4F-FR-035")
+    def test_run_schema_contract_violation_raises(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run returns failure with SchemaContractViolation info.
+
+        Given pipeline.run() raises an exception with "schema" and "contract"
+        in message, when run() is called, then it returns
+        IngestionResult(success=False) with SchemaContractViolation info in errors.
+        """
+        mock_pipeline = MagicMock()
+        # Configure mock to raise schema contract violation
+        mock_pipeline.run.side_effect = Exception("Schema contract violation: column 'new_field' not allowed")
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            schema_contract="freeze",
+        )
+
+        # Verify result indicates failure with schema contract violation
+        assert result.success is False
+        assert len(result.errors) > 0
+        assert "schema contract violation" in result.errors[0].lower()
+
+    @pytest.mark.requirement("4F-FR-034")
+    def test_run_default_schema_contract_is_evolve(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run uses 'evolve' as default when no schema_contract kwarg passed.
+
+        Given no schema_contract kwarg, when run() is called, then
+        pipeline.run() is invoked with schema_contract dict set to "evolve" mode.
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        # Call run() without schema_contract kwarg
+        dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+        )
+
+        # Verify pipeline.run was called with default evolve schema_contract
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert "schema_contract" in call_kwargs
+        assert call_kwargs["schema_contract"] == {
+            "columns": "evolve",
+            "tables": "evolve",
+            "data_type": "evolve",
+        }
+
 
 class TestGetDestinationConfig:
     """Unit tests for T024 - get_destination_config() method."""

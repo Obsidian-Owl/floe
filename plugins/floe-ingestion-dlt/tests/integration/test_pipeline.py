@@ -116,3 +116,57 @@ class TestPipelineMergeMode:
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
         pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+
+
+class TestSchemaContractEnforcement:
+    """Integration tests for schema contract enforcement (T037-T039a)."""
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-031")
+    def test_evolve_contract_adds_new_column(self) -> None:
+        """Test evolve contract adds new column to Iceberg table.
+
+        Given schema_contract="evolve" and source data gains a new column,
+        when run() is executed, then the Iceberg table schema evolves
+        to include the new column.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-032")
+    def test_freeze_contract_rejects_schema_change(self) -> None:
+        """Test freeze contract rejects schema changes.
+
+        Given schema_contract="freeze" and source schema changes,
+        when run() is executed, then pipeline raises SchemaContractViolation.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-033")
+    def test_discard_value_drops_nonconforming_columns(self) -> None:
+        """Test discard_value drops non-conforming column values.
+
+        Given schema_contract="discard_value" and non-conforming column values,
+        when run() is executed, then values are discarded and existing schema
+        is preserved.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-037")
+    def test_column_removal_preserves_iceberg_columns(self) -> None:
+        """Test column removal preserves Iceberg table columns.
+
+        Given a column is removed from source data, when run() is executed,
+        then the Iceberg table retains the column (additive-only evolution).
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail("Integration test requires K8s infrastructure — start services via make test-integration")
