@@ -1,14 +1,14 @@
 # Epic Overview
 
 **Total Requirements**: 406+
-**Total Epics**: 24
+**Total Epics**: 25
 **Requirement Domains**: 9
 
 ---
 
 ## Executive Summary
 
-The floe platform delivery is organized into 22 Epics across 10 categories. Each Epic is sized for optimal SpecKit task generation (15-25 requirements, yielding 30-60 tasks).
+The floe platform delivery is organized into 25 Epics across 10 categories. Each Epic is sized for optimal SpecKit task generation (15-25 requirements, yielding 30-60 tasks).
 
 ### Epic Sizing Rationale
 
@@ -190,6 +190,7 @@ All Epics fall within the optimal or acceptable range.
 |------|------|-----------|------------|
 | 2B | Compilation | 13 | 1, 2A |
 | 4D | Storage Plugin | 10 | 1, 4C |
+| 4F | Ingestion Plugin | 6 | 1, 4C, 4D |
 | 7A | Identity/Secrets | 25 | 1, 2A |
 
 ### Wave 4 (Depends on Wave 3)
@@ -197,6 +198,7 @@ All Epics fall within the optimal or acceptable range.
 |------|------|-----------|------------|
 | 3A | Policy Enforcer | 15 | 2A, 2B |
 | 4B | Orchestrator Plugin | 10 | 1, 2B |
+| 4G | Reverse ETL (SinkConnector) | 5 | 4F, 1, 4C, 4D |
 | 7B | K8s RBAC | 16 | 1, 7A |
 | 8A | OCI Client | 16 | 2B, 7A |
 
@@ -287,6 +289,8 @@ Each Epic has exclusive ownership of specific files to prevent merge conflicts:
 | 4B | `plugins/floe-orchestrator-dagster/` | All files |
 | 4C | `plugins/floe-catalog-polaris/` | All files |
 | 4D | `floe-iceberg/` | All files |
+| 4F | `plugins/floe-ingestion-dlt/` | All files |
+| 4G | `plugins/floe-ingestion-dlt/` (sinks), `floe-core` (SinkConnector ABC) | `sinks.py`, `sink_config.py`, SinkConnector mixin |
 | 5A | `floe-dbt/` | All files |
 | 5B | `plugins/floe-quality-*/` | All files |
 | 6A | `floe-core/src/floe_core/plugins/telemetry.py` | Telemetry ABC |
@@ -306,10 +310,10 @@ Each Epic has exclusive ownership of specific files to prevent merge conflicts:
 
 | Layer | Epics | Responsibility |
 |-------|-------|----------------|
-| 1: Foundation | 1, 4A-D, 5A-B, 6A-B, 7A | PyPI packages, plugin interfaces |
+| 1: Foundation | 1, 4A-G, 5A-B, 6A-B, 7A | PyPI packages, plugin interfaces |
 | 2: Configuration | 2A, 2B, 3A-D | OCI registry artifacts (manifest.yaml) |
 | 3: Services | 9A, 9B | K8s Deployments (Dagster, Polaris, Cube) |
-| 4: Data | 5A, 9C | K8s Jobs (dbt run, dlt ingestion) |
+| 4: Data | 4F, 4G, 5A, 9C | K8s Jobs (dbt run, dlt ingestion, dlt egress) |
 
 ### ADR References
 
