@@ -134,8 +134,8 @@ def test_sync_converts_path_objects_to_strings() -> None:
 
 
 @pytest.mark.requirement("T049")
-def test_sync_with_otel_available() -> None:
-    """Test asset uses OpenTelemetry span when available."""
+def test_sync_with_otel_tracing() -> None:
+    """Test asset creates OTel span via core tracer factory."""
     from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
 
     mock_plugin = MagicMock()
@@ -143,29 +143,35 @@ def test_sync_with_otel_available() -> None:
         Path("cube/schema/orders.yaml"),
     ]
 
-    # Mock OpenTelemetry
+    # Mock the core tracer factory
     mock_span = MagicMock()
     mock_tracer = MagicMock()
     mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
     mock_tracer.start_as_current_span.return_value.__exit__.return_value = None
 
-    with patch("opentelemetry.trace.get_tracer") as mock_get_tracer:
+    with patch(
+        "floe_orchestrator_dagster.assets.semantic_sync._get_tracer"
+    ) as mock_get_tracer:
         mock_get_tracer.return_value = mock_tracer
 
         context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
         result = sync_semantic_schemas(context, mock_plugin)
 
-    # Verify OTel span was created
-    mock_get_tracer.assert_called_once()
+    # Verify tracer factory was called with orchestrator tracer name
+    mock_get_tracer.assert_called_once_with("floe.orchestrator.semantic")
+
+    # Verify span was created with standard attributes
     mock_tracer.start_as_current_span.assert_called_once_with(
-        "floe.orchestrator.sync_semantic_schemas"
+        "floe.orchestrator.sync_semantic_schemas",
+        attributes={
+            "semantic.manifest_path": "target/manifest.json",
+            "semantic.output_dir": "cube/schema",
+        },
     )
 
-    # Verify span attributes were set
-    mock_span.set_attribute.assert_any_call("manifest_path", "target/manifest.json")
-    mock_span.set_attribute.assert_any_call("output_dir", "cube/schema")
-    mock_span.set_attribute.assert_any_call("generated_file_count", 1)
+    # Verify generated file count attribute was set
+    mock_span.set_attribute.assert_any_call("semantic.generated_file_count", 1)
 
     assert result == ["cube/schema/orders.yaml"]
 

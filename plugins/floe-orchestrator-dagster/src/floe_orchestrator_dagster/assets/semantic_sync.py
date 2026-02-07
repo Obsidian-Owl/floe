@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dagster import AssetExecutionContext, asset
+from floe_core.telemetry.tracer_factory import get_tracer as _get_tracer
 
 if TYPE_CHECKING:
     from floe_core.plugins.semantic import SemanticLayerPlugin
@@ -86,49 +87,16 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
         else str(_DEFAULT_OUTPUT_DIR)
     )
 
-    # FR-011: OTel span for tracing
-    # Note: OpenTelemetry instrumentation should be configured at the
-    # application level. This is a placeholder for the span context.
-    try:
-        from opentelemetry import trace
-
-        tracer = trace.get_tracer(__name__)
-        with tracer.start_as_current_span("floe.orchestrator.sync_semantic_schemas") as span:
-            span.set_attribute("manifest_path", str(manifest_path))
-            span.set_attribute("output_dir", str(output_dir))
-
-            # Delegate to semantic layer plugin
-            context.log.info(
-                f"Syncing semantic schemas from {manifest_path} to {output_dir}"
-            )
-
-            generated_files = semantic_layer.sync_from_dbt_manifest(
-                manifest_path=manifest_path,
-                output_dir=output_dir,
-            )
-
-            file_paths = [str(f) for f in generated_files]
-            span.set_attribute("generated_file_count", len(file_paths))
-
-            context.log.info(
-                f"Semantic schema sync complete: {len(file_paths)} files generated"
-            )
-
-            logger.info(
-                "Semantic schema sync completed",
-                extra={
-                    "manifest_path": str(manifest_path),
-                    "output_dir": str(output_dir),
-                    "file_count": len(file_paths),
-                },
-            )
-
-            return file_paths
-
-    except ImportError:
-        # Fallback if OpenTelemetry is not available
-        context.log.warning("OpenTelemetry not available, skipping span creation")
-
+    # FR-011: OTel tracing via core tracer factory
+    # Factory returns NoOpTracer gracefully if OTel is not configured
+    tracer = _get_tracer("floe.orchestrator.semantic")
+    with tracer.start_as_current_span(
+        "floe.orchestrator.sync_semantic_schemas",
+        attributes={
+            "semantic.manifest_path": str(manifest_path),
+            "semantic.output_dir": str(output_dir),
+        },
+    ) as span:
         context.log.info(
             f"Syncing semantic schemas from {manifest_path} to {output_dir}"
         )
@@ -139,6 +107,7 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
         )
 
         file_paths = [str(f) for f in generated_files]
+        span.set_attribute("semantic.generated_file_count", len(file_paths))
 
         context.log.info(
             f"Semantic schema sync complete: {len(file_paths)} files generated"

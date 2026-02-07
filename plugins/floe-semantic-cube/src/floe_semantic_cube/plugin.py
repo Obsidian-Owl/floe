@@ -28,6 +28,13 @@ from floe_core.plugins.semantic import SemanticLayerPlugin
 
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.schema_generator import CubeSchemaGenerator
+from floe_semantic_cube.tracing import (
+    ATTR_DURATION_MS,
+    ATTR_MODEL_COUNT,
+    ATTR_SCHEMA_PATH,
+    get_tracer,
+    semantic_span,
+)
 
 if TYPE_CHECKING:
     from floe_core.plugins.compute import ComputePlugin
@@ -107,25 +114,35 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
         Returns:
             List of paths to generated schema files.
         """
-        generator = CubeSchemaGenerator(
-            model_filter_schemas=self._config.model_filter_schemas or None,
-            model_filter_tags=self._config.model_filter_tags or None,
-        )
+        tracer = get_tracer()
 
-        logger.info(
-            "sync_from_dbt_manifest_started",
-            manifest_path=str(manifest_path),
-            output_dir=str(output_dir),
-        )
+        with semantic_span(
+            tracer,
+            "sync_from_dbt_manifest",
+            server_url=self._config.server_url,
+            schema_path=str(output_dir),
+        ) as span:
+            generator = CubeSchemaGenerator(
+                model_filter_schemas=self._config.model_filter_schemas or None,
+                model_filter_tags=self._config.model_filter_tags or None,
+            )
 
-        result = generator.generate(manifest_path, output_dir)
+            logger.info(
+                "sync_from_dbt_manifest_started",
+                manifest_path=str(manifest_path),
+                output_dir=str(output_dir),
+            )
 
-        logger.info(
-            "sync_from_dbt_manifest_complete",
-            files_generated=len(result),
-        )
+            result = generator.generate(manifest_path, output_dir)
+            span.set_attribute(ATTR_MODEL_COUNT, len(result))
+            span.set_attribute(ATTR_SCHEMA_PATH, str(output_dir))
 
-        return result
+            logger.info(
+                "sync_from_dbt_manifest_complete",
+                files_generated=len(result),
+            )
+
+            return result
 
     def get_security_context(
         self,
@@ -220,6 +237,11 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
 
         Raises:
             ValueError: If timeout is outside valid range.
+
+        Requirements:
+            FR-048: OTel span for health check
+            FR-049: Configurable timeout
+            FR-050: Response time measurement
         """
         effective_timeout = timeout if timeout is not None else self._config.health_check_timeout
 
@@ -240,71 +262,92 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                 },
             )
 
-        checked_at = datetime.now(timezone.utc)
-        start = time.perf_counter()
+        # FR-048: OTel span for health check (raw tracer API since we catch
+        # all exceptions internally rather than letting them propagate)
+        tracer = get_tracer()
+        with tracer.start_as_current_span(
+            "semantic.health_check",
+            attributes={
+                "semantic.operation": "health_check",
+                "semantic.server_url": self._config.server_url,
+                "semantic.timeout": effective_timeout,
+            },
+        ) as span:
+            checked_at = datetime.now(timezone.utc)
+            start = time.perf_counter()
 
-        try:
-            assert self._client is not None  # noqa: S101
-            health_url = f"{self._config.server_url}/readyz"
-            response = self._client.get(health_url, timeout=effective_timeout)
-            elapsed_ms = (time.perf_counter() - start) * 1000
+            try:
+                assert self._client is not None  # noqa: S101
+                health_url = f"{self._config.server_url}/readyz"
+                response = self._client.get(health_url, timeout=effective_timeout)
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                span.set_attribute(ATTR_DURATION_MS, elapsed_ms)
 
-            if response.status_code == 200:
+                if response.status_code == 200:
+                    span.set_attribute("semantic.health_status", "healthy")
+                    return HealthStatus(
+                        state=HealthState.HEALTHY,
+                        message="Cube API is healthy",
+                        details={
+                            "response_time_ms": elapsed_ms,
+                            "checked_at": checked_at,
+                            "timeout": effective_timeout,
+                            "status_code": response.status_code,
+                        },
+                    )
+                span.set_attribute("semantic.health_status", "unhealthy")
+                span.set_attribute("semantic.status_code", response.status_code)
                 return HealthStatus(
-                    state=HealthState.HEALTHY,
-                    message="Cube API is healthy",
+                    state=HealthState.UNHEALTHY,
+                    message=f"Cube API returned status {response.status_code}",
                     details={
                         "response_time_ms": elapsed_ms,
                         "checked_at": checked_at,
                         "timeout": effective_timeout,
                         "status_code": response.status_code,
+                        "reason": "unhealthy_response",
                     },
                 )
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message=f"Cube API returned status {response.status_code}",
-                details={
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": effective_timeout,
-                    "status_code": response.status_code,
-                    "reason": "unhealthy_response",
-                },
-            )
-        except httpx.TimeoutException:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            logger.warning(
-                "health_check_timeout",
-                server_url=self._config.server_url,
-                timeout=effective_timeout,
-            )
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message=f"Cube API health check timed out after {effective_timeout}s",
-                details={
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": effective_timeout,
-                    "reason": "timeout",
-                },
-            )
-        except Exception as exc:
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            logger.warning(
-                "health_check_error",
-                server_url=self._config.server_url,
-                error=str(exc),
-            )
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message=f"Cube API health check failed: {exc}",
-                details={
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": effective_timeout,
-                    "reason": "connection_error",
-                },
-            )
+            except httpx.TimeoutException as exc:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                span.set_attribute(ATTR_DURATION_MS, elapsed_ms)
+                span.set_attribute("semantic.health_status", "timeout")
+                span.record_exception(exc)
+                logger.warning(
+                    "health_check_timeout",
+                    server_url=self._config.server_url,
+                    timeout=effective_timeout,
+                )
+                return HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message=f"Cube API health check timed out after {effective_timeout}s",
+                    details={
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": effective_timeout,
+                        "reason": "timeout",
+                    },
+                )
+            except Exception as exc:
+                elapsed_ms = (time.perf_counter() - start) * 1000
+                span.set_attribute(ATTR_DURATION_MS, elapsed_ms)
+                span.set_attribute("semantic.health_status", "error")
+                span.record_exception(exc)
+                logger.warning(
+                    "health_check_error",
+                    server_url=self._config.server_url,
+                    error=str(exc),
+                )
+                return HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message=f"Cube API health check failed: {exc}",
+                    details={
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": effective_timeout,
+                        "reason": "connection_error",
+                    },
+                )
 
     def startup(self) -> None:
         """Initialize plugin resources.
