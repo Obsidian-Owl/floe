@@ -260,8 +260,12 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         self._authenticated = False
         logger.info("InfisicalSecretsPlugin shutdown complete")
 
-    def health_check(self) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check connectivity to Infisical API.
+
+        Args:
+            timeout: Maximum time in seconds to wait for response.
+                Not used by this plugin; accepted for base ABC compatibility.
 
         Returns:
             HealthStatus indicating current health state.

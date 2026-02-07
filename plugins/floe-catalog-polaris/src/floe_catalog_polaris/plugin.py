@@ -939,7 +939,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             },
         )
 
-    def health_check(self, timeout: float = 1.0) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check Polaris catalog connectivity and health.
 
         Performs a lightweight operation (list_namespaces) to verify the catalog
@@ -947,7 +947,8 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
         Args:
             timeout: Maximum time in seconds to wait for response.
-                Defaults to 1.0 second. Must be between 0.1 and 10.0 seconds.
+                None means use the default of 1.0 second.
+                Must be between 0.1 and 10.0 seconds when specified.
 
         Returns:
             HealthStatus indicating whether catalog is healthy, including
@@ -961,7 +962,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> if status.state == HealthState.HEALTHY:
             ...     print(f"Catalog OK ({status.details['response_time_ms']:.1f}ms)")
         """
-        # Validate timeout parameter
+        # Apply default and validate timeout parameter
+        if timeout is None:
+            timeout = 1.0
         if not (0.1 <= timeout <= 10.0):
             raise ValueError(f"timeout must be between 0.1 and 10.0 seconds, got {timeout}")
 

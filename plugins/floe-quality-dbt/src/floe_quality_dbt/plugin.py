@@ -205,8 +205,12 @@ class DBTExpectationsPlugin(QualityPlugin):
     def get_lineage_emitter(self) -> OpenLineageEmitter | None:
         return None
 
-    def health_check(self) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check plugin health (FR-009).
+
+        Args:
+            timeout: Maximum time in seconds to wait for response.
+                Not used by this plugin; accepted for base ABC compatibility.
 
         Returns HEALTHY if dbt-core can be imported.
         """

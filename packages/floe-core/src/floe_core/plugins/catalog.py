@@ -349,19 +349,18 @@ class CatalogPlugin(PluginMetadata):
         """
         ...
 
-    def health_check(self, timeout: float = 1.0) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check catalog connectivity and health.
 
         Performs a lightweight operation (e.g., list namespaces) to verify
         the catalog is reachable and responding within the timeout period.
 
-        This method overrides the base PluginMetadata.health_check() to add
-        timeout support. Concrete implementations should override to provide
-        actual health checks with timeout handling.
+        Concrete implementations should override to provide actual health
+        checks with timeout handling.
 
         Args:
             timeout: Maximum time in seconds to wait for response.
-                Defaults to 1.0 second.
+                None means use the plugin's own default timeout.
 
         Returns:
             HealthStatus indicating whether catalog is healthy.

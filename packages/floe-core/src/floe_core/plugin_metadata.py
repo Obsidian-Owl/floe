@@ -207,17 +207,22 @@ class PluginMetadata(ABC):
         """
         return None
 
-    def health_check(self) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check the health of this plugin.
 
         Override this method to implement custom health checks.
         Health checks should complete within 5 seconds (SC-007).
 
+        Args:
+            timeout: Maximum time in seconds to wait for response.
+                None means use the plugin's own default timeout.
+                Concrete implementations may validate the range.
+
         Returns:
             HealthStatus indicating current health state.
 
         Example:
-            >>> def health_check(self) -> HealthStatus:
+            >>> def health_check(self, timeout: float | None = None) -> HealthStatus:
             ...     if self._connection.is_alive():
             ...         return HealthStatus(state=HealthState.HEALTHY)
             ...     return HealthStatus(
