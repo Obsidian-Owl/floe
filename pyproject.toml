@@ -107,6 +107,7 @@ pythonpath = [
     "plugins/floe-quality-dbt/src",
     "plugins/floe-semantic-cube/src",
     "plugins/floe-lineage-marquez/src",
+    "plugins/floe-ingestion-dlt/src",
     ".",
 ]
 python_files = ["test_*.py"]

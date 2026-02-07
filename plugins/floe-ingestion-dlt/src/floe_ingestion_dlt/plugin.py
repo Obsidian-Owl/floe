@@ -20,6 +20,8 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import time
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -35,6 +37,11 @@ if TYPE_CHECKING:
 __all__ = ["DltIngestionPlugin"]
 
 logger = structlog.get_logger(__name__)
+
+# Timeout validation bounds for health_check()
+_MIN_TIMEOUT: float = 0.1
+_MAX_TIMEOUT: float = 10.0
+_DEFAULT_TIMEOUT: float = 5.0
 
 
 class DltIngestionPlugin(IngestionPlugin):
@@ -173,41 +180,76 @@ class DltIngestionPlugin(IngestionPlugin):
         self._dlt_version = None
         logger.info("ingestion_plugin_stopped", plugin_name=self.name)
 
-    def health_check(self) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check plugin health (FR-007).
 
         Verifies:
-        1. dlt package is importable
-        2. Plugin has been started
+        1. Plugin has been started
+        2. dlt package is importable
+
+        Args:
+            timeout: Maximum time in seconds to wait for health check.
+                Must be between 0.1 and 10.0. Defaults to 5.0.
 
         Returns:
             HealthStatus with current state and diagnostic details.
+
+        Raises:
+            ValueError: If timeout is outside valid range.
         """
+        effective_timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT
+
+        if effective_timeout < _MIN_TIMEOUT or effective_timeout > _MAX_TIMEOUT:
+            msg = (
+                f"timeout must be between {_MIN_TIMEOUT} and "
+                f"{_MAX_TIMEOUT}, got {effective_timeout}"
+            )
+            raise ValueError(msg)
+
+        checked_at = datetime.now(timezone.utc)
+        start = time.perf_counter()
+
         # Check 1: Plugin started
         if not self._started:
+            elapsed_ms = (time.perf_counter() - start) * 1000
             return HealthStatus(
                 state=HealthState.UNHEALTHY,
                 message="Plugin not started — call startup() first",
-                details={"reason": "not_started"},
+                details={
+                    "reason": "not_started",
+                    "response_time_ms": elapsed_ms,
+                    "checked_at": checked_at,
+                    "timeout": effective_timeout,
+                },
             )
 
         # Check 2: dlt is importable
         try:
             import dlt as _dlt  # noqa: F401
 
+            elapsed_ms = (time.perf_counter() - start) * 1000
             return HealthStatus(
                 state=HealthState.HEALTHY,
                 message="dlt ingestion plugin is healthy",
                 details={
                     "dlt_version": self._dlt_version,
                     "started": self._started,
+                    "response_time_ms": elapsed_ms,
+                    "checked_at": checked_at,
+                    "timeout": effective_timeout,
                 },
             )
         except ImportError:
+            elapsed_ms = (time.perf_counter() - start) * 1000
             return HealthStatus(
                 state=HealthState.UNHEALTHY,
                 message="dlt package is not installed",
-                details={"reason": "dlt_not_importable"},
+                details={
+                    "reason": "dlt_not_importable",
+                    "response_time_ms": elapsed_ms,
+                    "checked_at": checked_at,
+                    "timeout": effective_timeout,
+                },
             )
 
     def create_pipeline(self, config: IngestionConfig) -> Any:
