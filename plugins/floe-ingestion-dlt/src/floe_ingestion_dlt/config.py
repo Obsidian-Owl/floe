@@ -216,9 +216,7 @@ class IngestionSourceConfig(BaseModel):
             ValueError: If schema_contract is not supported.
         """
         if v not in VALID_SCHEMA_CONTRACTS:
-            msg = (
-                f"schema_contract must be one of {sorted(VALID_SCHEMA_CONTRACTS)}, got '{v}'"
-            )
+            msg = f"schema_contract must be one of {sorted(VALID_SCHEMA_CONTRACTS)}, got '{v}'"
             raise ValueError(msg)
         return v
 
@@ -285,7 +283,8 @@ class DltIngestionConfig(BaseModel):
     @field_validator("sources")
     @classmethod
     def validate_unique_source_names(
-        cls, v: list[IngestionSourceConfig],
+        cls,
+        v: list[IngestionSourceConfig],
     ) -> list[IngestionSourceConfig]:
         """Validate that all source names are unique.
 

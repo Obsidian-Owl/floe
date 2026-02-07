@@ -125,8 +125,7 @@ def try_create_ingestion_resources(
         )
     except Exception:
         logger.exception(
-            "Failed to create ingestion resources"
-            " — ingestion pipelines will not be available"
+            "Failed to create ingestion resources — ingestion pipelines will not be available"
         )
         raise
 

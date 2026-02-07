@@ -370,7 +370,7 @@ data:
   postgresql-password: (base64-encoded)
   postgresql-postgres-password: (base64-encoded)
 stringData:
-  postgresql-url: postgresql://user:password@host:5432/db
+  postgresql-url: postgresql://user:password@host:5432/db  # pragma: allowlist secret
 ```
 
 **Encryption Characteristics**:

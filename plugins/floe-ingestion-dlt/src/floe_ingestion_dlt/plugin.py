@@ -166,8 +166,7 @@ class DltIngestionPlugin(IngestionPlugin):
                     error=str(exc),
                 )
                 raise ImportError(
-                    "dlt package is not installed. "
-                    "Install with: pip install 'dlt[iceberg]>=1.20.0'"
+                    "dlt package is not installed. Install with: pip install 'dlt[iceberg]>=1.20.0'"
                 ) from exc
 
             self._started = True

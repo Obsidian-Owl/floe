@@ -459,7 +459,7 @@ class TestGetDestinationConfig:
             "warehouse": "floe_warehouse",
             "s3_endpoint": "http://minio:9000",
             "s3_access_key": "minioadmin",
-            "s3_secret_key": "minioadmin",
+            "s3_secret_key": "minioadmin",  # pragma: allowlist secret
             "s3_region": "us-east-1",
         }
 
@@ -924,7 +924,7 @@ class TestStructuredLogging:
             "warehouse": "floe_warehouse",
             "s3_endpoint": "http://minio:9000",
             "s3_access_key": "sensitive-access-key-12345",
-            "s3_secret_key": "super-secret-key-67890",
+            "s3_secret_key": "super-secret-key-67890",  # pragma: allowlist secret
         }
 
         with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:

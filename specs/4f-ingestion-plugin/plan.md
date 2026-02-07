@@ -48,7 +48,7 @@ Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, pro
 
 **Principle VI: Security First**
 - [x] Input validation via Pydantic: `DltIngestionConfig`, `IngestionSourceConfig` validate all fields
-- [x] Credentials use SecretStr: `SecretStr` for any credential fields in config
+- [x] Credentials use SecretStr: `SecretStr` for any credential fields in config  <!-- pragma: allowlist secret -->
 - [x] No shell=True, no dynamic code execution on untrusted data: dlt uses Python API, no subprocess
 
 **Principle VII: Four-Layer Architecture**

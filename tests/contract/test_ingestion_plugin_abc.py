@@ -66,7 +66,7 @@ class TestIngestionPluginABCDefinition:
         assert hasattr(IngestionPlugin, "is_external")
 
         # Must be abstract
-        prop = getattr(IngestionPlugin, "is_external")
+        prop = IngestionPlugin.is_external
         # For properties, check if the fget method is abstract
         assert getattr(prop.fget, "__isabstractmethod__", False), "is_external must be abstract"
 
@@ -129,9 +129,9 @@ class TestIngestionPluginABCDefinition:
 
         # Must be abstract
         method = IngestionPlugin.get_destination_config
-        assert getattr(
-            method, "__isabstractmethod__", False
-        ), "get_destination_config() must be abstract"
+        assert getattr(method, "__isabstractmethod__", False), (
+            "get_destination_config() must be abstract"
+        )
 
         # Check signature
         sig = inspect.signature(IngestionPlugin.get_destination_config)

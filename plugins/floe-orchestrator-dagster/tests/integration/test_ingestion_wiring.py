@@ -27,8 +27,7 @@ class TestIngestionWiringIntegration:
         includes an "ingestion" resource.
         """
         pytest.fail(
-            "Integration test requires full orchestrator stack — "
-            "run via make test-integration"
+            "Integration test requires full orchestrator stack — run via make test-integration"
         )
 
     @pytest.mark.integration
@@ -41,6 +40,5 @@ class TestIngestionWiringIntegration:
         is included and no error is raised.
         """
         pytest.fail(
-            "Integration test requires full orchestrator stack — "
-            "run via make test-integration"
+            "Integration test requires full orchestrator stack — run via make test-integration"
         )

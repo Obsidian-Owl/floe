@@ -273,7 +273,6 @@ class TestPluginInterfaceContract:
                 f"SemanticLayerPlugin.{method}() removed. This is a MAJOR version change."
             )
 
-
     @pytest.mark.requirement("CONTRACT-002")
     def test_ingestion_plugin_methods_stable(self) -> None:
         """Test IngestionPlugin interface hasn't lost methods."""
@@ -392,9 +391,7 @@ class TestV06IngestionArtifacts:
         """Test that v0.6.0 golden artifact with ingestion plugin parses correctly."""
         golden = load_golden("v0.6_compiled_artifacts_with_ingestion.json")
 
-        assert golden["version"] == "0.6.0", (
-            f"Expected version 0.6.0, got {golden.get('version')}"
-        )
+        assert golden["version"] == "0.6.0", f"Expected version 0.6.0, got {golden.get('version')}"
         assert "plugins" in golden, "Missing 'plugins' section"
         assert "ingestion" in golden["plugins"], "Missing 'ingestion' plugin"
         assert golden["plugins"]["ingestion"]["type"] == "dlt", (

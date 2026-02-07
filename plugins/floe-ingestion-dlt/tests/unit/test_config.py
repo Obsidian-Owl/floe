@@ -287,8 +287,12 @@ class TestIngestionSourceConfig:
         """
         # Valid names (alphanumeric with underscores/hyphens allowed)
         valid_names = [
-            "valid_name", "ValidName123", "source_1",
-            "mySource", "name-with-dash", "123invalid",
+            "valid_name",
+            "ValidName123",
+            "source_1",
+            "mySource",
+            "name-with-dash",
+            "123invalid",
         ]
         for name in valid_names:
             config = IngestionSourceConfig(

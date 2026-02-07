@@ -250,7 +250,7 @@ containers:
 **Values**:
 ```yaml
 dagster:
-  postgresqlSecretName: "dagster-postgresql-secret"
+  postgresqlSecretName: "dagster-postgresql-secret"  # pragma: allowlist secret
   generatePostgresqlPasswordSecret: false
 ```
 
@@ -667,4 +667,4 @@ helm install floe ./charts/floe-platform \
 - Values: `charts/floe-platform/values.yaml`
 - Network Policies: `templates/networkpolicy.yaml`
 - RBAC: `templates/role.yaml`, `templates/rolebinding.yaml`, `templates/serviceaccount.yaml`
-- Secrets: `templates/secret-postgresql.yaml`, `templates/secret-dagster.yaml`, `templates/externalsecret.yaml`
+- Secrets: `templates/secret-postgresql.yaml`, `templates/secret-dagster.yaml`, `templates/externalsecret.yaml`  <!-- pragma: allowlist secret -->

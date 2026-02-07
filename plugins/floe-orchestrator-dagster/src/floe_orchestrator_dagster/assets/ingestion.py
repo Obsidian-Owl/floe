@@ -164,8 +164,7 @@ def create_ingestion_assets(
         """
         ingestion_plugin = context.resources.ingestion
         context.log.info(
-            f"Ingestion asset triggered via {ingestion_plugin.name} "
-            f"v{ingestion_plugin.version}"
+            f"Ingestion asset triggered via {ingestion_plugin.name} v{ingestion_plugin.version}"
         )
 
     logger.info(
