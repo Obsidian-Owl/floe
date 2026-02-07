@@ -37,22 +37,42 @@ from floe_semantic_cube.errors import SchemaGenerationError
 logger = structlog.get_logger(__name__)
 
 # Numeric SQL types that map to Cube measures
-_NUMERIC_TYPES: frozenset[str] = frozenset({
-    "integer", "int", "bigint", "smallint", "tinyint",
-    "float", "double", "real",
-    "decimal", "numeric", "number",
-})
+_NUMERIC_TYPES: frozenset[str] = frozenset(
+    {
+        "integer",
+        "int",
+        "bigint",
+        "smallint",
+        "tinyint",
+        "float",
+        "double",
+        "real",
+        "decimal",
+        "numeric",
+        "number",
+    }
+)
 
 # Time SQL types that map to Cube time dimensions
-_TIME_TYPES: frozenset[str] = frozenset({
-    "date", "timestamp", "timestamp_tz", "timestamp_ntz",
-    "timestamptz", "datetime", "time",
-})
+_TIME_TYPES: frozenset[str] = frozenset(
+    {
+        "date",
+        "timestamp",
+        "timestamp_tz",
+        "timestamp_ntz",
+        "timestamptz",
+        "datetime",
+        "time",
+    }
+)
 
 # Boolean SQL types
-_BOOLEAN_TYPES: frozenset[str] = frozenset({
-    "boolean", "bool",
-})
+_BOOLEAN_TYPES: frozenset[str] = frozenset(
+    {
+        "boolean",
+        "bool",
+    }
+)
 
 
 class CubeSchemaGenerator:
@@ -142,13 +162,9 @@ class CubeSchemaGenerator:
             result: dict[str, Any] = json.loads(text)
             return result
         except json.JSONDecodeError as exc:
-            raise SchemaGenerationError(
-                f"Invalid JSON in manifest: {exc}"
-            ) from exc
+            raise SchemaGenerationError(f"Invalid JSON in manifest: {exc}") from exc
 
-    def _extract_models(
-        self, manifest: dict[str, Any]
-    ) -> list[dict[str, Any]]:
+    def _extract_models(self, manifest: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract model nodes from manifest.
 
         Args:
@@ -161,9 +177,7 @@ class CubeSchemaGenerator:
             SchemaGenerationError: If 'nodes' key is missing.
         """
         if "nodes" not in manifest:
-            raise SchemaGenerationError(
-                "Manifest missing required 'nodes' key"
-            )
+            raise SchemaGenerationError("Manifest missing required 'nodes' key")
 
         nodes: dict[str, Any] = manifest["nodes"]
         models: list[dict[str, Any]] = []
@@ -173,9 +187,7 @@ class CubeSchemaGenerator:
 
         return models
 
-    def _filter_models(
-        self, models: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _filter_models(self, models: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Filter models by schema and/or tag.
 
         Args:
@@ -187,17 +199,11 @@ class CubeSchemaGenerator:
         result = models
 
         if self._filter_schemas:
-            result = [
-                m for m in result
-                if m.get("schema", "") in self._filter_schemas
-            ]
+            result = [m for m in result if m.get("schema", "") in self._filter_schemas]
 
         if self._filter_tags:
             filter_tags_set = set(self._filter_tags)
-            result = [
-                m for m in result
-                if filter_tags_set.intersection(m.get("tags", []))
-            ]
+            result = [m for m in result if filter_tags_set.intersection(m.get("tags", []))]
 
         return result
 
@@ -366,14 +372,10 @@ class CubeSchemaGenerator:
             return []
 
         # Build lookup for model unique_id -> name
-        model_names: dict[str, str] = {
-            m["unique_id"]: m["name"] for m in all_models
-        }
+        model_names: dict[str, str] = {m["unique_id"]: m["name"] for m in all_models}
 
         model_meta = model.get("meta", {})
-        join_relationship_overrides: dict[str, str] = model_meta.get(
-            "cube_join_relationship", {}
-        )
+        join_relationship_overrides: dict[str, str] = model_meta.get("cube_join_relationship", {})
 
         joins: list[dict[str, Any]] = []
         for dep_id in depends_on:
@@ -382,25 +384,23 @@ class CubeSchemaGenerator:
                 # Dependency is not a model in our set, skip
                 continue
 
-            relationship = join_relationship_overrides.get(
-                dep_name, "belongs_to"
-            )
+            relationship = join_relationship_overrides.get(dep_name, "belongs_to")
 
             # Generate default join SQL using shared column name convention
             # Look for common column (e.g., customer_id in both model and dep)
             join_sql = f"{{{model['name']}}}.{dep_name}_id = {{{dep_name}}}.{dep_name}_id"
 
-            joins.append({
-                "name": dep_name,
-                "sql": join_sql,
-                "relationship": relationship,
-            })
+            joins.append(
+                {
+                    "name": dep_name,
+                    "sql": join_sql,
+                    "relationship": relationship,
+                }
+            )
 
         return joins
 
-    def _make_pre_aggregations(
-        self, model: dict[str, Any]
-    ) -> list[dict[str, Any]]:
+    def _make_pre_aggregations(self, model: dict[str, Any]) -> list[dict[str, Any]]:
         """Create Cube pre-aggregation definitions from meta tags.
 
         Args:

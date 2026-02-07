@@ -36,9 +36,7 @@ class TestGetTracer:
         Validates that the function returns a tracer from the factory with the
         correct tracer name for the Cube semantic layer plugin.
         """
-        with patch(
-            "floe_semantic_cube.tracing._factory_get_tracer"
-        ) as mock_factory:
+        with patch("floe_semantic_cube.tracing._factory_get_tracer") as mock_factory:
             mock_tracer = MagicMock(spec=["start_as_current_span"])
             mock_factory.return_value = mock_tracer
 
@@ -54,9 +52,7 @@ class TestGetTracer:
         Validates that the tracer name matches OpenTelemetry naming conventions
         for the floe semantic cube plugin.
         """
-        with patch(
-            "floe_semantic_cube.tracing._factory_get_tracer"
-        ) as mock_factory:
+        with patch("floe_semantic_cube.tracing._factory_get_tracer") as mock_factory:
             get_tracer()
 
             # Verify tracer name follows conventions
@@ -76,9 +72,7 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status", "set_attribute", "record_exception"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         with semantic_span(mock_tracer, "health_check") as span:
             assert span is mock_span
@@ -101,9 +95,7 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         with semantic_span(
             mock_tracer,
@@ -131,9 +123,7 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         with semantic_span(
             mock_tracer,
@@ -161,15 +151,11 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         extra = {"custom.attribute": "value", "model.count": 5}
 
-        with semantic_span(
-            mock_tracer, "sync_schema", extra_attributes=extra
-        ):
+        with semantic_span(mock_tracer, "sync_schema", extra_attributes=extra):
             pass
 
         call_kwargs = mock_tracer.start_as_current_span.call_args
@@ -187,9 +173,7 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         with semantic_span(
             mock_tracer,
@@ -213,9 +197,7 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status", "record_exception"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         test_error = ValueError("test error")
 
@@ -239,9 +221,7 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status", "set_attribute"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         with semantic_span(mock_tracer, "sync_schema") as span:
             # Caller can add custom attributes

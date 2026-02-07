@@ -83,9 +83,7 @@ def test_sync_propagates_file_not_found_error() -> None:
     from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
 
     mock_plugin = MagicMock()
-    mock_plugin.sync_from_dbt_manifest.side_effect = FileNotFoundError(
-        "manifest.json not found"
-    )
+    mock_plugin.sync_from_dbt_manifest.side_effect = FileNotFoundError("manifest.json not found")
 
     context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
@@ -149,9 +147,7 @@ def test_sync_with_otel_tracing() -> None:
     mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
     mock_tracer.start_as_current_span.return_value.__exit__.return_value = None
 
-    with patch(
-        "floe_orchestrator_dagster.assets.semantic_sync._get_tracer"
-    ) as mock_get_tracer:
+    with patch("floe_orchestrator_dagster.assets.semantic_sync._get_tracer") as mock_get_tracer:
         mock_get_tracer.return_value = mock_tracer
 
         context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})

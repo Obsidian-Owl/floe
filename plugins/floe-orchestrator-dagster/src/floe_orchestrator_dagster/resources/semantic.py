@@ -127,7 +127,8 @@ def try_create_semantic_resources(
         )
     except Exception:
         logger.exception(
-            "Failed to create semantic layer resources — this will prevent semantic layer sync from working"
+            "Failed to create semantic layer resources"
+            " — this will prevent semantic layer sync from working"
         )
         raise
 

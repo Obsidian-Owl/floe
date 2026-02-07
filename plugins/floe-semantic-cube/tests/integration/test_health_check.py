@@ -106,34 +106,26 @@ class TestCubeHealthCheckSpecific:
         assert isinstance(status, HealthStatus)
 
     @pytest.mark.requirement("FR-049")
-    def test_health_check_rejects_timeout_below_minimum(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_health_check_rejects_timeout_below_minimum(self, plugin: CubeSemanticPlugin) -> None:
         """Test health check rejects timeout below 0.1s."""
         with pytest.raises(ValueError, match="timeout"):
             plugin.health_check(timeout=0.05)
 
     @pytest.mark.requirement("FR-049")
-    def test_health_check_rejects_timeout_above_maximum(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_health_check_rejects_timeout_above_maximum(self, plugin: CubeSemanticPlugin) -> None:
         """Test health check rejects timeout above 10.0s."""
         with pytest.raises(ValueError, match="timeout"):
             plugin.health_check(timeout=15.0)
 
     @pytest.mark.requirement("FR-028")
-    def test_health_check_unhealthy_when_not_started(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_health_check_unhealthy_when_not_started(self, plugin: CubeSemanticPlugin) -> None:
         """Test health check returns UNHEALTHY before startup()."""
         status = plugin.health_check()
         assert status.state == HealthState.UNHEALTHY
         assert "not started" in status.message.lower()
 
     @pytest.mark.requirement("FR-028")
-    def test_health_check_unhealthy_includes_reason(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_health_check_unhealthy_includes_reason(self, plugin: CubeSemanticPlugin) -> None:
         """Test unhealthy status includes reason in details."""
         status = plugin.health_check()
         assert "reason" in status.details
@@ -157,9 +149,7 @@ class TestCubeHealthCheckSpecific:
             plugin.shutdown()
 
     @pytest.mark.requirement("FR-008")
-    def test_startup_shutdown_lifecycle_idempotent(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_startup_shutdown_lifecycle_idempotent(self, plugin: CubeSemanticPlugin) -> None:
         """Test startup/shutdown can be called multiple times safely."""
         plugin.startup()
         plugin.startup()  # Should be idempotent
@@ -167,9 +157,7 @@ class TestCubeHealthCheckSpecific:
         plugin.shutdown()  # Should be idempotent
 
     @pytest.mark.requirement("FR-008")
-    def test_startup_creates_http_client(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_startup_creates_http_client(self, plugin: CubeSemanticPlugin) -> None:
         """Test that startup creates an httpx client."""
         assert plugin._client is None
         plugin.startup()

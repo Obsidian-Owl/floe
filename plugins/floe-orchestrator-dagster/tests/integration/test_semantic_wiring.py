@@ -125,9 +125,9 @@ class TestSemanticDefinitionsWiring(IntegrationTestBase):
 
         # Check that resources dict does NOT contain semantic_layer
         resources = definitions.resources
-        assert (
-            "semantic_layer" not in resources
-        ), "semantic_layer should not be present when not configured"
+        assert "semantic_layer" not in resources, (
+            "semantic_layer should not be present when not configured"
+        )
 
 
 __all__ = [

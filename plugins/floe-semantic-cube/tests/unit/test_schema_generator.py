@@ -42,6 +42,7 @@ from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_manifest(
     nodes: dict[str, Any] | None = None,
     *,
@@ -113,24 +114,25 @@ def _read_generated_yaml(path: Path) -> dict[str, Any]:
 # Test: Single model conversion
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-010")
 @pytest.mark.requirement("FR-011")
 class TestSingleModelConversion:
     """Test basic dbt model to Cube YAML conversion."""
 
-    def test_single_model_produces_one_yaml_file(
-        self, tmp_path: Path
-    ) -> None:
+    def test_single_model_produces_one_yaml_file(self, tmp_path: Path) -> None:
         """Test that a single model produces exactly one YAML file."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={
-                    "customer_id": _make_column("customer_id", "integer"),
-                    "name": _make_column("name", "varchar"),
-                },
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "customer_id": _make_column("customer_id", "integer"),
+                        "name": _make_column("name", "varchar"),
+                    },
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -143,12 +145,14 @@ class TestSingleModelConversion:
 
     def test_cube_name_matches_model_name(self, tmp_path: Path) -> None:
         """Test that generated cube name matches dbt model name."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -165,13 +169,15 @@ class TestSingleModelConversion:
 
     def test_sql_table_uses_schema_dot_name(self, tmp_path: Path) -> None:
         """Test that sql_table is schema.model_name per FR-011."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                schema="gold",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    schema="gold",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -188,25 +194,36 @@ class TestSingleModelConversion:
 # Test: Column-to-measure inference
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-012")
 class TestNumericColumnToMeasure:
     """Test that numeric columns become Cube measures."""
 
-    @pytest.mark.parametrize("data_type", [
-        "integer", "int", "bigint", "smallint",
-        "float", "double", "real",
-        "decimal", "numeric", "number",
-    ])
-    def test_numeric_types_become_measures(
-        self, tmp_path: Path, data_type: str
-    ) -> None:
+    @pytest.mark.parametrize(
+        "data_type",
+        [
+            "integer",
+            "int",
+            "bigint",
+            "smallint",
+            "float",
+            "double",
+            "real",
+            "decimal",
+            "numeric",
+            "number",
+        ],
+    )
+    def test_numeric_types_become_measures(self, tmp_path: Path, data_type: str) -> None:
         """Test that various numeric SQL types map to measures."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"amount": _make_column("amount", data_type)},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"amount": _make_column("amount", data_type)},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -220,16 +237,16 @@ class TestNumericColumnToMeasure:
         measure_names = [m["name"] for m in cube.get("measures", [])]
         assert "amount" in measure_names
 
-    def test_numeric_column_default_aggregation_is_sum(
-        self, tmp_path: Path
-    ) -> None:
+    def test_numeric_column_default_aggregation_is_sum(self, tmp_path: Path) -> None:
         """Test default aggregation for non-ID numeric columns is sum."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"total_amount": _make_column("total_amount", "decimal")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"total_amount": _make_column("total_amount", "decimal")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -245,12 +262,14 @@ class TestNumericColumnToMeasure:
 
     def test_id_column_heuristic_uses_count(self, tmp_path: Path) -> None:
         """Test that ID columns (ending in _id) use count aggregation."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -264,21 +283,22 @@ class TestNumericColumnToMeasure:
         order_id = next(m for m in measures if m["name"] == "order_id")
         assert order_id["type"] == "count"
 
-    def test_meta_cube_measure_type_overrides_default(
-        self, tmp_path: Path
-    ) -> None:
+    def test_meta_cube_measure_type_overrides_default(self, tmp_path: Path) -> None:
         """Test meta.cube_measure_type overrides default aggregation (FR-015)."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "amount": _make_column(
-                        "amount", "decimal",
-                        meta={"cube_measure_type": "avg"},
-                    ),
-                },
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "amount": _make_column(
+                            "amount",
+                            "decimal",
+                            meta={"cube_measure_type": "avg"},
+                        ),
+                    },
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -297,32 +317,38 @@ class TestNumericColumnToMeasure:
 # Test: Column-to-dimension inference
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-013")
 class TestNonNumericColumnToDimension:
     """Test that non-numeric columns become Cube dimensions."""
 
-    @pytest.mark.parametrize("data_type,expected_type", [
-        ("varchar", "string"),
-        ("string", "string"),
-        ("text", "string"),
-        ("char", "string"),
-        ("date", "time"),
-        ("timestamp", "time"),
-        ("timestamp_tz", "time"),
-        ("datetime", "time"),
-        ("boolean", "boolean"),
-        ("bool", "boolean"),
-    ])
+    @pytest.mark.parametrize(
+        "data_type,expected_type",
+        [
+            ("varchar", "string"),
+            ("string", "string"),
+            ("text", "string"),
+            ("char", "string"),
+            ("date", "time"),
+            ("timestamp", "time"),
+            ("timestamp_tz", "time"),
+            ("datetime", "time"),
+            ("boolean", "boolean"),
+            ("bool", "boolean"),
+        ],
+    )
     def test_non_numeric_types_become_dimensions(
         self, tmp_path: Path, data_type: str, expected_type: str
     ) -> None:
         """Test that non-numeric SQL types map to dimensions with correct Cube type."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={"col": _make_column("col", data_type)},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={"col": _make_column("col", data_type)},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -337,21 +363,22 @@ class TestNonNumericColumnToDimension:
         col_dim = next(d for d in dims if d["name"] == "col")
         assert col_dim["type"] == expected_type
 
-    def test_meta_cube_type_overrides_inferred_type(
-        self, tmp_path: Path
-    ) -> None:
+    def test_meta_cube_type_overrides_inferred_type(self, tmp_path: Path) -> None:
         """Test meta.cube_type overrides inferred dimension type (FR-015)."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={
-                    "status": _make_column(
-                        "status", "varchar",
-                        meta={"cube_type": "number"},
-                    ),
-                },
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={
+                        "status": _make_column(
+                            "status",
+                            "varchar",
+                            meta={"cube_type": "number"},
+                        ),
+                    },
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -370,26 +397,29 @@ class TestNonNumericColumnToDimension:
 # Test: Join conversion
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-014")
 class TestRefToJoinConversion:
     """Test dbt ref() relationships convert to Cube joins."""
 
     def test_depends_on_creates_join(self, tmp_path: Path) -> None:
         """Test depends_on.nodes creates Cube join entries."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "order_id": _make_column("order_id", "integer"),
-                    "customer_id": _make_column("customer_id", "integer"),
-                },
-                depends_on_nodes=["model.analytics.customers"],
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "order_id": _make_column("order_id", "integer"),
+                        "customer_id": _make_column("customer_id", "integer"),
+                    },
+                    depends_on_nodes=["model.analytics.customers"],
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -411,24 +441,24 @@ class TestRefToJoinConversion:
         join_names = [j["name"] for j in joins]
         assert "customers" in join_names
 
-    def test_default_join_relationship_is_belongs_to(
-        self, tmp_path: Path
-    ) -> None:
+    def test_default_join_relationship_is_belongs_to(self, tmp_path: Path) -> None:
         """Test default join relationship is belongs_to."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "order_id": _make_column("order_id", "integer"),
-                    "customer_id": _make_column("customer_id", "integer"),
-                },
-                depends_on_nodes=["model.analytics.customers"],
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "order_id": _make_column("order_id", "integer"),
+                        "customer_id": _make_column("customer_id", "integer"),
+                    },
+                    depends_on_nodes=["model.analytics.customers"],
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -448,25 +478,25 @@ class TestRefToJoinConversion:
                 break
         assert orders_found, "orders cube not found in generated files"
 
-    def test_meta_cube_join_relationship_overrides_default(
-        self, tmp_path: Path
-    ) -> None:
+    def test_meta_cube_join_relationship_overrides_default(self, tmp_path: Path) -> None:
         """Test meta.cube_join_relationship overrides default."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "order_id": _make_column("order_id", "integer"),
-                    "customer_id": _make_column("customer_id", "integer"),
-                },
-                depends_on_nodes=["model.analytics.customers"],
-                meta={"cube_join_relationship": {"customers": "has_many"}},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "order_id": _make_column("order_id", "integer"),
+                        "customer_id": _make_column("customer_id", "integer"),
+                    },
+                    depends_on_nodes=["model.analytics.customers"],
+                    meta={"cube_join_relationship": {"customers": "has_many"}},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -491,29 +521,30 @@ class TestRefToJoinConversion:
 # Test: Multi-model generation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-010")
 @pytest.mark.requirement("FR-017")
 class TestMultiModelGeneration:
     """Test multi-model manifest produces multiple YAML files."""
 
-    def test_three_models_produce_three_yaml_files(
-        self, tmp_path: Path
-    ) -> None:
+    def test_three_models_produce_three_yaml_files(self, tmp_path: Path) -> None:
         """Test that three models produce three separate YAML files."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-            "model.analytics.products": _make_model(
-                "products",
-                columns={"product_id": _make_column("product_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+                "model.analytics.products": _make_model(
+                    "products",
+                    columns={"product_id": _make_column("product_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -528,24 +559,27 @@ class TestMultiModelGeneration:
 # Test: Model filtering
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-016")
 class TestModelFiltering:
     """Test filtering models by schema prefix or tag."""
 
     def test_filter_by_schema(self, tmp_path: Path) -> None:
         """Test filtering models by schema prefix."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                schema="gold",
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.raw_events": _make_model(
-                "raw_events",
-                schema="staging",
-                columns={"event_id": _make_column("event_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    schema="gold",
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.raw_events": _make_model(
+                    "raw_events",
+                    schema="staging",
+                    columns={"event_id": _make_column("event_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -559,18 +593,20 @@ class TestModelFiltering:
 
     def test_filter_by_tag(self, tmp_path: Path) -> None:
         """Test filtering models by tag."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                tags=["cube", "analytics"],
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.raw_events": _make_model(
-                "raw_events",
-                tags=["staging"],
-                columns={"event_id": _make_column("event_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    tags=["cube", "analytics"],
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.raw_events": _make_model(
+                    "raw_events",
+                    tags=["staging"],
+                    columns={"event_id": _make_column("event_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -584,18 +620,20 @@ class TestModelFiltering:
 
     def test_no_filter_includes_all_models(self, tmp_path: Path) -> None:
         """Test no filters returns all model nodes."""
-        manifest = _make_manifest({
-            "model.analytics.customers": _make_model(
-                "customers",
-                schema="gold",
-                columns={"customer_id": _make_column("customer_id", "integer")},
-            ),
-            "model.analytics.raw_events": _make_model(
-                "raw_events",
-                schema="staging",
-                columns={"event_id": _make_column("event_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.customers": _make_model(
+                    "customers",
+                    schema="gold",
+                    columns={"customer_id": _make_column("customer_id", "integer")},
+                ),
+                "model.analytics.raw_events": _make_model(
+                    "raw_events",
+                    schema="staging",
+                    columns={"event_id": _make_column("event_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -610,36 +648,37 @@ class TestModelFiltering:
 # Test: Pre-aggregation generation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-021")
 @pytest.mark.requirement("FR-022")
 class TestPreAggregationGeneration:
     """Test pre-aggregation generation from meta tags."""
 
-    def test_meta_cube_pre_aggregation_generates_block(
-        self, tmp_path: Path
-    ) -> None:
+    def test_meta_cube_pre_aggregation_generates_block(self, tmp_path: Path) -> None:
         """Test meta.cube_pre_aggregation triggers pre-aggregation generation."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "order_id": _make_column("order_id", "integer"),
-                    "total": _make_column("total", "decimal"),
-                    "order_date": _make_column("order_date", "date"),
-                },
-                meta={
-                    "cube_pre_aggregation": {
-                        "main": {
-                            "type": "rollup",
-                            "measures": ["total"],
-                            "dimensions": ["order_date"],
-                            "time_dimension": "order_date",
-                            "granularity": "day",
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "order_id": _make_column("order_id", "integer"),
+                        "total": _make_column("total", "decimal"),
+                        "order_date": _make_column("order_date", "date"),
+                    },
+                    meta={
+                        "cube_pre_aggregation": {
+                            "main": {
+                                "type": "rollup",
+                                "measures": ["total"],
+                                "dimensions": ["order_date"],
+                                "time_dimension": "order_date",
+                                "granularity": "day",
+                            },
                         },
                     },
-                },
-            ),
-        })
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -663,26 +702,28 @@ class TestPreAggregationRefreshKey:
 
     def test_refresh_key_every(self, tmp_path: Path) -> None:
         """Test refreshKey with every configuration."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "total": _make_column("total", "decimal"),
-                    "order_date": _make_column("order_date", "date"),
-                },
-                meta={
-                    "cube_pre_aggregation": {
-                        "main": {
-                            "type": "rollup",
-                            "measures": ["total"],
-                            "time_dimension": "order_date",
-                            "granularity": "day",
-                            "refresh_key": {"every": "1 hour"},
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "total": _make_column("total", "decimal"),
+                        "order_date": _make_column("order_date", "date"),
+                    },
+                    meta={
+                        "cube_pre_aggregation": {
+                            "main": {
+                                "type": "rollup",
+                                "measures": ["total"],
+                                "time_dimension": "order_date",
+                                "granularity": "day",
+                                "refresh_key": {"every": "1 hour"},
+                            },
                         },
                     },
-                },
-            ),
-        })
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -702,26 +743,28 @@ class TestPreAggregationPartitionGranularity:
 
     def test_partition_granularity(self, tmp_path: Path) -> None:
         """Test partitionGranularity in pre-aggregation."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "total": _make_column("total", "decimal"),
-                    "order_date": _make_column("order_date", "date"),
-                },
-                meta={
-                    "cube_pre_aggregation": {
-                        "main": {
-                            "type": "rollup",
-                            "measures": ["total"],
-                            "time_dimension": "order_date",
-                            "granularity": "day",
-                            "partition_granularity": "month",
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "total": _make_column("total", "decimal"),
+                        "order_date": _make_column("order_date", "date"),
+                    },
+                    meta={
+                        "cube_pre_aggregation": {
+                            "main": {
+                                "type": "rollup",
+                                "measures": ["total"],
+                                "time_dimension": "order_date",
+                                "granularity": "day",
+                                "partition_granularity": "month",
+                            },
                         },
                     },
-                },
-            ),
-        })
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -739,16 +782,16 @@ class TestPreAggregationPartitionGranularity:
 class TestNoPreAggregationWhenAbsent:
     """Test no pre-aggregation when meta is absent."""
 
-    def test_no_pre_aggregation_meta_means_no_block(
-        self, tmp_path: Path
-    ) -> None:
+    def test_no_pre_aggregation_meta_means_no_block(self, tmp_path: Path) -> None:
         """Test that models without meta.cube_pre_aggregation have no pre_aggregations."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -766,18 +809,21 @@ class TestNoPreAggregationWhenAbsent:
 # Test: Output directory cleanup
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-018")
 class TestOutputDirCleanup:
     """Test output_dir is cleaned before writing."""
 
     def test_existing_yaml_files_are_deleted(self, tmp_path: Path) -> None:
         """Test that existing .yaml files in output_dir are removed."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -802,13 +848,12 @@ class TestOutputDirCleanup:
 # Test: Edge cases and error handling
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("FR-019")
 class TestMissingManifest:
     """Test FileNotFoundError for missing manifest."""
 
-    def test_missing_manifest_raises_file_not_found(
-        self, tmp_path: Path
-    ) -> None:
+    def test_missing_manifest_raises_file_not_found(self, tmp_path: Path) -> None:
         """Test that a missing manifest file raises FileNotFoundError."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -823,9 +868,7 @@ class TestMissingManifest:
 class TestMalformedManifest:
     """Test SchemaGenerationError for malformed manifest."""
 
-    def test_invalid_json_raises_schema_generation_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_invalid_json_raises_schema_generation_error(self, tmp_path: Path) -> None:
         """Test invalid JSON raises SchemaGenerationError."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -836,9 +879,7 @@ class TestMalformedManifest:
         with pytest.raises(SchemaGenerationError, match="manifest"):
             gen.generate(manifest_path, output_dir)
 
-    def test_missing_nodes_key_raises_schema_generation_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_missing_nodes_key_raises_schema_generation_error(self, tmp_path: Path) -> None:
         """Test manifest without 'nodes' key raises SchemaGenerationError."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -870,9 +911,11 @@ class TestEdgeCases:
         self, tmp_path: Path
     ) -> None:
         """Test model with no columns produces a cube with empty measures/dimensions."""
-        manifest = _make_manifest({
-            "model.analytics.empty_model": _make_model("empty_model"),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.empty_model": _make_model("empty_model"),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -888,12 +931,14 @@ class TestEdgeCases:
 
     def test_special_characters_in_model_name(self, tmp_path: Path) -> None:
         """Test model names with underscores and numbers work correctly."""
-        manifest = _make_manifest({
-            "model.analytics.order_items_v2": _make_model(
-                "order_items_v2",
-                columns={"item_id": _make_column("item_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.order_items_v2": _make_model(
+                    "order_items_v2",
+                    columns={"item_id": _make_column("item_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -907,22 +952,24 @@ class TestEdgeCases:
 
     def test_non_model_nodes_are_ignored(self, tmp_path: Path) -> None:
         """Test that non-model nodes (seeds, sources) are ignored."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-            "seed.analytics.countries": {
-                "unique_id": "seed.analytics.countries",
-                "resource_type": "seed",
-                "name": "countries",
-            },
-            "source.analytics.raw_data": {
-                "unique_id": "source.analytics.raw_data",
-                "resource_type": "source",
-                "name": "raw_data",
-            },
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+                "seed.analytics.countries": {
+                    "unique_id": "seed.analytics.countries",
+                    "resource_type": "seed",
+                    "name": "countries",
+                },
+                "source.analytics.raw_data": {
+                    "unique_id": "source.analytics.raw_data",
+                    "resource_type": "source",
+                    "name": "raw_data",
+                },
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -939,12 +986,14 @@ class TestEdgeCases:
         Validates that a model name like '../../etc/evil' raises SchemaGenerationError
         to prevent writing outside the output directory.
         """
-        manifest = _make_manifest({
-            "model.analytics.evil": _make_model(
-                "../../etc/cron.d/exploit",
-                columns={"id": _make_column("id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.evil": _make_model(
+                    "../../etc/cron.d/exploit",
+                    columns={"id": _make_column("id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -960,12 +1009,14 @@ class TestEdgeCases:
         Validates that standard model names like 'orders', 'customers', etc. are
         accepted and produce valid output files.
         """
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"order_id": _make_column("order_id", "integer")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"order_id": _make_column("order_id", "integer")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -982,13 +1033,12 @@ class TestEdgeCases:
 # Test: Performance
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("SC-004")
 class TestPerformance:
     """Test schema generation performance."""
 
-    def test_ten_model_manifest_under_two_seconds(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ten_model_manifest_under_two_seconds(self, tmp_path: Path) -> None:
         """Test 10-model manifest generates within 2 seconds (SC-004)."""
         nodes: dict[str, Any] = {}
         for i in range(10):
@@ -1020,6 +1070,7 @@ class TestPerformance:
 # Test: YAML structural validation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.requirement("SC-005")
 @pytest.mark.requirement("FR-017")
 class TestYamlStructuralValidation:
@@ -1027,15 +1078,17 @@ class TestYamlStructuralValidation:
 
     def test_generated_yaml_has_cubes_list(self, tmp_path: Path) -> None:
         """Test generated YAML has top-level cubes list."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={
-                    "order_id": _make_column("order_id", "integer"),
-                    "status": _make_column("status", "varchar"),
-                },
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={
+                        "order_id": _make_column("order_id", "integer"),
+                        "status": _make_column("status", "varchar"),
+                    },
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -1054,12 +1107,14 @@ class TestYamlStructuralValidation:
 
     def test_measures_have_name_type_and_sql(self, tmp_path: Path) -> None:
         """Test measures have required name, type, and sql fields."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"total": _make_column("total", "decimal")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"total": _make_column("total", "decimal")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -1076,12 +1131,14 @@ class TestYamlStructuralValidation:
 
     def test_dimensions_have_name_type_and_sql(self, tmp_path: Path) -> None:
         """Test dimensions have required name, type, and sql fields."""
-        manifest = _make_manifest({
-            "model.analytics.orders": _make_model(
-                "orders",
-                columns={"status": _make_column("status", "varchar")},
-            ),
-        })
+        manifest = _make_manifest(
+            {
+                "model.analytics.orders": _make_model(
+                    "orders",
+                    columns={"status": _make_column("status", "varchar")},
+                ),
+            }
+        )
         manifest_path = _write_manifest(tmp_path, manifest)
         output_dir = tmp_path / "output"
         output_dir.mkdir()

@@ -281,9 +281,7 @@ class TestV05SemanticArtifacts:
         """Test that v0.5.0 golden artifact with semantic plugin parses correctly."""
         golden = load_golden("v0.5_compiled_artifacts_with_semantic.json")
 
-        assert golden["version"] == "0.5.0", (
-            f"Expected version 0.5.0, got {golden.get('version')}"
-        )
+        assert golden["version"] == "0.5.0", f"Expected version 0.5.0, got {golden.get('version')}"
         assert "plugins" in golden, "Missing 'plugins' section"
         assert "semantic" in golden["plugins"], "Missing 'semantic' plugin"
         assert golden["plugins"]["semantic"]["type"] == "cube", (
@@ -293,9 +291,7 @@ class TestV05SemanticArtifacts:
             "Expected semantic plugin version 0.1.0, "
             f"got {golden['plugins']['semantic'].get('version')}"
         )
-        assert "config" in golden["plugins"]["semantic"], (
-            "Semantic plugin missing 'config' section"
-        )
+        assert "config" in golden["plugins"]["semantic"], "Semantic plugin missing 'config' section"
 
     @pytest.mark.requirement("CONTRACT-001")
     def test_v05_with_semantic_round_trips_via_pydantic(self) -> None:
@@ -352,10 +348,7 @@ class TestV05SemanticArtifacts:
         assert len(artifacts.transforms.models) > 0, "No models in transforms"
 
         # Find the orders model which should have cube tag
-        orders_model = next(
-            (m for m in artifacts.transforms.models if m.name == "orders"),
-            None
-        )
+        orders_model = next((m for m in artifacts.transforms.models if m.name == "orders"), None)
         assert orders_model is not None, "Missing 'orders' model in transforms"
         assert orders_model.tags is not None, "orders model has no tags"
         assert "cube" in orders_model.tags, (

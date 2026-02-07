@@ -25,7 +25,6 @@ from abc import ABC
 from typing import get_type_hints
 
 import pytest
-
 from floe_core.plugin_metadata import PluginMetadata
 from floe_core.plugins.semantic import SemanticLayerPlugin
 
@@ -184,12 +183,8 @@ class TestSemanticLayerPluginDocstrings:
         """Verify all abstract methods have docstrings."""
         for method_name in EXPECTED_ABSTRACT_METHODS:
             method = getattr(SemanticLayerPlugin, method_name)
-            assert method.__doc__ is not None, (
-                f"Method {method_name} must have a docstring"
-            )
-            assert len(method.__doc__.strip()) > 10, (
-                f"Method {method_name} docstring is too short"
-            )
+            assert method.__doc__ is not None, f"Method {method_name} must have a docstring"
+            assert len(method.__doc__.strip()) > 10, f"Method {method_name} docstring is too short"
 
     @pytest.mark.requirement("SC-001")
     def test_class_has_docstring(self) -> None:

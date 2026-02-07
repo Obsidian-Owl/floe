@@ -68,9 +68,9 @@ class TestSemanticPluginEntryPointDiscovery:
 
         assert plugin_class is not None, "Failed to load plugin class from entry point"
         assert hasattr(plugin_class, "name"), "Plugin class missing 'name' attribute"
-        assert hasattr(
-            plugin_class, "sync_from_dbt_manifest"
-        ), "Plugin class missing 'sync_from_dbt_manifest' method"
+        assert hasattr(plugin_class, "sync_from_dbt_manifest"), (
+            "Plugin class missing 'sync_from_dbt_manifest' method"
+        )
 
 
 class TestSemanticResourceFactory:
@@ -149,16 +149,14 @@ class TestSemanticResourceFactory:
         resources = try_create_semantic_resources(plugins=plugins)
 
         assert "semantic_layer" in resources, "Expected 'semantic_layer' key in resources"
-        assert (
-            resources["semantic_layer"] is not None
-        ), "Expected non-None semantic_layer resource"
+        assert resources["semantic_layer"] is not None, "Expected non-None semantic_layer resource"
 
         # Verify the resource has expected plugin attributes
         semantic_plugin = resources["semantic_layer"]
         assert hasattr(semantic_plugin, "name"), "Plugin missing 'name' attribute"
-        assert hasattr(
-            semantic_plugin, "sync_from_dbt_manifest"
-        ), "Plugin missing 'sync_from_dbt_manifest' method"
+        assert hasattr(semantic_plugin, "sync_from_dbt_manifest"), (
+            "Plugin missing 'sync_from_dbt_manifest' method"
+        )
 
 
 class TestSyncSemanticSchemasAsset:
@@ -181,14 +179,14 @@ class TestSyncSemanticSchemasAsset:
 
         # Asset should be an AssetsDefinition or wrapped in one
         # The asset decorator creates an AssetsDefinition
-        assert hasattr(
-            sync_semantic_schemas, "required_resource_keys"
-        ), "Asset missing required_resource_keys"
+        assert hasattr(sync_semantic_schemas, "required_resource_keys"), (
+            "Asset missing required_resource_keys"
+        )
 
         required_keys = sync_semantic_schemas.required_resource_keys
-        assert (
-            "semantic_layer" in required_keys
-        ), "Asset must declare semantic_layer resource dependency"
+        assert "semantic_layer" in required_keys, (
+            "Asset must declare semantic_layer resource dependency"
+        )
 
 
 __all__ = [
