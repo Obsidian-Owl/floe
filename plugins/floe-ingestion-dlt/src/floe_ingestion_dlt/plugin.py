@@ -29,7 +29,13 @@ from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import IngestionConfig, IngestionPlugin, IngestionResult
 
 from floe_ingestion_dlt.config import VALID_SCHEMA_CONTRACTS, VALID_SOURCE_TYPES, VALID_WRITE_MODES
-from floe_ingestion_dlt.tracing import get_tracer, ingestion_span
+from floe_ingestion_dlt.errors import PipelineConfigurationError
+from floe_ingestion_dlt.tracing import (
+    get_tracer,
+    ingestion_span,
+    record_ingestion_error,
+    record_ingestion_result,
+)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -262,35 +268,210 @@ class DltIngestionPlugin(IngestionPlugin):
             Configured dlt pipeline object.
 
         Raises:
-            NotImplementedError: Pending implementation in T021.
+            RuntimeError: If plugin not started.
+            PipelineConfigurationError: If config is invalid.
         """
-        raise NotImplementedError("create_pipeline will be implemented in T021")
+        if not self._started:
+            raise RuntimeError("Plugin must be started before creating pipelines — call startup() first")
+
+        tracer = get_tracer()
+        with ingestion_span(
+            tracer,
+            "create_pipeline",
+            source_type=config.source_type,
+            destination_table=config.destination_table,
+            write_mode=config.write_mode,
+        ):
+            # Validate source_type
+            if config.source_type not in VALID_SOURCE_TYPES:
+                raise PipelineConfigurationError(
+                    f"Invalid source_type '{config.source_type}'. "
+                    f"Must be one of: {sorted(VALID_SOURCE_TYPES)}",
+                    source_type=config.source_type,
+                    destination_table=config.destination_table,
+                )
+
+            # Validate destination_table
+            if not config.destination_table:
+                raise PipelineConfigurationError(
+                    "destination_table is required and cannot be empty",
+                    source_type=config.source_type,
+                )
+
+            # Derive pipeline_name and dataset_name from destination_table
+            # Format: "namespace.table_name" -> pipeline_name="table_name", dataset_name="namespace"
+            parts = config.destination_table.split(".", 1)
+            if len(parts) == 2:
+                dataset_name, table_name = parts
+            else:
+                dataset_name = "default"
+                table_name = parts[0]
+
+            pipeline_name = f"ingest_{table_name}"
+
+            import dlt
+
+            pipeline = dlt.pipeline(
+                pipeline_name=pipeline_name,
+                dataset_name=dataset_name,
+            )
+
+            logger.info(
+                "pipeline_created",
+                pipeline_name=pipeline_name,
+                dataset_name=dataset_name,
+                source_type=config.source_type,
+                destination_table=config.destination_table,
+                write_mode=config.write_mode,
+            )
+
+            return pipeline
 
     def run(self, pipeline: Any, **kwargs: Any) -> IngestionResult:
         """Execute the dlt pipeline.
 
         Args:
             pipeline: Pipeline object from create_pipeline().
-            **kwargs: Additional execution options.
+            **kwargs: Additional execution options including:
+                - source: dlt source/resource to load
+                - write_disposition: Override write mode
+                - table_name: Override destination table name
 
         Returns:
             IngestionResult with execution metrics.
 
         Raises:
-            NotImplementedError: Pending implementation in T022.
+            RuntimeError: If plugin not started.
         """
-        raise NotImplementedError("run will be implemented in T022")
+        if not self._started:
+            raise RuntimeError("Plugin must be started before running pipelines — call startup() first")
+
+        tracer = get_tracer()
+        start_time = time.perf_counter()
+
+        source = kwargs.get("source")
+        write_disposition = kwargs.get("write_disposition", "append")
+        table_name = kwargs.get("table_name")
+
+        with ingestion_span(
+            tracer,
+            "run",
+            pipeline_name=getattr(pipeline, "pipeline_name", None),
+            write_mode=write_disposition,
+        ) as span:
+            try:
+                # Execute the pipeline
+                load_info = pipeline.run(
+                    source,
+                    write_disposition=write_disposition,
+                    table_name=table_name,
+                )
+
+                elapsed = time.perf_counter() - start_time
+
+                # Extract metrics from load_info
+                rows_loaded = 0
+                bytes_written = 0
+
+                if hasattr(load_info, "metrics") and load_info.metrics:
+                    # dlt load_info.metrics is a list of load package metrics
+                    for load_id, metrics_list in load_info.metrics.items():
+                        for metrics in metrics_list:
+                            if hasattr(metrics, "started_at"):
+                                # Process job metrics
+                                for job in getattr(metrics, "job_metrics", {}).values():
+                                    if hasattr(job, "table_metrics"):
+                                        for table_metric in job.table_metrics.values():
+                                            rows_loaded += getattr(table_metric, "items_count", 0)
+                                            bytes_written += getattr(table_metric, "file_size", 0)
+
+                result = IngestionResult(
+                    success=True,
+                    rows_loaded=rows_loaded,
+                    bytes_written=bytes_written,
+                    duration_seconds=elapsed,
+                )
+
+                record_ingestion_result(span, result)
+
+                logger.info(
+                    "pipeline_run_completed",
+                    pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                    rows_loaded=result.rows_loaded,
+                    bytes_written=result.bytes_written,
+                    duration_seconds=result.duration_seconds,
+                )
+
+                return result
+
+            except Exception as e:
+                elapsed = time.perf_counter() - start_time
+                error_msg = str(e)[:500]  # Truncate for safety
+
+                record_ingestion_error(span, e)
+
+                logger.error(
+                    "pipeline_run_failed",
+                    pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                    error=error_msg,
+                    duration_seconds=elapsed,
+                )
+
+                return IngestionResult(
+                    success=False,
+                    rows_loaded=0,
+                    bytes_written=0,
+                    duration_seconds=elapsed,
+                    errors=[error_msg],
+                )
 
     def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        """Generate Iceberg destination configuration.
+        """Generate Iceberg destination configuration for dlt.
+
+        Maps the platform's catalog config (Polaris REST catalog) to dlt's
+        Iceberg destination parameters.
 
         Args:
-            catalog_config: Catalog connection configuration.
+            catalog_config: Catalog connection configuration with keys:
+                - uri: Polaris catalog URI (e.g., "http://polaris:8181/api/catalog")
+                - warehouse: Warehouse name (e.g., "floe_warehouse")
+                - s3_endpoint: Optional S3/MinIO endpoint
+                - s3_access_key: Optional S3 access key
+                - s3_secret_key: Optional S3 secret key
+                - s3_region: Optional S3 region
 
         Returns:
-            dlt destination configuration dict.
-
-        Raises:
-            NotImplementedError: Pending implementation in T023.
+            dlt destination configuration dict for Iceberg.
         """
-        raise NotImplementedError("get_destination_config will be implemented in T023")
+        dest_config: dict[str, Any] = {
+            "destination": "iceberg",
+            "catalog_type": "rest",
+        }
+
+        # Map catalog URI
+        if "uri" in catalog_config:
+            dest_config["catalog_uri"] = catalog_config["uri"]
+
+        # Map warehouse
+        if "warehouse" in catalog_config:
+            dest_config["warehouse"] = catalog_config["warehouse"]
+
+        # Map S3/MinIO storage config
+        if "s3_endpoint" in catalog_config:
+            dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
+        if "s3_access_key" in catalog_config:
+            dest_config["s3_access_key"] = catalog_config["s3_access_key"]
+        if "s3_secret_key" in catalog_config:
+            dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
+        if "s3_region" in catalog_config:
+            dest_config["s3_region"] = catalog_config["s3_region"]
+
+        logger.info(
+            "destination_config_generated",
+            catalog_type="rest",
+            has_uri="uri" in catalog_config,
+            has_warehouse="warehouse" in catalog_config,
+            has_s3="s3_endpoint" in catalog_config,
+        )
+
+        return dest_config
