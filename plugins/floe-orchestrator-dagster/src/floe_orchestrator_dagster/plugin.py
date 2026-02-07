@@ -232,6 +232,13 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         ingestion_resources = self._create_ingestion_resources(validated.plugins)
         resources.update(ingestion_resources)
 
+        # T034: Wire ingestion assets if ingestion resource is available
+        if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
+            from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+            ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
+            assets.extend(ingestion_assets)
+
         logger.info(
             "Created Dagster Definitions",
             extra={

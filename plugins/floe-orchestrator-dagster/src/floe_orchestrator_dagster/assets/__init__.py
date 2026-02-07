@@ -2,4 +2,12 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from floe_orchestrator_dagster.assets.ingestion import (
+    FloeIngestionTranslator,
+    create_ingestion_assets,
+)
+
+__all__: list[str] = [
+    "FloeIngestionTranslator",
+    "create_ingestion_assets",
+]
