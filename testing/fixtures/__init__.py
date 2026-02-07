@@ -89,6 +89,17 @@ from testing.fixtures.duckdb import (
     get_connection_info as get_duckdb_connection_info,
 )
 
+# Ingestion fixtures
+from testing.fixtures.ingestion import (
+    create_dlt_ingestion_config,
+    create_ingestion_source_config,
+    dlt_config,
+    dlt_plugin,
+    mock_dlt_source,
+    sample_ingestion_config,
+    sample_ingestion_source_config,
+)
+
 # Lineage fixtures
 from testing.fixtures.lineage import (
     mock_lineage_backend,
@@ -143,6 +154,14 @@ from testing.fixtures.services import (
 )
 
 __all__ = [
+    # Ingestion fixtures
+    "create_dlt_ingestion_config",
+    "create_ingestion_source_config",
+    "dlt_config",
+    "dlt_plugin",
+    "mock_dlt_source",
+    "sample_ingestion_config",
+    "sample_ingestion_source_config",
     # Lineage fixtures
     "mock_lineage_backend",
     "mock_lineage_emitter",

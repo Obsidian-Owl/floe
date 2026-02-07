@@ -1,0 +1,107 @@
+{
+  "$comment": "Golden fixture: CompiledArtifacts v0.6.0 with ingestion plugin. DO NOT MODIFY without CONTRACT-001 review.",
+  "version": "0.6.0",
+  "metadata": {
+    "compiled_at": "2026-02-08T00:00:00Z",
+    "floe_version": "0.6.0",
+    "source_hash": "sha256:golden_ingestion_fixture",
+    "product_name": "golden-ingestion-test",
+    "product_version": "1.0.0"
+  },
+  "identity": {
+    "product_id": "analytics.golden_ingestion_test",
+    "domain": "analytics",
+    "repository": "github.com/acme/golden-ingestion-test",
+    "namespace_registered": true,
+    "registration_timestamp": "2026-02-08T00:00:00Z"
+  },
+  "mode": "centralized",
+  "inheritance_chain": [
+    {
+      "name": "enterprise-manifest",
+      "version": "1.0.0",
+      "scope": "enterprise",
+      "ref": "oci://registry.example.com/manifests/enterprise:1.0.0"
+    }
+  ],
+  "observability": {
+    "telemetry": {
+      "enabled": true,
+      "otlp_endpoint": "http://otel-collector:4317",
+      "otlp_protocol": "grpc",
+      "sampling": {
+        "dev": 1.0,
+        "staging": 0.5,
+        "prod": 0.1
+      },
+      "resource_attributes": {
+        "service_name": "golden-ingestion-test",
+        "service_version": "1.0.0",
+        "deployment_environment": "prod",
+        "floe_namespace": "analytics",
+        "floe_product_name": "golden-ingestion-test",
+        "floe_product_version": "1.0.0",
+        "floe_mode": "prod"
+      },
+      "authentication": null,
+      "batch_processor": {
+        "max_queue_size": 2048,
+        "max_export_batch_size": 512,
+        "schedule_delay_millis": 5000,
+        "export_timeout_millis": 30000
+      },
+      "logging": {
+        "log_level": "INFO",
+        "json_output": true
+      },
+      "backend": "jaeger"
+    },
+    "lineage": true,
+    "lineage_namespace": "golden-ingestion-test"
+  },
+  "plugins": {
+    "compute": {
+      "type": "duckdb",
+      "version": "0.9.0",
+      "config": {}
+    },
+    "orchestrator": {
+      "type": "dagster",
+      "version": "0.1.0",
+      "config": {}
+    },
+    "ingestion": {
+      "type": "dlt",
+      "version": "0.1.0",
+      "config": {}
+    }
+  },
+  "transforms": {
+    "models": [
+      {
+        "name": "customers",
+        "compute": "duckdb",
+        "tags": ["analytics"],
+        "depends_on": []
+      },
+      {
+        "name": "orders",
+        "compute": "duckdb",
+        "tags": ["analytics"],
+        "depends_on": ["customers"]
+      }
+    ],
+    "default_compute": "duckdb"
+  },
+  "dbt_profiles": {
+    "default": {
+      "target": "dev",
+      "outputs": {
+        "dev": {
+          "type": "duckdb",
+          "path": "/tmp/dev.duckdb"
+        }
+      }
+    }
+  }
+}

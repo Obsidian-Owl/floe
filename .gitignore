@@ -72,6 +72,7 @@ pip-delete-this-directory.txt
 .env.local
 *.local
 .agent/
+.omc/
 
 # Testing artifacts
 target/

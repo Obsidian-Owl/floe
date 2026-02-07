@@ -3,13 +3,14 @@
   "env": {
     "PYTEST_TIMEOUT": "300",
     "PYTHON_VERSION": "3.10",
-    "ENABLE_LSP_TOOL": "1"
+    "ENABLE_LSP_TOOL": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "attribution": {
     "commit": "🤖 Generated with Claude Code\n\n<noreply@anthropic.com>",
     "pr": "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
   },
-  "model": "claude-opus-4-5-20251101",
+  "model": "claude-opus-4-6",
   "hooks": {
     "SessionStart": [
       {

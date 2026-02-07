@@ -220,13 +220,15 @@ class TestPluginMetadataContract:
         params = list(sig.parameters.keys())
         assert params == ["self"], f"shutdown params should be ['self'], got {params}"
 
-        # health_check() -> HealthStatus
+        # health_check(timeout) -> HealthStatus
         # Use get_type_hints to resolve forward references
         hints = get_type_hints(PluginMetadata.health_check)
         assert hints.get("return") is HealthStatus
         sig = inspect.signature(PluginMetadata.health_check)
         params = list(sig.parameters.keys())
-        assert params == ["self"], f"health_check params should be ['self'], got {params}"
+        assert params == ["self", "timeout"], (
+            f"health_check params should be ['self', 'timeout'], got {params}"
+        )
 
 
 class TestPluginMetadataImplementation:

@@ -205,6 +205,10 @@ Read when working on specific domain:
 - PostgreSQL (CloudNativePG for prod, StatefulSet for non-prod), S3/MinIO (9b-helm-deployment)
 - Python 3.11 (CLI/tests), Go templating (Helm), SQL (dbt models) + pytest, Dagster, dbt-core, PyIceberg, Polaris, Marquez, OTel SDK (13-e2e-demo-platform)
 - Iceberg tables via Polaris catalog, MinIO (S3-compatible), PostgreSQL (13-e2e-demo-platform)
+- Python 3.11 + PyYAML (schema generation), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), httpx>=0.25.0 (health checks) (4e-semantic-layer)
+- N/A (Cube handles data access via ComputePlugin delegation) (4e-semantic-layer)
+- Python 3.11 + dlt[iceberg]>=1.20.0 (framework), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), tenacity>=8.0 (retry), httpx>=0.25.0 (health checks) (4f-ingestion-plugin)
+- Iceberg tables via Polaris REST catalog, MinIO/S3 for data files (dlt handles destination config) (4f-ingestion-plugin)
 
 ## Recent Changes
 - 9b-helm-deployment: Added Python 3.11 (CLI), Go templating (Helm) + Helm 3.12+, Dagster Helm chart 1.12.x, OTel Collector chart 0.85.x

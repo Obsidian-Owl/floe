@@ -1,0 +1,529 @@
+{
+  "_metadata": {
+    "epic": "4f-ingestion-plugin",
+    "project": "Epic 4F: Ingestion Plugin",
+    "project_id": "150ba0c5-e62b-484e-b135-abf91060e809",
+    "team": "floe",
+    "team_id": "ea992060-a5a5-47dc-8aca-bd8984b26a73",
+    "label": "epic:4f",
+    "label_id": "fb69a78d-5f2f-45f0-8e69-89d2a02d483e",
+    "created_at": "2026-02-07T07:24:00Z",
+    "total_tasks": 62
+  },
+  "tasks": {
+    "T001": {
+      "linear_id": "FLO-2432",
+      "uuid": "2aaee1f8-4dd0-44cb-af2e-7eaa1ac11d79",
+      "title": "Create plugin package scaffold",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T002": {
+      "linear_id": "FLO-2433",
+      "uuid": "62e02731-bbb3-4d3f-8412-c162715f2c1e",
+      "title": "Create DltIngestionConfig and IngestionSourceConfig models",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T003": {
+      "linear_id": "FLO-2434",
+      "uuid": "7210e150-ca0c-4848-ae7e-282225479ec8",
+      "title": "Create error hierarchy",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T004": {
+      "linear_id": "FLO-2435",
+      "uuid": "229467c5-8e4c-4883-b88e-d59eb1ff017c",
+      "title": "Create OTel tracing helpers",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T005": {
+      "linear_id": "FLO-2436",
+      "uuid": "8eec5aa3-4a92-4e6c-85f7-46c63def60c3",
+      "title": "Create retry logic with exponential backoff",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T006": {
+      "linear_id": "FLO-2437",
+      "uuid": "690eb69c-a0a0-48e7-9d0b-171db50ffbf7",
+      "title": "Create test fixtures for mock dlt sources",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T007": {
+      "linear_id": "FLO-2438",
+      "uuid": "6c6f7d82-b61e-4e87-a4d0-a6c81ee89450",
+      "title": "Create conftest.py files for test tiers",
+      "phase": 1,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T008": {
+      "linear_id": "FLO-2439",
+      "uuid": "1adde370-859e-46a1-bc04-1fbde1258f3a",
+      "title": "Implement DltIngestionPlugin class skeleton",
+      "phase": 2,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T009": {
+      "linear_id": "FLO-2440",
+      "uuid": "28b2a280-711f-444e-a326-21c95e0ed311",
+      "title": "Implement startup() and shutdown() lifecycle methods",
+      "phase": 2,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T010": {
+      "linear_id": "FLO-2441",
+      "uuid": "ae6b4764-1d1d-4ec1-b091-0bc89d388ef2",
+      "title": "Implement health_check() returning HealthStatus",
+      "phase": 2,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T011": {
+      "linear_id": "FLO-2442",
+      "uuid": "8ae5c564-f679-46ca-9353-eda560d5661b",
+      "title": "Update __init__.py exports",
+      "phase": 2,
+      "user_story": null,
+      "priority": "High"
+    },
+    "T012": {
+      "linear_id": "FLO-2443",
+      "uuid": "4aa7e3da-d4b1-457f-9a86-74466d8ef5fd",
+      "title": "Contract test for IngestionPlugin ABC",
+      "phase": 3,
+      "user_story": "US1",
+      "priority": "Urgent"
+    },
+    "T013": {
+      "linear_id": "FLO-2444",
+      "uuid": "388b5cd8-7501-486b-9d6f-ce264dd442df",
+      "title": "Contract test for round-trip serialization",
+      "phase": 3,
+      "user_story": "US1",
+      "priority": "Urgent"
+    },
+    "T014": {
+      "linear_id": "FLO-2445",
+      "uuid": "d4345c34-712b-424d-b326-1f9b7612830c",
+      "title": "Integration test for plugin discovery",
+      "phase": 3,
+      "user_story": "US1",
+      "priority": "Urgent"
+    },
+    "T015": {
+      "linear_id": "FLO-2446",
+      "uuid": "0fb6ef93-2c5f-418b-95f4-762a89cee833",
+      "title": "Integration test for health_check()",
+      "phase": 3,
+      "user_story": "US1",
+      "priority": "Urgent"
+    },
+    "T016": {
+      "linear_id": "FLO-2447",
+      "uuid": "ce987b72-49da-4c1a-99af-208ff977ce64",
+      "title": "Implement entry_points in pyproject.toml",
+      "phase": 3,
+      "user_story": "US1",
+      "priority": "Urgent"
+    },
+    "T017": {
+      "linear_id": "FLO-2448",
+      "uuid": "9d663a64-c878-4413-90f6-08ed67f2df2d",
+      "title": "Verify plugin discovery via PluginManager",
+      "phase": 3,
+      "user_story": "US1",
+      "priority": "Urgent"
+    },
+    "T018": {
+      "linear_id": "FLO-2449",
+      "uuid": "9ae91a7c-e50e-4ff6-bdfb-35c12ebc6744",
+      "title": "Unit tests for create_pipeline()",
+      "phase": 4,
+      "user_story": "US2",
+      "priority": "Urgent"
+    },
+    "T019": {
+      "linear_id": "FLO-2450",
+      "uuid": "9bbf7fcf-96db-41e7-976b-22d338fd1c77",
+      "title": "Unit tests for run()",
+      "phase": 4,
+      "user_story": "US2",
+      "priority": "Urgent"
+    },
+    "T020": {
+      "linear_id": "FLO-2451",
+      "uuid": "d28ad670-6b81-4da3-85a9-aeb07ca4504c",
+      "title": "Unit tests for DltIngestionConfig validation",
+      "phase": 4,
+      "user_story": "US2",
+      "priority": "Urgent"
+    },
+    "T021": {
+      "linear_id": "FLO-2452",
+      "uuid": "9f189c37-c9a3-4b46-b87d-d2b4499a7873",
+      "title": "Implement create_pipeline()",
+      "phase": 4,
+      "user_story": "US2",
+      "priority": "Urgent"
+    },
+    "T022": {
+      "linear_id": "FLO-2453",
+      "uuid": "8de48a50-5707-4889-a0fd-402bb6e3d4c1",
+      "title": "Implement run()",
+      "phase": 4,
+      "user_story": "US2",
+      "priority": "Urgent"
+    },
+    "T023": {
+      "linear_id": "FLO-2454",
+      "uuid": "d672e742-de0f-407e-b914-450b65052bea",
+      "title": "Implement get_destination_config()",
+      "phase": 4,
+      "user_story": "US2",
+      "priority": "Urgent"
+    },
+    "T024": {
+      "linear_id": "FLO-2455",
+      "uuid": "3373017a-3de6-47b7-af34-b28fd8da1198",
+      "title": "Unit tests for get_destination_config()",
+      "phase": 5,
+      "user_story": "US3",
+      "priority": "Urgent"
+    },
+    "T025": {
+      "linear_id": "FLO-2456",
+      "uuid": "05f0b058-27ad-4d5a-b338-344a00ccd736",
+      "title": "Integration test for write_mode=append",
+      "phase": 5,
+      "user_story": "US3",
+      "priority": "Urgent"
+    },
+    "T026": {
+      "linear_id": "FLO-2457",
+      "uuid": "920cce95-c7ba-4e11-8303-6a369106df7d",
+      "title": "Integration test for write_mode=replace",
+      "phase": 5,
+      "user_story": "US3",
+      "priority": "Urgent"
+    },
+    "T027": {
+      "linear_id": "FLO-2458",
+      "uuid": "3c659446-be6e-47d4-9340-347c1faee499",
+      "title": "Integration test for write_mode=merge",
+      "phase": 5,
+      "user_story": "US3",
+      "priority": "Urgent"
+    },
+    "T028": {
+      "linear_id": "FLO-2459",
+      "uuid": "72d6d83b-3dee-44ea-a58f-1f3fdf719abe",
+      "title": "Implement write mode support in run()",
+      "phase": 5,
+      "user_story": "US3",
+      "priority": "Urgent"
+    },
+    "T029": {
+      "linear_id": "FLO-2460",
+      "uuid": "035f8783-e747-42f2-9237-16c8a1e024e7",
+      "title": "Implement get_destination_config() for Polaris/Iceberg",
+      "phase": 5,
+      "user_story": "US3",
+      "priority": "Urgent"
+    },
+    "T030": {
+      "linear_id": "FLO-2461",
+      "uuid": "c13b5b42-9d9b-48f4-a79a-4249c4413fed",
+      "title": "Unit tests for try_create_ingestion_resources()",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T031": {
+      "linear_id": "FLO-2462",
+      "uuid": "48781357-3dc8-4a1c-9d0f-e5f70ef730a9",
+      "title": "Unit tests for FloeIngestionTranslator",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T032": {
+      "linear_id": "FLO-2463",
+      "uuid": "580edc7e-2158-4b8b-bf71-8be589ace075",
+      "title": "Integration test for orchestrator wiring",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T033": {
+      "linear_id": "FLO-2464",
+      "uuid": "aaf4f069-7cf3-49ab-a9ae-0a1e90a7b175",
+      "title": "Create ingestion resource factory",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T034": {
+      "linear_id": "FLO-2465",
+      "uuid": "a4c2ae4b-a2dd-4041-811d-5298ceca9252",
+      "title": "Create FloeIngestionTranslator asset factory",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T035": {
+      "linear_id": "FLO-2466",
+      "uuid": "6bb4aaf3-5ba4-4840-9c03-38e9fe4a4d23",
+      "title": "Wire into create_definitions()",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T036": {
+      "linear_id": "FLO-2467",
+      "uuid": "f857f812-8408-4b95-9544-d7dafb67b9dc",
+      "title": "Update orchestrator plugin dependencies",
+      "phase": 6,
+      "user_story": "US4",
+      "priority": "High"
+    },
+    "T037": {
+      "linear_id": "FLO-2468",
+      "uuid": "5e938762-696d-4893-b199-93097484476d",
+      "title": "Integration test for schema_contract=evolve",
+      "phase": 7,
+      "user_story": "US5",
+      "priority": "High"
+    },
+    "T038": {
+      "linear_id": "FLO-2469",
+      "uuid": "974fd65e-890d-4fe6-b395-fcbffb9a2247",
+      "title": "Integration test for schema_contract=freeze",
+      "phase": 7,
+      "user_story": "US5",
+      "priority": "High"
+    },
+    "T039": {
+      "linear_id": "FLO-2470",
+      "uuid": "fe9d2de7-ff3c-481a-ab10-b98af03de068",
+      "title": "Integration test for schema_contract=discard_value",
+      "phase": 7,
+      "user_story": "US5",
+      "priority": "High"
+    },
+    "T039a": {
+      "linear_id": "FLO-2471",
+      "uuid": "512cfe3c-b146-45e1-badf-73776c3fc373",
+      "title": "Integration test for column removal preservation",
+      "phase": 7,
+      "user_story": "US5",
+      "priority": "High"
+    },
+    "T040": {
+      "linear_id": "FLO-2472",
+      "uuid": "f43fe3c3-e3f5-4f1a-9f65-4a9f40587e07",
+      "title": "Wire schema_contract into create_pipeline()",
+      "phase": 7,
+      "user_story": "US5",
+      "priority": "High"
+    },
+    "T041": {
+      "linear_id": "FLO-2473",
+      "uuid": "1bc8ba3b-e04e-4388-bc0d-f06cccf66438",
+      "title": "Wire SchemaContractViolation into run()",
+      "phase": 7,
+      "user_story": "US5",
+      "priority": "High"
+    },
+    "T042": {
+      "linear_id": "FLO-2474",
+      "uuid": "9d65dc18-0b4f-459b-bf4b-63519c1693ab",
+      "title": "Integration test for incremental loading",
+      "phase": 8,
+      "user_story": "US6",
+      "priority": "High"
+    },
+    "T043": {
+      "linear_id": "FLO-2475",
+      "uuid": "5a3b46f5-f383-4403-8b8e-c87a5d7c321d",
+      "title": "Integration test for full refresh fallback",
+      "phase": 8,
+      "user_story": "US6",
+      "priority": "High"
+    },
+    "T044": {
+      "linear_id": "FLO-2476",
+      "uuid": "15b7f5d2-2147-4d17-a945-51bdb601cb44",
+      "title": "Wire cursor_field into create_pipeline()",
+      "phase": 8,
+      "user_story": "US6",
+      "priority": "High"
+    },
+    "T045": {
+      "linear_id": "FLO-2477",
+      "uuid": "85472ead-4e03-49b4-b436-9c8166b44cdf",
+      "title": "Wire incremental state tracking into run()",
+      "phase": 8,
+      "user_story": "US6",
+      "priority": "High"
+    },
+    "T046": {
+      "linear_id": "FLO-2478",
+      "uuid": "ceb1d8fe-46f0-4f2c-b4cc-2084e1cb8627",
+      "title": "Unit tests for OTel span emission",
+      "phase": 9,
+      "user_story": "US7",
+      "priority": "Medium"
+    },
+    "T047": {
+      "linear_id": "FLO-2479",
+      "uuid": "ca03bd0b-3b45-4852-b4dd-618026e0d692",
+      "title": "Unit tests for structured logging output",
+      "phase": 9,
+      "user_story": "US7",
+      "priority": "Medium"
+    },
+    "T048": {
+      "linear_id": "FLO-2480",
+      "uuid": "b2439c2a-6640-4e1a-bc06-ae116f1427d3",
+      "title": "Wire OTel tracing into all plugin methods",
+      "phase": 9,
+      "user_story": "US7",
+      "priority": "Medium"
+    },
+    "T049": {
+      "linear_id": "FLO-2481",
+      "uuid": "59c7f4bc-2eb5-4c0b-b8ee-22f228194f71",
+      "title": "Add structlog logging to all plugin operations",
+      "phase": 9,
+      "user_story": "US7",
+      "priority": "Medium"
+    },
+    "T050": {
+      "linear_id": "FLO-2482",
+      "uuid": "c41d9e72-63c8-4dd6-a283-ef7475e81606",
+      "title": "Unit tests for error hierarchy",
+      "phase": 10,
+      "user_story": "US8",
+      "priority": "Medium"
+    },
+    "T051": {
+      "linear_id": "FLO-2483",
+      "uuid": "9930f97d-4a64-4a06-a31b-33721f57995a",
+      "title": "Unit tests for retry logic",
+      "phase": 10,
+      "user_story": "US8",
+      "priority": "Medium"
+    },
+    "T052": {
+      "linear_id": "FLO-2484",
+      "uuid": "d480c463-077e-4c5c-a9f5-dab9a9e49299",
+      "title": "Unit tests for error categorization",
+      "phase": 10,
+      "user_story": "US8",
+      "priority": "Medium"
+    },
+    "T053": {
+      "linear_id": "FLO-2485",
+      "uuid": "5a5c55df-8b4f-46db-92fd-3e13b6d44996",
+      "title": "Integration test for error handling",
+      "phase": 10,
+      "user_story": "US8",
+      "priority": "Medium"
+    },
+    "T054": {
+      "linear_id": "FLO-2486",
+      "uuid": "ffa27196-50db-4689-8403-fe53a06d9593",
+      "title": "Wire retry decorator into run() method",
+      "phase": 10,
+      "user_story": "US8",
+      "priority": "Medium"
+    },
+    "T055": {
+      "linear_id": "FLO-2487",
+      "uuid": "ec8647c0-73da-4141-9d5a-b7595710943a",
+      "title": "Wire error categorization into run()",
+      "phase": 10,
+      "user_story": "US8",
+      "priority": "Medium"
+    },
+    "T056": {
+      "linear_id": "FLO-2488",
+      "uuid": "4c047fef-76fc-4880-9ee8-b060c14cb607",
+      "title": "Run mypy --strict on ingestion plugin",
+      "phase": 11,
+      "user_story": null,
+      "priority": "Low"
+    },
+    "T057": {
+      "linear_id": "FLO-2489",
+      "uuid": "0f3c59b2-c746-4923-891e-6e53bda28bd5",
+      "title": "Run ruff check on ingestion plugin",
+      "phase": 11,
+      "user_story": null,
+      "priority": "Low"
+    },
+    "T058": {
+      "linear_id": "FLO-2490",
+      "uuid": "e558d280-26e2-4376-902b-dae2cf999828",
+      "title": "Run bandit security scan on ingestion plugin",
+      "phase": 11,
+      "user_story": null,
+      "priority": "Low"
+    },
+    "T059": {
+      "linear_id": "FLO-2491",
+      "uuid": "23ab2438-953f-4e6e-9bc3-51d6c7af6d16",
+      "title": "Verify unit test coverage exceeds 80%",
+      "phase": 11,
+      "user_story": null,
+      "priority": "Low"
+    },
+    "T060": {
+      "linear_id": "FLO-2492",
+      "uuid": "a43833d1-d65d-4bcb-8069-8c6818b93a52",
+      "title": "Verify editable install and unit tests pass",
+      "phase": 11,
+      "user_story": null,
+      "priority": "Low"
+    },
+    "T061": {
+      "linear_id": "FLO-2493",
+      "uuid": "4b1b9c37-d9cc-44f5-a3fb-b238ea67adb9",
+      "title": "Validate quickstart.md code examples",
+      "phase": 11,
+      "user_story": null,
+      "priority": "Low"
+    }
+  },
+  "dependencies": {
+    "phase_1_blocks_phase_2": {
+      "blockers": ["T001", "T002", "T003", "T004", "T005", "T006", "T007"],
+      "blocked": ["T008", "T009", "T010", "T011"]
+    },
+    "phase_2_blocks_user_stories": {
+      "blocker": "T011",
+      "blocked": ["T012", "T018", "T030", "T046", "T050"]
+    },
+    "us2_blocks_us3_us5_us6": {
+      "blocker": "T023",
+      "blocked": ["T024", "T037", "T042"]
+    },
+    "all_stories_block_polish": {
+      "blockers": ["T045", "T041", "T049", "T055"],
+      "blocked": ["T056", "T057", "T058", "T059", "T060", "T061"]
+    }
+  }
+}

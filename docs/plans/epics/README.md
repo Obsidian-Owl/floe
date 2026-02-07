@@ -39,6 +39,7 @@ This directory contains detailed documentation for each of the 26 Epics.
 | [4D](04-core-plugins/epic-04d-storage-plugin.md) | Storage Plugin | 10 | Planned | [floe-04d-storage-plugin](https://linear.app/obsidianowl/project/floe-04d-storage-plugin-bb164b41d4c3) |
 | [4E](04-core-plugins/epic-04e-semantic-layer-plugin.md) | Semantic Layer Plugin | 6 | Planned | [epic-4e-semantic-layer-plugin](https://linear.app/obsidianowl/project/epic-4e-semantic-layer-plugin-3c5addd80c14) |
 | [4F](04-core-plugins/epic-04f-ingestion-plugin.md) | Ingestion Plugin | 6 | Planned | [epic-4f-ingestion-plugin](https://linear.app/obsidianowl/project/epic-4f-ingestion-plugin-0547e9605dc7) |
+| [4G](04-core-plugins/epic-04g-reverse-etl.md) | Reverse ETL (SinkConnector) | 5 | Planned | [epic-4g-reverse-etl-sinkconnector](https://linear.app/obsidianowl/project/epic-4g-reverse-etl-sinkconnector-b69dd02b131d) |
 | **Transformation** |
 | [5A](05-transformation/epic-05a-dbt-plugin.md) | dbt Plugin | 15 | Planned | [floe-05a-dbt-plugin](https://linear.app/obsidianowl/project/floe-05a-dbt-plugin-fc0710ba388c) |
 | [5B](05-transformation/epic-05b-dataquality-plugin.md) | Data Quality Plugin | 10 | Planned | [floe-05b-dataquality-plugin](https://linear.app/obsidianowl/project/floe-05b-dataquality-plugin-f4a912739ba9) |
@@ -85,7 +86,7 @@ Policy enforcement, data contracts, and governance integration.
 - [Epic 3D: Contract Monitoring](03-enforcement/epic-03d-contract-monitoring.md)
 - [Epic 3E: Governance Integration](03-enforcement/epic-03e-governance-integration.md) - *Compile-time RBAC, secrets, policies*
 
-### Core Plugins (Epics 4A-4F)
+### Core Plugins (Epics 4A-4G)
 Plugin interfaces and reference implementations.
 - [Epic 4A: Compute Plugin](04-core-plugins/epic-04a-compute-plugin.md)
 - [Epic 4B: Orchestrator Plugin](04-core-plugins/epic-04b-orchestrator-plugin.md)
@@ -93,6 +94,7 @@ Plugin interfaces and reference implementations.
 - [Epic 4D: Storage Plugin](04-core-plugins/epic-04d-storage-plugin.md)
 - [Epic 4E: Semantic Layer Plugin](04-core-plugins/epic-04e-semantic-layer-plugin.md) - *Cube integration*
 - [Epic 4F: Ingestion Plugin](04-core-plugins/epic-04f-ingestion-plugin.md) - *dlt integration*
+- [Epic 4G: Reverse ETL](04-core-plugins/epic-04g-reverse-etl.md) - *SinkConnector mixin, dlt @dlt.destination*
 
 ### Transformation (Epics 5A-5B)
 dbt and data quality.

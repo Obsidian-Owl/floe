@@ -36,6 +36,14 @@
         "get_api_endpoints": {},
         "get_helm_values_override": {}
       }
+    },
+    "IngestionPlugin": {
+      "methods": {
+        "is_external": {},
+        "create_pipeline": {},
+        "run": {},
+        "get_destination_config": {}
+      }
     }
   }
 }

@@ -11,5 +11,8 @@ dependencies:
 - name: jaeger
   repository: https://jaegertracing.github.io/helm-charts
   version: 3.4.1
-digest: sha256:2a064a5292563046f4c40d5d0a57d18e1ae302e89ed51c6475e2408b4cc00c49
-generated: "2026-02-03T18:13:20.758123+11:00"
+- name: cube
+  repository: ""
+  version: 0.1.0
+digest: sha256:f2ce6b48e3a4043aa3c8d4d8e3849a2428d03e4c81bb0bb79ac3244c36be664a
+generated: "2026-02-07T11:19:06.196875+11:00"

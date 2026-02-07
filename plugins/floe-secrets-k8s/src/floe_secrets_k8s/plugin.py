@@ -158,8 +158,11 @@ class K8sSecretsPlugin(SecretsPlugin):
         self._api = None
         logger.info("K8sSecretsPlugin shutdown complete")
 
-    def health_check(self) -> HealthStatus:
+    def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check connectivity to Kubernetes API.
+
+        Args:
+            timeout: Optional timeout in seconds (unused, reserved for base ABC).
 
         Returns:
             HealthStatus indicating current health state.
