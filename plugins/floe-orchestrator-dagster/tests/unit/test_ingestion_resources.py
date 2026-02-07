@@ -160,9 +160,14 @@ def test_create_ingestion_resources_configures_plugin() -> None:
         assert resources["ingestion"] == mock_plugin
 
 
-@pytest.mark.requirement("4F-FR-059")
+@pytest.mark.requirement("4F-FR-063")
 def test_try_create_ingestion_resources_handles_plugin_loading_error() -> None:
-    """Test try_create_ingestion_resources raises when plugin loading fails."""
+    """Test try_create_ingestion_resources returns empty dict on plugin loading error.
+
+    FR-063: Graceful degradation — when ingestion plugin loading fails,
+    the function logs the error and returns an empty dict instead of
+    propagating the exception.
+    """
     # Create ResolvedPlugins with ingestion plugin
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="1.0.0", config=None),
@@ -179,6 +184,6 @@ def test_try_create_ingestion_resources_handles_plugin_loading_error() -> None:
         mock_registry.get.side_effect = RuntimeError("Plugin not found")
         mock_get_registry.return_value = mock_registry
 
-        # Should raise the error (not swallow it)
-        with pytest.raises(RuntimeError, match="Plugin not found"):
-            try_create_ingestion_resources(plugins)
+        # Should return empty dict (graceful degradation)
+        resources = try_create_ingestion_resources(plugins)
+        assert resources == {}

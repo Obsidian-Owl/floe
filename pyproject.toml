@@ -56,6 +56,9 @@ dependencies = [
     # Data quality plugins (Epic 5B)
     "floe-quality-gx",
     "floe-quality-dbt",
+    # Ingestion plugins (Epic 4F)
+    "floe-ingestion-dlt",
+    "dagster-dlt>=0.25.0",
 ]
 
 [tool.uv]
@@ -87,6 +90,7 @@ floe-dbt-fusion = { path = "plugins/floe-dbt-fusion", editable = true }
 floe-network-security-k8s = { path = "plugins/floe-network-security-k8s", editable = true }
 floe-quality-gx = { path = "plugins/floe-quality-gx", editable = true }
 floe-quality-dbt = { path = "plugins/floe-quality-dbt", editable = true }
+floe-ingestion-dlt = { path = "plugins/floe-ingestion-dlt", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

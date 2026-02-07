@@ -127,7 +127,7 @@ def try_create_ingestion_resources(
         logger.exception(
             "Failed to create ingestion resources — ingestion pipelines will not be available"
         )
-        raise
+        return {}
 
 
 __all__ = [

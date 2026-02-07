@@ -47,8 +47,11 @@ logger = structlog.get_logger(__name__)
 # HTTP status codes that indicate transient errors (retryable)
 TRANSIENT_HTTP_CODES = frozenset({408, 429, 500, 502, 503, 504})
 
-# HTTP status codes that indicate permanent errors (not retryable)
-PERMANENT_HTTP_CODES = frozenset({400, 401, 403, 404, 405, 422})
+# HTTP status codes that indicate permanent errors (auth/permission — not retryable)
+PERMANENT_HTTP_CODES = frozenset({401, 403})
+
+# HTTP status codes that indicate configuration errors (client mistakes — not retryable)
+CONFIGURATION_HTTP_CODES = frozenset({400, 404, 405, 422})
 
 __all__ = [
     "categorize_error",
@@ -95,6 +98,8 @@ def categorize_error(error: BaseException) -> ErrorCategory:
             return ErrorCategory.TRANSIENT
         if http_code in PERMANENT_HTTP_CODES:
             return ErrorCategory.PERMANENT
+        if http_code in CONFIGURATION_HTTP_CODES:
+            return ErrorCategory.CONFIGURATION
 
     # Permission errors are permanent (check before OSError, since it's a subclass)
     if isinstance(error, PermissionError):
