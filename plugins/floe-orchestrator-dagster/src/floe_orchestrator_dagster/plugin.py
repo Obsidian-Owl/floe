@@ -219,9 +219,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # T108-T111: Wire Iceberg resources if catalog and storage are configured
         resources = self._create_iceberg_resources(validated.plugins)
 
-        # T047-T049: Wire semantic layer resources if semantic plugin is configured
+        # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
         semantic_resources = self._create_semantic_resources(validated.plugins)
         resources.update(semantic_resources)
+
+        if "semantic_layer" in semantic_resources:
+            from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
+
+            assets.append(sync_semantic_schemas)
 
         logger.info(
             "Created Dagster Definitions",
