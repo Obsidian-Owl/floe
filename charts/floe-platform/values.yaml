@@ -804,3 +804,10 @@ observability:
 
     # Datasource UID (must match Prometheus datasource in Grafana)
     datasourceUid: prometheus
+
+# =============================================================================
+# Cube Configuration (Semantic Layer)
+# =============================================================================
+cube:
+  # Cube is disabled by default - enable in environment-specific values
+  enabled: false

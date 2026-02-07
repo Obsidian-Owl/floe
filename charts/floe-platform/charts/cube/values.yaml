@@ -1,0 +1,119 @@
+# Cube Semantic Layer - Default Values
+# =====================================
+#
+# This chart deploys the Cube semantic layer stack:
+# - Cube API: REST, GraphQL, and SQL APIs
+# - Cube Refresh Worker: Pre-aggregation and scheduled refresh
+# - Cube Store: Distributed cache and query acceleration
+#
+# See https://cube.dev/docs for configuration options.
+
+# =============================================================================
+# Enable/Disable Cube Deployment
+# =============================================================================
+enabled: false
+
+# =============================================================================
+# Cube API Configuration
+# =============================================================================
+api:
+  # Number of API replicas
+  replicaCount: 1
+
+  # API service ports
+  port: 4000
+  sqlPort: 15432
+
+  # Resource limits for API pods
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# =============================================================================
+# Cube Refresh Worker Configuration
+# =============================================================================
+refreshWorker:
+  # Enable refresh worker (for pre-aggregations)
+  enabled: true
+
+  # Number of worker replicas
+  replicaCount: 1
+
+  # Resource limits for worker pods
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# =============================================================================
+# Cube Store Configuration (Distributed Cache)
+# =============================================================================
+cubeStore:
+  # Enable Cube Store for caching
+  enabled: true
+
+  # Cube Store image
+  image:
+    repository: cubejs/cubestore
+    tag: "v0.36.0"
+    pullPolicy: IfNotPresent
+
+  # Cube Store service port
+  port: 3030
+
+  # Persistence for Cube Store
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
+  # Resource limits for Cube Store
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# =============================================================================
+# Cube Container Image
+# =============================================================================
+image:
+  repository: cubejs/cube
+  tag: "v0.36.0"
+  pullPolicy: IfNotPresent
+
+# =============================================================================
+# Cube Configuration
+# =============================================================================
+config:
+  # Development mode (disable in production)
+  devMode: false
+
+  # Log level (error, warn, info, debug, trace)
+  logLevel: warn
+
+  # Disable telemetry
+  telemetry: false
+
+  # Database type for data source
+  dbType: duckdb
+
+  # Cache driver (cubestore, memory, redis)
+  cacheDriver: cubestore
+
+# =============================================================================
+# Cube Secret Configuration
+# =============================================================================
+secret:
+  # API secret for JWT tokens (REQUIRED - must be set)
+  # Generate with: openssl rand -hex 32
+  apiSecret: ""

@@ -1,0 +1,28 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cube.fullname" . }}
+  labels:
+    {{- include "cube.labels" . | nindent 4 }}
+data:
+  # Database type
+  CUBEJS_DB_TYPE: {{ .Values.config.dbType | quote }}
+
+  # Development mode
+  CUBEJS_DEV_MODE: {{ .Values.config.devMode | quote }}
+
+  # Cache and queue driver
+  CUBEJS_CACHE_AND_QUEUE_DRIVER: {{ .Values.config.cacheDriver | quote }}
+
+  # Cube Store host (only if enabled)
+  {{- if .Values.cubeStore.enabled }}
+  CUBEJS_CUBESTORE_HOST: {{ include "cube.fullname" . }}-cube-store:{{ .Values.cubeStore.port }}
+  {{- end }}
+
+  # Telemetry
+  CUBEJS_TELEMETRY: {{ .Values.config.telemetry | quote }}
+
+  # Log level
+  CUBEJS_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+{{- end }}

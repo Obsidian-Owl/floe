@@ -219,12 +219,22 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         # T108-T111: Wire Iceberg resources if catalog and storage are configured
         resources = self._create_iceberg_resources(validated.plugins)
 
+        # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
+        semantic_resources = self._create_semantic_resources(validated.plugins)
+        resources.update(semantic_resources)
+
+        if "semantic_layer" in semantic_resources:
+            from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
+
+            assets.append(sync_semantic_schemas)
+
         logger.info(
             "Created Dagster Definitions",
             extra={
                 "asset_count": len(assets),
                 "model_count": len(models),
                 "has_iceberg": "iceberg" in resources,
+                "has_semantic_layer": "semantic_layer" in resources,
             },
         )
 
@@ -255,6 +265,30 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
         return try_create_iceberg_resources(plugins)
+
+    def _create_semantic_resources(
+        self,
+        plugins: Any | None,
+    ) -> dict[str, Any]:
+        """Create semantic layer resources from resolved plugins configuration.
+
+        Attempts to load the semantic layer plugin and create a resource.
+        Returns empty dict if the plugin is not configured or if plugin
+        loading fails.
+
+        Args:
+            plugins: ResolvedPlugins from CompiledArtifacts, or None.
+
+        Returns:
+            Dictionary with "semantic_layer" key if successful, empty dict otherwise.
+
+        Requirements:
+            T047: Create semantic resource factory
+            T048: Wire into plugin.py
+        """
+        from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
+
+        return try_create_semantic_resources(plugins)
 
     def _models_to_transform_configs(self, models: list[dict[str, Any]]) -> list[TransformConfig]:
         """Convert ResolvedModel dicts to TransformConfig objects.

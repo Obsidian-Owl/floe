@@ -81,6 +81,11 @@ dependencies:
     condition: jaeger.enabled
     alias: jaeger
 
+  # Cube - Semantic layer (local subchart)
+  - name: cube
+    version: "0.1.0"
+    condition: cube.enabled
+
 # Annotations for artifact hub and other registries
 annotations:
   # Artifact Hub annotations

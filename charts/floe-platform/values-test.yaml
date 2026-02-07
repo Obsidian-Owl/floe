@@ -294,3 +294,9 @@ test:
     periodSeconds: 5
   # Skip optional init containers
   skipInitContainers: true
+
+# =============================================================================
+# Cube Configuration (Semantic Layer - Test)
+# =============================================================================
+cube:
+  enabled: true

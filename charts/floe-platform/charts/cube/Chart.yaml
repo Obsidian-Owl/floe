@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cube
+description: Cube semantic layer for floe platform
+type: application
+version: 0.1.0
+appVersion: "0.36.0"

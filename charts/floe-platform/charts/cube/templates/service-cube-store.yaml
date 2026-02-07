@@ -1,0 +1,18 @@
+{{- if and .Values.enabled .Values.cubeStore.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cube.fullname" . }}-cube-store
+  labels:
+    {{- include "cube.cubeStore.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: {{ .Values.cubeStore.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "cube.cubeStore.selectorLabels" . | nindent 4 }}
+{{- end }}

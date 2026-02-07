@@ -188,3 +188,9 @@ affinity:
             matchLabels:
               app.kubernetes.io/part-of: floe-platform
           topologyKey: kubernetes.io/hostname
+
+# =============================================================================
+# Cube Configuration (Semantic Layer - Production)
+# =============================================================================
+cube:
+  enabled: false

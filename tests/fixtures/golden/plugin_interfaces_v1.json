@@ -27,6 +27,15 @@
         "read_table": {},
         "write_table": {}
       }
+    },
+    "SemanticLayerPlugin": {
+      "methods": {
+        "sync_from_dbt_manifest": {},
+        "get_security_context": {},
+        "get_datasource_config": {},
+        "get_api_endpoints": {},
+        "get_helm_values_override": {}
+      }
     }
   }
 }

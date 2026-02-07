@@ -1,0 +1,369 @@
+{
+  "epic": "4e-semantic-layer",
+  "project": "Epic 4E: Semantic Layer Plugin",
+  "project_id": "3343e8b2-6c2a-4c28-bcd1-3f7a13780c5d",
+  "team": "floe",
+  "team_id": "ea992060-a5a5-47dc-8aca-bd8984b26a73",
+  "label": "epic:4e",
+  "label_id": "494fdb84-8811-440a-b9ae-9835c5576eb6",
+  "created_at": "2026-02-06T21:25:00Z",
+  "tasks": {
+    "T001": {
+      "linear_id": "FLO-2381",
+      "uuid": "cf6fe9ba-ce5d-4b4a-9f01-53d0ac0c2bab",
+      "title": "Create package structure plugins/floe-semantic-cube/pyproject.toml",
+      "phase": 1,
+      "status": "Backlog"
+    },
+    "T002": {
+      "linear_id": "FLO-2382",
+      "uuid": "e9f1380e-de21-4f87-bb64-90459667bb75",
+      "title": "Create __init__.py and py.typed marker",
+      "phase": 1,
+      "status": "Backlog"
+    },
+    "T003": {
+      "linear_id": "FLO-2383",
+      "uuid": "3e226182-91c3-41de-86e2-83eb77568e87",
+      "title": "Create test directory structure",
+      "phase": 1,
+      "status": "Backlog"
+    },
+    "T004": {
+      "linear_id": "FLO-2384",
+      "uuid": "4e79cc8e-0f4c-496b-956e-a183f1db397e",
+      "title": "Create error types in errors.py",
+      "phase": 1,
+      "status": "Backlog"
+    },
+    "T005": {
+      "linear_id": "FLO-2385",
+      "uuid": "1ab7bfa4-e8aa-4061-bd8e-91bc997d9088",
+      "title": "Create OTel tracing helpers in tracing.py",
+      "phase": 1,
+      "status": "Backlog"
+    },
+    "T006": {
+      "linear_id": "FLO-2386",
+      "uuid": "784db4f8-3af8-4702-953d-4ea52a0ef2a5",
+      "title": "Add get_api_endpoints() and get_helm_values_override() to ABC",
+      "phase": 2,
+      "status": "Backlog"
+    },
+    "T007": {
+      "linear_id": "FLO-2387",
+      "uuid": "c7ee84c1-8e17-4427-b8f4-76944af3b3ad",
+      "title": "Implement CubeSemanticConfig Pydantic model",
+      "phase": 2,
+      "status": "Backlog"
+    },
+    "T008": {
+      "linear_id": "FLO-2388",
+      "uuid": "28ead984-c306-4652-a1be-8e5ffde261ad",
+      "title": "Write unit tests for CubeSemanticConfig",
+      "phase": 2,
+      "status": "Backlog"
+    },
+    "T009": {
+      "linear_id": "FLO-2389",
+      "uuid": "9930a7d9-a691-4c13-98b6-c1d719b88293",
+      "title": "Write unit tests for error types",
+      "phase": 2,
+      "status": "Backlog"
+    },
+    "T010": {
+      "linear_id": "FLO-2390",
+      "uuid": "1c6d2d3d-35aa-43eb-b819-6ef31615708f",
+      "title": "Write contract tests for SemanticLayerPlugin ABC",
+      "phase": 3,
+      "status": "Backlog"
+    },
+    "T011": {
+      "linear_id": "FLO-2391",
+      "uuid": "22fc01fa-af29-40cd-be34-1af9512c383a",
+      "title": "Write contract tests for CompiledArtifacts.plugins.semantic round-trip",
+      "phase": 3,
+      "status": "Backlog"
+    },
+    "T012": {
+      "linear_id": "FLO-2392",
+      "uuid": "e3a19504-2887-42ef-a4af-8cc8a5e6d96f",
+      "title": "Write unit tests for CubeSemanticPlugin",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T013": {
+      "linear_id": "FLO-2393",
+      "uuid": "d6c667b1-8b0f-472b-956b-a78a826c7983",
+      "title": "Write integration tests for plugin discovery",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T014": {
+      "linear_id": "FLO-2394",
+      "uuid": "b5d76f25-467a-4069-96ca-86689e476ef6",
+      "title": "Write integration tests for health check",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T015": {
+      "linear_id": "FLO-2395",
+      "uuid": "b710c084-11f9-4ab1-a7fe-3038a90c708f",
+      "title": "Implement CubeSemanticPlugin class skeleton",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T016": {
+      "linear_id": "FLO-2396",
+      "uuid": "38e84871-62e0-4c43-aa85-350a19c1ea68",
+      "title": "Implement startup()/shutdown() lifecycle",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T017": {
+      "linear_id": "FLO-2397",
+      "uuid": "59720d31-aefc-4c62-9462-e73777ad1f5d",
+      "title": "Implement health_check()",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T018": {
+      "linear_id": "FLO-2398",
+      "uuid": "3bed9956-8390-4cbb-b48b-288569f6c5af",
+      "title": "Implement get_api_endpoints()",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T019": {
+      "linear_id": "FLO-2399",
+      "uuid": "8a50338c-c417-41ea-804b-08b563e4d17f",
+      "title": "Implement get_helm_values_override()",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T020": {
+      "linear_id": "FLO-2400",
+      "uuid": "0ffecc77-4ab4-4493-9ab1-fc02609f8ffe",
+      "title": "Implement get_security_context()",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T021": {
+      "linear_id": "FLO-2401",
+      "uuid": "83e509c9-9493-48cf-bc9d-8b8c0c7a1286",
+      "title": "Implement get_datasource_config()",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T022": {
+      "linear_id": "FLO-2402",
+      "uuid": "fb4016b6-0a29-45a5-94f2-1ead7477e4e3",
+      "title": "Create test fixtures for semantic layer",
+      "phase": 4,
+      "status": "Backlog"
+    },
+    "T023": {
+      "linear_id": "FLO-2403",
+      "uuid": "00a3983a-d5e9-44e7-b7db-63a1e64eb2cc",
+      "title": "Write unit tests for CubeSchemaGenerator",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T024": {
+      "linear_id": "FLO-2404",
+      "uuid": "8dc4e208-7357-478f-9890-bcd30cd60508",
+      "title": "Create CubeSchemaGenerator class skeleton",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T025": {
+      "linear_id": "FLO-2405",
+      "uuid": "9bdf3a63-9ccc-49d9-8e1e-772ff279b4d6",
+      "title": "Implement manifest parsing and model filtering",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T026": {
+      "linear_id": "FLO-2406",
+      "uuid": "96d05934-34f4-4bb0-a7af-ea1bb8972ce7",
+      "title": "Implement column-to-measure/dimension inference",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T027": {
+      "linear_id": "FLO-2407",
+      "uuid": "7fd0244f-63a8-437d-aae8-6a512c200ce7",
+      "title": "Implement ref-to-join conversion",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T028": {
+      "linear_id": "FLO-2408",
+      "uuid": "611e743b-b930-47f1-8ace-56482336961f",
+      "title": "Implement pre-aggregation generation",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T029": {
+      "linear_id": "FLO-2409",
+      "uuid": "0470b1c1-a255-46de-9a0f-46e645e82af1",
+      "title": "Implement YAML file writing",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T030": {
+      "linear_id": "FLO-2410",
+      "uuid": "78ed9d93-0407-4150-a4ba-449487567f55",
+      "title": "Wire sync_from_dbt_manifest() to CubeSchemaGenerator",
+      "phase": 5,
+      "status": "Backlog"
+    },
+    "T031": {
+      "linear_id": "FLO-2411",
+      "uuid": "aa719ddd-dbc9-493a-8ebc-24be1fb916ac",
+      "title": "Write unit tests for DuckDB Cube datasource",
+      "phase": 6,
+      "status": "Backlog"
+    },
+    "T032": {
+      "linear_id": "FLO-2412",
+      "uuid": "cd8b8936-416a-4d5a-919f-4e1173d0bcab",
+      "title": "Add get_cube_datasource_config() to DuckDBComputePlugin",
+      "phase": 6,
+      "status": "Backlog"
+    },
+    "T033": {
+      "linear_id": "FLO-2413",
+      "uuid": "27d414fe-f156-4a72-bf93-e55428aa7113",
+      "title": "Validate Helm chart renders all Cube resources",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T034": {
+      "linear_id": "FLO-2414",
+      "uuid": "694a3565-d60f-44a1-969d-b3170e26f89e",
+      "title": "Create Cube subchart scaffold",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T035": {
+      "linear_id": "FLO-2415",
+      "uuid": "df885059-7a32-496c-82c3-86614bb09ac8",
+      "title": "Create Cube API Deployment template",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T036": {
+      "linear_id": "FLO-2416",
+      "uuid": "94c2134f-d0b9-4a5c-9069-e0ce1c5e80e1",
+      "title": "Create Cube Refresh Worker Deployment template",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T037": {
+      "linear_id": "FLO-2417",
+      "uuid": "7df3af58-2a0b-421b-9f1b-550d5c6338ed",
+      "title": "Create Cube Store StatefulSet template",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T038": {
+      "linear_id": "FLO-2418",
+      "uuid": "e2232ab4-787e-4ea4-89d0-26c0dd495b6f",
+      "title": "Create Service templates (API, SQL, Cube Store)",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T039": {
+      "linear_id": "FLO-2419",
+      "uuid": "c2825f7f-325f-4307-9e40-f753a9178847",
+      "title": "Create Cube ConfigMap template",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T040": {
+      "linear_id": "FLO-2420",
+      "uuid": "0f94d469-ecc3-489d-9a9d-9df70a8e905f",
+      "title": "Integrate Cube subchart into parent chart",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T041": {
+      "linear_id": "FLO-2421",
+      "uuid": "1a78079a-859c-435a-948d-d86a79b4bc96",
+      "title": "Add Cube to environment-specific values files",
+      "phase": 8,
+      "status": "Backlog"
+    },
+    "T042": {
+      "linear_id": "FLO-2422",
+      "uuid": "ce5e1c00-33a5-4200-9682-63b05a7a0e67",
+      "title": "Update __init__.py exports and verify editable install",
+      "phase": 11,
+      "status": "Backlog"
+    },
+    "T043": {
+      "linear_id": "FLO-2423",
+      "uuid": "24137742-01ba-4ede-9579-641ad105449e",
+      "title": "Run mypy --strict on semantic and DuckDB packages",
+      "phase": 11,
+      "status": "Backlog"
+    },
+    "T044": {
+      "linear_id": "FLO-2424",
+      "uuid": "83335cfb-1c2d-47d4-814b-347359f5f167",
+      "title": "Run ruff check on floe-semantic-cube",
+      "phase": 11,
+      "status": "Backlog"
+    },
+    "T045": {
+      "linear_id": "FLO-2425",
+      "uuid": "5612d650-3516-44af-b395-e5c5de559291",
+      "title": "Run bandit security scan on floe-semantic-cube",
+      "phase": 11,
+      "status": "Backlog"
+    },
+    "T046": {
+      "linear_id": "FLO-2426",
+      "uuid": "61a89069-513c-44bb-b4a4-486601f10c8b",
+      "title": "Run pytest with coverage verification (>80%)",
+      "phase": 11,
+      "status": "Backlog"
+    },
+    "T047": {
+      "linear_id": "FLO-2427",
+      "uuid": "69e48e9e-3d2f-4142-91c0-53badf68f462",
+      "title": "Create try_create_semantic_resources() resource factory",
+      "phase": "6a",
+      "status": "Backlog"
+    },
+    "T048": {
+      "linear_id": "FLO-2428",
+      "uuid": "4da1367a-d576-4891-a451-e312615a2125",
+      "title": "Wire semantic resources into create_definitions()",
+      "phase": "6a",
+      "status": "Backlog"
+    },
+    "T049": {
+      "linear_id": "FLO-2429",
+      "uuid": "837214ed-a12c-4551-8cab-6ff683984a1c",
+      "title": "Create downstream sync_semantic_schemas Dagster asset",
+      "phase": "6a",
+      "status": "Backlog"
+    },
+    "T050": {
+      "linear_id": "FLO-2430",
+      "uuid": "cb70220a-137f-43f4-ac69-9632442d7ad9",
+      "title": "Write unit tests for orchestrator semantic wiring",
+      "phase": "6a",
+      "status": "Backlog"
+    },
+    "T051": {
+      "linear_id": "FLO-2431",
+      "uuid": "e2cdd655-661e-46c5-aa16-2d978ff3a575",
+      "title": "Write integration test for semantic orchestrator wiring chain",
+      "phase": "6a",
+      "status": "Backlog"
+    }
+  }
+}

@@ -6,6 +6,15 @@ responsible for:
 - Syncing semantic models from dbt manifests
 - Providing security context for data isolation
 - Configuring datasources from compute plugins
+- Exposing API endpoint metadata
+- Providing Helm values overrides for deployment
+
+Abstract methods (5 total):
+    1. sync_from_dbt_manifest() - Generate semantic models from dbt manifest
+    2. get_security_context() - Build security context for data isolation
+    3. get_datasource_config() - Generate datasource config from compute plugin
+    4. get_api_endpoints() - Return API endpoint URLs for the semantic layer
+    5. get_helm_values_override() - Return Helm values for deployment
 
 Example:
     >>> from floe_core.plugins.semantic import SemanticLayerPlugin
@@ -43,6 +52,8 @@ class SemanticLayerPlugin(PluginMetadata):
         - sync_from_dbt_manifest() method
         - get_security_context() method
         - get_datasource_config() method
+        - get_api_endpoints() method
+        - get_helm_values_override() method
 
     Example:
         >>> class CubePlugin(SemanticLayerPlugin):
@@ -163,6 +174,53 @@ class SemanticLayerPlugin(PluginMetadata):
                 'type': 'snowflake',
                 'account': 'xxx.us-east-1',
                 'warehouse': 'compute_wh'
+            }
+        """
+        ...
+
+    @abstractmethod
+    def get_api_endpoints(self) -> dict[str, str]:
+        """Return API endpoint URLs for the semantic layer.
+
+        Provides a mapping of endpoint names to their URL paths, enabling
+        the platform to expose semantic layer APIs through its gateway.
+
+        Returns:
+            Dictionary mapping endpoint names to URL paths.
+            Common keys: "rest", "graphql", "sql", "health".
+
+        Example:
+            >>> endpoints = plugin.get_api_endpoints()
+            >>> endpoints
+            {
+                'rest': '/cubejs-api/v1',
+                'graphql': '/cubejs-api/graphql',
+                'sql': '/cubejs-api/sql',
+                'health': '/readyz',
+            }
+        """
+        ...
+
+    @abstractmethod
+    def get_helm_values_override(self) -> dict[str, Any]:
+        """Return Helm values override for deploying the semantic layer.
+
+        Provides deployment configuration that the platform's Helm chart
+        uses to deploy the semantic layer component (e.g., Cube API server,
+        refresh worker, store).
+
+        Returns:
+            Dictionary of Helm values to merge into the platform chart.
+
+        Example:
+            >>> values = plugin.get_helm_values_override()
+            >>> values
+            {
+                'cube': {
+                    'enabled': True,
+                    'api': {'replicas': 2},
+                    'store': {'persistence': {'size': '10Gi'}},
+                }
             }
         """
         ...

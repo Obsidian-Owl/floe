@@ -46,6 +46,8 @@ dependencies = [
     "floe-rbac-k8s",
     # Include orchestrator plugins for development
     "floe-orchestrator-dagster",
+    # Include semantic layer plugins for development (Epic 4E)
+    "floe-semantic-cube",
     # Include dbt plugins for development (Epic 5A)
     "floe-dbt-core",
     "floe-dbt-fusion",
@@ -79,6 +81,7 @@ floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = t
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
 floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editable = true }
+floe-semantic-cube = { path = "plugins/floe-semantic-cube", editable = true }
 floe-dbt-core = { path = "plugins/floe-dbt-core", editable = true }
 floe-dbt-fusion = { path = "plugins/floe-dbt-fusion", editable = true }
 floe-network-security-k8s = { path = "plugins/floe-network-security-k8s", editable = true }
@@ -102,6 +105,7 @@ pythonpath = [
     "plugins/floe-network-security-k8s/src",
     "plugins/floe-quality-gx/src",
     "plugins/floe-quality-dbt/src",
+    "plugins/floe-semantic-cube/src",
     "plugins/floe-lineage-marquez/src",
     ".",
 ]
