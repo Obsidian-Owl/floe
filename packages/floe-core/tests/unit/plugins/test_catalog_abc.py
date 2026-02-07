@@ -244,10 +244,10 @@ class TestCatalogPluginDefaultImplementations:
         assert health.details is not None
         assert health.details.get("timeout") == pytest.approx(5.0)
 
-        # Default timeout
+        # Default timeout (None means plugin chooses its own default)
         health = plugin.health_check()
         assert health.details is not None
-        assert health.details.get("timeout") == pytest.approx(1.0)
+        assert health.details.get("timeout") is None
 
 
 class TestCatalogPluginInheritance:
