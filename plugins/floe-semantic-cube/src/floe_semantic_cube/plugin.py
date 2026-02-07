@@ -277,7 +277,9 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             start = time.perf_counter()
 
             try:
-                assert self._client is not None  # noqa: S101
+                if self._client is None:
+                    msg = "HTTP client not initialized — call startup() first"
+                    raise RuntimeError(msg)
                 health_url = f"{self._config.server_url}/readyz"
                 response = self._client.get(health_url, timeout=effective_timeout)
                 elapsed_ms = (time.perf_counter() - start) * 1000
