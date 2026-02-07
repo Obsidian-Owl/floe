@@ -7,10 +7,10 @@ Provides fixtures for integration tests requiring real services
 from __future__ import annotations
 
 import pytest
+from testing.fixtures.ingestion import create_ingestion_source_config
+
 from floe_ingestion_dlt.config import IngestionSourceConfig
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
-
-from testing.fixtures.ingestion import create_ingestion_source_config
 
 
 @pytest.fixture

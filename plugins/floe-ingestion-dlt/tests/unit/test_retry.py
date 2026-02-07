@@ -5,7 +5,6 @@ Tests error categorization, retry decision logic, and retry decorator.
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -14,8 +13,8 @@ from floe_ingestion_dlt.config import RetryConfig
 from floe_ingestion_dlt.errors import ErrorCategory, IngestionError
 from floe_ingestion_dlt.retry import (
     categorize_error,
-    is_retryable,
     create_retry_decorator,
+    is_retryable,
 )
 
 

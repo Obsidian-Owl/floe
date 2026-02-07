@@ -32,11 +32,13 @@ The following tests SHOULD PASS with current implementation:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator
+from collections.abc import Generator
+from typing import TYPE_CHECKING
 
 import pytest
-from floe_ingestion_dlt import DltIngestionPlugin
 from testing.base_classes.base_health_check_tests import BaseHealthCheckTests
+
+from floe_ingestion_dlt import DltIngestionPlugin
 
 if TYPE_CHECKING:
     pass

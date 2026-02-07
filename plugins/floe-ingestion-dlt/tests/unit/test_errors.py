@@ -8,12 +8,12 @@ from __future__ import annotations
 import pytest
 
 from floe_ingestion_dlt.errors import (
+    DestinationWriteError,
     ErrorCategory,
     IngestionError,
-    SourceConnectionError,
-    DestinationWriteError,
-    SchemaContractViolation,
     PipelineConfigurationError,
+    SchemaContractViolation,
+    SourceConnectionError,
 )
 
 

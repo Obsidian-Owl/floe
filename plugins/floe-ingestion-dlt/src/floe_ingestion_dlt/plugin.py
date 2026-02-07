@@ -30,10 +30,8 @@ from floe_core.plugins.ingestion import IngestionConfig, IngestionPlugin, Ingest
 
 from floe_ingestion_dlt.config import VALID_SCHEMA_CONTRACTS, VALID_SOURCE_TYPES, VALID_WRITE_MODES
 from floe_ingestion_dlt.errors import (
-    DestinationWriteError,
     PipelineConfigurationError,
     SchemaContractViolation,
-    SourceConnectionError,
 )
 from floe_ingestion_dlt.retry import categorize_error
 from floe_ingestion_dlt.tracing import (

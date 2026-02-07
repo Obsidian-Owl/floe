@@ -284,7 +284,9 @@ class DltIngestionConfig(BaseModel):
 
     @field_validator("sources")
     @classmethod
-    def validate_unique_source_names(cls, v: list[IngestionSourceConfig]) -> list[IngestionSourceConfig]:
+    def validate_unique_source_names(
+        cls, v: list[IngestionSourceConfig],
+    ) -> list[IngestionSourceConfig]:
         """Validate that all source names are unique.
 
         Args:

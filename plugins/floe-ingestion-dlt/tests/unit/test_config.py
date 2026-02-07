@@ -11,12 +11,11 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from floe_ingestion_dlt.config import (
+    VALID_SCHEMA_CONTRACTS,
+    VALID_SOURCE_TYPES,
     DltIngestionConfig,
     IngestionSourceConfig,
     RetryConfig,
-    VALID_SOURCE_TYPES,
-    VALID_WRITE_MODES,
-    VALID_SCHEMA_CONTRACTS,
 )
 
 
@@ -247,7 +246,10 @@ class TestIngestionSourceConfig:
 
         write_mode="merge" without primary_key raises ValidationError.
         """
-        with pytest.raises(ValidationError, match="primary_key is required when write_mode is 'merge'"):
+        with pytest.raises(
+            ValidationError,
+            match="primary_key is required when write_mode is 'merge'",
+        ):
             IngestionSourceConfig(
                 name="test_merge",
                 source_type="rest_api",
@@ -284,7 +286,10 @@ class TestIngestionSourceConfig:
         the remaining characters are alphanumeric.
         """
         # Valid names (alphanumeric with underscores/hyphens allowed)
-        valid_names = ["valid_name", "ValidName123", "source_1", "mySource", "name-with-dash", "123invalid"]
+        valid_names = [
+            "valid_name", "ValidName123", "source_1",
+            "mySource", "name-with-dash", "123invalid",
+        ]
         for name in valid_names:
             config = IngestionSourceConfig(
                 name=name,

@@ -9,7 +9,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from floe_ingestion_dlt.config import DltIngestionConfig, IngestionSourceConfig, RetryConfig
+
+from floe_ingestion_dlt.config import IngestionSourceConfig, RetryConfig
 from floe_ingestion_dlt.errors import ErrorCategory, IngestionError
 
 
