@@ -228,6 +228,10 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
             assets.append(sync_semantic_schemas)
 
+        # T035: Wire ingestion resources if ingestion plugin is configured
+        ingestion_resources = self._create_ingestion_resources(validated.plugins)
+        resources.update(ingestion_resources)
+
         logger.info(
             "Created Dagster Definitions",
             extra={
@@ -235,6 +239,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "model_count": len(models),
                 "has_iceberg": "iceberg" in resources,
                 "has_semantic_layer": "semantic_layer" in resources,
+                "has_ingestion": "ingestion" in resources,
             },
         )
 
@@ -289,6 +294,29 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
 
         return try_create_semantic_resources(plugins)
+
+    def _create_ingestion_resources(
+        self,
+        plugins: Any | None,
+    ) -> dict[str, Any]:
+        """Create ingestion resources from resolved plugins configuration.
+
+        Attempts to load the ingestion plugin and create a resource.
+        Returns empty dict if the plugin is not configured.
+
+        Args:
+            plugins: ResolvedPlugins from CompiledArtifacts, or None.
+
+        Returns:
+            Dictionary with "ingestion" key if successful, empty dict otherwise.
+
+        Requirements:
+            T033: Create ingestion resource factory
+            T035: Wire into plugin.py
+        """
+        from floe_orchestrator_dagster.resources.ingestion import try_create_ingestion_resources
+
+        return try_create_ingestion_resources(plugins)
 
     def _models_to_transform_configs(self, models: list[dict[str, Any]]) -> list[TransformConfig]:
         """Convert ResolvedModel dicts to TransformConfig objects.
