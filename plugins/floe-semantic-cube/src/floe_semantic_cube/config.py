@@ -48,8 +48,11 @@ class CubeSemanticConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # Default is K8s cluster-internal service URL — HTTP is standard for
+    # pod-to-pod communication; TLS terminates at the ingress controller.
+    # Production external URLs should use https://.
     server_url: str = Field(
-        default="http://cube:4000",
+        default="http://cube:4000",  # noqa: S105 — K8s service DNS, not external
         description="URL of the Cube API server",
     )
     api_secret: SecretStr = Field(
@@ -92,6 +95,8 @@ class CubeSemanticConfig(BaseModel):
             ValueError: If URL doesn't start with http:// or https://.
         """
         v = v.rstrip("/")
+        # HTTP is intentional for K8s cluster-internal service URLs
+        # (e.g. http://cube:4000). Production external URLs should use https://.
         if not v.startswith(("http://", "https://")):
             msg = "server_url must start with http:// or https://"
             raise ValueError(msg)

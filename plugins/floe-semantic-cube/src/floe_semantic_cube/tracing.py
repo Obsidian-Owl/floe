@@ -121,8 +121,8 @@ def semantic_span(
 def _sanitize_url(url: str) -> str:
     """Remove credentials from URL for safe logging/tracing.
 
-    Removes userinfo (username:password@) from URLs to prevent
-    accidental credential exposure in traces.
+    Uses ``urllib.parse`` for robust handling of URLs with embedded
+    credentials, including edge-cases with multiple ``@`` characters.
 
     Args:
         url: URL that may contain credentials.
@@ -134,12 +134,21 @@ def _sanitize_url(url: str) -> str:
         >>> _sanitize_url("https://user:pass@cube.example.com/api")
         'https://cube.example.com/api'
     """
-    if "@" in url and "://" in url:
-        scheme_end = url.index("://") + 3
-        at_pos = url.index("@")
-        slash_pos = url.find("/", scheme_end)
-        if slash_pos == -1 or at_pos < slash_pos:
-            return url[:scheme_end] + url[at_pos + 1 :]
+    from urllib.parse import urlparse, urlunparse
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return url
+
+    if parsed.username is not None or parsed.password is not None:
+        # Rebuild with userinfo stripped
+        replaced = parsed._replace(
+            netloc=parsed.hostname or ""
+            if parsed.port is None
+            else f"{parsed.hostname or ''}:{parsed.port}",
+        )
+        return urlunparse(replaced)
     return url
 
 
