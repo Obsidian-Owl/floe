@@ -29,7 +29,13 @@ from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import IngestionConfig, IngestionPlugin, IngestionResult
 
 from floe_ingestion_dlt.config import VALID_SCHEMA_CONTRACTS, VALID_SOURCE_TYPES, VALID_WRITE_MODES
-from floe_ingestion_dlt.errors import PipelineConfigurationError, SchemaContractViolation
+from floe_ingestion_dlt.errors import (
+    DestinationWriteError,
+    PipelineConfigurationError,
+    SchemaContractViolation,
+    SourceConnectionError,
+)
+from floe_ingestion_dlt.retry import categorize_error
 from floe_ingestion_dlt.tracing import (
     get_tracer,
     ingestion_span,
@@ -506,13 +512,14 @@ class DltIngestionPlugin(IngestionPlugin):
                 error_lower = str(e).lower()
                 if "schema" in error_lower and "contract" in error_lower:
                     # This is a schema contract violation
-                    record_ingestion_error(span, e)
+                    record_ingestion_error(span, e, category="permanent")
 
                     logger.error(
                         "schema_contract_violation",
                         pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
                         schema_contract_mode=schema_contract_mode,
                         error=error_msg,
+                        error_category="permanent",
                         duration_seconds=elapsed,
                     )
 
@@ -532,13 +539,16 @@ class DltIngestionPlugin(IngestionPlugin):
                         errors=[str(violation)],
                     )
 
-                # Generic error handling
-                record_ingestion_error(span, e)
+                # Generic error handling with categorization
+                category = categorize_error(e)
+
+                record_ingestion_error(span, e, category=category.value)
 
                 logger.error(
                     "pipeline_run_failed",
                     pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
                     error=error_msg,
+                    error_category=category.value,
                     duration_seconds=elapsed,
                 )
 

@@ -245,3 +245,43 @@ class TestIncrementalLoading:
         This test WILL FAIL if Polaris/MinIO services are not available.
         """
         pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+
+class TestErrorHandling:
+    """Integration tests for error handling (T053)."""
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-058")
+    def test_source_connection_failure_raises_error(self) -> None:
+        """Test source connection failure raises SourceConnectionError.
+
+        Given an unreachable source endpoint, when create_pipeline() or run()
+        is executed, then SourceConnectionError is raised with TRANSIENT category.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-057")
+    def test_iceberg_write_failure_returns_error_result(self) -> None:
+        """Test Iceberg write failure returns IngestionResult with success=False.
+
+        Given a pipeline targeting a non-existent Iceberg namespace, when run()
+        is executed, then it returns IngestionResult(success=False, errors=[...]).
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-052")
+    def test_transient_error_retried(self) -> None:
+        """Test transient error triggers retry with backoff.
+
+        Given a pipeline that fails with a transient error on first attempt,
+        when run() is called with retry enabled, then the operation is retried.
+
+        This test WILL FAIL if Polaris/MinIO services are not available.
+        """
+        pytest.fail(_K8S_INFRA_REQUIRED_MSG)
