@@ -207,3 +207,191 @@ class TestRunPipeline:
         # Just verify run doesn't raise and returns result - ingestion_span is tested separately
         result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
         assert isinstance(result, IngestionResult)
+
+    @pytest.mark.requirement("4F-FR-022")
+    def test_run_append_write_disposition(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes write_disposition='append' to pipeline.run().
+
+        Given write_disposition="append" kwarg, when run() is called,
+        then pipeline.run() is invoked with write_disposition="append".
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+
+        # Verify pipeline.run was called with correct write_disposition
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert call_kwargs["write_disposition"] == "append"
+
+    @pytest.mark.requirement("4F-FR-023")
+    def test_run_replace_write_disposition(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes write_disposition='replace' to pipeline.run().
+
+        Given write_disposition="replace" kwarg, when run() is called,
+        then pipeline.run() is invoked with write_disposition="replace".
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(mock_pipeline, source=[], write_disposition="replace")
+
+        # Verify pipeline.run was called with correct write_disposition
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert call_kwargs["write_disposition"] == "replace"
+
+    @pytest.mark.requirement("4F-FR-024")
+    def test_run_merge_write_disposition(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes write_disposition='merge' to pipeline.run().
+
+        Given write_disposition="merge" kwarg, when run() is called,
+        then pipeline.run() is invoked with write_disposition="merge".
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(mock_pipeline, source=[], write_disposition="merge")
+
+        # Verify pipeline.run was called with correct write_disposition
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert call_kwargs["write_disposition"] == "merge"
+
+    @pytest.mark.requirement("4F-FR-024")
+    def test_run_merge_with_table_name(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test run passes table_name kwarg to pipeline.run().
+
+        Given table_name kwarg with write_disposition="merge", when run()
+        is called, then both parameters are passed to pipeline.run().
+        """
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="merge",
+            table_name="bronze.raw_data",
+        )
+
+        # Verify pipeline.run was called with both kwargs
+        mock_pipeline.run.assert_called_once()
+        call_kwargs = mock_pipeline.run.call_args.kwargs
+        assert call_kwargs["write_disposition"] == "merge"
+        assert call_kwargs["table_name"] == "bronze.raw_data"
+
+
+class TestGetDestinationConfig:
+    """Unit tests for T024 - get_destination_config() method."""
+
+    @pytest.mark.requirement("4F-FR-019")
+    def test_get_destination_config_basic(self) -> None:
+        """Test get_destination_config() with basic catalog configuration.
+
+        Given catalog_config with uri and warehouse, when get_destination_config()
+        is called, then it returns dict with destination="iceberg",
+        catalog_type="rest", catalog_uri, and warehouse.
+        """
+        plugin = DltIngestionPlugin()
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+        }
+
+        result = plugin.get_destination_config(catalog_config)
+
+        assert result["destination"] == "iceberg"
+        assert result["catalog_type"] == "rest"
+        assert result["catalog_uri"] == "http://polaris:8181/api/catalog"
+        assert result["warehouse"] == "floe_warehouse"
+
+    @pytest.mark.requirement("4F-FR-020")
+    def test_get_destination_config_s3_config(self) -> None:
+        """Test get_destination_config() with S3/MinIO configuration.
+
+        Given catalog_config with s3_endpoint, s3_access_key, s3_secret_key,
+        s3_region, when get_destination_config() is called, then all S3
+        parameters are mapped to output dict.
+        """
+        plugin = DltIngestionPlugin()
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+            "s3_endpoint": "http://minio:9000",
+            "s3_access_key": "minioadmin",
+            "s3_secret_key": "minioadmin",
+            "s3_region": "us-east-1",
+        }
+
+        result = plugin.get_destination_config(catalog_config)
+
+        assert result["destination"] == "iceberg"
+        assert result["catalog_type"] == "rest"
+        assert result["s3_endpoint"] == "http://minio:9000"
+        assert result["s3_access_key"] == "minioadmin"
+        assert result["s3_secret_key"] == "minioadmin"
+        assert result["s3_region"] == "us-east-1"
+
+    @pytest.mark.requirement("4F-FR-019")
+    def test_get_destination_config_minimal(self) -> None:
+        """Test get_destination_config() with empty catalog_config.
+
+        Given empty catalog_config {}, when get_destination_config() is called,
+        then it returns dict with just destination and catalog_type (base fields).
+        """
+        plugin = DltIngestionPlugin()
+        catalog_config: dict[str, str] = {}
+
+        result = plugin.get_destination_config(catalog_config)
+
+        assert result["destination"] == "iceberg"
+        assert result["catalog_type"] == "rest"
+        assert "catalog_uri" not in result
+        assert "warehouse" not in result
+        assert "s3_endpoint" not in result
+
+    @pytest.mark.requirement("4F-FR-020")
+    def test_get_destination_config_partial_s3(self) -> None:
+        """Test get_destination_config() with partial S3 configuration.
+
+        Given catalog_config with only s3_endpoint (no keys/region), when
+        get_destination_config() is called, then only s3_endpoint appears
+        in output dict (no empty/null S3 fields).
+        """
+        plugin = DltIngestionPlugin()
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+            "s3_endpoint": "http://minio:9000",
+        }
+
+        result = plugin.get_destination_config(catalog_config)
+
+        assert result["destination"] == "iceberg"
+        assert result["catalog_type"] == "rest"
+        assert result["s3_endpoint"] == "http://minio:9000"
+        # Verify keys/region are not present
+        assert "s3_access_key" not in result
+        assert "s3_secret_key" not in result
+        assert "s3_region" not in result
+
+    @pytest.mark.requirement("4F-FR-019")
+    def test_get_destination_config_not_started_ok(self) -> None:
+        """Test get_destination_config() does not require plugin to be started.
+
+        get_destination_config is a pure mapping function that doesn't
+        depend on plugin state. It should work without calling startup().
+        """
+        plugin = DltIngestionPlugin()  # NOT started
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+        }
+
+        # Should not raise RuntimeError
+        result = plugin.get_destination_config(catalog_config)
+
+        assert result["destination"] == "iceberg"
+        assert result["catalog_type"] == "rest"
