@@ -1463,6 +1463,34 @@ requires-dist = [
 ]
 
 [[package]]
+name = "floe-semantic-cube"
+version = "0.1.0"
+source = { editable = "plugins/floe-semantic-cube" }
+dependencies = [
+    { name = "floe-core" },
+    { name = "httpx" },
+    { name = "opentelemetry-api" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "httpx", specifier = ">=0.25.0,<1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "opentelemetry-api", specifier = ">=1.0,<2.0" },
+    { name = "pydantic", specifier = ">=2.0,<3.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "pyyaml", specifier = ">=6.0,<7.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+    { name = "structlog", specifier = ">=24.0,<26.0" },
+]
+
+[[package]]
 name = "floe-telemetry-console"
 version = "0.1.0"
 source = { editable = "plugins/floe-telemetry-console" }
@@ -1525,6 +1553,7 @@ dependencies = [
     { name = "floe-rbac-k8s" },
     { name = "floe-secrets-infisical" },
     { name = "floe-secrets-k8s" },
+    { name = "floe-semantic-cube" },
     { name = "floe-telemetry-console" },
     { name = "floe-telemetry-jaeger" },
     { name = "import-linter" },
@@ -1567,6 +1596,7 @@ requires-dist = [
     { name = "floe-rbac-k8s", editable = "plugins/floe-rbac-k8s" },
     { name = "floe-secrets-infisical", editable = "plugins/floe-secrets-infisical" },
     { name = "floe-secrets-k8s", editable = "plugins/floe-secrets-k8s" },
+    { name = "floe-semantic-cube", editable = "plugins/floe-semantic-cube" },
     { name = "floe-telemetry-console", editable = "plugins/floe-telemetry-console" },
     { name = "floe-telemetry-jaeger", editable = "plugins/floe-telemetry-jaeger" },
     { name = "import-linter", specifier = ">=2.0" },
