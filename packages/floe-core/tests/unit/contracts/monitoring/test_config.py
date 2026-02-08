@@ -469,3 +469,188 @@ def test_registered_contract_last_check_times_mutability() -> None:
     assert len(contract.last_check_times) == 2
     assert contract.last_check_times["freshness"] == check_time
     assert contract.last_check_times["schema_drift"] == check_time
+
+
+# --- Per-Contract Override Tests (T076) ---
+
+
+@pytest.mark.requirement("3D-FR-045")
+def test_contract_override_check_intervals() -> None:
+    """Test per-contract check_intervals override."""
+    now = datetime.now(tz=timezone.utc)
+
+    # Create override config with custom check intervals
+    override_intervals = CheckIntervalConfig(
+        freshness_minutes=5,
+        schema_drift_minutes=30,
+        quality_minutes=120,
+        availability_minutes=2,
+    )
+    override_config = MonitoringConfig(check_intervals=override_intervals)
+
+    contract = RegisteredContract(
+        contract_name="orders_v1",
+        contract_version="1.0.0",
+        contract_data={"apiVersion": "v3.1.0"},
+        connection_config={"catalog": "polaris"},
+        registered_at=now,
+        monitoring_overrides=override_config,
+    )
+
+    # Verify override has different intervals than global defaults
+    assert contract.monitoring_overrides is not None
+    assert contract.monitoring_overrides.check_intervals.freshness_minutes == 5
+    assert contract.monitoring_overrides.check_intervals.schema_drift_minutes == 30
+    assert contract.monitoring_overrides.check_intervals.quality_minutes == 120
+    assert contract.monitoring_overrides.check_intervals.availability_minutes == 2
+
+    # Verify these differ from defaults
+    default_config = MonitoringConfig()
+    assert contract.monitoring_overrides.check_intervals.freshness_minutes != default_config.check_intervals.freshness_minutes
+    assert contract.monitoring_overrides.check_intervals.schema_drift_minutes != default_config.check_intervals.schema_drift_minutes
+
+
+@pytest.mark.requirement("3D-FR-045")
+def test_contract_override_severity_thresholds() -> None:
+    """Test per-contract severity_thresholds override."""
+    now = datetime.now(tz=timezone.utc)
+
+    # Create override config with custom severity thresholds
+    override_thresholds = SeverityThresholds(
+        info_pct=70.0,
+        warning_pct=85.0,
+        critical_count=5,
+        critical_window_hours=12,
+    )
+    override_config = MonitoringConfig(severity_thresholds=override_thresholds)
+
+    contract = RegisteredContract(
+        contract_name="critical_orders_v1",
+        contract_version="1.0.0",
+        contract_data={"apiVersion": "v3.1.0"},
+        connection_config={"catalog": "polaris"},
+        registered_at=now,
+        monitoring_overrides=override_config,
+    )
+
+    # Verify override has different thresholds
+    assert contract.monitoring_overrides is not None
+    assert contract.monitoring_overrides.severity_thresholds.info_pct == pytest.approx(70.0)
+    assert contract.monitoring_overrides.severity_thresholds.warning_pct == pytest.approx(85.0)
+    assert contract.monitoring_overrides.severity_thresholds.critical_count == 5
+    assert contract.monitoring_overrides.severity_thresholds.critical_window_hours == 12
+
+    # Verify these differ from defaults
+    default_config = MonitoringConfig()
+    assert contract.monitoring_overrides.severity_thresholds.info_pct != default_config.severity_thresholds.info_pct
+    assert contract.monitoring_overrides.severity_thresholds.critical_count != default_config.severity_thresholds.critical_count
+
+
+@pytest.mark.requirement("3D-FR-045")
+def test_contract_override_alerts_config() -> None:
+    """Test per-contract alert routing rules override."""
+    now = datetime.now(tz=timezone.utc)
+
+    # Create override config with custom alert routing
+    override_routing = [
+        AlertChannelRoutingRule(
+            channel_name="pagerduty",
+            min_severity=ViolationSeverity.ERROR,
+        ),
+        AlertChannelRoutingRule(
+            channel_name="slack-critical",
+            min_severity=ViolationSeverity.CRITICAL,
+        ),
+    ]
+    override_alerts = AlertConfig(
+        routing_rules=override_routing,
+        dedup_window_minutes=15,
+        rate_limit_per_contract=20,
+    )
+    override_config = MonitoringConfig(alerts=override_alerts)
+
+    contract = RegisteredContract(
+        contract_name="vip_orders_v1",
+        contract_version="1.0.0",
+        contract_data={"apiVersion": "v3.1.0"},
+        connection_config={"catalog": "polaris"},
+        registered_at=now,
+        monitoring_overrides=override_config,
+    )
+
+    # Verify override has custom alert routing
+    assert contract.monitoring_overrides is not None
+    assert len(contract.monitoring_overrides.alerts.routing_rules) == 2
+    assert contract.monitoring_overrides.alerts.routing_rules[0].channel_name == "pagerduty"
+    assert contract.monitoring_overrides.alerts.routing_rules[1].min_severity == ViolationSeverity.CRITICAL
+    assert contract.monitoring_overrides.alerts.dedup_window_minutes == 15
+    assert contract.monitoring_overrides.alerts.rate_limit_per_contract == 20
+
+
+@pytest.mark.requirement("3D-FR-045")
+def test_contract_override_partial() -> None:
+    """Test partial per-contract override (only check_intervals, others use defaults)."""
+    now = datetime.now(tz=timezone.utc)
+
+    # Create override with only custom check intervals
+    override_intervals = CheckIntervalConfig(
+        freshness_minutes=3,
+        availability_minutes=1,
+    )
+    override_config = MonitoringConfig(check_intervals=override_intervals)
+
+    contract = RegisteredContract(
+        contract_name="orders_v1",
+        contract_version="1.0.0",
+        contract_data={"apiVersion": "v3.1.0"},
+        connection_config={"catalog": "polaris"},
+        registered_at=now,
+        monitoring_overrides=override_config,
+    )
+
+    # Verify check_intervals are overridden
+    assert contract.monitoring_overrides is not None
+    assert contract.monitoring_overrides.check_intervals.freshness_minutes == 3
+    assert contract.monitoring_overrides.check_intervals.availability_minutes == 1
+
+    # Verify other fields use MonitoringConfig defaults
+    default_config = MonitoringConfig()
+    assert contract.monitoring_overrides.severity_thresholds.info_pct == default_config.severity_thresholds.info_pct
+    assert contract.monitoring_overrides.severity_thresholds.warning_pct == default_config.severity_thresholds.warning_pct
+    assert contract.monitoring_overrides.alerts.dedup_window_minutes == default_config.alerts.dedup_window_minutes
+    assert contract.monitoring_overrides.retention_days == default_config.retention_days
+
+
+@pytest.mark.requirement("3D-FR-045")
+def test_contract_no_override_uses_global() -> None:
+    """Test contract with no override uses global config in ContractMonitor."""
+    from floe_core.contracts.monitoring.monitor import ContractMonitor
+    from floe_core.contracts.monitoring.violations import ViolationType
+
+    now = datetime.now(tz=timezone.utc)
+
+    # Create global config with custom values
+    global_config = MonitoringConfig(
+        check_intervals=CheckIntervalConfig(freshness_minutes=20),
+        retention_days=60,
+    )
+
+    # Create contract with no override
+    contract = RegisteredContract(
+        contract_name="orders_v1",
+        contract_version="1.0.0",
+        contract_data={"apiVersion": "v3.1.0"},
+        connection_config={"catalog": "polaris"},
+        registered_at=now,
+        monitoring_overrides=None,  # No override
+    )
+
+    # Create monitor with global config
+    monitor = ContractMonitor(config=global_config)
+    monitor.register_contract(contract)
+
+    # Verify monitor uses global config when no override present
+    resolved_config = monitor._resolve_config(contract)
+    assert resolved_config == global_config
+    assert resolved_config.check_intervals.freshness_minutes == 20
+    assert resolved_config.retention_days == 60

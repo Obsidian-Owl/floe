@@ -172,6 +172,21 @@ class ContractMonitor:
             "is_running": self._is_running,
         }
 
+    def _resolve_config(self, contract: RegisteredContract) -> MonitoringConfig:
+        """Resolve effective monitoring config for a contract.
+
+        Uses per-contract overrides if present, otherwise falls back to global config.
+
+        Args:
+            contract: The registered contract to resolve config for.
+
+        Returns:
+            The effective MonitoringConfig for this contract.
+        """
+        if contract.monitoring_overrides is not None:
+            return contract.monitoring_overrides
+        return self._config
+
     async def run_check(
         self,
         contract_name: str,
@@ -201,11 +216,7 @@ class ContractMonitor:
         contract = self._contracts[contract_name]
 
         # Use per-contract config override if present
-        check_config = (
-            contract.monitoring_overrides
-            if contract.monitoring_overrides is not None
-            else self._config
-        )
+        check_config = self._resolve_config(contract)
 
         self._log.debug(
             "running_check",
