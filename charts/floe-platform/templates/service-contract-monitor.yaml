@@ -1,0 +1,19 @@
+{{- if .Values.contractMonitor.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-contract-monitor
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: contract-monitor
+spec:
+  type: {{ .Values.contractMonitor.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ .Values.contractMonitor.service.port | default 8080 }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "floe-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: contract-monitor
+{{- end }}

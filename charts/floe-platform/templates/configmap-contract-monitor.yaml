@@ -1,0 +1,20 @@
+{{- if .Values.contractMonitor.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-contract-monitor
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: contract-monitor
+data:
+  monitoring-config.yaml: |
+    enabled: {{ .Values.contractMonitor.monitoring.enabled | default true }}
+    mode: {{ .Values.contractMonitor.monitoring.mode | default "scheduled" }}
+    check_intervals:
+      freshness_minutes: {{ .Values.contractMonitor.monitoring.checkIntervals.freshnessMinutes | default 15 }}
+      schema_drift_minutes: {{ .Values.contractMonitor.monitoring.checkIntervals.schemaDriftMinutes | default 60 }}
+      quality_minutes: {{ .Values.contractMonitor.monitoring.checkIntervals.qualityMinutes | default 360 }}
+      availability_minutes: {{ .Values.contractMonitor.monitoring.checkIntervals.availabilityMinutes | default 5 }}
+    retention_days: {{ .Values.contractMonitor.monitoring.retentionDays | default 90 }}
+    check_timeout_seconds: {{ .Values.contractMonitor.monitoring.checkTimeoutSeconds | default 30 }}
+{{- end }}
