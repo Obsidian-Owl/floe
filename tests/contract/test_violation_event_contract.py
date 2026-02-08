@@ -11,7 +11,9 @@ Requirements: FR-005, FR-006, Constitution IV
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from floe_core.contracts.monitoring.violations import (
@@ -520,3 +522,177 @@ def test_check_result_all_status_values() -> None:
             timestamp=timestamp,
         )
         assert result.status == status
+
+
+# Helper function for converting ContractViolationEvent to OpenLineage facet dict
+def _event_to_openlineage_facet(event: ContractViolationEvent) -> dict:
+    """Convert ContractViolationEvent to OpenLineage facet dict (camelCase).
+
+    Maps snake_case Pydantic fields to camelCase JSON schema fields.
+
+    Args:
+        event: ContractViolationEvent to convert
+
+    Returns:
+        Dict with camelCase keys matching OpenLineage facet schema
+    """
+    return {
+        "_producer": "floe",
+        "_schemaURL": "https://floe.dev/schemas/contract-violation-facet.json",
+        "contractName": event.contract_name,
+        "contractVersion": event.contract_version,
+        "violationType": event.violation_type.value,
+        "severity": event.severity.value,
+        "message": event.message,
+        "element": event.element,
+        "expectedValue": event.expected_value,
+        "actualValue": event.actual_value,
+        "timestamp": event.timestamp.isoformat(),
+    }
+
+
+@pytest.mark.requirement("3D-FR-047")
+def test_openlineage_facet_required_fields() -> None:
+    """Test OpenLineage facet has all required fields from JSON schema.
+
+    Validates that emitted facet dict contains all required fields defined
+    in the OpenLineage facet schema.
+    """
+    timestamp = datetime.now(tz=timezone.utc)
+    event = ContractViolationEvent(
+        contract_name="orders_v1",
+        contract_version="1.0.0",
+        violation_type=ViolationType.FRESHNESS,
+        severity=ViolationSeverity.ERROR,
+        message="Data is stale",
+        timestamp=timestamp,
+        check_duration_seconds=0.5,
+    )
+
+    # Convert to facet dict
+    facet = _event_to_openlineage_facet(event)
+
+    # Verify all required fields present
+    required_fields = {
+        "_producer",
+        "_schemaURL",
+        "contractName",
+        "contractVersion",
+        "violationType",
+        "severity",
+        "message",
+        "timestamp",
+    }
+    assert set(facet.keys()) >= required_fields
+
+    # Verify required field values
+    assert facet["_producer"] == "floe"
+    assert facet["_schemaURL"] == "https://floe.dev/schemas/contract-violation-facet.json"
+    assert facet["contractName"] == "orders_v1"
+    assert facet["contractVersion"] == "1.0.0"
+    assert facet["violationType"] == "freshness"
+    assert facet["severity"] == "error"
+    assert facet["message"] == "Data is stale"
+    assert facet["timestamp"] == timestamp.isoformat()
+
+
+@pytest.mark.requirement("3D-FR-047")
+def test_openlineage_facet_violation_type_enum_values() -> None:
+    """Test ViolationType enum values match facet schema violationType enum.
+
+    Ensures Python enum values match JSON schema enum values exactly.
+    """
+    # Expected enum values from JSON schema
+    schema_enum_values = {"freshness", "schema_drift", "quality", "availability", "deprecation"}
+
+    # Actual enum values from ViolationType
+    actual_enum_values = {vt.value for vt in ViolationType}
+
+    # Must match exactly
+    assert actual_enum_values == schema_enum_values
+
+
+@pytest.mark.requirement("3D-FR-047")
+def test_openlineage_facet_severity_enum_values() -> None:
+    """Test ViolationSeverity enum values match facet schema severity enum.
+
+    Ensures Python enum values match JSON schema enum values exactly.
+    """
+    # Expected enum values from JSON schema
+    schema_enum_values = {"info", "warning", "error", "critical"}
+
+    # Actual enum values from ViolationSeverity
+    actual_enum_values = {vs.value for vs in ViolationSeverity}
+
+    # Must match exactly
+    assert actual_enum_values == schema_enum_values
+
+
+@pytest.mark.requirement("3D-FR-047")
+def test_openlineage_facet_validates_against_json_schema() -> None:
+    """Test OpenLineage facet validates against JSON schema.
+
+    Uses jsonschema.validate() to ensure emitted facets conform to the
+    OpenLineage facet schema specification.
+    """
+    jsonschema = pytest.importorskip("jsonschema")
+    import json
+    from pathlib import Path
+
+    # Load JSON schema
+    schema_path = Path(__file__).parent.parent.parent / "specs/3d-contract-monitoring/contracts/contract-violation-facet.json"
+    schema = json.loads(schema_path.read_text())
+
+    # Create event with all fields
+    timestamp = datetime.now(tz=timezone.utc)
+    event = ContractViolationEvent(
+        contract_name="orders_v1",
+        contract_version="1.2.3",
+        violation_type=ViolationType.SCHEMA_DRIFT,
+        severity=ViolationSeverity.WARNING,
+        message="Schema changed unexpectedly",
+        element="customer_email",
+        expected_value="string",
+        actual_value="null",
+        timestamp=timestamp,
+        check_duration_seconds=0.5,
+    )
+
+    # Convert to facet dict
+    facet = _event_to_openlineage_facet(event)
+
+    # Validate against schema (raises ValidationError if invalid)
+    jsonschema.validate(instance=facet, schema=schema)
+
+
+@pytest.mark.requirement("3D-FR-047")
+def test_openlineage_facet_rejects_extra_fields() -> None:
+    """Test JSON schema rejects facets with extra fields.
+
+    Validates that additionalProperties: false is enforced by the schema.
+    """
+    jsonschema = pytest.importorskip("jsonschema")
+    import json
+    from pathlib import Path
+
+    # Load JSON schema
+    schema_path = Path(__file__).parent.parent.parent / "specs/3d-contract-monitoring/contracts/contract-violation-facet.json"
+    schema = json.loads(schema_path.read_text())
+
+    # Create valid facet with extra field
+    timestamp = datetime.now(tz=timezone.utc)
+    facet = {
+        "_producer": "floe",
+        "_schemaURL": "https://floe.dev/schemas/contract-violation-facet.json",
+        "contractName": "orders_v1",
+        "contractVersion": "1.0.0",
+        "violationType": "freshness",
+        "severity": "error",
+        "message": "Data is stale",
+        "timestamp": timestamp.isoformat(),
+        "extraField": "not_allowed",  # Extra field
+    }
+
+    # Validation must fail
+    with pytest.raises(jsonschema.ValidationError, match="Additional properties are not allowed"):
+        jsonschema.validate(instance=facet, schema=schema)
