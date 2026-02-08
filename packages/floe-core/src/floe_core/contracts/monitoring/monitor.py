@@ -5,9 +5,10 @@ This module implements the main ContractMonitor class responsible for:
 - Dispatching validation checks based on check type
 - Managing monitor lifecycle (start/stop)
 - Providing health check visibility
+- Routing violations to alert channels via AlertRouter
 
-Tasks: T029, T030, T031 (Epic 3D)
-Requirements: FR-001 through FR-010
+Tasks: T029, T030, T031, T045 (Epic 3D)
+Requirements: FR-001 through FR-010, FR-028
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import Any
 
 import structlog
 
+from floe_core.contracts.monitoring.alert_router import AlertRouter
 from floe_core.contracts.monitoring.checks.freshness import FreshnessCheck
 from floe_core.contracts.monitoring.checks.schema_drift import SchemaDriftCheck
 from floe_core.contracts.monitoring.config import MonitoringConfig, RegisteredContract
@@ -50,14 +52,21 @@ class ContractMonitor:
         >>> await monitor.stop()
     """
 
-    def __init__(self, config: MonitoringConfig) -> None:
+    def __init__(
+        self,
+        config: MonitoringConfig,
+        alert_router: AlertRouter | None = None,
+    ) -> None:
         """Initialize the contract monitor.
 
         Args:
             config: Global monitoring configuration. Individual contracts may
                 override via RegisteredContract.monitoring_overrides.
+            alert_router: Optional AlertRouter for dispatching violations to
+                alert channels. If None, violations are logged but not routed.
         """
         self._config = config
+        self._alert_router = alert_router
         self._contracts: dict[str, RegisteredContract] = {}
         self._is_running: bool = False
         self._log = logger.bind(component="contract_monitor")
@@ -156,6 +165,8 @@ class ContractMonitor:
 
         Dispatches to the appropriate check implementation based on check_type.
         Uses per-contract config override if present, otherwise global config.
+        If a violation is detected and an AlertRouter is configured, routes
+        the violation to alert channels.
 
         Args:
             contract_name: Name of contract to check.
@@ -187,30 +198,39 @@ class ContractMonitor:
         )
 
         # Dispatch to appropriate check implementation
+        result: CheckResult | None = None
+
         if check_type == ViolationType.FRESHNESS:
             check = FreshnessCheck()
-            return await check.execute(contract=contract, config=check_config)
+            result = await check.execute(contract=contract, config=check_config)
 
-        if check_type == ViolationType.SCHEMA_DRIFT:
-            check = SchemaDriftCheck()
-            return await check.execute(contract=contract, config=check_config)
+        elif check_type == ViolationType.SCHEMA_DRIFT:
+            drift_check = SchemaDriftCheck()
+            result = await drift_check.execute(contract=contract, config=check_config)
 
-        # Unimplemented check types return ERROR
-        now = datetime.now(tz=timezone.utc)
-        start = time.monotonic()
-        duration = time.monotonic() - start
+        else:
+            # Unimplemented check types return ERROR
+            now = datetime.now(tz=timezone.utc)
+            start = time.monotonic()
+            duration = time.monotonic() - start
 
-        self._log.warning(
-            "check_not_implemented",
-            contract_name=contract_name,
-            check_type=check_type.value,
-        )
+            self._log.warning(
+                "check_not_implemented",
+                contract_name=contract_name,
+                check_type=check_type.value,
+            )
 
-        return CheckResult(
-            contract_name=contract_name,
-            check_type=check_type,
-            status=CheckStatus.ERROR,
-            duration_seconds=duration,
-            timestamp=now,
-            details={"error": f"Check type not yet implemented: {check_type.value}"},
-        )
+            result = CheckResult(
+                contract_name=contract_name,
+                check_type=check_type,
+                status=CheckStatus.ERROR,
+                duration_seconds=duration,
+                timestamp=now,
+                details={"error": f"Check type not yet implemented: {check_type.value}"},
+            )
+
+        # Route violations to alert channels if AlertRouter is configured
+        if result.violation is not None and self._alert_router is not None:
+            await self._alert_router.route(result.violation)
+
+        return result
