@@ -20,7 +20,9 @@ from typing import Any
 import structlog
 
 from floe_core.contracts.monitoring.alert_router import AlertRouter
+from floe_core.contracts.monitoring.checks.availability import AvailabilityCheck
 from floe_core.contracts.monitoring.checks.freshness import FreshnessCheck
+from floe_core.contracts.monitoring.checks.quality import QualityCheck
 from floe_core.contracts.monitoring.checks.schema_drift import SchemaDriftCheck
 from floe_core.contracts.monitoring.config import MonitoringConfig, RegisteredContract
 from floe_core.contracts.monitoring.violations import (
@@ -56,6 +58,8 @@ class ContractMonitor:
         self,
         config: MonitoringConfig,
         alert_router: AlertRouter | None = None,
+        quality_plugin: Any | None = None,
+        compute_plugin: Any | None = None,
     ) -> None:
         """Initialize the contract monitor.
 
@@ -64,9 +68,16 @@ class ContractMonitor:
                 override via RegisteredContract.monitoring_overrides.
             alert_router: Optional AlertRouter for dispatching violations to
                 alert channels. If None, violations are logged but not routed.
+            quality_plugin: Optional quality plugin implementing the QualityPlugin
+                protocol (duck-typed). If None, quality checks are SKIPPED.
+            compute_plugin: Optional compute plugin implementing the ComputePlugin
+                protocol (duck-typed, has validate_connection() method). If None,
+                availability checks are SKIPPED.
         """
         self._config = config
         self._alert_router = alert_router
+        self._quality_plugin = quality_plugin
+        self._compute_plugin = compute_plugin
         self._contracts: dict[str, RegisteredContract] = {}
         self._is_running: bool = False
         self._log = logger.bind(component="contract_monitor")
@@ -207,6 +218,14 @@ class ContractMonitor:
         elif check_type == ViolationType.SCHEMA_DRIFT:
             drift_check = SchemaDriftCheck()
             result = await drift_check.execute(contract=contract, config=check_config)
+
+        elif check_type == ViolationType.QUALITY:
+            quality_check = QualityCheck(quality_plugin=self._quality_plugin)
+            result = await quality_check.execute(contract=contract, config=check_config)
+
+        elif check_type == ViolationType.AVAILABILITY:
+            avail_check = AvailabilityCheck(compute_plugin=self._compute_plugin)
+            result = await avail_check.execute(contract=contract, config=check_config)
 
         else:
             # Unimplemented check types return ERROR
