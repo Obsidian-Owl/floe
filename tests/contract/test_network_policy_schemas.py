@@ -57,7 +57,9 @@ class TestEgressRuleSchema:
         """Contract: EgressRule accepts to_namespace."""
         from floe_core.network import EgressRule, PortRule
 
-        rule = EgressRule(to_namespace="kube-system", ports=[PortRule(port=53, protocol="UDP")])
+        rule = EgressRule(
+            to_namespace="kube-system", ports=[PortRule(port=53, protocol="UDP")]
+        )
         assert rule.to_namespace == "kube-system"
         assert rule.to_cidr is None
 
@@ -144,10 +146,14 @@ class TestNetworkPolicyConfigSchema:
         from floe_core.network import NetworkPolicyConfig
         from pydantic import ValidationError
 
-        NetworkPolicyConfig(name="floe-jobs-deny", namespace="floe-jobs", policy_types=["Egress"])
+        NetworkPolicyConfig(
+            name="floe-jobs-deny", namespace="floe-jobs", policy_types=["Egress"]
+        )
 
         with pytest.raises(ValidationError):
-            NetworkPolicyConfig(name="invalid-name", namespace="floe-jobs", policy_types=["Egress"])
+            NetworkPolicyConfig(
+                name="invalid-name", namespace="floe-jobs", policy_types=["Egress"]
+            )
 
     @pytest.mark.requirement("FR-001")
     def test_network_policy_config_pod_selector_default(self) -> None:
@@ -169,7 +175,10 @@ class TestNetworkPolicyConfigSchema:
             namespace="floe-jobs",
             policy_types=["Egress"],
             egress_rules=[
-                EgressRule(to_namespace="kube-system", ports=[PortRule(port=53, protocol="UDP")])
+                EgressRule(
+                    to_namespace="kube-system",
+                    ports=[PortRule(port=53, protocol="UDP")],
+                )
             ],
         )
 

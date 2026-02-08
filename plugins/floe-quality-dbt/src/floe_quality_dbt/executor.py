@@ -197,7 +197,9 @@ def run_dbt_tests_with_timeout(
                         "execution_time": getattr(test_result, "execution_time", 0),
                         "failures": getattr(test_result, "failures", 0),
                         "message": getattr(test_result, "message", None),
-                        "compiled_code": getattr(node, "compiled_code", None) if node else None,
+                        "compiled_code": (
+                            getattr(node, "compiled_code", None) if node else None
+                        ),
                     }
                     results["tests"].append(test_info)
 

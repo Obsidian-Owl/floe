@@ -477,7 +477,10 @@ class TestGenerateCommandMocked:
         # Mock RBACManifestGenerator with failure
         mock_result = MagicMock()
         mock_result.success = False
-        mock_result.errors = ["Failed to create role: invalid name", "Permission denied"]
+        mock_result.errors = [
+            "Failed to create role: invalid name",
+            "Permission denied",
+        ]
 
         mock_generator_class = MagicMock()
         mock_generator_instance = MagicMock()

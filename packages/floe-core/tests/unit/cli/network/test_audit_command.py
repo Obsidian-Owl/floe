@@ -249,7 +249,9 @@ class TestValidateAuditInputs:
         from floe_core.cli.network.audit import _validate_audit_inputs
 
         with pytest.raises(SystemExit) as exc_info:
-            _validate_audit_inputs(namespace=("Invalid_Namespace",), all_namespaces=False)
+            _validate_audit_inputs(
+                namespace=("Invalid_Namespace",), all_namespaces=False
+            )
 
         assert exc_info.value.code == 2  # ExitCode.USAGE_ERROR
 
@@ -451,7 +453,9 @@ class TestCheckDefaultDenyPolicy:
         mock_policies = MagicMock()
         mock_policy = MagicMock()
         mock_policy.metadata.name = "default-deny-all"
-        mock_policy.spec.ingress_rules = [MagicMock()]  # Has rules but name indicates default-deny
+        mock_policy.spec.ingress_rules = [
+            MagicMock()
+        ]  # Has rules but name indicates default-deny
         mock_policy.spec.egress_rules = [MagicMock()]
         mock_policies.items = [mock_policy]
 
@@ -843,7 +847,9 @@ class TestAuditCommandExecution:
         mock_k8s_module = MagicMock()
         mock_k8s_module.client.NetworkingV1Api.return_value = mock_networking_api
         mock_k8s_module.config.ConfigException = Exception
-        mock_k8s_module.config.load_incluster_config.side_effect = Exception("Not in cluster")
+        mock_k8s_module.config.load_incluster_config.side_effect = Exception(
+            "Not in cluster"
+        )
 
         with patch.dict("sys.modules", {"kubernetes": mock_k8s_module}):
             result = cli_runner.invoke(
@@ -888,7 +894,9 @@ class TestAuditCommandExecution:
         mock_k8s_module = MagicMock()
         mock_k8s_module.client.NetworkingV1Api.return_value = mock_networking_api
         mock_k8s_module.config.ConfigException = Exception
-        mock_k8s_module.config.load_incluster_config.side_effect = Exception("Not in cluster")
+        mock_k8s_module.config.load_incluster_config.side_effect = Exception(
+            "Not in cluster"
+        )
 
         with patch.dict("sys.modules", {"kubernetes": mock_k8s_module}):
             result = cli_runner.invoke(
@@ -938,7 +946,9 @@ class TestAuditCommandExecution:
         mock_k8s_module = MagicMock()
         mock_k8s_module.client.NetworkingV1Api.return_value = mock_networking_api
         mock_k8s_module.config.ConfigException = Exception
-        mock_k8s_module.config.load_incluster_config.side_effect = Exception("Not in cluster")
+        mock_k8s_module.config.load_incluster_config.side_effect = Exception(
+            "Not in cluster"
+        )
 
         with (
             patch.dict("sys.modules", {"kubernetes": mock_k8s_module}),
@@ -995,7 +1005,10 @@ class TestPerformAudit:
         # Need to import after patching to get the patched version
         with patch.dict(
             "sys.modules",
-            {"kubernetes": mock_k8s_module, "kubernetes.client": mock_k8s_module.client},
+            {
+                "kubernetes": mock_k8s_module,
+                "kubernetes.client": mock_k8s_module.client,
+            },
         ):
             from floe_core.cli.network.audit import _perform_audit
 

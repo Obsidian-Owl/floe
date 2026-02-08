@@ -16,7 +16,8 @@ import pytest
 # Run via: make test-integration
 
 _K8S_INFRA_REQUIRED_MSG = (
-    "Integration test requires K8s infrastructure — start services via make test-integration"
+    "Integration test requires K8s infrastructure — "
+    "start services via make test-integration"
 )
 
 

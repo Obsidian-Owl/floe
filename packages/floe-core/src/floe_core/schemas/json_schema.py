@@ -140,7 +140,11 @@ def validate_against_schema(
     if errors:
         # Get the first (most relevant) error
         error = errors[0]
-        path = ".".join(str(p) for p in error.absolute_path) if error.absolute_path else None
+        path = (
+            ".".join(str(p) for p in error.absolute_path)
+            if error.absolute_path
+            else None
+        )
         raise JsonSchemaValidationError(
             message=error.message,
             path=path,

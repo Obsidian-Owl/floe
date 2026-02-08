@@ -144,9 +144,11 @@ def _sanitize_url(url: str) -> str:
     if parsed.username is not None or parsed.password is not None:
         # Rebuild with userinfo stripped
         replaced = parsed._replace(
-            netloc=parsed.hostname or ""
-            if parsed.port is None
-            else f"{parsed.hostname or ''}:{parsed.port}",
+            netloc=(
+                parsed.hostname or ""
+                if parsed.port is None
+                else f"{parsed.hostname or ''}:{parsed.port}"
+            ),
         )
         return urlunparse(replaced)
     return url

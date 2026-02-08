@@ -16,10 +16,7 @@ import pytest
 from floe_core.contracts.monitoring.config import MonitoringConfig, RegisteredContract
 from floe_core.contracts.monitoring.monitor import ContractMonitor
 from floe_core.contracts.monitoring.violations import (
-    CheckResult,
     CheckStatus,
-    ContractViolationEvent,
-    ViolationSeverity,
     ViolationType,
 )
 
@@ -99,9 +96,7 @@ class MockRepository:
 
         # Delete old violations
         violations_to_delete = [
-            v
-            for v in self.violations
-            if v.get("timestamp") and v["timestamp"] < cutoff
+            v for v in self.violations if v.get("timestamp") and v["timestamp"] < cutoff
         ]
         deleted_count += len(violations_to_delete)
         for v in violations_to_delete:
@@ -258,7 +253,9 @@ async def test_persist_error_does_not_propagate(
     """
     # Create a mock repository that raises on save
     failing_repository = AsyncMock()
-    failing_repository.save_check_result = AsyncMock(side_effect=RuntimeError("DB error"))
+    failing_repository.save_check_result = AsyncMock(
+        side_effect=RuntimeError("DB error")
+    )
 
     monitor = ContractMonitor(
         config=config,

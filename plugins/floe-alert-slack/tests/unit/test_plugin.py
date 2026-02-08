@@ -7,16 +7,15 @@ Requirements: 3D-FR-026
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from floe_core.contracts.monitoring.violations import (
     ContractViolationEvent,
     ViolationSeverity,
     ViolationType,
 )
+
 from floe_alert_slack.plugin import SlackAlertPlugin
 
 

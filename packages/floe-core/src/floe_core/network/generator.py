@@ -129,7 +129,9 @@ def get_network_security_plugin(name: str | None = None) -> NetworkSecurityPlugi
     plugin_class = plugins[name]
     plugin_instance = plugin_class()
 
-    logger.info("get_plugin.instantiated", name=name, plugin_class=plugin_class.__name__)
+    logger.info(
+        "get_plugin.instantiated", name=name, plugin_class=plugin_class.__name__
+    )
 
     return plugin_instance
 
@@ -145,7 +147,9 @@ class NetworkPolicyManifestGenerator:
         self._plugin = plugin
 
     @classmethod
-    def from_entry_point(cls, plugin_name: str | None = None) -> NetworkPolicyManifestGenerator:
+    def from_entry_point(
+        cls, plugin_name: str | None = None
+    ) -> NetworkPolicyManifestGenerator:
         """Create generator with plugin discovered from entry points.
 
         Args:
@@ -178,7 +182,9 @@ class NetworkPolicyManifestGenerator:
         dns_rule = self._plugin.generate_dns_egress_rule()
 
         for namespace in namespaces:
-            default_deny_policies = self._plugin.generate_default_deny_policies(namespace)
+            default_deny_policies = self._plugin.generate_default_deny_policies(
+                namespace
+            )
 
             for policy in default_deny_policies:
                 egress_rules = list(policy.get("spec", {}).get("egress", []))
@@ -233,7 +239,9 @@ class NetworkPolicyManifestGenerator:
                 resolved_filepath = filepath.resolve()
                 resolved_output_dir = output_dir.resolve()
                 if not resolved_filepath.is_relative_to(resolved_output_dir):
-                    raise ValueError(f"Path traversal detected: {filepath} escapes {output_dir}")
+                    raise ValueError(
+                        f"Path traversal detected: {filepath} escapes {output_dir}"
+                    )
 
                 with filepath.open("w") as f:
                     yaml.dump(policy, f, default_flow_style=False, sort_keys=False)

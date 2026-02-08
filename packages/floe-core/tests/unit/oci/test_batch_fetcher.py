@@ -243,7 +243,9 @@ class TestBatchFetcher:
         mock_client.get_manifest.side_effect = mock_get_manifest
 
         # Create 10 tag refs
-        tag_refs = [(f"v1.0.{i}", f"registry.example.com/repo:v1.0.{i}") for i in range(10)]
+        tag_refs = [
+            (f"v1.0.{i}", f"registry.example.com/repo:v1.0.{i}") for i in range(10)
+        ]
 
         # Expected sequential time: 10 * 0.05 = 0.5s
         expected_sequential = len(tag_refs) * latency

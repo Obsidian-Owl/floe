@@ -187,7 +187,9 @@ class TestRollbackSuccessPath:
         assert "dev.floe.rollback" in annotations
 
     @pytest.mark.requirement("8C-FR-013")
-    def test_rollback_span_created_with_attributes(self, mock_client: MagicMock) -> None:
+    def test_rollback_span_created_with_attributes(
+        self, mock_client: MagicMock
+    ) -> None:
         """Test rollback() creates OTel span with required attributes."""
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.promotion import PromotionConfig
@@ -257,7 +259,9 @@ class TestRollbackVersionNotFound:
         return PromotionController(client=mock_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-013")
-    def test_rollback_raises_version_not_promoted_error(self, controller: MagicMock) -> None:
+    def test_rollback_raises_version_not_promoted_error(
+        self, controller: MagicMock
+    ) -> None:
         """Test rollback() raises VersionNotPromotedError when version not promoted."""
         from floe_core.oci.errors import VersionNotPromotedError
 
@@ -273,7 +277,9 @@ class TestRollbackVersionNotFound:
         assert exc_info.value.environment == "prod"
 
     @pytest.mark.requirement("8C-FR-013")
-    def test_version_not_promoted_error_has_exit_code_11(self, controller: MagicMock) -> None:
+    def test_version_not_promoted_error_has_exit_code_11(
+        self, controller: MagicMock
+    ) -> None:
         """Test VersionNotPromotedError has exit code 11."""
         from floe_core.oci.errors import VersionNotPromotedError
 
@@ -323,7 +329,9 @@ class TestRollbackTagNumbering:
         from floe_core.schemas.promotion import PromotionConfig
 
         promotion = PromotionConfig()
-        return PromotionController(client=mock_client_with_existing_rollbacks, promotion=promotion)
+        return PromotionController(
+            client=mock_client_with_existing_rollbacks, promotion=promotion
+        )
 
     @pytest.mark.requirement("8C-FR-014")
     def test_rollback_tag_increments_correctly(
@@ -377,7 +385,9 @@ class TestAnalyzeRollbackImpact:
         assert hasattr(controller, "analyze_rollback_impact")
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_rollback_impact_returns_analysis(self, controller: MagicMock) -> None:
+    def test_analyze_rollback_impact_returns_analysis(
+        self, controller: MagicMock
+    ) -> None:
         """Test analyze_rollback_impact() returns RollbackImpactAnalysis."""
         from floe_core.schemas.promotion import RollbackImpactAnalysis
 
@@ -389,7 +399,9 @@ class TestAnalyzeRollbackImpact:
         assert isinstance(result, RollbackImpactAnalysis)
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_rollback_impact_has_breaking_changes(self, controller: MagicMock) -> None:
+    def test_analyze_rollback_impact_has_breaking_changes(
+        self, controller: MagicMock
+    ) -> None:
         """Test RollbackImpactAnalysis includes breaking_changes."""
         result = controller.analyze_rollback_impact(
             tag="v1.0.0",
@@ -400,7 +412,9 @@ class TestAnalyzeRollbackImpact:
         assert isinstance(result.breaking_changes, list)
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_rollback_impact_has_affected_products(self, controller: MagicMock) -> None:
+    def test_analyze_rollback_impact_has_affected_products(
+        self, controller: MagicMock
+    ) -> None:
         """Test RollbackImpactAnalysis includes affected_products."""
         result = controller.analyze_rollback_impact(
             tag="v1.0.0",
@@ -411,7 +425,9 @@ class TestAnalyzeRollbackImpact:
         assert isinstance(result.affected_products, list)
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_rollback_impact_has_recommendations(self, controller: MagicMock) -> None:
+    def test_analyze_rollback_impact_has_recommendations(
+        self, controller: MagicMock
+    ) -> None:
         """Test RollbackImpactAnalysis includes recommendations."""
         result = controller.analyze_rollback_impact(
             tag="v1.0.0",

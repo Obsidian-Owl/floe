@@ -76,7 +76,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ):
             result = controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},
@@ -116,14 +118,18 @@ class TestPolicyComplianceGate:
         mock_result = EnforcementResult(
             passed=False,
             violations=[violation],
-            summary=EnforcementSummary(total_models=5, models_validated=5, naming_violations=1),
+            summary=EnforcementSummary(
+                total_models=5, models_validated=5, naming_violations=1
+            ),
             enforcement_level="strict",
             manifest_version="1.8.0",
             timestamp=datetime.now(timezone.utc),
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ):
             result = controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},
@@ -133,7 +139,9 @@ class TestPolicyComplianceGate:
             assert result.status == GateStatus.FAILED
             assert result.gate == PromotionGate.POLICY_COMPLIANCE
             assert result.error is not None
-            assert "violation" in result.error.lower() or "policy" in result.error.lower()
+            assert (
+                "violation" in result.error.lower() or "policy" in result.error.lower()
+            )
 
     @pytest.mark.requirement("8C-FR-010")
     def test_policy_compliance_gate_skipped_when_no_enforcer(
@@ -168,7 +176,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ) as mock_enforce:
             controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},
@@ -219,7 +229,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ):
             result = controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},

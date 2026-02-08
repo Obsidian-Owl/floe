@@ -110,7 +110,9 @@ class TestDryRunPromotion:
             mock_update_latest.assert_not_called()
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_does_not_store_promotion_record(self, controller: MagicMock) -> None:
+    def test_dry_run_does_not_store_promotion_record(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry_run=True does NOT call _store_promotion_record().
 
         Dry-run should not create audit records.
@@ -208,7 +210,9 @@ class TestDryRunPromotion:
             mock_verify.assert_called_once()
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_returns_record_with_dry_run_true(self, controller: MagicMock) -> None:
+    def test_dry_run_returns_record_with_dry_run_true(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry_run=True returns PromotionRecord with dry_run=True.
 
         The returned record should indicate this was a dry-run.
@@ -242,7 +246,9 @@ class TestDryRunPromotion:
             assert result.dry_run is True
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_does_not_raise_on_gate_failure(self, controller: MagicMock) -> None:
+    def test_dry_run_does_not_raise_on_gate_failure(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry_run=True does NOT raise GateValidationError on gate failure.
 
         In dry-run mode, gate failures should be reported in the record,
@@ -289,7 +295,9 @@ class TestDryRunPromotion:
             assert result.gate_results[0].status == GateStatus.FAILED
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_runs_all_gates_even_after_failure(self, controller: MagicMock) -> None:
+    def test_dry_run_runs_all_gates_even_after_failure(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry_run=True runs all gates even after one fails.
 
         In dry-run mode, all gates should run to show complete validation status.
@@ -353,7 +361,9 @@ class TestDryRunConvenienceMethod:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_method_calls_promote_with_dry_run_true(self, controller: MagicMock) -> None:
+    def test_dry_run_method_calls_promote_with_dry_run_true(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry_run() convenience method calls promote(dry_run=True)."""
         with patch.object(controller, "promote") as mock_promote:
             mock_promote.return_value = Mock()
@@ -370,7 +380,9 @@ class TestDryRunConvenienceMethod:
             )
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_method_returns_promotion_record(self, controller: MagicMock) -> None:
+    def test_dry_run_method_returns_promotion_record(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry_run() convenience method returns PromotionRecord."""
         from floe_core.schemas.promotion import PromotionRecord
 
@@ -483,7 +495,9 @@ class TestDryRunValidation:
             assert PromotionGate.TESTS in gate_types
 
     @pytest.mark.requirement("8C-FR-007")
-    def test_dry_run_record_contains_signature_status(self, controller: MagicMock) -> None:
+    def test_dry_run_record_contains_signature_status(
+        self, controller: MagicMock
+    ) -> None:
         """Test dry-run PromotionRecord contains signature verification status."""
         with (
             patch.object(controller, "_validate_transition"),

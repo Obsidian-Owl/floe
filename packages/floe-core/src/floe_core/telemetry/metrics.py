@@ -259,7 +259,9 @@ class MetricRecorder:
             # create_histogram uses positional args: name, unit, description
             unit_val = unit if unit is not None else ""
             desc_val = description if description is not None else ""
-            self._histograms[name] = self._meter.create_histogram(name, unit_val, desc_val)
+            self._histograms[name] = self._meter.create_histogram(
+                name, unit_val, desc_val
+            )
 
         return self._histograms[name]
 

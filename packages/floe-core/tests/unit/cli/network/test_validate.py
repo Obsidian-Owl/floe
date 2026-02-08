@@ -485,7 +485,10 @@ class TestValidateCommandOptions:
 
         # Should fail with usage error
         assert result.exit_code == ExitCode.USAGE_ERROR
-        assert "manifest-dir" in result.output.lower() or "missing" in result.output.lower()
+        assert (
+            "manifest-dir" in result.output.lower()
+            or "missing" in result.output.lower()
+        )
 
     @pytest.mark.requirement("FR-081")
     def test_accepts_config_option(
@@ -589,7 +592,9 @@ class TestValidateCommandExecution:
         """Test that strict mode fails on warnings."""
         manifest_dir = tmp_path / "manifests"
         manifest_dir.mkdir()
-        (manifest_dir / "policy.yaml").write_text(network_policy_missing_managed_by_label_yaml)
+        (manifest_dir / "policy.yaml").write_text(
+            network_policy_missing_managed_by_label_yaml
+        )
 
         result = cli_runner.invoke(
             validate_command,
@@ -610,7 +615,9 @@ class TestValidateCommandExecution:
         """Test that non-strict mode passes with warnings."""
         manifest_dir = tmp_path / "manifests"
         manifest_dir.mkdir()
-        (manifest_dir / "policy.yaml").write_text(network_policy_missing_managed_by_label_yaml)
+        (manifest_dir / "policy.yaml").write_text(
+            network_policy_missing_managed_by_label_yaml
+        )
 
         result = cli_runner.invoke(
             validate_command,

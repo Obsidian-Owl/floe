@@ -148,7 +148,9 @@ def generate_maintenance_log() -> None:
 
         for log_num in range(1, 101):
             equipment_id = f"EQ{random.randint(1, 50):03d}"
-            performed_at = start_date + timedelta(seconds=random.randint(0, total_seconds))
+            performed_at = start_date + timedelta(
+                seconds=random.randint(0, total_seconds)
+            )
 
             writer.writerow(
                 {

@@ -139,7 +139,9 @@ class TestCreateTable:
         """Test that creating an existing table raises ConflictError."""
         from pyiceberg.exceptions import TableAlreadyExistsError
 
-        mock_catalog.create_table.side_effect = TableAlreadyExistsError("bronze.customers")
+        mock_catalog.create_table.side_effect = TableAlreadyExistsError(
+            "bronze.customers"
+        )
 
         with pytest.raises(ConflictError) as exc_info:
             connected_plugin.create_table("bronze.customers", sample_schema)

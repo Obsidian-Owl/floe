@@ -48,7 +48,10 @@ def valid_manifest() -> dict[str, Any]:
                 "tags": ["tested", "documented"],
                 "meta": {"owner": "data-team@example.com"},
                 "columns": {
-                    "customer_id": {"name": "customer_id", "description": "Primary key"},
+                    "customer_id": {
+                        "name": "customer_id",
+                        "description": "Primary key",
+                    },
                     "email": {"name": "email", "description": "Customer email"},
                 },
                 "depends_on": {"nodes": []},
@@ -216,7 +219,9 @@ class TestRequireTagsForPrefixRule:
         assert len(violations) == 0
 
     @pytest.mark.requirement("003b-FR-006")
-    def test_model_not_matching_prefix_is_ignored(self, valid_manifest: dict[str, Any]) -> None:
+    def test_model_not_matching_prefix_is_ignored(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test that models not matching prefix are not validated.
 
         Given: silver_orders, bronze_events, legacy_users models
@@ -228,7 +233,10 @@ class TestRequireTagsForPrefixRule:
 
         rule = RequireTagsForPrefix(
             prefix="gold_",
-            required_tags=["production", "certified"],  # gold_customers doesn't have these
+            required_tags=[
+                "production",
+                "certified",
+            ],  # gold_customers doesn't have these
         )
 
         validator = CustomRuleValidator(custom_rules=[rule])
@@ -239,7 +247,9 @@ class TestRequireTagsForPrefixRule:
         assert violations[0].model_name == "gold_customers"
 
     @pytest.mark.requirement("003b-FR-006")
-    def test_multiple_required_tags_all_checked(self, valid_manifest: dict[str, Any]) -> None:
+    def test_multiple_required_tags_all_checked(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test that all required tags are checked and missing ones are reported.
 
         Given: bronze_events model with no tags
@@ -260,8 +270,12 @@ class TestRequireTagsForPrefixRule:
         assert len(violations) == 1
         assert violations[0].model_name == "bronze_events"
         # Message should mention the missing tags
-        assert "critical" in violations[0].message or "critical" in str(violations[0].expected)
-        assert "monitored" in violations[0].message or "monitored" in str(violations[0].expected)
+        assert "critical" in violations[0].message or "critical" in str(
+            violations[0].expected
+        )
+        assert "monitored" in violations[0].message or "monitored" in str(
+            violations[0].expected
+        )
 
     @pytest.mark.requirement("003b-FR-006")
     def test_applies_to_filters_models(self, valid_manifest: dict[str, Any]) -> None:
@@ -389,7 +403,9 @@ class TestRequireMetaFieldRule:
         assert len(violations) == 0
 
     @pytest.mark.requirement("003b-FR-007")
-    def test_applies_to_filters_models_for_meta_field(self, valid_manifest: dict[str, Any]) -> None:
+    def test_applies_to_filters_models_for_meta_field(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test that applies_to glob pattern filters which models are checked.
 
         Given: Models with varying meta field presence
@@ -469,7 +485,9 @@ class TestRequireTestsOfTypeRule:
         assert len(violations) == 0
 
     @pytest.mark.requirement("003b-FR-008")
-    def test_multiple_test_types_required(self, manifest_with_tests: dict[str, Any]) -> None:
+    def test_multiple_test_types_required(
+        self, manifest_with_tests: dict[str, Any]
+    ) -> None:
         """Test that multiple test types can be required.
 
         Given: customers model with not_null and unique tests
@@ -490,7 +508,9 @@ class TestRequireTestsOfTypeRule:
         assert len(violations) == 0
 
     @pytest.mark.requirement("003b-FR-008")
-    def test_min_columns_threshold_enforced(self, manifest_with_tests: dict[str, Any]) -> None:
+    def test_min_columns_threshold_enforced(
+        self, manifest_with_tests: dict[str, Any]
+    ) -> None:
         """Test that min_columns threshold is respected.
 
         Given: customers model with 1 column having not_null
@@ -624,12 +644,14 @@ class TestCustomRuleErrorHandling:
 
         # All violations should have FLOE-E4xx codes
         for violation in violations:
-            assert violation.error_code.startswith("FLOE-E4"), (
-                f"Custom rule violation has non-E4xx code: {violation.error_code}"
-            )
+            assert violation.error_code.startswith(
+                "FLOE-E4"
+            ), f"Custom rule violation has non-E4xx code: {violation.error_code}"
 
     @pytest.mark.requirement("003b-FR-009")
-    def test_applies_to_pattern_matching_edge_cases(self, valid_manifest: dict[str, Any]) -> None:
+    def test_applies_to_pattern_matching_edge_cases(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test applies_to pattern matching with edge cases.
 
         Given: Models with various names
@@ -670,7 +692,9 @@ class TestCustomRuleErrorHandling:
         assert len(violations) == 0
 
     @pytest.mark.requirement("003b-FR-010")
-    def test_violations_include_policy_type_custom(self, valid_manifest: dict[str, Any]) -> None:
+    def test_violations_include_policy_type_custom(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test that all custom rule violations have policy_type='custom'.
 
         Given: Manifest with violations
@@ -689,7 +713,9 @@ class TestCustomRuleErrorHandling:
             assert violation.policy_type == "custom"
 
     @pytest.mark.requirement("003b-FR-009")
-    def test_all_violations_have_suggestions(self, valid_manifest: dict[str, Any]) -> None:
+    def test_all_violations_have_suggestions(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test that all custom rule violations include actionable suggestions.
 
         SC-004: 100% of violations include actionable suggestions.
@@ -716,9 +742,9 @@ class TestCustomRuleErrorHandling:
 
         # All violations should have suggestions
         for violation in violations:
-            assert violation.suggestion is not None, (
-                f"Violation {violation.error_code} missing suggestion"
-            )
-            assert len(violation.suggestion) > 0, (
-                f"Violation {violation.error_code} has empty suggestion"
-            )
+            assert (
+                violation.suggestion is not None
+            ), f"Violation {violation.error_code} missing suggestion"
+            assert (
+                len(violation.suggestion) > 0
+            ), f"Violation {violation.error_code} has empty suggestion"

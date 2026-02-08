@@ -327,7 +327,9 @@ class TestColumnLineageFacetBuilder:
             {"namespace": "staging", "name": "stg_orders", "field": "customer_id"},
         ]
 
-        facet = ColumnLineageFacetBuilder.from_dbt_columns(model_columns, upstream_models)
+        facet = ColumnLineageFacetBuilder.from_dbt_columns(
+            model_columns, upstream_models
+        )
 
         assert facet["_producer"] == "floe"
         assert "_schemaURL" in facet
@@ -345,7 +347,9 @@ class TestColumnLineageFacetBuilder:
             {"namespace": "staging", "name": "stg_data", "field": "other_column"},
         ]
 
-        facet = ColumnLineageFacetBuilder.from_dbt_columns(model_columns, upstream_models)
+        facet = ColumnLineageFacetBuilder.from_dbt_columns(
+            model_columns, upstream_models
+        )
 
         assert "new_column" in facet["fields"]
         assert facet["fields"]["new_column"]["inputFields"] == []
@@ -361,7 +365,9 @@ class TestColumnLineageFacetBuilder:
             {"namespace": "silver", "name": "stg_orders", "field": "id"},
         ]
 
-        facet = ColumnLineageFacetBuilder.from_dbt_columns(model_columns, upstream_models)
+        facet = ColumnLineageFacetBuilder.from_dbt_columns(
+            model_columns, upstream_models
+        )
 
         assert len(facet["fields"]["id"]["inputFields"]) == 3
         assert facet["fields"]["id"]["inputFields"][0]["namespace"] == "bronze"

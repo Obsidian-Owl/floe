@@ -106,7 +106,9 @@ def helm_available() -> None:
         pytest.fail: If Helm CLI is not available.
     """
     if not _check_helm_available():
-        _fail("Helm CLI is not available.\nInstall Helm: https://helm.sh/docs/intro/install/")
+        _fail(
+            "Helm CLI is not available.\nInstall Helm: https://helm.sh/docs/intro/install/"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -126,7 +128,9 @@ def charts_dir() -> Path:
         if charts_path.exists() and charts_path.is_dir():
             return charts_path
 
-    _fail("Could not find charts/ directory.\nEnsure you are running tests from the project root.")
+    _fail(
+        "Could not find charts/ directory.\nEnsure you are running tests from the project root."
+    )
 
 
 @pytest.fixture(scope="session")

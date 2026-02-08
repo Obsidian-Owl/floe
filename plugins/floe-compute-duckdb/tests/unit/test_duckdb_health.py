@@ -153,7 +153,9 @@ class TestValidateConnectionStatus:
         assert ":memory:" in result.message or "DuckDB" in result.message
 
     @pytest.mark.requirement("001-FR-018")
-    def test_validate_connection_unhealthy_on_error(self, plugin: DuckDBComputePlugin) -> None:
+    def test_validate_connection_unhealthy_on_error(
+        self, plugin: DuckDBComputePlugin
+    ) -> None:
         """Test validate_connection returns UNHEALTHY on error."""
         mock_duckdb = MagicMock()
         mock_duckdb.connect.side_effect = Exception("Connection failed")
@@ -229,7 +231,11 @@ class TestValidateConnectionStatus:
         assert len(result.warnings) >= 1
         # At least one warning should contain relevant error info
         all_warnings = " ".join(result.warnings).lower()
-        assert "timeout" in all_warnings or "error" in all_warnings or "failed" in all_warnings
+        assert (
+            "timeout" in all_warnings
+            or "error" in all_warnings
+            or "failed" in all_warnings
+        )
 
 
 class TestValidateConnectionNativeDriver:
@@ -297,7 +303,9 @@ class TestValidateConnectionOTelMetrics:
         """Test validate_connection records duration metric on success."""
         with (
             patch.dict("sys.modules", {"duckdb": mock_duckdb_success}),
-            patch("floe_compute_duckdb.plugin.record_validation_duration") as mock_record,
+            patch(
+                "floe_compute_duckdb.plugin.record_validation_duration"
+            ) as mock_record,
         ):
             plugin.validate_connection(memory_config)
 
@@ -316,7 +324,9 @@ class TestValidateConnectionOTelMetrics:
 
         with (
             patch.dict("sys.modules", {"duckdb": mock_duckdb}),
-            patch("floe_compute_duckdb.plugin.record_validation_duration") as mock_record,
+            patch(
+                "floe_compute_duckdb.plugin.record_validation_duration"
+            ) as mock_record,
             patch("floe_compute_duckdb.plugin.record_validation_error"),
         ):
             config = ComputeConfig(

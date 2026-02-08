@@ -196,7 +196,9 @@ class IcebergIOManager(ConfigurableIOManager):
             exposing internal attribute names in error conditions.
         """
         required_attrs = ["load_table", "table_exists", "write_data", "create_table"]
-        missing_attrs = [attr for attr in required_attrs if not hasattr(table_manager, attr)]
+        missing_attrs = [
+            attr for attr in required_attrs if not hasattr(table_manager, attr)
+        ]
         if missing_attrs:
             # Security: Use static message to avoid exposing internal details
             msg = "table_manager is missing required interface methods"
@@ -358,7 +360,9 @@ class IcebergIOManager(ConfigurableIOManager):
         result: dict[str, Any] = {}
         for key, value in metadata.items():
             # Dagster MetadataValue objects expose a .value property
-            if hasattr(value, "value") and not isinstance(value, (str, bytes, int, float, bool)):
+            if hasattr(value, "value") and not isinstance(
+                value, (str, bytes, int, float, bool)
+            ):
                 result[key] = value.value
             else:
                 result[key] = value
@@ -431,7 +435,9 @@ class IcebergIOManager(ConfigurableIOManager):
             Full table identifier for the upstream table.
         """
         # Get upstream asset key
-        if hasattr(context, "upstream_output") and hasattr(context.upstream_output, "asset_key"):
+        if hasattr(context, "upstream_output") and hasattr(
+            context.upstream_output, "asset_key"
+        ):
             upstream_asset_key = context.upstream_output.asset_key
 
             # Read upstream definition_metadata only (not output_metadata) because
@@ -473,7 +479,9 @@ class IcebergIOManager(ConfigurableIOManager):
         metadata = self._get_merged_metadata(context)
 
         # Get write mode from metadata or default
-        write_mode_str = metadata.get(ICEBERG_WRITE_MODE_KEY, self._config.default_write_mode)
+        write_mode_str = metadata.get(
+            ICEBERG_WRITE_MODE_KEY, self._config.default_write_mode
+        )
         write_mode = WriteMode(write_mode_str)
 
         # Get optional configuration
@@ -496,7 +504,10 @@ class IcebergIOManager(ConfigurableIOManager):
         # Handle partitioned assets - map Dagster partition to Iceberg partition
         # Use has_partition_key (not hasattr) because Dagster's partition_key property
         # raises CheckError when accessed on non-partitioned runs.
-        if getattr(context, "has_partition_key", False) and context.partition_key is not None:
+        if (
+            getattr(context, "has_partition_key", False)
+            and context.partition_key is not None
+        ):
             partition_column = metadata.get(ICEBERG_PARTITION_COLUMN_KEY)
             if partition_column and write_mode == WriteMode.OVERWRITE:
                 # Build expression and convert to string for WriteConfig compatibility

@@ -22,7 +22,9 @@ from pathlib import Path
 import pytest
 
 # Path to contract schema
-CONTRACTS_DIR = Path(__file__).parent.parent.parent / "specs" / "3a-policy-enforcer" / "contracts"
+CONTRACTS_DIR = (
+    Path(__file__).parent.parent.parent / "specs" / "3a-policy-enforcer" / "contracts"
+)
 
 
 class TestGovernanceConfigContract:
@@ -266,8 +268,12 @@ class TestGovernanceConfigInheritanceContract:
             validate_security_policy_not_weakened(parent, child)
 
         # Coverage reduction MUST be rejected
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=80))
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=60))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=80)
+        )
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=60)
+        )
 
         with pytest.raises(SecurityPolicyViolationError):
             validate_security_policy_not_weakened(parent, child)

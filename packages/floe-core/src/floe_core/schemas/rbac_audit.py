@@ -173,9 +173,15 @@ class ServiceAccountSummary(BaseModel):
     name: str = Field(..., description="ServiceAccount name")
     namespace: str = Field(..., description="ServiceAccount namespace")
     roles: list[str] = Field(default_factory=list, description="Bound Role names")
-    cluster_roles: list[str] = Field(default_factory=list, description="Bound ClusterRole names")
-    secrets_access: list[str] = Field(default_factory=list, description="Accessible secret names")
-    automount_token: bool = Field(default=False, description="Token automounting enabled")
+    cluster_roles: list[str] = Field(
+        default_factory=list, description="Bound ClusterRole names"
+    )
+    secrets_access: list[str] = Field(
+        default_factory=list, description="Accessible secret names"
+    )
+    automount_token: bool = Field(
+        default=False, description="Token automounting enabled"
+    )
     managed_by_floe: bool = Field(default=False, description="Managed by floe")
 
 
@@ -205,7 +211,9 @@ class NamespaceSummary(BaseModel):
 
     name: str = Field(..., description="Namespace name")
     pss_enforce: str | None = Field(default=None, description="PSS enforcement level")
-    service_accounts: int = Field(default=0, ge=0, description="Number of service accounts")
+    service_accounts: int = Field(
+        default=0, ge=0, description="Number of service accounts"
+    )
     roles: int = Field(default=0, ge=0, description="Number of roles")
     role_bindings: int = Field(default=0, ge=0, description="Number of role bindings")
     managed_by_floe: bool = Field(default=False, description="Managed by floe")

@@ -120,9 +120,9 @@ class BasePluginMetadataTests(ABC):
     def test_plugin_version_is_semver(self, plugin_instance: Any) -> None:
         """Test plugin version follows semantic versioning format."""
         version = plugin_instance.version
-        assert re.match(self.SEMVER_PATTERN, version), (
-            f"Version '{version}' does not follow semver format (X.Y.Z)"
-        )
+        assert re.match(
+            self.SEMVER_PATTERN, version
+        ), f"Version '{version}' does not follow semver format (X.Y.Z)"
 
     # =========================================================================
     # API Version Tests
@@ -197,9 +197,9 @@ class BasePluginMetadataTests(ABC):
         eps = entry_points(group=self.expected_entry_point_group)
         matching_eps = [ep for ep in eps if ep.name == self.expected_name]
 
-        assert len(matching_eps) == 1, (
-            f"Expected exactly one entry point for '{self.expected_name}'"
-        )
+        assert (
+            len(matching_eps) == 1
+        ), f"Expected exactly one entry point for '{self.expected_name}'"
 
         # Load the plugin class
         loaded_class = matching_eps[0].load()

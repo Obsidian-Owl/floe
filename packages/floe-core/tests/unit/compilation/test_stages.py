@@ -477,7 +477,9 @@ plugins:
             spans = exporter.get_finished_spans()
 
             # Find the pipeline span
-            pipeline_span = next((s for s in spans if s.name == "compile.pipeline"), None)
+            pipeline_span = next(
+                (s for s in spans if s.name == "compile.pipeline"), None
+            )
             assert pipeline_span is not None
             assert "compile.product_name" in dict(pipeline_span.attributes)
             assert pipeline_span.attributes["compile.product_name"] == "test-product"
@@ -618,7 +620,9 @@ plugins:
             compile_pipeline(spec_path, manifest_path)
 
             spans = exporter.get_finished_spans()
-            pipeline_span = next((s for s in spans if s.name == "compile.pipeline"), None)
+            pipeline_span = next(
+                (s for s in spans if s.name == "compile.pipeline"), None
+            )
 
             assert pipeline_span is not None
             # Check that total duration is captured as attribute

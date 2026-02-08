@@ -107,9 +107,15 @@ class TestQuickstartExamples:
 
         # Define Iceberg schema using PyIceberg types (from quickstart)
         schema = Schema(
-            NestedField(field_id=1, name="event_id", field_type=StringType(), required=True),
-            NestedField(field_id=2, name="event_time", field_type=TimestampType(), required=True),
-            NestedField(field_id=3, name="payload", field_type=StringType(), required=False),
+            NestedField(
+                field_id=1, name="event_id", field_type=StringType(), required=True
+            ),
+            NestedField(
+                field_id=2, name="event_time", field_type=TimestampType(), required=True
+            ),
+            NestedField(
+                field_id=3, name="payload", field_type=StringType(), required=False
+            ),
         )
 
         # Create table in namespace (from quickstart)
@@ -204,7 +210,10 @@ class TestQuickstartExamples:
             (CatalogError, ["test message"]),  # CatalogError takes message
             (CatalogUnavailableError, ["http://test-catalog:8181"]),  # takes URI
             (AuthenticationError, ["test message"]),  # takes message
-            (NotSupportedError, ["test_operation", "test_catalog"]),  # operation, catalog
+            (
+                NotSupportedError,
+                ["test_operation", "test_catalog"],
+            ),  # operation, catalog
             (ConflictError, ["namespace", "test_ns"]),  # resource_type, identifier
             (NotFoundError, ["namespace", "test_ns"]),  # resource_type, identifier
         ]

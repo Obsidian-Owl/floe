@@ -607,9 +607,7 @@ def test_calculate_severity_custom_thresholds() -> None:
     from floe_core.contracts.monitoring.violations import calculate_severity
 
     # Custom thresholds: info at 70%, warning at 85%, critical at 5 violations
-    thresholds = SeverityThresholds(
-        info_pct=70.0, warning_pct=85.0, critical_count=5
-    )
+    thresholds = SeverityThresholds(info_pct=70.0, warning_pct=85.0, critical_count=5)
 
     # 70% should trigger INFO
     severity_info = calculate_severity(

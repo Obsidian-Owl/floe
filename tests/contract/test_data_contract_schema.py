@@ -344,7 +344,12 @@ class TestSchemaComparisonResultStability:
         schema = SchemaComparisonResult.model_json_schema()
         properties = schema.get("properties", {})
 
-        expected_fields = {"matches", "type_mismatches", "missing_columns", "extra_columns"}
+        expected_fields = {
+            "matches",
+            "type_mismatches",
+            "missing_columns",
+            "extra_columns",
+        }
         actual_fields = set(properties.keys())
 
         assert expected_fields == actual_fields

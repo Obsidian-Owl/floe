@@ -72,9 +72,9 @@ class TestCompileIntegrationWithRealFiles(IntegrationTestBase):
         )
 
         # Should succeed
-        assert result.exit_code == 0, (
-            f"Compile failed with exit code {result.exit_code}.\nOutput: {result.output}"
-        )
+        assert (
+            result.exit_code == 0
+        ), f"Compile failed with exit code {result.exit_code}.\nOutput: {result.output}"
 
         # Verify output file exists
         assert output_path.exists(), f"Expected output file at {output_path}"
@@ -176,7 +176,9 @@ class TestEnforcementReportIntegration(IntegrationTestBase):
         assert "passed" in content, "EnforcementResult must have passed field"
         assert "violations" in content, "EnforcementResult must have violations field"
         assert "summary" in content, "EnforcementResult must have summary field"
-        assert "enforcement_level" in content, "EnforcementResult must have enforcement_level"
+        assert (
+            "enforcement_level" in content
+        ), "EnforcementResult must have enforcement_level"
 
     @pytest.mark.requirement("011-FR-012")
     @pytest.mark.requirement("011-FR-013")
@@ -357,14 +359,18 @@ class TestCompileProductMetadata(IntegrationTestBase):
         # Verify product metadata from quickstart floe.yaml
         # Schema uses 'metadata' for product info and 'identity' for identification
         metadata = content.get("metadata", {})
-        assert metadata.get("product_name") == "customer-360", "Product name should match floe.yaml"
-        assert metadata.get("product_version") == "1.0.0", "Product version should match floe.yaml"
+        assert (
+            metadata.get("product_name") == "customer-360"
+        ), "Product name should match floe.yaml"
+        assert (
+            metadata.get("product_version") == "1.0.0"
+        ), "Product version should match floe.yaml"
 
         # Verify identity contains product_id derived from product name
         identity = content.get("identity", {})
-        assert "customer_360" in identity.get("product_id", ""), (
-            "Product ID should contain normalized product name"
-        )
+        assert "customer_360" in identity.get(
+            "product_id", ""
+        ), "Product ID should contain normalized product name"
 
 
 class TestCompileErrorHandling(IntegrationTestBase):
@@ -559,13 +565,13 @@ schema:
         )
 
         # Verify the --skip-contracts flag was recognized and honored
-        assert "SKIPPED" in result.output, (
-            f"--skip-contracts should output SKIPPED message. Got: {result.output}"
-        )
+        assert (
+            "SKIPPED" in result.output
+        ), f"--skip-contracts should output SKIPPED message. Got: {result.output}"
         # Contract validation errors should NOT appear since we skipped it
-        assert "FLOE-E5" not in result.output, (
-            "Contract errors (FLOE-E5xx) should not appear when --skip-contracts is used"
-        )
+        assert (
+            "FLOE-E5" not in result.output
+        ), "Contract errors (FLOE-E5xx) should not appear when --skip-contracts is used"
         # Exit code 0 means full success; exit code 6 is acceptable if from non-contract
         # compilation stages (e.g., dbt profile generation which is not yet implemented)
         assert result.exit_code in (0, 6), (

@@ -62,20 +62,26 @@ class TestCubeDatasourceWithCatalog:
             warehouse="floe_warehouse",
         )
 
-    def test_includes_init_sql_with_catalog(self, catalog_config: CatalogConfig) -> None:
+    def test_includes_init_sql_with_catalog(
+        self, catalog_config: CatalogConfig
+    ) -> None:
         """Test config includes initSql when catalog_config provided."""
         plugin = DuckDBComputePlugin()
         result = plugin.get_cube_datasource_config(catalog_config=catalog_config)
         assert "init_sql" in result
         assert isinstance(result["init_sql"], str)
 
-    def test_init_sql_contains_install_iceberg(self, catalog_config: CatalogConfig) -> None:
+    def test_init_sql_contains_install_iceberg(
+        self, catalog_config: CatalogConfig
+    ) -> None:
         """Test initSql contains INSTALL iceberg."""
         plugin = DuckDBComputePlugin()
         result = plugin.get_cube_datasource_config(catalog_config=catalog_config)
         assert "INSTALL iceberg" in result["init_sql"]
 
-    def test_init_sql_contains_load_iceberg(self, catalog_config: CatalogConfig) -> None:
+    def test_init_sql_contains_load_iceberg(
+        self, catalog_config: CatalogConfig
+    ) -> None:
         """Test initSql contains LOAD iceberg."""
         plugin = DuckDBComputePlugin()
         result = plugin.get_cube_datasource_config(catalog_config=catalog_config)
@@ -121,5 +127,7 @@ class TestCubeDatasourceAllKeys:
     def test_custom_database_path(self) -> None:
         """Test custom database path is passed through."""
         plugin = DuckDBComputePlugin()
-        result = plugin.get_cube_datasource_config(database_path="/data/analytics.duckdb")
+        result = plugin.get_cube_datasource_config(
+            database_path="/data/analytics.duckdb"
+        )
         assert result["database_path"] == "/data/analytics.duckdb"

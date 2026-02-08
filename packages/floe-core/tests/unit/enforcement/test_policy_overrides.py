@@ -316,7 +316,9 @@ class TestExcludeOverrideAction:
         from floe_core.enforcement.policy_enforcer import PolicyEnforcer
 
         original_count = len(sample_violations)
-        test_count = sum(1 for v in sample_violations if v.model_name.startswith("test_"))
+        test_count = sum(
+            1 for v in sample_violations if v.model_name.startswith("test_")
+        )
 
         result = PolicyEnforcer.apply_overrides(
             violations=sample_violations,

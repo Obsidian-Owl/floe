@@ -149,7 +149,9 @@ class TestCheckInfrastructure:
 
         with (
             patch("testing.fixtures.services._can_resolve_host", return_value=True),
-            patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check),
+            patch(
+                "testing.fixtures.services._tcp_health_check", side_effect=mock_check
+            ),
         ):
             with pytest.raises(ServiceUnavailableError) as exc_info:
                 check_infrastructure(
@@ -171,7 +173,9 @@ class TestCheckInfrastructure:
 
         with (
             patch("testing.fixtures.services._can_resolve_host", return_value=True),
-            patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check),
+            patch(
+                "testing.fixtures.services._tcp_health_check", side_effect=mock_check
+            ),
         ):
             result = check_infrastructure(
                 [("polaris", 8181), ("minio", 9000)],
@@ -232,7 +236,9 @@ class TestTcpHealthCheck:
         """Test _tcp_health_check returns False for failed connection."""
         from testing.fixtures.services import _tcp_health_check
 
-        with patch("socket.create_connection", side_effect=OSError("Connection refused")):
+        with patch(
+            "socket.create_connection", side_effect=OSError("Connection refused")
+        ):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is False
 

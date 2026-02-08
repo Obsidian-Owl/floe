@@ -34,7 +34,13 @@ def render_helm_templates(
     """
     # NOTE: --skip-schema-validation required because Dagster subchart
     # references external JSON schema URL that returns 404
-    cmd = ["helm", "template", "--skip-schema-validation", "test-release", str(chart_path)]
+    cmd = [
+        "helm",
+        "template",
+        "--skip-schema-validation",
+        "test-release",
+        str(chart_path),
+    ]
 
     if values:
         for key, value in values.items():
@@ -176,9 +182,9 @@ class TestPolarisSecurityRegression:
         features = polaris_config.get("featureConfiguration", {})
 
         # Explicit features should be used
-        assert "CUSTOM_FEATURE" in features or "ALLOW_ANONYMOUS_ACCESS" in features, (
-            "Explicit feature flags not rendered"
-        )
+        assert (
+            "CUSTOM_FEATURE" in features or "ALLOW_ANONYMOUS_ACCESS" in features
+        ), "Explicit feature flags not rendered"
 
 
 @pytest.mark.requirement("9b-SEC-001")
@@ -274,7 +280,9 @@ class TestPostgreSQLSecretSecurityRegression:
         )
 
         # Password should not be the old weak default 'floe'
-        assert password != "floe", "SECURITY REGRESSION: Password must not be weak default 'floe'"
+        assert (
+            password != "floe"
+        ), "SECURITY REGRESSION: Password must not be weak default 'floe'"
 
 
 @pytest.mark.requirement("9b-SEC-001")
@@ -315,7 +323,9 @@ class TestDagsterSecretSecurityRegression:
 
         # Verify data section has connection info
         data = secret.get("data", {})
-        assert "postgresql-connection" in data, "postgresql-connection missing from Dagster secret"
+        assert (
+            "postgresql-connection" in data
+        ), "postgresql-connection missing from Dagster secret"
 
     @pytest.mark.requirement("9b-SEC-001")
     def test_dagster_connection_url_encoded(
@@ -341,11 +351,11 @@ class TestDagsterSecretSecurityRegression:
 
         # Decode and verify format
         connection = base64.b64decode(connection_b64).decode("utf-8")
-        assert connection.startswith("postgresql://"), (
-            f"Connection URL must start with postgresql://. Got: {connection[:20]}..."
-        )
+        assert connection.startswith(
+            "postgresql://"
+        ), f"Connection URL must start with postgresql://. Got: {connection[:20]}..."
 
         # Should not contain weak 'floe' password
-        assert ":floe@" not in connection, (
-            "SECURITY REGRESSION: Connection URL must not contain weak 'floe' password"
-        )
+        assert (
+            ":floe@" not in connection
+        ), "SECURITY REGRESSION: Connection URL must not contain weak 'floe' password"

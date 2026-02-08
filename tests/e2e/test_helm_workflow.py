@@ -191,7 +191,9 @@ class TestHelmWorkflow:
         """Verify kubectl access to cluster."""
         result = _kubectl(["cluster-info"])
         if result.returncode != 0:
-            pytest.fail("Kubernetes cluster not available.\nStart cluster with: make kind-up")
+            pytest.fail(
+                "Kubernetes cluster not available.\nStart cluster with: make kind-up"
+            )
 
     @pytest.mark.requirement("E2E-001")
     def test_platform_deployed(
@@ -239,7 +241,9 @@ class TestHelmWorkflow:
             ]
         )
         assert result.returncode == 0, f"Polaris service not found: {result.stderr}"
-        assert "polaris" in result.stdout, f"No Polaris service in output: {result.stdout}"
+        assert (
+            "polaris" in result.stdout
+        ), f"No Polaris service in output: {result.stdout}"
 
     @pytest.mark.requirement("E2E-001")
     def test_postgresql_accessible(
@@ -343,6 +347,6 @@ class TestJobExecution:
         )
 
         assert result.returncode == 0, f"Template rendering failed: {result.stderr}"
-        assert "kind: Job" in result.stdout or "kind: CronJob" in result.stdout, (
-            "No Job or CronJob in rendered output"
-        )
+        assert (
+            "kind: Job" in result.stdout or "kind: CronJob" in result.stdout
+        ), "No Job or CronJob in rendered output"

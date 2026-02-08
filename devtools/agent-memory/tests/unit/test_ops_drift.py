@@ -411,7 +411,9 @@ class TestDetectDrift:
 
         stored_checksums = {
             unchanged_path: compute_content_hash("# Unchanged"),
-            modified_path: compute_content_hash("# Modified - old content"),  # Different!
+            modified_path: compute_content_hash(
+                "# Modified - old content"
+            ),  # Different!
             deleted_path: compute_content_hash("# Deleted file"),  # No longer exists
         }
         (cognee_dir / "checksums.json").write_text(json.dumps(stored_checksums))

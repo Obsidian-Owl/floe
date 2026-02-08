@@ -282,11 +282,15 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
 
         # Write initial data
         initial_data = pa.table({"id": [1, 2], "value": ["old1", "old2"]})
-        table = manager.write_data(table, initial_data, WriteConfig(mode=WriteMode.APPEND))
+        table = manager.write_data(
+            table, initial_data, WriteConfig(mode=WriteMode.APPEND)
+        )
 
         # Overwrite with new data
         new_data = pa.table({"id": [3], "value": ["new"]})
-        table = manager.write_data(table, new_data, WriteConfig(mode=WriteMode.OVERWRITE))
+        table = manager.write_data(
+            table, new_data, WriteConfig(mode=WriteMode.OVERWRITE)
+        )
 
         # Verify only new data exists
         result = table.scan().to_arrow()
@@ -348,7 +352,9 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
 
         # Write initial data
         initial_data = pa.table({"id": [1, 2], "name": ["Alice", "Bob"]})
-        table = manager.write_data(table, initial_data, WriteConfig(mode=WriteMode.APPEND))
+        table = manager.write_data(
+            table, initial_data, WriteConfig(mode=WriteMode.APPEND)
+        )
 
         # Evolve schema - add email column
         evolution = SchemaEvolution(
@@ -411,7 +417,9 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="user_name", field_type=FieldType.STRING),
+                    SchemaField(
+                        field_id=2, name="user_name", field_type=FieldType.STRING
+                    ),
                 ]
             ),
         )

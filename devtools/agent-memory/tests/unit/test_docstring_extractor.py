@@ -173,7 +173,9 @@ class TestExtractClassDocstring:
         class_entry = class_entries[0]
         assert class_entry.name == "MyClass"
         assert "A sample class for testing" in class_entry.docstring
-        assert class_entry.line_number == 3  # class MyClass: is on line 3 (after module docstring)
+        assert (
+            class_entry.line_number == 3
+        )  # class MyClass: is on line 3 (after module docstring)
         assert class_entry.source_path == python_file_with_class
 
     @pytest.mark.requirement("FR-007")
@@ -224,7 +226,9 @@ class TestExtractMethodDocstring:
         func_entry = func_entries[0]
         assert func_entry.name == "calculate_total"
         assert "Calculate the total" in func_entry.docstring
-        assert func_entry.line_number == 3  # function starts on line 3 (after module docstring)
+        assert (
+            func_entry.line_number == 3
+        )  # function starts on line 3 (after module docstring)
 
     @pytest.mark.requirement("FR-006")
     def test_extract_method_docstring(self, python_file_with_class: Path) -> None:
@@ -330,7 +334,9 @@ class TestHandleMalformedDocstring:
     """Tests for handling malformed or missing docstrings."""
 
     @pytest.mark.requirement("FR-006")
-    def test_function_without_docstring(self, python_file_with_malformed_docstring: Path) -> None:
+    def test_function_without_docstring(
+        self, python_file_with_malformed_docstring: Path
+    ) -> None:
         """Test handling of functions without docstrings."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 
@@ -338,7 +344,8 @@ class TestHandleMalformedDocstring:
         func_names = [e.name for e in entries if e.entry_type == "function"]
         # no_docstring and empty_docstring should either be absent or have empty docstring
         assert "no_docstring" not in func_names or any(
-            e.name == "no_docstring" and (e.docstring == "" or e.docstring is None) for e in entries
+            e.name == "no_docstring" and (e.docstring == "" or e.docstring is None)
+            for e in entries
         )
 
     @pytest.mark.requirement("FR-006")
@@ -350,10 +357,14 @@ class TestHandleMalformedDocstring:
         empty_entries = [e for e in entries if e.name == "empty_docstring"]
         # Should either be absent or have empty docstring
         if empty_entries:
-            assert empty_entries[0].docstring == "" or empty_entries[0].docstring is None
+            assert (
+                empty_entries[0].docstring == "" or empty_entries[0].docstring is None
+            )
 
     @pytest.mark.requirement("FR-006")
-    def test_incomplete_sections_graceful(self, python_file_with_malformed_docstring: Path) -> None:
+    def test_incomplete_sections_graceful(
+        self, python_file_with_malformed_docstring: Path
+    ) -> None:
         """Test graceful handling of incomplete Google-style sections."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 
@@ -367,7 +378,9 @@ class TestHandleMalformedDocstring:
         assert entry.sections is None or isinstance(entry.sections, dict)
 
     @pytest.mark.requirement("FR-006")
-    def test_class_without_docstring(self, python_file_with_malformed_docstring: Path) -> None:
+    def test_class_without_docstring(
+        self, python_file_with_malformed_docstring: Path
+    ) -> None:
         """Test handling of classes without docstrings."""
         entries = extract_docstrings(python_file_with_malformed_docstring)
 

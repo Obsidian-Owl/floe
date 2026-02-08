@@ -52,9 +52,7 @@ def create_violation_run_event(violation: ContractViolationEvent) -> dict[str, A
         "eventTime": event_time,
         "run": {
             "runId": str(uuid.uuid4()),
-            "facets": {
-                "contractViolation": build_contract_violation_facet(violation)
-            },
+            "facets": {"contractViolation": build_contract_violation_facet(violation)},
         },
         "job": {
             "namespace": "floe.contract_monitor",

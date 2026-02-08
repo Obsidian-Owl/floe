@@ -203,7 +203,9 @@ class CubeSchemaGenerator:
 
         if self._filter_tags:
             filter_tags_set = set(self._filter_tags)
-            result = [m for m in result if filter_tags_set.intersection(m.get("tags", []))]
+            result = [
+                m for m in result if filter_tags_set.intersection(m.get("tags", []))
+            ]
 
         return result
 
@@ -375,7 +377,9 @@ class CubeSchemaGenerator:
         model_names: dict[str, str] = {m["unique_id"]: m["name"] for m in all_models}
 
         model_meta = model.get("meta", {})
-        join_relationship_overrides: dict[str, str] = model_meta.get("cube_join_relationship", {})
+        join_relationship_overrides: dict[str, str] = model_meta.get(
+            "cube_join_relationship", {}
+        )
 
         joins: list[dict[str, Any]] = []
         for dep_id in depends_on:
@@ -388,7 +392,9 @@ class CubeSchemaGenerator:
 
             # Generate default join SQL using shared column name convention
             # Look for common column (e.g., customer_id in both model and dep)
-            join_sql = f"{{{model['name']}}}.{dep_name}_id = {{{dep_name}}}.{dep_name}_id"
+            join_sql = (
+                f"{{{model['name']}}}.{dep_name}_id = {{{dep_name}}}.{dep_name}_id"
+            )
 
             joins.append(
                 {

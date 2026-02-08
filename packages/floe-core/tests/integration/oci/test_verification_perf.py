@@ -168,7 +168,9 @@ class TestVerificationPerformance(IntegrationTestBase):
         verification_client = VerificationClient(policy)
 
         content = artifacts_path.read_bytes()
-        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        artifact_ref = (
+            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        )
 
         # Time the verification
         start_time = time.monotonic()
@@ -223,7 +225,9 @@ class TestVerificationPerformance(IntegrationTestBase):
         verification_client = VerificationClient(policy)
 
         content = artifacts_path.read_bytes()
-        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        artifact_ref = (
+            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        )
 
         # Run multiple iterations
         latencies: list[float] = []
@@ -245,8 +249,12 @@ class TestVerificationPerformance(IntegrationTestBase):
         max_latency = max(latencies)
 
         # Assert performance targets
-        assert avg_latency < 2.0, f"Average verification latency {avg_latency:.3f}s > 2.0s target"
-        assert p95_latency < 2.0, f"P95 verification latency {p95_latency:.3f}s > 2.0s target"
+        assert (
+            avg_latency < 2.0
+        ), f"Average verification latency {avg_latency:.3f}s > 2.0s target"
+        assert (
+            p95_latency < 2.0
+        ), f"P95 verification latency {p95_latency:.3f}s > 2.0s target"
 
         # Log performance stats for visibility
         print("\nVerification Performance Stats:")
@@ -299,7 +307,9 @@ class TestVerificationPerformance(IntegrationTestBase):
         verification_client = VerificationClient(policy)
 
         content = artifacts_path.read_bytes()
-        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        artifact_ref = (
+            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        )
 
         start_time = time.monotonic()
         verification_client.verify(
@@ -414,7 +424,9 @@ class TestVerificationScalability(IntegrationTestBase):
 
         # Verify artifact size is non-trivial
         artifact_size = artifacts_path.stat().st_size
-        assert artifact_size > 10_000, f"Artifact size {artifact_size} too small for test"
+        assert (
+            artifact_size > 10_000
+        ), f"Artifact size {artifact_size} too small for test"
 
         client = OCIClient.from_manifest(test_manifest_path)
         client.push(artifacts, tag=test_artifact_tag)
@@ -432,7 +444,9 @@ class TestVerificationScalability(IntegrationTestBase):
         verification_client = VerificationClient(policy)
 
         content = artifacts_path.read_bytes()
-        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        artifact_ref = (
+            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
+        )
 
         start_time = time.monotonic()
         verification_client.verify(

@@ -40,7 +40,9 @@ class TestFullRBACPipelineContract:
         # Step 1: Create SecurityConfig (input)
         security_config = SecurityConfig(
             rbac=RBACConfig(enabled=True, job_service_account="auto"),
-            pod_security=PodSecurityLevelConfig(jobs_level="restricted", platform_level="baseline"),
+            pod_security=PodSecurityLevelConfig(
+                jobs_level="restricted", platform_level="baseline"
+            ),
             namespace_isolation="strict",
         )
 
@@ -102,7 +104,9 @@ class TestFullRBACPipelineContract:
         dir2 = tmp_path / "run2"
 
         for output_dir in [dir1, dir2]:
-            generator = RBACManifestGenerator(plugin=K8sRBACPlugin(), output_dir=output_dir)
+            generator = RBACManifestGenerator(
+                plugin=K8sRBACPlugin(), output_dir=output_dir
+            )
             result = generator.generate(
                 security_config=security_config,
                 secret_references=["secret-a"],
@@ -126,7 +130,9 @@ class TestFullRBACPipelineContract:
             rbac=RBACConfig(enabled=False),  # Disabled
         )
 
-        generator = RBACManifestGenerator(plugin=K8sRBACPlugin(), output_dir=tmp_path / "rbac")
+        generator = RBACManifestGenerator(
+            plugin=K8sRBACPlugin(), output_dir=tmp_path / "rbac"
+        )
 
         result = generator.generate(
             security_config=security_config,
@@ -151,7 +157,9 @@ class TestFullRBACPipelineContract:
             rbac=RBACConfig(enabled=True, job_service_account="auto"),
         )
 
-        generator = RBACManifestGenerator(plugin=K8sRBACPlugin(), output_dir=tmp_path / "rbac")
+        generator = RBACManifestGenerator(
+            plugin=K8sRBACPlugin(), output_dir=tmp_path / "rbac"
+        )
 
         result = generator.generate(
             security_config=security_config,
@@ -183,7 +191,9 @@ class TestFullRBACPipelineContract:
             rbac=RBACConfig(enabled=True),
         )
 
-        generator = RBACManifestGenerator(plugin=K8sRBACPlugin(), output_dir=tmp_path / "rbac")
+        generator = RBACManifestGenerator(
+            plugin=K8sRBACPlugin(), output_dir=tmp_path / "rbac"
+        )
 
         # Generate manifests
         result = generator.generate(

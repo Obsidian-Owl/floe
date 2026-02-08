@@ -385,7 +385,9 @@ class TestSarifExporter:
             data = json.load(f)
 
         # Find the FLOE-E201 result (stg_customers model)
-        result = next(r for r in data["runs"][0]["results"] if r["ruleId"] == "FLOE-E201")
+        result = next(
+            r for r in data["runs"][0]["results"] if r["ruleId"] == "FLOE-E201"
+        )
         location = result["locations"][0]
 
         assert "physicalLocation" in location

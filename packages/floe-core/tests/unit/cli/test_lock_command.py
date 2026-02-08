@@ -384,7 +384,9 @@ class TestLockCommand:
             mock_client_cls.from_registry_config.return_value = mock_client
 
             mock_controller = MagicMock()
-            mock_controller.lock_environment.side_effect = ValueError("Environment not found")
+            mock_controller.lock_environment.side_effect = ValueError(
+                "Environment not found"
+            )
             mock_controller_cls.return_value = mock_controller
 
             result = runner.invoke(
@@ -640,7 +642,9 @@ class TestUnlockCommand:
             mock_client_cls.from_registry_config.return_value = mock_client
 
             mock_controller = MagicMock()
-            mock_controller.unlock_environment.side_effect = ValueError("Environment not locked")
+            mock_controller.unlock_environment.side_effect = ValueError(
+                "Environment not locked"
+            )
             mock_controller_cls.return_value = mock_controller
 
             result = runner.invoke(

@@ -450,7 +450,11 @@ class TestCoverageGapSuggestions:
         assert len(violations) == 1
         suggestion = violations[0].suggestion.lower()
         # Should mention uncovered columns (amount, status)
-        assert "amount" in suggestion or "status" in suggestion or "uncovered" in suggestion
+        assert (
+            "amount" in suggestion
+            or "status" in suggestion
+            or "uncovered" in suggestion
+        )
 
     @pytest.mark.requirement("3A-US4-FR004")
     def test_violation_includes_coverage_stats(self) -> None:
@@ -765,7 +769,9 @@ class TestZeroColumnEdgeCases:
         result = enforcer.enforce(manifest)
 
         # Should pass with no coverage violations
-        coverage_violations = [v for v in result.violations if v.policy_type == "coverage"]
+        coverage_violations = [
+            v for v in result.violations if v.policy_type == "coverage"
+        ]
         assert len(coverage_violations) == 0
 
 
@@ -781,7 +787,9 @@ class TestCoverageValidatorIntegration:
 
         governance = GovernanceConfig(
             policy_enforcement_level="strict",
-            naming=NamingConfig(enforcement="off"),  # Disable naming to focus on coverage
+            naming=NamingConfig(
+                enforcement="off"
+            ),  # Disable naming to focus on coverage
             quality_gates=QualityGatesConfig(minimum_test_coverage=80),
         )
 
@@ -816,5 +824,7 @@ class TestCoverageValidatorIntegration:
         result = enforcer.enforce(manifest)
 
         # Should have coverage violation (25% < 80%)
-        coverage_violations = [v for v in result.violations if v.policy_type == "coverage"]
+        coverage_violations = [
+            v for v in result.violations if v.policy_type == "coverage"
+        ]
         assert len(coverage_violations) >= 1

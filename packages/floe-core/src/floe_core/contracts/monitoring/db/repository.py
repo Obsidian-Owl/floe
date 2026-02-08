@@ -126,25 +126,29 @@ class MonitoringRepository:
             consecutive_violations: Current consecutive violation count.
         """
         now = datetime.now(tz=timezone.utc)
-        stmt = pg_insert(ContractSLAStatusModel).values(
-            id=uuid.uuid4(),
-            contract_name=contract_name,
-            check_type=check_type,
-            current_status=current_status,
-            compliance_pct=compliance_pct,
-            last_violation_at=last_violation_at,
-            consecutive_violations=consecutive_violations,
-            updated_at=now,
-        ).on_conflict_do_update(
-            index_elements=["contract_name"],
-            set_={
-                "check_type": check_type,
-                "current_status": current_status,
-                "compliance_pct": compliance_pct,
-                "last_violation_at": last_violation_at,
-                "consecutive_violations": consecutive_violations,
-                "updated_at": now,
-            },
+        stmt = (
+            pg_insert(ContractSLAStatusModel)
+            .values(
+                id=uuid.uuid4(),
+                contract_name=contract_name,
+                check_type=check_type,
+                current_status=current_status,
+                compliance_pct=compliance_pct,
+                last_violation_at=last_violation_at,
+                consecutive_violations=consecutive_violations,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=["contract_name"],
+                set_={
+                    "check_type": check_type,
+                    "current_status": current_status,
+                    "compliance_pct": compliance_pct,
+                    "last_violation_at": last_violation_at,
+                    "consecutive_violations": consecutive_violations,
+                    "updated_at": now,
+                },
+            )
         )
         await self._session.execute(stmt)
         self._log.debug("sla_status_upserted", contract_name=contract_name)
@@ -167,9 +171,11 @@ class MonitoringRepository:
         Returns:
             List of violation dicts.
         """
-        stmt = select(ContractViolationModel).order_by(
-            ContractViolationModel.timestamp.desc()
-        ).limit(limit)
+        stmt = (
+            select(ContractViolationModel)
+            .order_by(ContractViolationModel.timestamp.desc())
+            .limit(limit)
+        )
 
         if contract_name is not None:
             stmt = stmt.where(ContractViolationModel.contract_name == contract_name)
@@ -216,9 +222,11 @@ class MonitoringRepository:
         Returns:
             List of daily aggregate dicts.
         """
-        stmt = select(ContractDailyAggregateModel).where(
-            ContractDailyAggregateModel.contract_name == contract_name
-        ).order_by(ContractDailyAggregateModel.date.desc())
+        stmt = (
+            select(ContractDailyAggregateModel)
+            .where(ContractDailyAggregateModel.contract_name == contract_name)
+            .order_by(ContractDailyAggregateModel.date.desc())
+        )
 
         if check_type is not None:
             stmt = stmt.where(ContractDailyAggregateModel.check_type == check_type)
@@ -303,9 +311,15 @@ class MonitoringRepository:
         # Query raw check results for the day
         stmt = select(
             func.count().label("total"),
-            func.count().filter(ContractCheckResultModel.status == "pass").label("passed"),
-            func.count().filter(ContractCheckResultModel.status == "fail").label("failed"),
-            func.count().filter(ContractCheckResultModel.status == "error").label("errors"),
+            func.count()
+            .filter(ContractCheckResultModel.status == "pass")
+            .label("passed"),
+            func.count()
+            .filter(ContractCheckResultModel.status == "fail")
+            .label("failed"),
+            func.count()
+            .filter(ContractCheckResultModel.status == "error")
+            .label("errors"),
             func.coalesce(
                 func.avg(ContractCheckResultModel.duration_seconds), 0.0
             ).label("avg_duration"),
@@ -342,20 +356,24 @@ class MonitoringRepository:
         }
 
         # Upsert the aggregate
-        upsert_stmt = pg_insert(ContractDailyAggregateModel).values(
-            id=uuid.uuid4(),
-            **aggregate,
-        ).on_conflict_do_update(
-            index_elements=["contract_name", "date"],
-            set_={
-                "check_type": aggregate["check_type"],
-                "total_checks": aggregate["total_checks"],
-                "passed_checks": aggregate["passed_checks"],
-                "failed_checks": aggregate["failed_checks"],
-                "error_checks": aggregate["error_checks"],
-                "avg_duration_seconds": aggregate["avg_duration_seconds"],
-                "violation_count": aggregate["violation_count"],
-            },
+        upsert_stmt = (
+            pg_insert(ContractDailyAggregateModel)
+            .values(
+                id=uuid.uuid4(),
+                **aggregate,
+            )
+            .on_conflict_do_update(
+                index_elements=["contract_name", "date"],
+                set_={
+                    "check_type": aggregate["check_type"],
+                    "total_checks": aggregate["total_checks"],
+                    "passed_checks": aggregate["passed_checks"],
+                    "failed_checks": aggregate["failed_checks"],
+                    "error_checks": aggregate["error_checks"],
+                    "avg_duration_seconds": aggregate["avg_duration_seconds"],
+                    "violation_count": aggregate["violation_count"],
+                },
+            )
         )
         await self._session.execute(upsert_stmt)
 
@@ -367,7 +385,9 @@ class MonitoringRepository:
         )
         return aggregate
 
-    async def get_registered_contracts(self, active_only: bool = True) -> list[dict[str, Any]]:
+    async def get_registered_contracts(
+        self, active_only: bool = True
+    ) -> list[dict[str, Any]]:
         """Get all registered contracts from DB.
 
         Args:

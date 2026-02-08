@@ -215,7 +215,10 @@ class OCIClient:
     @property
     def circuit_breaker(self) -> CircuitBreaker | None:
         """Get or create the circuit breaker."""
-        if self._circuit_breaker is None and self._config.resilience.circuit_breaker.enabled:
+        if (
+            self._circuit_breaker is None
+            and self._config.resilience.circuit_breaker.enabled
+        ):
             self._circuit_breaker = CircuitBreaker(
                 registry_uri=self._config.uri,
                 config=self._config.resilience.circuit_breaker,
@@ -484,8 +487,12 @@ class OCIClient:
         """
         self._check_immutability_before_push(tag)
 
-        layer_content, layer_descriptor = serialize_layer(artifacts, annotations=annotations)
-        manifest = build_manifest(artifacts, layers=[layer_descriptor], annotations=annotations)
+        layer_content, layer_descriptor = serialize_layer(
+            artifacts, annotations=annotations
+        )
+        manifest = build_manifest(
+            artifacts, layers=[layer_descriptor], annotations=annotations
+        )
 
         span.set_attribute("oci.artifact.size_bytes", manifest.size)
         span.set_attribute("oci.artifact.layer_count", len(manifest.layers))
@@ -583,7 +590,9 @@ class OCIClient:
         """
         # Determine auth backend based on auth type
         # Basic auth needs 'basic' backend, otherwise use default 'token'
-        auth_backend = "basic" if self.auth_provider.auth_type == AuthType.BASIC else "token"
+        auth_backend = (
+            "basic" if self.auth_provider.auth_type == AuthType.BASIC else "token"
+        )
 
         # Create ORAS client with TLS settings and auth backend
         oras_client = OrasClient(
@@ -658,7 +667,9 @@ class OCIClient:
                 "or configure artifacts.signing in manifest.yaml"
             )
 
-        log = logger.bind(registry=self._registry_host, tag=tag, signing_mode=config.mode)
+        log = logger.bind(
+            registry=self._registry_host, tag=tag, signing_mode=config.mode
+        )
         log.info("sign_started")
         start_time = time.monotonic()
 
@@ -680,8 +691,14 @@ class OCIClient:
                 self._update_artifact_annotations(tag, metadata.to_annotations())
 
                 duration = time.monotonic() - start_time
-                log.info("sign_completed", duration=duration, rekor_index=metadata.rekor_log_index)
-                span.set_attribute("floe.signing.rekor_index", metadata.rekor_log_index or 0)
+                log.info(
+                    "sign_completed",
+                    duration=duration,
+                    rekor_index=metadata.rekor_log_index,
+                )
+                span.set_attribute(
+                    "floe.signing.rekor_index", metadata.rekor_log_index or 0
+                )
                 self._record_operation_metrics("sign", start_time, success=True)
                 return metadata
             except Exception as e:
@@ -706,7 +723,10 @@ class OCIClient:
         artifacts = self._deserialize_artifacts(content)
 
         existing_manifest = self._inspect_internal(tag)
-        merged_annotations = {**(existing_manifest.annotations or {}), **new_annotations}
+        merged_annotations = {
+            **(existing_manifest.annotations or {}),
+            **new_annotations,
+        }
 
         self._push_internal(artifacts, tag, merged_annotations, span=None)
 
@@ -865,7 +885,9 @@ class OCIClient:
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
                 pulled_files = oras_client.pull(target=target_ref, outdir=tmpdir)
-                artifacts_path = self.pull_operations.find_artifacts_file(pulled_files, tmpdir)
+                artifacts_path = self.pull_operations.find_artifacts_file(
+                    pulled_files, tmpdir
+                )
                 content = artifacts_path.read_bytes()
                 digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
                 return content, digest
@@ -921,7 +943,9 @@ class OCIClient:
             return
 
         enforcement = (
-            policy.get_enforcement_for_env(environment) if environment else policy.enforcement
+            policy.get_enforcement_for_env(environment)
+            if environment
+            else policy.enforcement
         )
         if enforcement == "off":
             return
@@ -1064,7 +1088,11 @@ class OCIClient:
                 manifest = self._inspect_internal(tag)
                 self._finalize_inspect(manifest, span, log, start_time)
                 return manifest
-            except (ArtifactNotFoundError, CircuitBreakerOpenError, AuthenticationError):
+            except (
+                ArtifactNotFoundError,
+                CircuitBreakerOpenError,
+                AuthenticationError,
+            ):
                 self._record_operation_metrics("inspect", start_time, success=False)
                 raise
             except Exception as e:
@@ -1098,7 +1126,9 @@ class OCIClient:
         target_ref = self._build_target_ref(tag)
 
         try:
-            manifest_data: dict[str, Any] = oras_client.get_manifest(container=target_ref)
+            manifest_data: dict[str, Any] = oras_client.get_manifest(
+                container=target_ref
+            )
             return manifest_data
         except Exception as e:
             self._handle_manifest_fetch_error(e, tag)
@@ -1180,7 +1210,11 @@ class OCIClient:
         try:
             result = self._list_internal(filter_pattern, log)
             duration = self._record_operation_metrics("list", start_time, success=True)
-            log.info("list_completed", tag_count=len(result), duration_ms=int(duration * 1000))
+            log.info(
+                "list_completed",
+                tag_count=len(result),
+                duration_ms=int(duration * 1000),
+            )
             return result
         except (CircuitBreakerOpenError, AuthenticationError):
             self._record_operation_metrics("list", start_time, success=False)
@@ -1190,7 +1224,9 @@ class OCIClient:
             log.error("list_failed", error=str(e))
             raise OCIError(f"List failed: {e}") from e
 
-    def _list_internal(self, filter_pattern: str | None, log: Any) -> builtins.list[ArtifactTag]:
+    def _list_internal(
+        self, filter_pattern: str | None, log: Any
+    ) -> builtins.list[ArtifactTag]:
         """Internal list logic with circuit breaker protection.
 
         Args:
@@ -1264,7 +1300,9 @@ class OCIClient:
         """
         from floe_core.oci.batch_fetcher import BatchFetcher
 
-        tag_refs = [(tag_name, self._build_target_ref(tag_name)) for tag_name in tag_names]
+        tag_refs = [
+            (tag_name, self._build_target_ref(tag_name)) for tag_name in tag_names
+        ]
         batch_fetcher = BatchFetcher(max_workers=10)
         fetch_result = batch_fetcher.fetch_manifests(oras_client, tag_refs)
 
@@ -1432,7 +1470,11 @@ class OCIClient:
             log.debug(
                 "registry_auth_validated",
                 auth_type=self._config.auth.type.value,
-                expires_at=credentials.expires_at.isoformat() if credentials.expires_at else None,
+                expires_at=(
+                    credentials.expires_at.isoformat()
+                    if credentials.expires_at
+                    else None
+                ),
             )
         except AuthenticationError:
             log.warning("registry_auth_failed", auth_type=self._config.auth.type.value)

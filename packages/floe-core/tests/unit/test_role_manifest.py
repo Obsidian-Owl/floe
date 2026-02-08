@@ -180,7 +180,9 @@ class TestRoleManifestRules:
         rules = [
             RoleRule(resources=["pods"], verbs=["get", "list"]),
             RoleRule(api_groups=["batch"], resources=["jobs"], verbs=["get", "create"]),
-            RoleRule(resources=["secrets"], verbs=["get"], resource_names=["my-secret"]),
+            RoleRule(
+                resources=["secrets"], verbs=["get"], resource_names=["my-secret"]
+            ),
         ]
         config = RoleConfig(name="floe-test-role", namespace="default", rules=rules)
         manifest = config.to_k8s_manifest()
@@ -279,7 +281,9 @@ class TestRoleManifestVariousConfigs:
                 resource_names=["db-creds", "api-key"],
             ),
         ]
-        config = RoleConfig(name="floe-complex-role", namespace="floe-jobs", rules=rules)
+        config = RoleConfig(
+            name="floe-complex-role", namespace="floe-jobs", rules=rules
+        )
         manifest = config.to_k8s_manifest()
 
         assert len(manifest["rules"]) == 3
@@ -323,4 +327,7 @@ class TestRoleManifestYamlCompatibility:
 
         assert restored["apiVersion"] == manifest["apiVersion"]
         assert restored["kind"] == manifest["kind"]
-        assert restored["rules"][0]["resourceNames"] == manifest["rules"][0]["resourceNames"]
+        assert (
+            restored["rules"][0]["resourceNames"]
+            == manifest["rules"][0]["resourceNames"]
+        )

@@ -16,6 +16,9 @@ from floe_core.contracts.monitoring.sla import (
     SLAComplianceReport,
     SLAStatus,
     TrendDirection,
+    aggregate_daily,
+    calculate_compliance,
+    compute_trend,
 )
 from floe_core.contracts.monitoring.violations import ViolationType
 
@@ -834,14 +837,6 @@ class TestSLAComplianceReport:
                 monitoring_coverage_pct=100.0,
                 generated_at=datetime.now(tz=timezone.utc),
             )
-
-
-# Import calculation functions for testing
-from floe_core.contracts.monitoring.sla import (
-    aggregate_daily,
-    calculate_compliance,
-    compute_trend,
-)
 
 
 class TestCalculateCompliance:

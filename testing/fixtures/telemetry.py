@@ -230,7 +230,9 @@ def check_jaeger_health(config: JaegerConfig, timeout: float = 5.0) -> bool:
         return False
 
 
-def check_otlp_collector_health(config: OTLPCollectorConfig, timeout: float = 5.0) -> bool:
+def check_otlp_collector_health(
+    config: OTLPCollectorConfig, timeout: float = 5.0
+) -> bool:
     """Check if OTLP Collector is healthy.
 
     Uses TCP check on gRPC port since collector may not have HTTP health endpoint.
@@ -245,7 +247,9 @@ def check_otlp_collector_health(config: OTLPCollectorConfig, timeout: float = 5.
     import socket
 
     try:
-        with socket.create_connection((config.k8s_host, config.grpc_port), timeout=timeout):
+        with socket.create_connection(
+            (config.k8s_host, config.grpc_port), timeout=timeout
+        ):
             return True
     except OSError:
         return False

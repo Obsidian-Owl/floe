@@ -248,7 +248,9 @@ class TestMetricRecorderSetGauge:
         # Gauge should only be created once
         assert mock_meter.create_gauge.call_count == 1
 
-    def test_set_gauge_creates_different_gauges_for_different_names(self, mock_meter: Mock) -> None:
+    def test_set_gauge_creates_different_gauges_for_different_names(
+        self, mock_meter: Mock
+    ) -> None:
         """Test set_gauge() creates separate gauges for different names."""
         from floe_core.telemetry.metrics import MetricRecorder
 
@@ -372,7 +374,9 @@ class TestMetricRecorderRecordHistogram:
         call_args = histogram.record.call_args
         assert "attributes" in call_args[1]
 
-    def test_record_histogram_reuses_histogram_for_same_name(self, mock_meter: Mock) -> None:
+    def test_record_histogram_reuses_histogram_for_same_name(
+        self, mock_meter: Mock
+    ) -> None:
         """Test record_histogram() reuses histogram for the same metric name."""
         from floe_core.telemetry.metrics import MetricRecorder
 
@@ -646,7 +650,9 @@ class TestMetricLabelsAttributes:
         call_args = counter.add.call_args
         assert call_args[1]["attributes"] == labels
 
-    def test_labels_preserved_across_multiple_recordings(self, mock_meter: Mock) -> None:
+    def test_labels_preserved_across_multiple_recordings(
+        self, mock_meter: Mock
+    ) -> None:
         """Test that labels are passed correctly on each recording."""
         from floe_core.telemetry.metrics import MetricRecorder
 

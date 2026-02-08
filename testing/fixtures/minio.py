@@ -41,15 +41,21 @@ class MinIOConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    endpoint: str = Field(default_factory=lambda: os.environ.get("MINIO_ENDPOINT", "minio:9000"))
+    endpoint: str = Field(
+        default_factory=lambda: os.environ.get("MINIO_ENDPOINT", "minio:9000")
+    )
     access_key: str = Field(
         default_factory=lambda: os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
     )
     secret_key: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"))
+        default_factory=lambda: SecretStr(
+            os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+        )
     )
     secure: bool = Field(default=False)
-    region: str = Field(default_factory=lambda: os.environ.get("AWS_REGION", "us-east-1"))
+    region: str = Field(
+        default_factory=lambda: os.environ.get("AWS_REGION", "us-east-1")
+    )
     namespace: str = Field(default="floe-test")
 
     @property
@@ -82,7 +88,9 @@ def create_minio_client(config: MinIOConfig) -> Minio:
     try:
         from minio import Minio
     except ImportError as e:
-        raise MinIOConnectionError("minio not installed. Install with: pip install minio") from e
+        raise MinIOConnectionError(
+            "minio not installed. Install with: pip install minio"
+        ) from e
 
     try:
         client = Minio(

@@ -225,7 +225,9 @@ class BaseCatalogPluginTests(ABC):
         assert callable(catalog_plugin.get_config_schema)
 
     @pytest.mark.requirement("FR-004")
-    def test_config_schema_returns_valid_type(self, catalog_plugin: CatalogPlugin) -> None:
+    def test_config_schema_returns_valid_type(
+        self, catalog_plugin: CatalogPlugin
+    ) -> None:
         """Verify get_config_schema() returns None or a BaseModel class.
 
         Plugins can either have no config schema (None) or return
@@ -244,7 +246,9 @@ class BaseCatalogPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-001")
-    def test_health_check_returns_health_status(self, catalog_plugin: CatalogPlugin) -> None:
+    def test_health_check_returns_health_status(
+        self, catalog_plugin: CatalogPlugin
+    ) -> None:
         """Verify health_check() returns a HealthStatus object."""
         from floe_core import HealthStatus
 

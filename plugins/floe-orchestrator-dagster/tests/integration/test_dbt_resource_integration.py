@@ -168,7 +168,9 @@ test_profile:
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-031")
-    def test_dbt_resource_run_models_with_real_dbt(self, temp_dbt_project: Path) -> None:
+    def test_dbt_resource_run_models_with_real_dbt(
+        self, temp_dbt_project: Path
+    ) -> None:
         """Test DBTResource.run_models() with real dbt execution."""
         require_dbt()
 

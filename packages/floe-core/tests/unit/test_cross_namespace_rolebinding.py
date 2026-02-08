@@ -83,7 +83,9 @@ class TestCrossNamespaceManifestGeneration:
         config = RoleBindingConfig(
             name="floe-cross-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-test-role",
         )
 
@@ -127,7 +129,9 @@ class TestCrossNamespaceManifestGeneration:
         config = RoleBindingConfig(
             name="floe-cross-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-test-role",
         )
 
@@ -154,7 +158,9 @@ class TestCrossNamespaceSubjectProperties:
         from floe_core.schemas.rbac import RoleBindingSubject
 
         # Only ServiceAccount is allowed by the Literal type
-        subject = RoleBindingSubject(kind="ServiceAccount", name="floe-test", namespace="floe-jobs")
+        subject = RoleBindingSubject(
+            kind="ServiceAccount", name="floe-test", namespace="floe-jobs"
+        )
         assert subject.kind == "ServiceAccount"
 
     @pytest.mark.requirement("FR-023")
@@ -179,7 +185,9 @@ class TestCrossNamespaceRoleRefBehavior:
         config = RoleBindingConfig(
             name="floe-cross-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-job-creator-role",
         )
 
@@ -198,7 +206,9 @@ class TestCrossNamespaceRoleRefBehavior:
         config = RoleBindingConfig(
             name="floe-cross-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-test-role",
         )
 
@@ -218,7 +228,9 @@ class TestCrossNamespaceAllowedNamespaces:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-test-role",
             allowed_subject_namespaces=["floe-platform", "floe-jobs"],
         )
@@ -236,7 +248,11 @@ class TestCrossNamespaceAllowedNamespaces:
             RoleBindingConfig(
                 name="floe-dagster-binding",
                 namespace="floe-jobs",
-                subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-sales-domain")],
+                subjects=[
+                    RoleBindingSubject(
+                        name="floe-dagster", namespace="floe-sales-domain"
+                    )
+                ],
                 role_name="floe-test-role",
                 allowed_subject_namespaces=["floe-platform", "floe-jobs"],
             )
@@ -250,7 +266,9 @@ class TestCrossNamespaceAllowedNamespaces:
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-any-namespace")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-any-namespace")
+            ],
             role_name="floe-test-role",
             allowed_subject_namespaces=None,
         )
@@ -271,7 +289,9 @@ class TestCrossNamespaceAllowedNamespaces:
                 namespace="floe-jobs",
                 subjects=[
                     RoleBindingSubject(name="floe-dagster", namespace="floe-platform"),
-                    RoleBindingSubject(name="floe-rogue", namespace="floe-bad-namespace"),
+                    RoleBindingSubject(
+                        name="floe-rogue", namespace="floe-bad-namespace"
+                    ),
                 ],
                 role_name="floe-test-role",
                 allowed_subject_namespaces=["floe-platform", "floe-jobs"],
@@ -288,7 +308,9 @@ class TestCrossNamespaceAllowedNamespaces:
             RoleBindingConfig(
                 name="floe-dagster-binding",
                 namespace="floe-jobs",
-                subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+                subjects=[
+                    RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+                ],
                 role_name="floe-test-role",
                 allowed_subject_namespaces=[],  # Empty = reject all
             )
@@ -307,7 +329,9 @@ class TestCrossNamespaceYAMLOutput:
         config = RoleBindingConfig(
             name="floe-cross-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-test-role",
         )
 

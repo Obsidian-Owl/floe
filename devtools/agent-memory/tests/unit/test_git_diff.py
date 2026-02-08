@@ -232,7 +232,9 @@ class TestGetChangedFiles:
                 result = MagicMock()
                 result.stdout = str(tmp_path) + "\n"
                 return result
-            raise subprocess.CalledProcessError(1, cmd, stderr="fatal: some other error")
+            raise subprocess.CalledProcessError(
+                1, cmd, stderr="fatal: some other error"
+            )
 
         with patch("subprocess.run", side_effect=mock_run):
             with pytest.raises(GitError, match="Git diff failed"):
@@ -320,7 +322,9 @@ class TestPatternMatching:
     def test_matches_double_star_pattern(self) -> None:
         """Test ** glob pattern matching."""
         assert _matches_any_pattern("tests/unit/test_foo.py", ["**/test_*.py"])
-        assert _matches_any_pattern("src/module/__pycache__/file.pyc", ["**/__pycache__/*"])
+        assert _matches_any_pattern(
+            "src/module/__pycache__/file.pyc", ["**/__pycache__/*"]
+        )
         assert not _matches_any_pattern("src/main.py", ["**/test_*.py"])
 
     @pytest.mark.requirement("FR-012")

@@ -88,7 +88,9 @@ class PolicyEnforcementError(Exception):
 
         if len(self.violations) > max_show:
             remaining = len(self.violations) - max_show
-            message += f"\n  ... and {remaining} more violation{'s' if remaining != 1 else ''}"
+            message += (
+                f"\n  ... and {remaining} more violation{'s' if remaining != 1 else ''}"
+            )
 
         return message
 

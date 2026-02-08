@@ -129,7 +129,9 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
         assert result == secret_value
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_get_secret_returns_none_for_nonexistent(self, plugin: InfisicalSecretsPlugin) -> None:
+    def test_get_secret_returns_none_for_nonexistent(
+        self, plugin: InfisicalSecretsPlugin
+    ) -> None:
         """Test get_secret returns None for non-existent secret."""
         result = plugin.get_secret(f"nonexistent-{uuid.uuid4().hex}")
 
@@ -186,7 +188,9 @@ class TestInfisicalSecretsOperations(IntegrationTestBase):
             assert key in result
 
     @pytest.mark.requirement("7A-FR-020")
-    def test_list_secrets_filters_by_prefix(self, plugin: InfisicalSecretsPlugin) -> None:
+    def test_list_secrets_filters_by_prefix(
+        self, plugin: InfisicalSecretsPlugin
+    ) -> None:
         """Test list_secrets filters by prefix."""
         # Create secrets with different prefixes
         db_keys = [f"db-{uuid.uuid4().hex[:8]}" for _ in range(2)]
@@ -240,7 +244,9 @@ class TestInfisicalSecretsPathOrganization(IntegrationTestBase):
         return f"/floe-test-{uuid.uuid4().hex[:8]}"
 
     @pytest.fixture
-    def plugin_with_path(self, base_path: str) -> Generator[InfisicalSecretsPlugin, None, None]:
+    def plugin_with_path(
+        self, base_path: str
+    ) -> Generator[InfisicalSecretsPlugin, None, None]:
         """Create plugin with specific secret_path.
 
         Raises:
@@ -342,7 +348,9 @@ class TestInfisicalSecretsEnvironmentIsolation(IntegrationTestBase):
                 client_id=os.environ["INFISICAL_CLIENT_ID"],
                 client_secret=SecretStr(os.environ["INFISICAL_CLIENT_SECRET"]),
                 project_id=os.environ["INFISICAL_PROJECT_ID"],
-                site_url=os.environ.get("INFISICAL_SITE_URL", "https://app.infisical.com"),
+                site_url=os.environ.get(
+                    "INFISICAL_SITE_URL", "https://app.infisical.com"
+                ),
                 environment="staging",
                 secret_path=base_path,
             )

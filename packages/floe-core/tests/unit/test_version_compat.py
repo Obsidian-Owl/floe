@@ -164,7 +164,9 @@ class TestVersionConstants:
     def test_min_version_compatible_with_current(self) -> None:
         """Test that minimum version is compatible with current version."""
         # MIN should be <= current (platform can run older plugins)
-        assert is_compatible(FLOE_PLUGIN_API_MIN_VERSION, FLOE_PLUGIN_API_VERSION) is True
+        assert (
+            is_compatible(FLOE_PLUGIN_API_MIN_VERSION, FLOE_PLUGIN_API_VERSION) is True
+        )
 
     @pytest.mark.requirement("SC-004")
     def test_current_version_values(self) -> None:

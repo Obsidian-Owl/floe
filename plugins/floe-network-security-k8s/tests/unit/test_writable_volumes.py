@@ -66,7 +66,9 @@ class TestWritableVolumeGeneration:
         from floe_network_security_k8s import K8sNetworkSecurityPlugin
 
         plugin = K8sNetworkSecurityPlugin()
-        volumes, volume_mounts = plugin.generate_writable_volumes(["/tmp", "/home/floe"])
+        volumes, volume_mounts = plugin.generate_writable_volumes(
+            ["/tmp", "/home/floe"]
+        )
 
         assert len(volumes) == 2
         assert len(volume_mounts) == 2
@@ -203,7 +205,9 @@ class TestWritableVolumesIntegration:
         from floe_network_security_k8s import K8sNetworkSecurityPlugin
 
         plugin = K8sNetworkSecurityPlugin()
-        volumes, volume_mounts = plugin.generate_writable_volumes(["/tmp", "/home/floe"])
+        volumes, volume_mounts = plugin.generate_writable_volumes(
+            ["/tmp", "/home/floe"]
+        )
 
         # Simulate adding to a pod spec
         pod_spec = {
@@ -226,7 +230,9 @@ class TestWritableVolumesIntegration:
         from floe_network_security_k8s import K8sNetworkSecurityPlugin
 
         plugin = K8sNetworkSecurityPlugin()
-        volumes, volume_mounts = plugin.generate_writable_volumes(["/tmp", "/home/floe"])
+        volumes, volume_mounts = plugin.generate_writable_volumes(
+            ["/tmp", "/home/floe"]
+        )
 
         volume_names = {v["name"] for v in volumes}
         mount_names = {vm["name"] for vm in volume_mounts}

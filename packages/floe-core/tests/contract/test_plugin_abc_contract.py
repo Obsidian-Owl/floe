@@ -47,9 +47,9 @@ class TestHealthStateContract:
         expected_values = {"HEALTHY", "DEGRADED", "UNHEALTHY"}
         actual_values = {member.name for member in HealthState}
 
-        assert expected_values.issubset(actual_values), (
-            f"HealthState missing required values: {expected_values - actual_values}"
-        )
+        assert expected_values.issubset(
+            actual_values
+        ), f"HealthState missing required values: {expected_values - actual_values}"
 
     @pytest.mark.requirement("SC-001")
     def test_health_state_string_values(self) -> None:
@@ -74,9 +74,9 @@ class TestHealthStatusContract:
         field_names = {f.name for f in fields(HealthStatus)}
         required_fields = {"state", "message", "details"}
 
-        assert required_fields.issubset(field_names), (
-            f"HealthStatus missing required fields: {required_fields - field_names}"
-        )
+        assert required_fields.issubset(
+            field_names
+        ), f"HealthStatus missing required fields: {required_fields - field_names}"
 
     @pytest.mark.requirement("SC-001")
     def test_health_status_field_types(self) -> None:
@@ -94,9 +94,9 @@ class TestHealthStatusContract:
 
         # Validate dict[str, Any] using proper type introspection
         details_type = hints.get("details")
-        assert get_origin(details_type) is dict, (
-            f"details should be dict, got {get_origin(details_type)}"
-        )
+        assert (
+            get_origin(details_type) is dict
+        ), f"details should be dict, got {get_origin(details_type)}"
         args = get_args(details_type)
         assert len(args) == 2, f"dict should have 2 type args, got {len(args)}"
         assert args[0] is str, f"dict key type should be str, got {args[0]}"
@@ -143,9 +143,9 @@ class TestPluginMetadataContract:
 
         required_abstract = {"name", "version", "floe_api_version"}
 
-        assert required_abstract.issubset(abstract_members), (
-            f"Missing abstract properties: {required_abstract - abstract_members}"
-        )
+        assert required_abstract.issubset(
+            abstract_members
+        ), f"Missing abstract properties: {required_abstract - abstract_members}"
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_metadata_abstract_properties_are_properties(self) -> None:
@@ -156,7 +156,9 @@ class TestPluginMetadataContract:
         # Check that these are defined as properties
         for prop_name in ["name", "version", "floe_api_version"]:
             prop = getattr(PluginMetadata, prop_name)
-            assert isinstance(prop, property), f"{prop_name} should be a property, not {type(prop)}"
+            assert isinstance(
+                prop, property
+            ), f"{prop_name} should be a property, not {type(prop)}"
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_metadata_has_optional_properties(self) -> None:
@@ -168,11 +170,15 @@ class TestPluginMetadataContract:
         """
         # description property exists
         assert hasattr(PluginMetadata, "description")
-        assert isinstance(inspect.getattr_static(PluginMetadata, "description"), property)
+        assert isinstance(
+            inspect.getattr_static(PluginMetadata, "description"), property
+        )
 
         # dependencies property exists
         assert hasattr(PluginMetadata, "dependencies")
-        assert isinstance(inspect.getattr_static(PluginMetadata, "dependencies"), property)
+        assert isinstance(
+            inspect.getattr_static(PluginMetadata, "dependencies"), property
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_metadata_has_lifecycle_methods(self) -> None:
@@ -226,9 +232,10 @@ class TestPluginMetadataContract:
         assert hints.get("return") is HealthStatus
         sig = inspect.signature(PluginMetadata.health_check)
         params = list(sig.parameters.keys())
-        assert params == ["self", "timeout"], (
-            f"health_check params should be ['self', 'timeout'], got {params}"
-        )
+        assert params == [
+            "self",
+            "timeout",
+        ], f"health_check params should be ['self', 'timeout'], got {params}"
 
 
 class TestPluginMetadataImplementation:
@@ -322,9 +329,9 @@ class TestPluginTypeContract:
         }
         actual_types = {member.name for member in PluginType}
 
-        assert required_types.issubset(actual_types), (
-            f"PluginType missing required types: {required_types - actual_types}"
-        )
+        assert required_types.issubset(
+            actual_types
+        ), f"PluginType missing required types: {required_types - actual_types}"
 
     @pytest.mark.requirement("FR-002")
     def test_plugin_type_entry_point_groups_are_stable(self) -> None:

@@ -321,7 +321,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         if tracer:
             span = tracer.start_span(
                 "infisical.get_secret",
-                attributes={_SPAN_SECRET_KEY: key, _SPAN_SECRET_PATH: self._config.secret_path},
+                attributes={
+                    _SPAN_SECRET_KEY: key,
+                    _SPAN_SECRET_PATH: self._config.secret_path,
+                },
             )
 
         try:
@@ -358,7 +361,9 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             if span:
                 span.end()
 
-    def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
+    def set_secret(
+        self, key: str, value: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         """Store a secret value.
 
         Creates the secret if it doesn't exist, or updates it if it does.
@@ -387,7 +392,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         if tracer:
             span = tracer.start_span(
                 "infisical.set_secret",
-                attributes={_SPAN_SECRET_KEY: key, _SPAN_SECRET_PATH: self._config.secret_path},
+                attributes={
+                    _SPAN_SECRET_KEY: key,
+                    _SPAN_SECRET_PATH: self._config.secret_path,
+                },
             )
 
         try:
@@ -520,7 +528,9 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             reason=str(e),
         ) from e
 
-    def _create_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
+    def _create_secret(
+        self, key: str, value: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         """Create a new secret in Infisical.
 
         Args:
@@ -545,7 +555,9 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
         self._client.createSecret(options)
 
-    def _update_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
+    def _update_secret(
+        self, key: str, value: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         """Update an existing secret in Infisical.
 
         Args:
@@ -588,7 +600,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         if tracer:
             span = tracer.start_span(
                 "infisical.delete_secret",
-                attributes={_SPAN_SECRET_KEY: key, _SPAN_SECRET_PATH: self._config.secret_path},
+                attributes={
+                    _SPAN_SECRET_KEY: key,
+                    _SPAN_SECRET_PATH: self._config.secret_path,
+                },
             )
 
         try:

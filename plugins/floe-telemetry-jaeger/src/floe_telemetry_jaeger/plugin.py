@@ -96,7 +96,9 @@ class JaegerTelemetryPlugin(TelemetryBackendPlugin):
             OTLP exporter configuration dictionary.
         """
         endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", self.DEFAULT_ENDPOINT)
-        insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() == "true"
+        insecure = (
+            os.environ.get("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() == "true"
+        )
 
         return {
             "exporter_type": "otlp",

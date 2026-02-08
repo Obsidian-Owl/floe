@@ -104,14 +104,18 @@ def _compare_values(
             elif key not in actual:
                 differences.append(f"{new_path}: missing field")
             else:
-                differences.extend(_compare_values(expected[key], actual[key], new_path))
+                differences.extend(
+                    _compare_values(expected[key], actual[key], new_path)
+                )
     elif isinstance(expected, list):
         if len(expected) != len(actual):
             differences.append(
                 f"{path}: list length mismatch (expected {len(expected)}, got {len(actual)})"
             )
         else:
-            for i, (exp_item, act_item) in enumerate(zip(expected, actual, strict=True)):
+            for i, (exp_item, act_item) in enumerate(
+                zip(expected, actual, strict=True)
+            ):
                 differences.extend(_compare_values(exp_item, act_item, f"{path}[{i}]"))
     elif expected != actual:
         differences.append(f"{path}: expected {expected!r}, got {actual!r}")

@@ -136,7 +136,9 @@ class TestExtractSecretPath:
         def my_func(self: Any, key: str) -> None:
             pass
 
-        result = _extract_secret_path(my_func, ("positional-key",), {"key": "kwarg-key"}, "key")
+        result = _extract_secret_path(
+            my_func, ("positional-key",), {"key": "kwarg-key"}, "key"
+        )
         assert result == "kwarg-key"
 
 

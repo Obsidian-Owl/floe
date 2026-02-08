@@ -58,7 +58,9 @@ class TestArtifactPullHelp:
 
         assert result.exit_code == 0
         assert "environment" in result.output.lower()
-        assert "verification" in result.output.lower() or "policy" in result.output.lower()
+        assert (
+            "verification" in result.output.lower() or "policy" in result.output.lower()
+        )
 
 
 class TestArtifactPullValidation:
@@ -80,7 +82,9 @@ class TestArtifactPullValidation:
     def test_pull_requires_tag_option(self) -> None:
         """Test that pull fails without --tag."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["artifact", "pull", "--registry", "oci://example.com/repo"])
+        result = runner.invoke(
+            cli, ["artifact", "pull", "--registry", "oci://example.com/repo"]
+        )
 
         assert result.exit_code != 0
 
@@ -94,10 +98,14 @@ class TestArtifactPullEnvironmentFlag:
 
     @pytest.mark.requirement("FR-009")
     @patch("floe_core.oci.OCIClient")
-    def test_pull_passes_environment_to_client(self, mock_client_class: MagicMock) -> None:
+    def test_pull_passes_environment_to_client(
+        self, mock_client_class: MagicMock
+    ) -> None:
         """Test that --environment flag is passed to OCIClient.pull()."""
         mock_client = MagicMock()
-        mock_client.pull.return_value = MagicMock(model_dump_json=MagicMock(return_value="{}"))
+        mock_client.pull.return_value = MagicMock(
+            model_dump_json=MagicMock(return_value="{}")
+        )
         mock_client_class.from_registry_config.return_value = mock_client
 
         runner = CliRunner()
@@ -123,7 +131,9 @@ class TestArtifactPullEnvironmentFlag:
     def test_pull_environment_from_env_var(self, mock_client_class: MagicMock) -> None:
         """Test that FLOE_ENVIRONMENT env var is used."""
         mock_client = MagicMock()
-        mock_client.pull.return_value = MagicMock(model_dump_json=MagicMock(return_value="{}"))
+        mock_client.pull.return_value = MagicMock(
+            model_dump_json=MagicMock(return_value="{}")
+        )
         mock_client_class.from_registry_config.return_value = mock_client
 
         runner = CliRunner()
@@ -148,7 +158,9 @@ class TestArtifactPullEnvironmentFlag:
     def test_pull_flag_overrides_env_var(self, mock_client_class: MagicMock) -> None:
         """Test that --environment flag takes precedence over env var."""
         mock_client = MagicMock()
-        mock_client.pull.return_value = MagicMock(model_dump_json=MagicMock(return_value="{}"))
+        mock_client.pull.return_value = MagicMock(
+            model_dump_json=MagicMock(return_value="{}")
+        )
         mock_client_class.from_registry_config.return_value = mock_client
 
         runner = CliRunner()
@@ -175,7 +187,9 @@ class TestArtifactPullEnvironmentFlag:
     def test_pull_without_environment(self, mock_client_class: MagicMock) -> None:
         """Test that pull works without environment (None)."""
         mock_client = MagicMock()
-        mock_client.pull.return_value = MagicMock(model_dump_json=MagicMock(return_value="{}"))
+        mock_client.pull.return_value = MagicMock(
+            model_dump_json=MagicMock(return_value="{}")
+        )
         mock_client_class.from_registry_config.return_value = mock_client
 
         runner = CliRunner()
@@ -204,7 +218,9 @@ class TestArtifactPullOutput:
 
     @pytest.mark.requirement("FR-043")
     @patch("floe_core.oci.OCIClient")
-    def test_pull_outputs_to_stdout_by_default(self, mock_client_class: MagicMock) -> None:
+    def test_pull_outputs_to_stdout_by_default(
+        self, mock_client_class: MagicMock
+    ) -> None:
         """Test that pull outputs JSON to stdout without --output."""
         mock_artifacts = MagicMock()
         mock_artifacts.model_dump_json.return_value = '{"test": "artifact"}'
@@ -230,7 +246,9 @@ class TestArtifactPullOutput:
 
     @pytest.mark.requirement("FR-043")
     @patch("floe_core.oci.OCIClient")
-    def test_pull_outputs_to_file_with_option(self, mock_client_class: MagicMock) -> None:
+    def test_pull_outputs_to_file_with_option(
+        self, mock_client_class: MagicMock
+    ) -> None:
         """Test that pull writes to file with --output."""
         mock_artifacts = MagicMock()
         mock_artifacts.model_dump_json.return_value = '{"test": "artifact"}'

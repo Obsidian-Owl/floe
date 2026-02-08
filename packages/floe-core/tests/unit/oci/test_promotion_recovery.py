@@ -99,7 +99,9 @@ class TestPromotionIdempotency:
         from floe_core.oci.errors import TagExistsError
 
         source_digest = TEST_DIGEST
-        existing_digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        existing_digest = (
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        )
 
         with (
             patch.object(controller, "_validate_transition"),
@@ -294,7 +296,9 @@ class TestPromotionRecordRecovery:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-004")
-    def test_promote_continues_if_record_storage_fails(self, controller: MagicMock) -> None:
+    def test_promote_continues_if_record_storage_fails(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() continues even if promotion record storage fails.
 
         ⚠️ TDD: This test WILL FAIL until T032a implements recovery logic.
@@ -337,7 +341,9 @@ class TestPromotionRecordRecovery:
             assert mock_store.call_count == 3
 
     @pytest.mark.requirement("8C-NFR-004")
-    def test_promote_records_partial_failure_in_result(self, controller: MagicMock) -> None:
+    def test_promote_records_partial_failure_in_result(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() records partial failures in the result.
 
         If record storage fails, the PromotionRecord should indicate

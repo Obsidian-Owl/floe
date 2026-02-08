@@ -211,9 +211,9 @@ class TestRetryPolicyJitter:
 
         # Base delay for attempt 0 is 1.0s
         # With ±25% jitter, delays should be in range [0.75, 1.25]
-        assert all(0.75 <= d <= 1.25 for d in delays), (
-            f"Delays out of range: min={min(delays)}, max={max(delays)}"
-        )
+        assert all(
+            0.75 <= d <= 1.25 for d in delays
+        ), f"Delays out of range: min={min(delays)}, max={max(delays)}"
 
         # There should be variance (not all same value)
         unique_delays = {round(d, 4) for d in delays}
@@ -599,7 +599,9 @@ class TestCustomRetryableExceptions:
     @pytest.mark.requirement("8A-FR-018")
     def test_should_retry_method(self) -> None:
         """Test should_retry correctly identifies retryable exceptions."""
-        policy = RetryPolicy(retryable_exceptions=(RegistryUnavailableError, ConnectionError))
+        policy = RetryPolicy(
+            retryable_exceptions=(RegistryUnavailableError, ConnectionError)
+        )
 
         assert policy.should_retry(RegistryUnavailableError("r", "x")) is True
         assert policy.should_retry(ConnectionError("x")) is True

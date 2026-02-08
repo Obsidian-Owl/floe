@@ -66,7 +66,9 @@ class TestK8sSecretsOperations(IntegrationTestBase):
             check=False,
         )
 
-    def _create_k8s_secret(self, name: str, namespace: str, data: dict[str, str]) -> None:
+    def _create_k8s_secret(
+        self, name: str, namespace: str, data: dict[str, str]
+    ) -> None:
         """Create a K8s Secret using kubectl."""
         # Encode data as base64
         literal_args = []
@@ -74,7 +76,8 @@ class TestK8sSecretsOperations(IntegrationTestBase):
             literal_args.extend(["--from-literal", f"{key}={value}"])
 
         subprocess.run(
-            ["kubectl", "create", "secret", "generic", name, "-n", namespace] + literal_args,
+            ["kubectl", "create", "secret", "generic", name, "-n", namespace]
+            + literal_args,
             capture_output=True,
             check=True,
         )
@@ -106,7 +109,15 @@ class TestK8sSecretsOperations(IntegrationTestBase):
     def _delete_k8s_secret(self, name: str, namespace: str) -> None:
         """Delete a K8s Secret using kubectl."""
         subprocess.run(
-            ["kubectl", "delete", "secret", name, "-n", namespace, "--ignore-not-found"],
+            [
+                "kubectl",
+                "delete",
+                "secret",
+                name,
+                "-n",
+                namespace,
+                "--ignore-not-found",
+            ],
             capture_output=True,
             check=False,
         )
@@ -296,7 +307,9 @@ class TestK8sSecretsOperations(IntegrationTestBase):
                 capture_output=True,
             )
 
-        config = K8sSecretsConfig(namespace=test_namespace, labels={"managed-by": label_value})
+        config = K8sSecretsConfig(
+            namespace=test_namespace, labels={"managed-by": label_value}
+        )
         plugin = K8sSecretsPlugin(config)
         plugin.startup()
 
@@ -344,7 +357,9 @@ class TestK8sSecretsOperations(IntegrationTestBase):
                 capture_output=True,
             )
 
-        config = K8sSecretsConfig(namespace=test_namespace, labels={"managed-by": label_value})
+        config = K8sSecretsConfig(
+            namespace=test_namespace, labels={"managed-by": label_value}
+        )
         plugin = K8sSecretsPlugin(config)
         plugin.startup()
 

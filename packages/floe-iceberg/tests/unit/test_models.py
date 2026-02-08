@@ -387,7 +387,9 @@ class TestIcebergTableManagerConfig:
     def test_frozen(self) -> None:
         """Test config is immutable (frozen)."""
         config = IcebergTableManagerConfig()
-        with pytest.raises(PydanticValidationError):  # ValidationError for frozen models
+        with pytest.raises(
+            PydanticValidationError
+        ):  # ValidationError for frozen models
             config.max_commit_retries = 5  # type: ignore[misc]
 
     @pytest.mark.requirement("FR-045")
@@ -587,9 +589,13 @@ class TestTableSchema:
 
         schema = TableSchema(
             fields=[
-                SchemaField(field_id=1, name="id", field_type=FieldType.LONG, required=True),
+                SchemaField(
+                    field_id=1, name="id", field_type=FieldType.LONG, required=True
+                ),
                 SchemaField(field_id=2, name="name", field_type=FieldType.STRING),
-                SchemaField(field_id=3, name="created_at", field_type=FieldType.TIMESTAMPTZ),
+                SchemaField(
+                    field_id=3, name="created_at", field_type=FieldType.TIMESTAMPTZ
+                ),
             ]
         )
         assert len(schema.fields) == 3
@@ -609,7 +615,9 @@ class TestTableSchema:
         """Test TableSchema is immutable."""
         from floe_iceberg.models import SchemaField, TableSchema
 
-        schema = TableSchema(fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)])
+        schema = TableSchema(
+            fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+        )
         with pytest.raises(PydanticValidationError):
             schema.fields = []  # type: ignore[misc]
 
@@ -833,7 +841,9 @@ class TestTableConfig:
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="order_date", field_type=FieldType.DATE),
+                    SchemaField(
+                        field_id=2, name="order_date", field_type=FieldType.DATE
+                    ),
                 ]
             ),
             partition_spec=PartitionSpec(
@@ -890,7 +900,9 @@ class TestTableConfig:
                 namespace="123invalid",
                 table_name="customers",
                 table_schema=TableSchema(
-                    fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+                    fields=[
+                        SchemaField(field_id=1, name="id", field_type=FieldType.LONG)
+                    ]
                 ),
             )
 
@@ -904,7 +916,9 @@ class TestTableConfig:
                 namespace="bronze",
                 table_name="_invalid",
                 table_schema=TableSchema(
-                    fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+                    fields=[
+                        SchemaField(field_id=1, name="id", field_type=FieldType.LONG)
+                    ]
                 ),
             )
 
@@ -933,7 +947,9 @@ class TestTableConfig:
                 namespace="bronze",
                 table_name="customers",
                 table_schema=TableSchema(
-                    fields=[SchemaField(field_id=1, name="id", field_type=FieldType.LONG)]
+                    fields=[
+                        SchemaField(field_id=1, name="id", field_type=FieldType.LONG)
+                    ]
                 ),
                 unknown="value",  # type: ignore[call-arg]
             )
@@ -956,13 +972,17 @@ class TestTableConfig:
         )
 
         # Schema has field_id=1, but partition references field_id=999
-        with pytest.raises(ValueError, match="source_field_id 999.*not found in schema"):
+        with pytest.raises(
+            ValueError, match="source_field_id 999.*not found in schema"
+        ):
             TableConfig(
                 namespace="bronze",
                 table_name="events",
                 table_schema=TableSchema(
                     fields=[
-                        SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
+                        SchemaField(
+                            field_id=1, name="event_date", field_type=FieldType.DATE
+                        ),
                     ]
                 ),
                 partition_spec=PartitionSpec(
@@ -994,14 +1014,22 @@ class TestTableConfig:
             TableSchema,
         )
 
-        with pytest.raises(ValueError, match="Duplicate partition field name.*date_part"):
+        with pytest.raises(
+            ValueError, match="Duplicate partition field name.*date_part"
+        ):
             TableConfig(
                 namespace="bronze",
                 table_name="events",
                 table_schema=TableSchema(
                     fields=[
-                        SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
-                        SchemaField(field_id=2, name="created_at", field_type=FieldType.TIMESTAMP),
+                        SchemaField(
+                            field_id=1, name="event_date", field_type=FieldType.DATE
+                        ),
+                        SchemaField(
+                            field_id=2,
+                            name="created_at",
+                            field_type=FieldType.TIMESTAMP,
+                        ),
                     ]
                 ),
                 partition_spec=PartitionSpec(
@@ -1043,8 +1071,12 @@ class TestTableConfig:
             table_name="events",
             table_schema=TableSchema(
                 fields=[
-                    SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
-                    SchemaField(field_id=2, name="customer_id", field_type=FieldType.LONG),
+                    SchemaField(
+                        field_id=1, name="event_date", field_type=FieldType.DATE
+                    ),
+                    SchemaField(
+                        field_id=2, name="customer_id", field_type=FieldType.LONG
+                    ),
                 ]
             ),
             partition_spec=PartitionSpec(
@@ -1218,7 +1250,9 @@ class TestSchemaEvolution:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=10, name="email", field_type=FieldType.STRING
+                    ),
                 )
             ]
         )
@@ -1232,7 +1266,9 @@ class TestSchemaEvolution:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=10, name="email", field_type=FieldType.STRING
+                    ),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.RENAME_COLUMN,
@@ -1258,7 +1294,9 @@ class TestSchemaEvolution:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=10, name="test", field_type=FieldType.STRING
+                    ),
                 )
             ]
         )
@@ -1285,7 +1323,9 @@ class TestSchemaEvolution:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=10, name="new_field", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=10, name="new_field", field_type=FieldType.STRING
+                    ),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.DELETE_COLUMN,
@@ -1316,7 +1356,9 @@ class TestSchemaEvolution:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=10, name="test", field_type=FieldType.STRING
+                    ),
                 )
             ]
         )
@@ -1331,7 +1373,9 @@ class TestSchemaEvolution:
                 changes=[
                     SchemaChange(
                         change_type=SchemaChangeType.ADD_COLUMN,
-                        field=SchemaField(field_id=10, name="test", field_type=FieldType.STRING),
+                        field=SchemaField(
+                            field_id=10, name="test", field_type=FieldType.STRING
+                        ),
                     )
                 ],
                 unknown="value",  # type: ignore[call-arg]
@@ -1344,7 +1388,9 @@ class TestSchemaEvolution:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=10, name="email", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=10, name="email", field_type=FieldType.STRING
+                    ),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.RENAME_COLUMN,
@@ -1557,7 +1603,9 @@ class TestWriteConfig:
     @pytest.mark.requirement("FR-027")
     def test_upsert_requires_join_columns(self) -> None:
         """Test UPSERT mode requires join_columns."""
-        with pytest.raises(ValueError, match="join_columns is required when mode is UPSERT"):
+        with pytest.raises(
+            ValueError, match="join_columns is required when mode is UPSERT"
+        ):
             WriteConfig(mode=WriteMode.UPSERT)
 
     @pytest.mark.requirement("FR-027")
@@ -1573,7 +1621,9 @@ class TestWriteConfig:
     @pytest.mark.requirement("FR-027")
     def test_upsert_empty_join_columns_fails(self) -> None:
         """Test UPSERT mode with empty join_columns fails."""
-        with pytest.raises(ValueError, match="join_columns is required when mode is UPSERT"):
+        with pytest.raises(
+            ValueError, match="join_columns is required when mode is UPSERT"
+        ):
             WriteConfig(mode=WriteMode.UPSERT, join_columns=[])
 
     @pytest.mark.requirement("FR-005")
@@ -1796,7 +1846,9 @@ class TestTableSchemaToPyIceberg:
         schema = TableSchema(
             fields=[
                 SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                SchemaField(field_id=2, name="name", field_type=FieldType.STRING, required=False),
+                SchemaField(
+                    field_id=2, name="name", field_type=FieldType.STRING, required=False
+                ),
             ]
         )
 
@@ -1833,7 +1885,9 @@ class TestTableSchemaToPyIceberg:
         for i, (field_type, expected_py_type) in enumerate(type_test_cases):
             schema = TableSchema(
                 fields=[
-                    SchemaField(field_id=i + 1, name=f"field_{i}", field_type=field_type),
+                    SchemaField(
+                        field_id=i + 1, name=f"field_{i}", field_type=field_type
+                    ),
                 ]
             )
             py_schema = schema.to_pyiceberg_schema()
@@ -1922,8 +1976,12 @@ class TestPartitionSpecToPyIceberg:
 
         return Schema(
             NestedField(field_id=1, name="id", field_type=LongType(), required=True),
-            NestedField(field_id=2, name="region", field_type=StringType(), required=True),
-            NestedField(field_id=3, name="event_time", field_type=TimestampType(), required=True),
+            NestedField(
+                field_id=2, name="region", field_type=StringType(), required=True
+            ),
+            NestedField(
+                field_id=3, name="event_time", field_type=TimestampType(), required=True
+            ),
         )
 
     @pytest.mark.requirement("FR-014")

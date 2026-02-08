@@ -192,7 +192,10 @@ class TestCatalogRegistrarSoftFailure:
         # Should return failure but not raise exception
         assert result.success is False
         assert result.warning is not None
-        assert "unreachable" in result.warning.lower() or "failed" in result.warning.lower()
+        assert (
+            "unreachable" in result.warning.lower()
+            or "failed" in result.warning.lower()
+        )
 
     @pytest.mark.requirement("3C-FR-028")
     def test_catalog_timeout_returns_soft_failure(self) -> None:
@@ -238,7 +241,9 @@ class TestCatalogRegistrarSoftFailure:
 
         assert result.success is False
         assert result.warning is not None
-        assert "permission" in result.warning.lower() or "denied" in result.warning.lower()
+        assert (
+            "permission" in result.warning.lower() or "denied" in result.warning.lower()
+        )
 
     @pytest.mark.requirement("3C-FR-028")
     def test_soft_failure_does_not_block_validation(self) -> None:
@@ -246,7 +251,9 @@ class TestCatalogRegistrarSoftFailure:
         from floe_core.enforcement.validators.data_contracts import CatalogRegistrar
 
         mock_catalog = MagicMock()
-        mock_catalog.set_namespace_properties = MagicMock(side_effect=Exception("Unexpected error"))
+        mock_catalog.set_namespace_properties = MagicMock(
+            side_effect=Exception("Unexpected error")
+        )
 
         registrar = CatalogRegistrar(catalog_plugin=mock_catalog)
 
@@ -356,7 +363,9 @@ schema:
             mock_registrar.register_contract.assert_called_once()
 
     @pytest.mark.requirement("3C-FR-028")
-    def test_validator_returns_warning_on_registration_failure(self, tmp_path: Path) -> None:
+    def test_validator_returns_warning_on_registration_failure(
+        self, tmp_path: Path
+    ) -> None:
         """Test that validation succeeds with warning if registration fails."""
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 

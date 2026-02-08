@@ -23,7 +23,14 @@ import yaml
 MIN_KUBESEC_SCORE = 7
 
 # Workload kinds to scan
-WORKLOAD_KINDS: set[str] = {"Deployment", "StatefulSet", "DaemonSet", "Pod", "Job", "CronJob"}
+WORKLOAD_KINDS: set[str] = {
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "Pod",
+    "Job",
+    "CronJob",
+}
 
 
 def render_helm_templates(
@@ -40,7 +47,13 @@ def render_helm_templates(
     """
     # NOTE: --skip-schema-validation required because Dagster subchart
     # references external JSON schema URL that returns 404
-    cmd = ["helm", "template", "--skip-schema-validation", "test-release", str(chart_path)]
+    cmd = [
+        "helm",
+        "template",
+        "--skip-schema-validation",
+        "test-release",
+        str(chart_path),
+    ]
     if values_path:
         cmd.extend(["--values", str(values_path)])
 
@@ -155,7 +168,9 @@ class TestKubesecScanning:
         Validates that all Deployments, StatefulSets, DaemonSets, and Pods
         in the rendered templates score at least MIN_KUBESEC_SCORE.
         """
-        workloads = [doc for doc in floe_platform_templates if doc.get("kind") in WORKLOAD_KINDS]
+        workloads = [
+            doc for doc in floe_platform_templates if doc.get("kind") in WORKLOAD_KINDS
+        ]
 
         if not workloads:
             pytest.skip("No workloads found in floe-platform chart")
@@ -174,21 +189,30 @@ class TestKubesecScanning:
 
                 failure_msg = f"{kind}/{name}: score={score} (min={MIN_KUBESEC_SCORE})"
                 if critical:
-                    failure_msg += f"\n  Critical: {[c.get('selector') for c in critical]}"
+                    failure_msg += (
+                        f"\n  Critical: {[c.get('selector') for c in critical]}"
+                    )
                 if advise:
-                    failure_msg += f"\n  Advise: {[a.get('selector') for a in advise[:3]]}"
+                    failure_msg += (
+                        f"\n  Advise: {[a.get('selector') for a in advise[:3]]}"
+                    )
 
                 failures.append(failure_msg)
 
         if failures:
             pytest.fail(
-                f"Security scan failed for {len(failures)} workload(s):\n" + "\n".join(failures)
+                f"Security scan failed for {len(failures)} workload(s):\n"
+                + "\n".join(failures)
             )
 
     @pytest.mark.requirement("SC-007")
-    def test_floe_jobs_security_score(self, floe_jobs_templates: list[dict[str, Any]]) -> None:
+    def test_floe_jobs_security_score(
+        self, floe_jobs_templates: list[dict[str, Any]]
+    ) -> None:
         """Test that floe-jobs workloads meet minimum kubesec score."""
-        workloads = [doc for doc in floe_jobs_templates if doc.get("kind") in WORKLOAD_KINDS]
+        workloads = [
+            doc for doc in floe_jobs_templates if doc.get("kind") in WORKLOAD_KINDS
+        ]
 
         if not workloads:
             pytest.skip("No workloads found in floe-jobs chart")
@@ -205,7 +229,9 @@ class TestKubesecScanning:
                 failures.append(f"{kind}/{name}: score={score}")
 
         if failures:
-            pytest.fail(f"Security scan failed for {len(failures)} workload(s): {failures}")
+            pytest.fail(
+                f"Security scan failed for {len(failures)} workload(s): {failures}"
+            )
 
 
 @pytest.mark.requirement("9b-FR-036")
@@ -242,7 +268,9 @@ class TestPodSecurityStandards:
                 container_name = container.get("name", "unknown")
                 container_security = container.get("securityContext", {})
 
-                container_non_root = container_security.get("runAsNonRoot", run_as_non_root)
+                container_non_root = container_security.get(
+                    "runAsNonRoot", run_as_non_root
+                )
                 container_user = container_security.get("runAsUser", run_as_user)
 
                 if not container_non_root and container_user == 0:
@@ -250,7 +278,8 @@ class TestPodSecurityStandards:
 
         if violations:
             pytest.fail(
-                f"Found {len(violations)} container(s) running as root:\n" + "\n".join(violations)
+                f"Found {len(violations)} container(s) running as root:\n"
+                + "\n".join(violations)
             )
 
     @pytest.mark.requirement("9b-FR-036")
@@ -278,7 +307,9 @@ class TestPodSecurityStandards:
                 drop = capabilities.get("drop", [])
 
                 if "ALL" not in drop:
-                    violations.append(f"{name}/{container_name}: does not drop ALL capabilities")
+                    violations.append(
+                        f"{name}/{container_name}: does not drop ALL capabilities"
+                    )
 
         if violations:
             pytest.fail(

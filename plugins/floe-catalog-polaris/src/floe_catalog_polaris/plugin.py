@@ -251,14 +251,18 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 # When enabled, Polaris returns vended credentials in table load response
                 # See: https://iceberg.apache.org/docs/latest/rest-catalog/#credential-vending
                 if self._config.credential_vending_enabled:
-                    catalog_config["header.X-Iceberg-Access-Delegation"] = "vended-credentials"
+                    catalog_config["header.X-Iceberg-Access-Delegation"] = (
+                        "vended-credentials"
+                    )
 
                 # Merge any additional configuration from the config argument
                 for key, value in config.items():
                     if key not in ("scope",):  # Already handled above
                         catalog_config[key] = value
 
-                log.debug("catalog_config_built", config_keys=list(catalog_config.keys()))
+                log.debug(
+                    "catalog_config_built", config_keys=list(catalog_config.keys())
+                )
 
                 # Clean up existing connection if reconnecting
                 if self._catalog is not None:
@@ -342,7 +346,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # Use empty dict if no properties provided
@@ -415,7 +421,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # PyIceberg returns list of tuples, e.g., [("bronze",), ("silver",)]
@@ -489,7 +497,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # Drop the namespace via PyIceberg catalog
@@ -562,7 +572,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # Build kwargs for PyIceberg create_table
@@ -632,7 +644,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # PyIceberg returns list of tuples: [(namespace, table_name), ...]
@@ -700,7 +714,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # Drop the table via PyIceberg catalog
@@ -807,7 +823,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 if self._catalog is None:
                     raise CatalogUnavailableError(
                         catalog_uri=self._config.uri,
-                        cause=ValueError("Catalog not connected. Call connect() first."),
+                        cause=ValueError(
+                            "Catalog not connected. Call connect() first."
+                        ),
                     )
 
                 # Load the table - PyIceberg will request vended credentials
@@ -966,7 +984,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
         if timeout is None:
             timeout = 1.0
         if not (0.1 <= timeout <= 10.0):
-            raise ValueError(f"timeout must be between 0.1 and 10.0 seconds, got {timeout}")
+            raise ValueError(
+                f"timeout must be between 0.1 and 10.0 seconds, got {timeout}"
+            )
 
         log = logger.bind(operation="health_check", timeout=timeout)
         checked_at = datetime.now(timezone.utc)
@@ -1028,4 +1048,6 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     span.set_attribute("health.response_time_ms", elapsed_ms)
                     set_error_attributes(span, e)
 
-                return self._build_error_status(error_message, elapsed_ms, checked_at, timeout)
+                return self._build_error_status(
+                    error_message, elapsed_ms, checked_at, timeout
+                )

@@ -103,7 +103,12 @@ async def test_quality_above_threshold() -> None:
     All expectations score >= threshold → overall score >= threshold → PASS.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
         {"name": "uniqueness", "type": "uniqueness", "threshold": 0.98, "weight": 1.0},
     ]
     contract = _make_contract(expectations=expectations, threshold=0.8)
@@ -129,7 +134,12 @@ async def test_quality_below_threshold() -> None:
     Score below threshold → FAIL with violation event.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
     ]
     contract = _make_contract(expectations=expectations, threshold=0.8)
     config = MonitoringConfig()
@@ -151,7 +161,9 @@ async def test_quality_below_threshold() -> None:
     assert result.violation.actual_value is not None
     assert "0.5" in result.violation.actual_value  # Score appears in actual value
     assert result.violation.expected_value is not None
-    assert "0.8" in result.violation.expected_value  # Threshold appears in expected value
+    assert (
+        "0.8" in result.violation.expected_value
+    )  # Threshold appears in expected value
 
 
 @pytest.mark.requirement("3D-FR-016")
@@ -162,7 +174,12 @@ async def test_quality_multiple_expectations() -> None:
     Overall score determines outcome, not individual expectation pass/fail.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
         {"name": "uniqueness", "type": "uniqueness", "threshold": 0.98, "weight": 1.0},
         {"name": "validity", "type": "validity", "threshold": 0.90, "weight": 1.0},
     ]
@@ -194,7 +211,12 @@ async def test_quality_weighted_score() -> None:
     Expectations with higher weights contribute more to overall score.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 2.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 2.0,
+        },
         {"name": "uniqueness", "type": "uniqueness", "threshold": 0.98, "weight": 1.0},
     ]
     contract = _make_contract(expectations=expectations, threshold=0.8)
@@ -243,7 +265,12 @@ async def test_quality_plugin_unavailable() -> None:
     No quality_plugin → SKIPPED (not ERROR).
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
     ]
     contract = _make_contract(expectations=expectations, threshold=0.8)
     config = MonitoringConfig()
@@ -267,7 +294,12 @@ async def test_quality_violation_event_fields() -> None:
     message, expected_value, actual_value, timestamp, check_duration_seconds.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
     ]
     contract = _make_contract(expectations=expectations, threshold=0.9)
     config = MonitoringConfig()
@@ -303,7 +335,12 @@ async def test_quality_empty_results() -> None:
     Empty results (no expectations evaluated) → vacuously true → PASS.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
     ]
     contract = _make_contract(expectations=expectations, threshold=0.8)
     config = MonitoringConfig()
@@ -327,7 +364,12 @@ async def test_quality_all_fail() -> None:
     All expectations score 0.0 → overall score 0.0 → far below threshold → CRITICAL.
     """
     expectations = [
-        {"name": "completeness", "type": "completeness", "threshold": 0.95, "weight": 1.0},
+        {
+            "name": "completeness",
+            "type": "completeness",
+            "threshold": 0.95,
+            "weight": 1.0,
+        },
         {"name": "uniqueness", "type": "uniqueness", "threshold": 0.98, "weight": 1.0},
     ]
     contract = _make_contract(expectations=expectations, threshold=0.8)

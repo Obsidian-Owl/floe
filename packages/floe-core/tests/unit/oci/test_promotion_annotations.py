@@ -69,7 +69,9 @@ class TestAnnotationSizeLimitHandling:
         )
 
     @pytest.mark.requirement("8C-NFR-005")
-    def test_promote_handles_large_promotion_record_gracefully(self, controller: MagicMock) -> None:
+    def test_promote_handles_large_promotion_record_gracefully(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() handles PromotionRecord exceeding 64KB gracefully.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -182,8 +184,12 @@ class TestAnnotationSizeLimitHandling:
             assert len(serialized.encode("utf-8")) < OCI_ANNOTATION_SIZE_LIMIT
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(reason="T032a: Annotation truncation warning logging not yet implemented")
-    def test_promote_logs_warning_when_truncation_occurs(self, controller: MagicMock) -> None:
+    @pytest.mark.xfail(
+        reason="T032a: Annotation truncation warning logging not yet implemented"
+    )
+    def test_promote_logs_warning_when_truncation_occurs(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() logs warning when record truncation occurs.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -281,7 +287,9 @@ class TestAnnotationSizeLimitHandling:
 
             # Error message must be preserved
             stored_gate = stored_record.gate_results[0]
-            assert stored_gate.error == "Test suite had 3 flaky tests but passed on retry"
+            assert (
+                stored_gate.error == "Test suite had 3 flaky tests but passed on retry"
+            )
 
     @pytest.mark.requirement("8C-NFR-005")
     @pytest.mark.xfail(
@@ -342,7 +350,9 @@ class TestAnnotationSizeLimitHandling:
     @pytest.mark.xfail(
         reason="T032a: TEST_SUITE gate not in PromotionGate enum, truncation logic incomplete"
     )
-    def test_promote_handles_multiple_large_gates_efficiently(self, controller: MagicMock) -> None:
+    def test_promote_handles_multiple_large_gates_efficiently(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() handles multiple large gate results efficiently.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.

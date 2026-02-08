@@ -53,7 +53,9 @@ class DbtLineageExtractor:
         'analytics.public.customers'
     """
 
-    def __init__(self, manifest: dict[str, Any], default_namespace: str = "default") -> None:
+    def __init__(
+        self, manifest: dict[str, Any], default_namespace: str = "default"
+    ) -> None:
         """Initialize the dbt lineage extractor.
 
         Args:
@@ -63,7 +65,9 @@ class DbtLineageExtractor:
         self.manifest = manifest
         self.default_namespace = default_namespace
 
-    def extract(self, context: Any) -> tuple[list[LineageDataset], list[LineageDataset]]:
+    def extract(
+        self, context: Any
+    ) -> tuple[list[LineageDataset], list[LineageDataset]]:
         """Extract lineage information from execution context.
 
         Implements the LineageExtractor protocol. For dbt, the context is
@@ -83,7 +87,9 @@ class DbtLineageExtractor:
         node_uid = str(context)
         return self.extract_model(node_uid)
 
-    def extract_model(self, node_uid: str) -> tuple[list[LineageDataset], list[LineageDataset]]:
+    def extract_model(
+        self, node_uid: str
+    ) -> tuple[list[LineageDataset], list[LineageDataset]]:
         """Extract lineage for a dbt model node.
 
         Resolves input datasets from parent_map (preferred) or depends_on.nodes,
@@ -233,7 +239,9 @@ class DbtLineageExtractor:
 
         return datasets
 
-    def extract_all_models(self) -> dict[str, tuple[list[LineageDataset], list[LineageDataset]]]:
+    def extract_all_models(
+        self,
+    ) -> dict[str, tuple[list[LineageDataset], list[LineageDataset]]]:
         """Extract lineage for all model nodes in the manifest.
 
         Returns:
@@ -302,8 +310,10 @@ class DbtLineageExtractor:
 
                 # Add column lineage facet if upstream columns available
                 if upstream_columns:
-                    facets["columnLineage"] = ColumnLineageFacetBuilder.from_dbt_columns(
-                        columns, upstream_columns
+                    facets["columnLineage"] = (
+                        ColumnLineageFacetBuilder.from_dbt_columns(
+                            columns, upstream_columns
+                        )
                     )
 
         return LineageDataset(

@@ -69,7 +69,9 @@ class TestDagsterCrossNamespaceAccess:
         dagster_binding = RoleBindingConfig(
             name="floe-dagster-job-creator-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-job-creator-role",
             allowed_subject_namespaces=["floe-platform"],
         )
@@ -102,13 +104,19 @@ class TestDagsterCrossNamespaceAccess:
             RoleBindingConfig(
                 name="floe-rogue-binding",
                 namespace="floe-jobs",
-                subjects=[RoleBindingSubject(name="floe-rogue-sa", namespace="floe-sales-domain")],
+                subjects=[
+                    RoleBindingSubject(
+                        name="floe-rogue-sa", namespace="floe-sales-domain"
+                    )
+                ],
                 role_name="floe-job-creator-role",
                 allowed_subject_namespaces=["floe-platform"],
             )
 
     @pytest.mark.requirement("FR-012")
-    def test_cross_namespace_subjects_all_have_namespace(self, plugin: K8sRBACPluginType) -> None:
+    def test_cross_namespace_subjects_all_have_namespace(
+        self, plugin: K8sRBACPluginType
+    ) -> None:
         """Test all cross-namespace subjects include their namespace."""
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
@@ -199,7 +207,9 @@ class TestCrossNamespaceManifestGeneration:
         dagster_binding = RoleBindingConfig(
             name="floe-dagster-job-creator-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-job-creator-role",
             allowed_subject_namespaces=["floe-platform"],
         )
@@ -214,7 +224,9 @@ class TestCrossNamespaceManifestGeneration:
         # Verify namespaces
         assert platform_manifest["metadata"]["name"] == "floe-platform"
         assert (
-            platform_manifest["metadata"]["labels"]["pod-security.kubernetes.io/enforce"]
+            platform_manifest["metadata"]["labels"][
+                "pod-security.kubernetes.io/enforce"
+            ]
             == "baseline"
         )
         assert jobs_manifest["metadata"]["name"] == "floe-jobs"
@@ -235,7 +247,9 @@ class TestCrossNamespaceManifestGeneration:
         assert binding_manifest["subjects"][0]["namespace"] == "floe-platform"
 
     @pytest.mark.requirement("FR-023")
-    def test_yaml_serializable_cross_namespace_stack(self, plugin: K8sRBACPluginType) -> None:
+    def test_yaml_serializable_cross_namespace_stack(
+        self, plugin: K8sRBACPluginType
+    ) -> None:
         """Test all cross-namespace manifests are YAML serializable."""
         import yaml
         from floe_core.schemas.rbac import (
@@ -259,7 +273,9 @@ class TestCrossNamespaceManifestGeneration:
         binding = RoleBindingConfig(
             name="floe-dagster-viewer-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-job-viewer-role",
             allowed_subject_namespaces=["floe-platform"],
         )
@@ -281,7 +297,9 @@ class TestCrossNamespaceManifestGeneration:
         assert "namespace: floe-jobs" in binding_yaml  # Binding namespace
 
     @pytest.mark.requirement("FR-023")
-    def test_yaml_roundtrip_preserves_cross_namespace(self, plugin: K8sRBACPluginType) -> None:
+    def test_yaml_roundtrip_preserves_cross_namespace(
+        self, plugin: K8sRBACPluginType
+    ) -> None:
         """Test YAML roundtrip preserves cross-namespace structure."""
         import yaml
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject

@@ -123,7 +123,10 @@ class SchemaDriftCheck(BaseCheck):
                     {
                         "column": col_name,
                         "drift_type": "column_removed",
-                        "expected": f"{expected_map[col_name]['type']} (nullable={expected_map[col_name]['nullable']})",
+                        "expected": (
+                            f"{expected_map[col_name]['type']} "
+                            f"(nullable={expected_map[col_name]['nullable']})"
+                        ),
                         "actual": "MISSING",
                         "severity": ViolationSeverity.CRITICAL,
                     }
@@ -137,7 +140,10 @@ class SchemaDriftCheck(BaseCheck):
                         "column": col_name,
                         "drift_type": "column_added",
                         "expected": "NOT_DEFINED",
-                        "actual": f"{actual_map[col_name]['type']} (nullable={actual_map[col_name]['nullable']})",
+                        "actual": (
+                            f"{actual_map[col_name]['type']} "
+                            f"(nullable={actual_map[col_name]['nullable']})"
+                        ),
                         "severity": ViolationSeverity.WARNING,
                     }
                 )
@@ -204,9 +210,8 @@ class SchemaDriftCheck(BaseCheck):
 
         # --- Build violation event ---
         drift_count = len(drifts)
-        message = (
-            f"Schema drift detected: {drift_count} drift{'s' if drift_count != 1 else ''} found"
-        )
+        plural = "s" if drift_count != 1 else ""
+        message = f"Schema drift detected: {drift_count} drift{plural} found"
 
         # Build summary for expected/actual values
         expected_summary = f"{len(expected_map)} columns defined"

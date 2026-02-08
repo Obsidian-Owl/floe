@@ -120,7 +120,9 @@ def _get_validation_duration_histogram() -> Histogram:
             description="Duration of compute connection validation in milliseconds",
             unit="ms",
         )
-        logger.debug("observability.histogram_created", name="floe.compute.validation_duration")
+        logger.debug(
+            "observability.histogram_created", name="floe.compute.validation_duration"
+        )
 
     return _validation_duration_histogram
 
@@ -142,7 +144,9 @@ def _get_validation_errors_counter() -> Counter:
             description="Count of compute connection validation errors",
             unit="{errors}",
         )
-        logger.debug("observability.counter_created", name="floe.compute.validation_errors")
+        logger.debug(
+            "observability.counter_created", name="floe.compute.validation_errors"
+        )
 
     return _validation_errors_counter
 

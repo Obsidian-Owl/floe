@@ -261,7 +261,9 @@ class TestPolarisCatalogPluginConfigSchema:
         assert callable(plugin.get_config_schema)
 
     @pytest.mark.requirement("FR-006")
-    def test_config_schema_returns_polaris_config_class(self, plugin: CatalogPlugin) -> None:
+    def test_config_schema_returns_polaris_config_class(
+        self, plugin: CatalogPlugin
+    ) -> None:
         """Test get_config_schema() returns PolarisCatalogConfig class."""
         from pydantic import BaseModel
 
@@ -272,7 +274,9 @@ class TestPolarisCatalogPluginConfigSchema:
         assert issubclass(schema, BaseModel)
 
     @pytest.mark.requirement("FR-006")
-    def test_config_schema_is_polaris_catalog_config(self, plugin: CatalogPlugin) -> None:
+    def test_config_schema_is_polaris_catalog_config(
+        self, plugin: CatalogPlugin
+    ) -> None:
         """Test get_config_schema() returns PolarisCatalogConfig specifically."""
         schema = plugin.get_config_schema()
 
@@ -351,7 +355,9 @@ class TestPolarisCatalogPluginConnect:
             plugin.connect({})
 
             config_kwargs = mock_load.call_args[1]
-            assert config_kwargs["oauth2-server-uri"] == ("https://auth.example.com/oauth/token")
+            assert config_kwargs["oauth2-server-uri"] == (
+                "https://auth.example.com/oauth/token"
+            )
 
     @pytest.mark.requirement("FR-009")
     def test_connect_accepts_scope_override(self, plugin: CatalogPlugin) -> None:
@@ -394,7 +400,9 @@ class TestPolarisCatalogPluginConnect:
         plugin = PolarisCatalogPlugin(config=config)
         mock_catalog = MagicMock()
 
-        with patch("floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog):
+        with patch(
+            "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+        ):
             plugin.connect({})
 
             # Access private attribute to verify storage
@@ -420,7 +428,9 @@ class TestPolarisCatalogPluginConnect:
             plugin.connect({})
 
             config_kwargs = mock_load.call_args[1]
-            assert config_kwargs.get("header.X-Iceberg-Access-Delegation") == ("vended-credentials")
+            assert config_kwargs.get("header.X-Iceberg-Access-Delegation") == (
+                "vended-credentials"
+            )
 
     @pytest.mark.requirement("FR-058")
     def test_connect_omits_access_delegation_header_when_disabled(self) -> None:
@@ -482,7 +492,9 @@ class TestPolarisCatalogPluginTracing:
         mock_tracer = MagicMock()
 
         with (
-            patch("floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog),
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
             patch("floe_catalog_polaris.plugin.get_tracer", return_value=mock_tracer),
             patch("floe_catalog_polaris.plugin.catalog_span") as mock_catalog_span,
         ):
@@ -507,7 +519,9 @@ class TestPolarisCatalogPluginTracing:
         mock_tracer = MagicMock()
 
         with (
-            patch("floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog),
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
             patch("floe_catalog_polaris.plugin.get_tracer", return_value=mock_tracer),
             patch("floe_catalog_polaris.plugin.catalog_span") as mock_catalog_span,
         ):
@@ -519,11 +533,15 @@ class TestPolarisCatalogPluginTracing:
             # Verify span attributes
             call_kwargs = mock_catalog_span.call_args[1]
             assert call_kwargs["catalog_name"] == "polaris"
-            assert call_kwargs["catalog_uri"] == "https://polaris.example.com/api/catalog"
+            assert (
+                call_kwargs["catalog_uri"] == "https://polaris.example.com/api/catalog"
+            )
             assert call_kwargs["warehouse"] == "test_warehouse"
 
     @pytest.mark.requirement("FR-031")
-    def test_connect_sets_error_attributes_on_failure(self, plugin: CatalogPlugin) -> None:
+    def test_connect_sets_error_attributes_on_failure(
+        self, plugin: CatalogPlugin
+    ) -> None:
         """Test connect() sets error attributes on span when connection fails."""
         from unittest.mock import MagicMock, patch
 
@@ -571,7 +589,9 @@ class TestPolarisCatalogPluginLogging:
         mock_logger = MagicMock()
 
         with (
-            patch("floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog),
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
             patch("floe_catalog_polaris.plugin.logger") as patched_logger,
         ):
             patched_logger.bind.return_value = mock_logger
@@ -596,7 +616,9 @@ class TestPolarisCatalogPluginLogging:
         mock_logger = MagicMock()
 
         with (
-            patch("floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog),
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
             patch("floe_catalog_polaris.plugin.logger") as patched_logger,
         ):
             patched_logger.bind.return_value = mock_logger
@@ -650,7 +672,9 @@ class TestPolarisCatalogPluginLogging:
         mock_bound = MockBoundLogger()
 
         with (
-            patch("floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog),
+            patch(
+                "floe_catalog_polaris.plugin.load_catalog", return_value=mock_catalog
+            ),
             patch("floe_catalog_polaris.plugin.logger") as patched_logger,
         ):
             patched_logger.bind.return_value = mock_bound

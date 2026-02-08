@@ -86,7 +86,9 @@ class TestCreatePipeline:
             dlt_plugin.create_pipeline(config)
 
     @pytest.mark.requirement("4F-FR-013")
-    def test_create_pipeline_empty_destination_raises(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_create_pipeline_empty_destination_raises(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test create_pipeline raises error for empty destination_table.
 
         Given an IngestionConfig with empty destination_table, when
@@ -98,7 +100,9 @@ class TestCreatePipeline:
             destination_table="",  # Empty destination
         )
 
-        with pytest.raises(PipelineConfigurationError, match="destination_table.*required"):
+        with pytest.raises(
+            PipelineConfigurationError, match="destination_table.*required"
+        ):
             dlt_plugin.create_pipeline(config)
 
     @pytest.mark.requirement("4F-FR-014")
@@ -152,7 +156,9 @@ class TestRunPipeline:
         assert result.duration_seconds >= 0
 
     @pytest.mark.requirement("4F-FR-017")
-    def test_run_failed_returns_false_success(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_failed_returns_false_success(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run returns success=False when pipeline fails.
 
         Given a pipeline that fails (mock), run returns
@@ -168,7 +174,9 @@ class TestRunPipeline:
         assert "Pipeline execution failed" in result.errors[0]
 
     @pytest.mark.requirement("4F-FR-018")
-    def test_run_empty_source_returns_zero_rows(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_empty_source_returns_zero_rows(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run returns zero rows for empty source data.
 
         Given a pipeline with empty source data, run returns
@@ -227,7 +235,9 @@ class TestRunPipeline:
         assert call_kwargs["write_disposition"] == "append"
 
     @pytest.mark.requirement("4F-FR-023")
-    def test_run_replace_write_disposition(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_replace_write_disposition(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run passes write_disposition='replace' to pipeline.run().
 
         Given write_disposition="replace" kwarg, when run() is called,
@@ -284,7 +294,9 @@ class TestRunPipeline:
         assert call_kwargs["table_name"] == "bronze.raw_data"
 
     @pytest.mark.requirement("4F-FR-031")
-    def test_run_passes_schema_contract_evolve(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_passes_schema_contract_evolve(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run passes schema_contract dict to pipeline.run() for evolve.
 
         Given schema_contract="evolve" kwarg, when run() is called, then
@@ -312,7 +324,9 @@ class TestRunPipeline:
         }
 
     @pytest.mark.requirement("4F-FR-032")
-    def test_run_passes_schema_contract_freeze(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_passes_schema_contract_freeze(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run passes schema_contract dict to pipeline.run() for freeze.
 
         Given schema_contract="freeze" kwarg, when run() is called, then
@@ -340,7 +354,9 @@ class TestRunPipeline:
         }
 
     @pytest.mark.requirement("4F-FR-033")
-    def test_run_passes_schema_contract_discard_value(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_passes_schema_contract_discard_value(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run passes schema_contract dict to pipeline.run() for discard_value.
 
         Given schema_contract="discard_value" kwarg, when run() is called, then
@@ -368,7 +384,9 @@ class TestRunPipeline:
         }
 
     @pytest.mark.requirement("4F-FR-035")
-    def test_run_schema_contract_violation_raises(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_schema_contract_violation_raises(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run returns failure with SchemaContractViolation info.
 
         Given pipeline.run() raises an exception with "schema" and "contract"
@@ -394,7 +412,9 @@ class TestRunPipeline:
         assert "schema contract violation" in result.errors[0].lower()
 
     @pytest.mark.requirement("4F-FR-034")
-    def test_run_default_schema_contract_is_evolve(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_default_schema_contract_is_evolve(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run uses 'evolve' as default when no schema_contract kwarg passed.
 
         Given no schema_contract kwarg, when run() is called, then
@@ -539,7 +559,9 @@ class TestIncrementalLoading:
     """Unit tests for incremental loading support (T045)."""
 
     @pytest.mark.requirement("4F-FR-038")
-    def test_run_with_cursor_field_logs_incremental(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_with_cursor_field_logs_incremental(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() accepts cursor_field kwarg and logs incremental mode.
 
         Given cursor_field kwarg is passed, when run() is called, then it
@@ -560,7 +582,9 @@ class TestIncrementalLoading:
         assert result.success is True
 
     @pytest.mark.requirement("4F-FR-042")
-    def test_run_with_primary_key_passes_to_pipeline(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_with_primary_key_passes_to_pipeline(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() passes primary_key kwarg to pipeline.run() with merge.
 
         Given primary_key and write_disposition="merge" kwargs, when run()
@@ -583,7 +607,9 @@ class TestIncrementalLoading:
         assert call_kwargs["primary_key"] == "id"
 
     @pytest.mark.requirement("4F-FR-040")
-    def test_run_without_cursor_field_default_none(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_without_cursor_field_default_none(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() proceeds normally when no cursor_field kwarg provided.
 
         Given no cursor_field kwarg (non-incremental mode), when run() is
@@ -627,7 +653,9 @@ class TestOTelSpanEmission:
     """Unit tests for T046 - OTel span emission verification."""
 
     @pytest.mark.requirement("4F-FR-044")
-    def test_create_pipeline_emits_otel_span(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_create_pipeline_emits_otel_span(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test create_pipeline() emits OTel span via tracer.
 
         Given a valid config, when create_pipeline() is called, then
@@ -688,7 +716,9 @@ class TestOTelSpanEmission:
             assert "run" in span_name
 
     @pytest.mark.requirement("4F-FR-046")
-    def test_run_span_records_result_attributes(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_span_records_result_attributes(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() calls record_ingestion_result with span and result.
 
         Given a successful pipeline run, when run() completes, then
@@ -700,7 +730,9 @@ class TestOTelSpanEmission:
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         with patch("floe_ingestion_dlt.plugin.record_ingestion_result") as mock_record:
-            result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+            result = dlt_plugin.run(
+                mock_pipeline, source=[], write_disposition="append"
+            )
 
             # Verify record_ingestion_result was called with span and result
             mock_record.assert_called_once()
@@ -710,7 +742,9 @@ class TestOTelSpanEmission:
             assert recorded_result == result
 
     @pytest.mark.requirement("4F-FR-047")
-    def test_run_span_records_error_on_failure(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_span_records_error_on_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() calls record_ingestion_error when pipeline fails.
 
         Given pipeline.run() raises exception, when run() handles error,
@@ -723,7 +757,9 @@ class TestOTelSpanEmission:
 
         with patch("floe_ingestion_dlt.plugin.record_ingestion_error") as mock_record:
             # Call run (doesn't raise, returns failed result)
-            result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
+            result = dlt_plugin.run(
+                mock_pipeline, source=[], write_disposition="append"
+            )
 
             # Verify record_ingestion_error was called
             mock_record.assert_called_once()
@@ -769,7 +805,9 @@ class TestStructuredLogging:
     """Unit tests for T047 - structured logging verification."""
 
     @pytest.mark.requirement("4F-FR-048")
-    def test_create_pipeline_logs_pipeline_created(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_create_pipeline_logs_pipeline_created(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test create_pipeline() logs 'pipeline_created' event.
 
         Given a valid config, when create_pipeline() is called, then
@@ -802,7 +840,9 @@ class TestStructuredLogging:
             assert found, "pipeline_created event not logged"
 
     @pytest.mark.requirement("4F-FR-048")
-    def test_run_logs_pipeline_run_starting(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_logs_pipeline_run_starting(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() logs 'pipeline_run_starting' event.
 
         Given a mock pipeline, when run() is called, then logger.info is
@@ -827,7 +867,9 @@ class TestStructuredLogging:
             assert found, "pipeline_run_starting event not logged"
 
     @pytest.mark.requirement("4F-FR-048")
-    def test_run_logs_pipeline_run_completed(self, dlt_plugin: DltIngestionPlugin) -> None:
+    def test_run_logs_pipeline_run_completed(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
         """Test run() logs 'pipeline_run_completed' event on success.
 
         Given a successful pipeline run, when run() completes, then
@@ -933,9 +975,9 @@ class TestStructuredLogging:
             # Verify secrets are NOT in any logger call
             for call in mock_logger.info.call_args_list:
                 call_str = str(call)
-                assert "sensitive-access-key-12345" not in call_str, (
-                    "s3_access_key value leaked in logs"
-                )
-                assert "super-secret-key-67890" not in call_str, (
-                    "s3_secret_key value leaked in logs"
-                )
+                assert (
+                    "sensitive-access-key-12345" not in call_str
+                ), "s3_access_key value leaked in logs"
+                assert (
+                    "super-secret-key-67890" not in call_str
+                ), "s3_secret_key value leaked in logs"

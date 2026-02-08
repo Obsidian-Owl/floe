@@ -265,7 +265,9 @@ class TestDBTFusionPluginRunModels:
         target_dir = temp_dbt_project / "target"
         target_dir.mkdir(exist_ok=True)
         (target_dir / "manifest.json").write_text('{"metadata": {}}')
-        (target_dir / "run_results.json").write_text('{"results": [], "elapsed_time": 1.0}')
+        (target_dir / "run_results.json").write_text(
+            '{"results": [], "elapsed_time": 1.0}'
+        )
 
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",
@@ -295,7 +297,9 @@ class TestDBTFusionPluginRunModels:
         target_dir = temp_dbt_project / "target"
         target_dir.mkdir(exist_ok=True)
         (target_dir / "manifest.json").write_text('{"metadata": {}}')
-        (target_dir / "run_results.json").write_text('{"results": [], "elapsed_time": 1.0}')
+        (target_dir / "run_results.json").write_text(
+            '{"results": [], "elapsed_time": 1.0}'
+        )
 
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",
@@ -326,7 +330,9 @@ class TestDBTFusionPluginRunModels:
         target_dir = temp_dbt_project / "target"
         target_dir.mkdir(exist_ok=True)
         (target_dir / "manifest.json").write_text('{"metadata": {}}')
-        (target_dir / "run_results.json").write_text('{"results": [], "elapsed_time": 1.0}')
+        (target_dir / "run_results.json").write_text(
+            '{"results": [], "elapsed_time": 1.0}'
+        )
 
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",
@@ -357,7 +363,9 @@ class TestDBTFusionPluginRunModels:
         target_dir = temp_dbt_project / "target"
         target_dir.mkdir(exist_ok=True)
         (target_dir / "manifest.json").write_text('{"metadata": {}}')
-        (target_dir / "run_results.json").write_text('{"results": [], "elapsed_time": 1.0}')
+        (target_dir / "run_results.json").write_text(
+            '{"results": [], "elapsed_time": 1.0}'
+        )
 
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",
@@ -428,7 +436,9 @@ class TestDBTFusionPluginTestModels:
         target_dir = temp_dbt_project / "target"
         target_dir.mkdir(exist_ok=True)
         (target_dir / "manifest.json").write_text('{"metadata": {}}')
-        (target_dir / "run_results.json").write_text('{"results": [], "elapsed_time": 1.0}')
+        (target_dir / "run_results.json").write_text(
+            '{"results": [], "elapsed_time": 1.0}'
+        )
 
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",
@@ -458,7 +468,9 @@ class TestDBTFusionPluginTestModels:
         target_dir = temp_dbt_project / "target"
         target_dir.mkdir(exist_ok=True)
         (target_dir / "manifest.json").write_text('{"metadata": {}}')
-        (target_dir / "run_results.json").write_text('{"results": [], "elapsed_time": 1.0}')
+        (target_dir / "run_results.json").write_text(
+            '{"results": [], "elapsed_time": 1.0}'
+        )
 
         with patch(
             "floe_dbt_fusion.plugin.detect_fusion_binary",

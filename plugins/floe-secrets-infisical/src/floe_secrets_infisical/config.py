@@ -30,7 +30,9 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 INFISICAL_CLOUD_URL = "https://app.infisical.com"
 
 # URL pattern for validation (must be HTTPS)
-HTTPS_URL_PATTERN = re.compile(r"^https://[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9](?::\d+)?$")
+HTTPS_URL_PATTERN = re.compile(
+    r"^https://[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9](?::\d+)?$"
+)
 
 
 class InfisicalSecretsConfig(BaseModel):
@@ -109,7 +111,10 @@ class InfisicalSecretsConfig(BaseModel):
         Field(
             default=INFISICAL_CLOUD_URL,
             description="Infisical site URL. Defaults to Infisical Cloud.",
-            examples=["https://app.infisical.com", "https://infisical.company.internal"],
+            examples=[
+                "https://app.infisical.com",
+                "https://infisical.company.internal",
+            ],
         ),
     ]
 

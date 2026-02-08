@@ -141,7 +141,9 @@ class MonitoringConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = True
-    mode: str = Field(default="scheduled", pattern=r"^(scheduled|continuous|on_demand)$")
+    mode: str = Field(
+        default="scheduled", pattern=r"^(scheduled|continuous|on_demand)$"
+    )
     check_intervals: CheckIntervalConfig = Field(default_factory=CheckIntervalConfig)
     severity_thresholds: SeverityThresholds = Field(default_factory=SeverityThresholds)
     alerts: AlertConfig = Field(default_factory=AlertConfig)

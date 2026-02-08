@@ -79,7 +79,9 @@ def create_semantic_resources(
 
     # Configure semantic plugin if config provided
     if semantic_ref.config:
-        registry.configure(PluginType.SEMANTIC_LAYER, semantic_ref.type, semantic_ref.config)
+        registry.configure(
+            PluginType.SEMANTIC_LAYER, semantic_ref.type, semantic_ref.config
+        )
 
     logger.info(
         "Semantic layer resources created",

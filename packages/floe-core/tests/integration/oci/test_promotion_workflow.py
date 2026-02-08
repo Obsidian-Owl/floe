@@ -35,7 +35,9 @@ if TYPE_CHECKING:
     pass
 
 
-def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "promo") -> Any:
+def _create_valid_compiled_artifacts(
+    unique_id: str, product_prefix: str = "promo"
+) -> Any:
     """Create a valid CompiledArtifacts instance for promotion testing.
 
     Args:
@@ -425,7 +427,9 @@ class TestPromotionWorkflow(IntegrationTestBase):
 
         # Configure promotion with signature verification in warn mode
         # (since test artifacts may not be signed)
-        promotion_config = PromotionConfig(signature_verification={"enforcement": "warn"})
+        promotion_config = PromotionConfig(
+            signature_verification={"enforcement": "warn"}
+        )
         controller = PromotionController(client=client, promotion=promotion_config)
 
         # Promote

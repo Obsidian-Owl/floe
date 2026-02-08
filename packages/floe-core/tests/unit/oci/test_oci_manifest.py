@@ -130,8 +130,13 @@ class TestArtifactManifestCreation:
         """
         assert "io.floe.product.name" in sample_artifact_manifest.annotations
         assert "io.floe.product.version" in sample_artifact_manifest.annotations
-        assert sample_artifact_manifest.annotations["io.floe.product.name"] == "test-product"
-        assert sample_artifact_manifest.annotations["io.floe.product.version"] == "1.0.0"
+        assert (
+            sample_artifact_manifest.annotations["io.floe.product.name"]
+            == "test-product"
+        )
+        assert (
+            sample_artifact_manifest.annotations["io.floe.product.version"] == "1.0.0"
+        )
 
     @pytest.mark.requirement("8A-FR-040")
     def test_artifact_manifest_product_name_property(
@@ -259,7 +264,10 @@ class TestArtifactLayerCreation:
             },
         )
 
-        assert layer.annotations["org.opencontainers.image.title"] == "compiled_artifacts.json"
+        assert (
+            layer.annotations["org.opencontainers.image.title"]
+            == "compiled_artifacts.json"
+        )
         assert layer.annotations["custom.annotation"] == "value"
 
     @pytest.mark.requirement("8A-FR-040")
@@ -360,7 +368,10 @@ class TestManifestBuilder:
         assert manifest.digest.startswith("sha256:")
         assert len(manifest.digest) == 71  # sha256: + 64 hex chars
         assert manifest.product_name == sample_compiled_artifacts.metadata.product_name
-        assert manifest.product_version == sample_compiled_artifacts.metadata.product_version
+        assert (
+            manifest.product_version
+            == sample_compiled_artifacts.metadata.product_version
+        )
 
     @pytest.mark.requirement("8A-FR-041")
     def test_build_manifest_calculates_layer_digest(
@@ -454,7 +465,9 @@ class TestManifestBuilder:
 
         assert content == b"{}"
         # This is the well-known digest for empty JSON object
-        expected = "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        expected = (
+            "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        )
         assert digest == expected
 
     @pytest.mark.requirement("8A-FR-040")

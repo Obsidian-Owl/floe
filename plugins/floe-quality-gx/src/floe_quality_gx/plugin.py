@@ -28,7 +28,9 @@ except ImportError:
 def _quality_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
     if not _HAS_OTEL or _factory_get_tracer is None:
         return nullcontext()
-    return _factory_get_tracer(__name__).start_as_current_span(name, attributes=attributes)
+    return _factory_get_tracer(__name__).start_as_current_span(
+        name, attributes=attributes
+    )
 
 
 if TYPE_CHECKING:
@@ -94,7 +96,9 @@ class GreatExpectationsPlugin(QualityPlugin):
 
             # Delegate to run_suite with empty connection config
             # In practice, the caller should use run_suite directly
-            connection_config: dict[str, Any] = opts.get("connection_config", {"dialect": "duckdb"})
+            connection_config: dict[str, Any] = opts.get(
+                "connection_config", {"dialect": "duckdb"}
+            )
             result = self.run_suite(suite, connection_config)
 
             # Override suite_name to match the requested name
@@ -149,7 +153,9 @@ class GreatExpectationsPlugin(QualityPlugin):
                 )
 
                 # Load data from connection config
-                dataframe = create_dataframe_from_connection(connection_config, suite.model_name)
+                dataframe = create_dataframe_from_connection(
+                    connection_config, suite.model_name
+                )
 
                 # Run validation with timeout
                 return run_validation_with_timeout(

@@ -32,11 +32,15 @@ class DriftReport(BaseModel):
         unchanged_files: Files that match both path and content.
     """
 
-    deleted_files: list[str] = Field(default_factory=list, description="Indexed but deleted")
+    deleted_files: list[str] = Field(
+        default_factory=list, description="Indexed but deleted"
+    )
     renamed_files: list[list[str]] = Field(
         default_factory=list, description="Renamed files [[old, new], ...]"
     )
-    modified_files: list[str] = Field(default_factory=list, description="Modified content")
+    modified_files: list[str] = Field(
+        default_factory=list, description="Modified content"
+    )
     unchanged_files: list[str] = Field(default_factory=list, description="No changes")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -57,7 +61,9 @@ class DriftReport(BaseModel):
         Returns:
             Sum of deleted, renamed, and modified files.
         """
-        return len(self.deleted_files) + len(self.renamed_files) + len(self.modified_files)
+        return (
+            len(self.deleted_files) + len(self.renamed_files) + len(self.modified_files)
+        )
 
 
 def compute_content_hash(content: str) -> str:
@@ -154,7 +160,9 @@ def detect_modified_files(
         indexed_content = indexed_files[path]
 
         # Compare content hashes
-        if compute_content_hash(filesystem_content) != compute_content_hash(indexed_content):
+        if compute_content_hash(filesystem_content) != compute_content_hash(
+            indexed_content
+        ):
             modified.append(path)
 
     return sorted(modified)

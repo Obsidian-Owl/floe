@@ -309,7 +309,9 @@ def test_helm_values_uses_existing_secret() -> None:
     auth = values["postgresql"]["auth"]
     # Verify existingSecret pattern is used
     assert "existingSecret" in auth
-    assert auth["existingSecret"] == "marquez-postgresql-credentials"  # pragma: allowlist secret
+    assert (
+        auth["existingSecret"] == "marquez-postgresql-credentials"
+    )  # pragma: allowlist secret
     # Verify secretKeys are specified (pragma: allowlist secret)
     assert "secretKeys" in auth
     # These are key NAMES, not actual secrets

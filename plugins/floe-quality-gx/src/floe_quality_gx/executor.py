@@ -169,10 +169,14 @@ def run_validation_with_timeout(
             # Set up data source and asset
             datasource = context.data_sources.add_pandas("floe_datasource")
             data_asset = datasource.add_dataframe_asset(name="floe_asset")
-            batch_definition = data_asset.add_batch_definition_whole_dataframe("floe_batch")
+            batch_definition = data_asset.add_batch_definition_whole_dataframe(
+                "floe_batch"
+            )
 
             # Create expectation suite
-            gx_suite = context.suites.add(gx.ExpectationSuite(name=f"{suite.model_name}_suite"))
+            gx_suite = context.suites.add(
+                gx.ExpectationSuite(name=f"{suite.model_name}_suite")
+            )
 
             # Add expectations from floe checks
             for check in suite.checks:
@@ -193,7 +197,9 @@ def run_validation_with_timeout(
             validation_def = context.validation_definitions.add(validation_def)
 
             # Run validation
-            result_holder[0] = validation_def.run(batch_parameters={"dataframe": dataframe})
+            result_holder[0] = validation_def.run(
+                batch_parameters={"dataframe": dataframe}
+            )
         except Exception as e:
             exception_holder[0] = e
 
@@ -242,9 +248,15 @@ def run_validation_with_timeout(
 
     # Map results back to checks by index (GX maintains order)
     enabled_checks = [c for c in suite.checks if c.enabled]
-    for _i, (check, gx_exp_result) in enumerate(zip(enabled_checks, gx_expectations, strict=False)):
+    for _i, (check, gx_exp_result) in enumerate(
+        zip(enabled_checks, gx_expectations, strict=False)
+    ):
         check_result = _convert_gx_result_to_check_result(
-            gx_exp_result.to_json_dict() if hasattr(gx_exp_result, "to_json_dict") else {},
+            (
+                gx_exp_result.to_json_dict()
+                if hasattr(gx_exp_result, "to_json_dict")
+                else {}
+            ),
             check,
         )
         check_results.append(check_result)
@@ -269,7 +281,8 @@ def run_validation_with_timeout(
                 "successful_expectations", sum(1 for r in check_results if r.passed)
             ),
             "failed": stats.get(
-                "unsuccessful_expectations", sum(1 for r in check_results if not r.passed)
+                "unsuccessful_expectations",
+                sum(1 for r in check_results if not r.passed),
             ),
             "success_percent": stats.get("success_percent", 0.0),
         },
@@ -311,7 +324,9 @@ def create_dataframe_from_connection(
         path = connection_config.get("path", ":memory:")
         conn = duckdb.connect(path)
         try:
-            return conn.execute(f"SELECT * FROM {quoted_name}").fetchdf()  # nosec B608 - regex + quoted
+            return conn.execute(
+                f"SELECT * FROM {quoted_name}"
+            ).fetchdf()  # nosec B608 - regex + quoted
         except duckdb.CatalogException:
             # Table doesn't exist, return empty DataFrame
             return pd.DataFrame()

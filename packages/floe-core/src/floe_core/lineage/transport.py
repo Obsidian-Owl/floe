@@ -98,7 +98,9 @@ class ConsoleLineageTransport:
 
     def __init__(self) -> None:
         """Initialize with structlog logger."""
-        self._log: structlog.stdlib.BoundLogger = structlog.get_logger("floe.lineage.console")
+        self._log: structlog.stdlib.BoundLogger = structlog.get_logger(
+            "floe.lineage.console"
+        )
 
     async def emit(self, event: LineageEvent) -> None:
         """Log the event as JSON via structlog.

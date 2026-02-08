@@ -201,7 +201,10 @@ class RBACGenerationAuditEvent(BaseModel):
             "namespaces": self.namespaces,
             "output_dir": self.output_dir,
             "total_resources": (
-                self.service_accounts + self.roles + self.role_bindings + self.namespaces
+                self.service_accounts
+                + self.roles
+                + self.role_bindings
+                + self.namespaces
             ),
         }
 
@@ -433,7 +436,11 @@ def detect_wildcard_permissions(
                     resource_namespace=namespace,
                     message=f"Rule {i} contains wildcard in apiGroups",
                     recommendation="Replace '*' with specific API groups",
-                    details={"rule_index": i, "field": "apiGroups", "value": api_groups},
+                    details={
+                        "rule_index": i,
+                        "field": "apiGroups",
+                        "value": api_groups,
+                    },
                 )
             )
 

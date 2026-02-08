@@ -47,15 +47,21 @@ class CatalogTestConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    catalog_type: str = Field(default_factory=lambda: os.environ.get("CATALOG_TYPE", "mock"))
+    catalog_type: str = Field(
+        default_factory=lambda: os.environ.get("CATALOG_TYPE", "mock")
+    )
     uri: str = Field(
-        default_factory=lambda: os.environ.get("CATALOG_URI", "http://polaris:8181/api/catalog")
+        default_factory=lambda: os.environ.get(
+            "CATALOG_URI", "http://polaris:8181/api/catalog"
+        )
     )
     warehouse: str = Field(
         default_factory=lambda: os.environ.get("CATALOG_WAREHOUSE", "test_warehouse")
     )
     credential: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.environ.get("CATALOG_CREDENTIAL", "root:secret"))
+        default_factory=lambda: SecretStr(
+            os.environ.get("CATALOG_CREDENTIAL", "root:secret")
+        )
     )
     namespace_prefix: str = Field(
         default_factory=lambda: os.environ.get("CATALOG_NAMESPACE_PREFIX", "test")
@@ -99,7 +105,9 @@ class MockCatalog:
         self._namespaces: dict[tuple[str, ...], dict[str, str]] = {}
         self._tables: dict[str, dict[str, Any]] = {}
 
-    def list_namespaces(self, parent: tuple[str, ...] | None = None) -> list[tuple[str, ...]]:
+    def list_namespaces(
+        self, parent: tuple[str, ...] | None = None
+    ) -> list[tuple[str, ...]]:
         """List all namespaces in the catalog.
 
         Args:
@@ -479,7 +487,8 @@ class MockCatalogPlugin:
         del timeout  # Unused in mock implementation
         return {
             "state": "healthy" if self._connected else "unhealthy",
-            "message": "Mock catalog" + (" connected" if self._connected else " not connected"),
+            "message": "Mock catalog"
+            + (" connected" if self._connected else " not connected"),
             "details": {"connected": self._connected},
         }
 
@@ -586,9 +595,8 @@ def create_polaris_catalog_plugin(
 
         # Derive token URL from catalog URI
         # Default: {uri}/v1/oauth/tokens (PyIceberg convention)
-        token_url = (
-            f"{config.uri.rstrip('/').rsplit('/api/catalog', 1)[0]}/api/catalog/v1/oauth/tokens"
-        )
+        base_uri = config.uri.rstrip("/").rsplit("/api/catalog", 1)[0]
+        token_url = f"{base_uri}/api/catalog/v1/oauth/tokens"
 
         polaris_config = PolarisCatalogConfig(
             uri=config.uri,
@@ -601,7 +609,9 @@ def create_polaris_catalog_plugin(
         )
         return PolarisCatalogPlugin(config=polaris_config)
     except Exception as e:
-        raise CatalogConnectionError(f"Failed to create Polaris catalog plugin: {e}") from e
+        raise CatalogConnectionError(
+            f"Failed to create Polaris catalog plugin: {e}"
+        ) from e
 
 
 @contextmanager

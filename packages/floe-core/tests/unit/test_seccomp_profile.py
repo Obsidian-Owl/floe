@@ -155,7 +155,13 @@ class TestSeccompProfileContextStructure:
         pod_context = config.to_pod_security_context()
 
         # Structure should match K8s PodSecurityContext
-        expected_keys = {"runAsNonRoot", "runAsUser", "runAsGroup", "fsGroup", "seccompProfile"}
+        expected_keys = {
+            "runAsNonRoot",
+            "runAsUser",
+            "runAsGroup",
+            "fsGroup",
+            "seccompProfile",
+        }
         assert expected_keys.issubset(set(pod_context.keys()))
 
         # seccompProfile should be a SeccompProfile object

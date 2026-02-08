@@ -146,9 +146,7 @@ def test_build_context_connection_catalog() -> None:
 @pytest.mark.requirement("3D-FR-044")
 def test_build_context_connection_catalog_missing() -> None:
     """Test connection catalog defaults to 'unknown' when missing."""
-    contract = _make_contract(
-        connection_config={"warehouse": "warehouse"}
-    )
+    contract = _make_contract(connection_config={"warehouse": "warehouse"})
 
     context = build_root_cause_context(contract)
 

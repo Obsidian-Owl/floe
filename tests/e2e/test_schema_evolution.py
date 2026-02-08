@@ -80,9 +80,9 @@ class TestSchemaEvolution(IntegrationTestBase):
             expected_namespace = product.replace("-", "_")
             namespaces.add(expected_namespace)
 
-        assert len(namespaces) == 3, (
-            f"Namespace collision detected. Unique namespaces: {namespaces}"
-        )
+        assert (
+            len(namespaces) == 3
+        ), f"Namespace collision detected. Unique namespaces: {namespaces}"
 
         # 2. Verify each product has independent dbt_project.yml
         project_names: set[str] = set()
@@ -99,9 +99,9 @@ class TestSchemaEvolution(IntegrationTestBase):
             assert project_name, f"{product} has no name in dbt_project.yml"
             project_names.add(project_name)
 
-        assert len(project_names) == 3, (
-            f"dbt project name collision detected. Names: {project_names}"
-        )
+        assert (
+            len(project_names) == 3
+        ), f"dbt project name collision detected. Names: {project_names}"
 
         # 3. Verify workspace ConfigMap has unique code locations
         chart_path = project_root / "charts" / "floe-platform"
@@ -126,18 +126,18 @@ class TestSchemaEvolution(IntegrationTestBase):
 
         rendered = result.stdout
         for product in products:
-            assert f"location_name: {product}" in rendered, (
-                f"Workspace missing unique code location for {product}"
-            )
+            assert (
+                f"location_name: {product}" in rendered
+            ), f"Workspace missing unique code location for {product}"
 
         # 4. Verify Dagster API is accessible (infrastructure ready)
         query = "query { version }"
         api_result = dagster_client._execute(query)
         assert api_result is not None, "Dagster API not responding"
         assert isinstance(api_result, dict), "Dagster API should return dict"
-        assert "data" in api_result or "errors" not in api_result, (
-            "Dagster API should return valid response"
-        )
+        assert (
+            "data" in api_result or "errors" not in api_result
+        ), "Dagster API should return valid response"
 
         # 5. Compile artifacts for each product and verify unique identity
         from floe_core.compilation.stages import compile_pipeline
@@ -168,9 +168,9 @@ class TestSchemaEvolution(IntegrationTestBase):
                     )
                     lineage_namespaces[product] = lns
 
-            assert len(product_identities) == 3, (
-                f"Expected 3 products compiled, got {len(product_identities)}"
-            )
+            assert (
+                len(product_identities) == 3
+            ), f"Expected 3 products compiled, got {len(product_identities)}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -202,14 +202,19 @@ class TestSchemaEvolution(IntegrationTestBase):
                 polaris_with_write_grants.create_namespace(ns_name)
             except Exception as e:  # noqa: BLE001
                 # Namespace may already exist — check error message
-                if "already exists" not in str(e).lower() and "conflict" not in str(e).lower():
+                if (
+                    "already exists" not in str(e).lower()
+                    and "conflict" not in str(e).lower()
+                ):
                     raise
 
         # List all namespaces in Polaris
         namespaces = polaris_with_write_grants.list_namespaces()
 
         # Convert to set of namespace tuples for easier checking
-        namespace_names = {ns[0] if isinstance(ns, tuple) else str(ns) for ns in namespaces}
+        namespace_names = {
+            ns[0] if isinstance(ns, tuple) else str(ns) for ns in namespaces
+        }
 
         for expected in expected_namespaces:
             # Allow for variations in naming (- vs _)
@@ -217,7 +222,9 @@ class TestSchemaEvolution(IntegrationTestBase):
                 expected.replace("_", "-") in ns or expected.replace("-", "_") in ns
                 for ns in namespace_names
             )
-            assert found, f"Namespace {expected} not found. Available namespaces: {namespace_names}"
+            assert (
+                found
+            ), f"Namespace {expected} not found. Available namespaces: {namespace_names}"
 
         # Verify namespaces are isolated by checking table counts
         for namespace in expected_namespaces:
@@ -232,9 +239,9 @@ class TestSchemaEvolution(IntegrationTestBase):
                     break
                 except Exception:  # noqa: BLE001
                     continue
-            assert tables_listed, (
-                f"Cannot list tables for namespace {namespace} (tried variants: {ns_variants})"
-            )
+            assert (
+                tables_listed
+            ), f"Cannot list tables for namespace {namespace} (tried variants: {ns_variants})"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -440,9 +447,9 @@ class TestSchemaEvolution(IntegrationTestBase):
         # Verify table exists and has accessible metadata (prerequisite for retention)
         reloaded_table = polaris_with_write_grants.load_table(table_name)
         assert hasattr(reloaded_table, "metadata"), "Table should have metadata"
-        assert reloaded_table.metadata.format_version >= 1, (
-            "Table should use Iceberg format version 1 or 2"
-        )
+        assert (
+            reloaded_table.metadata.format_version >= 1
+        ), "Table should use Iceberg format version 1 or 2"
 
         # Verify table supports property management for retention configuration
         txn = reloaded_table.transaction()
@@ -454,9 +461,10 @@ class TestSchemaEvolution(IntegrationTestBase):
         txn.commit_transaction()
 
         reloaded_table = polaris_with_write_grants.load_table(table_name)
-        assert reloaded_table.properties.get("history.expire.max-snapshot-age-ms") == "3600000", (
-            "Table should accept retention configuration via properties"
-        )
+        assert (
+            reloaded_table.properties.get("history.expire.max-snapshot-age-ms")
+            == "3600000"
+        ), "Table should accept retention configuration via properties"
 
         # Verify retention config matches manifest governance values
         import yaml
@@ -464,9 +472,9 @@ class TestSchemaEvolution(IntegrationTestBase):
         project_root = Path(__file__).parent.parent.parent
         manifest_path = project_root / "demo" / "manifest.yaml"
 
-        assert manifest_path.exists(), (
-            "demo/manifest.yaml must exist for governance retention validation"
-        )
+        assert (
+            manifest_path.exists()
+        ), "demo/manifest.yaml must exist for governance retention validation"
 
         with open(manifest_path) as f:
             manifest = yaml.safe_load(f)
@@ -482,7 +490,9 @@ class TestSchemaEvolution(IntegrationTestBase):
 
         # Verify our retention config matches manifest TTL
         ttl_ms = int(default_ttl) * 3600 * 1000
-        actual_ms = int(reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0"))
+        actual_ms = int(
+            reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0")
+        )
         assert actual_ms == ttl_ms, (
             f"Retention must match manifest TTL. "
             f"Expected {ttl_ms}ms ({default_ttl}h), "
@@ -575,9 +585,9 @@ class TestSchemaEvolution(IntegrationTestBase):
         project_root = Path(__file__).parent.parent.parent
         manifest_path = project_root / "demo" / "manifest.yaml"
 
-        assert manifest_path.exists(), (
-            "demo/manifest.yaml must exist for governance snapshot validation"
-        )
+        assert (
+            manifest_path.exists()
+        ), "demo/manifest.yaml must exist for governance snapshot validation"
 
         with open(manifest_path) as f:
             manifest = yaml.safe_load(f)

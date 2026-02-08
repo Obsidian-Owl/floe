@@ -112,7 +112,9 @@ async def test_send_alert_success() -> None:
 async def test_send_alert_cloudevents_format() -> None:
     """Test POST body has CloudEvents v1.0 required fields."""
     plugin = WebhookAlertPlugin(webhook_url="https://example.com/webhook")
-    event = _make_event(contract_name="test_contract", severity=ViolationSeverity.WARNING)
+    event = _make_event(
+        contract_name="test_contract", severity=ViolationSeverity.WARNING
+    )
 
     mock_response = AsyncMock()
     mock_response.status_code = 200

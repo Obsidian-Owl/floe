@@ -44,7 +44,9 @@ class TestPlatformChartLint:
         stdout = result.stdout.decode() if result.stdout else ""
         stderr = result.stderr.decode() if result.stderr else ""
 
-        assert result.returncode == 0, f"Chart lint failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        assert (
+            result.returncode == 0
+        ), f"Chart lint failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @pytest.mark.requirement("9b-FR-080")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -63,7 +65,13 @@ class TestPlatformChartLint:
         # NOTE: --skip-schema-validation required because Dagster subchart
         # references external JSON schema URL that returns 404
         result = subprocess.run(
-            ["helm", "lint", "--strict", "--skip-schema-validation", str(platform_chart_path)],
+            [
+                "helm",
+                "lint",
+                "--strict",
+                "--skip-schema-validation",
+                str(platform_chart_path),
+            ],
             capture_output=True,
             timeout=60,
             check=False,
@@ -72,9 +80,9 @@ class TestPlatformChartLint:
         stdout = result.stdout.decode() if result.stdout else ""
         stderr = result.stderr.decode() if result.stderr else ""
 
-        assert result.returncode == 0, (
-            f"Chart lint (strict) failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"Chart lint (strict) failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @pytest.mark.requirement("9b-FR-080")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -115,9 +123,9 @@ class TestPlatformChartLint:
         stdout = result.stdout.decode() if result.stdout else ""
         stderr = result.stderr.decode() if result.stderr else ""
 
-        assert result.returncode == 0, (
-            f"Chart lint with overrides failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"Chart lint with overrides failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @pytest.mark.requirement("9b-FR-080")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -155,9 +163,9 @@ class TestPlatformChartLint:
         stdout = result.stdout.decode() if result.stdout else ""
         stderr = result.stderr.decode() if result.stderr else ""
 
-        assert result.returncode == 0, (
-            f"Chart lint with disabled components failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-        )
+        assert (
+            result.returncode == 0
+        ), f"Chart lint with disabled components failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
 
     @pytest.mark.requirement("9b-FR-080")
     def test_chart_has_required_files(

@@ -10,14 +10,11 @@ from __future__ import annotations
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any
 
 import aiosmtplib
 import structlog
-
 from floe_core.contracts.monitoring.violations import (
     ContractViolationEvent,
-    ViolationSeverity,
 )
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 

@@ -35,7 +35,9 @@ class QualityCheck(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    name: str = Field(..., min_length=1, description="Check identifier (unique within model)")
+    name: str = Field(
+        ..., min_length=1, description="Check identifier (unique within model)"
+    )
 
     type: str = Field(
         ...,

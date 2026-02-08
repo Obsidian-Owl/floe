@@ -417,7 +417,9 @@ class TestKeycloakIdentityConfigEndpoints:
             client_secret=SecretStr("secret"),
         )
 
-        expected = "https://keycloak.example.com/realms/floe/.well-known/openid-configuration"
+        expected = (
+            "https://keycloak.example.com/realms/floe/.well-known/openid-configuration"
+        )
         assert config.discovery_url == expected
 
     @pytest.mark.requirement("7A-FR-031")
@@ -432,7 +434,9 @@ class TestKeycloakIdentityConfigEndpoints:
             client_secret=SecretStr("secret"),
         )
 
-        expected = "https://keycloak.example.com/realms/floe/protocol/openid-connect/token"
+        expected = (
+            "https://keycloak.example.com/realms/floe/protocol/openid-connect/token"
+        )
         assert config.token_url == expected
 
     @pytest.mark.requirement("7A-FR-034")
@@ -447,7 +451,9 @@ class TestKeycloakIdentityConfigEndpoints:
             client_secret=SecretStr("secret"),
         )
 
-        expected = "https://keycloak.example.com/realms/floe/protocol/openid-connect/certs"
+        expected = (
+            "https://keycloak.example.com/realms/floe/protocol/openid-connect/certs"
+        )
         assert config.jwks_url == expected
 
     @pytest.mark.requirement("7A-FR-031")
@@ -462,7 +468,9 @@ class TestKeycloakIdentityConfigEndpoints:
             client_secret=SecretStr("secret"),
         )
 
-        expected = "https://keycloak.example.com/realms/floe/protocol/openid-connect/userinfo"
+        expected = (
+            "https://keycloak.example.com/realms/floe/protocol/openid-connect/userinfo"
+        )
         assert config.userinfo_url == expected
 
 
@@ -492,7 +500,9 @@ class TestKeycloakIdentityConfigURLSecurity:
             )
 
         errors = exc_info.value.errors()
-        assert any("https" in str(e).lower() or "http" in str(e).lower() for e in errors)
+        assert any(
+            "https" in str(e).lower() or "http" in str(e).lower() for e in errors
+        )
 
     @pytest.mark.requirement("7A-FR-030")
     def test_127_attacker_domain_rejected(self) -> None:

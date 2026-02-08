@@ -168,11 +168,17 @@ class TestAssetDependencies:
         assert asset_by_name["raw_customers"].dependency_keys == {AssetKey(["dbt"])}
 
         # stg_customers depends on raw_customers + dbt resource
-        assert AssetKey(["raw_customers"]) in asset_by_name["stg_customers"].dependency_keys
+        assert (
+            AssetKey(["raw_customers"])
+            in asset_by_name["stg_customers"].dependency_keys
+        )
         assert AssetKey(["dbt"]) in asset_by_name["stg_customers"].dependency_keys
 
         # dim_customers depends on stg_customers + dbt resource
-        assert AssetKey(["stg_customers"]) in asset_by_name["dim_customers"].dependency_keys
+        assert (
+            AssetKey(["stg_customers"])
+            in asset_by_name["dim_customers"].dependency_keys
+        )
         assert AssetKey(["dbt"]) in asset_by_name["dim_customers"].dependency_keys
 
 

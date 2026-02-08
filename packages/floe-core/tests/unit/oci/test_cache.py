@@ -321,7 +321,9 @@ class TestMutableTagTTL:
             future_time = datetime.now(timezone.utc) + timedelta(hours=2)
             mock_now.return_value = future_time
 
-            expired_entry = cache_manager.get("oci://harbor.example.com/floe", "latest-dev")
+            expired_entry = cache_manager.get(
+                "oci://harbor.example.com/floe", "latest-dev"
+            )
             assert expired_entry is None  # Expired, returns None
 
     @pytest.mark.requirement("8A-FR-014")
@@ -458,7 +460,9 @@ class TestDigestVerification:
         from floe_core.oci.errors import CacheError
 
         content = b'{"version": "0.2.0", "test": "data"}'
-        wrong_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        wrong_digest = (
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        )
 
         with pytest.raises(CacheError, match="Digest mismatch"):
             cache_manager.put(
@@ -547,7 +551,9 @@ class TestDigestVerification:
         )
 
         # Retrieve with verification
-        result = cache_manager.get_with_content("oci://harbor.example.com/floe", "v1.0.0")
+        result = cache_manager.get_with_content(
+            "oci://harbor.example.com/floe", "v1.0.0"
+        )
 
         assert result is not None
         entry, retrieved_content = result
@@ -601,7 +607,9 @@ class TestDigestVerification:
         - Cache miss returns None
         - No error raised
         """
-        result = cache_manager.get_with_content("oci://harbor.example.com/floe", "nonexistent")
+        result = cache_manager.get_with_content(
+            "oci://harbor.example.com/floe", "nonexistent"
+        )
         assert result is None
 
 
@@ -641,10 +649,13 @@ class TestLRUEviction:
                 expires_at=None,  # Immutable
                 size=len(content),
                 path=Path(f"/tmp/cache/{digest[:12]}/blob"),
-                last_accessed=base_time + timedelta(hours=i),  # v1: +1h, v2: +2h, v3: +3h
+                last_accessed=base_time
+                + timedelta(hours=i),  # v1: +1h, v2: +2h, v3: +3h
             )
 
-        index = CacheIndex(entries=entries, total_size=sum(e.size for e in entries.values()))
+        index = CacheIndex(
+            entries=entries, total_size=sum(e.size for e in entries.values())
+        )
 
         # Get LRU entries
         lru = index.get_lru_entries(2)
@@ -695,7 +706,9 @@ class TestLRUEviction:
             last_accessed=base_time + timedelta(hours=1),  # Newer
         )
 
-        index = CacheIndex(entries=entries, total_size=sum(e.size for e in entries.values()))
+        index = CacheIndex(
+            entries=entries, total_size=sum(e.size for e in entries.values())
+        )
 
         # Get LRU entries
         lru = index.get_lru_entries(10)
@@ -759,7 +772,9 @@ class TestLRUEviction:
             last_accessed=base_time,
         )
 
-        index = CacheIndex(entries=entries, total_size=sum(e.size for e in entries.values()))
+        index = CacheIndex(
+            entries=entries, total_size=sum(e.size for e in entries.values())
+        )
 
         # Get expired entries
         expired = index.get_expired_entries()

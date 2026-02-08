@@ -108,7 +108,9 @@ class TestPromoteJsonOutputFields:
         """JSON output contains promotion_id field."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -138,7 +140,9 @@ class TestPromoteJsonOutputFields:
         """JSON output contains artifact_digest field."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -168,7 +172,9 @@ class TestPromoteJsonOutputFields:
         """JSON output contains gate_results array."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -198,11 +204,15 @@ class TestPromoteJsonOutputFields:
             assert "duration_ms" in gate
 
     @pytest.mark.requirement("FR-031")
-    def test_json_output_contains_trace_id(self, mock_promotion_record: PromotionRecord) -> None:
+    def test_json_output_contains_trace_id(
+        self, mock_promotion_record: PromotionRecord
+    ) -> None:
         """JSON output contains trace_id for observability correlation."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -232,7 +242,9 @@ class TestPromoteJsonOutputFields:
         """JSON output contains signature_verified status."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -269,7 +281,9 @@ class TestPromoteJsonErrorOutput:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = InvalidTransitionError(
                 from_env="dev",
@@ -304,7 +318,9 @@ class TestPromoteJsonErrorOutput:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = GateValidationError(
                 gate="policy_compliance",
@@ -339,7 +355,9 @@ class TestPromoteJsonErrorOutput:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = SignatureVerificationError(
                 artifact_ref="oci://example.com/repo:v1.0.0",
@@ -373,7 +391,9 @@ class TestPromoteJsonErrorOutput:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = RegistryUnavailableError(
                 registry="oci://example.com/repo",
@@ -407,11 +427,15 @@ class TestPromoteJsonExitCodes:
     """
 
     @pytest.mark.requirement("FR-034")
-    def test_success_returns_exit_code_0(self, mock_promotion_record: PromotionRecord) -> None:
+    def test_success_returns_exit_code_0(
+        self, mock_promotion_record: PromotionRecord
+    ) -> None:
         """Successful promotion returns exit code 0."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -438,7 +462,9 @@ class TestPromoteJsonExitCodes:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = InvalidTransitionError(
                 from_env="dev",
@@ -469,7 +495,9 @@ class TestPromoteJsonExitCodes:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = GateValidationError(
                 gate="tests",
@@ -499,7 +527,9 @@ class TestPromoteJsonExitCodes:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = SignatureVerificationError(
                 artifact_ref="oci://example.com/repo:v1.0.0",
@@ -529,7 +559,9 @@ class TestPromoteJsonExitCodes:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.side_effect = RegistryUnavailableError(
                 registry="oci://example.com/repo",

@@ -12,7 +12,9 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def reset_otel_global_state(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+def reset_otel_global_state(
+    request: pytest.FixtureRequest,
+) -> Generator[None, None, None]:
     """Reset OpenTelemetry global state before and after each test.
 
     This fixture ensures test isolation by resetting the global

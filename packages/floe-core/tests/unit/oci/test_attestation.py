@@ -111,7 +111,9 @@ class TestGenerateSBOM:
     """Tests for SBOM generation with mocked syft CLI (T049)."""
 
     @patch("shutil.which")
-    def test_generate_sbom_syft_not_found(self, mock_which: MagicMock, tmp_path: Path) -> None:
+    def test_generate_sbom_syft_not_found(
+        self, mock_which: MagicMock, tmp_path: Path
+    ) -> None:
         mock_which.return_value = None
 
         with pytest.raises(SyftNotFoundError) as exc_info:
@@ -274,7 +276,9 @@ class TestAttachAttestation:
         assert "cosign CLI not found" in str(exc_info.value)
 
     @patch("shutil.which")
-    def test_attach_attestation_predicate_not_found(self, mock_which: MagicMock) -> None:
+    def test_attach_attestation_predicate_not_found(
+        self, mock_which: MagicMock
+    ) -> None:
         mock_which.return_value = "/usr/local/bin/cosign"
         nonexistent = Path("/nonexistent/sbom.json")
 
@@ -380,7 +384,9 @@ class TestRetrieveAttestations:
     """Tests for attestation retrieval."""
 
     @patch("shutil.which")
-    def test_retrieve_attestations_cosign_not_found(self, mock_which: MagicMock) -> None:
+    def test_retrieve_attestations_cosign_not_found(
+        self, mock_which: MagicMock
+    ) -> None:
         mock_which.return_value = None
 
         with pytest.raises(CosignNotFoundError):

@@ -156,7 +156,9 @@ def _build_key_based_signing_config(key_ref: str) -> SigningConfig:
             exit_code=ExitCode.GENERAL_ERROR,
         )
 
-    is_kms = key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://"))
+    is_kms = key_ref.startswith(
+        ("awskms://", "gcpkms://", "azurekms://", "hashivault://")
+    )
 
     if is_kms:
         os.environ["FLOE_SIGNING_KEY"] = key_ref
@@ -193,7 +195,11 @@ def _handle_sign_error(e: Exception) -> NoReturn:
     error_mappings: list[tuple[str, str, ExitCode]] = [
         ("OIDCToken", f"OIDC token acquisition failed: {e}", ExitCode.GENERAL_ERROR),
         ("Signing", f"Signing failed: {e}", ExitCode.GENERAL_ERROR),
-        ("Authentication", f"Registry authentication failed: {e}", ExitCode.GENERAL_ERROR),
+        (
+            "Authentication",
+            f"Registry authentication failed: {e}",
+            ExitCode.GENERAL_ERROR,
+        ),
         ("NotFound", f"Artifact not found: {e}", ExitCode.VALIDATION_ERROR),
     ]
 

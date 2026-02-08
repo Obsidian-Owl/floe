@@ -56,9 +56,13 @@ class PluginTestBase(IntegrationTestBase):
         super().setup_method()
         # Validate plugin configuration
         if not self.plugin_type:
-            raise ValueError(f"{self.__class__.__name__} must define plugin_type class attribute")
+            raise ValueError(
+                f"{self.__class__.__name__} must define plugin_type class attribute"
+            )
         if not self.plugin_name:
-            raise ValueError(f"{self.__class__.__name__} must define plugin_name class attribute")
+            raise ValueError(
+                f"{self.__class__.__name__} must define plugin_name class attribute"
+            )
 
     def plugin_is_registered(self) -> bool:
         """Check if the plugin is registered in the plugin registry.

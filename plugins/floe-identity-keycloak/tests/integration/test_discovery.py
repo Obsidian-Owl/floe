@@ -91,9 +91,9 @@ class TestKeycloakPluginDiscovery(BasePluginDiscoveryTests):
         ]
 
         for method_name in identity_methods:
-            assert hasattr(plugin_class, method_name), (
-                f"Plugin missing IdentityPlugin method: {method_name}"
-            )
+            assert hasattr(
+                plugin_class, method_name
+            ), f"Plugin missing IdentityPlugin method: {method_name}"
 
 
 class TestKeycloakPluginImport:

@@ -157,7 +157,9 @@ class TestDagsterCanLoadCompiledArtifactsFromFile:
         assert artifacts.metadata.product_name == "test-pipeline"
 
     @pytest.mark.requirement("FR-004")
-    def test_loaded_artifacts_have_required_fields(self, sample_artifacts_json: Path) -> None:
+    def test_loaded_artifacts_have_required_fields(
+        self, sample_artifacts_json: Path
+    ) -> None:
         """Test loaded artifacts have all fields required for dagster asset creation."""
         from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
@@ -653,7 +655,9 @@ class TestDagsterPluginConsumesCompiledArtifacts:
 
         plugin = DagsterOrchestratorPlugin()
 
-        with pytest.raises(ValueError, match="Ensure you are passing output from 'floe compile'"):
+        with pytest.raises(
+            ValueError, match="Ensure you are passing output from 'floe compile'"
+        ):
             plugin.create_definitions({})
 
 

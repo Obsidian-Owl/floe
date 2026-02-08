@@ -277,7 +277,9 @@ class TestComputeRbacDiff:
         """Test diff result includes source information."""
         from floe_core.rbac.diff import compute_rbac_diff
 
-        result = compute_rbac_diff([], [], "deploy/rbac/manifests.yaml", "cluster:production")
+        result = compute_rbac_diff(
+            [], [], "deploy/rbac/manifests.yaml", "cluster:production"
+        )
 
         assert result.expected_source == "deploy/rbac/manifests.yaml"
         assert result.actual_source == "cluster:production"
@@ -332,7 +334,9 @@ class TestComputeRbacDiff:
             {"kind": "ServiceAccount", "metadata": {"name": "sa1", "namespace": "ns"}},
         ]
 
-        result = compute_rbac_diff(resources, resources.copy(), "expected.yaml", "cluster")
+        result = compute_rbac_diff(
+            resources, resources.copy(), "expected.yaml", "cluster"
+        )
 
         assert not result.has_differences()
 
@@ -343,16 +347,22 @@ class TestComputeRbacDiff:
 
         # Create lists that together exceed the limit
         expected = [
-            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            {
+                "kind": "ServiceAccount",
+                "metadata": {"name": f"sa{i}", "namespace": "ns"},
+            }
             for i in range(6)
         ]
         actual = [
-            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}} for i in range(5)
+            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}}
+            for i in range(5)
         ]
 
         # Total = 11, set limit to 10
         with pytest.raises(ValueError, match="exceeds maximum"):
-            compute_rbac_diff(expected, actual, "expected.yaml", "cluster", max_resources=10)
+            compute_rbac_diff(
+                expected, actual, "expected.yaml", "cluster", max_resources=10
+            )
 
     @pytest.mark.requirement("FR-063")
     def test_max_resources_validation_at_limit(self) -> None:
@@ -360,15 +370,21 @@ class TestComputeRbacDiff:
         from floe_core.rbac.diff import compute_rbac_diff
 
         expected = [
-            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            {
+                "kind": "ServiceAccount",
+                "metadata": {"name": f"sa{i}", "namespace": "ns"},
+            }
             for i in range(5)
         ]
         actual = [
-            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}} for i in range(5)
+            {"kind": "Role", "metadata": {"name": f"role{i}", "namespace": "ns"}}
+            for i in range(5)
         ]
 
         # Total = 10, limit = 10 - should pass
-        result = compute_rbac_diff(expected, actual, "expected.yaml", "cluster", max_resources=10)
+        result = compute_rbac_diff(
+            expected, actual, "expected.yaml", "cluster", max_resources=10
+        )
         assert result is not None
 
     @pytest.mark.requirement("FR-063")
@@ -377,13 +393,18 @@ class TestComputeRbacDiff:
         from floe_core.rbac.diff import compute_rbac_diff
 
         expected = [
-            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            {
+                "kind": "ServiceAccount",
+                "metadata": {"name": f"sa{i}", "namespace": "ns"},
+            }
             for i in range(100)
         ]
         actual: list[dict[str, Any]] = []
 
         # Should not raise even with 100 resources when limit is 0
-        result = compute_rbac_diff(expected, actual, "expected.yaml", "cluster", max_resources=0)
+        result = compute_rbac_diff(
+            expected, actual, "expected.yaml", "cluster", max_resources=0
+        )
         assert result.added_count == 100
 
 

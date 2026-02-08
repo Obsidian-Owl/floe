@@ -211,7 +211,9 @@ class TestParseDbtErrorLocation:
     @pytest.mark.requirement("FR-036")
     def test_parse_location_from_at_format(self) -> None:
         """parse_dbt_error_location should parse 'at file:line' format."""
-        file_path, line = parse_dbt_error_location("Error at models/dim_customers.sql:15")
+        file_path, line = parse_dbt_error_location(
+            "Error at models/dim_customers.sql:15"
+        )
         assert file_path == "models/dim_customers.sql"
         assert line == 15
 
@@ -234,6 +236,8 @@ class TestParseDbtErrorLocation:
     @pytest.mark.requirement("FR-036")
     def test_parse_location_from_path_line_col_format(self) -> None:
         """parse_dbt_error_location should parse 'path:line:col' format."""
-        file_path, line = parse_dbt_error_location("models/marts/fact_orders.sql:100:5: ERROR")
+        file_path, line = parse_dbt_error_location(
+            "models/marts/fact_orders.sql:100:5: ERROR"
+        )
         assert file_path == "models/marts/fact_orders.sql"
         assert line == 100

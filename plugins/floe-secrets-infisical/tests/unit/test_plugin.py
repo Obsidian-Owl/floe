@@ -231,7 +231,10 @@ class TestInfisicalSecretsPluginSetSecret:
         mock_infisical_sdk.getSecret.side_effect = Exception("Not found")
         mock_infisical_sdk.createSecret.return_value = MagicMock()
 
-        metadata: dict[str, Any] = {"description": "Database password", "owner": "platform-team"}
+        metadata: dict[str, Any] = {
+            "description": "Database password",
+            "owner": "platform-team",
+        }
         plugin.set_secret("db-password", "secret-value", metadata=metadata)
 
         mock_infisical_sdk.createSecret.assert_called_once()
@@ -351,7 +354,9 @@ class TestInfisicalSecretsPluginHealthCheck:
         mock_infisical_sdk: MagicMock,
     ) -> None:
         """Test health_check returns unhealthy when API is unreachable."""
-        mock_infisical_sdk.listSecrets.side_effect = ConnectionError("Connection refused")
+        mock_infisical_sdk.listSecrets.side_effect = ConnectionError(
+            "Connection refused"
+        )
 
         status = plugin.health_check()
 
@@ -385,7 +390,9 @@ class TestInfisicalSecretsPluginAuthentication:
         mock_client = MagicMock()
         mock_infisical_client_module.InfisicalClient.return_value = mock_client
 
-        with patch.dict(sys.modules, {"infisical_client": mock_infisical_client_module}):
+        with patch.dict(
+            sys.modules, {"infisical_client": mock_infisical_client_module}
+        ):
             plugin = InfisicalSecretsPlugin(config=mock_infisical_config)
             plugin.startup()
 
@@ -402,7 +409,9 @@ class TestInfisicalSecretsPluginAuthentication:
         mock_client = MagicMock()
         mock_infisical_client_module.InfisicalClient.return_value = mock_client
 
-        with patch.dict(sys.modules, {"infisical_client": mock_infisical_client_module}):
+        with patch.dict(
+            sys.modules, {"infisical_client": mock_infisical_client_module}
+        ):
             plugin = InfisicalSecretsPlugin(config=mock_infisical_config)
             plugin.startup()
 
@@ -488,7 +497,9 @@ class TestInfisicalSecretsPluginOptionalMethods:
         InfisicalSecretsPlugin uses the default implementation which raises
         NotImplementedError since Infisical doesn't natively support multi-key secrets.
         """
-        with pytest.raises(NotImplementedError, match="Multi-key secrets not supported"):
+        with pytest.raises(
+            NotImplementedError, match="Multi-key secrets not supported"
+        ):
             plugin.get_multi_key_secret("my-secret")
 
 

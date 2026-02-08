@@ -386,7 +386,11 @@ class TestAuthorizationConfig:
         config = AuthorizationConfig(
             allowed_groups=["platform-admins", "release-managers", "devops"],
         )
-        assert config.allowed_groups == ["platform-admins", "release-managers", "devops"]
+        assert config.allowed_groups == [
+            "platform-admins",
+            "release-managers",
+            "devops",
+        ]
         assert config.allowed_operators is None
         assert config.separation_of_duties is False
 

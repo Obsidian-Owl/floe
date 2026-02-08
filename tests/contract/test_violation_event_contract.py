@@ -142,7 +142,9 @@ def test_violation_event_serialization_round_trip() -> None:
     assert deserialized.actual_value == original.actual_value
     assert deserialized.timestamp == original.timestamp
     assert deserialized.affected_consumers == original.affected_consumers
-    assert deserialized.check_duration_seconds == pytest.approx(original.check_duration_seconds)
+    assert deserialized.check_duration_seconds == pytest.approx(
+        original.check_duration_seconds
+    )
     assert deserialized.metadata == original.metadata
 
 
@@ -587,7 +589,9 @@ def test_openlineage_facet_required_fields() -> None:
 
     # Verify required field values
     assert facet["_producer"] == "floe"
-    assert facet["_schemaURL"] == "https://floe.dev/schemas/contract-violation-facet.json"
+    assert (
+        facet["_schemaURL"] == "https://floe.dev/schemas/contract-violation-facet.json"
+    )
     assert facet["contractName"] == "orders_v1"
     assert facet["contractVersion"] == "1.0.0"
     assert facet["violationType"] == "freshness"
@@ -603,7 +607,13 @@ def test_openlineage_facet_violation_type_enum_values() -> None:
     Ensures Python enum values match JSON schema enum values exactly.
     """
     # Expected enum values from JSON schema
-    schema_enum_values = {"freshness", "schema_drift", "quality", "availability", "deprecation"}
+    schema_enum_values = {
+        "freshness",
+        "schema_drift",
+        "quality",
+        "availability",
+        "deprecation",
+    }
 
     # Actual enum values from ViolationType
     actual_enum_values = {vt.value for vt in ViolationType}
@@ -636,11 +646,12 @@ def test_openlineage_facet_validates_against_json_schema() -> None:
     OpenLineage facet schema specification.
     """
     jsonschema = pytest.importorskip("jsonschema")
-    import json
-    from pathlib import Path
 
     # Load JSON schema
-    schema_path = Path(__file__).parent.parent.parent / "specs/3d-contract-monitoring/contracts/contract-violation-facet.json"
+    schema_path = (
+        Path(__file__).parent.parent.parent
+        / "specs/3d-contract-monitoring/contracts/contract-violation-facet.json"
+    )
     schema = json.loads(schema_path.read_text())
 
     # Create event with all fields
@@ -672,11 +683,12 @@ def test_openlineage_facet_rejects_extra_fields() -> None:
     Validates that additionalProperties: false is enforced by the schema.
     """
     jsonschema = pytest.importorskip("jsonschema")
-    import json
-    from pathlib import Path
 
     # Load JSON schema
-    schema_path = Path(__file__).parent.parent.parent / "specs/3d-contract-monitoring/contracts/contract-violation-facet.json"
+    schema_path = (
+        Path(__file__).parent.parent.parent
+        / "specs/3d-contract-monitoring/contracts/contract-violation-facet.json"
+    )
     schema = json.loads(schema_path.read_text())
 
     # Create valid facet with extra field
@@ -694,5 +706,7 @@ def test_openlineage_facet_rejects_extra_fields() -> None:
     }
 
     # Validation must fail
-    with pytest.raises(jsonschema.ValidationError, match="Additional properties are not allowed"):
+    with pytest.raises(
+        jsonschema.ValidationError, match="Additional properties are not allowed"
+    ):
         jsonschema.validate(instance=facet, schema=schema)

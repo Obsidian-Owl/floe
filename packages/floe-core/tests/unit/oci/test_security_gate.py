@@ -362,7 +362,10 @@ class TestTrivySecurityScanResultIntegration:
 
         # Should be sum of all severity counts
         expected_total = (
-            result.critical_count + result.high_count + result.medium_count + result.low_count
+            result.critical_count
+            + result.high_count
+            + result.medium_count
+            + result.low_count
         )
         assert result.total_vulnerabilities == expected_total
 

@@ -152,7 +152,9 @@ class DBTEventCollector:
                 # Try to convert to dict if possible
                 if hasattr(event_data, "__dict__"):
                     data_dict = {
-                        k: v for k, v in event_data.__dict__.items() if not k.startswith("_")
+                        k: v
+                        for k, v in event_data.__dict__.items()
+                        if not k.startswith("_")
                     }
                 elif hasattr(event_data, "to_dict"):
                     data_dict = event_data.to_dict()

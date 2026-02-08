@@ -110,7 +110,9 @@ class TestCompiledArtifactsTelemetryContract:
     ) -> None:
         """Verify ObservabilityConfig contains TelemetryConfig."""
         assert hasattr(sample_compiled_artifacts.observability, "telemetry")
-        assert isinstance(sample_compiled_artifacts.observability.telemetry, TelemetryConfig)
+        assert isinstance(
+            sample_compiled_artifacts.observability.telemetry, TelemetryConfig
+        )
 
     @pytest.mark.requirement("T076")
     def test_telemetry_config_has_required_fields(
@@ -159,7 +161,9 @@ class TestCompiledArtifactsTelemetryContract:
         assert attrs.floe_mode == "dev"
 
     @pytest.mark.requirement("T076")
-    def test_sampling_config_preserved(self, sample_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_sampling_config_preserved(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Verify SamplingConfig is correctly preserved."""
         sampling = sample_compiled_artifacts.observability.telemetry.sampling
 
@@ -181,7 +185,9 @@ class TestCompiledArtifactsTelemetryContract:
         assert batch.export_timeout_millis == 30000
 
     @pytest.mark.requirement("T076")
-    def test_logging_config_preserved(self, sample_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_logging_config_preserved(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Verify LoggingConfig is correctly preserved."""
         logging = sample_compiled_artifacts.observability.telemetry.logging
 
@@ -189,7 +195,9 @@ class TestCompiledArtifactsTelemetryContract:
         assert logging.json_output is True
 
     @pytest.mark.requirement("T076")
-    def test_lineage_config_preserved(self, sample_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_lineage_config_preserved(
+        self, sample_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Verify lineage configuration is preserved alongside telemetry."""
         obs = sample_compiled_artifacts.observability
 
@@ -206,9 +214,9 @@ class TestCompiledArtifactsJsonSchema:
         schema = CompiledArtifacts.model_json_schema()
 
         # Check that observability is in the schema
-        assert "observability" in schema.get("required", []) or "observability" in schema.get(
-            "properties", {}
-        )
+        assert "observability" in schema.get(
+            "required", []
+        ) or "observability" in schema.get("properties", {})
 
     @pytest.mark.requirement("T076")
     def test_json_schema_includes_telemetry_fields(self) -> None:
@@ -277,7 +285,10 @@ class TestCompiledArtifactsJsonSchema:
         # Verify key fields match
         assert restored.version == original.version
         assert restored.mode == original.mode
-        assert restored.observability.telemetry.enabled == original.observability.telemetry.enabled
+        assert (
+            restored.observability.telemetry.enabled
+            == original.observability.telemetry.enabled
+        )
         assert (
             restored.observability.telemetry.resource_attributes.service_name
             == original.observability.telemetry.resource_attributes.service_name
@@ -394,12 +405,19 @@ class TestGoldenCompiledArtifactsCompatibility:
         # Key fields should match original
         assert exported["version"] == original_data["version"]
         assert exported["mode"] == original_data["mode"]
-        assert exported["identity"]["product_id"] == original_data["identity"]["product_id"]
+        assert (
+            exported["identity"]["product_id"]
+            == original_data["identity"]["product_id"]
+        )
         assert (
             exported["observability"]["telemetry"]["backend"]
             == original_data["observability"]["telemetry"]["backend"]
         )
         assert (
-            exported["observability"]["telemetry"]["resource_attributes"]["service_name"]
-            == original_data["observability"]["telemetry"]["resource_attributes"]["service_name"]
+            exported["observability"]["telemetry"]["resource_attributes"][
+                "service_name"
+            ]
+            == original_data["observability"]["telemetry"]["resource_attributes"][
+                "service_name"
+            ]
         )

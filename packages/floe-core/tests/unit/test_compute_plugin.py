@@ -392,12 +392,16 @@ class TestCompletePluginImplementation:
         assert complete_plugin.floe_api_version == "1.0"
 
     @pytest.mark.requirement("001-FR-001")
-    def test_complete_plugin_is_self_hosted(self, complete_plugin: ComputePlugin) -> None:
+    def test_complete_plugin_is_self_hosted(
+        self, complete_plugin: ComputePlugin
+    ) -> None:
         """Test is_self_hosted property works."""
         assert complete_plugin.is_self_hosted is True
 
     @pytest.mark.requirement("001-FR-002")
-    def test_complete_plugin_generate_dbt_profile(self, complete_plugin: ComputePlugin) -> None:
+    def test_complete_plugin_generate_dbt_profile(
+        self, complete_plugin: ComputePlugin
+    ) -> None:
         """Test generate_dbt_profile method works."""
         config = ComputeConfig(
             plugin="duckdb",
@@ -423,7 +427,9 @@ class TestCompletePluginImplementation:
         assert "dbt-duckdb>=1.7.0" in packages
 
     @pytest.mark.requirement("001-FR-003")
-    def test_complete_plugin_validate_connection(self, complete_plugin: ComputePlugin) -> None:
+    def test_complete_plugin_validate_connection(
+        self, complete_plugin: ComputePlugin
+    ) -> None:
         """Test validate_connection method works."""
         config = ComputeConfig(plugin="duckdb")
 
@@ -460,7 +466,9 @@ class TestCompletePluginImplementation:
         assert result is None  # Default implementation returns None
 
     @pytest.mark.requirement("001-FR-001")
-    def test_complete_plugin_default_config_schema(self, complete_plugin: ComputePlugin) -> None:
+    def test_complete_plugin_default_config_schema(
+        self, complete_plugin: ComputePlugin
+    ) -> None:
         """Test default get_config_schema returns None."""
         result = complete_plugin.get_config_schema()
 

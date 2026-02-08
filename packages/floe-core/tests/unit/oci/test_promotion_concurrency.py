@@ -24,9 +24,15 @@ from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
 
 # Test constants
 TEST_DIGEST = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-TEST_DIGEST_STAGING = "sha256:7777777777777777777777777777777777777777777777777777777777777777"
-TEST_DIGEST_PROD = "sha256:8888888888888888888888888888888888888888888888888888888888888888"
-TEST_DIGEST_EXISTING = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+TEST_DIGEST_STAGING = (
+    "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+)
+TEST_DIGEST_PROD = (
+    "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+)
+TEST_DIGEST_EXISTING = (
+    "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+)
 
 
 class TestConcurrentPromotionSameEnvironment:
@@ -48,7 +54,9 @@ class TestConcurrentPromotionSameEnvironment:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-006")
-    def test_concurrent_promotions_one_succeeds_one_fails(self, controller: MagicMock) -> None:
+    def test_concurrent_promotions_one_succeeds_one_fails(
+        self, controller: MagicMock
+    ) -> None:
         """Test that concurrent promotions to same env - one succeeds, one fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -196,14 +204,16 @@ class TestConcurrentPromotionSameEnvironment:
 
         # Both should succeed
         for env, result in results:
-            assert isinstance(result, PromotionRecord), (
-                f"Expected success for {env}, got {type(result).__name__}"
-            )
+            assert isinstance(
+                result, PromotionRecord
+            ), f"Expected success for {env}, got {type(result).__name__}"
             assert result.target_environment == env
 
     @pytest.mark.requirement("8C-NFR-006")
     @pytest.mark.timeout(30)
-    def test_concurrent_promotion_no_data_corruption(self, controller: MagicMock) -> None:
+    def test_concurrent_promotion_no_data_corruption(
+        self, controller: MagicMock
+    ) -> None:
         """Test that concurrent promotions do not cause data corruption.
 
         When multiple promotions run concurrently:
@@ -230,9 +240,11 @@ class TestConcurrentPromotionSameEnvironment:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
             mock_create_tag.return_value = TEST_DIGEST
-            mock_get_digest.return_value = (
-                "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
+            test_digest = (
+                "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1"
+                "b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
             )
+            mock_get_digest.return_value = test_digest
 
             def run_promotion(index: int) -> PromotionRecord | Exception:
                 """Run a promotion with unique tag."""
@@ -272,7 +284,9 @@ class TestConcurrentPromotionSameEnvironment:
             assert record.operator.endswith("@github.com")
 
     @pytest.mark.requirement("8C-NFR-006")
-    def test_tag_exists_error_exit_code_during_race(self, controller: MagicMock) -> None:
+    def test_tag_exists_error_exit_code_during_race(
+        self, controller: MagicMock
+    ) -> None:
         """Test TagExistsError has correct exit code during race condition.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -298,7 +312,9 @@ class TestConcurrentPromotionSameEnvironment:
 
     @pytest.mark.requirement("8C-NFR-006")
     @pytest.mark.timeout(30)
-    def test_concurrent_promotion_with_gate_failures(self, controller: MagicMock) -> None:
+    def test_concurrent_promotion_with_gate_failures(
+        self, controller: MagicMock
+    ) -> None:
         """Test concurrent promotions where some fail gate validation.
 
         When concurrent promotions have different gate outcomes:

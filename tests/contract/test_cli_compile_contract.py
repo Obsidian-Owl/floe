@@ -160,7 +160,9 @@ class TestCompileOutputContract:
         required_fields = ["version", "metadata", "identity", "observability"]
 
         for field in required_fields:
-            assert field in sample_compiled_artifacts_json, f"Missing required field: {field}"
+            assert (
+                field in sample_compiled_artifacts_json
+            ), f"Missing required field: {field}"
 
     @pytest.mark.requirement("FR-011")
     def test_compiled_artifacts_version_is_semver(
@@ -618,8 +620,12 @@ class TestCompileCommandIntegrationContract:
                     ],
                 )
 
-            assert result.exit_code == 0, f"CLI failed for format {format_name}: {result.output}"
-            assert report_path.exists(), f"Enforcement report not created for format {format_name}"
+            assert (
+                result.exit_code == 0
+            ), f"CLI failed for format {format_name}: {result.output}"
+            assert (
+                report_path.exists()
+            ), f"Enforcement report not created for format {format_name}"
 
             # Basic content validation
             content = report_path.read_text()

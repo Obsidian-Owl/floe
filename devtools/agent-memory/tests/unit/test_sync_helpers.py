@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(autouse=True)
-def mock_config_env_vars(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+def mock_config_env_vars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
     """Set mock environment variables for all tests in this module.
 
     AgentMemoryConfig requires cognee_api_key and openai_api_key (when

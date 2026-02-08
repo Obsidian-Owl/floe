@@ -160,7 +160,9 @@ class TestVerificationClientInit:
 
         assert client.environment == "production"
 
-    def test_is_enabled_false_when_disabled(self, github_actions_issuer: TrustedIssuer) -> None:
+    def test_is_enabled_false_when_disabled(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> None:
         """is_enabled returns False when policy.enabled=False."""
         policy = VerificationPolicy(
             enabled=False,
@@ -171,7 +173,9 @@ class TestVerificationClientInit:
 
         assert client.is_enabled is False
 
-    def test_is_enabled_false_when_enforcement_off(self, off_policy: VerificationPolicy) -> None:
+    def test_is_enabled_false_when_enforcement_off(
+        self, off_policy: VerificationPolicy
+    ) -> None:
         """is_enabled returns False when enforcement=off."""
         client = VerificationClient(off_policy)
 
@@ -181,7 +185,9 @@ class TestVerificationClientInit:
 class TestVerificationClientEnforcementLevels:
     """Tests for enforcement levels (T038)."""
 
-    def test_enforce_raises_on_unsigned(self, enforce_policy: VerificationPolicy) -> None:
+    def test_enforce_raises_on_unsigned(
+        self, enforce_policy: VerificationPolicy
+    ) -> None:
         """enforce mode raises SignatureVerificationError for unsigned artifacts."""
         client = VerificationClient(enforce_policy)
 
@@ -209,7 +215,9 @@ class TestVerificationClientEnforcementLevels:
         assert result.status == "unsigned"
         assert "enforcement=warn" in caplog.text or result.failure_reason is not None
 
-    def test_off_silently_accepts_unsigned(self, off_policy: VerificationPolicy) -> None:
+    def test_off_silently_accepts_unsigned(
+        self, off_policy: VerificationPolicy
+    ) -> None:
         """off mode silently accepts unsigned artifacts."""
         client = VerificationClient(off_policy)
 
@@ -384,7 +392,9 @@ class TestVerificationWithSigstore:
 class TestRekorVerification:
     """Tests for Rekor transparency log verification."""
 
-    def test_check_rekor_entry_with_entries(self, enforce_policy: VerificationPolicy) -> None:
+    def test_check_rekor_entry_with_entries(
+        self, enforce_policy: VerificationPolicy
+    ) -> None:
         """_check_rekor_entry returns True when tlog entries exist."""
         client = VerificationClient(enforce_policy)
         bundle = MagicMock()
@@ -394,11 +404,15 @@ class TestRekorVerification:
 
         assert client._check_rekor_entry(bundle) is True
 
-    def test_check_rekor_entry_without_entries(self, enforce_policy: VerificationPolicy) -> None:
+    def test_check_rekor_entry_without_entries(
+        self, enforce_policy: VerificationPolicy
+    ) -> None:
         """_check_rekor_entry returns False when no tlog entries."""
         client = VerificationClient(enforce_policy)
         bundle = MagicMock()
-        bundle.to_json.return_value = json.dumps({"verificationMaterial": {"tlogEntries": []}})
+        bundle.to_json.return_value = json.dumps(
+            {"verificationMaterial": {"tlogEntries": []}}
+        )
 
         assert client._check_rekor_entry(bundle) is False
 
@@ -422,7 +436,9 @@ class TestAuditLogging:
                 artifact_digest="sha256:abc123",
             )
 
-        assert "Verification audit" in caplog.text or "verification" in caplog.text.lower()
+        assert (
+            "Verification audit" in caplog.text or "verification" in caplog.text.lower()
+        )
 
 
 class TestVerifyArtifactConvenienceFunction:
@@ -445,7 +461,9 @@ class TestVerifyArtifactConvenienceFunction:
 class TestEnvironmentPolicyOverride:
     """Tests for per-environment policy overrides."""
 
-    def test_environment_enforcement_override(self, github_actions_issuer: TrustedIssuer) -> None:
+    def test_environment_enforcement_override(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> None:
         """Environment-specific enforcement overrides default."""
         from floe_core.schemas.signing import EnvironmentPolicy
 
@@ -469,7 +487,9 @@ class TestEnvironmentPolicyOverride:
 class TestRequireSBOMEnforcement:
     """Tests for require_sbom enforcement during verification (T058)."""
 
-    def test_require_sbom_property_default(self, github_actions_issuer: TrustedIssuer) -> None:
+    def test_require_sbom_property_default(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> None:
         """Default require_sbom is False."""
         policy = VerificationPolicy(
             enabled=True,
@@ -478,7 +498,9 @@ class TestRequireSBOMEnforcement:
         client = VerificationClient(policy)
         assert client.require_sbom is False
 
-    def test_require_sbom_property_enabled(self, github_actions_issuer: TrustedIssuer) -> None:
+    def test_require_sbom_property_enabled(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> None:
         """require_sbom property returns policy value."""
         policy = VerificationPolicy(
             enabled=True,
@@ -488,7 +510,9 @@ class TestRequireSBOMEnforcement:
         client = VerificationClient(policy)
         assert client.require_sbom is True
 
-    def test_require_sbom_environment_override(self, github_actions_issuer: TrustedIssuer) -> None:
+    def test_require_sbom_environment_override(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> None:
         """Environment-specific require_sbom overrides default."""
         from floe_core.schemas.signing import EnvironmentPolicy
 
@@ -635,7 +659,9 @@ class TestKeyBasedVerification:
         from floe_core.schemas.secrets import SecretReference, SecretSource
 
         key_file = tmp_path / "cosign.pub"
-        key_file.write_text("-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----")
+        key_file.write_text(
+            "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----"
+        )
 
         import os
 
@@ -646,7 +672,9 @@ class TestKeyBasedVerification:
             enforcement="enforce",
             trusted_issuers=[],
             require_rekor=False,
-            public_key_ref=SecretReference(source=SecretSource.ENV, name="test-pub-key"),
+            public_key_ref=SecretReference(
+                source=SecretSource.ENV, name="test-pub-key"
+            ),
         )
 
     def test_check_cosign_available_returns_bool(self) -> None:
@@ -672,7 +700,9 @@ class TestKeyBasedVerification:
     ) -> None:
         """verify() routes to _verify_key_based for key-based signatures."""
         with (
-            patch("floe_core.oci.verification.check_cosign_available", return_value=True),
+            patch(
+                "floe_core.oci.verification.check_cosign_available", return_value=True
+            ),
             patch.object(
                 VerificationClient, "_cosign_verify_blob", return_value=True
             ) as mock_verify,
@@ -694,7 +724,9 @@ class TestKeyBasedVerification:
         key_based_signature_metadata: SignatureMetadata,
     ) -> None:
         """Key-based verification returns invalid when cosign not available."""
-        with patch("floe_core.oci.verification.check_cosign_available", return_value=False):
+        with patch(
+            "floe_core.oci.verification.check_cosign_available", return_value=False
+        ):
             client = VerificationClient(key_based_policy)
             result = client._verify_key_based(
                 content=b"content",
@@ -717,7 +749,9 @@ class TestKeyBasedVerification:
                 public_key_ref=None,
             )
 
-    def test_resolve_public_key_ref_env(self, key_based_policy: VerificationPolicy) -> None:
+    def test_resolve_public_key_ref_env(
+        self, key_based_policy: VerificationPolicy
+    ) -> None:
         """_resolve_public_key_ref resolves environment variable."""
         client = VerificationClient(key_based_policy)
         key_ref = client._resolve_public_key_ref()
@@ -732,7 +766,9 @@ class TestKeyBasedVerification:
         policy = VerificationPolicy(
             enabled=True,
             trusted_issuers=[],
-            public_key_ref=SecretReference(source=SecretSource.ENV, name="nonexistent-var"),
+            public_key_ref=SecretReference(
+                source=SecretSource.ENV, name="nonexistent-var"
+            ),
         )
         client = VerificationClient(policy)
 
@@ -760,7 +796,9 @@ class TestKeyBasedVerification:
     ) -> None:
         """_cosign_verify_blob returns False on verification failure."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stderr="verification failed")
+            mock_run.return_value = MagicMock(
+                returncode=1, stderr="verification failed"
+            )
 
             client = VerificationClient(key_based_policy)
             result = client._cosign_verify_blob(
@@ -826,13 +864,17 @@ class TestOfflineVerification:
                 )
 
                 try:
-                    client._verify_keyless(b"content", metadata, "oci://registry/repo:v1.0.0")
+                    client._verify_keyless(
+                        b"content", metadata, "oci://registry/repo:v1.0.0"
+                    )
                 except Exception:
                     pass
 
                 mock_verifier_cls.production.assert_called_with(offline=True)
 
-    def test_online_verifier_when_rekor_required(self, enforce_policy: VerificationPolicy) -> None:
+    def test_online_verifier_when_rekor_required(
+        self, enforce_policy: VerificationPolicy
+    ) -> None:
         """Verifier uses online mode when require_rekor=True."""
         with patch("sigstore.verify.Verifier") as mock_verifier_cls:
             client = VerificationClient(enforce_policy)
@@ -843,7 +885,9 @@ class TestOfflineVerification:
                 patch("sigstore.verify.policy.Identity"),
             ):
                 mock_verifier_cls.production.return_value = MagicMock()
-                bundle_data = {"verificationMaterial": {"tlogEntries": [{"logIndex": "123"}]}}
+                bundle_data = {
+                    "verificationMaterial": {"tlogEntries": [{"logIndex": "123"}]}
+                }
                 metadata = SignatureMetadata(
                     bundle=base64.b64encode(json.dumps(bundle_data).encode()).decode(),
                     mode="keyless",
@@ -855,7 +899,9 @@ class TestOfflineVerification:
                 )
 
                 try:
-                    client._verify_keyless(b"content", metadata, "oci://registry/repo:v1.0.0")
+                    client._verify_keyless(
+                        b"content", metadata, "oci://registry/repo:v1.0.0"
+                    )
                 except Exception:
                     pass
 
@@ -898,7 +944,9 @@ class TestKeyBasedOfflineVerification:
         os.environ["FLOE_TEST_KEY"] = "/path/to/key.pub"
 
         with (
-            patch("floe_core.oci.verification.check_cosign_available", return_value=True),
+            patch(
+                "floe_core.oci.verification.check_cosign_available", return_value=True
+            ),
             patch.object(VerificationClient, "_cosign_verify_blob", return_value=True),
         ):
             client = VerificationClient(policy)
@@ -920,7 +968,9 @@ class TestCertificateGracePeriod:
     """
 
     @pytest.fixture
-    def policy_with_grace_period(self, github_actions_issuer: TrustedIssuer) -> VerificationPolicy:
+    def policy_with_grace_period(
+        self, github_actions_issuer: TrustedIssuer
+    ) -> VerificationPolicy:
         """Create policy with 7-day grace period."""
         return VerificationPolicy(
             enabled=True,
@@ -973,7 +1023,9 @@ class TestCertificateGracePeriod:
 
         mock_bundle = MagicMock()
         mock_cert = MagicMock()
-        mock_cert.not_valid_after_utc = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_cert.not_valid_after_utc = datetime(
+            2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc
+        )
         mock_bundle.signing_certificate = mock_cert
 
         expiry = client._get_certificate_expiration(mock_bundle)
@@ -1013,7 +1065,9 @@ class TestCertificateGracePeriod:
         mock_cert = MagicMock()
         mock_cert.not_valid_after_utc = expired_at
         mock_bundle.signing_certificate = mock_cert
-        mock_bundle.to_json.return_value = '{"verificationMaterial": {"tlogEntries": [{}]}}'
+        mock_bundle.to_json.return_value = (
+            '{"verificationMaterial": {"tlogEntries": [{}]}}'
+        )
 
         with (
             patch("sigstore.models.Bundle.from_json", return_value=mock_bundle),

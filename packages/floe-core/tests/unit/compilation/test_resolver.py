@@ -21,7 +21,11 @@ def simple_manifest() -> PlatformManifest:
     return PlatformManifest(
         api_version="floe.dev/v1",
         kind="Manifest",
-        metadata={"name": "test-platform", "version": "1.0.0", "owner": "test@example.com"},
+        metadata={
+            "name": "test-platform",
+            "version": "1.0.0",
+            "owner": "test@example.com",
+        },
         plugins={
             "compute": {"type": "duckdb", "version": "0.9.0"},
             "orchestrator": {"type": "dagster", "version": "1.5.0"},
@@ -35,7 +39,11 @@ def manifest_with_defaults() -> PlatformManifest:
     return PlatformManifest(
         api_version="floe.dev/v1",
         kind="Manifest",
-        metadata={"name": "test-platform", "version": "1.0.0", "owner": "test@example.com"},
+        metadata={
+            "name": "test-platform",
+            "version": "1.0.0",
+            "owner": "test@example.com",
+        },
         plugins={
             "compute": {"type": "duckdb", "version": "0.9.0"},
             "orchestrator": {"type": "dagster", "version": "1.5.0"},
@@ -76,7 +84,9 @@ class TestResolvePlugins:
     """Tests for resolve_plugins function."""
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_resolve_plugins_returns_type(self, simple_manifest: PlatformManifest) -> None:
+    def test_resolve_plugins_returns_type(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that resolve_plugins returns ResolvedPlugins."""
         from floe_core.compilation.resolver import resolve_plugins
         from floe_core.schemas.compiled_artifacts import ResolvedPlugins
@@ -85,7 +95,9 @@ class TestResolvePlugins:
         assert isinstance(plugins, ResolvedPlugins)
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_resolve_plugins_has_compute(self, simple_manifest: PlatformManifest) -> None:
+    def test_resolve_plugins_has_compute(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that resolved plugins include compute."""
         from floe_core.compilation.resolver import resolve_plugins
 
@@ -95,7 +107,9 @@ class TestResolvePlugins:
         assert plugins.compute.version == "0.9.0"
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_resolve_plugins_has_orchestrator(self, simple_manifest: PlatformManifest) -> None:
+    def test_resolve_plugins_has_orchestrator(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that resolved plugins include orchestrator."""
         from floe_core.compilation.resolver import resolve_plugins
 
@@ -126,7 +140,9 @@ class TestResolveManifestInheritance:
     """Tests for resolve_manifest_inheritance function."""
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_simple_manifest_returns_self(self, simple_manifest: PlatformManifest) -> None:
+    def test_simple_manifest_returns_self(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that simple manifest (no parent) returns itself."""
         from floe_core.compilation.resolver import resolve_manifest_inheritance
 
@@ -134,7 +150,9 @@ class TestResolveManifestInheritance:
         assert resolved.metadata.name == simple_manifest.metadata.name
 
     @pytest.mark.requirement("2B-FR-008")
-    def test_inheritance_returns_platform_manifest(self, simple_manifest: PlatformManifest) -> None:
+    def test_inheritance_returns_platform_manifest(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that resolved inheritance returns PlatformManifest."""
         from floe_core.compilation.resolver import resolve_manifest_inheritance
 
@@ -223,7 +241,9 @@ class TestValidateComputeCredentials:
     """Tests for validate_compute_credentials function."""
 
     @pytest.mark.requirement("2B-FR-006")
-    def test_duckdb_no_credentials_required(self, simple_manifest: PlatformManifest) -> None:
+    def test_duckdb_no_credentials_required(
+        self, simple_manifest: PlatformManifest
+    ) -> None:
         """Test that DuckDB (self-hosted) requires no credentials - validation passes."""
         from unittest.mock import MagicMock, patch
 
@@ -354,7 +374,9 @@ class TestValidateComputeCredentials:
             """Config schema with optional credential fields."""
 
             account: str = Field(..., description="Required account")
-            password: SecretStr | None = Field(default=None, description="Optional password")
+            password: SecretStr | None = Field(
+                default=None, description="Optional password"
+            )
 
         mock_plugin = MagicMock()
         mock_plugin.name = "snowflake"

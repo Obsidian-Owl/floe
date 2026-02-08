@@ -237,9 +237,9 @@ class QualityCheck(BaseCheck):
                 "threshold": f"{threshold:.2f}",
                 "expectations_evaluated": str(len(expectations)),
                 "severity_reason": (
-                    "critical" if overall_score < 0.5 * threshold
-                    else "error" if overall_score < 0.9 * threshold
-                    else "warning"
+                    "critical"
+                    if overall_score < 0.5 * threshold
+                    else "error" if overall_score < 0.9 * threshold else "warning"
                 ),
             },
         )

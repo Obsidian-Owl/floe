@@ -214,7 +214,9 @@ class _IcebergSchemaManager:
             for change in evolution.changes:
                 if change.change_type == SchemaChangeType.ADD_COLUMN:
                     if change.field:
-                        iceberg_type = type_mapping.get(change.field.field_type, StringType())
+                        iceberg_type = type_mapping.get(
+                            change.field.field_type, StringType()
+                        )
                         update.add_column(
                             change.field.name,
                             iceberg_type,
@@ -319,7 +321,9 @@ class _IcebergSchemaManager:
                 # Check if type widening is valid
                 if change.target_type is not None:
                     source_type = self._get_column_type(table, change.source_column)
-                    if not self._is_valid_type_widening(source_type, change.target_type):
+                    if not self._is_valid_type_widening(
+                        source_type, change.target_type
+                    ):
                         msg = (
                             f"Cannot widen type from '{source_type}' to "
                             f"'{change.target_type.value}'"
@@ -354,7 +358,9 @@ class _IcebergSchemaManager:
         # In mock, check via catalog plugin's table schema (mock-specific)
         table_id = getattr(table, "identifier", None)
         if table_id is not None:
-            tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
+            tables: dict[str, Any] | None = getattr(
+                self._catalog_plugin, "_tables", None
+            )
             if tables is not None:
                 table_data = tables.get(table_id)
                 if table_data is not None:
@@ -375,7 +381,9 @@ class _IcebergSchemaManager:
         """
         table_id = getattr(table, "identifier", None)
         if table_id is not None:
-            tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
+            tables: dict[str, Any] | None = getattr(
+                self._catalog_plugin, "_tables", None
+            )
             if tables is not None:
                 table_data = tables.get(table_id)
                 if table_data is not None:

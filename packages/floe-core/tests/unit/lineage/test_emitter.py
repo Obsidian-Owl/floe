@@ -559,7 +559,9 @@ class TestCreateEmitterParametrized:
             ("namespace-with-dashes", "producer.with.dots"),
         ],
     )
-    def test_namespace_and_producer_variations(self, namespace: str, producer: str) -> None:
+    def test_namespace_and_producer_variations(
+        self, namespace: str, producer: str
+    ) -> None:
         """create_emitter correctly sets namespace and producer."""
         emitter = create_emitter(
             default_namespace=namespace,

@@ -141,7 +141,9 @@ class TestDataPipeline(IntegrationTestBase):
         """
         return catalog.load_table(f"{namespace}.{table_name}")
 
-    def _get_iceberg_row_count(self, catalog: Any, namespace: str, table_name: str) -> int:
+    def _get_iceberg_row_count(
+        self, catalog: Any, namespace: str, table_name: str
+    ) -> int:
         """Get row count from Iceberg table via PyIceberg scan.
 
         Args:
@@ -274,7 +276,9 @@ class TestDataPipeline(IntegrationTestBase):
                 f"Available tables: {available_tables}"
             )
 
-            row_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
+            row_count = self._get_iceberg_row_count(
+                polaris_client, namespace, table_name
+            )
             assert row_count > 0, f"Table {table_name} should have rows after seed"
 
         # Validate seed row counts via DuckDB
@@ -283,18 +287,18 @@ class TestDataPipeline(IntegrationTestBase):
         # Verify raw_customers has meaningful row count
         rows = self._query_duckdb(db_path, "SELECT COUNT(*) as cnt FROM raw_customers")
         customer_count = rows[0]["cnt"]
-        assert customer_count >= 10, (
-            f"raw_customers should have at least 10 seed rows, got {customer_count}"
-        )
+        assert (
+            customer_count >= 10
+        ), f"raw_customers should have at least 10 seed rows, got {customer_count}"
 
         # Verify raw_transactions has data and amounts are positive
         rows = self._query_duckdb(
             db_path,
             "SELECT COUNT(*) as cnt FROM raw_transactions WHERE amount > 0",
         )
-        assert rows[0]["cnt"] > 0, (
-            "raw_transactions should have rows with positive amounts after seed"
-        )
+        assert (
+            rows[0]["cnt"] > 0
+        ), "raw_transactions should have rows with positive amounts after seed"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-020")
@@ -357,11 +361,15 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Find earliest execution time for each layer
         staging_times = [model_times[m] for m in model_times if m.startswith("stg_")]
-        intermediate_times = [model_times[m] for m in model_times if m.startswith("int_")]
+        intermediate_times = [
+            model_times[m] for m in model_times if m.startswith("int_")
+        ]
         mart_times = [model_times[m] for m in model_times if m.startswith("mart_")]
 
         assert len(staging_times) > 0, f"Should have staging models for {product}"
-        assert len(intermediate_times) > 0, f"Should have intermediate models for {product}"
+        assert (
+            len(intermediate_times) > 0
+        ), f"Should have intermediate models for {product}"
         assert len(mart_times) > 0, f"Should have mart models for {product}"
 
         # Verify dependency order: staging before intermediate before marts
@@ -369,18 +377,21 @@ class TestDataPipeline(IntegrationTestBase):
         min_intermediate_time = min(intermediate_times)
         min_mart_time = min(mart_times)
 
-        assert max_staging_time <= min_intermediate_time, (
-            "Staging models should complete before intermediate models start"
-        )
-        assert min_intermediate_time <= min_mart_time, (
-            "Intermediate models should start before or with mart models"
-        )
+        assert (
+            max_staging_time <= min_intermediate_time
+        ), "Staging models should complete before intermediate models start"
+        assert (
+            min_intermediate_time <= min_mart_time
+        ), "Intermediate models should start before or with mart models"
 
         # Verify ALL models succeeded (no errors)
         for result_entry in results:
             status = result_entry.get("status")
             uid = result_entry.get("unique_id", "unknown")
-            assert status in ("pass", "success"), f"Model {uid} should succeed, got status={status}"
+            assert status in (
+                "pass",
+                "success",
+            ), f"Model {uid} should succeed, got status={status}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-021")
@@ -418,27 +429,27 @@ class TestDataPipeline(IntegrationTestBase):
         # Verify Bronze layer (staging) tables
         bronze_tables = ["stg_crm_customers", "stg_transactions", "stg_support_tickets"]
         for table in bronze_tables:
-            assert table in available_tables, (
-                f"Bronze layer table {table} should exist in Polaris. Available: {available_tables}"
-            )
+            assert (
+                table in available_tables
+            ), f"Bronze layer table {table} should exist in Polaris. Available: {available_tables}"
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Bronze table {table} should have data"
 
         # Verify Silver layer (intermediate) tables
         silver_tables = ["int_customer_orders", "int_customer_support"]
         for table in silver_tables:
-            assert table in available_tables, (
-                f"Silver layer table {table} should exist in Polaris. Available: {available_tables}"
-            )
+            assert (
+                table in available_tables
+            ), f"Silver layer table {table} should exist in Polaris. Available: {available_tables}"
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Silver table {table} should have data"
 
         # Verify Gold layer (marts) tables
         gold_tables = ["mart_customer_360"]
         for table in gold_tables:
-            assert table in available_tables, (
-                f"Gold layer table {table} should exist in Polaris. Available: {available_tables}"
-            )
+            assert (
+                table in available_tables
+            ), f"Gold layer table {table} should exist in Polaris. Available: {available_tables}"
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Gold table {table} should have aggregated data"
 
@@ -516,19 +527,23 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Validate Iceberg table schemas have expected columns
         # Staging tables should have typed columns (not just raw strings)
-        stg_table = self._load_iceberg_table(polaris_client, namespace, "stg_crm_customers")
-        stg_columns = [field.name for field in stg_table.schema().fields]
-        assert "customer_id" in stg_columns or any("id" in c for c in stg_columns), (
-            f"stg_crm_customers should have an ID column. Columns: {stg_columns}"
+        stg_table = self._load_iceberg_table(
+            polaris_client, namespace, "stg_crm_customers"
         )
+        stg_columns = [field.name for field in stg_table.schema().fields]
+        assert "customer_id" in stg_columns or any(
+            "id" in c for c in stg_columns
+        ), f"stg_crm_customers should have an ID column. Columns: {stg_columns}"
 
         # Mart table should have derived columns (business metrics)
-        mart_table = self._load_iceberg_table(polaris_client, namespace, "mart_customer_360")
+        mart_table = self._load_iceberg_table(
+            polaris_client, namespace, "mart_customer_360"
+        )
         mart_columns = [field.name for field in mart_table.schema().fields]
         # Mart should have aggregated/derived metrics not in raw data
-        assert len(mart_columns) > 2, (
-            f"mart_customer_360 should have multiple business metric columns, got {mart_columns}"
-        )
+        assert (
+            len(mart_columns) > 2
+        ), f"mart_customer_360 should have multiple business metric columns, got {mart_columns}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-024")
@@ -571,9 +586,9 @@ class TestDataPipeline(IntegrationTestBase):
         output = result.stdout + result.stderr
         assert "PASS" in output or "passed" in output.lower(), "Tests should pass"
         # Should not have failures
-        assert "FAIL" not in output and "failed" not in output.lower(), (
-            "Should have no test failures"
-        )
+        assert (
+            "FAIL" not in output and "failed" not in output.lower()
+        ), "Should have no test failures"
 
         # Parse test results precisely
         import json as json_mod
@@ -588,11 +603,15 @@ class TestDataPipeline(IntegrationTestBase):
         results_list = test_results.get("results", [])
         passed = sum(1 for r in results_list if r.get("status") in ("pass", "success"))
         failed = sum(1 for r in results_list if r.get("status") == "fail")
-        assert passed > 0, (
-            f"dbt test should have at least one passing test, got {passed} pass, {failed} fail"
-        )
-        fail_ids = [r.get("unique_id") for r in results_list if r.get("status") == "fail"]
-        assert failed == 0, f"dbt test should have zero failures, got {failed}. Failed: {fail_ids}"
+        assert (
+            passed > 0
+        ), f"dbt test should have at least one passing test, got {passed} pass, {failed} fail"
+        fail_ids = [
+            r.get("unique_id") for r in results_list if r.get("status") == "fail"
+        ]
+        assert (
+            failed == 0
+        ), f"dbt test should have zero failures, got {failed}. Failed: {fail_ids}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-025")
@@ -626,14 +645,18 @@ class TestDataPipeline(IntegrationTestBase):
         # Get initial row count from a staging table (incremental candidate)
         namespace = "customer_360"
         table_name = "stg_transactions"
-        initial_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
+        initial_count = self._get_iceberg_row_count(
+            polaris_client, namespace, table_name
+        )
         assert initial_count > 0, "Initial load should have rows"
 
         # Second run: with same seed data (simulates incremental)
         self._run_dbt_command(["run"], project_dir)
 
         # Get row count after second run
-        second_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
+        second_count = self._get_iceberg_row_count(
+            polaris_client, namespace, table_name
+        )
 
         # For non-incremental models, count should remain the same
         # For incremental models, count should not double (merge/upsert behavior)
@@ -692,10 +715,12 @@ class TestDataPipeline(IntegrationTestBase):
         assert len(results["results"]) > 0, "Should have executed quality checks"
 
         # Verify all tests passed
-        failed_tests = [r for r in results["results"] if r.get("status") not in ("pass", "success")]
-        assert len(failed_tests) == 0, (
-            f"All quality checks should pass for {product}, but {len(failed_tests)} failed"
-        )
+        failed_tests = [
+            r for r in results["results"] if r.get("status") not in ("pass", "success")
+        ]
+        assert (
+            len(failed_tests) == 0
+        ), f"All quality checks should pass for {product}, but {len(failed_tests)} failed"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-027")
@@ -732,7 +757,9 @@ class TestDataPipeline(IntegrationTestBase):
         try:
             # Attempt to run pipeline (should fail)
             with pytest.raises(subprocess.CalledProcessError) as exc_info:
-                self._run_dbt_command(["run", "--select", "bad_model_test"], project_dir)
+                self._run_dbt_command(
+                    ["run", "--select", "bad_model_test"], project_dir
+                )
 
             # Verify dbt captured the error
             assert exc_info.value.returncode != 0, "dbt run should fail"
@@ -782,7 +809,9 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Create a bad intermediate model
         bad_model_path = project_dir / "models" / "intermediate" / "int_bad_test.sql"
-        bad_model_path.write_text("-- Intentional error\nSELECT * FROM non_existent_table\n")
+        bad_model_path.write_text(
+            "-- Intentional error\nSELECT * FROM non_existent_table\n"
+        )
 
         try:
             # Run pipeline with bad model (should fail)
@@ -855,7 +884,9 @@ class TestDataPipeline(IntegrationTestBase):
 
         if callable(sensor_def):
             sig = inspect.signature(sensor_def)
-            assert len(sig.parameters) > 0, "Sensor function should accept context parameter"
+            assert (
+                len(sig.parameters) > 0
+            ), "Sensor function should accept context parameter"
 
         # Test 4: Query Dagster GraphQL for sensor registration status
         query = """
@@ -876,9 +907,9 @@ class TestDataPipeline(IntegrationTestBase):
 
         try:
             result = dagster_client._execute(query)
-            assert "sensorsOrError" in result, (
-                f"Dagster sensor query response missing 'sensorsOrError'. Got: {result}"
-            )
+            assert (
+                "sensorsOrError" in result
+            ), f"Dagster sensor query response missing 'sensorsOrError'. Got: {result}"
         except Exception as e:
             pytest.fail(
                 f"Failed to query Dagster sensors endpoint: {e}\n"
@@ -912,17 +943,23 @@ class TestDataPipeline(IntegrationTestBase):
         assert artifacts.transforms is not None, "Transforms must be present"
 
         # Verify transform models exist with correct tier assignments
-        bronze_models = [m for m in artifacts.transforms.models if m.quality_tier == "bronze"]
-        silver_models = [m for m in artifacts.transforms.models if m.quality_tier == "silver"]
-        gold_models = [m for m in artifacts.transforms.models if m.quality_tier == "gold"]
+        bronze_models = [
+            m for m in artifacts.transforms.models if m.quality_tier == "bronze"
+        ]
+        silver_models = [
+            m for m in artifacts.transforms.models if m.quality_tier == "silver"
+        ]
+        gold_models = [
+            m for m in artifacts.transforms.models if m.quality_tier == "gold"
+        ]
 
         assert len(bronze_models) > 0, (
             "MATH GAP: No bronze tier models found. "
             "Customer-360 must have staging models for data normalization."
         )
-        assert len(silver_models) > 0, (
-            "MATH GAP: No silver tier models found. Customer-360 must have intermediate models."
-        )
+        assert (
+            len(silver_models) > 0
+        ), "MATH GAP: No silver tier models found. Customer-360 must have intermediate models."
         assert len(gold_models) > 0, (
             "MATH GAP: No gold tier models found. "
             "Customer-360 must have mart models for aggregation."
@@ -933,16 +970,16 @@ class TestDataPipeline(IntegrationTestBase):
         for model in silver_models:
             if model.depends_on:
                 for dep in model.depends_on:
-                    assert dep in all_model_names or dep.startswith("source"), (
-                        f"Silver model {model.name} depends on unknown model {dep}"
-                    )
+                    assert dep in all_model_names or dep.startswith(
+                        "source"
+                    ), f"Silver model {model.name} depends on unknown model {dep}"
 
         for model in gold_models:
             if model.depends_on:
                 for dep in model.depends_on:
-                    assert dep in all_model_names or dep.startswith("source"), (
-                        f"Gold model {model.name} depends on unknown model {dep}"
-                    )
+                    assert dep in all_model_names or dep.startswith(
+                        "source"
+                    ), f"Gold model {model.name} depends on unknown model {dep}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-031")
@@ -1020,13 +1057,13 @@ class TestDataPipeline(IntegrationTestBase):
         compiled = compile_pipeline(spec_path, manifest_path)
 
         # Governance retention must be populated from manifest
-        assert compiled.governance is not None, (
-            "Compiled artifacts must have governance section for retention enforcement"
-        )
+        assert (
+            compiled.governance is not None
+        ), "Compiled artifacts must have governance section for retention enforcement"
         retention = compiled.governance.data_retention_days
-        assert retention is None or retention > 0, (
-            f"Governance data_retention_days must be positive if set, got {retention}"
-        )
+        assert (
+            retention is None or retention > 0
+        ), f"Governance data_retention_days must be positive if set, got {retention}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
@@ -1053,7 +1090,10 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Test 1: Verify demo values have snapshot retention configuration
         values_demo_path = (
-            Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-demo.yaml"
+            Path(__file__).parent.parent.parent
+            / "charts"
+            / "floe-platform"
+            / "values-demo.yaml"
         )
         assert values_demo_path.exists(), (
             f"Demo values file not found at {values_demo_path}\n"
@@ -1064,7 +1104,8 @@ class TestDataPipeline(IntegrationTestBase):
 
         values_content = yaml.safe_load(values_demo_path.read_text())
         has_snapshot_config = (
-            "snapshotKeepLast" in str(values_content) or "snapshot" in str(values_content).lower()
+            "snapshotKeepLast" in str(values_content)
+            or "snapshot" in str(values_content).lower()
         )
         assert has_snapshot_config, (
             "Demo values should contain snapshot retention configuration "
@@ -1081,4 +1122,6 @@ class TestDataPipeline(IntegrationTestBase):
             or "snapshot" in str(floe_config).lower()
             or "expiry" in str(floe_config).lower()
         )
-        assert has_retention, "floe.yaml should contain retention or snapshot configuration"
+        assert (
+            has_retention
+        ), "floe.yaml should contain retention or snapshot configuration"

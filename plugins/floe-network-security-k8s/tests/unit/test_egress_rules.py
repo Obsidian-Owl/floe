@@ -150,7 +150,9 @@ class TestPlatformServiceEgressRules:
         rules = plugin.generate_platform_egress_rules()
 
         # Find Polaris rule (port 8181)
-        polaris_found = any(any(p.get("port") == 8181 for p in r.get("ports", [])) for r in rules)
+        polaris_found = any(
+            any(p.get("port") == 8181 for p in r.get("ports", [])) for r in rules
+        )
         assert polaris_found, "Platform egress must include Polaris (8181)"
 
     @pytest.mark.requirement("FR-031")
@@ -163,7 +165,9 @@ class TestPlatformServiceEgressRules:
         rules = plugin.generate_platform_egress_rules()
 
         # Find OTel gRPC rule (port 4317)
-        otel_grpc_found = any(any(p.get("port") == 4317 for p in r.get("ports", [])) for r in rules)
+        otel_grpc_found = any(
+            any(p.get("port") == 4317 for p in r.get("ports", [])) for r in rules
+        )
         assert otel_grpc_found, "Platform egress must include OTel gRPC (4317)"
 
     @pytest.mark.requirement("FR-031")
@@ -176,7 +180,9 @@ class TestPlatformServiceEgressRules:
         rules = plugin.generate_platform_egress_rules()
 
         # Find OTel HTTP rule (port 4318)
-        otel_http_found = any(any(p.get("port") == 4318 for p in r.get("ports", [])) for r in rules)
+        otel_http_found = any(
+            any(p.get("port") == 4318 for p in r.get("ports", [])) for r in rules
+        )
         assert otel_http_found, "Platform egress must include OTel HTTP (4318)"
 
     @pytest.mark.requirement("FR-032")
@@ -189,7 +195,9 @@ class TestPlatformServiceEgressRules:
         rules = plugin.generate_platform_egress_rules()
 
         # Find MinIO rule (port 9000)
-        minio_found = any(any(p.get("port") == 9000 for p in r.get("ports", [])) for r in rules)
+        minio_found = any(
+            any(p.get("port") == 9000 for p in r.get("ports", [])) for r in rules
+        )
         assert minio_found, "Platform egress must include MinIO (9000)"
 
     @pytest.mark.requirement("FR-033")
@@ -206,11 +214,13 @@ class TestPlatformServiceEgressRules:
             if "to" in rule:
                 for to_entry in rule["to"]:
                     if "namespaceSelector" in to_entry:
-                        match_labels = to_entry["namespaceSelector"].get("matchLabels", {})
-                        namespace = match_labels.get("kubernetes.io/metadata.name")
-                        assert namespace == "floe-platform", (
-                            f"Platform egress should target floe-platform, got {namespace}"
+                        match_labels = to_entry["namespaceSelector"].get(
+                            "matchLabels", {}
                         )
+                        namespace = match_labels.get("kubernetes.io/metadata.name")
+                        assert (
+                            namespace == "floe-platform"
+                        ), f"Platform egress should target floe-platform, got {namespace}"
 
     @pytest.mark.requirement("FR-031")
     def test_platform_egress_uses_tcp_protocol(self) -> None:
@@ -224,9 +234,9 @@ class TestPlatformServiceEgressRules:
         for rule in rules:
             for port_entry in rule.get("ports", []):
                 # Platform services use TCP
-                assert port_entry.get("protocol") == "TCP", (
-                    f"Platform egress should use TCP, got {port_entry.get('protocol')}"
-                )
+                assert (
+                    port_entry.get("protocol") == "TCP"
+                ), f"Platform egress should use TCP, got {port_entry.get('protocol')}"
 
 
 class TestCustomEgressRuleNegativePaths:
@@ -238,7 +248,9 @@ class TestCustomEgressRuleNegativePaths:
         from floe_network_security_k8s import K8sNetworkSecurityPlugin
 
         plugin = K8sNetworkSecurityPlugin()
-        with pytest.raises(ValueError, match="Either cidr or namespace must be provided"):
+        with pytest.raises(
+            ValueError, match="Either cidr or namespace must be provided"
+        ):
             plugin.generate_custom_egress_rule()
 
     @pytest.mark.requirement("FR-033")
@@ -305,7 +317,9 @@ class TestCustomEgressRulesMultiPortNegativePaths:
         from floe_network_security_k8s import K8sNetworkSecurityPlugin
 
         plugin = K8sNetworkSecurityPlugin()
-        with pytest.raises(ValueError, match="Either cidr or namespace must be provided"):
+        with pytest.raises(
+            ValueError, match="Either cidr or namespace must be provided"
+        ):
             plugin.generate_custom_egress_rules(ports=[80, 443])
 
     @pytest.mark.requirement("FR-033")

@@ -39,7 +39,9 @@ class DagsterConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    host: str = Field(default_factory=lambda: os.environ.get("DAGSTER_HOST", "dagster-webserver"))
+    host: str = Field(
+        default_factory=lambda: os.environ.get("DAGSTER_HOST", "dagster-webserver")
+    )
     port: int = Field(
         default_factory=lambda: int(os.environ.get("DAGSTER_PORT", "3000")),
         ge=1,

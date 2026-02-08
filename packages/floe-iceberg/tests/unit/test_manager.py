@@ -290,7 +290,9 @@ class TestIcebergTableManagerConnectionHandling:
         # Create a mock plugin that raises on get_pyiceberg_fileio
         failing_storage = MagicMock()
         failing_storage.name = "failing-storage"
-        failing_storage.get_pyiceberg_fileio.side_effect = RuntimeError("FileIO unavailable")
+        failing_storage.get_pyiceberg_fileio.side_effect = RuntimeError(
+            "FileIO unavailable"
+        )
 
         with pytest.raises((RuntimeError, IcebergError)):
             IcebergTableManager(
@@ -373,7 +375,9 @@ class TestIcebergTableManagerCreateTable:
             namespace="bronze",
             table_name="orders",
             table_schema=TableSchema(
-                fields=[SchemaField(field_id=1, name="order_id", field_type=FieldType.LONG)]
+                fields=[
+                    SchemaField(field_id=1, name="order_id", field_type=FieldType.LONG)
+                ]
             ),
         )
 
@@ -413,7 +417,9 @@ class TestIcebergTableManagerCreateTable:
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="event_id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="event_date", field_type=FieldType.DATE),
+                    SchemaField(
+                        field_id=2, name="event_date", field_type=FieldType.DATE
+                    ),
                 ]
             ),
             partition_spec=PartitionSpec(
@@ -459,7 +465,9 @@ class TestIcebergTableManagerCreateTable:
             namespace="gold",
             table_name="metrics",
             table_schema=TableSchema(
-                fields=[SchemaField(field_id=1, name="metric_id", field_type=FieldType.LONG)]
+                fields=[
+                    SchemaField(field_id=1, name="metric_id", field_type=FieldType.LONG)
+                ]
             ),
             properties={
                 "write.format.default": "parquet",
@@ -620,7 +628,10 @@ class TestIcebergTableManagerCreateTable:
 
         table_entry = mock_catalog_plugin._tables.get("bronze.custom_location")
         assert table_entry is not None
-        assert table_entry["location"] == "s3://custom-bucket/warehouse/bronze/custom_location"
+        assert (
+            table_entry["location"]
+            == "s3://custom-bucket/warehouse/bronze/custom_location"
+        )
         assert table.identifier == "bronze.custom_location"
 
 
@@ -1182,11 +1193,15 @@ class TestIcebergTableManagerEvolveSchemaAddColumn:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=2, name="email", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=2, name="email", field_type=FieldType.STRING
+                    ),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=3, name="phone", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=3, name="phone", field_type=FieldType.STRING
+                    ),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
@@ -1241,7 +1256,9 @@ class TestIcebergTableManagerEvolveSchemaRenameColumn:
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="old_name", field_type=FieldType.STRING),
+                    SchemaField(
+                        field_id=2, name="old_name", field_type=FieldType.STRING
+                    ),
                 ]
             ),
         )
@@ -1517,7 +1534,9 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="deprecated", field_type=FieldType.STRING),
+                    SchemaField(
+                        field_id=2, name="deprecated", field_type=FieldType.STRING
+                    ),
                 ]
             ),
         )
@@ -1568,7 +1587,9 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="deprecated", field_type=FieldType.STRING),
+                    SchemaField(
+                        field_id=2, name="deprecated", field_type=FieldType.STRING
+                    ),
                 ]
             ),
         )
@@ -1621,7 +1642,9 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
             table_schema=TableSchema(
                 fields=[
                     SchemaField(field_id=1, name="id", field_type=FieldType.LONG),
-                    SchemaField(field_id=2, name="deprecated", field_type=FieldType.STRING),
+                    SchemaField(
+                        field_id=2, name="deprecated", field_type=FieldType.STRING
+                    ),
                 ]
             ),
         )
@@ -1632,7 +1655,9 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
             changes=[
                 SchemaChange(
                     change_type=SchemaChangeType.ADD_COLUMN,
-                    field=SchemaField(field_id=3, name="new_field", field_type=FieldType.STRING),
+                    field=SchemaField(
+                        field_id=3, name="new_field", field_type=FieldType.STRING
+                    ),
                 ),
                 SchemaChange(
                     change_type=SchemaChangeType.DELETE_COLUMN,
@@ -1732,7 +1757,9 @@ class TestIcebergTableManagerEvolveSchemaIncompatible:
             table_name="evolve_make_optional",
             table_schema=TableSchema(
                 fields=[
-                    SchemaField(field_id=1, name="id", field_type=FieldType.LONG, required=True),
+                    SchemaField(
+                        field_id=1, name="id", field_type=FieldType.LONG, required=True
+                    ),
                     SchemaField(
                         field_id=2,
                         name="required_field",

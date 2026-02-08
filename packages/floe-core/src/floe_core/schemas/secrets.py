@@ -252,7 +252,8 @@ def _check_string_for_secret_pattern(
     for pattern in patterns:
         if value.startswith(pattern):
             return (
-                f"Potential secret at '{path}': value starts with suspicious pattern '{pattern}...'"
+                f"Potential secret at '{path}': "
+                f"value starts with suspicious pattern '{pattern}...'"
             )
     return None
 

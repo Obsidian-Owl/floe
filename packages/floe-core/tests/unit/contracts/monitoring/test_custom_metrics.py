@@ -6,7 +6,7 @@ Requirements: 3D-FR-046
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 
@@ -14,7 +14,6 @@ from floe_core.contracts.monitoring.custom_metrics import (
     CustomMetricDefinition,
     MetricRecorder,
 )
-
 
 # --- CustomMetricDefinition Tests ---
 
@@ -195,10 +194,16 @@ def test_custom_metric_with_labels() -> None:
     assert len(recordings) == 2
 
     assert recordings[0]["value"] == pytest.approx(0.125)
-    assert recordings[0]["labels"] == {"endpoint": "/api/v1/contracts", "status_code": "200"}
+    assert recordings[0]["labels"] == {
+        "endpoint": "/api/v1/contracts",
+        "status_code": "200",
+    }
 
     assert recordings[1]["value"] == pytest.approx(0.250)
-    assert recordings[1]["labels"] == {"endpoint": "/api/v1/violations", "status_code": "500"}
+    assert recordings[1]["labels"] == {
+        "endpoint": "/api/v1/violations",
+        "status_code": "500",
+    }
 
 
 @pytest.mark.requirement("3D-FR-046")

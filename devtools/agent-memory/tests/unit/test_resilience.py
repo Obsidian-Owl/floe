@@ -132,7 +132,9 @@ class TestCircuitBreaker:
         def mock_monotonic() -> float:
             return mock_time
 
-        with patch("agent_memory.resilience.time.monotonic", side_effect=mock_monotonic):
+        with patch(
+            "agent_memory.resilience.time.monotonic", side_effect=mock_monotonic
+        ):
             # Open the circuit
             breaker.record_failure()
             assert breaker.state == CircuitState.OPEN

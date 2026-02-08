@@ -94,7 +94,9 @@ class TestParseMarkdownFile:
         assert result.source_path == sample_markdown_file
 
     @pytest.mark.requirement("FR-004")
-    def test_parse_file_without_frontmatter(self, markdown_without_frontmatter: Path) -> None:
+    def test_parse_file_without_frontmatter(
+        self, markdown_without_frontmatter: Path
+    ) -> None:
         """Test parsing file without frontmatter uses H1 as title."""
         result = parse_markdown_file(markdown_without_frontmatter)
 

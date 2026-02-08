@@ -152,9 +152,13 @@ class TestCreateDefinitionsWithInvalidArtifacts:
             dagster_plugin.create_definitions(artifacts)
 
     @pytest.mark.requirement("FR-009")
-    def test_error_message_is_actionable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_error_message_is_actionable(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test validation error includes actionable guidance."""
-        with pytest.raises(ValueError, match="Ensure you are passing output from 'floe compile'"):
+        with pytest.raises(
+            ValueError, match="Ensure you are passing output from 'floe compile'"
+        ):
             dagster_plugin.create_definitions({})
 
 

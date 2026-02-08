@@ -48,7 +48,9 @@ def _make_contract(
     else:
         contract_data["sla"] = {}
 
-    if dataset_present and (data_age_minutes is not None or timestamp_value is not None):
+    if dataset_present and (
+        data_age_minutes is not None or timestamp_value is not None
+    ):
         ts = timestamp_value or (now - timedelta(minutes=data_age_minutes)).isoformat()  # type: ignore[arg-type]
         contract_data["dataset"] = {"last_updated": ts}
     elif dataset_present:

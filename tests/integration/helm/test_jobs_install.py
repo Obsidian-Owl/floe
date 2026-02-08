@@ -27,7 +27,9 @@ class TestJobsChartInstall:
     @pytest.mark.slow
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.usefixtures("helm_available", "kind_cluster")
-    def test_chart_install_dry_run(self, jobs_chart_path: Path, test_namespace: str) -> None:
+    def test_chart_install_dry_run(
+        self, jobs_chart_path: Path, test_namespace: str
+    ) -> None:
         """Test chart installation with dry-run."""
         result = subprocess.run(
             [
@@ -48,7 +50,9 @@ class TestJobsChartInstall:
     @pytest.mark.slow
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.usefixtures("helm_available", "kind_cluster")
-    def test_chart_install_with_dbt_job(self, jobs_chart_path: Path, test_namespace: str) -> None:
+    def test_chart_install_with_dbt_job(
+        self, jobs_chart_path: Path, test_namespace: str
+    ) -> None:
         """Test chart installation with dbt job enabled."""
         release_name = "test-jobs-dbt"
 
@@ -75,7 +79,9 @@ class TestJobsChartInstall:
 
             # Job will fail because there's no actual dbt project,
             # but the chart should install successfully
-            assert install_result.returncode == 0, f"Install failed: {install_result.stderr}"
+            assert (
+                install_result.returncode == 0
+            ), f"Install failed: {install_result.stderr}"
 
             # Verify job was created
             get_result = subprocess.run(
@@ -112,7 +118,9 @@ class TestJobsChartInstall:
     @pytest.mark.slow
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.usefixtures("helm_available", "kind_cluster")
-    def test_chart_install_with_cronjob(self, jobs_chart_path: Path, test_namespace: str) -> None:
+    def test_chart_install_with_cronjob(
+        self, jobs_chart_path: Path, test_namespace: str
+    ) -> None:
         """Test chart installation with CronJob."""
         release_name = "test-jobs-cron"
 
@@ -139,7 +147,9 @@ class TestJobsChartInstall:
                 check=False,
             )
 
-            assert install_result.returncode == 0, f"Install failed: {install_result.stderr}"
+            assert (
+                install_result.returncode == 0
+            ), f"Install failed: {install_result.stderr}"
 
             # Verify cronjob was created
             get_result = subprocess.run(
@@ -215,7 +225,9 @@ class TestJobsChartInstall:
                 check=False,
             )
 
-            assert upgrade_result.returncode == 0, f"Upgrade failed: {upgrade_result.stderr}"
+            assert (
+                upgrade_result.returncode == 0
+            ), f"Upgrade failed: {upgrade_result.stderr}"
 
         finally:
             # Cleanup

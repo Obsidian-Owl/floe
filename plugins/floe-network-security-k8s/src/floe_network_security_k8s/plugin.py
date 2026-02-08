@@ -100,7 +100,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             from_entries.append(
                 {
                     "namespaceSelector": {
-                        "matchLabels": {"kubernetes.io/metadata.name": rule.from_namespace}
+                        "matchLabels": {
+                            "kubernetes.io/metadata.name": rule.from_namespace
+                        }
                     }
                 }
             )
@@ -110,7 +112,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             k8s_rule["from"] = from_entries
 
         if rule.ports:
-            k8s_rule["ports"] = [{"port": p.port, "protocol": p.protocol} for p in rule.ports]
+            k8s_rule["ports"] = [
+                {"port": p.port, "protocol": p.protocol} for p in rule.ports
+            ]
 
         return k8s_rule
 
@@ -123,7 +127,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             to_entries.append(
                 {
                     "namespaceSelector": {
-                        "matchLabels": {"kubernetes.io/metadata.name": rule.to_namespace}
+                        "matchLabels": {
+                            "kubernetes.io/metadata.name": rule.to_namespace
+                        }
                     }
                 }
             )
@@ -133,7 +139,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             k8s_rule["to"] = to_entries
 
         if rule.ports:
-            k8s_rule["ports"] = [{"port": p.port, "protocol": p.protocol} for p in rule.ports]
+            k8s_rule["ports"] = [
+                {"port": p.port, "protocol": p.protocol} for p in rule.ports
+            ]
 
         return k8s_rule
 
@@ -235,7 +243,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
     # Platform Ingress Rules (US2 - Platform Namespace Policies)
     # =========================================================================
 
-    def generate_ingress_controller_rule(self, namespace: str = "ingress-nginx") -> dict[str, Any]:
+    def generate_ingress_controller_rule(
+        self, namespace: str = "ingress-nginx"
+    ) -> dict[str, Any]:
         """Generate ingress rule from ingress controller namespace.
 
         Platform services need to receive traffic from the ingress controller
@@ -375,7 +385,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ],
         }
 
-    def generate_external_https_egress_rule(self, enabled: bool = True) -> dict[str, Any] | None:
+    def generate_external_https_egress_rule(
+        self, enabled: bool = True
+    ) -> dict[str, Any] | None:
         """Generate egress rule for external HTTPS access.
 
         Platform services may need to access external APIs (e.g., cloud services).
@@ -710,7 +722,10 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         """
         for path in writable_paths:
             normalized = path.rstrip("/")
-            if normalized in self._BLOCKED_MOUNT_PATHS or path in self._BLOCKED_MOUNT_PATHS:
+            if (
+                normalized in self._BLOCKED_MOUNT_PATHS
+                or path in self._BLOCKED_MOUNT_PATHS
+            ):
                 raise ValueError(f"Mount path blocked for security: {path}")
 
         volumes: list[dict[str, Any]] = []
@@ -775,4 +790,6 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             raise ValueError(f"Invalid namespace: {namespace}")
         max_namespace_length = 63
         if len(namespace) > max_namespace_length:
-            raise ValueError(f"Namespace too long: {len(namespace)} > {max_namespace_length}")
+            raise ValueError(
+                f"Namespace too long: {len(namespace)} > {max_namespace_length}"
+            )

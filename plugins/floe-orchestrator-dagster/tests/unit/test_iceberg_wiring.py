@@ -176,7 +176,9 @@ class TestCreateDefinitionsWithIcebergResources:
             mock_try_create.return_value = {"iceberg": mock_io_manager}
 
             # Execute
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
+            result = dagster_plugin.create_definitions(
+                valid_compiled_artifacts_with_iceberg
+            )
 
             # Verify result is Definitions
             assert isinstance(result, Definitions)
@@ -203,7 +205,9 @@ class TestCreateDefinitionsWithIcebergResources:
             mock_try_create.return_value = {"iceberg": mock_io_manager}
 
             # Execute
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
+            result = dagster_plugin.create_definitions(
+                valid_compiled_artifacts_with_iceberg
+            )
 
             # Verify has both assets and resources
             assert isinstance(result, Definitions)
@@ -221,7 +225,9 @@ class TestGracefulDegradation:
     @pytest.mark.requirement("004d-FR-117")
     def test_try_create_with_no_plugins_returns_empty_dict(self) -> None:
         """Test try_create_iceberg_resources() returns {} when plugins is None."""
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         result = try_create_iceberg_resources(plugins=None)
 
@@ -232,7 +238,9 @@ class TestGracefulDegradation:
         """Test try_create_iceberg_resources() returns {} when storage is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -250,7 +258,9 @@ class TestGracefulDegradation:
         """Test try_create_iceberg_resources() returns {} when catalog is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -268,7 +278,9 @@ class TestGracefulDegradation:
         """Test try_create_iceberg_resources() returns {} when both catalog and storage are None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -290,7 +302,9 @@ class TestGracefulDegradation:
         """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -341,7 +355,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
         """Test try_create_iceberg_resources() returns dict with "iceberg" key when successful."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -378,7 +394,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
 
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -398,7 +416,8 @@ class TestTryCreateIcebergResourcesEdgeCases:
 
             # Verify error was logged before raising
             assert any(
-                "Failed to create Iceberg resources" in record.message for record in caplog.records
+                "Failed to create Iceberg resources" in record.message
+                for record in caplog.records
             )
 
     @pytest.mark.requirement("004d-FR-118")
@@ -410,7 +429,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
         """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),

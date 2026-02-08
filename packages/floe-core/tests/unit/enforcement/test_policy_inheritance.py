@@ -135,8 +135,12 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=80))
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=90))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=80)
+        )
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=90)
+        )
 
         validate_security_policy_not_weakened(parent, child)
 
@@ -147,8 +151,12 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=80))
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=60))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=80)
+        )
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=60)
+        )
 
         with pytest.raises(SecurityPolicyViolationError) as exc_info:
             validate_security_policy_not_weakened(parent, child)
@@ -164,8 +172,12 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(require_descriptions=False))
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(require_descriptions=True))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(require_descriptions=False)
+        )
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(require_descriptions=True)
+        )
 
         validate_security_policy_not_weakened(parent, child)
 
@@ -176,8 +188,12 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(require_descriptions=True))
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(require_descriptions=False))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(require_descriptions=True)
+        )
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(require_descriptions=False)
+        )
 
         with pytest.raises(SecurityPolicyViolationError) as exc_info:
             validate_security_policy_not_weakened(parent, child)
@@ -194,7 +210,9 @@ class TestQualityGatesInheritance:
         parent = GovernanceConfig(
             quality_gates=QualityGatesConfig(require_column_descriptions=False)
         )
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(require_column_descriptions=True))
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(require_column_descriptions=True)
+        )
 
         validate_security_policy_not_weakened(parent, child)
 
@@ -224,8 +242,12 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(block_on_failure=True))
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(block_on_failure=False))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(block_on_failure=True)
+        )
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(block_on_failure=False)
+        )
 
         with pytest.raises(SecurityPolicyViolationError) as exc_info:
             validate_security_policy_not_weakened(parent, child)
@@ -240,7 +262,9 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
         parent = GovernanceConfig(quality_gates=None)
-        child = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=100))
+        child = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=100)
+        )
 
         validate_security_policy_not_weakened(parent, child)
 
@@ -251,7 +275,9 @@ class TestQualityGatesInheritance:
         from floe_core.schemas.manifest import GovernanceConfig
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
-        parent = GovernanceConfig(quality_gates=QualityGatesConfig(minimum_test_coverage=80))
+        parent = GovernanceConfig(
+            quality_gates=QualityGatesConfig(minimum_test_coverage=80)
+        )
         child = GovernanceConfig(quality_gates=None)
 
         # None means inherit, not weaken
@@ -292,10 +318,14 @@ class TestLayerThresholdsInheritance:
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
         parent = GovernanceConfig(
-            quality_gates=QualityGatesConfig(layer_thresholds=LayerThresholds(bronze=50))
+            quality_gates=QualityGatesConfig(
+                layer_thresholds=LayerThresholds(bronze=50)
+            )
         )
         child = GovernanceConfig(
-            quality_gates=QualityGatesConfig(layer_thresholds=LayerThresholds(bronze=30))
+            quality_gates=QualityGatesConfig(
+                layer_thresholds=LayerThresholds(bronze=30)
+            )
         )
 
         with pytest.raises(SecurityPolicyViolationError) as exc_info:
@@ -311,10 +341,14 @@ class TestLayerThresholdsInheritance:
         from floe_core.schemas.validation import validate_security_policy_not_weakened
 
         parent = GovernanceConfig(
-            quality_gates=QualityGatesConfig(layer_thresholds=LayerThresholds(silver=80))
+            quality_gates=QualityGatesConfig(
+                layer_thresholds=LayerThresholds(silver=80)
+            )
         )
         child = GovernanceConfig(
-            quality_gates=QualityGatesConfig(layer_thresholds=LayerThresholds(silver=70))
+            quality_gates=QualityGatesConfig(
+                layer_thresholds=LayerThresholds(silver=70)
+            )
         )
 
         with pytest.raises(SecurityPolicyViolationError) as exc_info:

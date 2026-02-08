@@ -224,13 +224,17 @@ class BaseSecretsPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("7A-FR-002")
-    def test_has_generate_pod_env_spec_method(self, secrets_plugin: SecretsPlugin) -> None:
+    def test_has_generate_pod_env_spec_method(
+        self, secrets_plugin: SecretsPlugin
+    ) -> None:
         """Verify plugin has generate_pod_env_spec() method."""
         assert hasattr(secrets_plugin, "generate_pod_env_spec")
         assert callable(secrets_plugin.generate_pod_env_spec)
 
     @pytest.mark.requirement("7A-FR-002")
-    def test_generate_pod_env_spec_returns_dict(self, secrets_plugin: SecretsPlugin) -> None:
+    def test_generate_pod_env_spec_returns_dict(
+        self, secrets_plugin: SecretsPlugin
+    ) -> None:
         """Verify generate_pod_env_spec() returns valid pod spec fragment."""
         result = secrets_plugin.generate_pod_env_spec("test-secret")
         assert isinstance(result, dict)
@@ -247,7 +251,9 @@ class BaseSecretsPluginTests(ABC):
         assert callable(secrets_plugin.health_check)
 
     @pytest.mark.requirement("7A-FR-002")
-    def test_health_check_returns_health_status(self, secrets_plugin: SecretsPlugin) -> None:
+    def test_health_check_returns_health_status(
+        self, secrets_plugin: SecretsPlugin
+    ) -> None:
         """Verify health_check() returns a HealthStatus object."""
         from floe_core.plugin_metadata import HealthStatus
 
@@ -278,7 +284,9 @@ class BaseSecretsPluginTests(ABC):
         assert callable(secrets_plugin.get_config_schema)
 
     @pytest.mark.requirement("7A-FR-002")
-    def test_config_schema_returns_valid_type(self, secrets_plugin: SecretsPlugin) -> None:
+    def test_config_schema_returns_valid_type(
+        self, secrets_plugin: SecretsPlugin
+    ) -> None:
         """Verify get_config_schema() returns None or a BaseModel class."""
         schema = secrets_plugin.get_config_schema()
 
@@ -410,13 +418,21 @@ class BaseSecretsPluginTests(ABC):
         Args:
             event: The audit event dictionary to validate.
         """
-        required_fields = ["timestamp", "requester_id", "secret_path", "operation", "result"]
+        required_fields = [
+            "timestamp",
+            "requester_id",
+            "secret_path",
+            "operation",
+            "result",
+        ]
 
         for field in required_fields:
             assert field in event, f"Audit event missing required field: {field}"
 
         # Verify audit_event marker
-        assert event.get("audit_event") is True, "Audit event must have audit_event=true"
+        assert (
+            event.get("audit_event") is True
+        ), "Audit event must have audit_event=true"
 
 
 class AuditLogCapture:

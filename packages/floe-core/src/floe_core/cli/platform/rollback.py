@@ -65,7 +65,9 @@ def _format_rollback_result(record: RollbackRecord, output_format: str) -> str:
     return "\n".join(lines)
 
 
-def _format_impact_analysis(analysis: RollbackImpactAnalysis, output_format: str) -> str:
+def _format_impact_analysis(
+    analysis: RollbackImpactAnalysis, output_format: str
+) -> str:
     """Format impact analysis for CLI output.
 
     Args:

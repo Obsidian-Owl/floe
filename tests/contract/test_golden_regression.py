@@ -106,9 +106,9 @@ class TestCompiledArtifactsContract:
         properties = golden["properties"]
 
         # version field MUST exist and be string type
-        assert "version" in properties, (
-            "Schema missing 'version' property. This is a breaking change."
-        )
+        assert (
+            "version" in properties
+        ), "Schema missing 'version' property. This is a breaking change."
         assert properties["version"].get("type") == "string", (
             f"version field type is '{properties['version'].get('type')}', expected 'string'. "
             "This is a MAJOR version change."
@@ -117,9 +117,9 @@ class TestCompiledArtifactsContract:
         # metadata, dbt_profiles, dagster_config MUST exist
         expected_properties = ["metadata", "dbt_profiles", "dagster_config"]
         for prop in expected_properties:
-            assert prop in properties, (
-                f"Schema missing '{prop}' property. This is a breaking change."
-            )
+            assert (
+                prop in properties
+            ), f"Schema missing '{prop}' property. This is a breaking change."
 
 
 class TestPluginInterfaceContract:
@@ -158,9 +158,9 @@ class TestPluginInterfaceContract:
             "IngestionPlugin",
         ]
         for interface in required_interfaces:
-            assert interface in interfaces, (
-                f"Missing '{interface}' from plugin interfaces. This is a breaking change."
-            )
+            assert (
+                interface in interfaces
+            ), f"Missing '{interface}' from plugin interfaces. This is a breaking change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_compute_plugin_methods_stable(self) -> None:
@@ -179,9 +179,9 @@ class TestPluginInterfaceContract:
         methods = compute["methods"]
         required_methods = ["generate_profiles", "validate_config"]
         for method in required_methods:
-            assert method in methods, (
-                f"ComputePlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"ComputePlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_orchestrator_plugin_methods_stable(self) -> None:
@@ -200,9 +200,9 @@ class TestPluginInterfaceContract:
         methods = orchestrator["methods"]
         required_methods = ["create_assets", "create_schedules"]
         for method in required_methods:
-            assert method in methods, (
-                f"OrchestratorPlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"OrchestratorPlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_catalog_plugin_methods_stable(self) -> None:
@@ -221,9 +221,9 @@ class TestPluginInterfaceContract:
         methods = catalog["methods"]
         required_methods = ["create_namespace", "load_table"]
         for method in required_methods:
-            assert method in methods, (
-                f"CatalogPlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"CatalogPlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_storage_plugin_methods_stable(self) -> None:
@@ -242,9 +242,9 @@ class TestPluginInterfaceContract:
         methods = storage["methods"]
         required_methods = ["read_table", "write_table"]
         for method in required_methods:
-            assert method in methods, (
-                f"StoragePlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"StoragePlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_semantic_layer_plugin_methods_stable(self) -> None:
@@ -269,9 +269,9 @@ class TestPluginInterfaceContract:
             "get_helm_values_override",
         ]
         for method in required_methods:
-            assert method in methods, (
-                f"SemanticLayerPlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"SemanticLayerPlugin.{method}() removed. This is a MAJOR version change."
 
     @pytest.mark.requirement("CONTRACT-002")
     def test_ingestion_plugin_methods_stable(self) -> None:
@@ -295,9 +295,9 @@ class TestPluginInterfaceContract:
             "get_destination_config",
         ]
         for method in required_methods:
-            assert method in methods, (
-                f"IngestionPlugin.{method}() removed. This is a MAJOR version change."
-            )
+            assert (
+                method in methods
+            ), f"IngestionPlugin.{method}() removed. This is a MAJOR version change."
 
 
 class TestV05SemanticArtifacts:
@@ -308,17 +308,21 @@ class TestV05SemanticArtifacts:
         """Test that v0.5.0 golden artifact with semantic plugin parses correctly."""
         golden = load_golden("v0.5_compiled_artifacts_with_semantic.json")
 
-        assert golden["version"] == "0.5.0", f"Expected version 0.5.0, got {golden.get('version')}"
+        assert (
+            golden["version"] == "0.5.0"
+        ), f"Expected version 0.5.0, got {golden.get('version')}"
         assert "plugins" in golden, "Missing 'plugins' section"
         assert "semantic" in golden["plugins"], "Missing 'semantic' plugin"
-        assert golden["plugins"]["semantic"]["type"] == "cube", (
-            f"Expected semantic plugin type 'cube', got {golden['plugins']['semantic'].get('type')}"
-        )
+        assert (
+            golden["plugins"]["semantic"]["type"] == "cube"
+        ), f"Expected semantic plugin type 'cube', got {golden['plugins']['semantic'].get('type')}"
         assert golden["plugins"]["semantic"]["version"] == "0.1.0", (
             "Expected semantic plugin version 0.1.0, "
             f"got {golden['plugins']['semantic'].get('version')}"
         )
-        assert "config" in golden["plugins"]["semantic"], "Semantic plugin missing 'config' section"
+        assert (
+            "config" in golden["plugins"]["semantic"]
+        ), "Semantic plugin missing 'config' section"
 
     @pytest.mark.requirement("CONTRACT-001")
     def test_v05_with_semantic_round_trips_via_pydantic(self) -> None:
@@ -332,28 +336,28 @@ class TestV05SemanticArtifacts:
 
         # Validate via Pydantic
         artifacts = CompiledArtifacts.model_validate(golden_without_comment)
-        assert artifacts.version == "0.5.0", (
-            f"Expected version 0.5.0 after round-trip, got {artifacts.version}"
-        )
+        assert (
+            artifacts.version == "0.5.0"
+        ), f"Expected version 0.5.0 after round-trip, got {artifacts.version}"
         assert artifacts.plugins is not None, "Plugins became None after round-trip"
-        assert artifacts.plugins.semantic is not None, (
-            "Semantic plugin became None after round-trip"
-        )
-        assert artifacts.plugins.semantic.type == "cube", (
-            f"Expected semantic type 'cube' after round-trip, got {artifacts.plugins.semantic.type}"
-        )
+        assert (
+            artifacts.plugins.semantic is not None
+        ), "Semantic plugin became None after round-trip"
+        assert (
+            artifacts.plugins.semantic.type == "cube"
+        ), f"Expected semantic type 'cube' after round-trip, got {artifacts.plugins.semantic.type}"
         assert artifacts.plugins.semantic.version == "0.1.0", (
             "Expected semantic version 0.1.0 after round-trip, "
             f"got {artifacts.plugins.semantic.version}"
         )
 
         # Verify semantic config survived round-trip
-        assert artifacts.plugins.semantic.config is not None, (
-            "Semantic plugin config became None after round-trip"
-        )
-        assert "server_url" in artifacts.plugins.semantic.config, (
-            "Semantic plugin config missing 'server_url' after round-trip"
-        )
+        assert (
+            artifacts.plugins.semantic.config is not None
+        ), "Semantic plugin config became None after round-trip"
+        assert (
+            "server_url" in artifacts.plugins.semantic.config
+        ), "Semantic plugin config missing 'server_url' after round-trip"
         assert artifacts.plugins.semantic.config["server_url"] == "http://cube:4000", (
             "Expected server_url 'http://cube:4000', "
             f"got {artifacts.plugins.semantic.config.get('server_url')}"
@@ -375,12 +379,14 @@ class TestV05SemanticArtifacts:
         assert len(artifacts.transforms.models) > 0, "No models in transforms"
 
         # Find the orders model which should have cube tag
-        orders_model = next((m for m in artifacts.transforms.models if m.name == "orders"), None)
+        orders_model = next(
+            (m for m in artifacts.transforms.models if m.name == "orders"), None
+        )
         assert orders_model is not None, "Missing 'orders' model in transforms"
         assert orders_model.tags is not None, "orders model has no tags"
-        assert "cube" in orders_model.tags, (
-            f"orders model missing 'cube' tag, has: {orders_model.tags}"
-        )
+        assert (
+            "cube" in orders_model.tags
+        ), f"orders model missing 'cube' tag, has: {orders_model.tags}"
 
 
 class TestV06IngestionArtifacts:
@@ -391,7 +397,9 @@ class TestV06IngestionArtifacts:
         """Test that v0.6.0 golden artifact with ingestion plugin parses correctly."""
         golden = load_golden("v0.6_compiled_artifacts_with_ingestion.json")
 
-        assert golden["version"] == "0.6.0", f"Expected version 0.6.0, got {golden.get('version')}"
+        assert (
+            golden["version"] == "0.6.0"
+        ), f"Expected version 0.6.0, got {golden.get('version')}"
         assert "plugins" in golden, "Missing 'plugins' section"
         assert "ingestion" in golden["plugins"], "Missing 'ingestion' plugin"
         assert golden["plugins"]["ingestion"]["type"] == "dlt", (
@@ -402,9 +410,9 @@ class TestV06IngestionArtifacts:
             "Expected ingestion plugin version 0.1.0, "
             f"got {golden['plugins']['ingestion'].get('version')}"
         )
-        assert "config" in golden["plugins"]["ingestion"], (
-            "Ingestion plugin missing 'config' section"
-        )
+        assert (
+            "config" in golden["plugins"]["ingestion"]
+        ), "Ingestion plugin missing 'config' section"
 
     @pytest.mark.requirement("CONTRACT-001")
     def test_v06_with_ingestion_round_trips_via_pydantic(self) -> None:
@@ -418,13 +426,13 @@ class TestV06IngestionArtifacts:
 
         # Validate via Pydantic
         artifacts = CompiledArtifacts.model_validate(golden_without_comment)
-        assert artifacts.version == "0.6.0", (
-            f"Expected version 0.6.0 after round-trip, got {artifacts.version}"
-        )
+        assert (
+            artifacts.version == "0.6.0"
+        ), f"Expected version 0.6.0 after round-trip, got {artifacts.version}"
         assert artifacts.plugins is not None, "Plugins became None after round-trip"
-        assert artifacts.plugins.ingestion is not None, (
-            "Ingestion plugin became None after round-trip"
-        )
+        assert (
+            artifacts.plugins.ingestion is not None
+        ), "Ingestion plugin became None after round-trip"
         assert artifacts.plugins.ingestion.type == "dlt", (
             "Expected ingestion type 'dlt' after round-trip, "
             f"got {artifacts.plugins.ingestion.type}"
@@ -435,9 +443,9 @@ class TestV06IngestionArtifacts:
         )
 
         # Verify ingestion config survived round-trip
-        assert artifacts.plugins.ingestion.config is not None, (
-            "Ingestion plugin config became None after round-trip"
-        )
+        assert (
+            artifacts.plugins.ingestion.config is not None
+        ), "Ingestion plugin config became None after round-trip"
 
 
 class TestQualityThresholds:
@@ -471,16 +479,16 @@ class TestQualityThresholds:
         # Unit test threshold MUST exist and be >= 80%
         assert "unit" in coverage, "Missing 'unit' coverage threshold"
         unit_min = coverage["unit"].get("minimum_percent", 0)
-        assert unit_min >= 80, (
-            f"Unit test coverage threshold lowered to {unit_min}%. Minimum must be 80%."
-        )
+        assert (
+            unit_min >= 80
+        ), f"Unit test coverage threshold lowered to {unit_min}%. Minimum must be 80%."
 
         # Integration test threshold MUST exist and be >= 70%
         assert "integration" in coverage, "Missing 'integration' coverage threshold"
         int_min = coverage["integration"].get("minimum_percent", 0)
-        assert int_min >= 70, (
-            f"Integration test coverage threshold lowered to {int_min}%. Minimum must be 70%."
-        )
+        assert (
+            int_min >= 70
+        ), f"Integration test coverage threshold lowered to {int_min}%. Minimum must be 70%."
 
     @pytest.mark.requirement("CONTRACT-003")
     def test_requirement_traceability_is_100_percent(self) -> None:
@@ -500,12 +508,12 @@ class TestQualityThresholds:
         golden = load_golden("quality_thresholds.json")
         security = golden["security"]
 
-        assert security.get("allowed_critical_issues", 1) == 0, (
-            "Security threshold allows critical issues. Must be 0."
-        )
-        assert security.get("allowed_high_issues", 1) == 0, (
-            "Security threshold allows high issues. Must be 0."
-        )
+        assert (
+            security.get("allowed_critical_issues", 1) == 0
+        ), "Security threshold allows critical issues. Must be 0."
+        assert (
+            security.get("allowed_high_issues", 1) == 0
+        ), "Security threshold allows high issues. Must be 0."
 
     @pytest.mark.requirement("CONTRACT-003")
     def test_architecture_violations_not_allowed(self) -> None:
@@ -513,6 +521,6 @@ class TestQualityThresholds:
         golden = load_golden("quality_thresholds.json")
         architecture = golden["architecture"]
 
-        assert architecture.get("allowed_violations", 1) == 0, (
-            "Architecture threshold allows violations. Must be 0."
-        )
+        assert (
+            architecture.get("allowed_violations", 1) == 0
+        ), "Architecture threshold allows violations. Must be 0."

@@ -201,7 +201,9 @@ class TestRollbackCliAnalyze:
     """Tests for rollback impact analysis mode."""
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_mode_table_output(self, mock_impact_analysis: RollbackImpactAnalysis) -> None:
+    def test_analyze_mode_table_output(
+        self, mock_impact_analysis: RollbackImpactAnalysis
+    ) -> None:
         """Test --analyze flag shows impact analysis."""
         runner = CliRunner()
         with (
@@ -236,7 +238,9 @@ class TestRollbackCliAnalyze:
         assert "Recommendations" in result.output
 
     @pytest.mark.requirement("8C-FR-016")
-    def test_analyze_mode_json_output(self, mock_impact_analysis: RollbackImpactAnalysis) -> None:
+    def test_analyze_mode_json_output(
+        self, mock_impact_analysis: RollbackImpactAnalysis
+    ) -> None:
         """Test --analyze flag with JSON output."""
         runner = CliRunner()
         with (
@@ -510,7 +514,9 @@ class TestRollbackCliOperator:
         assert call_kwargs["operator"] == "custom@example.com"
 
     @pytest.mark.requirement("8C-FR-017")
-    def test_operator_defaults_to_user(self, mock_rollback_record: RollbackRecord) -> None:
+    def test_operator_defaults_to_user(
+        self, mock_rollback_record: RollbackRecord
+    ) -> None:
         """Test operator defaults to $USER when not specified."""
         runner = CliRunner()
         with (

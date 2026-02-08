@@ -119,9 +119,9 @@ class TestManifestSchemaContract:
         # Most categories should be None by default (optional)
         optional_categories = [c for c in expected_categories if c != "dbt"]
         for category in optional_categories:
-            assert getattr(plugins, category) is None, (
-                f"Category '{category}' should be None by default"
-            )
+            assert (
+                getattr(plugins, category) is None
+            ), f"Category '{category}' should be None by default"
 
         # dbt is ENFORCED technology and defaults to 'core' (per Epic 5A)
         assert plugins.dbt is not None
@@ -441,7 +441,9 @@ class TestPluginRegistryCompleteness:
 
         for category, plugins in PLUGIN_REGISTRY.items():
             assert isinstance(plugins, list), f"{category} should be a list"
-            assert len(plugins) >= 1, f"{category} should have at least one plugin option"
+            assert (
+                len(plugins) >= 1
+            ), f"{category} should have at least one plugin option"
             for plugin in plugins:
                 assert isinstance(plugin, str), f"{category} plugins should be strings"
                 assert len(plugin) > 0, f"{category} has empty plugin name"

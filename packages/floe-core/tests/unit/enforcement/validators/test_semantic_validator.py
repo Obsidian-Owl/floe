@@ -271,7 +271,9 @@ class TestValidateRefs:
         assert len(violations) == 1
         violation = violations[0]
         # Error should mention the missing model
-        assert "bronze_orders" in violation.expected or "bronze_orders" in violation.actual
+        assert (
+            "bronze_orders" in violation.expected or "bronze_orders" in violation.actual
+        )
 
     @pytest.mark.requirement("003b-FR-001")
     def test_missing_ref_has_actionable_suggestion(
@@ -292,7 +294,10 @@ class TestValidateRefs:
         violation = violations[0]
         # Suggestion should be non-empty and actionable
         assert len(violation.suggestion) > 0
-        assert "ref" in violation.suggestion.lower() or "model" in violation.suggestion.lower()
+        assert (
+            "ref" in violation.suggestion.lower()
+            or "model" in violation.suggestion.lower()
+        )
 
     @pytest.mark.requirement("003b-FR-001")
     def test_multiple_missing_refs_generate_multiple_violations(self) -> None:
@@ -364,7 +369,9 @@ class TestDetectCircularDeps:
     """
 
     @pytest.mark.requirement("003b-FR-002")
-    def test_no_circular_deps_no_violations(self, valid_manifest: dict[str, Any]) -> None:
+    def test_no_circular_deps_no_violations(
+        self, valid_manifest: dict[str, Any]
+    ) -> None:
         """Test acyclic dependency graph produces no violations.
 
         Given a manifest with valid DAG structure (no cycles),
@@ -418,7 +425,9 @@ class TestDetectCircularDeps:
         # Message should mention the cycle participants
         message_lower = violation.message.lower()
         assert (
-            "model_a" in message_lower or "model_b" in message_lower or "model_c" in message_lower
+            "model_a" in message_lower
+            or "model_b" in message_lower
+            or "model_c" in message_lower
         )
 
     @pytest.mark.requirement("003b-FR-002")
@@ -560,7 +569,10 @@ class TestValidateSources:
         assert len(violations) == 1
         violation = violations[0]
         assert len(violation.suggestion) > 0
-        assert "source" in violation.suggestion.lower() or "define" in violation.suggestion.lower()
+        assert (
+            "source" in violation.suggestion.lower()
+            or "define" in violation.suggestion.lower()
+        )
 
     @pytest.mark.requirement("003b-FR-003")
     def test_multiple_missing_sources_generate_multiple_violations(self) -> None:

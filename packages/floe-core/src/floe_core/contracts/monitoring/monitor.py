@@ -261,7 +261,9 @@ class ContractMonitor:
                 status=CheckStatus.ERROR,
                 duration_seconds=duration,
                 timestamp=now,
-                details={"error": f"Check type not yet implemented: {check_type.value}"},
+                details={
+                    "error": f"Check type not yet implemented: {check_type.value}"
+                },
             )
 
         # Route violations to alert channels if AlertRouter is configured
@@ -292,31 +294,35 @@ class ContractMonitor:
         # Type guard: caller already checked repository is not None
         assert self._repository is not None
 
-        await self._repository.save_check_result({
-            "id": result.id,
-            "contract_name": result.contract_name,
-            "check_type": result.check_type.value,
-            "status": result.status.value,
-            "duration_seconds": result.duration_seconds,
-            "timestamp": result.timestamp,
-            "details": result.details,
-        })
+        await self._repository.save_check_result(
+            {
+                "id": result.id,
+                "contract_name": result.contract_name,
+                "check_type": result.check_type.value,
+                "status": result.status.value,
+                "duration_seconds": result.duration_seconds,
+                "timestamp": result.timestamp,
+                "details": result.details,
+            }
+        )
 
         if result.violation is not None:
-            await self._repository.save_violation({
-                "contract_name": result.violation.contract_name,
-                "contract_version": result.violation.contract_version,
-                "violation_type": result.violation.violation_type.value,
-                "severity": result.violation.severity.value,
-                "message": result.violation.message,
-                "element": result.violation.element,
-                "expected_value": result.violation.expected_value,
-                "actual_value": result.violation.actual_value,
-                "timestamp": result.violation.timestamp,
-                "affected_consumers": result.violation.affected_consumers,
-                "check_duration_seconds": result.violation.check_duration_seconds,
-                "metadata": dict(result.violation.metadata),
-            })
+            await self._repository.save_violation(
+                {
+                    "contract_name": result.violation.contract_name,
+                    "contract_version": result.violation.contract_version,
+                    "violation_type": result.violation.violation_type.value,
+                    "severity": result.violation.severity.value,
+                    "message": result.violation.message,
+                    "element": result.violation.element,
+                    "expected_value": result.violation.expected_value,
+                    "actual_value": result.violation.actual_value,
+                    "timestamp": result.violation.timestamp,
+                    "affected_consumers": result.violation.affected_consumers,
+                    "check_duration_seconds": result.violation.check_duration_seconds,
+                    "metadata": dict(result.violation.metadata),
+                }
+            )
 
     async def cleanup_expired(self, retention_days: int = 90) -> int:
         """Delete check results and violations older than retention period.
@@ -331,8 +337,14 @@ class ContractMonitor:
             self._log.warning("cleanup_no_repository")
             return 0
         try:
-            deleted = await self._repository.cleanup_expired(retention_days=retention_days)
-            self._log.info("cleanup_completed", retention_days=retention_days, deleted_count=deleted)
+            deleted: int = await self._repository.cleanup_expired(
+                retention_days=retention_days
+            )
+            self._log.info(
+                "cleanup_completed",
+                retention_days=retention_days,
+                deleted_count=deleted,
+            )
             return deleted
         except Exception as e:
             self._log.error("cleanup_failed", error=str(e))
@@ -353,7 +365,9 @@ class ContractMonitor:
 
         if self._repository is not None:
             try:
-                contracts = await self._repository.get_registered_contracts(active_only=True)
+                contracts = await self._repository.get_registered_contracts(
+                    active_only=True
+                )
                 for contract_data in contracts:
                     try:
                         contract = RegisteredContract(
@@ -361,7 +375,9 @@ class ContractMonitor:
                             contract_version=contract_data["contract_version"],
                             contract_data=contract_data["contract_data"],
                             connection_config=contract_data["connection_config"],
-                            monitoring_overrides=contract_data.get("monitoring_overrides"),
+                            monitoring_overrides=contract_data.get(
+                                "monitoring_overrides"
+                            ),
                             registered_at=contract_data["registered_at"],
                             last_check_times=contract_data.get("last_check_times", {}),
                             active=contract_data.get("active", True),

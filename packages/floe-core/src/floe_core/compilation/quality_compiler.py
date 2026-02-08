@@ -14,7 +14,11 @@ from floe_core.compilation.errors import CompilationError, CompilationException
 from floe_core.compilation.stages import CompilationStage
 from floe_core.quality_errors import QualityCoverageError, QualityMissingTestsError
 from floe_core.schemas.quality_config import QualityConfig, QualityGates
-from floe_core.validation import calculate_coverage, validate_coverage, validate_required_tests
+from floe_core.validation import (
+    calculate_coverage,
+    validate_coverage,
+    validate_required_tests,
+)
 
 
 def validate_quality_gates_for_models(

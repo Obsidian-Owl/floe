@@ -145,7 +145,10 @@ class TestArtifactSignValidation:
 
         # Should fail because file doesn't exist
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "does not exist" in result.output.lower()
+        assert (
+            "not found" in result.output.lower()
+            or "does not exist" in result.output.lower()
+        )
 
 
 class TestArtifactSignKeyless:
@@ -256,7 +259,9 @@ class TestArtifactSignKeyless:
             call_args = mock_sign.call_args
             signing_config = call_args[0][3]
             assert signing_config.mode == "keyless"
-            assert "token.actions.githubusercontent.com" in str(signing_config.oidc_issuer)
+            assert "token.actions.githubusercontent.com" in str(
+                signing_config.oidc_issuer
+            )
 
 
 class TestArtifactSignKeyBased:
@@ -276,7 +281,9 @@ class TestArtifactSignKeyBased:
             Path("cosign.key").write_text("dummy key content")
 
             with patch("floe_core.cli.artifact.sign._sign_artifact") as mock_sign:
-                with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+                with patch(
+                    "floe_core.oci.signing.check_cosign_available", return_value=True
+                ):
                     result = runner.invoke(
                         cli,
                         [
@@ -306,7 +313,9 @@ class TestArtifactSignKeyBased:
         runner = CliRunner()
 
         with patch("floe_core.cli.artifact.sign._sign_artifact") as mock_sign:
-            with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+            with patch(
+                "floe_core.oci.signing.check_cosign_available", return_value=True
+            ):
                 result = runner.invoke(
                     cli,
                     [
@@ -335,7 +344,9 @@ class TestArtifactSignKeyBased:
         runner = CliRunner()
 
         with patch("floe_core.cli.artifact.sign._sign_artifact") as mock_sign:
-            with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+            with patch(
+                "floe_core.oci.signing.check_cosign_available", return_value=True
+            ):
                 result = runner.invoke(
                     cli,
                     [
@@ -363,7 +374,9 @@ class TestArtifactSignKeyBased:
         runner = CliRunner()
 
         with patch("floe_core.cli.artifact.sign._sign_artifact") as mock_sign:
-            with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+            with patch(
+                "floe_core.oci.signing.check_cosign_available", return_value=True
+            ):
                 result = runner.invoke(
                     cli,
                     [
@@ -391,7 +404,9 @@ class TestArtifactSignKeyBased:
         runner = CliRunner()
 
         with patch("floe_core.cli.artifact.sign._sign_artifact") as mock_sign:
-            with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+            with patch(
+                "floe_core.oci.signing.check_cosign_available", return_value=True
+            ):
                 result = runner.invoke(
                     cli,
                     [
@@ -421,7 +436,9 @@ class TestArtifactSignKeyBased:
         with runner.isolated_filesystem():
             Path("cosign.key").write_text("dummy key")
 
-            with patch("floe_core.oci.signing.check_cosign_available", return_value=False):
+            with patch(
+                "floe_core.oci.signing.check_cosign_available", return_value=False
+            ):
                 result = runner.invoke(
                     cli,
                     [
@@ -781,7 +798,9 @@ class TestArtifactSignExecution:
             Path("cosign.key").write_text("dummy key")
 
             with patch("floe_core.oci.OCIClient") as mock_client_class:
-                with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+                with patch(
+                    "floe_core.oci.signing.check_cosign_available", return_value=True
+                ):
                     mock_client = MagicMock()
                     mock_metadata = MagicMock()
                     mock_metadata.rekor_log_index = 12345
@@ -853,7 +872,9 @@ class TestArtifactSignEdgeCases:
                 # Make validate_key_path return a path that doesn't exist
                 mock_validate.return_value = Path("/nonexistent/path/to/key")
 
-                with patch("floe_core.oci.signing.check_cosign_available", return_value=True):
+                with patch(
+                    "floe_core.oci.signing.check_cosign_available", return_value=True
+                ):
                     result = runner.invoke(
                         cli,
                         [

@@ -93,6 +93,7 @@ cli.add_command(network)
 cli.add_command(artifact)
 cli.add_command(helm)
 
+
 # Register SLA command group
 @cli.group(name="sla", help="SLA compliance reporting commands.")
 def sla() -> None:

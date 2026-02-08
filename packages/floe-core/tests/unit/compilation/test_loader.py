@@ -142,7 +142,9 @@ class TestLoadFloeSpec:
         assert exc_info.value.exit_code == 1
 
     @pytest.mark.requirement("2B-FR-001")
-    def test_load_floe_spec_returns_floe_spec_type(self, valid_floe_spec_yaml: Path) -> None:
+    def test_load_floe_spec_returns_floe_spec_type(
+        self, valid_floe_spec_yaml: Path
+    ) -> None:
         """Test that load_floe_spec returns a FloeSpec instance."""
         from floe_core.compilation.loader import load_floe_spec
         from floe_core.schemas.floe_spec import FloeSpec
@@ -177,7 +179,9 @@ class TestLoadManifest:
         assert exc_info.value.exit_code == 1
 
     @pytest.mark.requirement("2B-FR-001")
-    def test_load_manifest_returns_manifest_type(self, valid_manifest_yaml: Path) -> None:
+    def test_load_manifest_returns_manifest_type(
+        self, valid_manifest_yaml: Path
+    ) -> None:
         """Test that load_manifest returns a PlatformManifest instance."""
         from floe_core.compilation.loader import load_manifest
         from floe_core.schemas.manifest import PlatformManifest

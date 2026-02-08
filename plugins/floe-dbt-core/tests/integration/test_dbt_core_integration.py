@@ -146,7 +146,9 @@ class TestDBTCorePluginIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-004")
-    def test_test_models_real_execution(self, temp_dbt_project_with_tests: Path) -> None:
+    def test_test_models_real_execution(
+        self, temp_dbt_project_with_tests: Path
+    ) -> None:
         """Test test_models with real dbt test execution.
 
         Verifies:
@@ -211,7 +213,9 @@ class TestDBTCorePluginIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-015")
-    def test_compile_failure_structured_error(self, temp_dbt_project_invalid: Path) -> None:
+    def test_compile_failure_structured_error(
+        self, temp_dbt_project_invalid: Path
+    ) -> None:
         """Test that compilation failures provide structured errors.
 
         Uses a project with invalid SQL to trigger a real dbt error.

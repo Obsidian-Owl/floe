@@ -105,7 +105,9 @@ class TestPromotionRecordSchemaContract:
         }
 
         for field in core_audit_fields:
-            assert field in required_fields, f"Required field '{field}' missing from schema"
+            assert (
+                field in required_fields
+            ), f"Required field '{field}' missing from schema"
 
     @pytest.mark.requirement("8C-FR-023")
     def test_schema_properties_exist(self) -> None:
@@ -156,7 +158,9 @@ class TestPromotionRecordSchemaContract:
         assert "gate_results" in props
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_serialization_round_trip(self, minimal_promotion_record: PromotionRecord) -> None:
+    def test_serialization_round_trip(
+        self, minimal_promotion_record: PromotionRecord
+    ) -> None:
         """Contract: PromotionRecord serializes to JSON and back.
 
         This ensures the contract can be passed between processes
@@ -174,13 +178,22 @@ class TestPromotionRecordSchemaContract:
         assert restored.promotion_id == minimal_promotion_record.promotion_id
         assert restored.artifact_digest == minimal_promotion_record.artifact_digest
         assert restored.artifact_tag == minimal_promotion_record.artifact_tag
-        assert restored.source_environment == minimal_promotion_record.source_environment
-        assert restored.target_environment == minimal_promotion_record.target_environment
-        assert restored.signature_verified == minimal_promotion_record.signature_verified
+        assert (
+            restored.source_environment == minimal_promotion_record.source_environment
+        )
+        assert (
+            restored.target_environment == minimal_promotion_record.target_environment
+        )
+        assert (
+            restored.signature_verified == minimal_promotion_record.signature_verified
+        )
         assert restored.operator == minimal_promotion_record.operator
         assert restored.dry_run == minimal_promotion_record.dry_run
         assert restored.trace_id == minimal_promotion_record.trace_id
-        assert restored.authorization_passed == minimal_promotion_record.authorization_passed
+        assert (
+            restored.authorization_passed
+            == minimal_promotion_record.authorization_passed
+        )
 
     @pytest.mark.requirement("8C-FR-023")
     def test_oci_annotation_key_patterns(self) -> None:
@@ -191,20 +204,22 @@ class TestPromotionRecordSchemaContract:
         """
         # Verify all annotation keys use the correct prefix
         for field, key in OCI_ANNOTATION_KEYS.items():
-            assert key.startswith(OCI_ANNOTATION_PREFIX), (
-                f"Key '{key}' for field '{field}' must start with '{OCI_ANNOTATION_PREFIX}'"
-            )
+            assert key.startswith(
+                OCI_ANNOTATION_PREFIX
+            ), f"Key '{key}' for field '{field}' must start with '{OCI_ANNOTATION_PREFIX}'"
 
         # Verify key patterns are valid OCI annotation keys (lowercase, dots/hyphens)
         for key in OCI_ANNOTATION_KEYS.values():
             assert key == key.lower(), f"Key '{key}' must be lowercase"
             # OCI annotation keys should be DNS-like labels
-            assert all(c.isalnum() or c in ".-" for c in key), (
-                f"Key '{key}' contains invalid characters"
-            )
+            assert all(
+                c.isalnum() or c in ".-" for c in key
+            ), f"Key '{key}' contains invalid characters"
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_gate_results_list_contract(self, minimal_promotion_record: PromotionRecord) -> None:
+    def test_gate_results_list_contract(
+        self, minimal_promotion_record: PromotionRecord
+    ) -> None:
         """Contract: gate_results is a list of GateResult objects.
 
         Epic 9B consumers iterate over gate_results for audit display.
@@ -244,7 +259,9 @@ class TestPromotionRecordSchemaContract:
         assert "undocumented_field" in str(exc_info.value)
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_immutability_contract(self, minimal_promotion_record: PromotionRecord) -> None:
+    def test_immutability_contract(
+        self, minimal_promotion_record: PromotionRecord
+    ) -> None:
         """Contract: PromotionRecord is immutable (frozen=True).
 
         Once created, PromotionRecord should not be modified.
@@ -260,7 +277,9 @@ class TestPromotionRecordSchemaContract:
         Format: sha256:<64 hex characters>
         """
         # Valid digest
-        valid_digest = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        valid_digest = (
+            "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+        )
         record = PromotionRecord(
             promotion_id=uuid4(),
             artifact_digest=valid_digest,
@@ -416,7 +435,9 @@ class TestPromotionGateEnumContract:
 
         # All expected gates must exist
         for gate in expected_gates:
-            assert gate in actual_gates, f"Gate '{gate}' missing from PromotionGate enum"
+            assert (
+                gate in actual_gates
+            ), f"Gate '{gate}' missing from PromotionGate enum"
 
 
 class TestGateStatusEnumContract:
@@ -440,4 +461,6 @@ class TestGateStatusEnumContract:
 
         # All expected statuses must exist
         for status in expected_statuses:
-            assert status in actual_statuses, f"Status '{status}' missing from GateStatus enum"
+            assert (
+                status in actual_statuses
+            ), f"Status '{status}' missing from GateStatus enum"

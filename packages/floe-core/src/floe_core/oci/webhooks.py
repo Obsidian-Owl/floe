@@ -240,7 +240,9 @@ class WebhookNotifier:
                             duration_ms = int((time.monotonic() - start_time) * 1000)
                             span.set_attribute("floe.webhook.duration_ms", duration_ms)
                             span.set_attribute("floe.webhook.attempts", attempt)
-                            span.set_attribute("floe.webhook.status_code", response.status_code)
+                            span.set_attribute(
+                                "floe.webhook.status_code", response.status_code
+                            )
                             span.set_attribute("floe.webhook.success", True)
 
                             logger.info(
@@ -263,7 +265,9 @@ class WebhookNotifier:
                             last_error = f"Server error: {response.status_code}"
                             if attempt < max_attempts:
                                 # Exponential backoff: 1s, 2s, 4s, ...
-                                backoff_delay = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                                backoff_delay = BACKOFF_BASE_SECONDS * (
+                                    2 ** (attempt - 1)
+                                )
                                 logger.warning(
                                     "webhook_notification_retry",
                                     url=url,

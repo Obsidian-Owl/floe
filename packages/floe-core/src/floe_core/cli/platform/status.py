@@ -67,9 +67,15 @@ def _format_status_table(response: PromotionStatusResponse) -> str:
         lock_marker = " 🔒 LOCKED" if is_locked else ""
 
         if env_state.promoted:
-            promoted_at = env_state.promoted_at.isoformat() if env_state.promoted_at else "unknown"
+            promoted_at = (
+                env_state.promoted_at.isoformat()
+                if env_state.promoted_at
+                else "unknown"
+            )
             operator = env_state.operator or "unknown"
-            lines.append(f"  {status_icon} {env_name}: Promoted{latest_marker}{lock_marker}")
+            lines.append(
+                f"  {status_icon} {env_name}: Promoted{latest_marker}{lock_marker}"
+            )
             lines.append(f"      at: {promoted_at}")
             lines.append(f"      by: {operator}")
         else:
@@ -93,7 +99,9 @@ def _format_status_table(response: PromotionStatusResponse) -> str:
                 if hasattr(entry.promoted_at, "isoformat")
                 else str(entry.promoted_at)
             )
-            lines.append(f"  {i}. {entry.source_environment} → {entry.target_environment}")
+            lines.append(
+                f"  {i}. {entry.source_environment} → {entry.target_environment}"
+            )
             lines.append(f"     at: {promoted_at}")
             lines.append(f"     by: {entry.operator}")
 

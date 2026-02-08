@@ -95,7 +95,9 @@ _ALLOWED_KEY_EXTENSIONS = frozenset({".key", ".pem", ".pub", ".crt", ".cert"})
 _VALID_KEY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
-def _decode_bundle_with_size_limit(bundle_b64: str, max_size: int = MAX_BUNDLE_SIZE_BYTES) -> str:
+def _decode_bundle_with_size_limit(
+    bundle_b64: str, max_size: int = MAX_BUNDLE_SIZE_BYTES
+) -> str:
     """Decode base64 bundle with size limit to prevent memory exhaustion.
 
     Args:
@@ -404,10 +406,14 @@ class VerificationClient:
             )
 
         span_name = (
-            "floe.oci.verify.rekor" if self.policy.require_rekor else "floe.oci.verify.offline"
+            "floe.oci.verify.rekor"
+            if self.policy.require_rekor
+            else "floe.oci.verify.offline"
         )
         with tracer.start_as_current_span(span_name) as span:
-            span.set_attribute("floe.verification.offline", not self.policy.require_rekor)
+            span.set_attribute(
+                "floe.verification.offline", not self.policy.require_rekor
+            )
             try:
                 verifier.verify_artifact(
                     input_=content,
@@ -528,7 +534,9 @@ class VerificationClient:
                     failure_reason=f"Invalid signature bundle: {e}",
                 )
 
-            verification_success = self._cosign_verify_blob(content, bundle_data, public_key_ref)
+            verification_success = self._cosign_verify_blob(
+                content, bundle_data, public_key_ref
+            )
 
             if verification_success:
                 return VerificationResult(
@@ -588,7 +596,9 @@ class VerificationClient:
             return env_value
 
         if key_ref.source.value == "kubernetes":
-            logger.error("Kubernetes secret references not yet supported for verification")
+            logger.error(
+                "Kubernetes secret references not yet supported for verification"
+            )
             return None
 
         logger.error("Unsupported key source: %s", key_ref.source.value)
@@ -664,7 +674,9 @@ class VerificationClient:
                 logger.error("cosign verify-blob error: %s", e)
                 return False
 
-    def _match_trusted_issuer(self, metadata: SignatureMetadata) -> TrustedIssuer | None:
+    def _match_trusted_issuer(
+        self, metadata: SignatureMetadata
+    ) -> TrustedIssuer | None:
         """Match signature against trusted issuers.
 
         Args:
@@ -675,7 +687,9 @@ class VerificationClient:
         """
         for trusted in self.policy.trusted_issuers:
             if metadata.issuer:
-                if _normalize_issuer(str(trusted.issuer)) != _normalize_issuer(metadata.issuer):
+                if _normalize_issuer(str(trusted.issuer)) != _normalize_issuer(
+                    metadata.issuer
+                ):
                     continue
 
             if trusted.subject:
@@ -693,7 +707,9 @@ class VerificationClient:
                     if re.match(trusted.subject_regex, metadata.subject):
                         return trusted
                 except re.error:
-                    logger.warning("Invalid regex in trusted issuer: %s", trusted.subject_regex)
+                    logger.warning(
+                        "Invalid regex in trusted issuer: %s", trusted.subject_regex
+                    )
                     continue
 
         return None
@@ -900,8 +916,12 @@ class VerificationClient:
             signature_status=result.status,
             rekor_verified=result.rekor_verified,
             timestamp=datetime.now(timezone.utc),
-            trace_id=format(span_context.trace_id, "032x") if span_context.is_valid else "",
-            span_id=format(span_context.span_id, "016x") if span_context.is_valid else "",
+            trace_id=(
+                format(span_context.trace_id, "032x") if span_context.is_valid else ""
+            ),
+            span_id=(
+                format(span_context.span_id, "016x") if span_context.is_valid else ""
+            ),
             success=success,
             failure_reason=result.failure_reason,
         )
@@ -979,7 +999,9 @@ def export_verification_bundle(
     )
 
 
-def load_verification_policy_from_manifest(manifest_path: Path) -> VerificationPolicy | None:
+def load_verification_policy_from_manifest(
+    manifest_path: Path,
+) -> VerificationPolicy | None:
     """Load verification policy from manifest.yaml file.
 
     This function extracts the verification policy configuration from a

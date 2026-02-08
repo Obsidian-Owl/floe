@@ -107,7 +107,9 @@ class TestGateTimeoutHandling:
         # Create a mock process that simulates hanging after SIGTERM
         mock_process = Mock()
         mock_process.returncode = None
-        mock_process.wait.side_effect = subprocess.TimeoutExpired(cmd="sleep", timeout=5)
+        mock_process.wait.side_effect = subprocess.TimeoutExpired(
+            cmd="sleep", timeout=5
+        )
 
         # First, subprocess.run must raise TimeoutExpired to trigger the escalation path
         with patch("floe_core.oci.promotion.subprocess.run") as mock_run:

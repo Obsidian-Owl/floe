@@ -237,7 +237,9 @@ def format_report(
 
     # Tests without markers
     if tests_without_markers:
-        lines.append(f"TESTS WITHOUT REQUIREMENT MARKERS ({len(tests_without_markers)}):")
+        lines.append(
+            f"TESTS WITHOUT REQUIREMENT MARKERS ({len(tests_without_markers)}):"
+        )
         if verbose:
             for test in sorted(tests_without_markers):
                 lines.append(f"  - {test}")
@@ -300,7 +302,9 @@ def format_json(
         "passes": percentage >= threshold,
         "uncovered_requirements": uncovered,
         "tests_without_markers_count": len(tests_without_markers),
-        "requirements": {req_id: requirement_map.get(req_id, []) for req_id in all_requirements},
+        "requirements": {
+            req_id: requirement_map.get(req_id, []) for req_id in all_requirements
+        },
     }
 
     return json.dumps(report, indent=2)

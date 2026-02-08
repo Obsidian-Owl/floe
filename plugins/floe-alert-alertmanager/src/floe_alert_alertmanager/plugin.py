@@ -12,7 +12,6 @@ from typing import Any
 
 import httpx
 import structlog
-
 from floe_core.contracts.monitoring.violations import ContractViolationEvent
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 

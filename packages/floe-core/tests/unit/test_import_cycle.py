@@ -39,9 +39,9 @@ def test_floe_core_imports_without_rbac_plugin() -> None:
         timeout=30,
     )
 
-    assert result.returncode == 0, (
-        f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"floe_core import failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "success" in result.stdout
 
 
@@ -53,7 +53,9 @@ def test_no_direct_k8s_rbac_plugin_import_in_generator() -> None:
     When I inspect its imports,
     Then it uses only the RBACPlugin ABC (no direct K8sRBACPlugin import).
     """
-    generator_path = Path(__file__).parents[2] / "src" / "floe_core" / "rbac" / "generator.py"
+    generator_path = (
+        Path(__file__).parents[2] / "src" / "floe_core" / "rbac" / "generator.py"
+    )
     assert generator_path.exists(), f"generator.py not found at {generator_path}"
 
     content = generator_path.read_text()
@@ -93,7 +95,9 @@ def test_no_direct_k8s_rbac_plugin_import_in_generator() -> None:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if "floe_rbac_k8s" in alias.name:
-                        actual_forbidden.append(f"Line {node.lineno}: import {alias.name}")
+                        actual_forbidden.append(
+                            f"Line {node.lineno}: import {alias.name}"
+                        )
 
             elif isinstance(node, ast.ImportFrom) and node.module:
                 if "floe_rbac_k8s" in node.module:
@@ -115,7 +119,9 @@ def test_no_direct_k8s_rbac_plugin_import_in_cli_generate() -> None:
     When it needs an RBAC plugin instance,
     Then it retrieves it via the plugin registry lookup (not direct import).
     """
-    generate_path = Path(__file__).parents[2] / "src" / "floe_core" / "cli" / "rbac" / "generate.py"
+    generate_path = (
+        Path(__file__).parents[2] / "src" / "floe_core" / "cli" / "rbac" / "generate.py"
+    )
     assert generate_path.exists(), f"generate.py not found at {generate_path}"
 
     content = generate_path.read_text()
@@ -133,7 +139,9 @@ def test_no_direct_k8s_rbac_plugin_import_in_cli_generate() -> None:
         elif isinstance(node, ast.ImportFrom):
             if node.module and "floe_rbac_k8s" in node.module:
                 names = ", ".join(alias.name for alias in node.names)
-                direct_imports.append(f"Line {node.lineno}: from {node.module} import {names}")
+                direct_imports.append(
+                    f"Line {node.lineno}: from {node.module} import {names}"
+                )
 
     # This test currently documents the CURRENT state (broken)
     # After T008, this test should PASS with no direct imports
@@ -194,9 +202,9 @@ print("success")
         timeout=30,
     )
 
-    assert result.returncode == 0, (
-        f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"Import sequence test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "CIRCULAR_WARNING" not in result.stdout
     assert "success" in result.stdout
 
@@ -208,7 +216,9 @@ def test_generator_docstring_no_direct_import_example() -> None:
     The module docstring example should show registry-based plugin lookup,
     not direct import from floe_rbac_k8s.
     """
-    generator_path = Path(__file__).parents[2] / "src" / "floe_core" / "rbac" / "generator.py"
+    generator_path = (
+        Path(__file__).parents[2] / "src" / "floe_core" / "rbac" / "generator.py"
+    )
     content = generator_path.read_text()
     tree = ast.parse(content)
 
@@ -218,7 +228,9 @@ def test_generator_docstring_no_direct_import_example() -> None:
 
     # Check if docstring has direct import examples (should be updated)
     # After fix, docstring should show registry pattern instead
-    has_direct_import_example = "from floe_rbac_k8s.plugin import K8sRBACPlugin" in module_docstring
+    has_direct_import_example = (
+        "from floe_rbac_k8s.plugin import K8sRBACPlugin" in module_docstring
+    )
 
     # This test documents the issue - after T007, this should be False
     assert not has_direct_import_example, (

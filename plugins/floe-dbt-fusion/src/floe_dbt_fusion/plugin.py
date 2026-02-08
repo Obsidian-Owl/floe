@@ -317,7 +317,9 @@ class DBTFusionPlugin(DBTPlugin):
             run_results = json.loads(run_results_path.read_text())
             results = run_results.get("results", [])
             models_run = len(results)
-            failures = sum(1 for r in results if r.get("status") not in ("success", "pass"))
+            failures = sum(
+                1 for r in results if r.get("status") not in ("success", "pass")
+            )
             execution_time = run_results.get("elapsed_time", 0.0)
 
         return DBTRunResult(
@@ -383,7 +385,9 @@ class DBTFusionPlugin(DBTPlugin):
             run_results = json.loads(run_results_path.read_text())
             results = run_results.get("results", [])
             tests_run = len(results)
-            failures = sum(1 for r in results if r.get("status") not in ("success", "pass"))
+            failures = sum(
+                1 for r in results if r.get("status") not in ("success", "pass")
+            )
             execution_time = run_results.get("elapsed_time", 0.0)
 
         return DBTRunResult(
@@ -465,7 +469,9 @@ class DBTFusionPlugin(DBTPlugin):
         # Parse text output from Fusion lint
         # Fusion lint outputs verdict/progress info, not JSON
         output = result.stdout + result.stderr
-        log.debug("fusion_lint_output", output=output[:500], returncode=result.returncode)
+        log.debug(
+            "fusion_lint_output", output=output[:500], returncode=result.returncode
+        )
 
         if result.returncode == 0:
             # Count SQL files mentioned in output

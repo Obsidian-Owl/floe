@@ -557,7 +557,9 @@ class TestValidateTTL:
     def test_validate_ttl_at_maximum_boundary(self) -> None:
         """Test TTL exactly at maximum is valid."""
         # Arrange - expiration exactly at 24 hour limit
-        future = datetime.now(timezone.utc) + timedelta(seconds=MAX_CREDENTIAL_TTL_SECONDS - 10)
+        future = datetime.now(timezone.utc) + timedelta(
+            seconds=MAX_CREDENTIAL_TTL_SECONDS - 10
+        )
         credentials = {"expiration": future.isoformat()}
 
         # Act

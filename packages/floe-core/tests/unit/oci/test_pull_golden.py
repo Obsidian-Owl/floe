@@ -115,7 +115,9 @@ def _normalize_for_comparison(data: Any) -> Any:
     return data
 
 
-def _assert_golden_match(actual: Any, fixture_path: Path, *, update: bool = False) -> None:
+def _assert_golden_match(
+    actual: Any, fixture_path: Path, *, update: bool = False
+) -> None:
     """Assert that actual output matches the golden fixture."""
     if update:
         _save_golden_fixture(fixture_path, fixture_path.stem, actual)
@@ -134,8 +136,12 @@ def _assert_golden_match(actual: Any, fixture_path: Path, *, update: bool = Fals
     expected_normalized = _normalize_for_comparison(expected)
 
     if actual_normalized != expected_normalized:
-        actual_json = json.dumps(actual_normalized, indent=2, sort_keys=True, default=str)
-        expected_json = json.dumps(expected_normalized, indent=2, sort_keys=True, default=str)
+        actual_json = json.dumps(
+            actual_normalized, indent=2, sort_keys=True, default=str
+        )
+        expected_json = json.dumps(
+            expected_normalized, indent=2, sort_keys=True, default=str
+        )
 
         pytest.fail(
             f"Golden test failed: output does not match fixture\n"
@@ -446,7 +452,9 @@ class TestPullGolden:
             result = oci_client.pull(tag="v1.0.0")
 
         # Extract observability config
-        observability_dict = result.observability.model_dump() if result.observability else None
+        observability_dict = (
+            result.observability.model_dump() if result.observability else None
+        )
 
         fixture_path = FIXTURES_DIR / "pull_observability.json"
         _assert_golden_match(observability_dict, fixture_path, update=UPDATE_GOLDEN)

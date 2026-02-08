@@ -160,7 +160,10 @@ class TestAuthorizationIntegration:
                                 assert record.authorization_passed is True
                                 assert "group:release-managers" in record.authorized_via
                                 # T130: Verify operator_groups audit field
-                                assert record.operator_groups == ["release-managers", "developers"]
+                                assert record.operator_groups == [
+                                    "release-managers",
+                                    "developers",
+                                ]
 
     @pytest.mark.requirement("FR-046")
     def test_promote_with_authorized_operator(
@@ -227,7 +230,9 @@ class TestAuthorizationIntegration:
 
         assert exc_info.value.exit_code == 12
         assert "alice@example.com" in str(exc_info.value)
-        assert "release-managers" in str(exc_info.value) or "platform-admins" in str(exc_info.value)
+        assert "release-managers" in str(exc_info.value) or "platform-admins" in str(
+            exc_info.value
+        )
 
     @pytest.mark.requirement("FR-046")
     def test_promote_denied_not_allowed_operator(
@@ -486,7 +491,9 @@ class TestSeparationOfDutiesIntegration:
 
         # Mock _get_previous_operator to return same operator
         # The check should fail BEFORE gates/signature verification
-        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
             with pytest.raises(SeparationOfDutiesError) as exc_info:
                 controller.promote(
                     tag="v1.0.0",
@@ -520,7 +527,9 @@ class TestSeparationOfDutiesIntegration:
         mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
 
         # Mock _get_previous_operator to return different operator
-        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
             with patch.object(
                 controller,
                 "_get_artifact_digest",
@@ -531,7 +540,9 @@ class TestSeparationOfDutiesIntegration:
                         mock_verify.return_value = MagicMock(status="valid")
                         with patch.object(controller, "_create_env_tag"):
                             with patch.object(controller, "_update_latest_tag"):
-                                with patch.object(controller, "_store_promotion_record"):
+                                with patch.object(
+                                    controller, "_store_promotion_record"
+                                ):
                                     # Bob promotes, Alice previously promoted - should succeed
                                     record = controller.promote(
                                         tag="v1.0.0",
@@ -582,7 +593,9 @@ class TestSeparationOfDutiesIntegration:
         mock_oci_client._credentials.metadata = {"groups": ["platform-admins"]}
 
         # Mock _get_previous_operator to return same operator
-        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
             with patch.object(
                 controller,
                 "_get_artifact_digest",
@@ -593,7 +606,9 @@ class TestSeparationOfDutiesIntegration:
                         mock_verify.return_value = MagicMock(status="valid")
                         with patch.object(controller, "_create_env_tag"):
                             with patch.object(controller, "_update_latest_tag"):
-                                with patch.object(controller, "_store_promotion_record"):
+                                with patch.object(
+                                    controller, "_store_promotion_record"
+                                ):
                                     # Same operator should succeed when SOD disabled
                                     record = controller.promote(
                                         tag="v1.0.0",
@@ -632,7 +647,9 @@ class TestSeparationOfDutiesIntegration:
                         mock_verify.return_value = MagicMock(status="valid")
                         with patch.object(controller, "_create_env_tag"):
                             with patch.object(controller, "_update_latest_tag"):
-                                with patch.object(controller, "_store_promotion_record"):
+                                with patch.object(
+                                    controller, "_store_promotion_record"
+                                ):
                                     record = controller.promote(
                                         tag="v1.0.0",
                                         from_env="staging",
@@ -664,7 +681,9 @@ class TestSeparationOfDutiesIntegration:
 
         # Previous operator was lowercase, current is uppercase - should still fail
         # The check should fail BEFORE gates/signature verification
-        with patch.object(controller, "_get_previous_operator", return_value="alice@example.com"):
+        with patch.object(
+            controller, "_get_previous_operator", return_value="alice@example.com"
+        ):
             with pytest.raises(SeparationOfDutiesError):
                 controller.promote(
                     tag="v1.0.0",
@@ -720,4 +739,7 @@ class TestSeparationOfDutiesErrorMessages:
         error_str = str(error)
         assert "Remediation" in error_str
         error_str_lower = error_str.lower()
-        assert "different team member" in error_str_lower or "different operator" in error_str_lower
+        assert (
+            "different team member" in error_str_lower
+            or "different operator" in error_str_lower
+        )

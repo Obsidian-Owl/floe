@@ -214,7 +214,9 @@ class TestNumericColumnToMeasure:
             "number",
         ],
     )
-    def test_numeric_types_become_measures(self, tmp_path: Path, data_type: str) -> None:
+    def test_numeric_types_become_measures(
+        self, tmp_path: Path, data_type: str
+    ) -> None:
         """Test that various numeric SQL types map to measures."""
         manifest = _make_manifest(
             {
@@ -478,7 +480,9 @@ class TestRefToJoinConversion:
                 break
         assert orders_found, "orders cube not found in generated files"
 
-    def test_meta_cube_join_relationship_overrides_default(self, tmp_path: Path) -> None:
+    def test_meta_cube_join_relationship_overrides_default(
+        self, tmp_path: Path
+    ) -> None:
         """Test meta.cube_join_relationship overrides default."""
         manifest = _make_manifest(
             {
@@ -879,7 +883,9 @@ class TestMalformedManifest:
         with pytest.raises(SchemaGenerationError, match="manifest"):
             gen.generate(manifest_path, output_dir)
 
-    def test_missing_nodes_key_raises_schema_generation_error(self, tmp_path: Path) -> None:
+    def test_missing_nodes_key_raises_schema_generation_error(
+        self, tmp_path: Path
+    ) -> None:
         """Test manifest without 'nodes' key raises SchemaGenerationError."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()

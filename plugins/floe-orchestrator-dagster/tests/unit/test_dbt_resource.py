@@ -118,7 +118,9 @@ class TestDBTResourcePluginLoading:
             assert plugin is mock_dbt_plugin
 
     @pytest.mark.requirement("FR-030")
-    def test_get_plugin_loads_from_registry_by_name(self, mock_dbt_plugin: MagicMock) -> None:
+    def test_get_plugin_loads_from_registry_by_name(
+        self, mock_dbt_plugin: MagicMock
+    ) -> None:
         """get_plugin() MUST load plugin by name from registry."""
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -132,7 +134,9 @@ class TestDBTResourcePluginLoading:
             mock_load.assert_called_once_with("fusion")
 
     @pytest.mark.requirement("FR-030")
-    def test_get_plugin_caches_plugin_instance(self, mock_dbt_plugin: MagicMock) -> None:
+    def test_get_plugin_caches_plugin_instance(
+        self, mock_dbt_plugin: MagicMock
+    ) -> None:
         """get_plugin() SHOULD cache the plugin instance."""
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -174,7 +178,9 @@ class TestDBTResourceCompile:
     """Test DBTResource compile method."""
 
     @pytest.mark.requirement("FR-031")
-    def test_compile_delegates_to_plugin(self, mock_dbt_plugin: MagicMock, tmp_path: Path) -> None:
+    def test_compile_delegates_to_plugin(
+        self, mock_dbt_plugin: MagicMock, tmp_path: Path
+    ) -> None:
         """compile() MUST delegate to plugin.compile_project()."""
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -561,7 +567,9 @@ class TestDBTResourceCapabilities:
             assert result is True
 
     @pytest.mark.requirement("FR-031")
-    def test_supports_sql_linting_delegates_to_plugin(self, mock_dbt_plugin: MagicMock) -> None:
+    def test_supports_sql_linting_delegates_to_plugin(
+        self, mock_dbt_plugin: MagicMock
+    ) -> None:
         """supports_sql_linting() MUST delegate to plugin."""
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 
@@ -640,7 +648,9 @@ class TestDBTResourceMetadata:
             assert result == expected_results
 
     @pytest.mark.requirement("FR-031")
-    def test_get_runtime_metadata_delegates_to_plugin(self, mock_dbt_plugin: MagicMock) -> None:
+    def test_get_runtime_metadata_delegates_to_plugin(
+        self, mock_dbt_plugin: MagicMock
+    ) -> None:
         """get_runtime_metadata() MUST delegate to plugin."""
         from floe_orchestrator_dagster.resources.dbt_resource import DBTResource
 

@@ -32,7 +32,9 @@ if TYPE_CHECKING:
     pass  # TYPE_CHECKING block preserved for future type-only imports
 
 
-def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "test") -> Any:
+def _create_valid_compiled_artifacts(
+    unique_id: str, product_prefix: str = "test"
+) -> Any:
     """Create a valid CompiledArtifacts instance for integration testing.
 
     This is a module-level helper to avoid duplicating artifact creation
@@ -204,7 +206,9 @@ class TestPushToRegistry(IntegrationTestBase):
 
         # Verify via registry API (HEAD request to manifest endpoint)
         # registry:2 API: GET /v2/<name>/manifests/<reference>
-        manifest_url = f"http://{oci_registry_host}/v2/floe-test/manifests/{test_artifact_tag}"
+        manifest_url = (
+            f"http://{oci_registry_host}/v2/floe-test/manifests/{test_artifact_tag}"
+        )
 
         # Use httpx to check manifest exists
         with httpx.Client() as http_client:
@@ -216,17 +220,17 @@ class TestPushToRegistry(IntegrationTestBase):
                 },
             )
 
-        assert response.status_code == 200, (
-            f"Expected 200 OK for pushed artifact, got {response.status_code}"
-        )
+        assert (
+            response.status_code == 200
+        ), f"Expected 200 OK for pushed artifact, got {response.status_code}"
 
         # Verify registry returns a valid digest header
         # Note: ORAS creates its own manifest, so registry digest may differ
         # from the one we computed locally. The key test is that a digest exists.
         docker_digest = response.headers.get("docker-content-digest", "")
-        assert docker_digest.startswith("sha256:"), (
-            f"Expected valid registry digest, got: {docker_digest}"
-        )
+        assert docker_digest.startswith(
+            "sha256:"
+        ), f"Expected valid registry digest, got: {docker_digest}"
 
     @pytest.mark.requirement("8A-FR-001")
     def test_push_returns_correct_digest(
@@ -332,9 +336,13 @@ class TestPullFromRegistry(IntegrationTestBase):
 
         # Verify content matches
         assert pulled_artifacts.version == original_artifacts.version
-        assert pulled_artifacts.metadata.product_name == original_artifacts.metadata.product_name
         assert (
-            pulled_artifacts.metadata.product_version == original_artifacts.metadata.product_version
+            pulled_artifacts.metadata.product_name
+            == original_artifacts.metadata.product_name
+        )
+        assert (
+            pulled_artifacts.metadata.product_version
+            == original_artifacts.metadata.product_version
         )
         assert pulled_artifacts.dbt_profiles == original_artifacts.dbt_profiles
 
@@ -434,7 +442,10 @@ class TestPullFromRegistry(IntegrationTestBase):
 
         # Both pulls should return identical content
         assert pulled_first.metadata.product_name == pulled_second.metadata.product_name
-        assert pulled_first.metadata.product_version == pulled_second.metadata.product_version
+        assert (
+            pulled_first.metadata.product_version
+            == pulled_second.metadata.product_version
+        )
         assert pulled_first.dbt_profiles == pulled_second.dbt_profiles
 
 
@@ -739,7 +750,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
         )
 
         # Create client with mock secrets plugin
-        client = OCIClient.from_registry_config(registry_config, secrets_plugin=mock_secrets_plugin)
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=mock_secrets_plugin
+        )
 
         # Push should succeed with valid credentials
         tag = f"auth-{test_artifact_tag}"
@@ -794,7 +807,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
             cache=CacheConfig(enabled=True, path=cache_dir),
         )
 
-        client = OCIClient.from_registry_config(registry_config, secrets_plugin=mock_secrets_plugin)
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=mock_secrets_plugin
+        )
 
         # Push first
         tag = f"auth-pull-{test_artifact_tag}"
@@ -805,7 +820,10 @@ class TestBasicAuthRegistry(IntegrationTestBase):
 
         # Verify content matches
         assert pulled_artifacts.version == original_artifacts.version
-        assert pulled_artifacts.metadata.product_name == original_artifacts.metadata.product_name
+        assert (
+            pulled_artifacts.metadata.product_name
+            == original_artifacts.metadata.product_name
+        )
 
     @pytest.mark.requirement("8A-FR-006")
     def test_basic_auth_invalid_credentials_rejected(
@@ -846,9 +864,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
 
         # Verify error indicates authentication failure
         error_msg = str(exc_info.value).lower()
-        assert any(term in error_msg for term in ["auth", "401", "unauthorized"]), (
-            f"Expected auth-related error, got: {exc_info.value}"
-        )
+        assert any(
+            term in error_msg for term in ["auth", "401", "unauthorized"]
+        ), f"Expected auth-related error, got: {exc_info.value}"
 
     @pytest.mark.requirement("8A-SC-009")
     def test_basic_auth_anonymous_access_denied(
@@ -871,9 +889,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
             response = http_client.get(catalog_url)
 
         # Should get 401 Unauthorized
-        assert response.status_code == 401, (
-            f"Expected 401 Unauthorized for anonymous access, got {response.status_code}"
-        )
+        assert (
+            response.status_code == 401
+        ), f"Expected 401 Unauthorized for anonymous access, got {response.status_code}"
 
     @pytest.mark.requirement("8A-FR-006")
     def test_basic_auth_inspect_succeeds(
@@ -915,7 +933,9 @@ class TestBasicAuthRegistry(IntegrationTestBase):
             tls_verify=False,
         )
 
-        client = OCIClient.from_registry_config(registry_config, secrets_plugin=mock_secrets_plugin)
+        client = OCIClient.from_registry_config(
+            registry_config, secrets_plugin=mock_secrets_plugin
+        )
 
         # Push first
         tag = f"auth-inspect-{test_artifact_tag}"

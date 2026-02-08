@@ -503,7 +503,10 @@ class PlatformRef(BaseModel):
         Field(
             min_length=1,
             description="OCI URI or local path to manifest",
-            examples=["oci://registry.acme.com/manifests/platform:1.0", "./manifest.yaml"],
+            examples=[
+                "oci://registry.acme.com/manifests/platform:1.0",
+                "./manifest.yaml",
+            ],
         ),
     ]
 
@@ -635,7 +638,9 @@ class FloeSpec(BaseModel):
 
     @field_validator("transforms")
     @classmethod
-    def validate_unique_transform_names(cls, v: list[TransformSpec]) -> list[TransformSpec]:
+    def validate_unique_transform_names(
+        cls, v: list[TransformSpec]
+    ) -> list[TransformSpec]:
         """Validate that transform names are unique.
 
         Args:
@@ -668,7 +673,9 @@ def _find_forbidden_in_list(items: list[Any], base_path: str) -> set[str]:
     forbidden_found: set[str] = set()
     for i, list_item in enumerate(items):
         if isinstance(list_item, dict):
-            forbidden_found.update(_find_forbidden_fields(dict(list_item), f"{base_path}[{i}]"))
+            forbidden_found.update(
+                _find_forbidden_fields(dict(list_item), f"{base_path}[{i}]")
+            )
     return forbidden_found
 
 

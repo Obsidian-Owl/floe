@@ -83,7 +83,9 @@ class TestPluginRegistryDiscovery:
             # Verify all groups were scanned
             expected_groups = {pt.entry_point_group for pt in PluginType}
             # Check via kwargs since entry_points is called with group=
-            actual_groups = {call.kwargs["group"] for call in mock_entry_points.call_args_list}
+            actual_groups = {
+                call.kwargs["group"] for call in mock_entry_points.call_args_list
+            }
             assert actual_groups == expected_groups
 
     @pytest.mark.requirement("FR-001")
@@ -165,9 +167,9 @@ class TestPluginRegistryDiscovery:
             # Verify warning was logged for duplicate
             mock_logger.warning.assert_called()
             call_args = mock_logger.warning.call_args_list
-            assert any("discover_group.duplicate" in str(call) for call in call_args), (
-                "Expected warning log for duplicate plugin"
-            )
+            assert any(
+                "discover_group.duplicate" in str(call) for call in call_args
+            ), "Expected warning log for duplicate plugin"
 
     @pytest.mark.requirement("FR-001")
     def test_discover_multiple_plugin_types(
@@ -179,7 +181,9 @@ class TestPluginRegistryDiscovery:
         registry = PluginRegistry()
 
         compute_ep = mock_entry_point("duckdb", "floe.computes", "pkg:DuckDB")
-        orchestrator_ep = mock_entry_point("dagster", "floe.orchestrators", "pkg:Dagster")
+        orchestrator_ep = mock_entry_point(
+            "dagster", "floe.orchestrators", "pkg:Dagster"
+        )
         catalog_ep = mock_entry_point("polaris", "floe.catalogs", "pkg:Polaris")
 
         def mock_eps(group: str) -> list[MagicMock]:
@@ -884,7 +888,9 @@ class TestPluginRegistryVersionCompatibility:
         registry = PluginRegistry()
 
         # Set up discovered entry point
-        ep = mock_entry_point("lazy-incompatible", "floe.computes", "pkg:IncompatibleLazyPlugin")
+        ep = mock_entry_point(
+            "lazy-incompatible", "floe.computes", "pkg:IncompatibleLazyPlugin"
+        )
         ep.load.return_value = IncompatibleLazyPlugin
         registry._discovered[(PluginType.COMPUTE, "lazy-incompatible")] = ep
 
@@ -1961,7 +1967,9 @@ class TestPluginRegistryHealthChecks:
         results = registry.health_check_all()
 
         assert results["COMPUTE:failing-health"].state == HealthState.UNHEALTHY
-        assert "RuntimeError" in results["COMPUTE:failing-health"].details.get("exception_type", "")
+        assert "RuntimeError" in results["COMPUTE:failing-health"].details.get(
+            "exception_type", ""
+        )
 
     @pytest.mark.requirement("SC-007")
     def test_health_check_all_returns_unhealthy_on_timeout(

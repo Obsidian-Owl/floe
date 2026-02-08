@@ -27,7 +27,9 @@ except ImportError:
 def _quality_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
     if not _HAS_OTEL or _factory_get_tracer is None:
         return nullcontext()
-    return _factory_get_tracer(__name__).start_as_current_span(name, attributes=attributes)
+    return _factory_get_tracer(__name__).start_as_current_span(
+        name, attributes=attributes
+    )
 
 
 if TYPE_CHECKING:

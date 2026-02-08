@@ -38,7 +38,9 @@ class TestCreateEnvTag:
         with (
             patch.object(controller.client, "inspect") as mock_inspect,
             patch.object(controller.client, "tag_exists", return_value=False),
-            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+            patch.object(
+                controller.client, "_create_oras_client"
+            ) as mock_oras_client_factory,
         ):
             # Setup mock inspect to return artifact with digest
             mock_manifest = Mock()
@@ -64,7 +66,9 @@ class TestCreateEnvTag:
         with (
             patch.object(controller.client, "inspect") as mock_inspect,
             patch.object(controller.client, "tag_exists", return_value=False),
-            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+            patch.object(
+                controller.client, "_create_oras_client"
+            ) as mock_oras_client_factory,
         ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:def456"
@@ -75,10 +79,14 @@ class TestCreateEnvTag:
             mock_oras_client_factory.return_value = mock_oras
 
             # Test various environment names
-            tag_staging = controller._create_env_tag(source_tag="v2.0.0", target_env="staging")
+            tag_staging = controller._create_env_tag(
+                source_tag="v2.0.0", target_env="staging"
+            )
             assert tag_staging == "v2.0.0-staging"
 
-            tag_prod = controller._create_env_tag(source_tag="v2.0.0", target_env="prod")
+            tag_prod = controller._create_env_tag(
+                source_tag="v2.0.0", target_env="prod"
+            )
             assert tag_prod == "v2.0.0-prod"
 
             tag_qa = controller._create_env_tag(source_tag="v2.0.0", target_env="qa")
@@ -104,7 +112,9 @@ class TestCreateEnvTag:
                 )
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_allows_force_when_same_digest(self, controller: MagicMock) -> None:
+    def test_create_env_tag_allows_force_when_same_digest(
+        self, controller: MagicMock
+    ) -> None:
         """Test _create_env_tag allows force when digests match (idempotent)."""
         with (
             patch.object(controller.client, "tag_exists", return_value=True),
@@ -126,12 +136,16 @@ class TestCreateEnvTag:
             assert tag == "v1.2.3-staging"
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_uses_oras_upload_manifest(self, controller: MagicMock) -> None:
+    def test_create_env_tag_uses_oras_upload_manifest(
+        self, controller: MagicMock
+    ) -> None:
         """Test _create_env_tag uses ORAS upload_manifest for tag creation."""
         with (
             patch.object(controller.client, "inspect") as mock_inspect,
             patch.object(controller.client, "tag_exists", return_value=False),
-            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+            patch.object(
+                controller.client, "_create_oras_client"
+            ) as mock_oras_client_factory,
             patch.object(controller.client, "_build_target_ref") as mock_build_ref,
         ):
             mock_manifest = Mock()
@@ -161,12 +175,16 @@ class TestCreateEnvTag:
             assert "v1.2.3-staging" in str(call_args)
 
     @pytest.mark.requirement("8C-FR-002")
-    def test_create_env_tag_returns_created_tag_name(self, controller: MagicMock) -> None:
+    def test_create_env_tag_returns_created_tag_name(
+        self, controller: MagicMock
+    ) -> None:
         """Test _create_env_tag returns the created tag name."""
         with (
             patch.object(controller.client, "inspect") as mock_inspect,
             patch.object(controller.client, "tag_exists", return_value=False),
-            patch.object(controller.client, "_create_oras_client") as mock_oras_client_factory,
+            patch.object(
+                controller.client, "_create_oras_client"
+            ) as mock_oras_client_factory,
         ):
             mock_manifest = Mock()
             mock_manifest.digest = "sha256:abc123"

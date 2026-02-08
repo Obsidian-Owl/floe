@@ -243,7 +243,9 @@ class _IcebergTableLifecycle:
         table_name = parts[1]
 
         # Check if namespace exists (mock-specific attribute for unit testing)
-        namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
+        namespaces: list[str] | None = getattr(
+            self._catalog_plugin, "_namespaces", None
+        )
         if namespaces is not None and namespace not in namespaces:
             return False
 
@@ -328,7 +330,9 @@ class _IcebergTableLifecycle:
             NoSuchNamespaceError: If namespace doesn't exist.
         """
         # Mock-specific attribute access for unit testing
-        namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
+        namespaces: list[str] | None = getattr(
+            self._catalog_plugin, "_namespaces", None
+        )
         if namespaces is not None and namespace not in namespaces:
             msg = f"Namespace '{namespace}' does not exist"
             raise NoSuchNamespaceError(msg)
@@ -344,7 +348,9 @@ class _IcebergTableLifecycle:
         """
         parts = identifier.rsplit(".", 1)
         if len(parts) < 2:
-            msg = f"Invalid identifier format: '{identifier}'. Expected 'namespace.table'"
+            msg = (
+                f"Invalid identifier format: '{identifier}'. Expected 'namespace.table'"
+            )
             raise ValidationError(msg)
 
     def _table_schema_to_dict(self, table_schema: Any) -> dict[str, Any]:

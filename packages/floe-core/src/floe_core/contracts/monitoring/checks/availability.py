@@ -114,7 +114,9 @@ class AvailabilityCheck(BaseCheck):
                 status=CheckStatus.SKIPPED,
                 duration_seconds=duration,
                 timestamp=now,
-                details={"reason": "No compute plugin available for availability check"},
+                details={
+                    "reason": "No compute plugin available for availability check"
+                },
             )
 
         # --- Ping the data source ---

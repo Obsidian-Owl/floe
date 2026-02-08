@@ -175,26 +175,26 @@ class TestPluginSystem(IntegrationTestBase):
                     )
 
                     # Verify required PluginMetadata properties exist
-                    assert hasattr(plugin, "name"), (
-                        f"{plugin_type.name}:{plugin_name} missing 'name' property"
-                    )
-                    assert hasattr(plugin, "version"), (
-                        f"{plugin_type.name}:{plugin_name} missing 'version' property"
-                    )
-                    assert hasattr(plugin, "floe_api_version"), (
-                        f"{plugin_type.name}:{plugin_name} missing 'floe_api_version' property"
-                    )
+                    assert hasattr(
+                        plugin, "name"
+                    ), f"{plugin_type.name}:{plugin_name} missing 'name' property"
+                    assert hasattr(
+                        plugin, "version"
+                    ), f"{plugin_type.name}:{plugin_name} missing 'version' property"
+                    assert hasattr(
+                        plugin, "floe_api_version"
+                    ), f"{plugin_type.name}:{plugin_name} missing 'floe_api_version' property"
 
                     # Verify properties return expected types
-                    assert isinstance(plugin.name, str), (
-                        f"{plugin_type.name}:{plugin_name} name must be str"
-                    )
-                    assert isinstance(plugin.version, str), (
-                        f"{plugin_type.name}:{plugin_name} version must be str"
-                    )
-                    assert isinstance(plugin.floe_api_version, str), (
-                        f"{plugin_type.name}:{plugin_name} floe_api_version must be str"
-                    )
+                    assert isinstance(
+                        plugin.name, str
+                    ), f"{plugin_type.name}:{plugin_name} name must be str"
+                    assert isinstance(
+                        plugin.version, str
+                    ), f"{plugin_type.name}:{plugin_name} version must be str"
+                    assert isinstance(
+                        plugin.floe_api_version, str
+                    ), f"{plugin_type.name}:{plugin_name} floe_api_version must be str"
 
                     # Verify version format (X.Y or X.Y.Z semver)
                     assert version_pattern.match(plugin.floe_api_version), (
@@ -220,7 +220,9 @@ class TestPluginSystem(IntegrationTestBase):
                                 f"method '{name}' from {abc_class.__name__}"
                             )
 
-                    self.logger.info(f"ABC compliance passed: {plugin_type.name}:{plugin_name}")
+                    self.logger.info(
+                        f"ABC compliance passed: {plugin_type.name}:{plugin_name}"
+                    )
 
                 except Exception as e:
                     non_compliant.append(f"{plugin_type.name}:{plugin_name} - {e}")
@@ -253,9 +255,9 @@ class TestPluginSystem(IntegrationTestBase):
         # Get available compute plugins
         compute_plugins = registry.list_all().get(PluginType.COMPUTE, [])
 
-        assert len(compute_plugins) >= 1, (
-            f"Need at least 1 compute plugin for swap test, found {len(compute_plugins)}"
-        )
+        assert (
+            len(compute_plugins) >= 1
+        ), f"Need at least 1 compute plugin for swap test, found {len(compute_plugins)}"
 
         project_root = Path(__file__).parent.parent.parent
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
@@ -263,10 +265,12 @@ class TestPluginSystem(IntegrationTestBase):
 
         # Compile with default configuration
         artifacts = compile_pipeline(spec_path, manifest_path)
-        assert artifacts.plugins is not None, "Compiled artifacts must have plugins section"
-        assert artifacts.plugins.compute is not None, (
-            "Compiled artifacts must specify compute plugin"
-        )
+        assert (
+            artifacts.plugins is not None
+        ), "Compiled artifacts must have plugins section"
+        assert (
+            artifacts.plugins.compute is not None
+        ), "Compiled artifacts must specify compute plugin"
 
         default_compute = artifacts.plugins.compute.type
         assert default_compute in compute_plugins, (
@@ -291,7 +295,9 @@ class TestPluginSystem(IntegrationTestBase):
 
             if len(profiles_by_plugin) >= 2:
                 profile_types = {
-                    p.get("type") for p in profiles_by_plugin.values() if isinstance(p, dict)
+                    p.get("type")
+                    for p in profiles_by_plugin.values()
+                    if isinstance(p, dict)
                 }
                 assert len(profile_types) >= 2, (
                     f"SWAP GAP: Different compute plugins produce same dbt profile type: "
@@ -357,7 +363,9 @@ class TestPluginSystem(IntegrationTestBase):
                     )
 
                 except Exception as e:
-                    health_check_failures.append(f"{plugin_type.name}:{plugin_name} - {e}")
+                    health_check_failures.append(
+                        f"{plugin_type.name}:{plugin_name} - {e}"
+                    )
                     self.logger.error(
                         f"Health check failed: {plugin_type.name}:{plugin_name} - {e}"
                     )
@@ -583,9 +591,9 @@ class ThirdPartyTestPlugin(PluginMetadata):
 
         for plugin_type, abc_class in self.PLUGIN_ABC_MAP.items():
             # ABC must be a class (not a module or instance)
-            assert inspect.isclass(abc_class), (
-                f"PLUGIN_ABC_MAP[{plugin_type.name}] = {abc_class} is not a class"
-            )
+            assert inspect.isclass(
+                abc_class
+            ), f"PLUGIN_ABC_MAP[{plugin_type.name}] = {abc_class} is not a class"
 
             # ABC must have the required base methods
             abc_methods = {
@@ -633,9 +641,9 @@ class ThirdPartyTestPlugin(PluginMetadata):
         # Get available compute plugins
         compute_plugins = registry.list_all().get(PluginType.COMPUTE, [])
 
-        assert len(compute_plugins) >= 1, (
-            f"Need at least 1 compute plugin for execution test, found {len(compute_plugins)}"
-        )
+        assert (
+            len(compute_plugins) >= 1
+        ), f"Need at least 1 compute plugin for execution test, found {len(compute_plugins)}"
 
         # Collect plugin configurations for comparison
         plugin_configs: dict[str, dict[str, Any]] = {}
@@ -656,9 +664,9 @@ class ThirdPartyTestPlugin(PluginMetadata):
 
                 # 1. Validate health check passes
                 health_status = compute_plugin.health_check()
-                assert health_status.state == HealthState.HEALTHY, (
-                    f"Plugin {compute_name} health check failed: {health_status.message}"
-                )
+                assert (
+                    health_status.state == HealthState.HEALTHY
+                ), f"Plugin {compute_name} health check failed: {health_status.message}"
                 plugin_config["health_check_passed"] = True
 
                 self.logger.info(
@@ -705,13 +713,15 @@ class ThirdPartyTestPlugin(PluginMetadata):
                 plugin_configs[compute_name] = plugin_config
 
             except Exception as e:
-                self.logger.error(f"Plugin execution test failed: compute={compute_name} - {e}")
+                self.logger.error(
+                    f"Plugin execution test failed: compute={compute_name} - {e}"
+                )
                 raise
 
         # Verify at least one plugin configuration was collected
-        assert len(plugin_configs) >= 1, (
-            "Plugin swap execution test requires at least one successful configuration"
-        )
+        assert (
+            len(plugin_configs) >= 1
+        ), "Plugin swap execution test requires at least one successful configuration"
 
         # If we have multiple compute plugins, verify they produce different configs
         if len(plugin_configs) >= 2:
@@ -724,7 +734,9 @@ class ThirdPartyTestPlugin(PluginMetadata):
 
             if len(dbt_profiles) >= 2:
                 # Check that profiles have different 'type' fields (e.g., duckdb vs postgres)
-                profile_types = {profile.get("type") for profile in dbt_profiles if profile}
+                profile_types = {
+                    profile.get("type") for profile in dbt_profiles if profile
+                }
 
                 assert len(profile_types) >= 2, (
                     f"Expected different dbt profile types, but got: {profile_types}. "

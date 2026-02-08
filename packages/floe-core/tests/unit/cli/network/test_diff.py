@@ -76,7 +76,10 @@ class TestDiffCommandOptions:
         )
 
         assert result.exit_code != 0
-        assert "manifest-dir" in result.output.lower() or "required" in result.output.lower()
+        assert (
+            "manifest-dir" in result.output.lower()
+            or "required" in result.output.lower()
+        )
 
     @pytest.mark.requirement("FR-082")
     def test_accepts_namespace_option(
@@ -189,7 +192,9 @@ class TestDiffCommandOptions:
         for output_format in ["text", "json"]:
             with (
                 patch("floe_core.cli.network.diff._load_kubeconfig"),
-                patch("floe_core.cli.network.diff._get_deployed_policies", return_value={}),
+                patch(
+                    "floe_core.cli.network.diff._get_deployed_policies", return_value={}
+                ),
             ):
                 result = cli_runner.invoke(
                     cli,
@@ -203,9 +208,9 @@ class TestDiffCommandOptions:
                     ],
                 )
 
-                assert "Error: Invalid value for '--output-format'" not in (result.output or ""), (
-                    f"Format {output_format} should be valid"
-                )
+                assert "Error: Invalid value for '--output-format'" not in (
+                    result.output or ""
+                ), f"Format {output_format} should be valid"
 
     @pytest.mark.requirement("FR-082")
     def test_shows_help(
@@ -266,7 +271,9 @@ class TestLoadKubeconfig:
     """Tests for _load_kubeconfig helper function."""
 
     @pytest.mark.requirement("FR-083")
-    def test_incluster_config_tried_first(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_incluster_config_tried_first(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test that in-cluster config is tried first when no kubeconfig provided.
 
         Validates that load_incluster_config is called before load_kube_config.
@@ -284,7 +291,9 @@ class TestLoadKubeconfig:
             mock_config.load_incluster_config.assert_called_once()
 
     @pytest.mark.requirement("FR-083")
-    def test_falls_back_to_kubeconfig_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_falls_back_to_kubeconfig_file(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test that falls back to kubeconfig file when in-cluster config fails.
 
         Validates fallback behavior when not running in cluster.
@@ -293,7 +302,9 @@ class TestLoadKubeconfig:
 
         mock_config = MagicMock()
         mock_config.ConfigException = Exception
-        mock_config.load_incluster_config = MagicMock(side_effect=Exception("Not in cluster"))
+        mock_config.load_incluster_config = MagicMock(
+            side_effect=Exception("Not in cluster")
+        )
         mock_config.load_kube_config = MagicMock()
 
         with patch("kubernetes.config", mock_config):
@@ -336,7 +347,9 @@ class TestParseManifestFile:
     """Tests for _parse_manifest_file helper function."""
 
     @pytest.mark.requirement("FR-083")
-    def test_parses_valid_yaml(self, tmp_path: Path, valid_network_policy_yaml: str) -> None:
+    def test_parses_valid_yaml(
+        self, tmp_path: Path, valid_network_policy_yaml: str
+    ) -> None:
         """Test that valid YAML is parsed correctly.
 
         Validates that NetworkPolicy YAML is parsed into dict.
@@ -519,26 +532,22 @@ class TestLoadExpectedPolicies:
         manifest_dir.mkdir()
 
         # Create mixed resource types
-        (manifest_dir / "policy.yaml").write_text(
-            """apiVersion: networking.k8s.io/v1
+        (manifest_dir / "policy.yaml").write_text("""apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: test-policy
   namespace: default
 spec:
   podSelector: {}
-"""
-        )
-        (manifest_dir / "configmap.yaml").write_text(
-            """apiVersion: v1
+""")
+        (manifest_dir / "configmap.yaml").write_text("""apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test-config
   namespace: default
 data:
   key: value
-"""
-        )
+""")
 
         result = _load_expected_policies(manifest_dir)
 
@@ -556,15 +565,13 @@ data:
         manifest_dir = tmp_path / "manifests"
         manifest_dir.mkdir()
 
-        (manifest_dir / "policy.yaml").write_text(
-            """apiVersion: networking.k8s.io/v1
+        (manifest_dir / "policy.yaml").write_text("""apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: no-namespace-policy
 spec:
   podSelector: {}
-"""
-        )
+""")
 
         result = _load_expected_policies(manifest_dir)
 
@@ -586,7 +593,9 @@ class TestGetDeployedPolicies:
         """
         from floe_core.cli.network.diff import _get_deployed_policies
 
-        mock_networking_api.list_namespaced_network_policy.return_value = mock_network_policy_list
+        mock_networking_api.list_namespaced_network_policy.return_value = (
+            mock_network_policy_list
+        )
 
         with patch("kubernetes.client") as mock_client:
             mock_client.NetworkingV1Api.return_value = mock_networking_api
@@ -607,7 +616,9 @@ class TestGetDeployedPolicies:
         """
         from floe_core.cli.network.diff import _get_deployed_policies
 
-        mock_networking_api.list_namespaced_network_policy.side_effect = mock_api_exception_404
+        mock_networking_api.list_namespaced_network_policy.side_effect = (
+            mock_api_exception_404
+        )
 
         with patch("kubernetes.client") as mock_client:
             mock_client.NetworkingV1Api.return_value = mock_networking_api
@@ -655,7 +666,9 @@ class TestGetDeployedPolicies:
         """
         from floe_core.cli.network.diff import _get_deployed_policies
 
-        mock_networking_api.list_namespaced_network_policy.return_value = mock_network_policy_list
+        mock_networking_api.list_namespaced_network_policy.return_value = (
+            mock_network_policy_list
+        )
 
         with patch("kubernetes.client") as mock_client:
             mock_client.NetworkingV1Api.return_value = mock_networking_api

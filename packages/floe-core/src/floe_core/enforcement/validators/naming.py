@@ -194,11 +194,15 @@ class NamingValidator:
         if self.config.pattern == "medallion":
             return "^(bronze|silver|gold)_[a-z][a-z0-9_]*$ (medallion architecture)"
         if self.config.pattern == "kimball":
-            return "^(dim|fact|bridge|hub|link|sat)_[a-z][a-z0-9_]*$ (kimball dimensional)"
+            return (
+                "^(dim|fact|bridge|hub|link|sat)_[a-z][a-z0-9_]*$ (kimball dimensional)"
+            )
         if self.config.pattern == "custom" and self.config.custom_patterns:
             patterns_preview = ", ".join(self.config.custom_patterns[:3])
             if len(self.config.custom_patterns) > 3:
-                patterns_preview += f" (and {len(self.config.custom_patterns) - 3} more)"
+                patterns_preview += (
+                    f" (and {len(self.config.custom_patterns) - 3} more)"
+                )
             return f"Custom patterns: {patterns_preview}"
         return "configured naming pattern"
 

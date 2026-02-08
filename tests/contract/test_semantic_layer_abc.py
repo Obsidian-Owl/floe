@@ -80,9 +80,9 @@ class TestSemanticLayerPluginABCStructure:
                 all_abstract.add(name)
 
         # The semantic-specific abstract methods should all be present
-        assert EXPECTED_ABSTRACT_METHODS.issubset(all_abstract), (
-            f"Missing abstract methods: {EXPECTED_ABSTRACT_METHODS - all_abstract}"
-        )
+        assert EXPECTED_ABSTRACT_METHODS.issubset(
+            all_abstract
+        ), f"Missing abstract methods: {EXPECTED_ABSTRACT_METHODS - all_abstract}"
 
 
 class TestSemanticLayerPluginMethodSignatures:
@@ -183,8 +183,12 @@ class TestSemanticLayerPluginDocstrings:
         """Verify all abstract methods have docstrings."""
         for method_name in EXPECTED_ABSTRACT_METHODS:
             method = getattr(SemanticLayerPlugin, method_name)
-            assert method.__doc__ is not None, f"Method {method_name} must have a docstring"
-            assert len(method.__doc__.strip()) > 10, f"Method {method_name} docstring is too short"
+            assert (
+                method.__doc__ is not None
+            ), f"Method {method_name} must have a docstring"
+            assert (
+                len(method.__doc__.strip()) > 10
+            ), f"Method {method_name} docstring is too short"
 
     @pytest.mark.requirement("SC-001")
     def test_class_has_docstring(self) -> None:

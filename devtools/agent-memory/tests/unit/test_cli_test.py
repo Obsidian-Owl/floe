@@ -75,7 +75,9 @@ class TestTestCommand:
                 failed_tests=1,
                 results=[
                     TestResult(query="What functions?", passed=True),
-                    TestResult(query="What classes?", passed=False, missing_keywords=["class"]),
+                    TestResult(
+                        query="What classes?", passed=False, missing_keywords=["class"]
+                    ),
                 ],
             )
             mock_validate.return_value = mock_report
@@ -351,7 +353,11 @@ class TestDefaultTestQueries:
     def test_uses_default_queries(self) -> None:
         """Test that test command uses default queries from quality module."""
         from agent_memory.cli import app
-        from agent_memory.ops.quality import QualityReport, TestResult, create_default_test_queries
+        from agent_memory.ops.quality import (
+            QualityReport,
+            TestResult,
+            create_default_test_queries,
+        )
 
         default_queries = create_default_test_queries()
 
@@ -359,7 +365,9 @@ class TestDefaultTestQueries:
             patch("agent_memory.cli._load_config") as mock_config,
             patch("agent_memory.cli.CogneeClient") as mock_client_class,
             patch("agent_memory.ops.quality.validate_quality") as mock_validate,
-            patch("agent_memory.ops.quality.create_default_test_queries") as mock_queries,
+            patch(
+                "agent_memory.ops.quality.create_default_test_queries"
+            ) as mock_queries,
         ):
             mock_config.return_value = MagicMock()
             mock_client_class.return_value = MagicMock()
@@ -369,7 +377,9 @@ class TestDefaultTestQueries:
                 total_tests=len(default_queries),
                 passed_tests=len(default_queries),
                 failed_tests=0,
-                results=[TestResult(query=q.query, passed=True) for q in default_queries],
+                results=[
+                    TestResult(query=q.query, passed=True) for q in default_queries
+                ],
             )
             mock_validate.return_value = mock_report
 

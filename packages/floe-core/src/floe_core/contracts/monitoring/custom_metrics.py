@@ -27,8 +27,10 @@ class CustomMetricDefinition(BaseModel):
     Attributes:
         name: Unique name of the metric (e.g., "ingestion_rate").
         description: Human-readable description of what the metric measures.
-        unit: Unit of measurement (e.g., "count", "seconds", "percent", "records/sec").
-        labels: List of label key names for dimensional metrics (e.g., ["pipeline_name", "environment"]).
+        unit: Unit of measurement (e.g., "count", "seconds", "percent",
+            "records/sec").
+        labels: List of label key names for dimensional metrics (e.g.,
+            ["pipeline_name", "environment"]).
 
     Example:
         >>> metric = CustomMetricDefinition(
@@ -144,7 +146,8 @@ class MetricRecorder:
             name: Name of the metric to retrieve recordings for.
 
         Returns:
-            List of recordings, each containing: {"value": float, "labels": dict, "timestamp": datetime}.
+            List of recordings, each containing: {"value": float, "labels": dict,
+                "timestamp": datetime}.
 
         Raises:
             KeyError: If the metric is not registered.

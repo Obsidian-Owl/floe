@@ -33,9 +33,7 @@ class ContractCheckResultModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    contract_name: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
+    contract_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     check_type: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     duration_seconds: Mapped[float] = mapped_column(Float, nullable=False)
@@ -62,9 +60,7 @@ class ContractViolationModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    contract_name: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
+    contract_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     contract_version: Mapped[str] = mapped_column(String(50), nullable=False)
     violation_type: Mapped[str] = mapped_column(String(50), nullable=False)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
@@ -75,7 +71,9 @@ class ContractViolationModel(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    affected_consumers: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    affected_consumers: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     check_duration_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     metadata_: Mapped[dict[str, str]] = mapped_column(
         "metadata", JSONB, nullable=False, default=dict
@@ -131,16 +129,16 @@ class ContractDailyAggregateModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    contract_name: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
+    contract_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     check_type: Mapped[str] = mapped_column(String(50), nullable=False)
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     total_checks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     passed_checks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_checks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_checks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    avg_duration_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    avg_duration_seconds: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
     violation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (
@@ -167,11 +165,15 @@ class RegisteredContractModel(Base):
     contract_version: Mapped[str] = mapped_column(String(50), nullable=False)
     contract_data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     connection_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    monitoring_overrides: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    monitoring_overrides: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    last_check_times: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    last_check_times: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 

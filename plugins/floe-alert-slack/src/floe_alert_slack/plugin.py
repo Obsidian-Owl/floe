@@ -13,7 +13,6 @@ from typing import Any
 
 import httpx
 import structlog
-
 from floe_core.contracts.monitoring.violations import (
     ContractViolationEvent,
     ViolationSeverity,
@@ -98,7 +97,10 @@ class SlackAlertPlugin(AlertChannelPlugin):
                 "type": "section",
                 "fields": [
                     {"type": "mrkdwn", "text": f"*Contract:*\n{event.contract_name}"},
-                    {"type": "mrkdwn", "text": f"*Type:*\n{event.violation_type.value}"},
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Type:*\n{event.violation_type.value}",
+                    },
                     {"type": "mrkdwn", "text": f"*Severity:*\n{event.severity.value}"},
                     {"type": "mrkdwn", "text": f"*Version:*\n{event.contract_version}"},
                 ],
@@ -110,7 +112,10 @@ class SlackAlertPlugin(AlertChannelPlugin):
             {
                 "type": "context",
                 "elements": [
-                    {"type": "mrkdwn", "text": f"Detected at: {event.timestamp.isoformat()}"},
+                    {
+                        "type": "mrkdwn",
+                        "text": f"Detected at: {event.timestamp.isoformat()}",
+                    },
                 ],
             },
         ]

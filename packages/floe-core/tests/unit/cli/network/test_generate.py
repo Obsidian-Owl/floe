@@ -182,7 +182,9 @@ class TestNamespaceValidation:
         Validates that RFC 1123 compliant namespace names are accepted.
         """
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -243,7 +245,9 @@ class TestGenerateStubManifests:
         output_dir = tmp_path / "network-output"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -276,7 +280,9 @@ class TestGenerateStubManifests:
         output_dir = tmp_path / "network-output"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -315,7 +321,9 @@ class TestGenerateStubManifests:
         output_dir = tmp_path / "network-output"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -353,7 +361,9 @@ class TestGenerateStubManifests:
         output_dir = tmp_path / "network-output"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -395,7 +405,9 @@ class TestPluginDiscovery:
         output_dir = tmp_path / "network-output"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -441,7 +453,9 @@ class TestPluginDiscovery:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -497,7 +511,9 @@ class TestGenerateWithPlugin:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -552,7 +568,9 @@ class TestGenerateWithPlugin:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -571,7 +589,9 @@ class TestGenerateWithPlugin:
             )
 
             # Verify write_manifests was called
-            mock_generator.write_manifests.assert_called_once_with(mock_result, output_dir)
+            mock_generator.write_manifests.assert_called_once_with(
+                mock_result, output_dir
+            )
 
     @pytest.mark.requirement("FR-080")
     def test_reports_statistics(
@@ -604,7 +624,9 @@ class TestGenerateWithPlugin:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -653,7 +675,9 @@ class TestGenerateWithPlugin:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -703,7 +727,9 @@ class TestGenerateWithPlugin:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -758,7 +784,9 @@ class TestDryRunMode:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -809,7 +837,9 @@ class TestDryRunMode:
         mock_generator.generate.return_value = mock_result
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.network.NetworkPolicyManifestGenerator") as mock_gen_class,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
@@ -849,7 +879,9 @@ class TestOutputDirectory:
         Validates that when --output is not specified, target/network is used.
         """
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -881,7 +913,9 @@ class TestOutputDirectory:
         custom_dir = tmp_path / "custom" / "network"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}
@@ -914,7 +948,9 @@ class TestOutputDirectory:
         nested_dir = tmp_path / "level1" / "level2" / "level3" / "network"
 
         with (
-            patch("floe_core.network.generator.discover_network_security_plugins") as mock_discover,
+            patch(
+                "floe_core.network.generator.discover_network_security_plugins"
+            ) as mock_discover,
             patch("floe_core.compilation.loader.load_manifest") as mock_load,
         ):
             mock_discover.return_value = {}

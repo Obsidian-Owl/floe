@@ -279,7 +279,9 @@ class PromotionController:
 
         try:
             # Run async notify_all in sync context (T119 - non-blocking multi-webhook)
-            results = asyncio.run(self._webhook_notifier.notify_all(event_type, event_data))
+            results = asyncio.run(
+                self._webhook_notifier.notify_all(event_type, event_data)
+            )
             # Log results for each webhook
             for result in results:
                 if result.success:
@@ -334,7 +336,10 @@ class PromotionController:
         Raises:
             AuthorizationError: If operator is not authorized.
         """
-        from floe_core.oci.authorization import AuthorizationChecker, AuthorizationResult
+        from floe_core.oci.authorization import (
+            AuthorizationChecker,
+            AuthorizationResult,
+        )
 
         # Get environment config for target
         env_config = self._get_environment(environment)
@@ -752,7 +757,8 @@ class PromotionController:
                 else:
                     # Enforcement failed - extract violation summary
                     violation_summary = (
-                        f"{result.error_count} error(s), {result.warning_count} warning(s)"
+                        f"{result.error_count} error(s), "
+                        f"{result.warning_count} warning(s)"
                     )
                     error_msg = f"Policy compliance failed: {violation_summary}"
 
@@ -1131,7 +1137,9 @@ class PromotionController:
                     return results
 
             duration_ms = int((time.monotonic() - start_time) * 1000)
-            all_passed = all(r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results)
+            all_passed = all(
+                r.status in (GateStatus.PASSED, GateStatus.SKIPPED) for r in results
+            )
             self._log.info(
                 "run_all_gates_completed",
                 environment=to_env,
@@ -1523,13 +1531,21 @@ class PromotionController:
                             history_entries.append(
                                 PromotionHistoryEntry(
                                     promotion_id=entry.get("promotion_id", ""),
-                                    artifact_digest=entry.get("artifact_digest", default_digest),
-                                    source_environment=entry.get("source_environment", ""),
-                                    target_environment=entry.get("target_environment", ""),
+                                    artifact_digest=entry.get(
+                                        "artifact_digest", default_digest
+                                    ),
+                                    source_environment=entry.get(
+                                        "source_environment", ""
+                                    ),
+                                    target_environment=entry.get(
+                                        "target_environment", ""
+                                    ),
                                     operator=entry.get("operator", "unknown"),
                                     promoted_at=entry.get("promoted_at", ""),
                                     gate_results=entry.get("gate_results", []),
-                                    signature_verified=entry.get("signature_verified", False),
+                                    signature_verified=entry.get(
+                                        "signature_verified", False
+                                    ),
                                 )
                             )
                         except Exception:
@@ -2040,7 +2056,9 @@ class PromotionController:
         ) as span:
             # Extract trace_id for CLI output and correlation
             span_context = span.get_span_context()
-            trace_id = format(span_context.trace_id, "032x") if span_context.is_valid else ""
+            trace_id = (
+                format(span_context.trace_id, "032x") if span_context.is_valid else ""
+            )
 
             self._log.info(
                 "promote_started",
@@ -2067,7 +2085,11 @@ class PromotionController:
                 raise EnvironmentLockedError(
                     environment=to_env,
                     locked_by=lock_status.locked_by or "",
-                    locked_at=(lock_status.locked_at.isoformat() if lock_status.locked_at else ""),
+                    locked_at=(
+                        lock_status.locked_at.isoformat()
+                        if lock_status.locked_at
+                        else ""
+                    ),
                     reason=lock_status.reason or "",
                 )
 
@@ -2158,7 +2180,9 @@ class PromotionController:
             from floe_core.schemas.signing import VerificationResult
 
             signature_status: VerificationResult | None = (
-                verification_result if isinstance(verification_result, VerificationResult) else None
+                verification_result
+                if isinstance(verification_result, VerificationResult)
+                else None
             )
 
             # Step 9: Store promotion record (if not dry_run) with retry
@@ -2400,7 +2424,9 @@ class PromotionController:
         ) as span:
             # Extract trace_id for CLI output and correlation
             span_context = span.get_span_context()
-            trace_id = format(span_context.trace_id, "032x") if span_context.is_valid else ""
+            trace_id = (
+                format(span_context.trace_id, "032x") if span_context.is_valid else ""
+            )
 
             self._log.info(
                 "rollback_started",
@@ -2570,7 +2596,9 @@ class PromotionController:
             return RollbackImpactAnalysis(
                 breaking_changes=[],
                 affected_products=[],
-                recommendations=["Environment already at target version - no rollback needed"],
+                recommendations=[
+                    "Environment already at target version - no rollback needed"
+                ],
                 estimated_downtime=None,
             )
 
@@ -2589,7 +2617,9 @@ class PromotionController:
                 major, minor, patch = map(int, version_match.groups())
                 # If rolling back to a lower major version, likely breaking
                 if major < 1:
-                    recommendations.append("Rolling back to pre-1.0 version - check stability")
+                    recommendations.append(
+                        "Rolling back to pre-1.0 version - check stability"
+                    )
         except Exception:
             pass  # Version parsing optional
 

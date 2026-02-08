@@ -72,7 +72,9 @@ class TestVerifySignatureOpenTelemetrySpan:
             assert call_args[0][0] == "floe.oci.promote.verify"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_verify_signature_span_has_enforcement_attribute(self, controller: MagicMock) -> None:
+    def test_verify_signature_span_has_enforcement_attribute(
+        self, controller: MagicMock
+    ) -> None:
         """Test _verify_signature() span has enforcement_mode attribute."""
         from floe_core.schemas.signing import VerificationResult
 
@@ -134,7 +136,9 @@ class TestVerifySignatureOpenTelemetrySpan:
             assert attributes["enforcement_mode"] == "off"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_verify_signature_span_has_artifact_ref_attribute(self, controller: MagicMock) -> None:
+    def test_verify_signature_span_has_artifact_ref_attribute(
+        self, controller: MagicMock
+    ) -> None:
         """Test _verify_signature() span has artifact_ref attribute."""
         from floe_core.schemas.signing import VerificationResult
 

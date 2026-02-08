@@ -135,7 +135,9 @@ def full_compiled_artifacts() -> CompiledArtifacts:
         ),
         transforms=ResolvedTransforms(
             models=[
-                ResolvedModel(name="stg_customers", compute="snowflake", tags=["staging"]),
+                ResolvedModel(
+                    name="stg_customers", compute="snowflake", tags=["staging"]
+                ),
                 ResolvedModel(
                     name="fct_orders",
                     compute="snowflake",
@@ -274,7 +276,9 @@ class TestCompiledArtifactsDeserializationContract:
         assert restored.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("8A-FR-002")
-    def test_deserialize_from_bytes(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
+    def test_deserialize_from_bytes(
+        self, minimal_compiled_artifacts: CompiledArtifacts
+    ) -> None:
         """Contract: CompiledArtifacts deserializes from bytes.
 
         OCI layers are stored as bytes, so deserialization from bytes
@@ -376,9 +380,15 @@ class TestCompiledArtifactsRoundTripContract:
         json_str = minimal_compiled_artifacts.model_dump_json()
         restored = CompiledArtifacts.model_validate(json.loads(json_str))
 
-        assert restored.identity.product_id == minimal_compiled_artifacts.identity.product_id
+        assert (
+            restored.identity.product_id
+            == minimal_compiled_artifacts.identity.product_id
+        )
         assert restored.identity.domain == minimal_compiled_artifacts.identity.domain
-        assert restored.identity.repository == minimal_compiled_artifacts.identity.repository
+        assert (
+            restored.identity.repository
+            == minimal_compiled_artifacts.identity.repository
+        )
 
     @pytest.mark.requirement("8A-FR-005")
     def test_round_trip_preserves_plugins(
@@ -391,12 +401,16 @@ class TestCompiledArtifactsRoundTripContract:
         assert restored.plugins is not None
         assert minimal_compiled_artifacts.plugins is not None
         # Verify type
-        assert restored.plugins.compute.type == minimal_compiled_artifacts.plugins.compute.type
+        assert (
+            restored.plugins.compute.type
+            == minimal_compiled_artifacts.plugins.compute.type
+        )
         orch_type = minimal_compiled_artifacts.plugins.orchestrator.type
         assert restored.plugins.orchestrator.type == orch_type
         # Verify version is also preserved (contract completeness)
         assert (
-            restored.plugins.compute.version == minimal_compiled_artifacts.plugins.compute.version
+            restored.plugins.compute.version
+            == minimal_compiled_artifacts.plugins.compute.version
         )
         assert (
             restored.plugins.orchestrator.version
@@ -440,7 +454,10 @@ class TestCompiledArtifactsRoundTripContract:
         assert restored.mode == full_compiled_artifacts.mode
 
         # Metadata
-        assert restored.metadata.product_name == full_compiled_artifacts.metadata.product_name
+        assert (
+            restored.metadata.product_name
+            == full_compiled_artifacts.metadata.product_name
+        )
 
         # Identity with optional fields
         orig_registered = full_compiled_artifacts.identity.namespace_registered
@@ -647,7 +664,10 @@ class TestFileBasedSerializationContract:
         # Read
         restored = CompiledArtifacts.from_json_file(file_path)
         assert restored.version == minimal_compiled_artifacts.version
-        assert restored.metadata.product_name == minimal_compiled_artifacts.metadata.product_name
+        assert (
+            restored.metadata.product_name
+            == minimal_compiled_artifacts.metadata.product_name
+        )
 
     @pytest.mark.requirement("8A-FR-002")
     def test_file_content_is_valid_json(
@@ -756,7 +776,9 @@ class TestOCISchemaGoldenFixtures:
 
         # Verify key fields preserved
         assert manifest.digest.startswith("sha256:")
-        assert manifest.artifact_type == "application/vnd.floe.compiled-artifacts.v1+json"
+        assert (
+            manifest.artifact_type == "application/vnd.floe.compiled-artifacts.v1+json"
+        )
         assert manifest.size == 12345
         assert len(manifest.layers) == 1
         assert manifest.layers[0].media_type == manifest.artifact_type
@@ -782,7 +804,10 @@ class TestOCISchemaGoldenFixtures:
         assert restored.auth.type == config.auth.type
         assert restored.tls_verify == config.tls_verify
         assert restored.cache.max_size_gb == config.cache.max_size_gb
-        assert restored.resilience.retry.max_attempts == config.resilience.retry.max_attempts
+        assert (
+            restored.resilience.retry.max_attempts
+            == config.resilience.retry.max_attempts
+        )
 
     @pytest.mark.requirement("8A-FR-001")
     def test_v1_artifact_manifest_roundtrip(self, fixtures_dir: Path) -> None:

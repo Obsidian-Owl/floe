@@ -213,7 +213,9 @@ class MockSecretsPlugin:
             return self._credentials.get("password")
         return self._credentials.get(key)
 
-    def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
+    def set_secret(
+        self, key: str, value: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         """Store secret (not implemented for mock)."""
         raise NotImplementedError("Mock does not support writing secrets")
 

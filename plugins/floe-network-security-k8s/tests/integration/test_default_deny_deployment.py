@@ -106,7 +106,9 @@ class TestDefaultDenyDeployment(IntegrationTestBase):
     @pytest.mark.requirement("FR-010")
     def test_kubectl_available(self) -> None:
         """Test that kubectl is available and configured."""
-        assert self._kubectl_available(), "kubectl not available or cluster not accessible"
+        assert (
+            self._kubectl_available()
+        ), "kubectl not available or cluster not accessible"
 
     @pytest.mark.k8s
     @pytest.mark.integration
@@ -137,7 +139,9 @@ class TestDefaultDenyDeployment(IntegrationTestBase):
 
             # Apply policy to cluster
             policy_yaml = yaml.dump_all(policies)
-            assert self._apply_policy(test_namespace, policy_yaml), "Failed to apply policy"
+            assert self._apply_policy(
+                test_namespace, policy_yaml
+            ), "Failed to apply policy"
 
             # Verify policy exists in cluster
             policies_in_cluster = self._get_policies(test_namespace)
@@ -210,7 +214,9 @@ class TestDefaultDenyDeployment(IntegrationTestBase):
 
             # Apply all policies
             policy_yaml = yaml.dump_all(policies)
-            assert self._apply_policy(test_namespace, policy_yaml), "Failed to apply policies"
+            assert self._apply_policy(
+                test_namespace, policy_yaml
+            ), "Failed to apply policies"
 
             # Verify all policies exist
             policies_in_cluster = self._get_policies(test_namespace)
@@ -379,7 +385,9 @@ class TestDefaultDenyEgress(IntegrationTestBase):
         assert len(rule["to"]) == 1
         assert "namespaceSelector" in rule["to"][0]
         assert (
-            rule["to"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"]
+            rule["to"][0]["namespaceSelector"]["matchLabels"][
+                "kubernetes.io/metadata.name"
+            ]
             == "external-service"
         )
         assert rule["ports"][0]["port"] == 5432
@@ -450,7 +458,9 @@ class TestDefaultDenyIngress(IntegrationTestBase):
         # Verify namespace selector
         assert "namespaceSelector" in rule["from"][0]
         assert (
-            rule["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"]
+            rule["from"][0]["namespaceSelector"]["matchLabels"][
+                "kubernetes.io/metadata.name"
+            ]
             == "ingress-nginx"
         )
 
@@ -481,7 +491,9 @@ class TestDefaultDenyIngress(IntegrationTestBase):
         # Verify namespace selector
         assert "namespaceSelector" in rule["from"][0]
         assert (
-            rule["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"]
+            rule["from"][0]["namespaceSelector"]["matchLabels"][
+                "kubernetes.io/metadata.name"
+            ]
             == "floe-jobs"
         )
 
@@ -556,7 +568,9 @@ class TestDnsEgressAllowed(IntegrationTestBase):
         # Verify namespace selector points to kube-system
         assert "namespaceSelector" in rule["to"][0]
         assert (
-            rule["to"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"]
+            rule["to"][0]["namespaceSelector"]["matchLabels"][
+                "kubernetes.io/metadata.name"
+            ]
             == "kube-system"
         )
 
@@ -614,7 +628,10 @@ class TestDnsEgressAllowed(IntegrationTestBase):
 
         namespace_selector = rule["to"][0]["namespaceSelector"]
         assert "matchLabels" in namespace_selector
-        assert namespace_selector["matchLabels"]["kubernetes.io/metadata.name"] == "kube-system"
+        assert (
+            namespace_selector["matchLabels"]["kubernetes.io/metadata.name"]
+            == "kube-system"
+        )
 
     @pytest.mark.k8s
     @pytest.mark.integration

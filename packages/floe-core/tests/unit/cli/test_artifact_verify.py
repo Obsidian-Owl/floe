@@ -221,7 +221,10 @@ class TestArtifactVerifyKeyless:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -230,7 +233,9 @@ class TestArtifactVerifyKeyless:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True
@@ -273,7 +278,10 @@ class TestArtifactVerifyKeyless:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -282,7 +290,9 @@ class TestArtifactVerifyKeyless:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True
@@ -325,7 +335,10 @@ class TestArtifactVerifyKeyless:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -334,7 +347,9 @@ class TestArtifactVerifyKeyless:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True
@@ -383,7 +398,9 @@ class TestArtifactVerifyKeyBased:
                 "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----"
             )
 
-            with patch("floe_core.oci.verification.check_cosign_available", return_value=True):
+            with patch(
+                "floe_core.oci.verification.check_cosign_available", return_value=True
+            ):
                 with patch("floe_core.oci.OCIClient") as mock_client_class:
                     mock_client = MagicMock()
                     mock_manifest = MagicMock()
@@ -391,7 +408,10 @@ class TestArtifactVerifyKeyBased:
                         "cosign.sigstore.dev/signature": "sig_data",
                     }
                     mock_client.inspect.return_value = mock_manifest
-                    mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+                    mock_client._fetch_from_registry.return_value = (
+                        b"content",
+                        "sha256:abc123",
+                    )
                     mock_client_class.from_registry_config.return_value = mock_client
 
                     with patch(
@@ -435,7 +455,9 @@ class TestArtifactVerifyKeyBased:
         """Test key-based verification with KMS URI."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.verification.check_cosign_available", return_value=True):
+        with patch(
+            "floe_core.oci.verification.check_cosign_available", return_value=True
+        ):
             with patch("floe_core.oci.OCIClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_manifest = MagicMock()
@@ -443,7 +465,10 @@ class TestArtifactVerifyKeyBased:
                     "cosign.sigstore.dev/signature": "sig_data",
                 }
                 mock_client.inspect.return_value = mock_manifest
-                mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+                mock_client._fetch_from_registry.return_value = (
+                    b"content",
+                    "sha256:abc123",
+                )
                 mock_client_class.from_registry_config.return_value = mock_client
 
                 with patch(
@@ -452,7 +477,9 @@ class TestArtifactVerifyKeyBased:
                     mock_sig_metadata = MagicMock()
                     mock_from_annot.return_value = mock_sig_metadata
 
-                    with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                    with patch(
+                        "floe_core.oci.verification.VerificationClient"
+                    ) as mock_verif_class:
                         mock_verif = MagicMock()
                         mock_result = MagicMock()
                         mock_result.is_valid = True
@@ -485,7 +512,9 @@ class TestArtifactVerifyKeyBased:
         """Test key-based verification fails when cosign is not available."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.verification.check_cosign_available", return_value=False):
+        with patch(
+            "floe_core.oci.verification.check_cosign_available", return_value=False
+        ):
             result = runner.invoke(
                 cli,
                 [
@@ -508,7 +537,9 @@ class TestArtifactVerifyKeyBased:
         """Test key-based verification fails when key file not found."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.verification.check_cosign_available", return_value=True):
+        with patch(
+            "floe_core.oci.verification.check_cosign_available", return_value=True
+        ):
             result = runner.invoke(
                 cli,
                 [
@@ -525,7 +556,9 @@ class TestArtifactVerifyKeyBased:
 
             assert result.exit_code == ExitCode.VALIDATION_ERROR
             # Error message mentions path validation
-            assert "path" in result.output.lower() or "directory" in result.output.lower()
+            assert (
+                "path" in result.output.lower() or "directory" in result.output.lower()
+            )
 
 
 class TestArtifactVerifyUnsignedArtifact:
@@ -694,7 +727,10 @@ class TestArtifactVerifyEnforcement:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -703,7 +739,9 @@ class TestArtifactVerifyEnforcement:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = False
@@ -730,7 +768,10 @@ class TestArtifactVerifyEnforcement:
                     )
 
                     assert result.exit_code == ExitCode.SIGNATURE_ERROR
-                    assert "invalid" in result.output.lower() or "failed" in result.output.lower()
+                    assert (
+                        "invalid" in result.output.lower()
+                        or "failed" in result.output.lower()
+                    )
 
     @pytest.mark.requirement("FR-011")
     def test_verify_enforcement_warn_invalid_signature(self) -> None:
@@ -745,7 +786,10 @@ class TestArtifactVerifyEnforcement:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -754,7 +798,9 @@ class TestArtifactVerifyEnforcement:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = False
@@ -781,7 +827,10 @@ class TestArtifactVerifyEnforcement:
                     )
 
                     assert result.exit_code == 0
-                    assert "invalid" in result.output.lower() or "failed" in result.output.lower()
+                    assert (
+                        "invalid" in result.output.lower()
+                        or "failed" in result.output.lower()
+                    )
 
     @pytest.mark.requirement("FR-011")
     def test_verify_enforcement_off_invalid_signature(self) -> None:
@@ -796,7 +845,10 @@ class TestArtifactVerifyEnforcement:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -805,7 +857,9 @@ class TestArtifactVerifyEnforcement:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = False
@@ -855,7 +909,10 @@ class TestArtifactVerifyBundleExport:
                     "cosign.sigstore.dev/certificate": "cert_data",
                 }
                 mock_client.inspect.return_value = mock_manifest
-                mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+                mock_client._fetch_from_registry.return_value = (
+                    b"content",
+                    "sha256:abc123",
+                )
                 mock_client_class.from_registry_config.return_value = mock_client
 
                 with patch(
@@ -864,13 +921,17 @@ class TestArtifactVerifyBundleExport:
                     mock_sig_metadata = MagicMock()
                     mock_from_annot.return_value = mock_sig_metadata
 
-                    with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                    with patch(
+                        "floe_core.oci.verification.VerificationClient"
+                    ) as mock_verif_class:
                         mock_verif = MagicMock()
                         mock_result = MagicMock()
                         mock_result.is_valid = True
                         mock_result.status = "valid"
                         mock_result.signer_identity = "test@example.com"
-                        mock_result.issuer = "https://token.actions.githubusercontent.com"
+                        mock_result.issuer = (
+                            "https://token.actions.githubusercontent.com"
+                        )
                         mock_result.rekor_verified = True
                         mock_verif.verify.return_value = mock_result
                         mock_verif_class.return_value = mock_verif
@@ -879,7 +940,9 @@ class TestArtifactVerifyBundleExport:
                             "floe_core.oci.verification.export_verification_bundle"
                         ) as mock_export:
                             mock_bundle = MagicMock()
-                            mock_bundle.model_dump_json.return_value = '{"version": "1.0"}'
+                            mock_bundle.model_dump_json.return_value = (
+                                '{"version": "1.0"}'
+                            )
                             mock_export.return_value = mock_bundle
 
                             result = runner.invoke(
@@ -1040,7 +1103,10 @@ class TestArtifactVerifyErrors:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1049,7 +1115,9 @@ class TestArtifactVerifyErrors:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     from floe_core.oci.errors import SignatureVerificationError
 
                     mock_verif = MagicMock()
@@ -1119,7 +1187,9 @@ class TestArtifactVerifyErrors:
             from floe_core.oci.errors import AuthenticationError
 
             mock_client = MagicMock()
-            mock_client.inspect.side_effect = AuthenticationError("example.com", "Auth failed")
+            mock_client.inspect.side_effect = AuthenticationError(
+                "example.com", "Auth failed"
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             result = runner.invoke(
@@ -1190,7 +1260,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1199,7 +1272,9 @@ class TestArtifactVerifyRegistryConfig:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True
@@ -1242,7 +1317,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1251,7 +1329,9 @@ class TestArtifactVerifyRegistryConfig:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True
@@ -1297,7 +1377,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1306,7 +1389,9 @@ class TestArtifactVerifyRegistryConfig:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True
@@ -1349,7 +1434,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1358,7 +1446,9 @@ class TestArtifactVerifyRegistryConfig:
                 mock_sig_metadata = MagicMock()
                 mock_from_annot.return_value = mock_sig_metadata
 
-                with patch("floe_core.oci.verification.VerificationClient") as mock_verif_class:
+                with patch(
+                    "floe_core.oci.verification.VerificationClient"
+                ) as mock_verif_class:
                     mock_verif = MagicMock()
                     mock_result = MagicMock()
                     mock_result.is_valid = True

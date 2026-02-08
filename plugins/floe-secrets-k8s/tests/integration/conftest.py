@@ -52,7 +52,9 @@ def test_namespace_name() -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def test_namespace(kubectl_required: None, test_namespace_name: str) -> Generator[str, None, None]:
+def test_namespace(
+    kubectl_required: None, test_namespace_name: str
+) -> Generator[str, None, None]:
     """Create and cleanup a unique K8s namespace for testing.
 
     Creates a namespace before the test and deletes it after.

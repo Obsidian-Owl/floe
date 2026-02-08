@@ -224,7 +224,9 @@ def _k8s_network_policy_to_dict(policy: Any) -> dict[str, Any]:
 
         # Ingress rules
         if policy.spec.ingress:
-            spec["ingress"] = [_ingress_rule_to_dict(rule) for rule in policy.spec.ingress]
+            spec["ingress"] = [
+                _ingress_rule_to_dict(rule) for rule in policy.spec.ingress
+            ]
 
         # Egress rules
         if policy.spec.egress:
@@ -425,7 +427,9 @@ def _output_diff_as_text(diff_result: dict[str, Any]) -> None:
         diff_result: The computed diff result.
     """
     total_changes = (
-        diff_result["missing_count"] + diff_result["extra_count"] + diff_result["modified_count"]
+        diff_result["missing_count"]
+        + diff_result["extra_count"]
+        + diff_result["modified_count"]
     )
 
     if total_changes == 0:

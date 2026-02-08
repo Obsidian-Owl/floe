@@ -364,7 +364,9 @@ class TestHtmlExportIntegration:
         pass_content = pass_path.read_text().lower()
 
         # Should indicate success
-        assert "pass" in pass_content or "success" in pass_content or "✓" in pass_content
+        assert (
+            "pass" in pass_content or "success" in pass_content or "✓" in pass_content
+        )
 
 
 class TestDirectoryCreation:

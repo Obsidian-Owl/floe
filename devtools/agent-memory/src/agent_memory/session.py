@@ -55,7 +55,9 @@ class SessionContext(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    session_id: UUID = Field(default_factory=uuid4, description="Unique session identifier")
+    session_id: UUID = Field(
+        default_factory=uuid4, description="Unique session identifier"
+    )
     captured_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="When context was captured",
@@ -105,7 +107,8 @@ def capture_session_context(
     """
     # Convert decision strings to DecisionRecord objects
     decision_records = [
-        DecisionRecord(decision=d, timestamp=datetime.now(timezone.utc)) for d in decisions
+        DecisionRecord(decision=d, timestamp=datetime.now(timezone.utc))
+        for d in decisions
     ]
 
     return SessionContext(
@@ -178,7 +181,9 @@ async def retrieve_session_context(
     """
     # Search for relevant session context (scoped to sessions dataset)
     query = f"session context for {work_area}"
-    search_result = await client.search(query, dataset_name=dataset, search_type=search_type)
+    search_result = await client.search(
+        query, dataset_name=dataset, search_type=search_type
+    )
 
     if not search_result.results:
         return None
@@ -279,7 +284,9 @@ def _parse_context_from_result(content: str) -> SessionContext | None:
                     tasks.append(value)
                 elif current_section == "decisions":
                     decisions.append(
-                        DecisionRecord(decision=value, timestamp=datetime.now(timezone.utc))
+                        DecisionRecord(
+                            decision=value, timestamp=datetime.now(timezone.utc)
+                        )
                     )
             elif current_section == "summary" and line:
                 summary = line

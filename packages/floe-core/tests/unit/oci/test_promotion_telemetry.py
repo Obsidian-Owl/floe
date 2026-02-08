@@ -26,7 +26,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def tracer_with_exporter() -> Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]:
+def tracer_with_exporter() -> (
+    Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]
+):
     """Create a TracerProvider with InMemorySpanExporter for testing.
 
     Injects the tracer into the tracing module for testing purposes.
@@ -80,7 +82,9 @@ class TestPromotionOpenTelemetryIntegration:
         _, exporter = tracer_with_exporter
 
         # Mock _get_artifact_digest to avoid network calls
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123"):
+        with patch.object(
+            controller, "_get_artifact_digest", return_value="sha256:abc123"
+        ):
             try:
                 controller.promote(
                     tag="v1.0.0",
@@ -107,7 +111,9 @@ class TestPromotionOpenTelemetryIntegration:
         _, exporter = tracer_with_exporter
 
         # Mock _get_artifact_digest to avoid network calls
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123"):
+        with patch.object(
+            controller, "_get_artifact_digest", return_value="sha256:abc123"
+        ):
             try:
                 controller.promote(
                     tag="v1.0.0",
@@ -137,7 +143,9 @@ class TestPromotionOpenTelemetryIntegration:
         _, exporter = tracer_with_exporter
 
         # Mock _get_artifact_digest to avoid network calls
-        with patch.object(controller, "_get_artifact_digest", return_value="sha256:abc123"):
+        with patch.object(
+            controller, "_get_artifact_digest", return_value="sha256:abc123"
+        ):
             try:
                 controller.promote(
                     tag="v1.0.0",
@@ -171,7 +179,9 @@ class TestPromotionOpenTelemetryIntegration:
         _, exporter = tracer_with_exporter
 
         # Mock client.inspect to avoid network calls
-        with patch.object(controller.client, "inspect", return_value={"digest": "sha256:abc"}):
+        with patch.object(
+            controller.client, "inspect", return_value={"digest": "sha256:abc"}
+        ):
             try:
                 controller.rollback(
                     tag="v1.0.0",
@@ -473,7 +483,9 @@ class TestPromotionOpenTelemetryIntegration:
             )
 
         spans = exporter.get_finished_spans()
-        security_span = next(s for s in spans if s.name == "floe.oci.gate.security_scan")
+        security_span = next(
+            s for s in spans if s.name == "floe.oci.gate.security_scan"
+        )
 
         attrs = dict(security_span.attributes)
         assert attrs["scanner_format"] == "grype"
@@ -630,7 +642,9 @@ class TestPromotionOpenTelemetryIntegration:
             )
 
         spans = exporter.get_finished_spans()
-        security_span = next(s for s in spans if s.name == "floe.oci.gate.security_scan")
+        security_span = next(
+            s for s in spans if s.name == "floe.oci.gate.security_scan"
+        )
 
         attrs = dict(security_span.attributes)
         assert "duration_ms" in attrs
@@ -747,7 +761,9 @@ class TestPromotionOpenTelemetryIntegration:
         controller._run_policy_compliance_gate(manifest={})
 
         spans = exporter.get_finished_spans()
-        policy_span = next(s for s in spans if s.name == "floe.oci.gate.policy_compliance")
+        policy_span = next(
+            s for s in spans if s.name == "floe.oci.gate.policy_compliance"
+        )
 
         attrs = dict(policy_span.attributes)
         assert "duration_ms" in attrs

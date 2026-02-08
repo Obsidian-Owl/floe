@@ -436,7 +436,9 @@ class TestSchemaValidation:
         assert isinstance(errors, list)
 
     @pytest.mark.requirement("9b-FR-004")
-    def test_validate_with_schema_path_override(self, valid_schema: Path, tmp_path: Path) -> None:
+    def test_validate_with_schema_path_override(
+        self, valid_schema: Path, tmp_path: Path
+    ) -> None:
         """Test validate with schema_path parameter override."""
         # Create alternate schema
         alt_schema = {

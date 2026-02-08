@@ -73,7 +73,8 @@ class TestGenerateMcpConfig:
         assert "project-memory" in config["mcpServers"]
         assert config["mcpServers"]["project-memory"]["transport"] == "http"
         assert (
-            config["mcpServers"]["project-memory"]["url"] == "http://memory.example.com:8080/v1/mcp"
+            config["mcpServers"]["project-memory"]["url"]
+            == "http://memory.example.com:8080/v1/mcp"
         )
 
     @pytest.mark.requirement("FR-013")

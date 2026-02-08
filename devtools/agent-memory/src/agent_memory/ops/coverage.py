@@ -30,8 +30,12 @@ class CoverageReport(BaseModel):
 
     total_files: int = Field(ge=0, description="Total files on filesystem")
     indexed_files: int = Field(ge=0, description="Files currently indexed")
-    missing_files: list[str] = Field(default_factory=list, description="Files not indexed")
-    extra_files: list[str] = Field(default_factory=list, description="Stale indexed files")
+    missing_files: list[str] = Field(
+        default_factory=list, description="Files not indexed"
+    )
+    extra_files: list[str] = Field(
+        default_factory=list, description="Stale indexed files"
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

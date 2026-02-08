@@ -129,8 +129,12 @@ class TestPromotionControllerInit:
         registry = RegistryConfig(uri="oci://harbor.example.com/floe", auth=auth)
 
         custom_envs = [
-            EnvironmentConfig(name="test", gates={PromotionGate.POLICY_COMPLIANCE: True}),
-            EnvironmentConfig(name="production", gates={PromotionGate.POLICY_COMPLIANCE: True}),
+            EnvironmentConfig(
+                name="test", gates={PromotionGate.POLICY_COMPLIANCE: True}
+            ),
+            EnvironmentConfig(
+                name="production", gates={PromotionGate.POLICY_COMPLIANCE: True}
+            ),
         ]
         promotion = PromotionConfig(environments=custom_envs)
 

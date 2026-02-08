@@ -62,7 +62,14 @@ def generate_market_data(output_path: Path, num_rows: int = 1000) -> None:
     with output_path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
-            ["instrument_id", "date", "close_price", "volume", "volatility", "_loaded_at"]
+            [
+                "instrument_id",
+                "date",
+                "close_price",
+                "volume",
+                "volatility",
+                "_loaded_at",
+            ]
         )
 
         # Generate daily data for instruments across Oct-Dec 2025
@@ -104,15 +111,38 @@ def generate_counterparties(output_path: Path, num_rows: int = 100) -> None:
     """Generate raw_counterparties.csv with 100 rows."""
     random.seed(44)
 
-    bank_prefixes = ["Bank of", "Capital", "Financial", "Trust", "Securities", "Holdings"]
-    bank_suffixes = ["Alpha", "Beta", "Gamma", "Delta", "Omega", "Prime", "Global", "International"]
+    bank_prefixes = [
+        "Bank of",
+        "Capital",
+        "Financial",
+        "Trust",
+        "Securities",
+        "Holdings",
+    ]
+    bank_suffixes = [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta",
+        "Omega",
+        "Prime",
+        "Global",
+        "International",
+    ]
     ratings = ["AAA", "AA", "A", "BBB", "BB", "B", "CCC"]
     countries = ["US", "UK", "DE", "JP", "CH", "SG", "HK", "AU", "CA", "FR"]
 
     with output_path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
-            ["counterparty_id", "name", "rating", "country", "exposure_limit", "_loaded_at"]
+            [
+                "counterparty_id",
+                "name",
+                "rating",
+                "country",
+                "exposure_limit",
+                "_loaded_at",
+            ]
         )
 
         for i in range(1, num_rows + 1):
@@ -123,7 +153,9 @@ def generate_counterparties(output_path: Path, num_rows: int = 100) -> None:
             exposure_limit = random.randint(1000000, 500000000)
             loaded_at = "2026-01-15T00:00:00Z"
 
-            writer.writerow([counterparty_id, name, rating, country, exposure_limit, loaded_at])
+            writer.writerow(
+                [counterparty_id, name, rating, country, exposure_limit, loaded_at]
+            )
 
 
 if __name__ == "__main__":

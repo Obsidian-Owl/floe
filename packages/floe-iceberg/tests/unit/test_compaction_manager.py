@@ -230,7 +230,9 @@ class TestCompactionManagerCompactTable:
             mock_result.files_rewritten = 8
             mock_exec.return_value = mock_result
 
-            result = compaction_manager.compact_table(table_for_compaction, strategy=sort_strategy)
+            result = compaction_manager.compact_table(
+                table_for_compaction, strategy=sort_strategy
+            )
 
             assert result == 8
             # Verify SORT strategy was used
@@ -556,7 +558,9 @@ class TestCompactionEdgeCases:
             )
 
     @pytest.mark.requirement("FR-016")
-    def test_bin_pack_executor_raises_compaction_error_on_analysis_failure(self) -> None:
+    def test_bin_pack_executor_raises_compaction_error_on_analysis_failure(
+        self,
+    ) -> None:
         """Test BinPackCompactionExecutor raises CompactionError when analysis fails.
 
         When _analyze_files_for_compaction raises CompactionAnalysisError,

@@ -305,7 +305,9 @@ class CoverageValidator:
                 f"Need {threshold - int(coverage):.0f}% more coverage to meet threshold."
             )
         else:
-            suggestion = f"Add more column-level tests to achieve {threshold}% coverage."
+            suggestion = (
+                f"Add more column-level tests to achieve {threshold}% coverage."
+            )
 
         # Build message
         layer_msg = f" ({layer} layer)" if layer else ""

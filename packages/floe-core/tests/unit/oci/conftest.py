@@ -31,9 +31,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def mock_span_context() -> Callable[
-    [str, dict[str, Any] | None], AbstractContextManager[MagicMock]
-]:
+def mock_span_context() -> (
+    Callable[[str, dict[str, Any] | None], AbstractContextManager[MagicMock]]
+):
     """Factory for mock span context managers.
 
     Returns:
@@ -144,7 +144,9 @@ def sample_manifest_response() -> dict[str, Any]:
                 "mediaType": "application/vnd.floe.compiled-artifacts.v1+json",
                 "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 "size": 12345,
-                "annotations": {"org.opencontainers.image.title": "compiled_artifacts.json"},
+                "annotations": {
+                    "org.opencontainers.image.title": "compiled_artifacts.json"
+                },
             }
         ],
         "annotations": {

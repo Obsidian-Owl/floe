@@ -81,11 +81,15 @@ class TestRollbackJsonOutputFields:
     """
 
     @pytest.mark.requirement("FR-031")
-    def test_json_output_contains_rollback_id(self, mock_rollback_record: RollbackRecord) -> None:
+    def test_json_output_contains_rollback_id(
+        self, mock_rollback_record: RollbackRecord
+    ) -> None:
         """JSON output contains rollback_id field."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -115,7 +119,9 @@ class TestRollbackJsonOutputFields:
         """JSON output contains artifact_digest field."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -139,11 +145,15 @@ class TestRollbackJsonOutputFields:
             assert data["artifact_digest"] == mock_rollback_record.artifact_digest
 
     @pytest.mark.requirement("FR-031")
-    def test_json_output_contains_trace_id(self, mock_rollback_record: RollbackRecord) -> None:
+    def test_json_output_contains_trace_id(
+        self, mock_rollback_record: RollbackRecord
+    ) -> None:
         """JSON output contains trace_id for observability correlation."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -167,11 +177,15 @@ class TestRollbackJsonOutputFields:
             assert data["trace_id"] == mock_rollback_record.trace_id
 
     @pytest.mark.requirement("FR-031")
-    def test_json_output_contains_environment(self, mock_rollback_record: RollbackRecord) -> None:
+    def test_json_output_contains_environment(
+        self, mock_rollback_record: RollbackRecord
+    ) -> None:
         """JSON output contains environment field."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -201,7 +215,9 @@ class TestRollbackJsonOutputFields:
         """JSON output contains previous_digest for audit trail."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -238,7 +254,9 @@ class TestRollbackJsonErrorOutput:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.side_effect = VersionNotPromotedError(
                 tag="v1.0.0",
@@ -277,7 +295,9 @@ class TestRollbackJsonErrorOutput:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.side_effect = RegistryUnavailableError(
                 registry="oci://example.com/repo",
@@ -311,11 +331,15 @@ class TestRollbackJsonExitCodes:
     """
 
     @pytest.mark.requirement("FR-031")
-    def test_success_returns_exit_code_0(self, mock_rollback_record: RollbackRecord) -> None:
+    def test_success_returns_exit_code_0(
+        self, mock_rollback_record: RollbackRecord
+    ) -> None:
         """Successful rollback returns exit code 0."""
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.return_value = mock_rollback_record
             mock_controller_class.return_value = mock_controller
@@ -342,7 +366,9 @@ class TestRollbackJsonExitCodes:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.side_effect = VersionNotPromotedError(
                 tag="v1.0.0",
@@ -373,7 +399,9 @@ class TestRollbackJsonExitCodes:
 
         runner = CliRunner()
 
-        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
+        with patch(
+            "floe_core.oci.promotion.PromotionController"
+        ) as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.rollback.side_effect = RegistryUnavailableError(
                 registry="oci://example.com/repo",

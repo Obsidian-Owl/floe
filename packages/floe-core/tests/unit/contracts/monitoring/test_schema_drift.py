@@ -300,7 +300,9 @@ async def test_schema_drift_multiple_drifts() -> None:
     assert result.violation.severity == ViolationSeverity.CRITICAL
     # Should report all drifts
     drifts = result.details.get("drifts", [])
-    assert len(drifts) == 3  # type_changed(id), column_removed(email), column_added(phone)
+    assert (
+        len(drifts) == 3
+    )  # type_changed(id), column_removed(email), column_added(phone)
     drift_columns = {d["column"] for d in drifts}
     assert drift_columns == {"id", "email", "phone"}
     drift_types = {d["drift_type"] for d in drifts}

@@ -141,7 +141,9 @@ class QualityPlugin(PluginMetadata):
         if config.provider != self.name:
             return ValidationResult(
                 success=False,
-                errors=[f"Provider mismatch: expected '{self.name}', got '{config.provider}'"],
+                errors=[
+                    f"Provider mismatch: expected '{self.name}', got '{config.provider}'"
+                ],
             )
         return ValidationResult(success=True)
 
@@ -422,9 +424,11 @@ class QualityPlugin(PluginMetadata):
             {
                 "name": r.check_name,
                 "passed": r.passed,
-                "dimension": r.dimension.value
-                if hasattr(r.dimension, "value")
-                else str(r.dimension),
+                "dimension": (
+                    r.dimension.value
+                    if hasattr(r.dimension, "value")
+                    else str(r.dimension)
+                ),
             }
             for r in results
         ]

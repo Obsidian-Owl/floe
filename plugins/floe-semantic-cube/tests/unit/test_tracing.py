@@ -72,7 +72,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status", "set_attribute", "record_exception"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         with semantic_span(mock_tracer, "health_check") as span:
             assert span is mock_span
@@ -95,7 +97,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         with semantic_span(
             mock_tracer,
@@ -123,7 +127,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         with semantic_span(
             mock_tracer,
@@ -151,7 +157,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         extra = {"custom.attribute": "value", "model.count": 5}
 
@@ -173,7 +181,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         with semantic_span(
             mock_tracer,
@@ -197,7 +207,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status", "record_exception"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         test_error = ValueError("test error")
 
@@ -221,7 +233,9 @@ class TestSemanticSpan:
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
         mock_span = MagicMock(spec=["set_status", "set_attribute"])
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
 
         with semantic_span(mock_tracer, "sync_schema") as span:
             # Caller can add custom attributes

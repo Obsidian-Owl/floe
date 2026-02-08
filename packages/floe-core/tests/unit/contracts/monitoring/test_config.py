@@ -506,8 +506,14 @@ def test_contract_override_check_intervals() -> None:
 
     # Verify these differ from defaults
     default_config = MonitoringConfig()
-    assert contract.monitoring_overrides.check_intervals.freshness_minutes != default_config.check_intervals.freshness_minutes
-    assert contract.monitoring_overrides.check_intervals.schema_drift_minutes != default_config.check_intervals.schema_drift_minutes
+    assert (
+        contract.monitoring_overrides.check_intervals.freshness_minutes
+        != default_config.check_intervals.freshness_minutes
+    )
+    assert (
+        contract.monitoring_overrides.check_intervals.schema_drift_minutes
+        != default_config.check_intervals.schema_drift_minutes
+    )
 
 
 @pytest.mark.requirement("3D-FR-045")
@@ -535,15 +541,26 @@ def test_contract_override_severity_thresholds() -> None:
 
     # Verify override has different thresholds
     assert contract.monitoring_overrides is not None
-    assert contract.monitoring_overrides.severity_thresholds.info_pct == pytest.approx(70.0)
-    assert contract.monitoring_overrides.severity_thresholds.warning_pct == pytest.approx(85.0)
+    assert contract.monitoring_overrides.severity_thresholds.info_pct == pytest.approx(
+        70.0
+    )
+    assert (
+        contract.monitoring_overrides.severity_thresholds.warning_pct
+        == pytest.approx(85.0)
+    )
     assert contract.monitoring_overrides.severity_thresholds.critical_count == 5
     assert contract.monitoring_overrides.severity_thresholds.critical_window_hours == 12
 
     # Verify these differ from defaults
     default_config = MonitoringConfig()
-    assert contract.monitoring_overrides.severity_thresholds.info_pct != default_config.severity_thresholds.info_pct
-    assert contract.monitoring_overrides.severity_thresholds.critical_count != default_config.severity_thresholds.critical_count
+    assert (
+        contract.monitoring_overrides.severity_thresholds.info_pct
+        != default_config.severity_thresholds.info_pct
+    )
+    assert (
+        contract.monitoring_overrides.severity_thresholds.critical_count
+        != default_config.severity_thresholds.critical_count
+    )
 
 
 @pytest.mark.requirement("3D-FR-045")
@@ -581,8 +598,14 @@ def test_contract_override_alerts_config() -> None:
     # Verify override has custom alert routing
     assert contract.monitoring_overrides is not None
     assert len(contract.monitoring_overrides.alerts.routing_rules) == 2
-    assert contract.monitoring_overrides.alerts.routing_rules[0].channel_name == "pagerduty"
-    assert contract.monitoring_overrides.alerts.routing_rules[1].min_severity == ViolationSeverity.CRITICAL
+    assert (
+        contract.monitoring_overrides.alerts.routing_rules[0].channel_name
+        == "pagerduty"
+    )
+    assert (
+        contract.monitoring_overrides.alerts.routing_rules[1].min_severity
+        == ViolationSeverity.CRITICAL
+    )
     assert contract.monitoring_overrides.alerts.dedup_window_minutes == 15
     assert contract.monitoring_overrides.alerts.rate_limit_per_contract == 20
 
@@ -615,9 +638,18 @@ def test_contract_override_partial() -> None:
 
     # Verify other fields use MonitoringConfig defaults
     default_config = MonitoringConfig()
-    assert contract.monitoring_overrides.severity_thresholds.info_pct == default_config.severity_thresholds.info_pct
-    assert contract.monitoring_overrides.severity_thresholds.warning_pct == default_config.severity_thresholds.warning_pct
-    assert contract.monitoring_overrides.alerts.dedup_window_minutes == default_config.alerts.dedup_window_minutes
+    assert (
+        contract.monitoring_overrides.severity_thresholds.info_pct
+        == default_config.severity_thresholds.info_pct
+    )
+    assert (
+        contract.monitoring_overrides.severity_thresholds.warning_pct
+        == default_config.severity_thresholds.warning_pct
+    )
+    assert (
+        contract.monitoring_overrides.alerts.dedup_window_minutes
+        == default_config.alerts.dedup_window_minutes
+    )
     assert contract.monitoring_overrides.retention_days == default_config.retention_days
 
 
@@ -625,7 +657,6 @@ def test_contract_override_partial() -> None:
 def test_contract_no_override_uses_global() -> None:
     """Test contract with no override uses global config in ContractMonitor."""
     from floe_core.contracts.monitoring.monitor import ContractMonitor
-    from floe_core.contracts.monitoring.violations import ViolationType
 
     now = datetime.now(tz=timezone.utc)
 

@@ -575,17 +575,19 @@ class TestErrorHandling:
             call_count += 1
             raise ssl_error
 
-        with (
-            patch("httpx.AsyncClient") as mock_async_client,
-        ):
+        with (patch("httpx.AsyncClient") as mock_async_client,):
             mock_client_instance = AsyncMock()
             mock_client_instance.request.side_effect = mock_request
-            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_client_instance.__aenter__ = AsyncMock(
+                return_value=mock_client_instance
+            )
             mock_client_instance.__aexit__ = AsyncMock(return_value=None)
             mock_async_client.return_value = mock_client_instance
 
             with pytest.raises(CogneeClientError, match="Request failed after"):
-                await client._make_request("POST", "/api/add", json_data={"data": "test"})
+                await client._make_request(
+                    "POST", "/api/add", json_data={"data": "test"}
+                )
 
             # Should have retried max_retries times
             assert call_count == 3
@@ -621,17 +623,19 @@ class TestErrorHandling:
             call_count += 1
             raise proxy_error
 
-        with (
-            patch("httpx.AsyncClient") as mock_async_client,
-        ):
+        with (patch("httpx.AsyncClient") as mock_async_client,):
             mock_client_instance = AsyncMock()
             mock_client_instance.request.side_effect = mock_request
-            mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_client_instance.__aenter__ = AsyncMock(
+                return_value=mock_client_instance
+            )
             mock_client_instance.__aexit__ = AsyncMock(return_value=None)
             mock_async_client.return_value = mock_client_instance
 
             with pytest.raises(CogneeClientError, match="Request failed after"):
-                await client._make_request("POST", "/api/add", json_data={"data": "test"})
+                await client._make_request(
+                    "POST", "/api/add", json_data={"data": "test"}
+                )
 
             # Should have retried max_retries times
             assert call_count == 3

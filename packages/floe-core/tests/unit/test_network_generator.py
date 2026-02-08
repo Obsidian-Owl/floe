@@ -28,7 +28,11 @@ def mock_plugin() -> MagicMock:
     plugin = MagicMock()
     plugin.generate_dns_egress_rule.return_value = {
         "to": [
-            {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}
+            {
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                }
+            }
         ],
         "ports": [{"protocol": "UDP", "port": 53}],
     }
@@ -58,7 +62,11 @@ def mock_plugin_multi_namespace() -> MagicMock:
     plugin = MagicMock()
     plugin.generate_dns_egress_rule.return_value = {
         "to": [
-            {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}}
+            {
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                }
+            }
         ],
         "ports": [{"protocol": "UDP", "port": 53}],
     }
@@ -94,7 +102,11 @@ def mock_plugin_multi_namespace() -> MagicMock:
                     "egress": [
                         {
                             "to": [
-                                {"namespaceSelector": {"matchLabels": {"name": "floe-platform"}}}
+                                {
+                                    "namespaceSelector": {
+                                        "matchLabels": {"name": "floe-platform"}
+                                    }
+                                }
                             ],
                             "ports": [{"protocol": "TCP", "port": 8181}],
                         }
@@ -123,7 +135,10 @@ class TestNetworkPolicyManifestGenerator:
     @pytest.mark.requirement("FR-070")
     def test_generate_returns_result(self, mock_plugin: MagicMock) -> None:
         """Test generate() returns NetworkPolicyGenerationResult."""
-        from floe_core.network import NetworkPolicyGenerationResult, NetworkPolicyManifestGenerator
+        from floe_core.network import (
+            NetworkPolicyGenerationResult,
+            NetworkPolicyManifestGenerator,
+        )
 
         generator = NetworkPolicyManifestGenerator(plugin=mock_plugin)
         result = generator.generate(namespaces=["floe-jobs"])
@@ -142,7 +157,9 @@ class TestNetworkPolicyManifestGenerator:
         mock_plugin.generate_dns_egress_rule.assert_called_once()
 
     @pytest.mark.requirement("FR-070")
-    def test_generate_multiple_namespaces(self, mock_plugin_multi_namespace: MagicMock) -> None:
+    def test_generate_multiple_namespaces(
+        self, mock_plugin_multi_namespace: MagicMock
+    ) -> None:
         """Test generate() processes multiple namespaces."""
         from floe_core.network import NetworkPolicyManifestGenerator
 
@@ -174,7 +191,9 @@ class TestNetworkPolicyManifestGenerator:
         assert dns_rule is not None
 
     @pytest.mark.requirement("FR-072")
-    def test_result_summary_statistics(self, mock_plugin_multi_namespace: MagicMock) -> None:
+    def test_result_summary_statistics(
+        self, mock_plugin_multi_namespace: MagicMock
+    ) -> None:
         """Test result includes correct summary statistics."""
         from floe_core.network import NetworkPolicyManifestGenerator
 
@@ -271,7 +290,9 @@ class TestNetworkPolicyFileOutput:
         assert manifest["metadata"]["namespace"] == "floe-jobs"
 
     @pytest.mark.requirement("FR-073")
-    def test_yaml_files_have_managed_by_label(self, mock_plugin: MagicMock, tmp_path: Path) -> None:
+    def test_yaml_files_have_managed_by_label(
+        self, mock_plugin: MagicMock, tmp_path: Path
+    ) -> None:
         """Test generated YAML files include floe.dev/managed-by label."""
         from floe_core.network import NetworkPolicyManifestGenerator
 
@@ -388,7 +409,9 @@ class TestGeneratorEmptyInput:
         assert len(result.generated_policies) == 0
 
     @pytest.mark.requirement("FR-071")
-    def test_write_manifests_empty_result(self, mock_plugin: MagicMock, tmp_path: Path) -> None:
+    def test_write_manifests_empty_result(
+        self, mock_plugin: MagicMock, tmp_path: Path
+    ) -> None:
         """Test write_manifests handles empty result."""
         from floe_core.network import NetworkPolicyManifestGenerator
 
@@ -591,11 +614,16 @@ class TestPluginDiscovery:
                     "to": [
                         {
                             "namespaceSelector": {
-                                "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                                "matchLabels": {
+                                    "kubernetes.io/metadata.name": "kube-system"
+                                }
                             }
                         }
                     ],
-                    "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+                    "ports": [
+                        {"protocol": "UDP", "port": 53},
+                        {"protocol": "TCP", "port": 53},
+                    ],
                 },
                 "generate_network_policy": lambda self, config: {},
                 "generate_pod_security_context": lambda self, config=None: {},

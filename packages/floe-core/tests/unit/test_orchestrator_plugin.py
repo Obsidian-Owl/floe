@@ -34,7 +34,9 @@ class ConcreteOrchestratorPlugin(OrchestratorPlugin):
     def create_definitions(self, artifacts: dict[str, Any]) -> Any:
         return {}
 
-    def create_assets_from_transforms(self, transforms: list[TransformConfig]) -> list[Any]:
+    def create_assets_from_transforms(
+        self, transforms: list[TransformConfig]
+    ) -> list[Any]:
         return []
 
     def get_helm_values(self) -> dict[str, Any]:

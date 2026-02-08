@@ -116,7 +116,9 @@ class BaseHealthCheckTests(ABC):
         assert hasattr(result, "message")
 
     @pytest.mark.requirement("FR-028")
-    def test_health_check_reports_healthy_when_connected(self, connected_plugin: Any) -> None:
+    def test_health_check_reports_healthy_when_connected(
+        self, connected_plugin: Any
+    ) -> None:
         """Test health_check returns HEALTHY when connected and operational."""
         from floe_core.plugin_metadata import HealthState
 
@@ -152,7 +154,9 @@ class BaseHealthCheckTests(ABC):
         assert result.details["response_time_ms"] >= 0
 
     @pytest.mark.requirement("SC-007")
-    def test_health_check_completes_within_one_second(self, connected_plugin: Any) -> None:
+    def test_health_check_completes_within_one_second(
+        self, connected_plugin: Any
+    ) -> None:
         """Test health_check completes within 1 second for healthy plugin."""
         import time
 
@@ -170,7 +174,9 @@ class BaseHealthCheckTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-028")
-    def test_health_check_includes_checked_at_timestamp(self, connected_plugin: Any) -> None:
+    def test_health_check_includes_checked_at_timestamp(
+        self, connected_plugin: Any
+    ) -> None:
         """Test health_check includes checked_at timestamp in details."""
         before = datetime.now(timezone.utc)
         result = connected_plugin.health_check()
@@ -190,7 +196,9 @@ class BaseHealthCheckTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-028")
-    def test_health_check_accepts_timeout_parameter(self, connected_plugin: Any) -> None:
+    def test_health_check_accepts_timeout_parameter(
+        self, connected_plugin: Any
+    ) -> None:
         """Test health_check accepts a timeout parameter."""
         from floe_core.plugin_metadata import HealthStatus
 
@@ -198,24 +206,32 @@ class BaseHealthCheckTests(ABC):
         result = connected_plugin.health_check(timeout=2.0)
         assert isinstance(result, HealthStatus)
 
-    def test_health_check_rejects_invalid_timeout_low(self, unconnected_plugin: Any) -> None:
+    def test_health_check_rejects_invalid_timeout_low(
+        self, unconnected_plugin: Any
+    ) -> None:
         """Test health_check rejects timeout below 0.1 seconds."""
         with pytest.raises(ValueError, match=r"timeout"):
             unconnected_plugin.health_check(timeout=0.05)
 
-    def test_health_check_rejects_invalid_timeout_high(self, unconnected_plugin: Any) -> None:
+    def test_health_check_rejects_invalid_timeout_high(
+        self, unconnected_plugin: Any
+    ) -> None:
         """Test health_check rejects timeout above 10.0 seconds."""
         with pytest.raises(ValueError, match=r"timeout"):
             unconnected_plugin.health_check(timeout=15.0)
 
-    def test_health_check_accepts_boundary_timeout_min(self, connected_plugin: Any) -> None:
+    def test_health_check_accepts_boundary_timeout_min(
+        self, connected_plugin: Any
+    ) -> None:
         """Test health_check accepts minimum timeout of 0.1 seconds."""
         from floe_core.plugin_metadata import HealthStatus
 
         result = connected_plugin.health_check(timeout=0.1)
         assert isinstance(result, HealthStatus)
 
-    def test_health_check_accepts_boundary_timeout_max(self, connected_plugin: Any) -> None:
+    def test_health_check_accepts_boundary_timeout_max(
+        self, connected_plugin: Any
+    ) -> None:
         """Test health_check accepts maximum timeout of 10.0 seconds."""
         from floe_core.plugin_metadata import HealthStatus
 
@@ -227,7 +243,9 @@ class BaseHealthCheckTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-028")
-    def test_health_check_does_not_raise_when_unhealthy(self, unconnected_plugin: Any) -> None:
+    def test_health_check_does_not_raise_when_unhealthy(
+        self, unconnected_plugin: Any
+    ) -> None:
         """Test health_check returns status instead of raising exceptions."""
         from floe_core.plugin_metadata import HealthStatus
 

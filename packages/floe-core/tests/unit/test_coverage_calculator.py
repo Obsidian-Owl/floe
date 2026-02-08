@@ -143,7 +143,10 @@ class TestDetectTestTypes:
         model = {
             "name": "model",
             "columns": [{"name": "id", "tests": ["not_null"]}],
-            "tests": ["relationships", "dbt_expectations.expect_table_row_count_to_be_between"],
+            "tests": [
+                "relationships",
+                "dbt_expectations.expect_table_row_count_to_be_between",
+            ],
         }
         test_types = detect_test_types(model)
         assert "relationships" in test_types

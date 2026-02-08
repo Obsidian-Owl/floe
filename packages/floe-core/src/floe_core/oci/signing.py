@@ -93,7 +93,9 @@ def _get_env_float(name: str, default: float, min_val: float, max_val: float) ->
 
 # OIDC token retry configuration
 # Max retries for transient OIDC token failures (network issues, temporary unavailability)
-OIDC_MAX_RETRIES = _get_env_int("FLOE_OIDC_TOKEN_MAX_RETRIES", default=3, min_val=1, max_val=10)
+OIDC_MAX_RETRIES = _get_env_int(
+    "FLOE_OIDC_TOKEN_MAX_RETRIES", default=3, min_val=1, max_val=10
+)
 OIDC_RETRY_BASE_DELAY = 0.5  # Base delay in seconds for exponential backoff
 OIDC_RETRY_MAX_DELAY = 8.0  # Maximum delay cap in seconds
 OIDC_RETRY_JITTER = 0.1  # Random jitter added to delay (0-0.1s)
@@ -223,7 +225,9 @@ def _artifact_lock_path(artifact_ref: str) -> Path:
 
 
 @contextmanager
-def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Iterator[None]:
+def signing_lock(
+    artifact_ref: str, timeout_seconds: float | None = None
+) -> Iterator[None]:
     """Context manager for serializing concurrent signing operations.
 
     Uses file-based locking to ensure only one process can sign a given
@@ -260,7 +264,9 @@ def signing_lock(artifact_ref: str, timeout_seconds: float | None = None) -> Ite
             try:
                 fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 lock_acquired = True
-                logger.debug("Acquired signing lock for %s at %s", artifact_ref, lock_path)
+                logger.debug(
+                    "Acquired signing lock for %s at %s", artifact_ref, lock_path
+                )
                 break
             except OSError as e:
                 if e.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
@@ -436,7 +442,9 @@ class SigningClient:
             env_var_name = f"FLOE_{key_ref.name.upper().replace('-', '_')}"
             env_value = os.environ.get(env_var_name)
             if not env_value:
-                raise KeyLoadError(f"Environment variable not set: {env_var_name}", key_ref.name)
+                raise KeyLoadError(
+                    f"Environment variable not set: {env_var_name}", key_ref.name
+                )
             return env_value
 
         if key_ref.source.value == "kubernetes":
@@ -446,7 +454,9 @@ class SigningClient:
                 key_ref.name,
             )
 
-        raise KeyLoadError(f"Unsupported key source: {key_ref.source.value}", key_ref.name)
+        raise KeyLoadError(
+            f"Unsupported key source: {key_ref.source.value}", key_ref.name
+        )
 
     def _cosign_sign_blob(self, content: bytes, key_ref: str) -> dict[str, Any]:
         """Sign content using cosign CLI.
@@ -469,7 +479,9 @@ class SigningClient:
 
             content_file.write_bytes(content)
 
-            is_kms = key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://"))
+            is_kms = key_ref.startswith(
+                ("awskms://", "gcpkms://", "azurekms://", "hashivault://")
+            )
 
             cmd = [
                 "cosign",
@@ -516,7 +528,9 @@ class SigningClient:
             except json.JSONDecodeError as e:
                 raise SigningError(f"Invalid JSON output from cosign: {e}") from e
 
-    def _key_signature_to_metadata(self, bundle: dict[str, Any], key_ref: str) -> SignatureMetadata:
+    def _key_signature_to_metadata(
+        self, bundle: dict[str, Any], key_ref: str
+    ) -> SignatureMetadata:
         """Convert cosign key-based signature to SignatureMetadata.
 
         Args:
@@ -532,7 +546,9 @@ class SigningClient:
         key_fingerprint = self._compute_key_fingerprint(key_ref)
 
         span = trace.get_current_span()
-        span.set_attribute("floe.signing.key_ref", key_ref[:50] if len(key_ref) > 50 else key_ref)
+        span.set_attribute(
+            "floe.signing.key_ref", key_ref[:50] if len(key_ref) > 50 else key_ref
+        )
 
         return SignatureMetadata(
             bundle=bundle_b64,
@@ -556,7 +572,9 @@ class SigningClient:
         Returns:
             Fingerprint string (may be empty if not computable)
         """
-        if key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://")):
+        if key_ref.startswith(
+            ("awskms://", "gcpkms://", "azurekms://", "hashivault://")
+        ):
             return hashlib.sha256(key_ref.encode()).hexdigest()[:16]
 
         try:
@@ -598,7 +616,8 @@ class SigningClient:
                 last_error = e
                 if attempt < OIDC_MAX_RETRIES - 1:
                     delay = min(
-                        OIDC_RETRY_BASE_DELAY * (2**attempt) + random.uniform(0, OIDC_RETRY_JITTER),
+                        OIDC_RETRY_BASE_DELAY * (2**attempt)
+                        + random.uniform(0, OIDC_RETRY_JITTER),
                         OIDC_RETRY_MAX_DELAY,
                     )
                     logger.warning(
@@ -625,7 +644,12 @@ class SigningClient:
         Raises:
             IdentityError: On token acquisition failure
         """
-        from sigstore.oidc import IdentityError, IdentityToken, Issuer, detect_credential
+        from sigstore.oidc import (
+            IdentityError,
+            IdentityToken,
+            Issuer,
+            detect_credential,
+        )
 
         try:
             credential = detect_credential()
@@ -643,7 +667,9 @@ class SigningClient:
             raise OIDCTokenError(
                 "No ambient OIDC credential found and browser OAuth is disabled. "
                 "Set FLOE_DISABLE_BROWSER_OAUTH=false or ensure CI/CD OIDC is configured.",
-                issuer=str(self.config.oidc_issuer) if self.config.oidc_issuer else None,
+                issuer=(
+                    str(self.config.oidc_issuer) if self.config.oidc_issuer else None
+                ),
             )
 
         from sigstore.models import ClientTrustConfig
@@ -652,7 +678,9 @@ class SigningClient:
         issuer = Issuer(oidc_url)
         return issuer.identity_token()
 
-    def _bundle_to_metadata(self, bundle: Bundle, identity: IdentityToken) -> SignatureMetadata:
+    def _bundle_to_metadata(
+        self, bundle: Bundle, identity: IdentityToken
+    ) -> SignatureMetadata:
         """Convert Sigstore bundle to SignatureMetadata.
 
         Args:

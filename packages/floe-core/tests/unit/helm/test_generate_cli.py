@@ -109,7 +109,9 @@ class TestParseSetValues:
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_multiple_values(self) -> None:
         """Test parsing multiple key=value pairs."""
-        result = _parse_set_values(("dagster.replicas=3", "global.env=prod", "enabled=true"))
+        result = _parse_set_values(
+            ("dagster.replicas=3", "global.env=prod", "enabled=true")
+        )
         assert result == {
             "dagster": {"replicas": 3},
             "global": {"env": "prod"},
@@ -163,7 +165,9 @@ class TestGenerateCommand:
         return CliRunner()
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_default_dev_environment(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_default_dev_environment(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test generating with default dev environment."""
         output_dir = tmp_path / "output"
 
@@ -177,7 +181,9 @@ class TestGenerateCommand:
         assert "Generated" in result.output
 
     @pytest.mark.requirement("9b-FR-062")
-    def test_generate_multiple_environments(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_multiple_environments(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test generating values for multiple environments."""
         output_dir = tmp_path / "output"
 
@@ -203,7 +209,9 @@ class TestGenerateCommand:
         assert (output_dir / "values-prod.yaml").exists()
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_single_environment_to_file(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_single_environment_to_file(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test generating single environment to specific file."""
         output_file = tmp_path / "custom-values.yaml"
 
@@ -244,7 +252,9 @@ class TestGenerateCommand:
         assert values["global"]["custom"] == "test"
 
     @pytest.mark.requirement("9b-FR-064")
-    def test_generate_with_values_files(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_with_values_files(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test generating with additional values files."""
         # Create additional values file
         additional_values = {"custom": {"key": "value"}, "dagster": {"enabled": True}}
@@ -267,7 +277,9 @@ class TestGenerateCommand:
         assert values["dagster"]["enabled"] is True
 
     @pytest.mark.requirement("9b-FR-064")
-    def test_generate_with_multiple_values_files(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_with_multiple_values_files(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test generating with multiple values files."""
         values1 = {"a": {"b": 1}}
         values2 = {"a": {"c": 2}}
@@ -303,7 +315,9 @@ class TestGenerateCommand:
         assert values["a"]["c"] == 2
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_dry_run_single_env(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_dry_run_single_env(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test dry-run mode for single environment."""
         output_file = tmp_path / "values.yaml"
 
@@ -321,7 +335,9 @@ class TestGenerateCommand:
         assert not output_file.exists()
 
     @pytest.mark.requirement("9b-FR-062")
-    def test_generate_dry_run_multi_env(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_dry_run_multi_env(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test dry-run mode for multiple environments."""
         output_dir = tmp_path / "output"
 
@@ -348,7 +364,9 @@ class TestGenerateCommand:
         assert not output_dir.exists()
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_artifact_not_found(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_artifact_not_found(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test error when artifact file not found."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(
@@ -360,7 +378,9 @@ class TestGenerateCommand:
         assert "Artifact file not found" in result.output
 
     @pytest.mark.requirement("9b-FR-064")
-    def test_generate_values_file_not_found(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_values_file_not_found(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test error when values file not found."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(
@@ -372,7 +392,9 @@ class TestGenerateCommand:
         assert result.exit_code != 0
 
     @pytest.mark.requirement("9b-FR-064")
-    def test_generate_invalid_values_file(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_invalid_values_file(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test error when values file contains invalid YAML."""
         invalid_file = tmp_path / "invalid.yaml"
         invalid_file.write_text("not: valid: yaml: {{{")
@@ -389,7 +411,9 @@ class TestGenerateCommand:
         assert "Failed to load values file" in result.output
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_oci_artifact_placeholder(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_oci_artifact_placeholder(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test OCI artifact support shows placeholder message."""
         output_file = tmp_path / "values.yaml"
 
@@ -408,7 +432,9 @@ class TestGenerateCommand:
         assert "OCI artifact support planned" in result.output
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_artifact_file_exists(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_artifact_file_exists(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test loading artifact from file path."""
         artifact_file = tmp_path / "artifact.json"
         artifact_file.write_text('{"version": "1.0"}')
@@ -425,7 +451,9 @@ class TestGenerateCommand:
         assert f"Loading artifact: {artifact_file}" in result.output
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_default_output_directory(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_default_output_directory(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test default output directory is target/helm."""
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(generate_command, [])
@@ -480,7 +508,9 @@ class TestGenerateCommand:
         assert (output_dir / "values-staging.yaml").exists()
 
     @pytest.mark.requirement("9b-FR-064")
-    def test_generate_values_file_empty(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_values_file_empty(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test values file that is empty is handled gracefully."""
         empty_file = tmp_path / "empty.yaml"
         empty_file.write_text("")
@@ -497,13 +527,17 @@ class TestGenerateCommand:
         assert result.exit_code == 0
 
     @pytest.mark.requirement("9b-FR-060")
-    def test_generate_exception_during_generation(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_generate_exception_during_generation(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Test error handling when generation fails."""
         output_file = tmp_path / "values.yaml"
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
             with patch("floe_core.cli.helm.generate.HelmValuesGenerator") as mock_gen:
-                mock_gen.return_value.generate.side_effect = Exception("Generation error")
+                mock_gen.return_value.generate.side_effect = Exception(
+                    "Generation error"
+                )
 
                 result = runner.invoke(
                     generate_command,

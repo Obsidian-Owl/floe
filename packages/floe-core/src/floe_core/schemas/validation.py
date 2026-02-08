@@ -190,7 +190,9 @@ def _validate_audit_logging(parent: GovernanceConfig, child: GovernanceConfig) -
         )
 
 
-def _validate_policy_enforcement_level(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+def _validate_policy_enforcement_level(
+    parent: GovernanceConfig, child: GovernanceConfig
+) -> None:
     """Validate policy_enforcement_level is not weakened.
 
     Args:
@@ -200,7 +202,10 @@ def _validate_policy_enforcement_level(parent: GovernanceConfig, child: Governan
     Raises:
         SecurityPolicyViolationError: If child weakens policy_enforcement_level.
     """
-    if parent.policy_enforcement_level is None or child.policy_enforcement_level is None:
+    if (
+        parent.policy_enforcement_level is None
+        or child.policy_enforcement_level is None
+    ):
         return
 
     parent_strength = POLICY_LEVEL_STRENGTH.get(parent.policy_enforcement_level, 0)
@@ -213,7 +218,9 @@ def _validate_policy_enforcement_level(parent: GovernanceConfig, child: Governan
         )
 
 
-def _validate_data_retention_days(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+def _validate_data_retention_days(
+    parent: GovernanceConfig, child: GovernanceConfig
+) -> None:
     """Validate data_retention_days is not weakened (higher is stricter).
 
     Args:
@@ -239,7 +246,9 @@ def _validate_data_retention_days(parent: GovernanceConfig, child: GovernanceCon
         )
 
 
-def _validate_naming_if_present(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+def _validate_naming_if_present(
+    parent: GovernanceConfig, child: GovernanceConfig
+) -> None:
     """Validate naming config if both parent and child have it.
 
     Args:
@@ -250,7 +259,9 @@ def _validate_naming_if_present(parent: GovernanceConfig, child: GovernanceConfi
         _validate_naming_config_not_weakened(parent.naming, child.naming)
 
 
-def _validate_quality_gates_if_present(parent: GovernanceConfig, child: GovernanceConfig) -> None:
+def _validate_quality_gates_if_present(
+    parent: GovernanceConfig, child: GovernanceConfig
+) -> None:
     """Validate quality gates config if both parent and child have it.
 
     Args:
@@ -332,7 +343,9 @@ def _validate_quality_gates_not_weakened(
 
     # Check layer_thresholds (each layer threshold must not decrease)
     if parent.layer_thresholds is not None and child.layer_thresholds is not None:
-        _validate_layer_thresholds_not_weakened(parent.layer_thresholds, child.layer_thresholds)
+        _validate_layer_thresholds_not_weakened(
+            parent.layer_thresholds, child.layer_thresholds
+        )
 
 
 def _validate_layer_thresholds_not_weakened(

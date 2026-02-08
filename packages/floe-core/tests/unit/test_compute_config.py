@@ -137,7 +137,9 @@ class TestWorkloadPresets:
     def test_workload_presets_are_resource_spec(self) -> None:
         """Test presets are ResourceSpec instances."""
         for preset_name, spec in WORKLOAD_PRESETS.items():
-            assert isinstance(spec, ResourceSpec), f"{preset_name} should be ResourceSpec"
+            assert isinstance(
+                spec, ResourceSpec
+            ), f"{preset_name} should be ResourceSpec"
 
     @pytest.mark.requirement("001-FR-008")
     def test_workload_presets_scaling(self) -> None:
@@ -306,10 +308,14 @@ class TestDuckDBConfig:
         DuckDBConfig(memory_limit="512MB")
 
         # Invalid format
-        with pytest.raises(ValidationError, match="memory_limit must end with GB or MB"):
+        with pytest.raises(
+            ValidationError, match="memory_limit must end with GB or MB"
+        ):
             DuckDBConfig(memory_limit="4G")
 
-        with pytest.raises(ValidationError, match="memory_limit must end with GB or MB"):
+        with pytest.raises(
+            ValidationError, match="memory_limit must end with GB or MB"
+        ):
             DuckDBConfig(memory_limit="4096")
 
     @pytest.mark.requirement("001-FR-006")

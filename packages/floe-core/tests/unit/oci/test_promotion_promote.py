@@ -157,7 +157,9 @@ class TestPromoteSuccessPath:
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
         """
-        expected_digest = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0"
+        expected_digest = (
+            "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0"
+        )
 
         with (
             patch.object(controller, "_validate_transition"),
@@ -518,7 +520,9 @@ class TestPromoteGateFailurePath:
             mock_create_tag.assert_not_called()
 
     @pytest.mark.requirement("8C-FR-006")
-    def test_promote_gate_failure_does_not_create_tags(self, controller: MagicMock) -> None:
+    def test_promote_gate_failure_does_not_create_tags(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() does not create tags when a gate fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -666,7 +670,9 @@ class TestPromoteGateFailurePath:
             assert "timed out" in exc_info.value.details.lower()
 
     @pytest.mark.requirement("8C-FR-006")
-    def test_promote_multiple_gate_failures_reports_first(self, controller: MagicMock) -> None:
+    def test_promote_multiple_gate_failures_reports_first(
+        self, controller: MagicMock
+    ) -> None:
         """Test when multiple gates fail, error reports the first failure.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -829,12 +835,18 @@ class TestPromoteSignatureFailurePath:
                     operator="ci@github.com",
                 )
 
-            assert exc_info.value.expected_signer == "repo:acme/floe:ref:refs/heads/main"
-            assert exc_info.value.actual_signer == "repo:unknown/repo:ref:refs/heads/main"
+            assert (
+                exc_info.value.expected_signer == "repo:acme/floe:ref:refs/heads/main"
+            )
+            assert (
+                exc_info.value.actual_signer == "repo:unknown/repo:ref:refs/heads/main"
+            )
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_signature_failure_does_not_create_tags(self, controller: MagicMock) -> None:
+    def test_promote_signature_failure_does_not_create_tags(
+        self, controller: MagicMock
+    ) -> None:
         """Test promote() does not create tags when signature verification fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -905,7 +917,9 @@ class TestPromoteSignatureFailurePath:
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_signature_failure_after_gates_pass(self, controller: MagicMock) -> None:
+    def test_promote_signature_failure_after_gates_pass(
+        self, controller: MagicMock
+    ) -> None:
         """Test signature verification happens after gates pass.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -978,7 +992,9 @@ class TestPromoteSignatureFailurePath:
 
     @pytest.mark.requirement("8C-FR-004")
     @pytest.mark.requirement("8C-FR-005")
-    def test_promote_includes_artifact_ref_in_signature_error(self, controller: MagicMock) -> None:
+    def test_promote_includes_artifact_ref_in_signature_error(
+        self, controller: MagicMock
+    ) -> None:
         """Test SignatureVerificationError includes the artifact reference.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.

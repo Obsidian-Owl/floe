@@ -196,7 +196,9 @@ class TestDBTCorePluginRun:
             yield mock_runner
 
     @pytest.mark.requirement("FR-003")
-    def test_run_models_invokes_dbt_run(self, mock_dbt_runner: MagicMock, tmp_path: Path) -> None:
+    def test_run_models_invokes_dbt_run(
+        self, mock_dbt_runner: MagicMock, tmp_path: Path
+    ) -> None:
         """run_models should invoke dbt run command."""
         from floe_dbt_core import DBTCorePlugin
 
@@ -218,7 +220,9 @@ class TestDBTCorePluginRun:
         assert "run" in call_args
 
     @pytest.mark.requirement("FR-003")
-    def test_run_models_with_select(self, mock_dbt_runner: MagicMock, tmp_path: Path) -> None:
+    def test_run_models_with_select(
+        self, mock_dbt_runner: MagicMock, tmp_path: Path
+    ) -> None:
         """run_models should pass select pattern to dbt."""
         from floe_dbt_core import DBTCorePlugin
 
@@ -242,7 +246,9 @@ class TestDBTCorePluginRun:
         assert call_args[select_idx + 1] == "tag:daily"
 
     @pytest.mark.requirement("FR-003")
-    def test_run_models_with_exclude(self, mock_dbt_runner: MagicMock, tmp_path: Path) -> None:
+    def test_run_models_with_exclude(
+        self, mock_dbt_runner: MagicMock, tmp_path: Path
+    ) -> None:
         """run_models should pass exclude pattern to dbt."""
         from floe_dbt_core import DBTCorePlugin
 
@@ -266,7 +272,9 @@ class TestDBTCorePluginRun:
         assert call_args[exclude_idx + 1] == "tag:deprecated"
 
     @pytest.mark.requirement("FR-003")
-    def test_run_models_with_full_refresh(self, mock_dbt_runner: MagicMock, tmp_path: Path) -> None:
+    def test_run_models_with_full_refresh(
+        self, mock_dbt_runner: MagicMock, tmp_path: Path
+    ) -> None:
         """run_models should pass --full-refresh flag when requested."""
         from floe_dbt_core import DBTCorePlugin
 
@@ -359,7 +367,9 @@ class TestDBTCorePluginTest:
             yield mock_runner
 
     @pytest.mark.requirement("FR-004")
-    def test_test_models_invokes_dbt_test(self, mock_dbt_runner: MagicMock, tmp_path: Path) -> None:
+    def test_test_models_invokes_dbt_test(
+        self, mock_dbt_runner: MagicMock, tmp_path: Path
+    ) -> None:
         """test_models should invoke dbt test command."""
         from floe_dbt_core import DBTCorePlugin
 
@@ -381,7 +391,9 @@ class TestDBTCorePluginTest:
         assert "test" in call_args
 
     @pytest.mark.requirement("FR-004")
-    def test_test_models_with_select(self, mock_dbt_runner: MagicMock, tmp_path: Path) -> None:
+    def test_test_models_with_select(
+        self, mock_dbt_runner: MagicMock, tmp_path: Path
+    ) -> None:
         """test_models should pass select pattern to dbt."""
         from floe_dbt_core import DBTCorePlugin
 

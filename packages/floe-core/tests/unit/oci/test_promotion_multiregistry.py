@@ -32,6 +32,11 @@ from floe_core.schemas.promotion import (
 if TYPE_CHECKING:
     pass
 
+# Test constant
+TEST_DIGEST = (
+    "sha256:abc123def456abc123def456abc123def456abc123" "def456abc123def456abcd"
+)
+
 
 @pytest.fixture
 def mock_oci_client() -> MagicMock:
@@ -40,12 +45,10 @@ def mock_oci_client() -> MagicMock:
     mock.registry_uri = "oci://primary.registry.com/repo"
     mock.get_manifest.return_value = {
         "schemaVersion": 2,
-        "digest": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+        "digest": TEST_DIGEST,
         "annotations": {},
     }
-    mock.get_artifact_digest.return_value = (
-        "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-    )
+    mock.get_artifact_digest.return_value = TEST_DIGEST
     return mock
 
 
@@ -56,12 +59,10 @@ def mock_secondary_client() -> MagicMock:
     mock.registry_uri = "oci://secondary.registry.com/repo"
     mock.get_manifest.return_value = {
         "schemaVersion": 2,
-        "digest": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+        "digest": TEST_DIGEST,
         "annotations": {},
     }
-    mock.get_artifact_digest.return_value = (
-        "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-    )
+    mock.get_artifact_digest.return_value = TEST_DIGEST
     return mock
 
 
@@ -114,9 +115,7 @@ class TestMultiRegistryPromotionSuccess:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
@@ -156,9 +155,7 @@ class TestMultiRegistryPromotionSuccess:
         # Mock promote() to return a valid record
         with patch.object(controller, "promote") as mock_promote:
             mock_record = MagicMock()
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
@@ -207,18 +204,14 @@ class TestMultiRegistryDigestVerification:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
 
             # Mock secondary client - digest matches
             mock_secondary_client.copy_tag = MagicMock()
-            mock_secondary_client.get_artifact_digest.return_value = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_secondary_client.get_artifact_digest.return_value = TEST_DIGEST
 
             result = controller.promote_multi(
                 tag="v1.0.0",
@@ -260,9 +253,7 @@ class TestMultiRegistryDigestVerification:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
@@ -309,16 +300,16 @@ class TestMultiRegistryPartialFailure:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
 
             # Create a proper mock for model_copy that returns updated record
             def mock_model_copy(update: dict) -> MagicMock:
                 updated_record = MagicMock(spec=PromotionRecord)
                 updated_record.warnings = update.get("warnings", [])
-                updated_record.registry_sync_status = update.get("registry_sync_status", [])
+                updated_record.registry_sync_status = update.get(
+                    "registry_sync_status", []
+                )
                 return updated_record
 
             mock_record.model_copy.side_effect = mock_model_copy
@@ -364,16 +355,16 @@ class TestMultiRegistryPartialFailure:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
 
             # Create a proper mock for model_copy that returns updated record
             def mock_model_copy(update: dict) -> MagicMock:
                 updated_record = MagicMock(spec=PromotionRecord)
                 updated_record.warnings = update.get("warnings", [])
-                updated_record.registry_sync_status = update.get("registry_sync_status", [])
+                updated_record.registry_sync_status = update.get(
+                    "registry_sync_status", []
+                )
                 return updated_record
 
             mock_record.model_copy.side_effect = mock_model_copy
@@ -418,16 +409,16 @@ class TestMultiRegistrySyncStatus:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
 
             # Create a proper mock for model_copy that returns updated record
             def mock_model_copy(update: dict) -> MagicMock:
                 updated_record = MagicMock(spec=PromotionRecord)
                 updated_record.warnings = update.get("warnings", [])
-                updated_record.registry_sync_status = update.get("registry_sync_status", [])
+                updated_record.registry_sync_status = update.get(
+                    "registry_sync_status", []
+                )
                 return updated_record
 
             mock_record.model_copy.side_effect = mock_model_copy
@@ -435,9 +426,7 @@ class TestMultiRegistrySyncStatus:
 
             # Mock secondary client
             mock_secondary_client.copy_tag = MagicMock()
-            mock_secondary_client.get_artifact_digest.return_value = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_secondary_client.get_artifact_digest.return_value = TEST_DIGEST
 
             result = controller.promote_multi(
                 tag="v1.0.0",
@@ -464,7 +453,9 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig accepts secondary_registries list."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
             ],
             secondary_registries=[
                 "oci://secondary1.registry.com/repo",
@@ -479,7 +470,9 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig secondary_registries defaults to None."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
             ],
         )
         assert config.secondary_registries is None
@@ -489,7 +482,9 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig verify_secondary_digests defaults to True."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
             ],
         )
         assert config.verify_secondary_digests is True
@@ -499,7 +494,9 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig allows disabling digest verification."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
+                EnvironmentConfig(
+                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
+                ),
             ],
             secondary_registries=["oci://secondary.registry.com/repo"],
             verify_secondary_digests=False,
@@ -520,7 +517,7 @@ class TestRegistrySyncStatusSchema:
         status = RegistrySyncStatus(
             registry_uri="oci://secondary.registry.com/repo",
             synced=True,
-            digest="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+            digest=TEST_DIGEST,
             synced_at=datetime.now(timezone.utc),
         )
         assert status.synced is True

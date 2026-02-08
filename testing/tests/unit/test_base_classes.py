@@ -41,8 +41,13 @@ class TestIntegrationTestBase:
         instance = TestClass()
 
         # Mock service check to fail
-        with patch("testing.base_classes.integration_test_base.check_infrastructure") as mock_check:
-            from testing.fixtures.services import ServiceEndpoint, ServiceUnavailableError
+        with patch(
+            "testing.base_classes.integration_test_base.check_infrastructure"
+        ) as mock_check:
+            from testing.fixtures.services import (
+                ServiceEndpoint,
+                ServiceUnavailableError,
+            )
 
             mock_check.side_effect = ServiceUnavailableError(
                 ServiceEndpoint("polaris", 8181), "connection failed"

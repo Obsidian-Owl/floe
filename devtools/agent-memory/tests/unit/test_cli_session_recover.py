@@ -56,7 +56,9 @@ class TestSessionRecoverCommand:
             )
             mock_retrieve.return_value = mock_context
 
-            result = runner.invoke(app, ["session-recover", "--work-area", "plugin-system"])
+            result = runner.invoke(
+                app, ["session-recover", "--work-area", "plugin-system"]
+            )
 
             assert result.exit_code == 0
             mock_retrieve.assert_called_once()
@@ -194,10 +196,15 @@ class TestSessionRecoverCommand:
             mock_client_class.return_value = mock_client
             mock_retrieve.return_value = None
 
-            result = runner.invoke(app, ["session-recover", "--work-area", "unknown-area"])
+            result = runner.invoke(
+                app, ["session-recover", "--work-area", "unknown-area"]
+            )
 
             assert result.exit_code == 0
-            assert "No prior session" in result.output or "not found" in result.output.lower()
+            assert (
+                "No prior session" in result.output
+                or "not found" in result.output.lower()
+            )
 
     @pytest.mark.requirement("FR-016")
     def test_session_recover_fails_without_config(self) -> None:
@@ -307,7 +314,9 @@ class TestSessionRecoverCommand:
                 active_work_areas=["src/api.py", "tests/test_api.py"],
                 related_closed_tasks=["FLO-100", "FLO-101"],
                 recent_decisions=[
-                    DecisionRecord(decision="Use REST", rationale="Simpler to implement"),
+                    DecisionRecord(
+                        decision="Use REST", rationale="Simpler to implement"
+                    ),
                 ],
                 conversation_summary="Built API endpoints",
             )

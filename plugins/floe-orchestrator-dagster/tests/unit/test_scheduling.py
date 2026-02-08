@@ -103,11 +103,15 @@ class TestCronExpressionValidation:
         """Test valid weekly cron expression."""
         dagster_plugin.schedule_job("job", "0 8 * * 1", "UTC")
 
-    def test_valid_cron_monthly(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_cron_monthly(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid monthly cron expression."""
         dagster_plugin.schedule_job("job", "0 8 1 * *", "UTC")
 
-    def test_valid_cron_complex(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_cron_complex(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid complex cron expression with ranges."""
         dagster_plugin.schedule_job("job", "*/15 8-17 * * 1-5", "UTC")
 
@@ -132,7 +136,9 @@ class TestCronExpressionValidation:
         with pytest.raises(ValueError, match="minute hour day month weekday"):
             dagster_plugin.schedule_job("job", "invalid", "UTC")
 
-    def test_empty_cron_raises_value_error(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_empty_cron_raises_value_error(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test empty cron expression raises ValueError."""
         with pytest.raises(ValueError, match="empty string"):
             dagster_plugin.schedule_job("job", "", "UTC")
@@ -165,23 +171,33 @@ class TestTimezoneValidation:
     Validates FR-015: System MUST validate IANA timezones.
     """
 
-    def test_valid_timezone_utc(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_timezone_utc(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid UTC timezone."""
         dagster_plugin.schedule_job("job", "0 8 * * *", "UTC")
 
-    def test_valid_timezone_us_eastern(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_timezone_us_eastern(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid US Eastern timezone."""
         dagster_plugin.schedule_job("job", "0 8 * * *", "America/New_York")
 
-    def test_valid_timezone_us_pacific(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_timezone_us_pacific(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid US Pacific timezone."""
         dagster_plugin.schedule_job("job", "0 8 * * *", "America/Los_Angeles")
 
-    def test_valid_timezone_europe(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_timezone_europe(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid European timezone."""
         dagster_plugin.schedule_job("job", "0 8 * * *", "Europe/London")
 
-    def test_valid_timezone_asia(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_valid_timezone_asia(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test valid Asian timezone."""
         dagster_plugin.schedule_job("job", "0 8 * * *", "Asia/Tokyo")
 
@@ -224,7 +240,9 @@ class TestTimezoneValidation:
         with pytest.raises(ValueError, match="empty string"):
             dagster_plugin.schedule_job("job", "0 8 * * *", "   ")
 
-    def test_timezone_case_variants(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_timezone_case_variants(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test timezone case handling.
 
         Note: Python's zoneinfo module behavior varies by platform.
@@ -250,7 +268,9 @@ class TestTimezoneValidation:
 class TestScheduleJobEdgeCases:
     """Test edge cases for schedule_job."""
 
-    def test_job_name_with_underscores(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_job_name_with_underscores(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test job name with underscores."""
         dagster_plugin.schedule_job("my_daily_job_v2", "0 8 * * *", "UTC")
 
@@ -269,7 +289,9 @@ class TestScheduleJobEdgeCases:
         with pytest.raises(DagsterInvalidDefinitionError, match="not a valid name"):
             dagster_plugin.schedule_job("my-daily-job", "0 8 * * *", "UTC")
 
-    def test_cron_with_leading_zeros(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_cron_with_leading_zeros(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test cron expression with leading zeros."""
         dagster_plugin.schedule_job("job", "00 08 01 01 *", "UTC")
 
@@ -281,7 +303,9 @@ class TestScheduleJobEdgeCases:
         """Test cron every minute."""
         dagster_plugin.schedule_job("job", "* * * * *", "UTC")
 
-    def test_different_timezones_same_job(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_different_timezones_same_job(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test same job can be scheduled in different timezones."""
         dagster_plugin.schedule_job("job_east", "0 8 * * *", "America/New_York")
         dagster_plugin.schedule_job("job_west", "0 8 * * *", "America/Los_Angeles")

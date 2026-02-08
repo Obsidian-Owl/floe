@@ -363,7 +363,9 @@ class TestRBACAuditReport:
         report = RBACAuditReport(
             cluster_name="test-cluster",
             namespaces=[NamespaceSummary(name="default")],
-            service_accounts=[ServiceAccountSummary(name="test-sa", namespace="default")],
+            service_accounts=[
+                ServiceAccountSummary(name="test-sa", namespace="default")
+            ],
             total_service_accounts=1,
             total_roles=2,
         )

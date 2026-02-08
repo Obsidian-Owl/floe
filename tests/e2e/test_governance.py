@@ -106,7 +106,9 @@ class TestGovernance(IntegrationTestBase):
         templates = self._render_helm_templates(
             chart_root / "floe-platform", set_values={"networkPolicy.enabled": "true"}
         )
-        network_policies = [doc for doc in templates if doc.get("kind") == "NetworkPolicy"]
+        network_policies = [
+            doc for doc in templates if doc.get("kind") == "NetworkPolicy"
+        ]
 
         if not network_policies:
             pytest.fail(
@@ -181,7 +183,13 @@ class TestGovernance(IntegrationTestBase):
 
         # Check Helm templates for hardcoded secrets
         for doc in templates:
-            if doc.get("kind") not in {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}:
+            if doc.get("kind") not in {
+                "Deployment",
+                "StatefulSet",
+                "DaemonSet",
+                "Job",
+                "CronJob",
+            }:
                 continue
 
             name = doc.get("metadata", {}).get("name", "unknown")
@@ -212,9 +220,18 @@ class TestGovernance(IntegrationTestBase):
 
         # Patterns that indicate hardcoded secrets (common in config files)
         secret_patterns = [
-            (r'(?:password|passwd|pwd)\s*=\s*["\'][^"\']{3,}["\']', "hardcoded password"),
-            (r'(?:api_key|apikey|api_token)\s*=\s*["\'][^"\']{3,}["\']', "hardcoded API key"),
-            (r'(?:secret|token)\s*=\s*["\'][A-Za-z0-9+/=]{20,}["\']', "hardcoded secret/token"),
+            (
+                r'(?:password|passwd|pwd)\s*=\s*["\'][^"\']{3,}["\']',
+                "hardcoded password",
+            ),
+            (
+                r'(?:api_key|apikey|api_token)\s*=\s*["\'][^"\']{3,}["\']',
+                "hardcoded API key",
+            ),
+            (
+                r'(?:secret|token)\s*=\s*["\'][A-Za-z0-9+/=]{20,}["\']',
+                "hardcoded secret/token",
+            ),
         ]
 
         for py_file in (repo_root / "packages").rglob("*.py"):
@@ -225,7 +242,9 @@ class TestGovernance(IntegrationTestBase):
                 matches = re.findall(pattern, content, re.IGNORECASE)
                 if matches:
                     rel_path = py_file.relative_to(repo_root)
-                    python_violations.append(f"{rel_path}: {description} ({len(matches)} matches)")
+                    python_violations.append(
+                        f"{rel_path}: {description} ({len(matches)} matches)"
+                    )
 
         all_violations = violations + python_violations
 
@@ -273,9 +292,10 @@ class TestGovernance(IntegrationTestBase):
                     "Expected 401 Unauthorized or 403 Forbidden."
                 )
 
-            assert read_response.status_code in {401, 403}, (
-                f"Expected 401/403 for unauthorized read, got {read_response.status_code}"
-            )
+            assert read_response.status_code in {
+                401,
+                403,
+            }, f"Expected 401/403 for unauthorized read, got {read_response.status_code}"
 
         except httpx.HTTPError as e:
             pytest.fail(
@@ -289,7 +309,11 @@ class TestGovernance(IntegrationTestBase):
             write_response = httpx.post(
                 f"{polaris_url}/api/management/v1/catalogs",
                 headers={"Authorization": "Bearer invalid-token"},
-                json={"name": "rbac-test-catalog", "type": "INTERNAL", "properties": {}},
+                json={
+                    "name": "rbac-test-catalog",
+                    "type": "INTERNAL",
+                    "properties": {},
+                },
                 timeout=10.0,
             )
             if write_response.status_code in {200, 201}:
@@ -299,9 +323,10 @@ class TestGovernance(IntegrationTestBase):
                     "Write operations MUST be denied for "
                     "unauthorized principals."
                 )
-            assert write_response.status_code in {401, 403}, (
-                f"Expected 401/403 for unauthorized write, got {write_response.status_code}"
-            )
+            assert write_response.status_code in {
+                401,
+                403,
+            }, f"Expected 401/403 for unauthorized write, got {write_response.status_code}"
         except httpx.HTTPError as e:
             pytest.fail(f"Failed to test RBAC write protection: {e}")
 
@@ -353,7 +378,9 @@ class TestGovernance(IntegrationTestBase):
 
                     # Filter for HIGH and CRITICAL severity
                     high_critical = [
-                        r for r in results if r.get("issue_severity") in {"HIGH", "CRITICAL"}
+                        r
+                        for r in results
+                        if r.get("issue_severity") in {"HIGH", "CRITICAL"}
                     ]
 
                     if high_critical:
@@ -576,9 +603,10 @@ class TestGovernance(IntegrationTestBase):
                 timeout=10.0,
             )
 
-            assert response.status_code in {401, 403}, (
-                f"Expected auth failure (401/403), got {response.status_code}"
-            )
+            assert response.status_code in {
+                401,
+                403,
+            }, f"Expected auth failure (401/403), got {response.status_code}"
 
         except httpx.HTTPError as e:
             pytest.fail(
@@ -618,9 +646,9 @@ class TestGovernance(IntegrationTestBase):
                 "Governance policies must be checked during compilation.\n"
                 "enforcement_result being None means no policies were evaluated."
             )
-            assert hasattr(artifacts.enforcement_result, "passed"), (
-                "Enforcement result must indicate pass/fail status"
-            )
+            assert hasattr(
+                artifacts.enforcement_result, "passed"
+            ), "Enforcement result must indicate pass/fail status"
 
         except Exception as e:
             pytest.fail(
@@ -665,9 +693,9 @@ class TestGovernance(IntegrationTestBase):
             "Governance policies must be checked during compilation.\n"
             "enforcement_result being None means no policies were evaluated."
         )
-        assert hasattr(artifacts.enforcement_result, "passed"), (
-            "Enforcement result must indicate pass/fail status"
-        )
+        assert hasattr(
+            artifacts.enforcement_result, "passed"
+        ), "Enforcement result must indicate pass/fail status"
         assert artifacts.enforcement_result.models_validated > 0, (
             "Enforcement must validate at least one model.\n"
             f"Got models_validated={artifacts.enforcement_result.models_validated}\n"
@@ -702,7 +730,11 @@ class TestGovernance(IntegrationTestBase):
         ]
 
         for py_file in (repo_root / "packages").rglob("*.py"):
-            if ".venv" in str(py_file) or "__pycache__" in str(py_file) or "test" in str(py_file):
+            if (
+                ".venv" in str(py_file)
+                or "__pycache__" in str(py_file)
+                or "test" in str(py_file)
+            ):
                 continue
             content = py_file.read_text()
 

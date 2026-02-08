@@ -231,7 +231,9 @@ class TestFloeSpanAttributesValidation:
     def test_namespace_max_length(self) -> None:
         """Test that namespace has a maximum length of 128 characters."""
         long_namespace = "a" * 129
-        with pytest.raises(ValueError, match="String should have at most 128 characters"):
+        with pytest.raises(
+            ValueError, match="String should have at most 128 characters"
+        ):
             FloeSpanAttributes(
                 namespace=long_namespace,
                 product_name="customer-360",
@@ -272,7 +274,9 @@ class TestFloeSpanAttributesValidation:
     @pytest.mark.requirement("FR-007d")
     def test_mode_must_be_valid_literal(self) -> None:
         """Test that mode must be dev, staging, or prod."""
-        with pytest.raises(ValueError, match="Input should be 'dev', 'staging' or 'prod'"):
+        with pytest.raises(
+            ValueError, match="Input should be 'dev', 'staging' or 'prod'"
+        ):
             FloeSpanAttributes(
                 namespace="analytics",
                 product_name="customer-360",

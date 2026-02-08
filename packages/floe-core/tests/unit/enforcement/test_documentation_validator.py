@@ -479,7 +479,11 @@ class TestDocumentationTemplateSuggestion:
         assert len(violations) == 1
         # Actual should indicate missing or None
         actual_lower = violations[0].actual.lower()
-        assert "missing" in actual_lower or "none" in actual_lower or "empty" in actual_lower
+        assert (
+            "missing" in actual_lower
+            or "none" in actual_lower
+            or "empty" in actual_lower
+        )
 
 
 class TestDocumentationValidatorIntegration:
@@ -580,7 +584,9 @@ class TestExpandedPlaceholderPatterns:
         config = QualityGatesConfig(require_descriptions=True)
         validator = DocumentationValidator(config)
 
-        model = _create_model_node(name="bronze_orders", description="WIP - orders data")
+        model = _create_model_node(
+            name="bronze_orders", description="WIP - orders data"
+        )
 
         violations = validator.validate(models=[model])
 
@@ -639,7 +645,9 @@ class TestExpandedPlaceholderPatterns:
         config = QualityGatesConfig(require_descriptions=True)
         validator = DocumentationValidator(config)
 
-        model = _create_model_node(name="bronze_orders", description="needs description")
+        model = _create_model_node(
+            name="bronze_orders", description="needs description"
+        )
 
         violations = validator.validate(models=[model])
 
@@ -678,7 +686,9 @@ class TestExpandedPlaceholderPatterns:
         config = QualityGatesConfig(require_descriptions=True)
         validator = DocumentationValidator(config)
 
-        model = _create_model_node(name="bronze_orders", description="Documentation coming soon")
+        model = _create_model_node(
+            name="bronze_orders", description="Documentation coming soon"
+        )
 
         violations = validator.validate(models=[model])
 
@@ -730,7 +740,9 @@ class TestConfigurableDocumentationUrl:
         assert url == "https://docs.example.com"
 
     @pytest.mark.requirement("3A-US5-FR005")
-    def test_strips_trailing_slash_from_docs_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_strips_trailing_slash_from_docs_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Documentation URL MUST strip trailing slash."""
         from floe_core.enforcement.patterns import _get_docs_base_url
 
@@ -776,6 +788,8 @@ class TestDocumentationValidatorWithPolicyEnforcer:
         result = enforcer.enforce(manifest)
 
         # Should have documentation violation
-        doc_violations = [v for v in result.violations if v.policy_type == "documentation"]
+        doc_violations = [
+            v for v in result.violations if v.policy_type == "documentation"
+        ]
         assert len(doc_violations) >= 1
         assert any(v.error_code == "FLOE-E220" for v in doc_violations)

@@ -82,7 +82,9 @@ class TestSemanticDefinitionsWiring(IntegrationTestBase):
         # Check that resources dict contains semantic_layer
         resources = definitions.resources
         assert resources is not None, "Definitions has no resources"
-        assert "semantic_layer" in resources, "semantic_layer not found in Definitions resources"
+        assert (
+            "semantic_layer" in resources
+        ), "semantic_layer not found in Definitions resources"
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-055")
@@ -125,9 +127,9 @@ class TestSemanticDefinitionsWiring(IntegrationTestBase):
 
         # Check that resources dict does NOT contain semantic_layer
         resources = definitions.resources
-        assert "semantic_layer" not in resources, (
-            "semantic_layer should not be present when not configured"
-        )
+        assert (
+            "semantic_layer" not in resources
+        ), "semantic_layer should not be present when not configured"
 
 
 __all__ = [

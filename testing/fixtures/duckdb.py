@@ -42,7 +42,9 @@ class DuckDBConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    database: str = Field(default_factory=lambda: os.environ.get("DUCKDB_DATABASE", ":memory:"))
+    database: str = Field(
+        default_factory=lambda: os.environ.get("DUCKDB_DATABASE", ":memory:")
+    )
     read_only: bool = Field(default=False)
     extensions: tuple[str, ...] = Field(default=())
     config: dict[str, Any] = Field(default_factory=dict)
@@ -74,7 +76,9 @@ def create_duckdb_connection(config: DuckDBConfig) -> duckdb.DuckDBPyConnection:
     try:
         import duckdb
     except ImportError as e:
-        raise DuckDBConnectionError("duckdb not installed. Install with: pip install duckdb") from e
+        raise DuckDBConnectionError(
+            "duckdb not installed. Install with: pip install duckdb"
+        ) from e
 
     try:
         conn = duckdb.connect(

@@ -463,7 +463,9 @@ class TestArtifactInspectSbom:
 
         # Create SBOM with 15 packages (more than 10 limit)
         mock_sbom = {
-            "packages": [{"name": f"pkg{i}", "versionInfo": f"{i}.0.0"} for i in range(15)]
+            "packages": [
+                {"name": f"pkg{i}", "versionInfo": f"{i}.0.0"} for i in range(15)
+            ]
         }
 
         with patch("floe_core.oci.OCIClient") as mock_client_class:

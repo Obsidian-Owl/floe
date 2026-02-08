@@ -112,9 +112,9 @@ class TestNamespaceOperations(IntegrationTestBase):
 
             # Verify it exists
             namespaces = plugin.list_namespaces()
-            assert namespace in namespaces, (
-                f"Created namespace '{namespace}' not found in list: {namespaces}"
-            )
+            assert (
+                namespace in namespaces
+            ), f"Created namespace '{namespace}' not found in list: {namespaces}"
         finally:
             # Cleanup
             try:
@@ -367,15 +367,15 @@ class TestNamespaceHierarchy(IntegrationTestBase):
 
             # Verify parent exists in top-level list
             top_namespaces = plugin.list_namespaces()
-            assert parent in top_namespaces, (
-                f"Parent namespace '{parent}' not found in list: {top_namespaces}"
-            )
+            assert (
+                parent in top_namespaces
+            ), f"Parent namespace '{parent}' not found in list: {top_namespaces}"
 
             # Verify child exists when querying with parent filter
             child_namespaces = plugin.list_namespaces(parent=parent)
-            assert child in child_namespaces, (
-                f"Child '{child}' not found in parent '{parent}': {child_namespaces}"
-            )
+            assert (
+                child in child_namespaces
+            ), f"Child '{child}' not found in parent '{parent}': {child_namespaces}"
         finally:
             # Cleanup in reverse order (child first, then parent)
             try:

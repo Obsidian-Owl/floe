@@ -124,7 +124,9 @@ def pull_command(
         click.echo(artifacts_json)
 
 
-def _build_registry_config(registry_uri: str, manifest_path: str | None) -> RegistryConfig:
+def _build_registry_config(
+    registry_uri: str, manifest_path: str | None
+) -> RegistryConfig:
     """Build RegistryConfig from URI, manifest, and environment."""
     from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
     from floe_core.schemas.secrets import SecretReference, SecretSource
@@ -200,7 +202,11 @@ def _handle_pull_error(e: Exception) -> NoReturn:
         ("Authentication", f"Authentication failed: {e}", ExitCode.GENERAL_ERROR),
         ("Unavailable", f"Registry unavailable: {e}", ExitCode.GENERAL_ERROR),
         ("NotFound", f"Artifact not found: {e}", ExitCode.FILE_NOT_FOUND),
-        ("SignatureVerification", f"Signature verification failed: {e}", ExitCode.VALIDATION_ERROR),
+        (
+            "SignatureVerification",
+            f"Signature verification failed: {e}",
+            ExitCode.VALIDATION_ERROR,
+        ),
     ]
 
     for keyword, message, exit_code in error_mappings:
@@ -238,7 +244,9 @@ def _write_output(content: str, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content)
     except Exception as e:
-        error_exit(f"Failed to write output file: {e}", exit_code=ExitCode.GENERAL_ERROR)
+        error_exit(
+            f"Failed to write output file: {e}", exit_code=ExitCode.GENERAL_ERROR
+        )
 
 
 __all__: list[str] = ["pull_command"]

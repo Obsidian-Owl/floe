@@ -137,7 +137,9 @@ class BaseRBACPluginTests(ABC):
         assert callable(rbac_plugin.generate_namespace)
 
     @pytest.mark.requirement("FR-001")
-    def test_has_generate_pod_security_context_method(self, rbac_plugin: RBACPlugin) -> None:
+    def test_has_generate_pod_security_context_method(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify plugin has generate_pod_security_context() method."""
         assert hasattr(rbac_plugin, "generate_pod_security_context")
         assert callable(rbac_plugin.generate_pod_security_context)
@@ -159,7 +161,9 @@ class BaseRBACPluginTests(ABC):
         assert manifest["apiVersion"] == "v1"
 
     @pytest.mark.requirement("FR-010")
-    def test_generate_service_account_has_correct_kind(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_service_account_has_correct_kind(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify generated ServiceAccount has correct kind."""
         from floe_core.schemas.rbac import ServiceAccountConfig
 
@@ -169,7 +173,9 @@ class BaseRBACPluginTests(ABC):
         assert manifest["kind"] == "ServiceAccount"
 
     @pytest.mark.requirement("FR-013")
-    def test_generate_service_account_has_managed_by_label(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_service_account_has_managed_by_label(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify generated ServiceAccount has floe managed-by label."""
         from floe_core.schemas.rbac import ServiceAccountConfig
 
@@ -205,7 +211,9 @@ class BaseRBACPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-020")
-    def test_generate_role_has_correct_api_version(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_role_has_correct_api_version(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify generated Role has correct apiVersion."""
         from floe_core.schemas.rbac import RoleConfig, RoleRule
 
@@ -256,7 +264,9 @@ class BaseRBACPluginTests(ABC):
         assert manifest["rules"][0]["resourceNames"] == ["my-secret", "other-secret"]
 
     @pytest.mark.requirement("FR-024")
-    def test_generate_role_allows_only_get_for_secrets(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_role_allows_only_get_for_secrets(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify Role can be generated with only get verb for secrets."""
         from floe_core.schemas.rbac import RoleConfig, RoleRule
 
@@ -271,7 +281,9 @@ class BaseRBACPluginTests(ABC):
         assert manifest["rules"][0]["verbs"] == ["get"]
 
     @pytest.mark.requirement("FR-070")
-    def test_role_rule_rejects_wildcard_resources(self, rbac_plugin: RBACPlugin) -> None:
+    def test_role_rule_rejects_wildcard_resources(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify RoleRule rejects wildcard (*) in resources."""
         from floe_core.schemas.rbac import RoleRule
         from pydantic import ValidationError
@@ -289,7 +301,9 @@ class BaseRBACPluginTests(ABC):
             RoleRule(resources=["secrets"], verbs=["*"])
 
     @pytest.mark.requirement("FR-070")
-    def test_role_rule_rejects_wildcard_api_groups(self, rbac_plugin: RBACPlugin) -> None:
+    def test_role_rule_rejects_wildcard_api_groups(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify RoleRule rejects wildcard (*) in apiGroups."""
         from floe_core.schemas.rbac import RoleRule
         from pydantic import ValidationError
@@ -302,14 +316,18 @@ class BaseRBACPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-022")
-    def test_generate_role_binding_has_correct_api_version(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_role_binding_has_correct_api_version(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify generated RoleBinding has correct apiVersion."""
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         config = RoleBindingConfig(
             name="floe-test-runner-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-test-runner", namespace="floe-jobs")],
+            subjects=[
+                RoleBindingSubject(name="floe-test-runner", namespace="floe-jobs")
+            ],
             role_name="floe-test-runner-role",
         )
         manifest = rbac_plugin.generate_role_binding(config)
@@ -317,14 +335,18 @@ class BaseRBACPluginTests(ABC):
         assert manifest["apiVersion"] == "rbac.authorization.k8s.io/v1"
 
     @pytest.mark.requirement("FR-022")
-    def test_generate_role_binding_has_correct_kind(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_role_binding_has_correct_kind(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify generated RoleBinding has correct kind."""
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         config = RoleBindingConfig(
             name="floe-test-runner-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-test-runner", namespace="floe-jobs")],
+            subjects=[
+                RoleBindingSubject(name="floe-test-runner", namespace="floe-jobs")
+            ],
             role_name="floe-test-runner-role",
         )
         manifest = rbac_plugin.generate_role_binding(config)
@@ -332,14 +354,18 @@ class BaseRBACPluginTests(ABC):
         assert manifest["kind"] == "RoleBinding"
 
     @pytest.mark.requirement("FR-022")
-    def test_generate_role_binding_has_correct_role_ref(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_role_binding_has_correct_role_ref(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify RoleBinding references the correct Role."""
         from floe_core.schemas.rbac import RoleBindingConfig, RoleBindingSubject
 
         config = RoleBindingConfig(
             name="floe-test-runner-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-test-runner", namespace="floe-jobs")],
+            subjects=[
+                RoleBindingSubject(name="floe-test-runner", namespace="floe-jobs")
+            ],
             role_name="floe-test-runner-role",
         )
         manifest = rbac_plugin.generate_role_binding(config)
@@ -358,7 +384,9 @@ class BaseRBACPluginTests(ABC):
         config = RoleBindingConfig(
             name="floe-dagster-binding",
             namespace="floe-jobs",
-            subjects=[RoleBindingSubject(name="floe-dagster", namespace="floe-platform")],
+            subjects=[
+                RoleBindingSubject(name="floe-dagster", namespace="floe-platform")
+            ],
             role_name="floe-job-creator-role",
         )
         manifest = rbac_plugin.generate_role_binding(config)
@@ -372,7 +400,9 @@ class BaseRBACPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("FR-030")
-    def test_generate_namespace_has_correct_api_version(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_namespace_has_correct_api_version(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify generated Namespace has correct apiVersion."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -392,7 +422,9 @@ class BaseRBACPluginTests(ABC):
         assert manifest["kind"] == "Namespace"
 
     @pytest.mark.requirement("FR-031")
-    def test_generate_namespace_has_pss_enforce_label(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_namespace_has_pss_enforce_label(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify Namespace has PSS enforce label."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -404,7 +436,9 @@ class BaseRBACPluginTests(ABC):
         assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
 
     @pytest.mark.requirement("FR-031")
-    def test_generate_namespace_has_pss_audit_label(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_namespace_has_pss_audit_label(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify Namespace has PSS audit label."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -415,7 +449,9 @@ class BaseRBACPluginTests(ABC):
         assert "pod-security.kubernetes.io/audit" in labels
 
     @pytest.mark.requirement("FR-031")
-    def test_generate_namespace_has_pss_warn_label(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_namespace_has_pss_warn_label(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify Namespace has PSS warn label."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -438,7 +474,9 @@ class BaseRBACPluginTests(ABC):
         assert labels["floe.dev/layer"] == "4"
 
     @pytest.mark.requirement("FR-034")
-    def test_generate_namespace_has_managed_by_label(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_namespace_has_managed_by_label(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify Namespace has managed-by label."""
         from floe_core.schemas.rbac import NamespaceConfig
 
@@ -456,7 +494,9 @@ class BaseRBACPluginTests(ABC):
         from floe_core.schemas.rbac import NamespaceConfig
 
         # Platform namespace (layer 3) should default to baseline
-        config = NamespaceConfig(name="floe-platform", layer="3", pss_enforce="baseline")
+        config = NamespaceConfig(
+            name="floe-platform", layer="3", pss_enforce="baseline"
+        )
         manifest = rbac_plugin.generate_namespace(config)
 
         labels = manifest["metadata"]["labels"]
@@ -479,7 +519,9 @@ class BaseRBACPluginTests(ABC):
         assert contexts["pod"]["runAsNonRoot"] is True
 
     @pytest.mark.requirement("FR-044")
-    def test_generate_pod_security_context_has_run_as_user(self, rbac_plugin: RBACPlugin) -> None:
+    def test_generate_pod_security_context_has_run_as_user(
+        self, rbac_plugin: RBACPlugin
+    ) -> None:
         """Verify pod security context includes runAsUser."""
         from floe_core.schemas.rbac import PodSecurityConfig
 

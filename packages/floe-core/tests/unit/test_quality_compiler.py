@@ -38,7 +38,9 @@ class TestValidateQualityGatesForModels:
         config = QualityConfig(
             provider="great_expectations",
             quality_gates=QualityGates(
-                gold=GateTier(min_test_coverage=100, required_tests=["not_null", "unique"]),
+                gold=GateTier(
+                    min_test_coverage=100, required_tests=["not_null", "unique"]
+                ),
             ),
         )
         errors = validate_quality_gates_for_models(models, config)
@@ -84,7 +86,9 @@ class TestValidateQualityGatesForModels:
         config = QualityConfig(
             provider="great_expectations",
             quality_gates=QualityGates(
-                silver=GateTier(min_test_coverage=100, required_tests=["not_null", "unique"]),
+                silver=GateTier(
+                    min_test_coverage=100, required_tests=["not_null", "unique"]
+                ),
             ),
         )
         errors = validate_quality_gates_for_models(models, config)
@@ -108,7 +112,9 @@ class TestValidateQualityGatesForModels:
         config = QualityConfig(
             provider="great_expectations",
             quality_gates=QualityGates(
-                gold=GateTier(min_test_coverage=100, required_tests=["not_null", "unique"]),
+                gold=GateTier(
+                    min_test_coverage=100, required_tests=["not_null", "unique"]
+                ),
             ),
         )
         errors = validate_quality_gates_for_models(models, config)

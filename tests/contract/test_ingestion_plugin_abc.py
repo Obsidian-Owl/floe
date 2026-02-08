@@ -68,7 +68,9 @@ class TestIngestionPluginABCDefinition:
         # Must be abstract
         prop = IngestionPlugin.is_external
         # For properties, check if the fget method is abstract
-        assert getattr(prop.fget, "__isabstractmethod__", False), "is_external must be abstract"
+        assert getattr(
+            prop.fget, "__isabstractmethod__", False
+        ), "is_external must be abstract"
 
     @pytest.mark.requirement("4F-FR-001")
     def test_create_pipeline_is_abstract(self) -> None:
@@ -84,7 +86,9 @@ class TestIngestionPluginABCDefinition:
 
         # Must be abstract
         method = IngestionPlugin.create_pipeline
-        assert getattr(method, "__isabstractmethod__", False), "create_pipeline() must be abstract"
+        assert getattr(
+            method, "__isabstractmethod__", False
+        ), "create_pipeline() must be abstract"
 
         # Check signature
         sig = inspect.signature(IngestionPlugin.create_pipeline)
@@ -129,9 +133,9 @@ class TestIngestionPluginABCDefinition:
 
         # Must be abstract
         method = IngestionPlugin.get_destination_config
-        assert getattr(method, "__isabstractmethod__", False), (
-            "get_destination_config() must be abstract"
-        )
+        assert getattr(
+            method, "__isabstractmethod__", False
+        ), "get_destination_config() must be abstract"
 
         # Check signature
         sig = inspect.signature(IngestionPlugin.get_destination_config)
@@ -285,7 +289,9 @@ class TestIngestionPluginInstantiationContract:
                 _ = pipeline, kwargs
                 return IngestionResult(success=True, rows_loaded=0)
 
-            def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
+            def get_destination_config(
+                self, catalog_config: dict[str, Any]
+            ) -> dict[str, Any]:
                 _ = catalog_config
                 return {"destination": "mock"}
 

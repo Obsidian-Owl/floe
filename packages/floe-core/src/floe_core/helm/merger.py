@@ -83,7 +83,9 @@ def deep_merge(
             # Both are dicts - recurse
             base_dict: dict[str, Any] = result[key]
             override_dict: dict[str, Any] = override_value
-            result[key] = deep_merge(base_dict, override_dict, list_strategy=list_strategy)
+            result[key] = deep_merge(
+                base_dict, override_dict, list_strategy=list_strategy
+            )
         elif isinstance(result[key], list) and isinstance(override_value, list):
             # Both are lists - apply list strategy
             base_list: list[Any] = result[key]
@@ -188,7 +190,9 @@ def flatten_dict(
             for idx, item in enumerate(list_value):
                 if isinstance(item, dict):
                     item_dict: dict[str, Any] = item
-                    items.extend(flatten_dict(item_dict, f"{new_key}[{idx}]", sep).items())
+                    items.extend(
+                        flatten_dict(item_dict, f"{new_key}[{idx}]", sep).items()
+                    )
                 else:
                     items.append((f"{new_key}[{idx}]", item))
         else:

@@ -348,9 +348,13 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                 if result.valid:
                     span.set_status(Status(StatusCode.OK))
                     if result.user_info:
-                        span.set_attribute("keycloak.user.subject", result.user_info.subject)
+                        span.set_attribute(
+                            "keycloak.user.subject", result.user_info.subject
+                        )
                 else:
-                    span.set_status(Status(StatusCode.ERROR, result.error or "Invalid token"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, result.error or "Invalid token")
+                    )
                 return result
             except Exception as e:
                 span.set_attribute(_SPAN_TOKEN_VALID, False)
@@ -358,7 +362,9 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                 span.record_exception(e)
                 raise
 
-    def _validate_and_convert(self, token: str, validator: TokenValidator) -> TokenValidationResult:
+    def _validate_and_convert(
+        self, token: str, validator: TokenValidator
+    ) -> TokenValidationResult:
         """Validate token and convert to floe_core result.
 
         Args:
@@ -463,9 +469,13 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                 if result.valid:
                     span.set_status(Status(StatusCode.OK))
                     if result.user_info:
-                        span.set_attribute("keycloak.user.subject", result.user_info.subject)
+                        span.set_attribute(
+                            "keycloak.user.subject", result.user_info.subject
+                        )
                 else:
-                    span.set_status(Status(StatusCode.ERROR, result.error or "Invalid token"))
+                    span.set_status(
+                        Status(StatusCode.ERROR, result.error or "Invalid token")
+                    )
                 return result
             except Exception as e:
                 span.set_attribute(_SPAN_TOKEN_VALID, False)
@@ -518,7 +528,9 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             else self._config.client_secret.get_secret_value()
         )
 
-        token_url = f"{self._config.server_url}/realms/{realm}/protocol/openid-connect/token"
+        token_url = (
+            f"{self._config.server_url}/realms/{realm}/protocol/openid-connect/token"
+        )
 
         # Determine grant type
         if "username" in credentials and "password" in credentials:
@@ -592,7 +604,9 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         self._realm_validators[realm] = validator
         return validator
 
-    def _extract_roles_from_access_dict(self, access_dict: Any, roles: list[str]) -> None:
+    def _extract_roles_from_access_dict(
+        self, access_dict: Any, roles: list[str]
+    ) -> None:
         """Extract roles from an access dictionary (realm_access or resource dict).
 
         Args:

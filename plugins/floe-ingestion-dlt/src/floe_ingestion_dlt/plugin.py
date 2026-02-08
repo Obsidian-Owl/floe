@@ -26,9 +26,17 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
-from floe_core.plugins.ingestion import IngestionConfig, IngestionPlugin, IngestionResult
+from floe_core.plugins.ingestion import (
+    IngestionConfig,
+    IngestionPlugin,
+    IngestionResult,
+)
 
-from floe_ingestion_dlt.config import VALID_SCHEMA_CONTRACTS, VALID_SOURCE_TYPES, VALID_WRITE_MODES
+from floe_ingestion_dlt.config import (
+    VALID_SCHEMA_CONTRACTS,
+    VALID_SOURCE_TYPES,
+    VALID_WRITE_MODES,
+)
 from floe_ingestion_dlt.errors import (
     PipelineConfigurationError,
     SchemaContractViolation,
@@ -477,8 +485,12 @@ class DltIngestionPlugin(IngestionPlugin):
                                 for job in getattr(metrics, "job_metrics", {}).values():
                                     if hasattr(job, "table_metrics"):
                                         for table_metric in job.table_metrics.values():
-                                            rows_loaded += getattr(table_metric, "items_count", 0)
-                                            bytes_written += getattr(table_metric, "file_size", 0)
+                                            rows_loaded += getattr(
+                                                table_metric, "items_count", 0
+                                            )
+                                            bytes_written += getattr(
+                                                table_metric, "file_size", 0
+                                            )
 
                 result = IngestionResult(
                     success=True,

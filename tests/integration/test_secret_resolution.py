@@ -76,7 +76,9 @@ class TestSecretReferenceResolutionContract:
             syntax = ref.to_env_var_syntax()
 
             # Must match Jinja pattern
-            assert jinja_pattern.match(syntax), f"Invalid Jinja syntax for {ref.name}: {syntax}"
+            assert jinja_pattern.match(
+                syntax
+            ), f"Invalid Jinja syntax for {ref.name}: {syntax}"
 
             # Must not contain any lowercase (env var names are UPPER_CASE)
             env_var_match = re.search(r"FLOE_SECRET_([A-Z0-9_]+)", syntax)
@@ -158,9 +160,9 @@ class TestSecretReferenceResolutionContract:
             # The source doesn't appear in the env var name
             # (it's used at runtime for resolution, not in the profile)
             # Note: We check the suffix only, not the full syntax (which contains 'env_var')
-            assert source.value not in env_var_suffix, (
-                f"Source '{source.value}' should not appear in env var name '{env_var_suffix}'"
-            )
+            assert (
+                source.value not in env_var_suffix
+            ), f"Source '{source.value}' should not appear in env var name '{env_var_suffix}'"
 
 
 class TestSecretReferenceCompilationSafety:
@@ -280,7 +282,9 @@ class TestSecretReferenceProfilesYmlIntegration:
         # Verify secrets are env_var references
         assert dev["account"] == "{{ env_var('FLOE_SECRET_SNOWFLAKE_CREDS_ACCOUNT') }}"
         assert dev["user"] == "{{ env_var('FLOE_SECRET_SNOWFLAKE_CREDS_USER') }}"
-        assert dev["password"] == "{{ env_var('FLOE_SECRET_SNOWFLAKE_CREDS_PASSWORD') }}"
+        assert (
+            dev["password"] == "{{ env_var('FLOE_SECRET_SNOWFLAKE_CREDS_PASSWORD') }}"
+        )
 
         # Verify non-secrets are preserved
         assert dev["role"] == "TRANSFORM_ROLE"
@@ -298,7 +302,9 @@ class TestSecretReferenceProfilesYmlIntegration:
                 "dev": {
                     "type": "duckdb",
                     "path": "md:analytics",  # MotherDuck prefix
-                    "motherduck_token": SecretReference(name="motherduck-creds", key="token"),
+                    "motherduck_token": SecretReference(
+                        name="motherduck-creds", key="token"
+                    ),
                 },
             },
         }

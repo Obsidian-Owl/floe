@@ -117,7 +117,9 @@ def validate_override(
         return
 
     locked_idx = TIER_HIERARCHY.index(locked_by) if locked_by in TIER_HIERARCHY else -1
-    attempted_idx = TIER_HIERARCHY.index(attempted_by) if attempted_by in TIER_HIERARCHY else -1
+    attempted_idx = (
+        TIER_HIERARCHY.index(attempted_by) if attempted_by in TIER_HIERARCHY else -1
+    )
 
     if attempted_idx > locked_idx:
         raise QualityOverrideError(

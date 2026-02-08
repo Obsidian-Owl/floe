@@ -178,7 +178,9 @@ class TestValidateManifest:
 
             errors = validate_manifest(manifest)
             kind_errors = [e for e in errors if "kind" in e.lower()]
-            assert kind_errors == [], f"Kind {kind} should be valid but got: {kind_errors}"
+            assert (
+                kind_errors == []
+            ), f"Kind {kind} should be valid but got: {kind_errors}"
 
     @pytest.mark.requirement("FR-051")
     def test_validate_multiple_errors(self) -> None:
@@ -607,8 +609,16 @@ class TestWriteManifests:
 
         manifests: dict[str, list[dict[str, Any]]] = {
             "serviceaccounts.yaml": [
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "sa-1"}},
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "sa-2"}},
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "sa-1"},
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "sa-2"},
+                },
             ],
         }
 

@@ -199,7 +199,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         # Extract transforms from validated artifacts
         if validated.transforms is None:
-            logger.warning("No transforms found in artifacts, returning empty Definitions")
+            logger.warning(
+                "No transforms found in artifacts, returning empty Definitions"
+            )
             return Definitions(assets=[])
 
         # Get models list from transforms
@@ -224,7 +226,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         resources.update(semantic_resources)
 
         if "semantic_layer" in semantic_resources:
-            from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
+            from floe_orchestrator_dagster.assets.semantic_sync import (
+                sync_semantic_schemas,
+            )
 
             assets.append(sync_semantic_schemas)
 
@@ -233,8 +237,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         resources.update(ingestion_resources)
 
         # T034: Wire ingestion assets if ingestion resource is available
-        if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
-            from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+        if (
+            "ingestion" in resources
+            and validated.plugins
+            and validated.plugins.ingestion
+        ):
+            from floe_orchestrator_dagster.assets.ingestion import (
+                create_ingestion_assets,
+            )
 
             ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
             assets.extend(ingestion_assets)
@@ -274,7 +284,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             T110: Instantiate IcebergTableManager
             T111: Wire IcebergIOManager
         """
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         return try_create_iceberg_resources(plugins)
 
@@ -298,7 +310,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             T047: Create semantic resource factory
             T048: Wire into plugin.py
         """
-        from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
+        from floe_orchestrator_dagster.resources.semantic import (
+            try_create_semantic_resources,
+        )
 
         return try_create_semantic_resources(plugins)
 
@@ -321,11 +335,15 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             T033: Create ingestion resource factory
             T035: Wire into plugin.py
         """
-        from floe_orchestrator_dagster.resources.ingestion import try_create_ingestion_resources
+        from floe_orchestrator_dagster.resources.ingestion import (
+            try_create_ingestion_resources,
+        )
 
         return try_create_ingestion_resources(plugins)
 
-    def _models_to_transform_configs(self, models: list[dict[str, Any]]) -> list[TransformConfig]:
+    def _models_to_transform_configs(
+        self, models: list[dict[str, Any]]
+    ) -> list[TransformConfig]:
         """Convert ResolvedModel dicts to TransformConfig objects.
 
         Maps the CompiledArtifacts ResolvedModel structure to the
@@ -348,7 +366,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             configs.append(config)
         return configs
 
-    def create_assets_from_transforms(self, transforms: list[TransformConfig]) -> list[Any]:
+    def create_assets_from_transforms(
+        self, transforms: list[TransformConfig]
+    ) -> list[Any]:
         """Create Dagster software-defined assets from dbt transforms.
 
         Converts TransformConfig objects into Dagster assets, preserving
@@ -640,7 +660,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             return ValidationResult(
                 success=False,
                 message="Failed to connect to Dagster service",
-                errors=[f"Connection error: {e}. Ensure Dagster webserver is running at {url}."],
+                errors=[
+                    f"Connection error: {e}. Ensure Dagster webserver is running at {url}."
+                ],
             )
         except Exception as e:
             logger.error(
@@ -724,7 +746,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         # Build input/output dataset structures
         input_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in inputs]
-        output_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in outputs]
+        output_datasets = [
+            {"namespace": ds.namespace, "name": ds.name} for ds in outputs
+        ]
 
         return {
             "eventType": event_type,
@@ -785,7 +809,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         actual_namespace = job_namespace if job_namespace is not None else "floe"
         # TODO: Wire producer to lineage backend event emission
         _actual_producer = (
-            producer if producer is not None else f"floe-orchestrator-dagster/{self.version}"
+            producer
+            if producer is not None
+            else f"floe-orchestrator-dagster/{self.version}"
         )
 
         lineage_backend = getattr(self, "_lineage_backend", None)
@@ -861,7 +887,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         )
         month_pattern = "".join(month_pattern)
         # weekday: 0-6
-        weekday_pattern = r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
+        weekday_pattern = (
+            r"(\*|[0-6])(\/\d+)?(-[0-6])?(,[0-6](-[0-6])?)*(\/\d+)?|\*\/\d+"
+        )
 
         # Full cron pattern: 5 whitespace-separated fields
         cron_pattern = (
@@ -978,7 +1006,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             logger.info("Health check sensor loaded for auto-triggering")
             return health_check_sensor
         except ImportError:
-            logger.warning("Sensors module not available, sensor_definition returning None")
+            logger.warning(
+                "Sensors module not available, sensor_definition returning None"
+            )
             return None
 
     def get_default_schedule(self, job_name: str = "demo_pipeline") -> Any:

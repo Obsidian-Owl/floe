@@ -78,7 +78,8 @@ class TestGenerateCommand(IntegrationTestBase):
         )
         assert result.returncode != 0
         assert (
-            "Missing --config option" in result.stderr or "Missing --config option" in result.stdout
+            "Missing --config option" in result.stderr
+            or "Missing --config option" in result.stdout
         )
 
     @pytest.mark.integration

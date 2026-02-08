@@ -74,7 +74,10 @@ def mock_time_controller() -> Generator[MockTime, None, None]:
     """
     controller = MockTime(start=1000.0)  # Start at arbitrary point
 
-    with patch("time.time", controller.time), patch("time.perf_counter", controller.perf_counter):
+    with (
+        patch("time.time", controller.time),
+        patch("time.perf_counter", controller.perf_counter),
+    ):
         yield controller
 
 
@@ -148,7 +151,9 @@ class TestHealthCheckBasic:
         assert result.state == HealthState.HEALTHY
         # Accept various positive messages
         msg_lower = result.message.lower()
-        assert any(word in msg_lower for word in ["healthy", "ok", "responding", "normal"])
+        assert any(
+            word in msg_lower for word in ["healthy", "ok", "responding", "normal"]
+        )
 
     def test_health_check_unhealthy_when_list_namespaces_fails(
         self,
@@ -174,7 +179,9 @@ class TestHealthCheckBasic:
         result = connected_plugin.health_check()
 
         # Error details should be in message or details
-        assert "Connection refused" in result.message or "Connection refused" in str(result.details)
+        assert "Connection refused" in result.message or "Connection refused" in str(
+            result.details
+        )
 
 
 class TestHealthCheckResponseTime:
@@ -408,7 +415,11 @@ class TestHealthCheckTimestamp:
             assert checked_at.tzinfo == timezone.utc or str(checked_at.tzinfo) == "UTC"
         elif isinstance(checked_at, str):
             # ISO format with Z suffix or +00:00 indicates UTC
-            assert checked_at.endswith("Z") or "+00:00" in checked_at or checked_at.endswith("UTC")
+            assert (
+                checked_at.endswith("Z")
+                or "+00:00" in checked_at
+                or checked_at.endswith("UTC")
+            )
 
 
 class TestHealthCheckNotConnected:
@@ -423,7 +434,10 @@ class TestHealthCheckNotConnected:
         result = polaris_plugin.health_check()
 
         assert result.state == HealthState.UNHEALTHY
-        assert "not connected" in result.message.lower() or "connect" in result.message.lower()
+        assert (
+            "not connected" in result.message.lower()
+            or "connect" in result.message.lower()
+        )
 
     def test_health_check_not_connected_does_not_raise(
         self,
@@ -503,7 +517,11 @@ class TestHealthCheckLogging:
             connected_plugin.health_check()
 
             # Should log the health check operation
-            assert mock_logger.bind.called or mock_logger.info.called or mock_logger.debug.called
+            assert (
+                mock_logger.bind.called
+                or mock_logger.info.called
+                or mock_logger.debug.called
+            )
 
     def test_health_check_logs_failure(
         self,
@@ -517,7 +535,11 @@ class TestHealthCheckLogging:
             connected_plugin.health_check()
 
             # Should log the error/warning
-            assert mock_logger.warning.called or mock_logger.error.called or mock_logger.bind.called
+            assert (
+                mock_logger.warning.called
+                or mock_logger.error.called
+                or mock_logger.bind.called
+            )
 
 
 class TestHealthCheckEdgeCases:
@@ -544,7 +566,9 @@ class TestHealthCheckEdgeCases:
         """Test that health_check handles network errors gracefully."""
         from requests.exceptions import ConnectionError as RequestsConnectionError
 
-        mock_catalog.list_namespaces.side_effect = RequestsConnectionError("Host unreachable")
+        mock_catalog.list_namespaces.side_effect = RequestsConnectionError(
+            "Host unreachable"
+        )
 
         result = connected_plugin.health_check()
 

@@ -25,37 +25,49 @@ class TestLineageEventValidation:
     """
 
     @pytest.mark.requirement("FR-016")
-    def test_start_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_start_event_type_valid(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test START event type is accepted."""
         run_id = dagster_plugin.emit_lineage_event(RunState.START, "job")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_complete_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_complete_event_type_valid(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test COMPLETE event type is accepted."""
         run_id = dagster_plugin.emit_lineage_event(RunState.COMPLETE, "job")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_fail_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_fail_event_type_valid(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test FAIL event type is accepted."""
         run_id = dagster_plugin.emit_lineage_event(RunState.FAIL, "job")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_running_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_running_event_type_valid(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test RUNNING event type is accepted."""
         run_id = dagster_plugin.emit_lineage_event(RunState.RUNNING, "job")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_abort_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_abort_event_type_valid(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test ABORT event type is accepted."""
         run_id = dagster_plugin.emit_lineage_event(RunState.ABORT, "job")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_other_event_type_valid(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_other_event_type_valid(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test OTHER event type is accepted."""
         run_id = dagster_plugin.emit_lineage_event(RunState.OTHER, "job")
         assert isinstance(run_id, UUID)
@@ -68,13 +80,17 @@ class TestLineageEventInputsOutputs:
     """
 
     @pytest.mark.requirement("FR-017")
-    def test_empty_inputs_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_empty_inputs_outputs(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test lineage event with empty inputs and outputs."""
         run_id = dagster_plugin.emit_lineage_event(RunState.START, "job")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-017")
-    def test_single_input_dataset(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_single_input_dataset(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test lineage event with single input dataset."""
         inputs = [LineageDataset(namespace="floe", name="raw.customers")]
 
@@ -82,15 +98,21 @@ class TestLineageEventInputsOutputs:
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-017")
-    def test_single_output_dataset(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_single_output_dataset(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test lineage event with single output dataset."""
         outputs = [LineageDataset(namespace="floe", name="staging.stg_customers")]
 
-        run_id = dagster_plugin.emit_lineage_event(RunState.COMPLETE, "job", outputs=outputs)
+        run_id = dagster_plugin.emit_lineage_event(
+            RunState.COMPLETE, "job", outputs=outputs
+        )
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-017")
-    def test_multiple_inputs_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_multiple_inputs_outputs(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test lineage event with multiple inputs and outputs."""
         inputs = [
             LineageDataset(namespace="floe", name="raw.orders"),
@@ -132,7 +154,9 @@ class TestLineageEventNoOp:
     """
 
     @pytest.mark.requirement("FR-018")
-    def test_no_backend_is_noop(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_no_backend_is_noop(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test emit_lineage_event is no-op when no backend configured."""
         inputs = [LineageDataset(namespace="floe", name="input")]
         outputs = [LineageDataset(namespace="floe", name="output")]
@@ -154,7 +178,9 @@ class TestLineageEventNoOp:
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-018")
-    def test_no_backend_no_event_stored(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_no_backend_no_event_stored(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test no lineage event is stored when no backend configured."""
         dagster_plugin.emit_lineage_event(RunState.START, "job")
 
@@ -201,7 +227,9 @@ class TestOpenLineageEventStructure:
         assert "+" in event["eventTime"] or "Z" in event["eventTime"]
 
     @pytest.mark.requirement("FR-016")
-    def test_build_event_contains_producer(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_build_event_contains_producer(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test built event contains producer identifier."""
         event = dagster_plugin._build_openlineage_event("START", "job", [], [])
 
@@ -210,7 +238,9 @@ class TestOpenLineageEventStructure:
         assert dagster_plugin.version in event["producer"]
 
     @pytest.mark.requirement("FR-016")
-    def test_build_event_contains_job(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_build_event_contains_job(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test built event contains job with namespace and name."""
         event = dagster_plugin._build_openlineage_event("START", "my_job", [], [])
 
@@ -219,7 +249,9 @@ class TestOpenLineageEventStructure:
         assert event["job"]["name"] == "my_job"
 
     @pytest.mark.requirement("FR-017")
-    def test_build_event_contains_inputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_build_event_contains_inputs(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test built event contains inputs list."""
         inputs = [
             LineageDataset(namespace="floe", name="raw.customers"),
@@ -236,7 +268,9 @@ class TestOpenLineageEventStructure:
         assert event["inputs"][1]["name"] == "api.data"
 
     @pytest.mark.requirement("FR-017")
-    def test_build_event_contains_outputs(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_build_event_contains_outputs(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test built event contains outputs list."""
         outputs = [
             LineageDataset(namespace="floe", name="staging.stg_customers"),
@@ -267,13 +301,17 @@ class TestLineageEventEdgeCases:
     """
 
     @pytest.mark.requirement("FR-016")
-    def test_job_name_with_underscores(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_job_name_with_underscores(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test job name with underscores."""
         run_id = dagster_plugin.emit_lineage_event(RunState.START, "my_dbt_job_v2")
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_job_name_with_dots(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_job_name_with_dots(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test job name with dots."""
         run_id = dagster_plugin.emit_lineage_event(RunState.START, "staging.customers")
         assert isinstance(run_id, UUID)
@@ -291,8 +329,12 @@ class TestLineageEventEdgeCases:
     @pytest.mark.requirement("FR-017")
     def test_long_dataset_list(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test handling many datasets."""
-        inputs = [LineageDataset(namespace="floe", name=f"source_{i}") for i in range(20)]
-        outputs = [LineageDataset(namespace="floe", name=f"output_{i}") for i in range(10)]
+        inputs = [
+            LineageDataset(namespace="floe", name=f"source_{i}") for i in range(20)
+        ]
+        outputs = [
+            LineageDataset(namespace="floe", name=f"output_{i}") for i in range(10)
+        ]
 
         run_id = dagster_plugin.emit_lineage_event(
             RunState.COMPLETE, "big_job", inputs=inputs, outputs=outputs
@@ -307,18 +349,26 @@ class TestLineageEventEdgeCases:
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_emit_accepts_custom_run_id(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_emit_accepts_custom_run_id(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test emit_lineage_event accepts custom run_id."""
         from uuid import uuid4
 
         custom_id = uuid4()
-        run_id = dagster_plugin.emit_lineage_event(RunState.START, "job", run_id=custom_id)
+        run_id = dagster_plugin.emit_lineage_event(
+            RunState.START, "job", run_id=custom_id
+        )
 
         assert run_id == custom_id
         assert isinstance(run_id, UUID)
 
     @pytest.mark.requirement("FR-016")
-    def test_emit_accepts_custom_namespace(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
+    def test_emit_accepts_custom_namespace(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
         """Test emit_lineage_event accepts custom job_namespace."""
-        run_id = dagster_plugin.emit_lineage_event(RunState.START, "job", job_namespace="custom-ns")
+        run_id = dagster_plugin.emit_lineage_event(
+            RunState.START, "job", job_namespace="custom-ns"
+        )
         assert isinstance(run_id, UUID)

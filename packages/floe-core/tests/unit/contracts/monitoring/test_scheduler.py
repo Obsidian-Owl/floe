@@ -6,7 +6,6 @@ Tests the CheckScheduler class that manages periodic contract checks.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 import pytest
 

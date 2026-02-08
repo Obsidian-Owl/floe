@@ -118,7 +118,9 @@ class TestOTLPGrpcExporterConfiguration:
             otlp_protocol="grpc",
         )
 
-        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_grpc_exporter:
+        with patch(
+            "floe_core.telemetry.provider.OTLPSpanExporter"
+        ) as mock_grpc_exporter:
             mock_grpc_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -144,7 +146,9 @@ class TestOTLPGrpcExporterConfiguration:
             otlp_protocol="grpc",
         )
 
-        with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_grpc_exporter:
+        with patch(
+            "floe_core.telemetry.provider.OTLPSpanExporter"
+        ) as mock_grpc_exporter:
             mock_grpc_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -198,7 +202,9 @@ class TestOTLPHttpExporterConfiguration:
             otlp_protocol="http",
         )
 
-        with patch("floe_core.telemetry.provider.OTLPHttpSpanExporter") as mock_http_exporter:
+        with patch(
+            "floe_core.telemetry.provider.OTLPHttpSpanExporter"
+        ) as mock_http_exporter:
             mock_http_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -224,7 +230,9 @@ class TestOTLPHttpExporterConfiguration:
             otlp_protocol="http",
         )
 
-        with patch("floe_core.telemetry.provider.OTLPHttpSpanExporter") as mock_http_exporter:
+        with patch(
+            "floe_core.telemetry.provider.OTLPHttpSpanExporter"
+        ) as mock_http_exporter:
             mock_http_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -306,7 +314,9 @@ class TestOTLPAuthenticationConfiguration:
 
             call_kwargs = mock_exporter.call_args.kwargs
             assert call_kwargs["headers"] is not None
-            assert call_kwargs["headers"]["Authorization"] == "Bearer my-bearer-token-xyz"
+            assert (
+                call_kwargs["headers"]["Authorization"] == "Bearer my-bearer-token-xyz"
+            )
 
             provider.shutdown()
 
@@ -353,7 +363,9 @@ class TestOTLPAuthenticationConfiguration:
             authentication=auth,
         )
 
-        with patch("floe_core.telemetry.provider.OTLPHttpSpanExporter") as mock_exporter:
+        with patch(
+            "floe_core.telemetry.provider.OTLPHttpSpanExporter"
+        ) as mock_exporter:
             mock_exporter.return_value = MagicMock()
             provider = TelemetryProvider(config)
             provider.initialize()
@@ -450,7 +462,9 @@ class TestBatchSpanProcessorConfiguration:
             "floe_core.telemetry.provider.OTLPSpanExporter",
             return_value=mock_exporter,
         ):
-            with patch("floe_core.telemetry.provider.BatchSpanProcessor") as mock_processor:
+            with patch(
+                "floe_core.telemetry.provider.BatchSpanProcessor"
+            ) as mock_processor:
                 mock_processor.return_value = MagicMock()
                 provider = TelemetryProvider(config)
                 provider.initialize()
@@ -605,7 +619,9 @@ class TestResourceAttributesOnExport:
 
         with patch("floe_core.telemetry.provider.OTLPSpanExporter"):
             with patch("floe_core.telemetry.provider.BatchSpanProcessor"):
-                with patch("floe_core.telemetry.provider.Resource.create") as mock_resource:
+                with patch(
+                    "floe_core.telemetry.provider.Resource.create"
+                ) as mock_resource:
                     mock_resource.return_value = MagicMock()
                     provider = TelemetryProvider(config)
                     provider.initialize()
@@ -673,7 +689,9 @@ class TestNoOpModeExport:
         os.environ["OTEL_SDK_DISABLED"] = "true"
 
         try:
-            with patch("floe_core.telemetry.provider.OTLPSpanExporter") as mock_exporter:
+            with patch(
+                "floe_core.telemetry.provider.OTLPSpanExporter"
+            ) as mock_exporter:
                 provider = TelemetryProvider(config)
                 provider.initialize()
 

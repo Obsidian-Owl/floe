@@ -97,7 +97,9 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
             "semantic.output_dir": str(output_dir),
         },
     ) as span:
-        context.log.info(f"Syncing semantic schemas from {manifest_path} to {output_dir}")
+        context.log.info(
+            f"Syncing semantic schemas from {manifest_path} to {output_dir}"
+        )
 
         generated_files = semantic_layer.sync_from_dbt_manifest(
             manifest_path=manifest_path,
@@ -107,7 +109,9 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
         file_paths = [str(f) for f in generated_files]
         span.set_attribute("semantic.generated_file_count", len(file_paths))
 
-        context.log.info(f"Semantic schema sync complete: {len(file_paths)} files generated")
+        context.log.info(
+            f"Semantic schema sync complete: {len(file_paths)} files generated"
+        )
 
         logger.info(
             "Semantic schema sync completed",

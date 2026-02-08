@@ -133,7 +133,9 @@ class QualityCoverageError(QualityError):
         self.tier = tier
         self.actual_coverage = actual_coverage
         self.required_coverage = required_coverage
-        self.resolution = f"Add more tests to meet {tier} tier minimum of {required_coverage}%"
+        self.resolution = (
+            f"Add more tests to meet {tier} tier minimum of {required_coverage}%"
+        )
         message = (
             f"[{self.error_code}] Coverage violation for '{model_name}' ({tier} tier): "
             f"{actual_coverage:.1f}% < {required_coverage:.1f}% required. "

@@ -283,7 +283,11 @@ class ContractGenerator:
         result = base.copy()
 
         for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
                 # Deep merge for nested dicts, but NOT for schema
                 # Schema should be completely replaced
                 if key == "schema":

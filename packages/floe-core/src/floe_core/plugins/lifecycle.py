@@ -430,7 +430,9 @@ class PluginLifecycle:
                 )
 
         # Log summary
-        healthy_count = sum(1 for s in results.values() if s.state == HealthState.HEALTHY)
+        healthy_count = sum(
+            1 for s in results.values() if s.state == HealthState.HEALTHY
+        )
         logger.info(
             "health_check_all.completed",
             total=len(results),

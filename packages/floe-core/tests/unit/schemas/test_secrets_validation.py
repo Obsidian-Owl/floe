@@ -94,14 +94,23 @@ class TestResolveSecretReferences:
         config = {
             "connections": [
                 {"name": "primary", "password": SecretReference(name="primary-pass")},
-                {"name": "secondary", "password": SecretReference(name="secondary-pass")},
+                {
+                    "name": "secondary",
+                    "password": SecretReference(name="secondary-pass"),
+                },
             ],
         }
         result = resolve_secret_references(config)
 
         assert result["connections"][0]["name"] == "primary"
-        assert result["connections"][0]["password"] == "{{ env_var('FLOE_SECRET_PRIMARY_PASS') }}"
-        assert result["connections"][1]["password"] == "{{ env_var('FLOE_SECRET_SECONDARY_PASS') }}"
+        assert (
+            result["connections"][0]["password"]
+            == "{{ env_var('FLOE_SECRET_PRIMARY_PASS') }}"
+        )
+        assert (
+            result["connections"][1]["password"]
+            == "{{ env_var('FLOE_SECRET_SECONDARY_PASS') }}"
+        )
 
     @pytest.mark.requirement("001-FR-010")
     def test_resolve_list_with_non_dicts(self) -> None:
@@ -137,7 +146,9 @@ class TestResolveSecretReferences:
     def test_resolve_with_key(self) -> None:
         """Test that SecretReference with key generates correct syntax."""
         config = {
-            "api_key": SecretReference(source=SecretSource.VAULT, name="api-creds", key="token"),
+            "api_key": SecretReference(
+                source=SecretSource.VAULT, name="api-creds", key="token"
+            ),
         }
         result = resolve_secret_references(config)
 
@@ -175,7 +186,9 @@ class TestCheckStringForSecretPattern:
     def test_detects_jwt_token(self) -> None:
         """Test detection of base64-encoded JWT pattern."""
         result = _check_string_for_secret_pattern(
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "config.token", SECRET_VALUE_PATTERNS
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            "config.token",
+            SECRET_VALUE_PATTERNS,
         )
         assert result is not None
         assert "eyJ" in result
@@ -200,7 +213,9 @@ class TestCheckStringForSecretPattern:
     @pytest.mark.requirement("SC-004")
     def test_no_match_for_safe_string(self) -> None:
         """Test that safe strings are not flagged."""
-        result = _check_string_for_secret_pattern("localhost", "config.host", SECRET_VALUE_PATTERNS)
+        result = _check_string_for_secret_pattern(
+            "localhost", "config.host", SECRET_VALUE_PATTERNS
+        )
         assert result is None
 
     @pytest.mark.requirement("SC-004")
@@ -220,7 +235,9 @@ class TestCollectSecretWarnings:
     def test_collects_string_warning(self) -> None:
         """Test collecting warning from string value."""
         warnings: list[str] = []
-        _collect_secret_warnings("sk-test123", "config.key", SECRET_VALUE_PATTERNS, warnings)
+        _collect_secret_warnings(
+            "sk-test123", "config.key", SECRET_VALUE_PATTERNS, warnings
+        )
         assert len(warnings) == 1
         assert "sk-" in warnings[0]
 
@@ -263,7 +280,9 @@ class TestCollectSecretWarnings:
         _collect_secret_warnings(12345, "config.port", SECRET_VALUE_PATTERNS, warnings)
         assert len(warnings) == 0
 
-        _collect_secret_warnings(True, "config.enabled", SECRET_VALUE_PATTERNS, warnings)
+        _collect_secret_warnings(
+            True, "config.enabled", SECRET_VALUE_PATTERNS, warnings
+        )
         assert len(warnings) == 0
 
         _collect_secret_warnings(None, "config.value", SECRET_VALUE_PATTERNS, warnings)
@@ -343,7 +362,9 @@ class TestValidateNoSecretsInArtifacts:
 
         # With additional pattern - warning generated
         additional = frozenset({"CUSTOM_SECRET_"})
-        warnings = validate_no_secrets_in_artifacts(artifacts, additional_patterns=additional)
+        warnings = validate_no_secrets_in_artifacts(
+            artifacts, additional_patterns=additional
+        )
         assert len(warnings) == 1
         assert "CUSTOM_SECRET_" in warnings[0]
 

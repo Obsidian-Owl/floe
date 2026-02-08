@@ -98,7 +98,9 @@ class TestArtifactSbomGenerate:
     """Tests for SBOM generation via CLI."""
 
     @patch("floe_core.oci.attestation.generate_sbom")
-    def test_sbom_generate_success(self, mock_generate: MagicMock, tmp_path: Path) -> None:
+    def test_sbom_generate_success(
+        self, mock_generate: MagicMock, tmp_path: Path
+    ) -> None:
         mock_sbom = {
             "spdxVersion": "SPDX-2.3",
             "packages": [{"name": "click", "versionInfo": "8.1.0"}],
@@ -116,7 +118,9 @@ class TestArtifactSbomGenerate:
         assert "SPDX-2.3" in result.output
 
     @patch("floe_core.oci.attestation.generate_sbom")
-    def test_sbom_generate_to_file(self, mock_generate: MagicMock, tmp_path: Path) -> None:
+    def test_sbom_generate_to_file(
+        self, mock_generate: MagicMock, tmp_path: Path
+    ) -> None:
         mock_sbom = {"spdxVersion": "SPDX-2.3", "packages": []}
         mock_generate.return_value = mock_sbom
 
@@ -141,7 +145,9 @@ class TestArtifactSbomGenerate:
         assert saved_sbom["spdxVersion"] == "SPDX-2.3"
 
     @patch("floe_core.oci.attestation.generate_sbom")
-    def test_sbom_generate_syft_not_found(self, mock_generate: MagicMock, tmp_path: Path) -> None:
+    def test_sbom_generate_syft_not_found(
+        self, mock_generate: MagicMock, tmp_path: Path
+    ) -> None:
         from floe_core.oci.attestation import SyftNotFoundError
 
         mock_generate.side_effect = SyftNotFoundError()
@@ -192,7 +198,9 @@ class TestArtifactSbomAttach:
         mock_attach.assert_called_once()
 
     @patch("floe_core.oci.attestation.attach_attestation")
-    def test_sbom_attach_existing_file(self, mock_attach: MagicMock, tmp_path: Path) -> None:
+    def test_sbom_attach_existing_file(
+        self, mock_attach: MagicMock, tmp_path: Path
+    ) -> None:
         sbom_file = tmp_path / "sbom.json"
         sbom_file.write_text('{"spdxVersion": "SPDX-2.3"}')
 

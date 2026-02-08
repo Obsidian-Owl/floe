@@ -75,7 +75,9 @@ class MockCatalog:
             # Create a mock table with common attributes
             mock_table = MagicMock()
             mock_table.identifier = identifier
-            mock_table.metadata_location = f"s3://warehouse/{identifier}/metadata/v1.metadata.json"
+            mock_table.metadata_location = (
+                f"s3://warehouse/{identifier}/metadata/v1.metadata.json"
+            )
 
             # Create a proper mock schema with fields
             mock_schema = MagicMock()
@@ -246,7 +248,9 @@ class MockCatalogPlugin:
         """
         if namespace in self._namespaces:
             del self._namespaces[namespace]
-            self._catalog.namespaces = [ns for ns in self._catalog.namespaces if ns[0] != namespace]
+            self._catalog.namespaces = [
+                ns for ns in self._catalog.namespaces if ns[0] != namespace
+            ]
             if namespace in self._catalog.tables:
                 del self._catalog.tables[namespace]
 
@@ -477,7 +481,9 @@ def mock_storage_plugin() -> MockStoragePlugin:
 
 
 @pytest.fixture
-def connected_catalog_plugin(mock_catalog_plugin: MockCatalogPlugin) -> MockCatalogPlugin:
+def connected_catalog_plugin(
+    mock_catalog_plugin: MockCatalogPlugin,
+) -> MockCatalogPlugin:
     """Create a MockCatalogPlugin that is already connected.
 
     Args:

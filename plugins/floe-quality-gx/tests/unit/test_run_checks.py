@@ -29,7 +29,9 @@ class TestRunChecksBasicExecution:
     """Tests for run_checks() basic execution (T047)."""
 
     @pytest.mark.requirement("FR-004", "FR-027")
-    def test_run_checks_returns_suite_result(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_run_checks_returns_suite_result(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """run_checks returns QualitySuiteResult with correct structure."""
         result = gx_plugin.run_checks(
             suite_name="test_suite",
@@ -53,7 +55,9 @@ class TestRunChecksBasicExecution:
         assert isinstance(result, QualitySuiteResult)
 
     @pytest.mark.requirement("FR-004")
-    def test_run_suite_executes_checks(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_run_suite_executes_checks(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """run_suite executes all checks in the suite."""
         suite = QualitySuite(
             model_name="test_model",
@@ -84,7 +88,9 @@ class TestRunChecksBasicExecution:
         assert isinstance(result.checks, list)
 
     @pytest.mark.requirement("FR-004")
-    def test_run_suite_empty_checks_passes(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_run_suite_empty_checks_passes(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """run_suite with no checks returns passing result."""
         suite = QualitySuite(model_name="test_model", checks=[])
         connection_config: dict[str, Any] = {"dialect": "duckdb"}
@@ -99,7 +105,9 @@ class TestRunChecksFailures:
     """Tests for FLOE-DQ102 check failure handling (T049)."""
 
     @pytest.mark.requirement("FR-042")
-    def test_failed_checks_reported_in_results(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_failed_checks_reported_in_results(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """Failed checks are included in results with correct metadata."""
         # Mock GX to return failures
         suite = QualitySuite(
@@ -126,7 +134,9 @@ class TestRunChecksFailures:
             assert check_result.severity in SeverityLevel
 
     @pytest.mark.requirement("FR-042")
-    def test_suite_passed_false_when_checks_fail(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_suite_passed_false_when_checks_fail(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """Suite passed is False when any check fails.
 
         Exercises the plugin's run_suite with a check that includes failure
@@ -258,7 +268,9 @@ class TestValidateExpectations:
     """Tests for validate_expectations method."""
 
     @pytest.mark.requirement("FR-004")
-    def test_validate_expectations_returns_list(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_validate_expectations_returns_list(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """validate_expectations returns list of QualityCheckResult."""
         results = gx_plugin.validate_expectations(
             data_source="staging.orders",
@@ -273,7 +285,9 @@ class TestValidateExpectations:
             assert isinstance(result, QualityCheckResult)
 
     @pytest.mark.requirement("FR-004")
-    def test_validate_expectations_empty_list(self, gx_plugin: GreatExpectationsPlugin) -> None:
+    def test_validate_expectations_empty_list(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
         """validate_expectations handles empty expectations list."""
         results = gx_plugin.validate_expectations(
             data_source="staging.orders",

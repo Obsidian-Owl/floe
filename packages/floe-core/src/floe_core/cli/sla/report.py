@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import click
 import structlog
@@ -121,7 +122,9 @@ def _format_table(report: SLAComplianceReport) -> str:
     lines.append("=" * 80)
     lines.append(f"SLA COMPLIANCE REPORT: {report.contract_name}")
     lines.append("=" * 80)
-    lines.append(f"Period: {report.period_start.isoformat()} to {report.period_end.isoformat()}")
+    lines.append(
+        f"Period: {report.period_start.isoformat()} to {report.period_end.isoformat()}"
+    )
     lines.append(f"Generated: {report.generated_at.isoformat()}")
     lines.append("")
     lines.append(f"Overall Compliance: {report.overall_compliance_pct:.1f}%")
@@ -218,15 +221,17 @@ def report(
 
     try:
         # Get test data source from context if available
-        data_source: Callable[..., SLAComplianceReport] | None = ctx.obj.get(
-            "_data_source"
-        ) if ctx.obj else None
+        data_source: Callable[..., SLAComplianceReport] | None = (
+            ctx.obj.get("_data_source") if ctx.obj else None
+        )
 
         # Generate report (use test data source if provided, otherwise sample data)
         if data_source is not None:
             compliance_report = data_source(contract_name=contract, window=window)
         else:
-            compliance_report = _generate_sample_report(contract_name=contract, window=window)
+            compliance_report = _generate_sample_report(
+                contract_name=contract, window=window
+            )
 
         # Format output
         if output_format == "json":

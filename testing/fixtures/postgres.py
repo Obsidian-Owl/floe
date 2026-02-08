@@ -44,7 +44,9 @@ class PostgresConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    host: str = Field(default_factory=lambda: os.environ.get("POSTGRES_HOST", "postgres"))
+    host: str = Field(
+        default_factory=lambda: os.environ.get("POSTGRES_HOST", "postgres")
+    )
     port: int = Field(
         default_factory=lambda: int(os.environ.get("POSTGRES_PORT", "5432")),
         ge=1,
@@ -52,9 +54,13 @@ class PostgresConfig(BaseModel):
     )
     user: str = Field(default_factory=lambda: os.environ.get("POSTGRES_USER", "floe"))
     password: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.environ.get("POSTGRES_PASSWORD", "floe_test_password"))
+        default_factory=lambda: SecretStr(
+            os.environ.get("POSTGRES_PASSWORD", "floe_test_password")
+        )
     )
-    database: str = Field(default_factory=lambda: os.environ.get("POSTGRES_DATABASE", "floe_test"))
+    database: str = Field(
+        default_factory=lambda: os.environ.get("POSTGRES_DATABASE", "floe_test")
+    )
     namespace: str = Field(default="floe-test")
 
     @property

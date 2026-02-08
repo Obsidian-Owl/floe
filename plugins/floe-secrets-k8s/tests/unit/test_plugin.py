@@ -192,7 +192,9 @@ class TestK8sSecretsPluginGetSecret:
         return type("ApiException", (Exception,), {"status": 404})
 
     @pytest.fixture
-    def initialized_plugin(self, mock_api_exception: type[Exception]) -> K8sSecretsPlugin:
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
@@ -202,7 +204,9 @@ class TestK8sSecretsPluginGetSecret:
         return plugin
 
     @pytest.mark.requirement("7A-FR-010")
-    def test_get_secret_returns_value(self, initialized_plugin: K8sSecretsPlugin) -> None:
+    def test_get_secret_returns_value(
+        self, initialized_plugin: K8sSecretsPlugin
+    ) -> None:
         """Test get_secret returns decoded value for existing secret."""
         secret_value = "my-secret-value"
         encoded_value = base64.b64encode(secret_value.encode()).decode()
@@ -299,7 +303,9 @@ class TestK8sSecretsPluginSetSecret:
         return type("ApiException", (Exception,), {"status": 404})
 
     @pytest.fixture
-    def initialized_plugin(self, mock_api_exception: type[Exception]) -> K8sSecretsPlugin:
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
@@ -327,7 +333,9 @@ class TestK8sSecretsPluginSetSecret:
         initialized_plugin._api.create_namespaced_secret.assert_called_once()
 
     @pytest.mark.requirement("7A-FR-010")
-    def test_set_secret_updates_existing(self, initialized_plugin: K8sSecretsPlugin) -> None:
+    def test_set_secret_updates_existing(
+        self, initialized_plugin: K8sSecretsPlugin
+    ) -> None:
         """Test set_secret updates existing secret."""
         mock_secret = Mock()
         mock_secret.data = {}
@@ -368,7 +376,9 @@ class TestK8sSecretsPluginListSecrets:
         return type("ApiException", (Exception,), {"status": 404})
 
     @pytest.fixture
-    def initialized_plugin(self, mock_api_exception: type[Exception]) -> K8sSecretsPlugin:
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
@@ -378,7 +388,9 @@ class TestK8sSecretsPluginListSecrets:
         return plugin
 
     @pytest.mark.requirement("7A-FR-010")
-    def test_list_secrets_returns_all(self, initialized_plugin: K8sSecretsPlugin) -> None:
+    def test_list_secrets_returns_all(
+        self, initialized_plugin: K8sSecretsPlugin
+    ) -> None:
         """Test list_secrets returns all secrets."""
         mock_secret1 = Mock()
         mock_secret1.metadata = Mock()
@@ -401,7 +413,9 @@ class TestK8sSecretsPluginListSecrets:
         assert "secret2/password" in result
 
     @pytest.mark.requirement("7A-FR-010")
-    def test_list_secrets_filters_by_prefix(self, initialized_plugin: K8sSecretsPlugin) -> None:
+    def test_list_secrets_filters_by_prefix(
+        self, initialized_plugin: K8sSecretsPlugin
+    ) -> None:
         """Test list_secrets filters by prefix."""
         mock_secret1 = Mock()
         mock_secret1.metadata = Mock()
@@ -423,7 +437,9 @@ class TestK8sSecretsPluginListSecrets:
         assert "api-key/token" not in result
 
     @pytest.mark.requirement("7A-FR-010")
-    def test_list_secrets_empty_data(self, initialized_plugin: K8sSecretsPlugin) -> None:
+    def test_list_secrets_empty_data(
+        self, initialized_plugin: K8sSecretsPlugin
+    ) -> None:
         """Test list_secrets handles secrets with no data."""
         mock_secret = Mock()
         mock_secret.metadata = Mock()
@@ -448,7 +464,9 @@ class TestK8sSecretsPluginGetMultiKeySecret:
         return type("ApiException", (Exception,), {"status": 404})
 
     @pytest.fixture
-    def initialized_plugin(self, mock_api_exception: type[Exception]) -> K8sSecretsPlugin:
+    def initialized_plugin(
+        self, mock_api_exception: type[Exception]
+    ) -> K8sSecretsPlugin:
         """Create an initialized plugin with mocked API."""
         plugin = K8sSecretsPlugin()
         plugin._client = Mock()
