@@ -318,6 +318,26 @@ class ContractMonitor:
                 "metadata": dict(result.violation.metadata),
             })
 
+    async def cleanup_expired(self, retention_days: int = 90) -> int:
+        """Delete check results and violations older than retention period.
+
+        Args:
+            retention_days: Days to retain raw data. Defaults to 90.
+
+        Returns:
+            Number of deleted records. Returns 0 if no repository.
+        """
+        if self._repository is None:
+            self._log.warning("cleanup_no_repository")
+            return 0
+        try:
+            deleted = await self._repository.cleanup_expired(retention_days=retention_days)
+            self._log.info("cleanup_completed", retention_days=retention_days, deleted_count=deleted)
+            return deleted
+        except Exception as e:
+            self._log.error("cleanup_failed", error=str(e))
+            return 0
+
     async def discover_contracts(self) -> int:
         """Discover and register contracts on cold start.
 

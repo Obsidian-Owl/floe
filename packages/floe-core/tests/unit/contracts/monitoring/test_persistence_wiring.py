@@ -192,17 +192,18 @@ async def test_run_check_persists_pass_result(
 
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-031")
-async def test_run_check_persists_fail_result_and_violation(
+async def test_run_check_persists_quality_result(
     config: MonitoringConfig,
     sample_contract: RegisteredContract,
     mock_repository: MockRepository,
 ) -> None:
-    """Test that FAIL result and violation are saved to repository.
+    """Test that quality check result is saved to repository.
 
-    Verifies that when a check fails, both the result and violation are
-    persisted with correct details.
+    Verifies that when a quality check runs with an AsyncMock plugin,
+    the result is persisted. Quality checks with mock plugins produce
+    no violation (SKIP/ERROR status).
     """
-    # Create a monitor with mocked quality plugin that returns FAIL
+    # Create a monitor with mocked quality plugin
     mock_quality_plugin = AsyncMock()
     monitor = ContractMonitor(
         config=config,
@@ -214,19 +215,15 @@ async def test_run_check_persists_fail_result_and_violation(
     # Run quality check (will call quality_plugin)
     result = await monitor.run_check("orders_v1", ViolationType.QUALITY)
 
-    # Verify both result and violation were persisted
+    # Verify result was persisted
     assert len(mock_repository.check_results) == 1
     saved_result = mock_repository.check_results[0]
     assert saved_result["contract_name"] == "orders_v1"
     assert saved_result["check_type"] == ViolationType.QUALITY.value
 
-    # Quality check without plugin should skip (no violation)
-    # If it did produce a violation, it would be saved
-    if result.violation is not None:
-        assert len(mock_repository.violations) == 1
-        saved_violation = mock_repository.violations[0]
-        assert saved_violation["contract_name"] == "orders_v1"
-        assert saved_violation["violation_type"] == result.violation.violation_type.value
+    # Quality check with AsyncMock plugin produces no violation (SKIP/ERROR status)
+    assert result.violation is None
+    assert len(mock_repository.violations) == 0
 
 
 @pytest.mark.asyncio
@@ -467,6 +464,7 @@ async def test_discover_contracts_skips_already_registered(
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-034")
 async def test_cleanup_expired_deletes_old_check_results(
+    config: MonitoringConfig,
     mock_repository: MockRepository,
 ) -> None:
     """Test cleanup_expired deletes raw check results older than retention period.
@@ -500,8 +498,9 @@ async def test_cleanup_expired_deletes_old_check_results(
         },
     ]
 
-    # Run cleanup with default 90-day retention
-    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+    # Run cleanup through ContractMonitor
+    monitor = ContractMonitor(config=config, repository=mock_repository)
+    deleted_count = await monitor.cleanup_expired(retention_days=90)
 
     # Verify old result was deleted, recent one preserved
     assert deleted_count == 1
@@ -512,6 +511,7 @@ async def test_cleanup_expired_deletes_old_check_results(
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-034")
 async def test_cleanup_expired_deletes_old_violations(
+    config: MonitoringConfig,
     mock_repository: MockRepository,
 ) -> None:
     """Test cleanup_expired deletes raw violations older than retention period.
@@ -557,8 +557,9 @@ async def test_cleanup_expired_deletes_old_violations(
         },
     ]
 
-    # Run cleanup with 90-day retention
-    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+    # Run cleanup through ContractMonitor
+    monitor = ContractMonitor(config=config, repository=mock_repository)
+    deleted_count = await monitor.cleanup_expired(retention_days=90)
 
     # Verify old violation was deleted, recent one preserved
     assert deleted_count == 1
@@ -569,6 +570,7 @@ async def test_cleanup_expired_deletes_old_violations(
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-034")
 async def test_cleanup_expired_preserves_daily_aggregates(
+    config: MonitoringConfig,
     mock_repository: MockRepository,
 ) -> None:
     """Test cleanup_expired does NOT delete daily aggregates (indefinite retention).
@@ -597,8 +599,9 @@ async def test_cleanup_expired_preserves_daily_aggregates(
     # Store initial count
     initial_count = len(mock_repository.daily_aggregates)
 
-    # Run cleanup
-    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+    # Run cleanup through ContractMonitor
+    monitor = ContractMonitor(config=config, repository=mock_repository)
+    deleted_count = await monitor.cleanup_expired(retention_days=90)
 
     # Verify aggregate was NOT deleted
     assert len(mock_repository.daily_aggregates) == initial_count
@@ -610,6 +613,7 @@ async def test_cleanup_expired_preserves_daily_aggregates(
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-034")
 async def test_cleanup_expired_deletes_both_results_and_violations(
+    config: MonitoringConfig,
     mock_repository: MockRepository,
 ) -> None:
     """Test cleanup_expired deletes both old results and violations together.
@@ -675,8 +679,9 @@ async def test_cleanup_expired_deletes_both_results_and_violations(
         },
     ]
 
-    # Run cleanup
-    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+    # Run cleanup through ContractMonitor
+    monitor = ContractMonitor(config=config, repository=mock_repository)
+    deleted_count = await monitor.cleanup_expired(retention_days=90)
 
     # Verify all old records were deleted
     assert deleted_count == 4  # 2 check results + 2 violations
@@ -687,6 +692,7 @@ async def test_cleanup_expired_deletes_both_results_and_violations(
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-034")
 async def test_cleanup_expired_with_custom_retention_days(
+    config: MonitoringConfig,
     mock_repository: MockRepository,
 ) -> None:
     """Test cleanup_expired respects custom retention_days parameter.
@@ -720,8 +726,9 @@ async def test_cleanup_expired_with_custom_retention_days(
         },
     ]
 
-    # Run cleanup with 30-day retention (not default 90)
-    deleted_count = await mock_repository.cleanup_expired(retention_days=30)
+    # Run cleanup through ContractMonitor with 30-day retention
+    monitor = ContractMonitor(config=config, repository=mock_repository)
+    deleted_count = await monitor.cleanup_expired(retention_days=30)
 
     # Verify only the too-old result was deleted
     assert deleted_count == 1
@@ -732,6 +739,7 @@ async def test_cleanup_expired_with_custom_retention_days(
 @pytest.mark.asyncio
 @pytest.mark.requirement("3D-FR-034")
 async def test_cleanup_expired_empty_database(
+    config: MonitoringConfig,
     mock_repository: MockRepository,
 ) -> None:
     """Test cleanup_expired handles empty database gracefully.
@@ -742,8 +750,9 @@ async def test_cleanup_expired_empty_database(
     assert len(mock_repository.check_results) == 0
     assert len(mock_repository.violations) == 0
 
-    # Run cleanup
-    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+    # Run cleanup through ContractMonitor
+    monitor = ContractMonitor(config=config, repository=mock_repository)
+    deleted_count = await monitor.cleanup_expired(retention_days=90)
 
     # Verify it handled empty case
     assert deleted_count == 0

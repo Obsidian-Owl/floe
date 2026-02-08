@@ -103,9 +103,9 @@ async def test_availability_ping_success() -> None:
     assert result.contract_name == "test_contract"
     assert result.violation is None
     assert "latency_ms" in result.details
-    assert result.details["latency_ms"] == 15.5
+    assert result.details["latency_ms"] == pytest.approx(15.5)
     assert "availability_ratio" in result.details
-    assert result.details["availability_ratio"] == 1.0  # 100% on first ping
+    assert result.details["availability_ratio"] == pytest.approx(1.0)  # 100% on first ping
 
 
 @pytest.mark.requirement("3D-FR-020")
@@ -202,11 +202,6 @@ async def test_availability_recovery_reset() -> None:
     assert result_fail.violation.severity == ViolationSeverity.ERROR
 
     # Success: resets counter
-    check = AvailabilityCheck(compute_plugin=success_plugin)
-    # Transfer state from the previous check instance
-    check._ping_history = check._ping_history.copy()
-    check._consecutive_failures = check._consecutive_failures.copy()
-
     # Actually, we need to use the same instance. Let's modify approach.
     # The check maintains state across calls on the same instance.
     check_stateful = AvailabilityCheck(compute_plugin=fail_plugin)
@@ -239,21 +234,21 @@ async def test_availability_ratio_calculation() -> None:
 
     # First ping: 100%
     result1 = await check.execute(contract=contract, config=config)
-    assert result1.details["availability_ratio"] == 1.0
+    assert result1.details["availability_ratio"] == pytest.approx(1.0)
 
     # Second ping (success): 100%
     result2 = await check.execute(contract=contract, config=config)
-    assert result2.details["availability_ratio"] == 1.0
+    assert result2.details["availability_ratio"] == pytest.approx(1.0)
 
     # Third ping (fail): 66.7%
     check._compute_plugin = MockComputePlugin(success=False)
     result3 = await check.execute(contract=contract, config=config)
-    assert abs(result3.details["availability_ratio"] - 0.6667) < 0.01
+    assert result3.details["availability_ratio"] == pytest.approx(0.6667, abs=0.01)
 
     # Fourth ping (success): 75%
     check._compute_plugin = MockComputePlugin(success=True)
     result4 = await check.execute(contract=contract, config=config)
-    assert abs(result4.details["availability_ratio"] - 0.75) < 0.01
+    assert result4.details["availability_ratio"] == pytest.approx(0.75, abs=0.01)
 
 
 @pytest.mark.requirement("3D-FR-021")
@@ -279,7 +274,7 @@ async def test_availability_below_sla_threshold() -> None:
     # 5 consecutive failures = CRITICAL severity
     assert result.violation.severity == ViolationSeverity.CRITICAL
     assert "availability" in result.violation.message.lower()
-    assert result.details["availability_ratio"] == 0.2
+    assert result.details["availability_ratio"] == pytest.approx(0.2)
     assert result.violation.expected_value == "80.0%"
     assert result.violation.actual_value == "20.0%"
 

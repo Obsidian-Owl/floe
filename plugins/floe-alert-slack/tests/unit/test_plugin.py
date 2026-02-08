@@ -43,6 +43,24 @@ def test_slack_name() -> None:
 
 
 @pytest.mark.requirement("3D-FR-026")
+def test_slack_version() -> None:
+    """Test plugin version is valid semver string."""
+    plugin = SlackAlertPlugin(webhook_url="https://hooks.slack.com/test")
+    version = plugin.version
+    # Validate semver format: X.Y.Z
+    parts = version.split(".")
+    assert len(parts) == 3
+    assert all(part.isdigit() for part in parts)
+
+
+@pytest.mark.requirement("3D-FR-026")
+def test_slack_floe_api_version() -> None:
+    """Test plugin floe_api_version is '1.0'."""
+    plugin = SlackAlertPlugin(webhook_url="https://hooks.slack.com/test")
+    assert plugin.floe_api_version == "1.0"
+
+
+@pytest.mark.requirement("3D-FR-026")
 def test_slack_validate_config_valid() -> None:
     plugin = SlackAlertPlugin(webhook_url="https://hooks.slack.com/test")
     assert plugin.validate_config() == []

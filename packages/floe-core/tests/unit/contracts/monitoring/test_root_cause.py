@@ -26,25 +26,15 @@ def _make_contract(
     contract_data: dict[str, Any] | None = None,
     connection_config: dict[str, Any] | None = None,
     last_check_times: dict[str, datetime] | None = None,
+    registered_at: datetime | None = None,
 ) -> RegisteredContract:
-    """Create a test RegisteredContract instance.
-
-    Args:
-        contract_name: Name of the contract.
-        contract_version: Version of the contract.
-        contract_data: Contract metadata (defaults to empty dict).
-        connection_config: Connection config (defaults to empty dict).
-        last_check_times: Map of check type to last execution time.
-
-    Returns:
-        RegisteredContract instance for testing.
-    """
+    """Create a test RegisteredContract instance."""
     contract = RegisteredContract(
         contract_name=contract_name,
         contract_version=contract_version,
         contract_data=contract_data or {},
         connection_config=connection_config or {},
-        registered_at=datetime.now(tz=timezone.utc),
+        registered_at=registered_at or datetime.now(tz=timezone.utc),
     )
     if last_check_times:
         contract.last_check_times = last_check_times
@@ -55,11 +45,9 @@ def _make_contract(
 def test_build_context_basic() -> None:
     """Test basic context fields are present."""
     registered_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    contract = RegisteredContract(
+    contract = _make_contract(
         contract_name="orders_v1",
         contract_version="2.0.0",
-        contract_data={},
-        connection_config={},
         registered_at=registered_at,
     )
 

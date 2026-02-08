@@ -343,15 +343,6 @@ def test_uuid_primary_key_generation() -> None:
     assert callable(id_column.default.arg)
     assert id_column.default.arg.__name__ == "uuid4"
 
-    # The default function in SQLAlchemy wrapped context expects a ctx parameter
-    # But we can verify it's the right function by checking the name and that
-    # uuid.uuid4 produces UUIDs when called directly
-    uuid1 = uuid.uuid4()
-    uuid2 = uuid.uuid4()
-    assert isinstance(uuid1, uuid.UUID)
-    assert isinstance(uuid2, uuid.UUID)
-    assert uuid1 != uuid2
-
 
 @pytest.mark.requirement("3D-FR-031")
 def test_base_class_inheritance() -> None:

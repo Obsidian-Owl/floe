@@ -25,17 +25,7 @@ def _make_contract(
     contract_data: dict[str, Any] | None = None,
     connection_config: dict[str, Any] | None = None,
 ) -> RegisteredContract:
-    """Create a test RegisteredContract instance.
-
-    Args:
-        contract_name: Name of the contract.
-        contract_version: Version of the contract.
-        contract_data: Contract metadata (defaults to empty dict).
-        connection_config: Connection config (defaults to empty dict).
-
-    Returns:
-        RegisteredContract instance for testing.
-    """
+    """Create a test RegisteredContract instance."""
     return RegisteredContract(
         contract_name=contract_name,
         contract_version=contract_version,

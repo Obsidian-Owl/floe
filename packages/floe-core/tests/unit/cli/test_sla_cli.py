@@ -1,4 +1,4 @@
-"""Integration tests for SLA CLI commands.
+"""Unit tests for SLA CLI commands.
 
 Task: T087
 Requirements: 3D-FR-038, 3D-FR-039
@@ -26,7 +26,6 @@ def cli_runner() -> CliRunner:
 
 
 @pytest.mark.requirement("3D-FR-038")
-@pytest.mark.integration
 def test_sla_cli_help(cli_runner: CliRunner) -> None:
     """Test that the sla CLI group shows help text.
 
@@ -42,7 +41,6 @@ def test_sla_cli_help(cli_runner: CliRunner) -> None:
 
 
 @pytest.mark.requirement("3D-FR-038")
-@pytest.mark.integration
 def test_sla_cli_report_requires_contract(cli_runner: CliRunner) -> None:
     """Test that sla report command works with optional contract parameter.
 

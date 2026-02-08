@@ -48,6 +48,34 @@ def test_email_name() -> None:
 
 
 @pytest.mark.requirement("3D-FR-026")
+def test_email_version() -> None:
+    """Test plugin version is valid semver string."""
+    plugin = EmailAlertPlugin(
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        from_address="alerts@example.com",
+        to_addresses=["team@example.com"],
+    )
+    version = plugin.version
+    # Validate semver format: X.Y.Z
+    parts = version.split(".")
+    assert len(parts) == 3
+    assert all(part.isdigit() for part in parts)
+
+
+@pytest.mark.requirement("3D-FR-026")
+def test_email_floe_api_version() -> None:
+    """Test plugin floe_api_version is '1.0'."""
+    plugin = EmailAlertPlugin(
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        from_address="alerts@example.com",
+        to_addresses=["team@example.com"],
+    )
+    assert plugin.floe_api_version == "1.0"
+
+
+@pytest.mark.requirement("3D-FR-026")
 def test_email_validate_config_valid() -> None:
     plugin = EmailAlertPlugin(
         smtp_host="smtp.example.com",

@@ -43,6 +43,24 @@ def test_alertmanager_name() -> None:
 
 
 @pytest.mark.requirement("3D-FR-026")
+def test_alertmanager_version() -> None:
+    """Test plugin version is valid semver string."""
+    plugin = AlertmanagerPlugin(api_url="http://alertmanager:9093")
+    version = plugin.version
+    # Validate semver format: X.Y.Z
+    parts = version.split(".")
+    assert len(parts) == 3
+    assert all(part.isdigit() for part in parts)
+
+
+@pytest.mark.requirement("3D-FR-026")
+def test_alertmanager_floe_api_version() -> None:
+    """Test plugin floe_api_version is '1.0'."""
+    plugin = AlertmanagerPlugin(api_url="http://alertmanager:9093")
+    assert plugin.floe_api_version == "1.0"
+
+
+@pytest.mark.requirement("3D-FR-026")
 def test_alertmanager_validate_config_valid() -> None:
     plugin = AlertmanagerPlugin(api_url="http://alertmanager:9093")
     assert plugin.validate_config() == []
