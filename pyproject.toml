@@ -12,6 +12,7 @@ dependencies = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",  # Test timeout enforcement for E2E tests
+    "pytest-asyncio>=0.23",  # Async test support for alert channel plugins
     "pytest-codspeed>=3.0",  # Performance benchmarking with CodSpeed
     "mypy>=1.8",
     "ruff>=0.3",
@@ -63,6 +64,7 @@ dependencies = [
     "floe-alert-slack",
     "floe-alert-email",
     "floe-alert-alertmanager",
+    "floe-alert-webhook",
 ]
 
 [tool.uv]
@@ -98,6 +100,7 @@ floe-ingestion-dlt = { path = "plugins/floe-ingestion-dlt", editable = true }
 floe-alert-slack = { path = "plugins/floe-alert-slack", editable = true }
 floe-alert-email = { path = "plugins/floe-alert-email", editable = true }
 floe-alert-alertmanager = { path = "plugins/floe-alert-alertmanager", editable = true }
+floe-alert-webhook = { path = "plugins/floe-alert-webhook", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -122,6 +125,7 @@ pythonpath = [
     "plugins/floe-alert-slack/src",
     "plugins/floe-alert-email/src",
     "plugins/floe-alert-alertmanager/src",
+    "plugins/floe-alert-webhook/src",
     ".",
 ]
 python_files = ["test_*.py"]
