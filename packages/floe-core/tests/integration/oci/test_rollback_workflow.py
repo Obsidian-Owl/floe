@@ -39,9 +39,7 @@ if TYPE_CHECKING:
     pass
 
 
-def _create_valid_compiled_artifacts(
-    unique_id: str, product_prefix: str = "rollback"
-) -> Any:
+def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "rollback") -> Any:
     """Create a valid CompiledArtifacts instance for rollback testing.
 
     Args:

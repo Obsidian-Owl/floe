@@ -186,9 +186,9 @@ class TestMarquezLineageIntegration:
         # Verify nodes exist in graph
         node_ids = {n["id"] for n in lineage["graph"]}
         # Marquez returns node IDs like "dataset:ns:name" or "job:ns:name"
-        assert any(
-            "marts.customers" in nid for nid in node_ids
-        ), f"Final output dataset not in lineage graph. Nodes: {node_ids}"
+        assert any("marts.customers" in nid for nid in node_ids), (
+            f"Final output dataset not in lineage graph. Nodes: {node_ids}"
+        )
 
     def test_emit_with_schema_facets(self, marquez_port: int) -> None:
         """Emit event with schema facets and verify in Marquez.
@@ -368,9 +368,7 @@ class TestMarquezLineageIntegration:
 
             jobs = _get_json(marquez_port, f"/api/v1/namespaces/{ns}/jobs")
             job_names = [j["name"] for j in jobs["jobs"]]
-            assert (
-                "transport_test_job" in job_names
-            ), f"Job not found. Jobs: {job_names}"
+            assert "transport_test_job" in job_names, f"Job not found. Jobs: {job_names}"
 
             runs = _get_json(
                 marquez_port,

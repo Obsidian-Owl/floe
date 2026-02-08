@@ -149,9 +149,7 @@ class IncidentManager:
         violation_name = event.violation_type.value.replace("_", " ").title()
         return f"{violation_name} violation on {event.contract_name}"
 
-    def create_or_correlate(
-        self, event: ContractViolationEvent
-    ) -> tuple[Incident, bool]:
+    def create_or_correlate(self, event: ContractViolationEvent) -> tuple[Incident, bool]:
         """Create new incident or correlate to existing open incident.
 
         Correlation logic (FR-041):

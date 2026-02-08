@@ -243,9 +243,7 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             FR-049: Configurable timeout
             FR-050: Response time measurement
         """
-        effective_timeout = (
-            timeout if timeout is not None else self._config.health_check_timeout
-        )
+        effective_timeout = timeout if timeout is not None else self._config.health_check_timeout
 
         if effective_timeout < _MIN_TIMEOUT or effective_timeout > _MAX_TIMEOUT:
             msg = (

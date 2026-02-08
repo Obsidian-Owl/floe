@@ -291,8 +291,7 @@ class TestVerificationDuringPullE2E(IntegrationTestBase):
             client.pull(tag=test_artifact_tag)
 
         assert (
-            "unsigned" in str(exc_info.value).lower()
-            or "signature" in str(exc_info.value).lower()
+            "unsigned" in str(exc_info.value).lower() or "signature" in str(exc_info.value).lower()
         )
 
     @pytest.mark.requirement("8B-SC-006")
@@ -339,9 +338,7 @@ class TestVerificationDuringPullE2E(IntegrationTestBase):
         verification_client = VerificationClient(policy)
 
         content = artifacts_path.read_bytes()
-        artifact_ref = (
-            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
-        )
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         # Time the verification operation
         start_time = time.monotonic()
@@ -562,19 +559,13 @@ class TestVerificationTracingE2E(IntegrationTestBase):
         verification_client = VerificationClient(policy, environment="staging")
 
         content = artifacts_path.read_bytes()
-        artifact_ref = (
-            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
-        )
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         # Mock the tracer
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("floe_core.oci.verification.tracer", mock_tracer):
             verification_client.verify(
@@ -589,9 +580,7 @@ class TestVerificationTracingE2E(IntegrationTestBase):
 
         # Verify span attributes were set
         assert mock_span.set_attribute.called
-        calls = {
-            call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list
-        }
+        calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert "floe.artifact.ref" in calls
         assert "floe.verification.enforcement" in calls
 
@@ -706,9 +695,7 @@ class TestCertificateRotationGracePeriodE2E(IntegrationTestBase):
 
         verification_client = VerificationClient(policy)
         content = artifacts_path.read_bytes()
-        artifact_ref = (
-            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
-        )
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         # Verification should proceed (even for unsigned, in warn mode)
         result = verification_client.verify(
@@ -775,9 +762,7 @@ class TestOfflineVerificationBundleE2E(IntegrationTestBase):
 
         verification_client = VerificationClient(policy)
         content = artifacts_path.read_bytes()
-        artifact_ref = (
-            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
-        )
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         result = verification_client.verify(
             content=content,

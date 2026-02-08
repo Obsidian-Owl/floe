@@ -22,9 +22,7 @@ _MAX_NAMESPACE_LENGTH = 63
 def _validate_namespace(namespace: str) -> str:
     """Validate Kubernetes namespace name (RFC 1123 DNS label)."""
     if len(namespace) > _MAX_NAMESPACE_LENGTH:
-        raise ValueError(
-            f"Namespace too long: {len(namespace)} > {_MAX_NAMESPACE_LENGTH}"
-        )
+        raise ValueError(f"Namespace too long: {len(namespace)} > {_MAX_NAMESPACE_LENGTH}")
     if not _NAMESPACE_PATTERN.match(namespace):
         raise ValueError(f"Invalid namespace: {namespace}")
     return namespace
@@ -75,9 +73,7 @@ class PortRule(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     port: int = Field(..., ge=1, le=65535, description="Port number")
-    protocol: Literal["TCP", "UDP"] = Field(
-        default="TCP", description="Protocol (TCP or UDP)"
-    )
+    protocol: Literal["TCP", "UDP"] = Field(default="TCP", description="Protocol (TCP or UDP)")
 
 
 class EgressRule(BaseModel):
@@ -85,9 +81,7 @@ class EgressRule(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    to_namespace: str | None = Field(
-        default=None, description="Destination namespace selector"
-    )
+    to_namespace: str | None = Field(default=None, description="Destination namespace selector")
     to_cidr: str | None = Field(default=None, description="Destination CIDR block")
     ports: tuple[PortRule, ...] = Field(..., min_length=1, description="Allowed ports")
 
@@ -121,9 +115,7 @@ class IngressRule(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    from_namespace: str | None = Field(
-        default=None, description="Source namespace selector"
-    )
+    from_namespace: str | None = Field(default=None, description="Source namespace selector")
     from_pod_labels: dict[str, str] = Field(
         default_factory=dict, description="Source pod label selector"
     )
@@ -196,9 +188,7 @@ class NetworkPolicyConfig(BaseModel):
                 },
             },
             "spec": {
-                "podSelector": (
-                    {"matchLabels": self.pod_selector} if self.pod_selector else {}
-                ),
+                "podSelector": ({"matchLabels": self.pod_selector} if self.pod_selector else {}),
                 "policyTypes": list(self.policy_types),
             },
         }
@@ -224,24 +214,18 @@ class NetworkPolicyConfig(BaseModel):
             from_selectors.append(
                 {
                     "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": rule.from_namespace
-                        }
+                        "matchLabels": {"kubernetes.io/metadata.name": rule.from_namespace}
                     }
                 }
             )
         if rule.from_pod_labels:
-            from_selectors.append(
-                {"podSelector": {"matchLabels": rule.from_pod_labels}}
-            )
+            from_selectors.append({"podSelector": {"matchLabels": rule.from_pod_labels}})
 
         if from_selectors:
             k8s_rule["from"] = from_selectors
 
         if rule.ports:
-            k8s_rule["ports"] = [
-                {"port": p.port, "protocol": p.protocol} for p in rule.ports
-            ]
+            k8s_rule["ports"] = [{"port": p.port, "protocol": p.protocol} for p in rule.ports]
 
         return k8s_rule
 
@@ -253,18 +237,14 @@ class NetworkPolicyConfig(BaseModel):
             k8s_rule["to"].append(
                 {
                     "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": rule.to_namespace
-                        }
+                        "matchLabels": {"kubernetes.io/metadata.name": rule.to_namespace}
                     }
                 }
             )
         elif rule.to_cidr:
             k8s_rule["to"].append({"ipBlock": {"cidr": rule.to_cidr}})
 
-        k8s_rule["ports"] = [
-            {"port": p.port, "protocol": p.protocol} for p in rule.ports
-        ]
+        k8s_rule["ports"] = [{"port": p.port, "protocol": p.protocol} for p in rule.ports]
 
         return k8s_rule
 

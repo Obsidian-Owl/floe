@@ -22,9 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
-def _run_helm_command(
-    args: list[str], timeout: int = 300
-) -> subprocess.CompletedProcess[str]:
+def _run_helm_command(args: list[str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
     """Run a helm command with timeout.
 
     Args:
@@ -44,9 +42,7 @@ def _run_helm_command(
     )
 
 
-def _run_kubectl_command(
-    args: list[str], timeout: int = 60
-) -> subprocess.CompletedProcess[str]:
+def _run_kubectl_command(args: list[str], timeout: int = 60) -> subprocess.CompletedProcess[str]:
     """Run a kubectl command with timeout.
 
     Args:
@@ -153,9 +149,7 @@ class TestPlatformUpgrade:
         """Verify kubectl access to cluster."""
         result = _run_kubectl_command(["cluster-info"])
         if result.returncode != 0:
-            pytest.fail(
-                "Kubernetes cluster not available.\nStart cluster with: make kind-up"
-            )
+            pytest.fail("Kubernetes cluster not available.\nStart cluster with: make kind-up")
 
     @pytest.mark.requirement("SC-008")
     def test_initial_install(

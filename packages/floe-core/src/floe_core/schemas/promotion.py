@@ -174,9 +174,7 @@ class SecurityScanResult(BaseModel):
     @property
     def total_vulnerabilities(self) -> int:
         """Total count of all vulnerabilities."""
-        return (
-            self.critical_count + self.high_count + self.medium_count + self.low_count
-        )
+        return self.critical_count + self.high_count + self.medium_count + self.low_count
 
 
 class GateResult(BaseModel):

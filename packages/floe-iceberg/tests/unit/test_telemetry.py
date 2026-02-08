@@ -40,9 +40,7 @@ def mock_tracer() -> Generator[MagicMock, None, None]:
     mock_tracer = MagicMock()
     mock_tracer.start_as_current_span = MagicMock(return_value=mock_span)
 
-    with patch(
-        "floe_iceberg.telemetry.get_tracer", return_value=mock_tracer
-    ) as mock_get_tracer:
+    with patch("floe_iceberg.telemetry.get_tracer", return_value=mock_tracer) as mock_get_tracer:
         mock_get_tracer.return_value = mock_tracer
         yield mock_tracer
 
@@ -77,9 +75,7 @@ class TestTracedDecorator:
         assert call_args[0][0] == "my_function"
 
     @pytest.mark.requirement("FR-041")
-    def test_traced_includes_operation_name_attribute(
-        self, mock_tracer: MagicMock
-    ) -> None:
+    def test_traced_includes_operation_name_attribute(self, mock_tracer: MagicMock) -> None:
         """Test span includes operation name attribute.
 
         Acceptance criteria from T069:
@@ -130,16 +126,12 @@ class TestTracedDecorator:
 
         write_data()
 
-        mock_span = (
-            mock_tracer.start_as_current_span.return_value.__enter__.return_value
-        )
+        mock_span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
         mock_span.set_attribute.assert_any_call("table", "customers")
         mock_span.set_attribute.assert_any_call("namespace", "bronze")
 
     @pytest.mark.requirement("FR-041")
-    def test_traced_preserves_function_return_value(
-        self, mock_tracer: MagicMock
-    ) -> None:
+    def test_traced_preserves_function_return_value(self, mock_tracer: MagicMock) -> None:
         """Test @traced preserves decorated function's return value."""
         from floe_iceberg.telemetry import traced
 
@@ -213,15 +205,11 @@ class TestTracedDecorator:
         with pytest.raises(ValueError, match="Something went wrong"):
             failing_function()
 
-        mock_span = (
-            mock_tracer.start_as_current_span.return_value.__enter__.return_value
-        )
+        mock_span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
         mock_span.record_exception.assert_called_once()
 
     @pytest.mark.requirement("FR-041")
-    def test_traced_sets_error_status_on_exception(
-        self, mock_tracer: MagicMock
-    ) -> None:
+    def test_traced_sets_error_status_on_exception(self, mock_tracer: MagicMock) -> None:
         """Test @traced sets span status to error when exception occurs."""
         from opentelemetry.trace import StatusCode
 
@@ -235,9 +223,7 @@ class TestTracedDecorator:
         with pytest.raises(RuntimeError):
             failing_function()
 
-        mock_span = (
-            mock_tracer.start_as_current_span.return_value.__enter__.return_value
-        )
+        mock_span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
         # Check set_status was called with error status
         mock_span.set_status.assert_called()
         status_call = mock_span.set_status.call_args[0][0]
@@ -272,15 +258,11 @@ class TestTracedDecorator:
         assert documented_function.__doc__ == "This is the docstring."
 
     @pytest.mark.requirement("FR-042")
-    def test_traced_with_dynamic_attributes_callable(
-        self, mock_tracer: MagicMock
-    ) -> None:
+    def test_traced_with_dynamic_attributes_callable(self, mock_tracer: MagicMock) -> None:
         """Test @traced supports callable for dynamic attributes from function args."""
         from floe_iceberg.telemetry import traced
 
-        def extract_attributes(
-            table_id: str, namespace: str, **kwargs: Any
-        ) -> dict[str, str]:
+        def extract_attributes(table_id: str, namespace: str, **kwargs: Any) -> dict[str, str]:
             return {"table_id": table_id, "namespace": namespace}
 
         @traced(attributes_fn=extract_attributes)
@@ -290,9 +272,7 @@ class TestTracedDecorator:
         result = load_table("customers", "bronze")
 
         assert result == "bronze.customers"
-        mock_span = (
-            mock_tracer.start_as_current_span.return_value.__enter__.return_value
-        )
+        mock_span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
         mock_span.set_attribute.assert_any_call("table_id", "customers")
         mock_span.set_attribute.assert_any_call("namespace", "bronze")
 
@@ -318,9 +298,7 @@ class TestTracerConfiguration:
         """Test get_tracer returns tracer from trace.get_tracer with correct name."""
         from floe_core.telemetry.tracer_factory import reset_tracer
 
-        with patch(
-            "floe_core.telemetry.tracer_factory.trace.get_tracer"
-        ) as mock_get_tracer:
+        with patch("floe_core.telemetry.tracer_factory.trace.get_tracer") as mock_get_tracer:
             # Reset the cached tracer via factory
             reset_tracer()
 

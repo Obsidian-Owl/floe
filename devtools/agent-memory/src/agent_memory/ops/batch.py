@@ -65,14 +65,10 @@ class BatchResult(BaseModel):
 
     total_files: int = Field(ge=0, description="Total files processed")
     successful_files: int = Field(ge=0, description="Successfully loaded files")
-    failed_files: list[str] = Field(
-        default_factory=list, description="Failed file paths"
-    )
+    failed_files: list[str] = Field(default_factory=list, description="Failed file paths")
     batches_completed: int = Field(ge=0, description="Batches completed")
     duration_seconds: float = Field(ge=0, description="Duration in seconds")
-    resumed_from_checkpoint: bool = Field(
-        default=False, description="Resumed from checkpoint"
-    )
+    resumed_from_checkpoint: bool = Field(default=False, description="Resumed from checkpoint")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -209,9 +205,7 @@ async def batch_load(
     start_time = time.monotonic()
     batch_size = config.batch_size
     total_files = len(files)
-    total_batches = (
-        (total_files + batch_size - 1) // batch_size if total_files > 0 else 1
-    )
+    total_batches = (total_files + batch_size - 1) // batch_size if total_files > 0 else 1
 
     # Check for existing checkpoint
     checkpoint: BatchCheckpoint | None = None

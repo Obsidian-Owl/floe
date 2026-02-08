@@ -79,9 +79,9 @@ class TestSecretsPluginDiscovery:
 
         for ep in eps:
             plugin_class = ep.load()
-            assert issubclass(
-                plugin_class, SecretsPlugin
-            ), f"Plugin '{ep.name}' does not inherit from SecretsPlugin ABC"
+            assert issubclass(plugin_class, SecretsPlugin), (
+                f"Plugin '{ep.name}' does not inherit from SecretsPlugin ABC"
+            )
 
     @pytest.mark.requirement("7A-FR-002")
     def test_all_secrets_plugins_have_required_methods(self) -> None:
@@ -98,9 +98,9 @@ class TestSecretsPluginDiscovery:
         for ep in eps:
             plugin_class = ep.load()
             for method in required_methods:
-                assert hasattr(
-                    plugin_class, method
-                ), f"Plugin '{ep.name}' missing required method: {method}"
+                assert hasattr(plugin_class, method), (
+                    f"Plugin '{ep.name}' missing required method: {method}"
+                )
 
 
 class TestIdentityPluginDiscovery:
@@ -143,9 +143,9 @@ class TestIdentityPluginDiscovery:
 
         for ep in eps:
             plugin_class = ep.load()
-            assert issubclass(
-                plugin_class, IdentityPlugin
-            ), f"Plugin '{ep.name}' does not inherit from IdentityPlugin ABC"
+            assert issubclass(plugin_class, IdentityPlugin), (
+                f"Plugin '{ep.name}' does not inherit from IdentityPlugin ABC"
+            )
 
     @pytest.mark.requirement("7A-FR-003")
     def test_all_identity_plugins_have_required_methods(self) -> None:
@@ -162,9 +162,9 @@ class TestIdentityPluginDiscovery:
         for ep in eps:
             plugin_class = ep.load()
             for method in required_methods:
-                assert hasattr(
-                    plugin_class, method
-                ), f"Plugin '{ep.name}' missing required method: {method}"
+                assert hasattr(plugin_class, method), (
+                    f"Plugin '{ep.name}' missing required method: {method}"
+                )
 
 
 class TestCrossPluginDiscovery:
@@ -217,15 +217,13 @@ class TestCrossPluginDiscovery:
             plugin_class = ep.load()
 
             # Check for required metadata properties
-            assert hasattr(
-                plugin_class, "name"
-            ), f"Plugin '{ep.name}' missing 'name' property"
-            assert hasattr(
-                plugin_class, "version"
-            ), f"Plugin '{ep.name}' missing 'version' property"
-            assert hasattr(
-                plugin_class, "floe_api_version"
-            ), f"Plugin '{ep.name}' missing 'floe_api_version' property"
+            assert hasattr(plugin_class, "name"), f"Plugin '{ep.name}' missing 'name' property"
+            assert hasattr(plugin_class, "version"), (
+                f"Plugin '{ep.name}' missing 'version' property"
+            )
+            assert hasattr(plugin_class, "floe_api_version"), (
+                f"Plugin '{ep.name}' missing 'floe_api_version' property"
+            )
 
     @pytest.mark.requirement("7A-FR-002")
     @pytest.mark.requirement("7A-FR-003")
@@ -244,7 +242,5 @@ class TestCrossPluginDiscovery:
         identity_list = list(identity_eps)
 
         # At minimum, our Epic 7A plugins should be present
-        assert (
-            len(secrets_list) >= 2
-        ), "Expected at least 2 secrets plugins (k8s, infisical)"
+        assert len(secrets_list) >= 2, "Expected at least 2 secrets plugins (k8s, infisical)"
         assert len(identity_list) >= 1, "Expected at least 1 identity plugin (keycloak)"

@@ -35,15 +35,9 @@ def main(output_path: str | None = None) -> None:
     if output_path is None:
         # Find repo root by looking for pyproject.toml
         current = Path(__file__).resolve()
-        repo_root = (
-            current.parent.parent.parent.parent
-        )  # scripts -> floe-core -> packages -> repo
+        repo_root = current.parent.parent.parent.parent  # scripts -> floe-core -> packages -> repo
         output_path = str(
-            repo_root
-            / "specs"
-            / "001-manifest-schema"
-            / "contracts"
-            / "manifest.schema.json"
+            repo_root / "specs" / "001-manifest-schema" / "contracts" / "manifest.schema.json"
         )
 
     path = Path(output_path)

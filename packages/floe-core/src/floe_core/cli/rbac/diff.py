@@ -177,9 +177,7 @@ def _output_diff_as_text(diff_result: RBACDiffResult) -> None:
         success("No differences found. Cluster matches expected manifests.")
         return
 
-    total_changes = (
-        diff_result.added_count + diff_result.removed_count + diff_result.modified_count
-    )
+    total_changes = diff_result.added_count + diff_result.removed_count + diff_result.modified_count
     warning(f"Found {total_changes} difference(s):")
 
     by_type = diff_result.diffs_by_change_type()

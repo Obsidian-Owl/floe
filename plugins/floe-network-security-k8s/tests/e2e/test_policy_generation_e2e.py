@@ -64,9 +64,7 @@ class TestPolicyGenerationWorkflow:
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-080")
-    def test_generate_creates_output_directory(
-        self, sample_manifest: Path, tmp_path: Path
-    ) -> None:
+    def test_generate_creates_output_directory(self, sample_manifest: Path, tmp_path: Path) -> None:
         """Test generate command creates output directory structure.
 
         Validates that the generate command properly creates the output
@@ -139,9 +137,7 @@ class TestPolicyGenerationWorkflow:
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-080")
-    def test_generate_with_namespace_filter(
-        self, sample_manifest: Path, tmp_path: Path
-    ) -> None:
+    def test_generate_with_namespace_filter(self, sample_manifest: Path, tmp_path: Path) -> None:
         """Test generate with --namespace filter.
 
         Validates that the --namespace option filters policy generation
@@ -355,9 +351,7 @@ class TestPolicyOutputFormats:
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-080")
-    def test_generated_summary_markdown_exists(
-        self, sample_manifest: Path, tmp_path: Path
-    ) -> None:
+    def test_generated_summary_markdown_exists(self, sample_manifest: Path, tmp_path: Path) -> None:
         """Test generated summary markdown file exists.
 
         Validates that the policy generation creates a summary

@@ -194,9 +194,7 @@ class TestNamespaceResolver:
             strategy="simple",
             default_namespace="prod",
         )
-        namespace = resolver.resolve_dataset_namespace(
-            table_identifier="bronze.customers"
-        )
+        namespace = resolver.resolve_dataset_namespace(table_identifier="bronze.customers")
         assert namespace == "prod"
 
     @pytest.mark.requirement("REQ-517")
@@ -321,9 +319,7 @@ class TestCatalogDatasetResolver:
 
         resolver = CatalogDatasetResolver(default_namespace="prod")
 
-        with pytest.raises(
-            ValidationError, match="String should have at least 1 character"
-        ):
+        with pytest.raises(ValidationError, match="String should have at least 1 character"):
             resolver.resolve_dataset("")
 
     @pytest.mark.requirement("REQ-531")

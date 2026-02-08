@@ -37,17 +37,13 @@ class PolarisConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     uri: str = Field(
-        default_factory=lambda: os.environ.get(
-            "POLARIS_URI", "http://polaris:8181/api/catalog"
-        )
+        default_factory=lambda: os.environ.get("POLARIS_URI", "http://polaris:8181/api/catalog")
     )
     warehouse: str = Field(
         default_factory=lambda: os.environ.get("POLARIS_WAREHOUSE", "test_warehouse")
     )
     credential: SecretStr = Field(
-        default_factory=lambda: SecretStr(
-            os.environ.get("POLARIS_CREDENTIAL", "root:secret")
-        )
+        default_factory=lambda: SecretStr(os.environ.get("POLARIS_CREDENTIAL", "root:secret"))
     )
     scope: str = Field(
         default_factory=lambda: os.environ.get("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL")

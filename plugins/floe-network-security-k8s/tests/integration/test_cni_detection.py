@@ -129,9 +129,7 @@ class TestCniSupportMatrix(IntegrationTestBase):
         """Test that there are supported CNIs defined."""
         from floe_core.cli.network.check_cni import CNI_SUPPORT
 
-        supported = [
-            name for name, info in CNI_SUPPORT.items() if info.get("supported", False)
-        ]
+        supported = [name for name, info in CNI_SUPPORT.items() if info.get("supported", False)]
         assert len(supported) > 0
 
     @pytest.mark.requirement("FR-084")
@@ -140,9 +138,7 @@ class TestCniSupportMatrix(IntegrationTestBase):
         from floe_core.cli.network.check_cni import CNI_SUPPORT
 
         unsupported = [
-            name
-            for name, info in CNI_SUPPORT.items()
-            if not info.get("supported", True)
+            name for name, info in CNI_SUPPORT.items() if not info.get("supported", True)
         ]
         assert len(unsupported) > 0
 
@@ -155,9 +151,9 @@ class TestCniSupportMatrix(IntegrationTestBase):
             # Each CNI should have a supported field
             assert "supported" in cni_info, f"CNI {cni_name} missing 'supported' field"
             # Supported field should be boolean
-            assert isinstance(
-                cni_info["supported"], bool
-            ), f"CNI {cni_name} 'supported' is not boolean"
+            assert isinstance(cni_info["supported"], bool), (
+                f"CNI {cni_name} 'supported' is not boolean"
+            )
 
     @pytest.mark.requirement("FR-084")
     def test_cni_support_matrix_has_common_cnis(self) -> None:

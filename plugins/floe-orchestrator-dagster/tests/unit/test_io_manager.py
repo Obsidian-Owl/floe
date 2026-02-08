@@ -35,9 +35,7 @@ def mock_table_manager() -> MagicMock:
     # Mock table for load_table return
     mock_table = MagicMock()
     mock_table.scan = MagicMock(return_value=MagicMock())
-    mock_table.scan.return_value.filter = MagicMock(
-        return_value=mock_table.scan.return_value
-    )
+    mock_table.scan.return_value.filter = MagicMock(return_value=mock_table.scan.return_value)
     mock_table.scan.return_value.to_arrow = MagicMock(return_value=MagicMock())
     manager.load_table.return_value = mock_table
 
@@ -214,9 +212,7 @@ class TestIcebergIOManagerInit:
         """Test IOManager rejects table manager missing some methods."""
         from floe_orchestrator_dagster.io_manager import IcebergIOManager
 
-        partial_manager = Mock(
-            spec=["load_table", "table_exists"]
-        )  # Missing write_data
+        partial_manager = Mock(spec=["load_table", "table_exists"])  # Missing write_data
 
         # Security: Error message is generic to avoid exposing internal details
         with pytest.raises(TypeError, match="missing required interface methods"):
@@ -300,9 +296,7 @@ class TestHandleOutput:
         """Test handle_output uses custom namespace from metadata."""
         from floe_orchestrator_dagster.io_manager import ICEBERG_NAMESPACE_KEY
 
-        mock_output_context.definition_metadata = {
-            ICEBERG_NAMESPACE_KEY: "custom_namespace"
-        }
+        mock_output_context.definition_metadata = {ICEBERG_NAMESPACE_KEY: "custom_namespace"}
         mock_table_manager.table_exists.return_value = True
 
         io_manager.handle_output(mock_output_context, mock_pyarrow_table)

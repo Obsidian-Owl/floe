@@ -204,9 +204,7 @@ class SchemaDriftCheck(BaseCheck):
             ViolationSeverity.WARNING: 2,
             ViolationSeverity.INFO: 1,
         }
-        highest_severity = max(drifts, key=lambda d: severity_priority[d["severity"]])[
-            "severity"
-        ]
+        highest_severity = max(drifts, key=lambda d: severity_priority[d["severity"]])["severity"]
 
         # --- Build violation event ---
         drift_count = len(drifts)

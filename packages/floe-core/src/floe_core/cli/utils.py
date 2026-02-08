@@ -239,9 +239,7 @@ def sanitize_error(error: str | Exception, max_length: int = _MAX_ERROR_LENGTH) 
     msg = str(error)
 
     msg = "".join(c for c in msg if c.isprintable() or c in " \t")
-    msg = re.sub(
-        r"(/[a-zA-Z0-9_\-./]+)/([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)", r"[PATH]/\2", msg
-    )
+    msg = re.sub(r"(/[a-zA-Z0-9_\-./]+)/([a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+)", r"[PATH]/\2", msg)
     msg = re.sub(
         r"(token|key|secret|password|credential|auth)[=:\s]+[^\s,;)]+",
         r"\1=[REDACTED]",
@@ -312,9 +310,7 @@ def validate_key_path(
             Path("/etc/floe/keys"),
         ]
 
-    is_allowed = any(
-        _is_path_within(resolved, allowed_dir) for allowed_dir in allowed_dirs
-    )
+    is_allowed = any(_is_path_within(resolved, allowed_dir) for allowed_dir in allowed_dirs)
 
     if not is_allowed:
         error_exit(

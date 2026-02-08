@@ -181,9 +181,7 @@ def _perform_audit(rbac_api: Any, namespace: str | None) -> RBACAuditReport:
     )
 
 
-def _audit_roles(
-    rbac_api: Any, namespace: str | None
-) -> tuple[int, list[AuditFinding]]:
+def _audit_roles(rbac_api: Any, namespace: str | None) -> tuple[int, list[AuditFinding]]:
     """Audit all roles in the namespace.
 
     Args:
@@ -210,12 +208,8 @@ def _audit_roles(
         if role.rules:
             rules_dicts = _convert_rules_to_dicts(role.rules)
             role_name = role.metadata.name
-            findings.extend(
-                detect_wildcard_permissions(rules_dicts, role_name, namespace)
-            )
-            findings.extend(
-                check_missing_resource_names(rules_dicts, role_name, namespace)
-            )
+            findings.extend(detect_wildcard_permissions(rules_dicts, role_name, namespace))
+            findings.extend(check_missing_resource_names(rules_dicts, role_name, namespace))
 
     return total_roles, findings
 
@@ -240,9 +234,7 @@ def _convert_rules_to_dicts(rules: list[Any]) -> list[dict[str, list[str]]]:
     ]
 
 
-def _audit_role_bindings(
-    rbac_api: Any, namespace: str | None
-) -> tuple[int, list[AuditFinding]]:
+def _audit_role_bindings(rbac_api: Any, namespace: str | None) -> tuple[int, list[AuditFinding]]:
     """Audit all role bindings in the namespace.
 
     Args:

@@ -97,9 +97,7 @@ class TestStoragePluginContract:
         assert hasattr(StoragePlugin, "name")
 
         # Verify get_pyiceberg_fileio is abstract
-        assert getattr(
-            StoragePlugin.get_pyiceberg_fileio, "__isabstractmethod__", False
-        )
+        assert getattr(StoragePlugin.get_pyiceberg_fileio, "__isabstractmethod__", False)
 
     @pytest.mark.requirement("FR-004")
     def test_fileio_protocol_defines_required_methods(self) -> None:
@@ -219,9 +217,7 @@ class TestModelSchemaStability:
             "default_table_properties",
         }
 
-        assert (
-            expected_fields <= field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
 
     @pytest.mark.requirement("FR-045")
     def test_iceberg_table_manager_config_field_types(self) -> None:
@@ -260,9 +256,7 @@ class TestModelSchemaStability:
             "scale",
         }
 
-        assert (
-            expected_fields <= field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
 
     @pytest.mark.requirement("FR-012")
     def test_table_schema_has_required_fields(self) -> None:
@@ -273,9 +267,7 @@ class TestModelSchemaStability:
 
         expected_fields = {"fields"}
 
-        assert (
-            expected_fields <= field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
 
     @pytest.mark.requirement("FR-014")
     def test_partition_field_has_required_fields(self) -> None:
@@ -293,9 +285,7 @@ class TestModelSchemaStability:
             "width",
         }
 
-        assert (
-            expected_fields <= field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
 
     @pytest.mark.requirement("FR-013")
     def test_table_config_has_required_fields(self) -> None:
@@ -313,9 +303,7 @@ class TestModelSchemaStability:
             "properties",
         }
 
-        assert (
-            expected_fields <= field_names
-        ), f"Missing fields: {expected_fields - field_names}"
+        assert expected_fields <= field_names, f"Missing fields: {expected_fields - field_names}"
 
 
 # =============================================================================
@@ -416,11 +404,7 @@ class TestGoldenFixtureBackwardsCompatibility:
 
         from floe_iceberg.models import IcebergTableManagerConfig
 
-        fixture_path = (
-            Path(__file__).parent
-            / "fixtures"
-            / "v1.0_iceberg_table_manager_config.json"
-        )
+        fixture_path = Path(__file__).parent / "fixtures" / "v1.0_iceberg_table_manager_config.json"
         fixture_data = json.loads(fixture_path.read_text())
 
         # Should parse without error

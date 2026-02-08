@@ -225,9 +225,7 @@ class ContractParser:
         )
         return contract
 
-    def parse_contract_string(
-        self, yaml_content: str, name: str = "inline"
-    ) -> DataContract:
+    def parse_contract_string(self, yaml_content: str, name: str = "inline") -> DataContract:
         """Parse a YAML string into a DataContract model.
 
         Convenience method for parsing contracts from strings rather than files.
@@ -667,9 +665,7 @@ class ContractValidator:
                         f"Data product '{spec.metadata.name}' must define either a "
                         "datacontract.yaml or output_ports for contract generation"
                     ),
-                    suggestion=(
-                        "Add a datacontract.yaml file or define outputPorts in floe.yaml"
-                    ),
+                    suggestion=("Add a datacontract.yaml file or define outputPorts in floe.yaml"),
                 )
             ],
             warnings=[],
@@ -1623,9 +1619,7 @@ def _get_suggestion(error_code: str, context: str) -> str:
         "FLOE-E507": "Ensure the value is within the allowed range",
         "FLOE-E509": "Check the ODCS v3 contract documentation for valid field values",
     }
-    return suggestions.get(
-        error_code, "Review the ODCS v3 contract schema documentation"
-    )
+    return suggestions.get(error_code, "Review the ODCS v3 contract schema documentation")
 
 
 __all__ = [

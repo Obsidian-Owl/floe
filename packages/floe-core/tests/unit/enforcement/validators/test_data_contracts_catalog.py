@@ -320,9 +320,7 @@ schema:
 
         assert result.success is False
         assert result.warning is not None
-        assert (
-            "denied" in result.warning.lower() or "permission" in result.warning.lower()
-        )
+        assert "denied" in result.warning.lower() or "permission" in result.warning.lower()
 
 
 class TestContractValidatorRegistration:

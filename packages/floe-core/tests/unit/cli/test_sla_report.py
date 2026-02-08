@@ -150,14 +150,9 @@ def test_report_table_output_format(
     # Verify table headers and content
     assert "SLA COMPLIANCE REPORT" in result.output
     assert sample_report.contract_name in result.output
-    assert (
-        f"Overall Compliance: {sample_report.overall_compliance_pct:.1f}%"
-        in result.output
-    )
+    assert f"Overall Compliance: {sample_report.overall_compliance_pct:.1f}%" in result.output
     assert f"Total Violations: {sample_report.total_violations}" in result.output
-    assert (
-        f"Total Checks Executed: {sample_report.total_checks_executed}" in result.output
-    )
+    assert f"Total Checks Executed: {sample_report.total_checks_executed}" in result.output
 
     # Verify check type table headers
     assert "Check Type" in result.output
@@ -234,9 +229,7 @@ def test_report_json_output_format(
 
     # Verify required fields
     assert data["contract_name"] == sample_report.contract_name
-    assert data["overall_compliance_pct"] == pytest.approx(
-        sample_report.overall_compliance_pct
-    )
+    assert data["overall_compliance_pct"] == pytest.approx(sample_report.overall_compliance_pct)
     assert data["total_violations"] == sample_report.total_violations
     assert data["total_checks_executed"] == sample_report.total_checks_executed
     assert len(data["check_summaries"]) == len(sample_report.check_summaries)
@@ -246,15 +239,11 @@ def test_report_json_output_format(
         original_summary = sample_report.check_summaries[i]
         assert summary_data["check_type"] == original_summary.check_type.value
         assert summary_data["total_checks"] == original_summary.total_checks
-        assert summary_data["compliance_pct"] == pytest.approx(
-            original_summary.compliance_pct
-        )
+        assert summary_data["compliance_pct"] == pytest.approx(original_summary.compliance_pct)
 
 
 @pytest.mark.requirement("3D-FR-039")
-def test_report_contract_filter(
-    cli_runner: CliRunner, sample_report: SLAComplianceReport
-) -> None:
+def test_report_contract_filter(cli_runner: CliRunner, sample_report: SLAComplianceReport) -> None:
     """Test SLA report --contract filter applies to report generation.
 
     Verifies that the contract filter is passed to the data source and
@@ -266,9 +255,7 @@ def test_report_contract_filter(
     """
     contract_name = "orders_v1"
 
-    def mock_data_source(
-        contract_name: str | None = None, **kwargs: str
-    ) -> SLAComplianceReport:
+    def mock_data_source(contract_name: str | None = None, **kwargs: str) -> SLAComplianceReport:
         """Mock data source that checks the contract_name parameter.
 
         Args:
@@ -313,9 +300,7 @@ def test_report_window_filter_daily(
         sample_report: Sample compliance report fixture.
     """
 
-    def mock_data_source(
-        window: str = "weekly", **kwargs: str | None
-    ) -> SLAComplianceReport:
+    def mock_data_source(window: str = "weekly", **kwargs: str | None) -> SLAComplianceReport:
         """Mock data source that verifies window parameter.
 
         Args:
@@ -349,9 +334,7 @@ def test_report_window_filter_weekly(
         sample_report: Sample compliance report fixture.
     """
 
-    def mock_data_source(
-        window: str = "weekly", **kwargs: str | None
-    ) -> SLAComplianceReport:
+    def mock_data_source(window: str = "weekly", **kwargs: str | None) -> SLAComplianceReport:
         """Mock data source that verifies window parameter.
 
         Args:
@@ -385,9 +368,7 @@ def test_report_window_filter_monthly(
         sample_report: Sample compliance report fixture.
     """
 
-    def mock_data_source(
-        window: str = "weekly", **kwargs: str | None
-    ) -> SLAComplianceReport:
+    def mock_data_source(window: str = "weekly", **kwargs: str | None) -> SLAComplianceReport:
         """Mock data source that verifies window parameter.
 
         Args:
@@ -411,9 +392,7 @@ def test_report_window_filter_monthly(
 
 
 @pytest.mark.requirement("3D-FR-039")
-def test_report_empty_results(
-    cli_runner: CliRunner, empty_report: SLAComplianceReport
-) -> None:
+def test_report_empty_results(cli_runner: CliRunner, empty_report: SLAComplianceReport) -> None:
     """Test SLA report handles empty results (no checks executed).
 
     Verifies that the command succeeds and displays appropriate output
@@ -461,9 +440,7 @@ def test_report_default_arguments(
         sample_report: Sample compliance report fixture.
     """
 
-    def mock_data_source(
-        window: str = "weekly", **kwargs: str | None
-    ) -> SLAComplianceReport:
+    def mock_data_source(window: str = "weekly", **kwargs: str | None) -> SLAComplianceReport:
         """Mock data source that checks default window parameter.
 
         Args:

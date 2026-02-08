@@ -161,9 +161,7 @@ async def test_quality_below_threshold() -> None:
     assert result.violation.actual_value is not None
     assert "0.5" in result.violation.actual_value  # Score appears in actual value
     assert result.violation.expected_value is not None
-    assert (
-        "0.8" in result.violation.expected_value
-    )  # Threshold appears in expected value
+    assert "0.8" in result.violation.expected_value  # Threshold appears in expected value
 
 
 @pytest.mark.requirement("3D-FR-016")

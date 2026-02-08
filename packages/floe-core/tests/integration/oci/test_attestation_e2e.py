@@ -238,9 +238,7 @@ dependencies = [
         # Create minimal project
         project_dir = tmp_path / "perf-test"
         project_dir.mkdir()
-        (project_dir / "pyproject.toml").write_text(
-            '[project]\nname = "test"\nversion = "1.0.0"'
-        )
+        (project_dir / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "1.0.0"')
 
         start_time = time.monotonic()
         generate_sbom(project_dir)
@@ -431,18 +429,12 @@ class TestAttestationTracingE2E(IntegrationTestBase):
 
         project_dir = tmp_path / "trace-test"
         project_dir.mkdir()
-        (project_dir / "pyproject.toml").write_text(
-            '[project]\nname = "test"\nversion = "1.0.0"'
-        )
+        (project_dir / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "1.0.0"')
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("floe_core.oci.attestation.tracer", mock_tracer):
             generate_sbom(project_dir)
@@ -453,9 +445,7 @@ class TestAttestationTracingE2E(IntegrationTestBase):
 
         # Verify span attributes were set
         assert mock_span.set_attribute.called
-        calls = {
-            call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list
-        }
+        calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert "floe.sbom.project_path" in calls
         assert "floe.sbom.format" in calls
 

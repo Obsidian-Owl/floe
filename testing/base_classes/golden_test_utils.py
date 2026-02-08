@@ -56,9 +56,7 @@ class GoldenFixture:
 
     name: str
     output: Any
-    captured_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    captured_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     function_name: str = ""
     args: tuple[Any, ...] = field(default_factory=tuple)
     kwargs: dict[str, Any] = field(default_factory=dict)
@@ -238,13 +236,9 @@ def assert_golden_match(
     if actual != expected_fixture.output:
         # Generate diff for debugging
         actual_json = json.dumps(actual, indent=2, sort_keys=True, default=str)
-        expected_json = json.dumps(
-            expected_fixture.output, indent=2, sort_keys=True, default=str
-        )
+        expected_json = json.dumps(expected_fixture.output, indent=2, sort_keys=True, default=str)
 
-        diff_msg = (
-            f"Golden test failed: output does not match fixture\nFixture: {path}\n"
-        )
+        diff_msg = f"Golden test failed: output does not match fixture\nFixture: {path}\n"
         if message:
             diff_msg += f"Context: {message}\n"
         diff_msg += f"\nExpected:\n{expected_json}\n\nActual:\n{actual_json}"
@@ -299,9 +293,7 @@ class GoldenTestCase:
 
     fixtures_dir: Path = Path("testing/fixtures/golden")
 
-    def assert_golden(
-        self, fixture_name: str, actual: Any, *, update: bool = False
-    ) -> None:
+    def assert_golden(self, fixture_name: str, actual: Any, *, update: bool = False) -> None:
         """Assert actual output matches named golden fixture.
 
         Args:

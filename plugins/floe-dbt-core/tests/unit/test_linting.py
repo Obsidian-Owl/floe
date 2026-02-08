@@ -337,9 +337,7 @@ class TestDBTCorePluginLinting:
     """Tests for DBTCorePlugin.lint_project() method."""
 
     @pytest.mark.requirement("FR-013")
-    def test_lint_project_success(
-        self, temp_dbt_project: Path, mock_dbt_runner: MagicMock
-    ) -> None:
+    def test_lint_project_success(self, temp_dbt_project: Path, mock_dbt_runner: MagicMock) -> None:
         """DBTCorePlugin.lint_project() returns success for clean project."""
         from floe_dbt_core import DBTCorePlugin
 

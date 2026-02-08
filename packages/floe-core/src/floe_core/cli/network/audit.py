@@ -314,12 +314,8 @@ def _perform_audit(
             "total_namespaces": len(audited_namespaces),
             "total_policies": len(policies),
             "total_findings": len(findings),
-            "critical_findings": sum(
-                1 for f in findings if f.get("severity") == "critical"
-            ),
-            "warning_findings": sum(
-                1 for f in findings if f.get("severity") == "warning"
-            ),
+            "critical_findings": sum(1 for f in findings if f.get("severity") == "critical"),
+            "warning_findings": sum(1 for f in findings if f.get("severity") == "warning"),
         },
     }
 
@@ -348,9 +344,7 @@ def _audit_namespace(
                 "type": "missing_default_deny",
                 "namespace": namespace,
                 "message": f"Namespace '{namespace}' lacks default-deny NetworkPolicy",
-                "recommendation": (
-                    "Create a default-deny NetworkPolicy to restrict all traffic"
-                ),
+                "recommendation": ("Create a default-deny NetworkPolicy to restrict all traffic"),
             }
         )
 
@@ -424,9 +418,7 @@ def _audit_policy(
                         "message": (
                             f"NetworkPolicy '{policy_name}' has overly permissive ingress rule"
                         ),
-                        "recommendation": (
-                            "Restrict ingress to specific sources and ports"
-                        ),
+                        "recommendation": ("Restrict ingress to specific sources and ports"),
                     }
                 )
 
@@ -444,9 +436,7 @@ def _audit_policy(
                         "message": (
                             f"NetworkPolicy '{policy_name}' has overly permissive egress rule"
                         ),
-                        "recommendation": (
-                            "Restrict egress to specific destinations and ports"
-                        ),
+                        "recommendation": ("Restrict egress to specific destinations and ports"),
                     }
                 )
 

@@ -276,9 +276,9 @@ class TestExitCodeUniquenessContract:
         exit_codes = [err.exit_code for err in promotion_errors]
         unique_codes = set(exit_codes)
 
-        assert len(exit_codes) == len(
-            unique_codes
-        ), f"Duplicate exit codes found! Codes: {exit_codes}"
+        assert len(exit_codes) == len(unique_codes), (
+            f"Duplicate exit codes found! Codes: {exit_codes}"
+        )
 
     @pytest.mark.requirement("8C-FR-001")
     def test_promotion_exit_codes_in_valid_range(self) -> None:
@@ -329,6 +329,4 @@ class TestExitCodeUniquenessContract:
                 f"{error_class.__name__} exit_code {error_class.exit_code} "
                 f"conflicts with core OCI error codes"
             )
-            assert (
-                error_class.exit_code >= 8
-            ), f"{error_class.__name__} exit_code must be >= 8"
+            assert error_class.exit_code >= 8, f"{error_class.__name__} exit_code must be >= 8"

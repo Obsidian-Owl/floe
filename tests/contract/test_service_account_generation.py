@@ -164,9 +164,7 @@ class TestServiceAccountManifestContract:
         )
         manifest = config.to_k8s_manifest()
 
-        assert (
-            manifest["metadata"]["annotations"]["description"] == "Test service account"
-        )
+        assert manifest["metadata"]["annotations"]["description"] == "Test service account"
 
 
 class TestRoleConfigSchemaContract:

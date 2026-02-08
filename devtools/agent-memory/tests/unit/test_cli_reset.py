@@ -204,9 +204,7 @@ class TestResetCommand:
         ):
             mock_config.return_value = MagicMock()
             mock_client = MagicMock()
-            mock_client.prune_system = AsyncMock(
-                side_effect=CogneeClientError("Connection failed")
-            )
+            mock_client.prune_system = AsyncMock(side_effect=CogneeClientError("Connection failed"))
             mock_client_class.return_value = mock_client
 
             result = runner.invoke(app, ["reset", "--confirm"])
@@ -248,9 +246,7 @@ class TestPruneSystemClient:
 
         with (
             patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list,
-            patch.object(
-                client, "delete_dataset", new_callable=AsyncMock
-            ) as mock_delete,
+            patch.object(client, "delete_dataset", new_callable=AsyncMock) as mock_delete,
         ):
             mock_list.return_value = ["dataset1", "dataset2", "dataset3"]
             mock_delete.return_value = None
@@ -279,9 +275,7 @@ class TestPruneSystemClient:
 
         with (
             patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list,
-            patch.object(
-                client, "delete_dataset", new_callable=AsyncMock
-            ) as mock_delete,
+            patch.object(client, "delete_dataset", new_callable=AsyncMock) as mock_delete,
         ):
             mock_list.return_value = []
 
@@ -324,9 +318,7 @@ class TestPruneSystemClient:
 
         with (
             patch.object(client, "list_datasets", new_callable=AsyncMock) as mock_list,
-            patch.object(
-                client, "delete_dataset", new_callable=AsyncMock
-            ) as mock_delete,
+            patch.object(client, "delete_dataset", new_callable=AsyncMock) as mock_delete,
         ):
             mock_list.return_value = ["dataset1", "dataset2"]
             mock_delete.side_effect = CogneeClientError("Delete failed")

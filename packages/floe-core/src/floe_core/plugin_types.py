@@ -102,6 +102,4 @@ class PluginType(Enum):
             if member.value == group:
                 return member
         valid_groups = ", ".join(cls.all_entry_point_groups())
-        raise ValueError(
-            f"Unknown entry point group: {group}. Valid groups: {valid_groups}"
-        )
+        raise ValueError(f"Unknown entry point group: {group}. Valid groups: {valid_groups}")

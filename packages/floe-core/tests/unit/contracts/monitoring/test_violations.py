@@ -240,9 +240,7 @@ def test_contract_violation_event_json_serialization_round_trip() -> None:
     assert deserialized.actual_value == original.actual_value
     assert deserialized.timestamp == original.timestamp
     assert deserialized.affected_consumers == original.affected_consumers
-    assert deserialized.check_duration_seconds == pytest.approx(
-        original.check_duration_seconds
-    )
+    assert deserialized.check_duration_seconds == pytest.approx(original.check_duration_seconds)
     assert deserialized.metadata == original.metadata
 
 

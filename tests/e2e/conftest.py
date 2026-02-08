@@ -528,8 +528,6 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         services = response.json()["data"]
     """
     jaeger_url = os.environ.get("JAEGER_URL", "http://localhost:16686")
-    wait_for_service(
-        f"{jaeger_url}/api/services", timeout=60, description="Jaeger query API"
-    )
+    wait_for_service(f"{jaeger_url}/api/services", timeout=60, description="Jaeger query API")
 
     return httpx.Client(base_url=jaeger_url, timeout=30.0)

@@ -311,18 +311,12 @@ class MonitoringRepository:
         # Query raw check results for the day
         stmt = select(
             func.count().label("total"),
-            func.count()
-            .filter(ContractCheckResultModel.status == "pass")
-            .label("passed"),
-            func.count()
-            .filter(ContractCheckResultModel.status == "fail")
-            .label("failed"),
-            func.count()
-            .filter(ContractCheckResultModel.status == "error")
-            .label("errors"),
-            func.coalesce(
-                func.avg(ContractCheckResultModel.duration_seconds), 0.0
-            ).label("avg_duration"),
+            func.count().filter(ContractCheckResultModel.status == "pass").label("passed"),
+            func.count().filter(ContractCheckResultModel.status == "fail").label("failed"),
+            func.count().filter(ContractCheckResultModel.status == "error").label("errors"),
+            func.coalesce(func.avg(ContractCheckResultModel.duration_seconds), 0.0).label(
+                "avg_duration"
+            ),
         ).where(
             ContractCheckResultModel.contract_name == contract_name,
             ContractCheckResultModel.check_type == check_type,
@@ -385,9 +379,7 @@ class MonitoringRepository:
         )
         return aggregate
 
-    async def get_registered_contracts(
-        self, active_only: bool = True
-    ) -> list[dict[str, Any]]:
+    async def get_registered_contracts(self, active_only: bool = True) -> list[dict[str, Any]]:
         """Get all registered contracts from DB.
 
         Args:

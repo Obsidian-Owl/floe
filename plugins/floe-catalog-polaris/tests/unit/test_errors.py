@@ -372,9 +372,7 @@ class TestConnectWithErrorMapping:
             with pytest.raises(CatalogUnavailableError) as exc_info:
                 plugin.connect({})
 
-            assert (
-                exc_info.value.catalog_uri == "https://polaris.example.com/api/catalog"
-            )
+            assert exc_info.value.catalog_uri == "https://polaris.example.com/api/catalog"
             assert exc_info.value.cause is not None
 
     @pytest.mark.requirement("FR-033")

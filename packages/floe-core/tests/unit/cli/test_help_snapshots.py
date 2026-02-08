@@ -68,9 +68,7 @@ class TestRootHelpSnapshot:
                 command_lines.append(line)
 
         # Should have at least platform, rbac, artifact
-        assert (
-            len(command_lines) >= 3
-        ), f"Expected at least 3 commands, got {len(command_lines)}"
+        assert len(command_lines) >= 3, f"Expected at least 3 commands, got {len(command_lines)}"
 
 
 class TestPlatformHelpSnapshot:

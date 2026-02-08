@@ -573,9 +573,7 @@ class TestYamlSerialization:
             ),
             transforms=ResolvedTransforms(
                 models=[
-                    ResolvedModel(
-                        name="stg_customers", compute="duckdb", tags=["staging"]
-                    ),
+                    ResolvedModel(name="stg_customers", compute="duckdb", tags=["staging"]),
                     ResolvedModel(
                         name="fct_orders",
                         compute="duckdb",
@@ -708,9 +706,7 @@ class TestYamlSerialization:
 
         # Metadata preserved
         assert loaded.metadata.product_name == full_artifacts.metadata.product_name
-        assert (
-            loaded.metadata.product_version == full_artifacts.metadata.product_version
-        )
+        assert loaded.metadata.product_version == full_artifacts.metadata.product_version
         assert loaded.metadata.floe_version == full_artifacts.metadata.floe_version
 
         # Identity preserved
@@ -721,8 +717,7 @@ class TestYamlSerialization:
         # Observability preserved
         assert loaded.observability.lineage == full_artifacts.observability.lineage
         assert (
-            loaded.observability.lineage_namespace
-            == full_artifacts.observability.lineage_namespace
+            loaded.observability.lineage_namespace == full_artifacts.observability.lineage_namespace
         )
 
         # Plugins preserved

@@ -150,9 +150,7 @@ class TestNetworkPolicyGeneratorOutputContract:
             assert len(yaml_files) >= 1, "Expected at least one YAML file"
 
     @pytest.mark.requirement("FR-072")
-    def test_write_manifests_creates_summary_markdown(
-        self, mock_plugin: MagicMock
-    ) -> None:
+    def test_write_manifests_creates_summary_markdown(self, mock_plugin: MagicMock) -> None:
         """Test that write_manifests() creates NETWORK-POLICY-SUMMARY.md."""
         from floe_core.network import NetworkPolicyManifestGenerator
 
@@ -164,9 +162,7 @@ class TestNetworkPolicyGeneratorOutputContract:
             generator.write_manifests(result, output_path)
 
             summary_file = output_path / "NETWORK-POLICY-SUMMARY.md"
-            assert (
-                summary_file.exists()
-            ), "NETWORK-POLICY-SUMMARY.md should be generated"
+            assert summary_file.exists(), "NETWORK-POLICY-SUMMARY.md should be generated"
 
     @pytest.mark.requirement("FR-070")
     def test_generated_yaml_is_valid_k8s_resource(self, mock_plugin: MagicMock) -> None:

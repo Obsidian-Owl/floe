@@ -124,9 +124,7 @@ class TestPlatformCompileCommand:
             ],
         )
 
-        assert "Error: No such option: --enforcement-report" not in (
-            result.output or ""
-        )
+        assert "Error: No such option: --enforcement-report" not in (result.output or "")
 
     @pytest.mark.requirement("FR-013")
     def test_compile_accepts_enforcement_format_option(
@@ -161,9 +159,9 @@ class TestPlatformCompileCommand:
                 ],
             )
 
-            assert "Error: Invalid value for '--enforcement-format'" not in (
-                result.output or ""
-            ), f"Format {format_choice} should be valid"
+            assert "Error: Invalid value for '--enforcement-format'" not in (result.output or ""), (
+                f"Format {format_choice} should be valid"
+            )
 
     @pytest.mark.requirement("FR-013")
     def test_compile_rejects_invalid_enforcement_format(
@@ -199,9 +197,7 @@ class TestPlatformCompileCommand:
 
         assert result.exit_code != 0
         # Click outputs error about invalid choice
-        assert "Invalid value" in (result.output or "") or "invalid_format" in (
-            result.output or ""
-        )
+        assert "Invalid value" in (result.output or "") or "invalid_format" in (result.output or "")
 
     @pytest.mark.requirement("FR-015")
     def test_compile_help_exits_with_zero(
@@ -377,9 +373,7 @@ class TestPlatformCompileCommand:
 
         assert "Error: No such option: --drift-detection" not in (result.output or "")
         # Verify the flag is recognized in output
-        assert "drift detection: ENABLED" in (
-            result.output or ""
-        ) or result.exit_code in (0, 6)
+        assert "drift detection: ENABLED" in (result.output or "") or result.exit_code in (0, 6)
 
     @pytest.mark.requirement("3C-FR-032")
     def test_compile_shows_contract_flags_in_help(

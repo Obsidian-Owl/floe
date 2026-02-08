@@ -396,9 +396,7 @@ def real_table_manager(
                 "oauth2-server-uri": oauth2_server_uri,
                 "s3.endpoint": f"http://{minio_host}:9000",
                 "s3.access-key-id": os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-                "s3.secret-access-key": os.environ.get(
-                    "MINIO_SECRET_KEY", "minioadmin123"
-                ),
+                "s3.secret-access-key": os.environ.get("MINIO_SECRET_KEY", "minioadmin123"),
                 "s3.region": "us-east-1",
                 "s3.path-style-access": "true",
             },

@@ -111,9 +111,7 @@ async def test_health_check_reports_response_time(cognee_client: CogneeClient) -
     # Cognee Cloud component should have response time
     if status.cognee_cloud.response_time_ms is not None:
         assert status.cognee_cloud.response_time_ms >= 0
-        assert (
-            status.cognee_cloud.response_time_ms < 30000
-        ), "Response time should be < 30 seconds"
+        assert status.cognee_cloud.response_time_ms < 30000, "Response time should be < 30 seconds"
 
 
 @pytest.mark.requirement("FR-001")

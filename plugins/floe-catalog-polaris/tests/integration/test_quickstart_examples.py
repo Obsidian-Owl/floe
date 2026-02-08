@@ -107,15 +107,9 @@ class TestQuickstartExamples:
 
         # Define Iceberg schema using PyIceberg types (from quickstart)
         schema = Schema(
-            NestedField(
-                field_id=1, name="event_id", field_type=StringType(), required=True
-            ),
-            NestedField(
-                field_id=2, name="event_time", field_type=TimestampType(), required=True
-            ),
-            NestedField(
-                field_id=3, name="payload", field_type=StringType(), required=False
-            ),
+            NestedField(field_id=1, name="event_id", field_type=StringType(), required=True),
+            NestedField(field_id=2, name="event_time", field_type=TimestampType(), required=True),
+            NestedField(field_id=3, name="payload", field_type=StringType(), required=False),
         )
 
         # Create table in namespace (from quickstart)

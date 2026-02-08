@@ -83,19 +83,14 @@ class TestCubeSemanticPluginMetadata:
         """Test plugin has a description."""
         assert plugin.description is not None
         assert len(plugin.description) > 0
-        assert (
-            "cube" in plugin.description.lower()
-            or "semantic" in plugin.description.lower()
-        )
+        assert "cube" in plugin.description.lower() or "semantic" in plugin.description.lower()
 
 
 class TestCubeSemanticPluginConfigSchema:
     """Tests for get_config_schema()."""
 
     @pytest.mark.requirement("FR-003")
-    def test_get_config_schema_returns_config_class(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_get_config_schema_returns_config_class(self, plugin: CubeSemanticPlugin) -> None:
         """Test that get_config_schema returns CubeSemanticConfig."""
         schema = plugin.get_config_schema()
         assert schema is CubeSemanticConfig
@@ -185,9 +180,7 @@ class TestCubeSemanticPluginSecurityContext:
         assert context["bypass_rls"] is True
 
     @pytest.mark.requirement("FR-033")
-    def test_security_context_no_admin_no_bypass(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_security_context_no_admin_no_bypass(self, plugin: CubeSemanticPlugin) -> None:
         """Test that non-admin roles do not get RLS bypass."""
         context = plugin.get_security_context(
             namespace="tenant_acme",
@@ -202,9 +195,7 @@ class TestCubeSemanticPluginSecurityContext:
         assert context["tenant_id"] == ""
 
     @pytest.mark.requirement("FR-032")
-    def test_security_context_special_characters(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_security_context_special_characters(self, plugin: CubeSemanticPlugin) -> None:
         """Test security context with special characters in namespace."""
         context = plugin.get_security_context(
             namespace="tenant-with_special.chars",
@@ -230,9 +221,7 @@ class TestCubeSemanticPluginHealthCheck:
     """Tests for health_check()."""
 
     @pytest.mark.requirement("FR-009")
-    def test_health_check_returns_health_status(
-        self, plugin: CubeSemanticPlugin
-    ) -> None:
+    def test_health_check_returns_health_status(self, plugin: CubeSemanticPlugin) -> None:
         """Test that health_check returns a HealthStatus."""
         status = plugin.health_check()
         assert isinstance(status, HealthStatus)

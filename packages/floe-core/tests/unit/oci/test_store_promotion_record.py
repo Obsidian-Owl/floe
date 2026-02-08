@@ -69,9 +69,7 @@ class TestStorePromotionRecord:
         self, controller: MagicMock, sample_record: MagicMock
     ) -> None:
         """Test _store_promotion_record stores record to OCI annotations."""
-        with patch.object(
-            controller.client, "_update_artifact_annotations"
-        ) as mock_update:
+        with patch.object(controller.client, "_update_artifact_annotations") as mock_update:
             controller._store_promotion_record(
                 tag="v1.2.3-staging",
                 record=sample_record,
@@ -90,9 +88,7 @@ class TestStorePromotionRecord:
         self, controller: MagicMock, sample_record: MagicMock
     ) -> None:
         """Test _store_promotion_record uses correct annotation key."""
-        with patch.object(
-            controller.client, "_update_artifact_annotations"
-        ) as mock_update:
+        with patch.object(controller.client, "_update_artifact_annotations") as mock_update:
             controller._store_promotion_record(
                 tag="v1.2.3-staging",
                 record=sample_record,
@@ -109,9 +105,7 @@ class TestStorePromotionRecord:
         """Test _store_promotion_record serializes record as JSON."""
         import json
 
-        with patch.object(
-            controller.client, "_update_artifact_annotations"
-        ) as mock_update:
+        with patch.object(controller.client, "_update_artifact_annotations") as mock_update:
             controller._store_promotion_record(
                 tag="v1.2.3-staging",
                 record=sample_record,
@@ -134,9 +128,7 @@ class TestStorePromotionRecord:
         """Test _store_promotion_record includes all record fields."""
         import json
 
-        with patch.object(
-            controller.client, "_update_artifact_annotations"
-        ) as mock_update:
+        with patch.object(controller.client, "_update_artifact_annotations") as mock_update:
             controller._store_promotion_record(
                 tag="v1.2.3-staging",
                 record=sample_record,

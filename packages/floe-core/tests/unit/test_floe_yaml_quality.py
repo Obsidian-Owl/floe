@@ -115,11 +115,7 @@ class TestFloeSpecQualityParsing:
             apiVersion="floe.dev/v1",
             kind="FloeSpec",
             metadata=FloeMetadata(name="test-product", version="1.0.0"),
-            transforms=[
-                TransformSpec(
-                    name="stg_customers", tier="silver", quality_checks=[check]
-                )
-            ],
+            transforms=[TransformSpec(name="stg_customers", tier="silver", quality_checks=[check])],
         )
         assert spec.transforms[0].tier == "silver"
         assert spec.transforms[0].quality_checks is not None
@@ -185,14 +181,8 @@ class TestDbtTestDimensionMap:
     @pytest.mark.requirement("005B-FR-018")
     def test_between_tests_map_to_accuracy(self) -> None:
         """Test range/between tests map to ACCURACY dimension."""
-        assert (
-            DBT_TEST_DIMENSION_MAP["expect_column_values_to_be_between"]
-            == Dimension.ACCURACY
-        )
-        assert (
-            DBT_TEST_DIMENSION_MAP["expect_column_min_to_be_between"]
-            == Dimension.ACCURACY
-        )
+        assert DBT_TEST_DIMENSION_MAP["expect_column_values_to_be_between"] == Dimension.ACCURACY
+        assert DBT_TEST_DIMENSION_MAP["expect_column_min_to_be_between"] == Dimension.ACCURACY
 
 
 class TestInferDimension:

@@ -65,19 +65,17 @@ class TestDriftDetectorImportResilience:
         )
 
         method = getattr(ContractValidator, "validate_with_drift_detection", None)
-        assert (
-            method is not None
-        ), "ContractValidator must have validate_with_drift_detection method"
+        assert method is not None, (
+            "ContractValidator must have validate_with_drift_detection method"
+        )
 
         sig = inspect.signature(method)
-        assert (
-            "table_schema" in sig.parameters
-        ), "validate_with_drift_detection must accept table_schema parameter"
+        assert "table_schema" in sig.parameters, (
+            "validate_with_drift_detection must accept table_schema parameter"
+        )
         # table_schema should default to None (drift detection is optional)
         param = sig.parameters["table_schema"]
-        assert (
-            param.default is None
-        ), "table_schema should default to None for graceful degradation"
+        assert param.default is None, "table_schema should default to None for graceful degradation"
 
 
 class TestDriftDetectorExportBoundary:

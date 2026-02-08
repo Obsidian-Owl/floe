@@ -303,8 +303,7 @@ def calculate_compliance(
     filtered_results = [
         r
         for r in check_results
-        if r["contract_name"] == contract_name
-        and period_start <= r["timestamp"] < period_end
+        if r["contract_name"] == contract_name and period_start <= r["timestamp"] < period_end
     ]
 
     # Group by check_type
@@ -358,9 +357,7 @@ def calculate_compliance(
         total_violations += failed
 
     # Calculate overall compliance
-    overall_compliance_pct = (
-        (total_passed / total_checks * 100.0) if total_checks > 0 else 0.0
-    )
+    overall_compliance_pct = (total_passed / total_checks * 100.0) if total_checks > 0 else 0.0
 
     # For monitoring_coverage_pct, assume 100% for now
     # (would require expected check count to calculate properly)

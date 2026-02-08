@@ -194,19 +194,11 @@ class TestJsonExporter:
         assert violation["severity"] == "error"
         assert violation["policy_type"] == "naming"
         assert violation["model_name"] == "stg_customers"
-        assert (
-            violation["message"]
-            == "Model 'stg_customers' violates medallion naming convention"
-        )
+        assert violation["message"] == "Model 'stg_customers' violates medallion naming convention"
         assert violation["expected"] == "Pattern: bronze_*, silver_*, gold_*"
         assert violation["actual"] == "stg_customers"
-        assert (
-            violation["suggestion"]
-            == "Rename model to bronze_customers or silver_customers"
-        )
-        assert (
-            violation["documentation_url"] == "https://floe.dev/docs/enforcement/naming"
-        )
+        assert violation["suggestion"] == "Rename model to bronze_customers or silver_customers"
+        assert violation["documentation_url"] == "https://floe.dev/docs/enforcement/naming"
         assert violation["downstream_impact"] == ["dim_customers", "fct_orders"]
 
     @pytest.mark.requirement("003b-FR-020")

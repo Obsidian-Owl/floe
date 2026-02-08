@@ -121,14 +121,10 @@ class PolicyEnforcer:
         )
 
         # Run all validators and collect violations
-        violations = self._run_all_validators(
-            manifest, models, max_violations, contract_path
-        )
+        violations = self._run_all_validators(manifest, models, max_violations, contract_path)
 
         # Post-process violations
-        violations = self._post_process_violations(
-            violations, manifest, dry_run, include_context
-        )
+        violations = self._post_process_violations(violations, manifest, dry_run, include_context)
 
         # Build result
         return self._build_enforcement_result(
@@ -163,9 +159,7 @@ class PolicyEnforcer:
                 return violations[:max_violations]
 
         # Run quality gate validators
-        violations = self._run_quality_gate_validators(
-            manifest, models, violations, max_violations
-        )
+        violations = self._run_quality_gate_validators(manifest, models, violations, max_violations)
         if self._limit_reached(violations, max_violations):
             return violations[:max_violations]
 
@@ -181,10 +175,7 @@ class PolicyEnforcer:
                 return violations[:max_violations]
 
         # Run data contract validation if configured (Epic 3C, T026)
-        if (
-            contract_path is not None
-            or self.governance_config.data_contracts is not None
-        ):
+        if contract_path is not None or self.governance_config.data_contracts is not None:
             violations.extend(self._validate_data_contracts(contract_path))
             if self._limit_reached(violations, max_violations):
                 return violations[:max_violations]
@@ -337,9 +328,7 @@ class PolicyEnforcer:
             List of model node dictionaries.
         """
         nodes = manifest.get("nodes", {})
-        models = [
-            node for node in nodes.values() if node.get("resource_type") == "model"
-        ]
+        models = [node for node in nodes.values() if node.get("resource_type") == "model"]
         return models
 
     def _extract_tests(self, manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -486,24 +475,18 @@ class PolicyEnforcer:
         # Check if data contracts validation is configured
         data_contracts_config = self.governance_config.data_contracts
         if data_contracts_config is None:
-            self._log.debug(
-                "data_contracts_validation_skipped", reason="not_configured"
-            )
+            self._log.debug("data_contracts_validation_skipped", reason="not_configured")
             return []
 
         # Get enforcement level
         enforcement_level = data_contracts_config.enforcement
         if enforcement_level == "off":
-            self._log.debug(
-                "data_contracts_validation_skipped", reason="enforcement=off"
-            )
+            self._log.debug("data_contracts_validation_skipped", reason="enforcement=off")
             return []
 
         # Skip if no contract path provided
         if contract_path is None:
-            self._log.debug(
-                "data_contracts_validation_skipped", reason="no_contract_path"
-            )
+            self._log.debug("data_contracts_validation_skipped", reason="no_contract_path")
             return []
 
         # Skip if contract file doesn't exist
@@ -518,9 +501,7 @@ class PolicyEnforcer:
         # Validate the contract
         try:
             validator = ContractValidator()
-            result = validator.validate(
-                contract_path, enforcement_level=enforcement_level
-            )
+            result = validator.validate(contract_path, enforcement_level=enforcement_level)
 
             # Convert ContractViolations to Violations
             violations: list[Violation] = []
@@ -776,9 +757,7 @@ class PolicyEnforcer:
 
         for violation in violations:
             # Find first matching override
-            matched_override = PolicyEnforcer._find_matching_override(
-                violation, active_overrides
-            )
+            matched_override = PolicyEnforcer._find_matching_override(violation, active_overrides)
 
             if matched_override is None:
                 # No match - keep violation unchanged
@@ -795,9 +774,7 @@ class PolicyEnforcer:
                 # Don't add to result - violation is excluded
             else:
                 # Downgrade action - convert error to warning (FR-012)
-                downgraded = PolicyEnforcer._apply_downgrade(
-                    violation, matched_override.pattern
-                )
+                downgraded = PolicyEnforcer._apply_downgrade(violation, matched_override.pattern)
                 log.warning(
                     "override_downgrade_applied",
                     pattern=matched_override.pattern,
@@ -942,9 +919,7 @@ class PolicyEnforcer:
 
         for override in overrides:
             # Check if pattern matches any model
-            matched_any = any(
-                fnmatch.fnmatch(name, override.pattern) for name in model_names
-            )
+            matched_any = any(fnmatch.fnmatch(name, override.pattern) for name in model_names)
             if not matched_any:
                 log.warning(
                     "override_matched_zero_models",

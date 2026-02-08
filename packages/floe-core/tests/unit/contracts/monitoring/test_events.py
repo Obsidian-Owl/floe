@@ -261,9 +261,7 @@ def test_event_time_is_iso8601_format() -> None:
 
     # Verify ISO 8601 format (YYYY-MM-DDTHH:MM:SS.ffffffZ)
     iso8601_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"
-    assert re.match(
-        iso8601_pattern, event_time
-    ), f"Invalid ISO 8601 format: {event_time}"
+    assert re.match(iso8601_pattern, event_time), f"Invalid ISO 8601 format: {event_time}"
 
     # Verify it can be parsed back to datetime
     parsed_time = datetime.fromisoformat(event_time.replace("Z", "+00:00"))

@@ -35,9 +35,7 @@ if TYPE_CHECKING:
     pass
 
 
-def _create_valid_compiled_artifacts(
-    unique_id: str, product_prefix: str = "lock"
-) -> Any:
+def _create_valid_compiled_artifacts(unique_id: str, product_prefix: str = "lock") -> Any:
     """Create a valid CompiledArtifacts instance for lock testing.
 
     Args:

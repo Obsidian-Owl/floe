@@ -176,10 +176,7 @@ class TestSecurityContextIntegration:
 
         # Verify structure is valid
         assert pod_spec["securityContext"]["runAsNonRoot"] is True
-        assert (
-            pod_spec["containers"][0]["securityContext"]["allowPrivilegeEscalation"]
-            is False
-        )
+        assert pod_spec["containers"][0]["securityContext"]["allowPrivilegeEscalation"] is False
 
     @pytest.mark.requirement("FR-060")
     def test_security_context_complies_with_pss_restricted(self) -> None:

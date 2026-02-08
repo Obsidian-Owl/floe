@@ -377,9 +377,7 @@ class TelemetryProvider:
         metric_endpoint = self._config.otlp_endpoint
 
         # For HTTP protocol, append /v1/metrics if not already present
-        if self._config.otlp_protocol == "http" and not metric_endpoint.endswith(
-            "/v1/metrics"
-        ):
+        if self._config.otlp_protocol == "http" and not metric_endpoint.endswith("/v1/metrics"):
             # Replace /v1/traces with /v1/metrics or append
             if metric_endpoint.endswith("/v1/traces"):
                 metric_endpoint = metric_endpoint.rsplit("/v1/traces", 1)[0]

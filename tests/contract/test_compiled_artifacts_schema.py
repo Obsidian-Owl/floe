@@ -33,10 +33,7 @@ from pydantic import ValidationError
 
 # Path to contract JSON Schema
 CONTRACTS_DIR = (
-    Path(__file__).parent.parent.parent
-    / "specs"
-    / "2b-compilation-pipeline"
-    / "contracts"
+    Path(__file__).parent.parent.parent / "specs" / "2b-compilation-pipeline" / "contracts"
 )
 CONTRACT_SCHEMA_PATH = CONTRACTS_DIR / "compiled-artifacts.json"
 
@@ -257,9 +254,7 @@ class TestCompiledArtifactsSchemaContract:
         assert "undocumented_field" in str(exc_info.value)
 
     @pytest.mark.requirement("2B-FR-004")
-    def test_immutability_contract(
-        self, minimal_compiled_artifacts: CompiledArtifacts
-    ) -> None:
+    def test_immutability_contract(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
         """Contract: CompiledArtifacts is immutable (frozen=True).
 
         Once created, CompiledArtifacts should not be modified.
@@ -412,9 +407,7 @@ class TestCompiledArtifactsSchemaContract:
         assert "observability" in schema["properties"]
 
     @pytest.mark.requirement("2B-FR-004")
-    def test_serialization_round_trip(
-        self, minimal_compiled_artifacts: CompiledArtifacts
-    ) -> None:
+    def test_serialization_round_trip(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
         """Contract: CompiledArtifacts can serialize to JSON and back.
 
         This ensures the contract can be passed between processes.
@@ -430,14 +423,8 @@ class TestCompiledArtifactsSchemaContract:
         # Verify key fields are preserved
         assert restored.version == minimal_compiled_artifacts.version
         assert restored.mode == minimal_compiled_artifacts.mode
-        assert (
-            restored.metadata.product_name
-            == minimal_compiled_artifacts.metadata.product_name
-        )
-        assert (
-            restored.identity.product_id
-            == minimal_compiled_artifacts.identity.product_id
-        )
+        assert restored.metadata.product_name == minimal_compiled_artifacts.metadata.product_name
+        assert restored.identity.product_id == minimal_compiled_artifacts.identity.product_id
 
 
 class TestResolvedPluginsContract:
@@ -541,10 +528,7 @@ class TestFileSerializationMethods:
         loaded = CompiledArtifacts.from_json_file(output_path)
 
         assert loaded.version == minimal_compiled_artifacts.version
-        assert (
-            loaded.metadata.product_name
-            == minimal_compiled_artifacts.metadata.product_name
-        )
+        assert loaded.metadata.product_name == minimal_compiled_artifacts.metadata.product_name
         assert loaded.mode == minimal_compiled_artifacts.mode
 
     @pytest.mark.requirement("2B-FR-004")
@@ -580,17 +564,9 @@ class TestFileSerializationMethods:
         # Verify all fields preserved
         assert loaded.version == minimal_compiled_artifacts.version
         assert loaded.mode == minimal_compiled_artifacts.mode
-        assert (
-            loaded.metadata.product_name
-            == minimal_compiled_artifacts.metadata.product_name
-        )
-        assert (
-            loaded.metadata.source_hash
-            == minimal_compiled_artifacts.metadata.source_hash
-        )
-        assert (
-            loaded.identity.product_id == minimal_compiled_artifacts.identity.product_id
-        )
+        assert loaded.metadata.product_name == minimal_compiled_artifacts.metadata.product_name
+        assert loaded.metadata.source_hash == minimal_compiled_artifacts.metadata.source_hash
+        assert loaded.identity.product_id == minimal_compiled_artifacts.identity.product_id
         assert loaded.plugins is not None
         assert loaded.plugins.compute.type == "duckdb"
         assert loaded.transforms is not None

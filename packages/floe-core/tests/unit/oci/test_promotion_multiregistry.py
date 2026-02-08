@@ -33,9 +33,7 @@ if TYPE_CHECKING:
     pass
 
 # Test constant
-TEST_DIGEST = (
-    "sha256:abc123def456abc123def456abc123def456abc123" "def456abc123def456abcd"
-)
+TEST_DIGEST = "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
 
 
 @pytest.fixture
@@ -307,9 +305,7 @@ class TestMultiRegistryPartialFailure:
             def mock_model_copy(update: dict) -> MagicMock:
                 updated_record = MagicMock(spec=PromotionRecord)
                 updated_record.warnings = update.get("warnings", [])
-                updated_record.registry_sync_status = update.get(
-                    "registry_sync_status", []
-                )
+                updated_record.registry_sync_status = update.get("registry_sync_status", [])
                 return updated_record
 
             mock_record.model_copy.side_effect = mock_model_copy
@@ -362,9 +358,7 @@ class TestMultiRegistryPartialFailure:
             def mock_model_copy(update: dict) -> MagicMock:
                 updated_record = MagicMock(spec=PromotionRecord)
                 updated_record.warnings = update.get("warnings", [])
-                updated_record.registry_sync_status = update.get(
-                    "registry_sync_status", []
-                )
+                updated_record.registry_sync_status = update.get("registry_sync_status", [])
                 return updated_record
 
             mock_record.model_copy.side_effect = mock_model_copy
@@ -416,9 +410,7 @@ class TestMultiRegistrySyncStatus:
             def mock_model_copy(update: dict) -> MagicMock:
                 updated_record = MagicMock(spec=PromotionRecord)
                 updated_record.warnings = update.get("warnings", [])
-                updated_record.registry_sync_status = update.get(
-                    "registry_sync_status", []
-                )
+                updated_record.registry_sync_status = update.get("registry_sync_status", [])
                 return updated_record
 
             mock_record.model_copy.side_effect = mock_model_copy
@@ -453,9 +445,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig accepts secondary_registries list."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             secondary_registries=[
                 "oci://secondary1.registry.com/repo",
@@ -470,9 +460,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig secondary_registries defaults to None."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
         )
         assert config.secondary_registries is None
@@ -482,9 +470,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig verify_secondary_digests defaults to True."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
         )
         assert config.verify_secondary_digests is True
@@ -494,9 +480,7 @@ class TestPromotionConfigSecondaryRegistries:
         """PromotionConfig allows disabling digest verification."""
         config = PromotionConfig(
             environments=[
-                EnvironmentConfig(
-                    name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}
-                ),
+                EnvironmentConfig(name="dev", gates={PromotionGate.POLICY_COMPLIANCE: True}),
             ],
             secondary_registries=["oci://secondary.registry.com/repo"],
             verify_secondary_digests=False,

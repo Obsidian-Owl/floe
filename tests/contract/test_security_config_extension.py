@@ -140,9 +140,7 @@ class TestEgressAllowRuleSchema:
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            EgressAllowRule(
-                name="invalid", to_namespace="vault", to_cidr="0.0.0.0/0", port=443
-            )
+            EgressAllowRule(name="invalid", to_namespace="vault", to_cidr="0.0.0.0/0", port=443)
 
         with pytest.raises(ValidationError):
             EgressAllowRule(name="invalid", port=443)
@@ -184,7 +182,5 @@ class TestEgressAllowRuleSchema:
         """Contract: Protocol can be UDP."""
         from floe_core.network import EgressAllowRule
 
-        rule = EgressAllowRule(
-            name="dns", to_namespace="kube-system", port=53, protocol="UDP"
-        )
+        rule = EgressAllowRule(name="dns", to_namespace="kube-system", port=53, protocol="UDP")
         assert rule.protocol == "UDP"

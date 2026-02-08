@@ -69,9 +69,7 @@ class TestAuthenticateTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             # Mock HTTP response
             with patch.object(plugin._client, "post") as mock_post:
@@ -80,9 +78,7 @@ class TestAuthenticateTracing:
                 mock_response.json.return_value = {"access_token": "test-token"}
                 mock_post.return_value = mock_response
 
-                with patch.object(
-                    plugin_module, "_get_tracer", return_value=mock_tracer
-                ):
+                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
                     token = plugin.authenticate({})
 
                     assert token == "test-token"
@@ -115,9 +111,7 @@ class TestAuthenticateTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             with patch.object(plugin._client, "post") as mock_post:
                 mock_response = MagicMock()
@@ -125,16 +119,12 @@ class TestAuthenticateTracing:
                 mock_response.json.return_value = {"access_token": "test-token"}
                 mock_post.return_value = mock_response
 
-                with patch.object(
-                    plugin_module, "_get_tracer", return_value=mock_tracer
-                ):
+                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
                     plugin.authenticate({})
 
                     # Verify span attributes were set
                     set_attribute_calls = mock_span.set_attribute.call_args_list
-                    attributes = {
-                        call[0][0]: call[0][1] for call in set_attribute_calls
-                    }
+                    attributes = {call[0][0]: call[0][1] for call in set_attribute_calls}
 
                     assert attributes.get("keycloak.realm") == "test-realm"
                     assert attributes.get("keycloak.client_id") == "my-client"
@@ -172,9 +162,7 @@ class TestValidateTokenTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             # Mock token validator
             mock_validator_result = MagicMock()
@@ -185,9 +173,7 @@ class TestValidateTokenTracing:
             with patch.object(
                 plugin._token_validator, "validate", return_value=mock_validator_result
             ):
-                with patch.object(
-                    plugin_module, "_get_tracer", return_value=mock_tracer
-                ):
+                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
                     result = plugin.validate_token("invalid-token")
 
                     assert result.valid is False
@@ -228,9 +214,7 @@ class TestValidateTokenForRealmTracing:
             mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
                 return_value=mock_span
             )
-            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-                return_value=None
-            )
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=None)
 
             # Mock realm validator
             mock_validator = MagicMock()
@@ -243,16 +227,12 @@ class TestValidateTokenForRealmTracing:
             with patch.object(
                 plugin, "_get_or_create_realm_validator", return_value=mock_validator
             ):
-                with patch.object(
-                    plugin_module, "_get_tracer", return_value=mock_tracer
-                ):
+                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
                     plugin.validate_token_for_realm("token", "other-realm")
 
                     # Verify multi_tenant attribute
                     set_attribute_calls = mock_span.set_attribute.call_args_list
-                    attributes = {
-                        call[0][0]: call[0][1] for call in set_attribute_calls
-                    }
+                    attributes = {call[0][0]: call[0][1] for call in set_attribute_calls}
 
                     assert attributes.get("keycloak.realm") == "other-realm"
                     assert attributes.get("keycloak.multi_tenant") is True

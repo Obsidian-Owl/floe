@@ -113,8 +113,7 @@ class TestFusionStaticAnalysis:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = (
-            "Linting model_a.sql\nLinting model_b.sql\n"
-            "Linting model_c.sql\nDone linting 3 files\n"
+            "Linting model_a.sql\nLinting model_b.sql\nLinting model_c.sql\nDone linting 3 files\n"
         )
         mock_result.stderr = ""
 

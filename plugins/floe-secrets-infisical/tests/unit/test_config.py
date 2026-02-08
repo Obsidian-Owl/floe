@@ -382,9 +382,7 @@ class TestInfisicalSecretsConfigSerialization:
 
         properties = schema.get("properties", {})
         for field_name, field_schema in properties.items():
-            assert (
-                "description" in field_schema
-            ), f"Field '{field_name}' missing description"
+            assert "description" in field_schema, f"Field '{field_name}' missing description"
 
 
 class TestInfisicalSecretsConfigEdgeCases:
@@ -455,10 +453,7 @@ class TestInfisicalSecretsConfigEquality:
 
         # Note: SecretStr equality depends on value comparison
         assert config1.client_id == config2.client_id
-        assert (
-            config1.client_secret.get_secret_value()
-            == config2.client_secret.get_secret_value()
-        )
+        assert config1.client_secret.get_secret_value() == config2.client_secret.get_secret_value()
 
     @pytest.mark.requirement("7A-FR-021")
     def test_different_configs_not_equal(self) -> None:

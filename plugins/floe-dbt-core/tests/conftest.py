@@ -335,9 +335,7 @@ def temp_dbt_project_with_artifacts(
     target_dir.mkdir()
 
     (target_dir / "manifest.json").write_text(json.dumps(sample_manifest, indent=2))
-    (target_dir / "run_results.json").write_text(
-        json.dumps(sample_run_results, indent=2)
-    )
+    (target_dir / "run_results.json").write_text(json.dumps(sample_run_results, indent=2))
 
     return temp_dbt_project
 

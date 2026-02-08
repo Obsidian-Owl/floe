@@ -78,9 +78,7 @@ class CustomRuleValidator:
         nodes = manifest.get("nodes", {})
 
         # Extract models only
-        models = [
-            node for node in nodes.values() if node.get("resource_type") == "model"
-        ]
+        models = [node for node in nodes.values() if node.get("resource_type") == "model"]
 
         if not self.custom_rules:
             self._log.debug("no_custom_rules_configured")
@@ -145,9 +143,7 @@ class CustomRuleValidator:
         Returns:
             List of models matching the pattern.
         """
-        return [
-            model for model in models if fnmatch.fnmatch(model.get("name", ""), pattern)
-        ]
+        return [model for model in models if fnmatch.fnmatch(model.get("name", ""), pattern)]
 
     def _validate_tags_for_prefix(
         self,
@@ -464,9 +460,7 @@ class CustomRuleValidator:
             severity="error",
             policy_type="custom",
             model_name=model_name,
-            message=(
-                f"Model '{model_name}' is missing required test types: {missing_str}"
-            ),
+            message=(f"Model '{model_name}' is missing required test types: {missing_str}"),
             expected=(
                 f"Tests of type [{required_str}] should exist for at least {min_columns} column(s)"
             ),
@@ -477,8 +471,7 @@ class CustomRuleValidator:
                 f"    - name: {model_name}\n"
                 f"      columns:\n"
                 f"        - name: <column_name>\n"
-                f"          data_tests:\n"
-                + "\n".join(f"            - {t}" for t in required_tests)
+                f"          data_tests:\n" + "\n".join(f"            - {t}" for t in required_tests)
             ),
             documentation_url=f"{CUSTOM_RULES_DOCS_BASE}#require-tests-of-type",
         )

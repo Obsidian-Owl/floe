@@ -48,9 +48,7 @@ class EventBuilder:
         ... )
     """
 
-    def __init__(
-        self, producer: str = "floe", default_namespace: str = "default"
-    ) -> None:
+    def __init__(self, producer: str = "floe", default_namespace: str = "default") -> None:
         """Initialize the event builder.
 
         Args:
@@ -84,9 +82,7 @@ class EventBuilder:
         Returns:
             LineageEvent with RunState.START
         """
-        namespace = (
-            job_namespace if job_namespace is not None else self.default_namespace
-        )
+        namespace = job_namespace if job_namespace is not None else self.default_namespace
         rid = run_id if run_id is not None else uuid4()
 
         return LineageEvent(
@@ -122,9 +118,7 @@ class EventBuilder:
         Returns:
             LineageEvent with RunState.COMPLETE
         """
-        namespace = (
-            job_namespace if job_namespace is not None else self.default_namespace
-        )
+        namespace = job_namespace if job_namespace is not None else self.default_namespace
 
         return LineageEvent(
             event_type=RunState.COMPLETE,
@@ -155,9 +149,7 @@ class EventBuilder:
         Returns:
             LineageEvent with RunState.FAIL
         """
-        namespace = (
-            job_namespace if job_namespace is not None else self.default_namespace
-        )
+        namespace = job_namespace if job_namespace is not None else self.default_namespace
         facets = run_facets.copy() if run_facets else {}
 
         # Add ErrorMessageRunFacet if error_message provided

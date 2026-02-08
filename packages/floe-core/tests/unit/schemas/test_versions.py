@@ -27,9 +27,9 @@ class TestCompiledArtifactsVersion:
     def test_version_is_semver_format(self) -> None:
         """Version MUST be in MAJOR.MINOR.PATCH format."""
         semver_pattern = r"^\d+\.\d+\.\d+$"
-        assert re.match(
-            semver_pattern, COMPILED_ARTIFACTS_VERSION
-        ), f"Version '{COMPILED_ARTIFACTS_VERSION}' is not valid semver"
+        assert re.match(semver_pattern, COMPILED_ARTIFACTS_VERSION), (
+            f"Version '{COMPILED_ARTIFACTS_VERSION}' is not valid semver"
+        )
 
     @pytest.mark.requirement("SC-001")
     def test_version_is_string(self) -> None:
@@ -60,17 +60,15 @@ class TestVersionHistory:
         """All history versions MUST be valid semver."""
         semver_pattern = r"^\d+\.\d+\.\d+$"
         for version in COMPILED_ARTIFACTS_VERSION_HISTORY:
-            assert re.match(
-                semver_pattern, version
-            ), f"History version '{version}' is not valid semver"
+            assert re.match(semver_pattern, version), (
+                f"History version '{version}' is not valid semver"
+            )
 
     @pytest.mark.requirement("SC-001")
     def test_history_descriptions_are_strings(self) -> None:
         """All history descriptions MUST be strings."""
         for version, description in COMPILED_ARTIFACTS_VERSION_HISTORY.items():
-            assert isinstance(
-                description, str
-            ), f"Description for {version} is not a string"
+            assert isinstance(description, str), f"Description for {version} is not a string"
 
     @pytest.mark.requirement("SC-001")
     def test_history_descriptions_not_empty(self) -> None:

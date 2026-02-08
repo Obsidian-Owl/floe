@@ -63,23 +63,17 @@ class TestDemoMode(IntegrationTestBase):
 
         for product in products:
             product_dir = demo_dir / product
-            assert (
-                product_dir.exists()
-            ), f"Product directory {product_dir} does not exist"
+            assert product_dir.exists(), f"Product directory {product_dir} does not exist"
 
             # Check required files
             for required_file in required_files:
                 file_path = product_dir / required_file
-                assert (
-                    file_path.exists()
-                ), f"Required file {required_file} missing in {product}"
+                assert file_path.exists(), f"Required file {required_file} missing in {product}"
 
             # Check seeds directory
             seeds_dir = product_dir / "seeds"
             assert seeds_dir.exists(), f"Seeds directory missing in {product}"
-            assert (
-                seeds_dir.is_dir()
-            ), f"Seeds path exists but is not a directory in {product}"
+            assert seeds_dir.is_dir(), f"Seeds path exists but is not a directory in {product}"
 
         # Verify all services are healthy
         for service_name, port in self.required_services:
@@ -90,9 +84,7 @@ class TestDemoMode(IntegrationTestBase):
 
         for product in products:
             definitions_path = demo_dir / product / "definitions.py"
-            assert (
-                definitions_path.exists()
-            ), f"Product {product} missing definitions.py"
+            assert definitions_path.exists(), f"Product {product} missing definitions.py"
 
             spec = importlib.util.spec_from_file_location(
                 f"demo.{product.replace('-', '_')}.definitions",
@@ -102,9 +94,7 @@ class TestDemoMode(IntegrationTestBase):
                 f"IMPORT GAP: Could not create module spec for {product}/definitions.py. "
                 "File may have invalid Python syntax."
             )
-            assert (
-                spec.loader is not None
-            ), f"IMPORT GAP: No loader for {product}/definitions.py"
+            assert spec.loader is not None, f"IMPORT GAP: No loader for {product}/definitions.py"
 
             try:
                 module = importlib.util.module_from_spec(spec)
@@ -166,12 +156,10 @@ class TestDemoMode(IntegrationTestBase):
         else:
             version = None
 
-        assert (
-            version is not None
-        ), f"Dagster GraphQL API not responding correctly. Response: {result}"
-        assert isinstance(
-            version, str
-        ), f"Version should be string, got {type(version)}"
+        assert version is not None, (
+            f"Dagster GraphQL API not responding correctly. Response: {result}"
+        )
+        assert isinstance(version, str), f"Version should be string, got {type(version)}"
         assert len(version) > 0, "Version should not be empty"
 
         # 2. Verify demo product definitions.py files exist (code ready for deployment)
@@ -180,9 +168,9 @@ class TestDemoMode(IntegrationTestBase):
 
         for product in expected_products:
             definitions_path = project_root / "demo" / product / "definitions.py"
-            assert (
-                definitions_path.exists()
-            ), f"Demo product {product} missing definitions.py. Expected at: {definitions_path}"
+            assert definitions_path.exists(), (
+                f"Demo product {product} missing definitions.py. Expected at: {definitions_path}"
+            )
 
         # 3. Verify workspace ConfigMap has code locations defined
         # This validates the Helm chart configuration is correct
@@ -216,9 +204,9 @@ class TestDemoMode(IntegrationTestBase):
                 f"Workspace ConfigMap missing code location for {product}. "
                 f"Check dagster.codeLocations in values-test.yaml"
             )
-            assert (
-                f"demo.{product_underscore}.definitions" in rendered
-            ), f"Workspace ConfigMap missing module path for {product}"
+            assert f"demo.{product_underscore}.definitions" in rendered, (
+                f"Workspace ConfigMap missing module path for {product}"
+            )
 
         # 4. Query Dagster for loaded code locations (will FAIL if locations can't load)
         locations_query = """
@@ -357,17 +345,15 @@ class TestDemoMode(IntegrationTestBase):
             spec_path = project_root / "demo" / product / "floe.yaml"
             artifacts = compile_pipeline(spec_path, manifest_path)
 
-            assert (
-                artifacts.transforms is not None
-            ), f"{product}: Compilation produced no transforms"
-            assert (
-                len(artifacts.transforms.models) > 0
-            ), f"{product}: Compilation produced zero transform models"
+            assert artifacts.transforms is not None, (
+                f"{product}: Compilation produced no transforms"
+            )
+            assert len(artifacts.transforms.models) > 0, (
+                f"{product}: Compilation produced zero transform models"
+            )
 
             # Verify models have quality_tier tags matching the YAML tiers
-            tier_set = {
-                m.quality_tier for m in artifacts.transforms.models if m.quality_tier
-            }
+            tier_set = {m.quality_tier for m in artifacts.transforms.models if m.quality_tier}
             assert len(tier_set) > 0, (
                 f"{product}: No models have quality_tier set. "
                 "Compiler should propagate tier from floe.yaml transforms."
@@ -408,21 +394,19 @@ class TestDemoMode(IntegrationTestBase):
             check=False,
         )
 
-        assert (
-            result.returncode == 0
-        ), f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
 
         rendered_output = result.stdout
 
         # Verify Grafana dashboard ConfigMap exists
-        assert (
-            "grafana-dashboards" in rendered_output.lower()
-        ), "Grafana dashboard ConfigMap not found in Helm templates"
+        assert "grafana-dashboards" in rendered_output.lower(), (
+            "Grafana dashboard ConfigMap not found in Helm templates"
+        )
 
         # Verify ConfigMap has kind: ConfigMap
-        assert (
-            "kind: ConfigMap" in rendered_output
-        ), "No ConfigMap resource found in Helm templates"
+        assert "kind: ConfigMap" in rendered_output, "No ConfigMap resource found in Helm templates"
 
         # Verify dashboard content marker (JSON structure)
         # Grafana dashboards typically contain "dashboard" and "panels" keys
@@ -432,9 +416,9 @@ class TestDemoMode(IntegrationTestBase):
             or "floe-platform-dashboard" in rendered_output.lower()
         )
 
-        assert (
-            has_dashboard_content
-        ), "Dashboard ConfigMap exists but appears to lack dashboard definitions"
+        assert has_dashboard_content, (
+            "Dashboard ConfigMap exists but appears to lack dashboard definitions"
+        )
 
         # Validate dashboard JSON contains actual panel definitions
         assert '"panels"' in rendered_output, (
@@ -447,10 +431,7 @@ class TestDemoMode(IntegrationTestBase):
             "DASHBOARD GAP: Dashboard ConfigMap has no 'datasource' references. "
             "Grafana dashboards must reference Prometheus or Jaeger data sources."
         )
-        assert (
-            "prometheus" in rendered_output.lower()
-            or "jaeger" in rendered_output.lower()
-        ), (
+        assert "prometheus" in rendered_output.lower() or "jaeger" in rendered_output.lower(), (
             "DASHBOARD GAP: Grafana dashboards exist but don't reference "
             "Prometheus or Jaeger data sources. Dashboards may show no data."
         )
@@ -490,17 +471,15 @@ class TestDemoMode(IntegrationTestBase):
 
         # Query for services endpoint
         response = jaeger_client.get("/api/services")
-        assert (
-            response.status_code == 200
-        ), f"Jaeger services endpoint failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Jaeger services endpoint failed: {response.status_code}"
+        )
 
         response_json = response.json()
         assert "data" in response_json, "Jaeger services response missing 'data' key"
 
         services = response_json["data"]
-        assert isinstance(
-            services, list
-        ), f"Services data should be a list, got: {type(services)}"
+        assert isinstance(services, list), f"Services data should be a list, got: {type(services)}"
 
         # HARD ASSERTION: After demo deployment, services should be emitting traces
         assert len(services) > 0, (
@@ -517,9 +496,7 @@ class TestDemoMode(IntegrationTestBase):
             "financial-risk",
         }
         matching_services = [
-            s
-            for s in services
-            if any(p in s.lower() for p in required_product_services)
+            s for s in services if any(p in s.lower() for p in required_product_services)
         ]
 
         assert len(matching_services) >= 1, (
@@ -532,9 +509,7 @@ class TestDemoMode(IntegrationTestBase):
 
         # Verify ALL 3 products are emitting (not just one)
         products_found = {
-            p
-            for p in required_product_services
-            if any(p in s.lower() for s in services)
+            p for p in required_product_services if any(p in s.lower() for s in services)
         }
         missing_products = required_product_services - products_found
         assert not missing_products, (
@@ -574,14 +549,12 @@ class TestDemoMode(IntegrationTestBase):
 
             # Verify self-contained configuration files
             floe_yaml = product_dir / "floe.yaml"
-            assert (
-                floe_yaml.exists()
-            ), f"Product {product} missing floe.yaml (not self-contained)"
+            assert floe_yaml.exists(), f"Product {product} missing floe.yaml (not self-contained)"
 
             dbt_project_yml = product_dir / "dbt_project.yml"
-            assert (
-                dbt_project_yml.exists()
-            ), f"Product {product} missing dbt_project.yml (not self-contained)"
+            assert dbt_project_yml.exists(), (
+                f"Product {product} missing dbt_project.yml (not self-contained)"
+            )
 
             # Verify has its own models directory
             models_dir = product_dir / "models"
@@ -601,9 +574,7 @@ class TestDemoMode(IntegrationTestBase):
             with open(dbt_project_path) as f:
                 dbt_config = yaml_mod.safe_load(f)
 
-            assert (
-                "name" in dbt_config
-            ), f"{product}: dbt_project.yml missing 'name' field"
+            assert "name" in dbt_config, f"{product}: dbt_project.yml missing 'name' field"
 
             # Verify dbt project can be parsed (valid model graph)
             # This catches broken refs, missing sources, etc.
@@ -657,14 +628,14 @@ class TestDemoMode(IntegrationTestBase):
                 with open(seed_file, newline="") as f:
                     reader = csv.reader(f)
                     header = next(reader, None)
-                    assert (
-                        header is not None
-                    ), f"Seed file {seed_file.name} in {product} has no header row"
+                    assert header is not None, (
+                        f"Seed file {seed_file.name} in {product} has no header row"
+                    )
                     row_count = sum(1 for _ in reader)
                     total_rows += row_count
-                    assert (
-                        row_count > 0
-                    ), f"Seed file {seed_file.name} in {product} has header but no data rows"
+                    assert row_count > 0, (
+                        f"Seed file {seed_file.name} in {product} has header but no data rows"
+                    )
 
             # Each product should have meaningful seed data (not trivial)
             assert total_rows >= 10, (

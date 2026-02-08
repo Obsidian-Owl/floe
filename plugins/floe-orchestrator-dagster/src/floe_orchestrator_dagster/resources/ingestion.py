@@ -74,9 +74,7 @@ def create_ingestion_resources(
 
     # Configure ingestion plugin if config provided
     if ingestion_ref.config:
-        registry.configure(
-            PluginType.INGESTION, ingestion_ref.type, ingestion_ref.config
-        )
+        registry.configure(PluginType.INGESTION, ingestion_ref.type, ingestion_ref.config)
 
     logger.info(
         "Ingestion resources created",

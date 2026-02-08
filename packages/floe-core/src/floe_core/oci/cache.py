@@ -198,11 +198,7 @@ class CacheManager:
                             "cache_expired",
                             registry=registry,
                             tag=tag,
-                            expires_at=(
-                                entry.expires_at.isoformat()
-                                if entry.expires_at
-                                else None
-                            ),
+                            expires_at=(entry.expires_at.isoformat() if entry.expires_at else None),
                         )
                         return None
 
@@ -241,9 +237,7 @@ class CacheManager:
                 self._save_index(index)
             return entry
 
-    def get_with_content(
-        self, registry: str, tag: str
-    ) -> tuple[CacheEntry, bytes] | None:
+    def get_with_content(self, registry: str, tag: str) -> tuple[CacheEntry, bytes] | None:
         """Retrieve a cached artifact with verified content.
 
         Gets the cache entry and reads its content, verifying the digest
@@ -590,9 +584,7 @@ class CacheManager:
             # Calculate how many more to remove
             remaining_to_free = to_free - freed
             avg_size = index.total_size / len(index.entries) if index.entries else 0
-            estimate_count = (
-                int(remaining_to_free / avg_size) + 1 if avg_size > 0 else 10
-            )
+            estimate_count = int(remaining_to_free / avg_size) + 1 if avg_size > 0 else 10
 
             lru_entries = index.get_lru_entries(estimate_count * 2)
             for entry in lru_entries:

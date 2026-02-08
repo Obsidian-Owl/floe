@@ -169,9 +169,7 @@ class TestCubeSemanticConfigHealthCheckTimeout:
     @pytest.mark.requirement("FR-047")
     def test_health_check_timeout_zero_rejected(self) -> None:
         """Test that zero timeout is rejected."""
-        with pytest.raises(
-            ValidationError, match="health_check_timeout must be positive"
-        ):
+        with pytest.raises(ValidationError, match="health_check_timeout must be positive"):
             CubeSemanticConfig(
                 api_secret="test",
                 health_check_timeout=0.0,
@@ -180,9 +178,7 @@ class TestCubeSemanticConfigHealthCheckTimeout:
     @pytest.mark.requirement("FR-047")
     def test_health_check_timeout_negative_rejected(self) -> None:
         """Test that negative timeout is rejected."""
-        with pytest.raises(
-            ValidationError, match="health_check_timeout must be positive"
-        ):
+        with pytest.raises(ValidationError, match="health_check_timeout must be positive"):
             CubeSemanticConfig(
                 api_secret="test",
                 health_check_timeout=-1.0,

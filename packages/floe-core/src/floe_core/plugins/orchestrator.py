@@ -199,9 +199,7 @@ class OrchestratorPlugin(PluginMetadata):
         ...
 
     @abstractmethod
-    def create_assets_from_transforms(
-        self, transforms: list[TransformConfig]
-    ) -> list[Any]:
+    def create_assets_from_transforms(self, transforms: list[TransformConfig]) -> list[Any]:
         """Create orchestrator assets from dbt transforms.
 
         Converts a list of dbt model configurations into platform-specific

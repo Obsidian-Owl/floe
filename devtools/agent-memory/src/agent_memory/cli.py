@@ -280,9 +280,7 @@ def init(
         try:
             checkpoint_data = json.loads(checkpoint_file.read_text())
             completed_files = set(checkpoint_data.get("completed_files", []))
-            typer.echo(
-                f"  Resuming from checkpoint ({len(completed_files)} files already indexed)"
-            )
+            typer.echo(f"  Resuming from checkpoint ({len(completed_files)} files already indexed)")
         except (json.JSONDecodeError, KeyError):
             typer.secho(
                 "  Warning: Could not read checkpoint, starting fresh",
@@ -309,9 +307,7 @@ def init(
                         typer.echo(f"  All files already indexed for: {source.path}")
                         continue
 
-                typer.echo(
-                    f"  Processing {len(files)} file(s) for dataset '{source.dataset}'"
-                )
+                typer.echo(f"  Processing {len(files)} file(s) for dataset '{source.dataset}'")
                 indexed_files[source.dataset] = []
 
                 if progress:
@@ -338,9 +334,7 @@ def init(
                                     **parsed.metadata,
                                 },
                             )
-                            checksums[str(file_path)] = _compute_file_checksum(
-                                file_path
-                            )
+                            checksums[str(file_path)] = _compute_file_checksum(file_path)
                             indexed_files[source.dataset].append(str(file_path))
                             all_processed_files.append(str(file_path))
                             datasets_to_cognify.add(source.dataset)
@@ -408,9 +402,7 @@ def init(
             if checkpoint_file.exists():
                 checkpoint_file.unlink()
 
-            total_files = sum(len(f) for f in indexed_files.values()) + len(
-                completed_files
-            )
+            total_files = sum(len(f) for f in indexed_files.values()) + len(completed_files)
             typer.echo()
             typer.secho(
                 f"Initialization complete: {total_files} file(s) indexed",
@@ -491,9 +483,7 @@ def sync(
     ] = None,
     all_files: Annotated[
         bool,
-        typer.Option(
-            "--all", "-a", help="Sync all configured sources, not just changed"
-        ),
+        typer.Option("--all", "-a", help="Sync all configured sources, not just changed"),
     ] = False,
     dry_run: Annotated[
         bool,
@@ -509,9 +499,7 @@ def sync(
     ] = True,
     since: Annotated[
         str,
-        typer.Option(
-            "--since", "-s", help="Git reference to compare against for changes"
-        ),
+        typer.Option("--since", "-s", help="Git reference to compare against for changes"),
     ] = "HEAD~1",
     verify: Annotated[
         bool,
@@ -573,9 +561,7 @@ def sync(
                         )
                         raise typer.Exit(code=0)
 
-                    typer.echo(
-                        f"Found {len(files_to_sync)} changed file(s) since {since}..."
-                    )
+                    typer.echo(f"Found {len(files_to_sync)} changed file(s) since {since}...")
                 except GitError as e:
                     typer.secho(f"Git error: {e}", fg=typer.colors.RED, err=True)
                     typer.echo("Falling back to syncing all configured sources...")
@@ -614,17 +600,13 @@ def sync(
             # Sync markdown files
             if md_files:
                 typer.echo(f"\nSyncing {len(md_files)} markdown file(s)...")
-                md_datasets = await _sync_markdown_files(
-                    client, config, md_files, verify=verify
-                )
+                md_datasets = await _sync_markdown_files(client, config, md_files, verify=verify)
                 datasets_to_cognify.update(md_datasets)
 
             # Sync Python files (extract docstrings)
             if py_files:
                 typer.echo(f"\nSyncing {len(py_files)} Python file(s)...")
-                py_datasets = await _sync_python_files(
-                    client, config, py_files, verify=verify
-                )
+                py_datasets = await _sync_python_files(client, config, py_files, verify=verify)
                 datasets_to_cognify.update(py_datasets)
 
             # Run cognify for each dataset that had files synced
@@ -678,9 +660,7 @@ def _get_all_source_files(config: AgentMemoryConfig) -> list[Path]:
     return files
 
 
-def _filter_by_dataset(
-    files: list[Path], config: AgentMemoryConfig, dataset: str
-) -> list[Path]:
+def _filter_by_dataset(files: list[Path], config: AgentMemoryConfig, dataset: str) -> list[Path]:
     """Filter files to those matching a specific dataset.
 
     Args:
@@ -901,9 +881,7 @@ def search(
             typer.echo(f"Search type: {result.search_type}")
             if dataset:
                 typer.echo(f"Dataset: {dataset}")
-            typer.echo(
-                f"Results: {result.total_count} (in {result.execution_time_ms}ms)"
-            )
+            typer.echo(f"Results: {result.total_count} (in {result.execution_time_ms}ms)")
             typer.echo()
 
             if not result.results:
@@ -981,12 +959,8 @@ def memify(
                     fg=typer.colors.YELLOW,
                 )
                 typer.echo()
-                typer.echo(
-                    "This is a known limitation of Cognee Cloud (api.cognee.ai)."
-                )
-                typer.echo(
-                    "The memify endpoint is only available in self-hosted Cognee."
-                )
+                typer.echo("This is a known limitation of Cognee Cloud (api.cognee.ai).")
+                typer.echo("The memify endpoint is only available in self-hosted Cognee.")
                 typer.echo()
                 typer.echo("Your knowledge graph is still functional:")
                 typer.echo("  - sync: Adds content to the graph")
@@ -1129,9 +1103,7 @@ def drift(
 
     # Summary
     if report.has_drift:
-        typer.secho(
-            f"  Drift detected: {report.total_drifted} file(s)", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"  Drift detected: {report.total_drifted} file(s)", fg=typer.colors.YELLOW)
     else:
         typer.secho("  No drift detected", fg=typer.colors.GREEN)
     typer.echo()
@@ -1170,9 +1142,7 @@ def drift(
 def repair(
     dry_run: Annotated[
         bool,
-        typer.Option(
-            "--dry-run", help="Show what would be repaired without making changes"
-        ),
+        typer.Option("--dry-run", help="Show what would be repaired without making changes"),
     ] = False,
 ) -> None:
     """Repair drift issues by re-indexing changed files.
@@ -1202,9 +1172,7 @@ def repair(
     typer.echo()
 
     if dry_run:
-        typer.secho(
-            "[DRY RUN] Would perform the following repairs:", fg=typer.colors.YELLOW
-        )
+        typer.secho("[DRY RUN] Would perform the following repairs:", fg=typer.colors.YELLOW)
         typer.echo()
 
         if report.modified_files:
@@ -1213,16 +1181,12 @@ def repair(
                 typer.echo(f"    - {f}")
 
         if report.deleted_files:
-            typer.echo(
-                f"  Remove {len(report.deleted_files)} deleted file(s) from checksums:"
-            )
+            typer.echo(f"  Remove {len(report.deleted_files)} deleted file(s) from checksums:")
             for f in report.deleted_files:
                 typer.echo(f"    - {f}")
 
         if report.renamed_files:
-            typer.echo(
-                f"  Update {len(report.renamed_files)} renamed file(s) in checksums:"
-            )
+            typer.echo(f"  Update {len(report.renamed_files)} renamed file(s) in checksums:")
             for old_path, new_path in report.renamed_files:
                 typer.echo(f"    - {old_path} -> {new_path}")
 
@@ -1257,9 +1221,7 @@ def repair(
 
         # Handle deleted files - remove from checksums
         if report.deleted_files:
-            typer.echo(
-                f"Removing {len(report.deleted_files)} deleted file(s) from checksums..."
-            )
+            typer.echo(f"Removing {len(report.deleted_files)} deleted file(s) from checksums...")
             for file_path in report.deleted_files:
                 if file_path in checksums:
                     del checksums[file_path]
@@ -1268,9 +1230,7 @@ def repair(
 
         # Handle renamed files - update path in checksums
         if report.renamed_files:
-            typer.echo(
-                f"Updating {len(report.renamed_files)} renamed file(s) in checksums..."
-            )
+            typer.echo(f"Updating {len(report.renamed_files)} renamed file(s) in checksums...")
             for old_path, new_path in report.renamed_files:
                 if old_path in checksums:
                     # Move checksum to new path
@@ -1282,9 +1242,7 @@ def repair(
         checksums_path.write_text(json.dumps(checksums, indent=2))
 
         typer.echo()
-        typer.secho(
-            f"Repair complete: {repaired_count} file(s) repaired", fg=typer.colors.GREEN
-        )
+        typer.secho(f"Repair complete: {repaired_count} file(s) repaired", fg=typer.colors.GREEN)
 
     _run_async(_repair())
 
@@ -1293,9 +1251,7 @@ def repair(
 def reset(
     confirm: Annotated[
         bool,
-        typer.Option(
-            "--confirm", help="Confirm reset without prompting (required for safety)"
-        ),
+        typer.Option("--confirm", help="Confirm reset without prompting (required for safety)"),
     ] = False,
 ) -> None:
     """Reset knowledge graph by pruning all data and clearing local state.
@@ -1429,9 +1385,7 @@ def test(
                 if result.found_keywords:
                     typer.echo(f"         Found: {', '.join(result.found_keywords)}")
                 if result.missing_keywords:
-                    typer.echo(
-                        f"         Missing: {', '.join(result.missing_keywords)}"
-                    )
+                    typer.echo(f"         Missing: {', '.join(result.missing_keywords)}")
                 if result.error:
                     typer.echo(f"         Error: {result.error}")
 
@@ -1447,11 +1401,7 @@ def test(
             typer.secho(
                 f"Tests: {report.passed_tests}/{report.total_tests} passed "
                 f"({report.pass_rate:.1f}%)",
-                fg=(
-                    typer.colors.YELLOW
-                    if report.pass_rate >= threshold
-                    else typer.colors.RED
-                ),
+                fg=(typer.colors.YELLOW if report.pass_rate >= threshold else typer.colors.RED),
             )
 
         return report
@@ -1463,9 +1413,7 @@ def test(
         if report.pass_rate >= threshold:
             raise typer.Exit(code=0)
         else:
-            typer.echo(
-                f"\nFailed: Pass rate {report.pass_rate:.1f}% < {threshold}% threshold"
-            )
+            typer.echo(f"\nFailed: Pass rate {report.pass_rate:.1f}% < {threshold}% threshold")
             raise typer.Exit(code=1)
 
     except CogneeClientError as e:
@@ -1732,13 +1680,9 @@ def codify(
 
         # Load existing state
         try:
-            existing_state = (
-                json.loads(state_file.read_text()) if state_file.exists() else {}
-            )
+            existing_state = json.loads(state_file.read_text()) if state_file.exists() else {}
             existing_checksums = (
-                json.loads(checksums_file.read_text())
-                if checksums_file.exists()
-                else {}
+                json.loads(checksums_file.read_text()) if checksums_file.exists() else {}
             )
         except json.JSONDecodeError:
             existing_state = {}
@@ -1773,9 +1717,7 @@ def codify(
                                 )
                             total_entries += len(entries)
                             indexed_files.append(str(file_path))
-                            checksums[str(file_path)] = _compute_file_checksum(
-                                file_path
-                            )
+                            checksums[str(file_path)] = _compute_file_checksum(file_path)
             else:
                 for i, file_path in enumerate(files, 1):
                     typer.echo(f"  [{i}/{len(files)}] {file_path}")

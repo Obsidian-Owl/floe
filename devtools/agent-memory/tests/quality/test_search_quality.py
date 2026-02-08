@@ -116,9 +116,7 @@ class TestKnownQueryResults:
 
     @pytest.mark.requirement("FR-017")
     @pytest.mark.asyncio
-    async def test_validate_quality_returns_report(
-        self, mock_cognee_client: MagicMock
-    ) -> None:
+    async def test_validate_quality_returns_report(self, mock_cognee_client: MagicMock) -> None:
         """Test that validate_quality returns a QualityReport."""
         from agent_memory.ops.quality import QualityReport, TestQuery, validate_quality
 
@@ -149,9 +147,7 @@ class TestKnownQueryResults:
         from agent_memory.ops.quality import TestQuery, validate_quality
 
         mock_result = MagicMock()
-        mock_result.results = [
-            MagicMock(content="The CogneeClient connects to cognee api")
-        ]
+        mock_result.results = [MagicMock(content="The CogneeClient connects to cognee api")]
         mock_cognee_client.search = AsyncMock(return_value=mock_result)
 
         queries = [
@@ -236,9 +232,7 @@ class TestKnownQueryResults:
         ]
         mock_cognee_client.search = AsyncMock(return_value=mock_result)
 
-        queries = [
-            TestQuery(query="Test query", expected_keywords=[], description="Test")
-        ]
+        queries = [TestQuery(query="Test query", expected_keywords=[], description="Test")]
 
         report = await validate_quality(mock_cognee_client, queries)
 
@@ -277,9 +271,9 @@ class TestArchitectureQueryRelevance:
         report = await validate_quality(mock_cognee_client, architecture_queries)
 
         # Target: 90% pass rate for architecture queries
-        assert (
-            report.pass_rate >= 90.0
-        ), f"Architecture query relevance is {report.pass_rate}%, target is 90%"
+        assert report.pass_rate >= 90.0, (
+            f"Architecture query relevance is {report.pass_rate}%, target is 90%"
+        )
 
     @pytest.mark.requirement("FR-017")
     @pytest.mark.asyncio
@@ -298,9 +292,7 @@ class TestArchitectureQueryRelevance:
 
         # Second attempt returns better match
         second_result = MagicMock()
-        second_result.results = [
-            MagicMock(content="layer architecture plugin kubernetes")
-        ]
+        second_result.results = [MagicMock(content="layer architecture plugin kubernetes")]
 
         mock_cognee_client.search = AsyncMock(side_effect=[first_result, second_result])
 
@@ -351,15 +343,11 @@ class TestSearchResultAccuracy:
         report = await validate_quality(mock_cognee_client, codebase_queries)
 
         # Target: 95% accuracy for known queries
-        assert (
-            report.pass_rate >= 95.0
-        ), f"Search accuracy is {report.pass_rate}%, target is 95%"
+        assert report.pass_rate >= 95.0, f"Search accuracy is {report.pass_rate}%, target is 95%"
 
     @pytest.mark.requirement("FR-017")
     @pytest.mark.asyncio
-    async def test_partial_keyword_matches_counted(
-        self, mock_cognee_client: MagicMock
-    ) -> None:
+    async def test_partial_keyword_matches_counted(self, mock_cognee_client: MagicMock) -> None:
         """Test that partial keyword matches are tracked correctly."""
         from agent_memory.ops.quality import TestQuery, validate_quality
 
@@ -409,14 +397,10 @@ class TestSearchTypes:
             )
         ]
 
-        report = await validate_quality(
-            mock_cognee_client, queries, search_type="GRAPH_COMPLETION"
-        )
+        report = await validate_quality(mock_cognee_client, queries, search_type="GRAPH_COMPLETION")
 
         assert report.passed_tests == 1
-        mock_cognee_client.search.assert_called_with(
-            "Test query", search_type="GRAPH_COMPLETION"
-        )
+        mock_cognee_client.search.assert_called_with("Test query", search_type="GRAPH_COMPLETION")
 
     @pytest.mark.requirement("FR-017")
     @pytest.mark.asyncio
@@ -436,9 +420,7 @@ class TestSearchTypes:
             )
         ]
 
-        report = await validate_quality(
-            mock_cognee_client, queries, search_type="SUMMARIES"
-        )
+        report = await validate_quality(mock_cognee_client, queries, search_type="SUMMARIES")
 
         assert report.passed_tests == 1
         mock_cognee_client.search.assert_called_with(
@@ -463,9 +445,7 @@ class TestSearchTypes:
             )
         ]
 
-        report = await validate_quality(
-            mock_cognee_client, queries, search_type="INSIGHTS"
-        )
+        report = await validate_quality(mock_cognee_client, queries, search_type="INSIGHTS")
 
         assert report.passed_tests == 1
         mock_cognee_client.search.assert_called_with(
@@ -490,9 +470,7 @@ class TestSearchTypes:
             )
         ]
 
-        report = await validate_quality(
-            mock_cognee_client, queries, search_type="CHUNKS"
-        )
+        report = await validate_quality(mock_cognee_client, queries, search_type="CHUNKS")
 
         assert report.passed_tests == 1
         mock_cognee_client.search.assert_called_with(
@@ -528,9 +506,7 @@ class TestSearchTypes:
         )
 
         # CHUNKS doesn't find "graph"
-        report2 = await validate_quality(
-            mock_cognee_client, [query], search_type="CHUNKS"
-        )
+        report2 = await validate_quality(mock_cognee_client, [query], search_type="CHUNKS")
 
         assert report1.passed_tests == 1
         assert report2.passed_tests == 0
@@ -546,9 +522,7 @@ class TestSearchErrorHandling:
 
     @pytest.mark.requirement("FR-017")
     @pytest.mark.asyncio
-    async def test_search_error_recorded_in_result(
-        self, mock_cognee_client: MagicMock
-    ) -> None:
+    async def test_search_error_recorded_in_result(self, mock_cognee_client: MagicMock) -> None:
         """Test that search errors are recorded in test results."""
         from agent_memory.ops.quality import TestQuery, validate_quality
 
@@ -648,14 +622,10 @@ class TestQualityReportMetrics:
         """Test all_passed property works correctly."""
         from agent_memory.ops.quality import QualityReport
 
-        all_pass = QualityReport(
-            total_tests=3, passed_tests=3, failed_tests=0, results=[]
-        )
+        all_pass = QualityReport(total_tests=3, passed_tests=3, failed_tests=0, results=[])
         assert all_pass.all_passed is True
 
-        some_fail = QualityReport(
-            total_tests=3, passed_tests=2, failed_tests=1, results=[]
-        )
+        some_fail = QualityReport(total_tests=3, passed_tests=2, failed_tests=1, results=[])
         assert some_fail.all_passed is False
 
 

@@ -21,9 +21,7 @@ class TestOpenLineageFailEvent:
     """Tests for T088: FAIL event emission on check failure."""
 
     @pytest.mark.requirement("FR-006")
-    def test_lineage_emitter_emit_fail_event(
-        self, gx_plugin: GreatExpectationsPlugin
-    ) -> None:
+    def test_lineage_emitter_emit_fail_event(self, gx_plugin: GreatExpectationsPlugin) -> None:
         """OpenLineageEmitter emits FAIL event with check results."""
         from unittest.mock import patch
 
@@ -62,9 +60,7 @@ class TestOpenLineageFailEvent:
             assert assertions[0]["success"] is False
 
     @pytest.mark.requirement("FR-006")
-    def test_lineage_emitter_formats_facet(
-        self, gx_plugin: GreatExpectationsPlugin
-    ) -> None:
+    def test_lineage_emitter_formats_facet(self, gx_plugin: GreatExpectationsPlugin) -> None:
         """OpenLineageEmitter creates quality facet with check details."""
         from floe_quality_gx.lineage import create_quality_facet
 
@@ -86,9 +82,7 @@ class TestOpenLineageFailEvent:
         assert len(facet["dataQuality"]["assertions"]) == 1
 
     @pytest.mark.requirement("FR-006")
-    def test_lineage_emitter_multiple_failures(
-        self, gx_plugin: GreatExpectationsPlugin
-    ) -> None:
+    def test_lineage_emitter_multiple_failures(self, gx_plugin: GreatExpectationsPlugin) -> None:
         """OpenLineageEmitter filters to only failed checks in event."""
         from unittest.mock import patch
 
@@ -145,9 +139,7 @@ class TestGracefulDegradation:
         assert emitter is None
 
     @pytest.mark.requirement("FR-006")
-    def test_emitter_handles_connection_failure(
-        self, gx_plugin: GreatExpectationsPlugin
-    ) -> None:
+    def test_emitter_handles_connection_failure(self, gx_plugin: GreatExpectationsPlugin) -> None:
         """Emitter gracefully handles connection failures."""
         from floe_quality_gx.lineage import OpenLineageQualityEmitter
 
@@ -171,9 +163,7 @@ class TestGracefulDegradation:
         )
 
     @pytest.mark.requirement("FR-006")
-    def test_emitter_handles_empty_results(
-        self, gx_plugin: GreatExpectationsPlugin
-    ) -> None:
+    def test_emitter_handles_empty_results(self, gx_plugin: GreatExpectationsPlugin) -> None:
         """Emitter handles empty check results gracefully."""
         from floe_quality_gx.lineage import OpenLineageQualityEmitter
 

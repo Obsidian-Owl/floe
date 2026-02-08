@@ -222,9 +222,7 @@ def lock_command(
                 "environment": env,
                 "reason": lock_status.reason,
                 "locked_by": lock_status.locked_by,
-                "locked_at": (
-                    lock_status.locked_at.isoformat() if lock_status.locked_at else None
-                ),
+                "locked_at": (lock_status.locked_at.isoformat() if lock_status.locked_at else None),
             }
             click.echo(json.dumps(result, indent=2))
         else:

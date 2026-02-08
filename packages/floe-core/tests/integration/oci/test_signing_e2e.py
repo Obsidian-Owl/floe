@@ -185,9 +185,7 @@ class TestKeylessSigningE2E(IntegrationTestBase):
         signing_client = SigningClient(config)
 
         content = artifacts_path.read_bytes()
-        artifact_ref = (
-            f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
-        )
+        artifact_ref = f"oci://{client.config.uri.replace('oci://', '')}:{test_artifact_tag}"
 
         metadata = signing_client.sign(content, artifact_ref)
 
@@ -325,12 +323,8 @@ class TestKeylessSigningE2E(IntegrationTestBase):
 
         mock_tracer = MagicMock()
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("floe_core.oci.signing.tracer", mock_tracer):
             signing_client.sign(content, artifact_ref)

@@ -88,9 +88,7 @@ def mock_sigstore_bundle() -> MagicMock:
     bundle_data = {
         "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
         "verificationMaterial": {
-            "certificate": {
-                "rawBytes": base64.b64encode(b"mock-certificate-der").decode()
-            },
+            "certificate": {"rawBytes": base64.b64encode(b"mock-certificate-der").decode()},
             "tlogEntries": [
                 {
                     "logIndex": "12345678",
@@ -137,9 +135,7 @@ class TestSigningClient:
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
-            mock_context.signer.return_value.__enter__ = MagicMock(
-                return_value=mock_signer
-            )
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
             mock_context_cls.from_trust_config.return_value = mock_context
 
@@ -207,12 +203,8 @@ class TestOIDCTokenAcquisition:
             mock_issuer_cls.return_value = mock_issuer
 
             mock_signing_config = MagicMock()
-            mock_signing_config.get_oidc_url.return_value = (
-                "https://oauth2.sigstore.dev/auth"
-            )
-            mock_trust_config.production.return_value.signing_config = (
-                mock_signing_config
-            )
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
             token = client._get_identity_token()
@@ -235,21 +227,15 @@ class TestOIDCTokenAcquisition:
             mock_issuer_cls.return_value = mock_issuer
 
             mock_signing_config = MagicMock()
-            mock_signing_config.get_oidc_url.return_value = (
-                "https://oauth2.sigstore.dev/auth"
-            )
-            mock_trust_config.production.return_value.signing_config = (
-                mock_signing_config
-            )
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
 
             with pytest.raises(OIDCTokenError, match="Failed to acquire OIDC token"):
                 client._get_identity_token()
 
-    def test_browser_oauth_disabled_raises_error(
-        self, keyless_config: SigningConfig
-    ) -> None:
+    def test_browser_oauth_disabled_raises_error(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token raises OIDCTokenError when browser OAuth is disabled."""
         with (
             patch("sigstore.oidc.detect_credential", return_value=None),
@@ -329,10 +315,7 @@ class TestSignatureMetadataAnnotations:
 
         assert annotations[ANNOTATION_BUNDLE] == "dGVzdC1idW5kbGU="
         assert annotations[ANNOTATION_MODE] == "keyless"
-        assert (
-            annotations[ANNOTATION_ISSUER]
-            == "https://token.actions.githubusercontent.com"
-        )
+        assert annotations[ANNOTATION_ISSUER] == "https://token.actions.githubusercontent.com"
         assert annotations[ANNOTATION_SUBJECT] == "repo:acme/floe:ref:refs/heads/main"
         assert annotations[ANNOTATION_REKOR_INDEX] == "12345678"
         assert ANNOTATION_SIGNED_AT in annotations
@@ -383,15 +366,11 @@ class TestSignArtifactConvenienceFunction:
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
-            mock_context.signer.return_value.__enter__ = MagicMock(
-                return_value=mock_signer
-            )
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
             mock_context_cls.from_trust_config.return_value = mock_context
 
-            metadata = sign_artifact(
-                b"content", "oci://registry/repo:v1.0.0", keyless_config
-            )
+            metadata = sign_artifact(b"content", "oci://registry/repo:v1.0.0", keyless_config)
 
             assert isinstance(metadata, SignatureMetadata)
 
@@ -466,9 +445,7 @@ class TestOpenTelemetrySpans:
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
-            mock_context.signer.return_value.__enter__ = MagicMock(
-                return_value=mock_signer
-            )
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
             mock_context_cls.from_trust_config.return_value = mock_context
 
@@ -506,9 +483,7 @@ class TestOpenTelemetrySpans:
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
-            mock_context.signer.return_value.__enter__ = MagicMock(
-                return_value=mock_signer
-            )
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
             mock_context_cls.from_trust_config.return_value = mock_context
 
@@ -540,9 +515,7 @@ class TestOpenTelemetrySpans:
         with (
             patch("floe_core.oci.signing.check_cosign_available", return_value=True),
             patch.object(SigningClient, "_cosign_sign_blob", return_value=mock_bundle),
-            patch.object(
-                SigningClient, "_resolve_key_reference", return_value="/path/to/key"
-            ),
+            patch.object(SigningClient, "_resolve_key_reference", return_value="/path/to/key"),
         ):
             client = SigningClient(config)
             client.sign(b"content", "oci://registry/repo:v1.0.0")
@@ -571,9 +544,7 @@ class TestOpenTelemetrySpans:
         with (
             patch("floe_core.oci.signing.check_cosign_available", return_value=True),
             patch.object(SigningClient, "_cosign_sign_blob", return_value=mock_bundle),
-            patch.object(
-                SigningClient, "_resolve_key_reference", return_value="/path/to/key"
-            ),
+            patch.object(SigningClient, "_resolve_key_reference", return_value="/path/to/key"),
         ):
             client = SigningClient(config)
             client.sign(b"content", "oci://registry/repo:v1.0.0")
@@ -582,9 +553,7 @@ class TestOpenTelemetrySpans:
 
         # The key_ref attribute is set on the key_based span, not the root span
         # This is because _key_bundle_to_metadata uses trace.get_current_span()
-        key_based_span = next(
-            (s for s in spans if s.name == "floe.oci.sign.key_based"), None
-        )
+        key_based_span = next((s for s in spans if s.name == "floe.oci.sign.key_based"), None)
 
         assert key_based_span is not None
         attrs = dict(key_based_span.attributes)
@@ -601,9 +570,7 @@ class TestKeyBasedSigning:
         from floe_core.schemas.secrets import SecretReference, SecretSource
 
         key_file = tmp_path / "cosign.key"
-        key_file.write_text(
-            "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"
-        )
+        key_file.write_text("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----")
 
         os.environ["FLOE_TEST_KEY"] = str(key_file)
 
@@ -629,9 +596,7 @@ class TestKeyBasedSigning:
         assert "File not found" in str(error)
         assert "/path/to/key" in str(error)
 
-    def test_resolve_key_reference_env_var(
-        self, key_based_config: SigningConfig
-    ) -> None:
+    def test_resolve_key_reference_env_var(self, key_based_config: SigningConfig) -> None:
         """_resolve_key_reference resolves environment variable."""
         client = SigningClient(key_based_config)
         key_ref = client._resolve_key_reference()
@@ -645,9 +610,7 @@ class TestKeyBasedSigning:
 
         config = SigningConfig(
             mode="key-based",
-            private_key_ref=SecretReference(
-                source=SecretSource.ENV, name="nonexistent-var"
-            ),
+            private_key_ref=SecretReference(source=SecretSource.ENV, name="nonexistent-var"),
         )
         client = SigningClient(config)
 
@@ -661,9 +624,7 @@ class TestKeyBasedSigning:
         with pytest.raises(ValidationError, match="private_key_ref required"):
             SigningConfig(mode="key-based", private_key_ref=None)
 
-    def test_sign_key_based_with_cosign_mock(
-        self, key_based_config: SigningConfig
-    ) -> None:
+    def test_sign_key_based_with_cosign_mock(self, key_based_config: SigningConfig) -> None:
         """Key-based signing calls cosign CLI and returns metadata."""
         mock_bundle = {"base64Signature": "dGVzdC1zaWc=", "keyRef": "/path/to/key"}
 
@@ -681,9 +642,7 @@ class TestKeyBasedSigning:
             assert metadata.rekor_log_index is None
             assert metadata.bundle is not None
 
-    def test_key_signature_metadata_has_fingerprint(
-        self, key_based_config: SigningConfig
-    ) -> None:
+    def test_key_signature_metadata_has_fingerprint(self, key_based_config: SigningConfig) -> None:
         """Key-based signature metadata includes key fingerprint."""
         mock_bundle = {"base64Signature": "dGVzdC1zaWc="}
 
@@ -710,9 +669,7 @@ class TestKeyBasedSigning:
         assert len(fingerprint) == 16
         assert all(c in "0123456789abcdef" for c in fingerprint)
 
-    def test_cosign_sign_blob_timeout(
-        self, key_based_config: SigningConfig, tmp_path
-    ) -> None:
+    def test_cosign_sign_blob_timeout(self, key_based_config: SigningConfig, tmp_path) -> None:
         """_cosign_sign_blob handles timeout."""
         import subprocess
 
@@ -727,17 +684,13 @@ class TestKeyBasedSigning:
             with pytest.raises(SigningError, match="timed out"):
                 client._cosign_sign_blob(b"content", str(tmp_path / "key"))
 
-    def test_cosign_sign_blob_failure(
-        self, key_based_config: SigningConfig, tmp_path
-    ) -> None:
+    def test_cosign_sign_blob_failure(self, key_based_config: SigningConfig, tmp_path) -> None:
         """_cosign_sign_blob handles cosign failure."""
         with (
             patch("subprocess.run") as mock_run,
             patch("floe_core.oci.signing.check_cosign_available", return_value=True),
         ):
-            mock_run.return_value = MagicMock(
-                returncode=1, stderr="error: key not found"
-            )
+            mock_run.return_value = MagicMock(returncode=1, stderr="error: key not found")
 
             client = SigningClient(key_based_config)
 
@@ -855,9 +808,7 @@ class TestConcurrentSigning:
             test_complete.set()
             holder_thread.join(timeout=5)
 
-        assert (
-            error_raised is not None
-        ), "ConcurrentSigningError should have been raised"
+        assert error_raised is not None, "ConcurrentSigningError should have been raised"
         assert "v1.0.0" in str(error_raised)
         assert error_raised.timeout_seconds == 0.2
 
@@ -895,9 +846,7 @@ class TestConcurrentSigning:
             mock_context = MagicMock()
             mock_signer = MagicMock()
             mock_signer.sign_artifact.return_value = mock_sigstore_bundle
-            mock_context.signer.return_value.__enter__ = MagicMock(
-                return_value=mock_signer
-            )
+            mock_context.signer.return_value.__enter__ = MagicMock(return_value=mock_signer)
             mock_context.signer.return_value.__exit__ = MagicMock(return_value=False)
             mock_context_cls.from_trust_config.return_value = mock_context
 
@@ -917,9 +866,7 @@ class TestOIDCTokenRetry:
     Validates retry behavior for transient OIDC token acquisition failures.
     """
 
-    def test_oidc_retry_on_transient_failure(
-        self, keyless_config: SigningConfig
-    ) -> None:
+    def test_oidc_retry_on_transient_failure(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token retries on transient IdentityError."""
         from sigstore.oidc import IdentityError
 
@@ -946,12 +893,8 @@ class TestOIDCTokenRetry:
             mock_issuer_cls.return_value = mock_issuer
 
             mock_signing_config = MagicMock()
-            mock_signing_config.get_oidc_url.return_value = (
-                "https://oauth2.sigstore.dev/auth"
-            )
-            mock_trust_config.production.return_value.signing_config = (
-                mock_signing_config
-            )
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
             token = client._get_identity_token()
@@ -960,9 +903,7 @@ class TestOIDCTokenRetry:
             assert call_count == 3
             assert mock_sleep.call_count == 2
 
-    def test_oidc_retry_respects_max_retries(
-        self, keyless_config: SigningConfig
-    ) -> None:
+    def test_oidc_retry_respects_max_retries(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token raises after max retries exhausted."""
         from sigstore.oidc import IdentityError
 
@@ -978,12 +919,8 @@ class TestOIDCTokenRetry:
             mock_issuer_cls.return_value = mock_issuer
 
             mock_signing_config = MagicMock()
-            mock_signing_config.get_oidc_url.return_value = (
-                "https://oauth2.sigstore.dev/auth"
-            )
-            mock_trust_config.production.return_value.signing_config = (
-                mock_signing_config
-            )
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
 
@@ -992,9 +929,7 @@ class TestOIDCTokenRetry:
 
             assert f"Failed after {OIDC_MAX_RETRIES} attempts" in str(exc_info.value)
 
-    def test_oidc_retry_uses_exponential_backoff(
-        self, keyless_config: SigningConfig
-    ) -> None:
+    def test_oidc_retry_uses_exponential_backoff(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token uses exponential backoff between retries."""
         from sigstore.oidc import IdentityError
 
@@ -1016,12 +951,8 @@ class TestOIDCTokenRetry:
             mock_issuer_cls.return_value = mock_issuer
 
             mock_signing_config = MagicMock()
-            mock_signing_config.get_oidc_url.return_value = (
-                "https://oauth2.sigstore.dev/auth"
-            )
-            mock_trust_config.production.return_value.signing_config = (
-                mock_signing_config
-            )
+            mock_signing_config.get_oidc_url.return_value = "https://oauth2.sigstore.dev/auth"
+            mock_trust_config.production.return_value.signing_config = mock_signing_config
 
             client = SigningClient(keyless_config)
 
@@ -1035,9 +966,7 @@ class TestOIDCTokenRetry:
             # Second retry: 0.5 * 2^1 + 0.05 = 1.05
             assert abs(sleep_delays[1] - (OIDC_RETRY_BASE_DELAY * 2 + 0.05)) < 0.01
 
-    def test_oidc_no_retry_on_immediate_success(
-        self, keyless_config: SigningConfig
-    ) -> None:
+    def test_oidc_no_retry_on_immediate_success(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token does not retry on immediate success."""
         mock_token = MagicMock()
 
@@ -1052,9 +981,7 @@ class TestOIDCTokenRetry:
             assert token == mock_token
             mock_sleep.assert_not_called()
 
-    def test_oidc_ambient_credential_failure_retries(
-        self, keyless_config: SigningConfig
-    ) -> None:
+    def test_oidc_ambient_credential_failure_retries(self, keyless_config: SigningConfig) -> None:
         """_get_identity_token retries when ambient credential detection fails."""
         from sigstore.oidc import IdentityError
 

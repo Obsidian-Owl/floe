@@ -541,13 +541,8 @@ def test_contract_override_severity_thresholds() -> None:
 
     # Verify override has different thresholds
     assert contract.monitoring_overrides is not None
-    assert contract.monitoring_overrides.severity_thresholds.info_pct == pytest.approx(
-        70.0
-    )
-    assert (
-        contract.monitoring_overrides.severity_thresholds.warning_pct
-        == pytest.approx(85.0)
-    )
+    assert contract.monitoring_overrides.severity_thresholds.info_pct == pytest.approx(70.0)
+    assert contract.monitoring_overrides.severity_thresholds.warning_pct == pytest.approx(85.0)
     assert contract.monitoring_overrides.severity_thresholds.critical_count == 5
     assert contract.monitoring_overrides.severity_thresholds.critical_window_hours == 12
 
@@ -598,10 +593,7 @@ def test_contract_override_alerts_config() -> None:
     # Verify override has custom alert routing
     assert contract.monitoring_overrides is not None
     assert len(contract.monitoring_overrides.alerts.routing_rules) == 2
-    assert (
-        contract.monitoring_overrides.alerts.routing_rules[0].channel_name
-        == "pagerduty"
-    )
+    assert contract.monitoring_overrides.alerts.routing_rules[0].channel_name == "pagerduty"
     assert (
         contract.monitoring_overrides.alerts.routing_rules[1].min_severity
         == ViolationSeverity.CRITICAL

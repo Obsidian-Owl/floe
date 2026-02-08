@@ -62,9 +62,7 @@ class LineageExtractor(Protocol):
         ...         return (inputs, outputs)
     """
 
-    def extract(
-        self, context: Any
-    ) -> tuple[list[LineageDataset], list[LineageDataset]]:
+    def extract(self, context: Any) -> tuple[list[LineageDataset], list[LineageDataset]]:
         """Extract lineage information from execution context.
 
         Args:

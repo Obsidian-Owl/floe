@@ -117,9 +117,7 @@ class BaseIdentityPluginTests(ABC):
         assert len(identity_plugin.version) > 0
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_has_floe_api_version_property(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_has_floe_api_version_property(self, identity_plugin: IdentityPlugin) -> None:
         """Verify plugin declares compatible floe API version.
 
         This is used to check plugin compatibility with the platform.
@@ -151,9 +149,7 @@ class BaseIdentityPluginTests(ABC):
         assert callable(identity_plugin.validate_token)
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_authenticate_returns_token_or_none(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_authenticate_returns_token_or_none(self, identity_plugin: IdentityPlugin) -> None:
         """Verify authenticate() returns str or None for invalid creds.
 
         Per contract: Return None for failed authentication, not raise exception.
@@ -163,9 +159,7 @@ class BaseIdentityPluginTests(ABC):
         assert result is None
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_validate_token_returns_result(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_validate_token_returns_result(self, identity_plugin: IdentityPlugin) -> None:
         """Verify validate_token() always returns TokenValidationResult.
 
         Even for invalid tokens, should return result with valid=False.
@@ -179,9 +173,7 @@ class BaseIdentityPluginTests(ABC):
         assert hasattr(result, "error")
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_invalid_token_returns_invalid_result(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_invalid_token_returns_invalid_result(self, identity_plugin: IdentityPlugin) -> None:
         """Verify invalid tokens return valid=False in result."""
         result = identity_plugin.validate_token("definitely-not-a-valid-token")
         assert result.valid is False
@@ -189,9 +181,7 @@ class BaseIdentityPluginTests(ABC):
         assert result.error != ""
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_get_user_info_returns_userinfo_or_none(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_get_user_info_returns_userinfo_or_none(self, identity_plugin: IdentityPlugin) -> None:
         """Verify get_user_info() returns UserInfo or None.
 
         For invalid tokens, should return None.
@@ -220,9 +210,7 @@ class BaseIdentityPluginTests(ABC):
         assert callable(identity_plugin.health_check)
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_health_check_returns_health_status(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_health_check_returns_health_status(self, identity_plugin: IdentityPlugin) -> None:
         """Verify health_check() returns a HealthStatus object."""
         from floe_core.plugin_metadata import HealthStatus
 
@@ -247,17 +235,13 @@ class BaseIdentityPluginTests(ABC):
     # =========================================================================
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_has_get_config_schema_method(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_has_get_config_schema_method(self, identity_plugin: IdentityPlugin) -> None:
         """Verify plugin has get_config_schema() method."""
         assert hasattr(identity_plugin, "get_config_schema")
         assert callable(identity_plugin.get_config_schema)
 
     @pytest.mark.requirement("7A-FR-001")
-    def test_config_schema_returns_valid_type(
-        self, identity_plugin: IdentityPlugin
-    ) -> None:
+    def test_config_schema_returns_valid_type(self, identity_plugin: IdentityPlugin) -> None:
         """Verify get_config_schema() returns None or a BaseModel class."""
         schema = identity_plugin.get_config_schema()
 

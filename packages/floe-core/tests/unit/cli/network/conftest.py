@@ -189,9 +189,7 @@ def manifest_dir_with_policies(
     manifest_dir.mkdir()
 
     (manifest_dir / "default-deny.yaml").write_text(valid_network_policy_yaml)
-    (manifest_dir / "allow-egress.yaml").write_text(
-        valid_network_policy_with_rules_yaml
-    )
+    (manifest_dir / "allow-egress.yaml").write_text(valid_network_policy_with_rules_yaml)
 
     return manifest_dir
 
@@ -205,9 +203,7 @@ def manifest_dir_with_invalid_policies(
     manifest_dir = tmp_path / "invalid-manifests"
     manifest_dir.mkdir()
 
-    (manifest_dir / "invalid.yaml").write_text(
-        invalid_network_policy_missing_apiversion_yaml
-    )
+    (manifest_dir / "invalid.yaml").write_text(invalid_network_policy_missing_apiversion_yaml)
 
     return manifest_dir
 

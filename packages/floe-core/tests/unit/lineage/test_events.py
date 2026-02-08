@@ -249,9 +249,7 @@ class TestToOpenLineageEvent:
         builder = EventBuilder()
         run_id = uuid4()
         run_facets = {"parent": {"run_id": "parent-123"}}
-        event = builder.start_run(
-            job_name="test_job", run_id=run_id, run_facets=run_facets
-        )
+        event = builder.start_run(job_name="test_job", run_id=run_id, run_facets=run_facets)
         wire_format = to_openlineage_event(event)
 
         assert wire_format["run"]["runId"] == str(run_id)
@@ -751,9 +749,7 @@ class TestEventSerialization:
         """Dataset facets are preserved in serialized dict."""
         builder = EventBuilder()
         dataset_facets = {"schema": {"fields": [{"name": "id", "type": "int"}]}}
-        inputs = [
-            LineageDataset(namespace="raw", name="customers", facets=dataset_facets)
-        ]
+        inputs = [LineageDataset(namespace="raw", name="customers", facets=dataset_facets)]
 
         event = builder.start_run(job_name="test_job", inputs=inputs)
         wire_format = to_openlineage_event(event)
@@ -778,10 +774,7 @@ class TestEventSerialization:
         wire_format = to_openlineage_event(event)
 
         assert "schemaURL" in wire_format
-        assert (
-            wire_format["schemaURL"]
-            == "https://openlineage.io/spec/2-0-2/OpenLineage.json"
-        )
+        assert wire_format["schemaURL"] == "https://openlineage.io/spec/2-0-2/OpenLineage.json"
 
 
 class TestEventBuilderEdgeCases:
@@ -864,9 +857,7 @@ class TestEventBuilderEdgeCases:
     def test_fail_run_with_none_error_message(self) -> None:
         """fail_run with None error_message does not add error facet."""
         builder = EventBuilder()
-        event = builder.fail_run(
-            run_id=uuid4(), job_name="test_job", error_message=None
-        )
+        event = builder.fail_run(run_id=uuid4(), job_name="test_job", error_message=None)
 
         assert "errorMessage" not in event.run.facets
 
@@ -917,9 +908,7 @@ class TestEventBuilderEdgeCases:
             ("a", "b"),  # Single character names
         ],
     )
-    def test_builder_initialization_parametrized(
-        self, producer: str, namespace: str
-    ) -> None:
+    def test_builder_initialization_parametrized(self, producer: str, namespace: str) -> None:
         """EventBuilder initializes with various producer and namespace values."""
         builder = EventBuilder(producer=producer, default_namespace=namespace)
 
@@ -935,9 +924,7 @@ class TestEventBuilderEdgeCases:
             ("job_with_underscores", "namespace_with_underscores"),
         ],
     )
-    def test_start_run_with_various_names(
-        self, job_name: str, job_namespace: str
-    ) -> None:
+    def test_start_run_with_various_names(self, job_name: str, job_namespace: str) -> None:
         """start_run handles various job name and namespace formats."""
         builder = EventBuilder()
         event = builder.start_run(job_name=job_name, job_namespace=job_namespace)

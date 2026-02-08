@@ -228,9 +228,7 @@ class TestContainerSecurityContextYAMLCompatibility:
         yaml_str = yaml.dump(context)
         restored: dict[str, Any] = yaml.safe_load(yaml_str)
 
-        assert (
-            restored["allowPrivilegeEscalation"] == context["allowPrivilegeEscalation"]
-        )
+        assert restored["allowPrivilegeEscalation"] == context["allowPrivilegeEscalation"]
         assert restored["readOnlyRootFilesystem"] == context["readOnlyRootFilesystem"]
         assert restored["capabilities"]["drop"] == context["capabilities"]["drop"]
 

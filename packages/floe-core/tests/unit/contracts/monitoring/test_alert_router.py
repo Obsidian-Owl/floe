@@ -243,9 +243,7 @@ async def test_deduplication_within_window() -> None:
 
     config = AlertConfig(
         routing_rules=[
-            AlertChannelRoutingRule(
-                channel_name="channel", min_severity=ViolationSeverity.WARNING
-            ),
+            AlertChannelRoutingRule(channel_name="channel", min_severity=ViolationSeverity.WARNING),
         ],
         dedup_window_minutes=5,
         rate_limit_per_contract=10,
@@ -254,12 +252,8 @@ async def test_deduplication_within_window() -> None:
 
     router = AlertRouter(config=config, channels={"channel": channel})
 
-    event1 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
-    event2 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
+    event1 = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
+    event2 = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
 
     results1 = await router.route(event1)
     results2 = await router.route(event2)
@@ -280,9 +274,7 @@ async def test_deduplication_after_window() -> None:
     # 1 minute dedup window for testing (minimum allowed)
     config = AlertConfig(
         routing_rules=[
-            AlertChannelRoutingRule(
-                channel_name="channel", min_severity=ViolationSeverity.WARNING
-            ),
+            AlertChannelRoutingRule(channel_name="channel", min_severity=ViolationSeverity.WARNING),
         ],
         dedup_window_minutes=1,
         rate_limit_per_contract=10,
@@ -291,9 +283,7 @@ async def test_deduplication_after_window() -> None:
 
     router = AlertRouter(config=config, channels={"channel": channel})
 
-    event1 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
+    event1 = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
     results1 = await router.route(event1)
 
     # Manually advance dedup state timestamp to simulate window expiry
@@ -301,9 +291,7 @@ async def test_deduplication_after_window() -> None:
     for key in router._dedup_state:
         router._dedup_state[key] = time.monotonic() - 61  # Set to 61 seconds ago
 
-    event2 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
+    event2 = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
     results2 = await router.route(event2)
 
     # Both alerts should succeed
@@ -320,9 +308,7 @@ async def test_deduplication_different_type() -> None:
 
     config = AlertConfig(
         routing_rules=[
-            AlertChannelRoutingRule(
-                channel_name="channel", min_severity=ViolationSeverity.WARNING
-            ),
+            AlertChannelRoutingRule(channel_name="channel", min_severity=ViolationSeverity.WARNING),
         ],
         dedup_window_minutes=5,
         rate_limit_per_contract=10,
@@ -331,12 +317,8 @@ async def test_deduplication_different_type() -> None:
 
     router = AlertRouter(config=config, channels={"channel": channel})
 
-    event1 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
-    event2 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.SCHEMA_DRIFT
-    )
+    event1 = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
+    event2 = _make_event(contract_name="orders_v1", violation_type=ViolationType.SCHEMA_DRIFT)
 
     results1 = await router.route(event1)
     results2 = await router.route(event2)
@@ -355,9 +337,7 @@ async def test_rate_limit_exceeded() -> None:
 
     config = AlertConfig(
         routing_rules=[
-            AlertChannelRoutingRule(
-                channel_name="channel", min_severity=ViolationSeverity.WARNING
-            ),
+            AlertChannelRoutingRule(channel_name="channel", min_severity=ViolationSeverity.WARNING),
         ],
         dedup_window_minutes=1,  # Minimum allowed value
         rate_limit_per_contract=2,
@@ -367,15 +347,9 @@ async def test_rate_limit_exceeded() -> None:
     router = AlertRouter(config=config, channels={"channel": channel})
 
     # Send 3 alerts for same contract (different violation types to avoid dedup)
-    event1 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
-    event2 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.SCHEMA_DRIFT
-    )
-    event3 = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.QUALITY
-    )
+    event1 = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
+    event2 = _make_event(contract_name="orders_v1", violation_type=ViolationType.SCHEMA_DRIFT)
+    event3 = _make_event(contract_name="orders_v1", violation_type=ViolationType.QUALITY)
 
     results1 = await router.route(event1)
     results2 = await router.route(event2)
@@ -396,9 +370,7 @@ async def test_rate_limit_different_contracts() -> None:
 
     config = AlertConfig(
         routing_rules=[
-            AlertChannelRoutingRule(
-                channel_name="channel", min_severity=ViolationSeverity.WARNING
-            ),
+            AlertChannelRoutingRule(channel_name="channel", min_severity=ViolationSeverity.WARNING),
         ],
         dedup_window_minutes=1,  # Minimum allowed value
         rate_limit_per_contract=2,
@@ -408,9 +380,7 @@ async def test_rate_limit_different_contracts() -> None:
     router = AlertRouter(config=config, channels={"channel": channel})
 
     # Send 2 alerts for each contract
-    event1_orders = _make_event(
-        contract_name="orders_v1", violation_type=ViolationType.FRESHNESS
-    )
+    event1_orders = _make_event(contract_name="orders_v1", violation_type=ViolationType.FRESHNESS)
     event2_orders = _make_event(
         contract_name="orders_v1", violation_type=ViolationType.SCHEMA_DRIFT
     )
@@ -538,9 +508,7 @@ async def test_inactive_contract_skipped() -> None:
 
     config = AlertConfig(
         routing_rules=[
-            AlertChannelRoutingRule(
-                channel_name="channel", min_severity=ViolationSeverity.WARNING
-            ),
+            AlertChannelRoutingRule(channel_name="channel", min_severity=ViolationSeverity.WARNING),
         ],
         dedup_window_minutes=5,
         rate_limit_per_contract=10,
@@ -550,9 +518,7 @@ async def test_inactive_contract_skipped() -> None:
     router = AlertRouter(config=config, channels={"channel": channel})
 
     # Router doesn't filter by contract active status - that's the monitor's job
-    event = _make_event(
-        contract_name="inactive_contract", severity=ViolationSeverity.ERROR
-    )
+    event = _make_event(contract_name="inactive_contract", severity=ViolationSeverity.ERROR)
     results = await router.route(event)
 
     # Alert should be routed regardless (monitor handles filtering)

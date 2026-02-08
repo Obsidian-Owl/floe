@@ -306,9 +306,7 @@ class TestJaegerValidateConnection:
                 mock_conn.return_value.__exit__ = MagicMock(return_value=False)
                 plugin.validate_connection()
                 # Verify the host was parsed correctly (without http://)
-                mock_conn.assert_called_once_with(
-                    ("jaeger-collector", 4317), timeout=5.0
-                )
+                mock_conn.assert_called_once_with(("jaeger-collector", 4317), timeout=5.0)
         finally:
             if original is None:
                 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
@@ -356,9 +354,7 @@ class TestJaegerValidateConnection:
                 mock_conn.return_value.__enter__ = MagicMock(return_value=None)
                 mock_conn.return_value.__exit__ = MagicMock(return_value=False)
                 plugin.validate_connection()
-                mock_conn.assert_called_once_with(
-                    ("jaeger-collector", 4317), timeout=5.0
-                )
+                mock_conn.assert_called_once_with(("jaeger-collector", 4317), timeout=5.0)
         finally:
             if original is None:
                 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)

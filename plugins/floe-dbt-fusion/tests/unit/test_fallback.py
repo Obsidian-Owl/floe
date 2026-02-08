@@ -136,9 +136,7 @@ class TestFallbackPluginBehavior:
     """Tests for FallbackPlugin behavior delegating to dbt-core."""
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_compile_delegates_to_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_compile_delegates_to_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.compile_project() delegates to DBTCorePlugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -162,9 +160,7 @@ class TestFallbackPluginBehavior:
         assert result == temp_dbt_project / "target" / "manifest.json"
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_run_delegates_to_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_run_delegates_to_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.run_models() delegates to DBTCorePlugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -194,9 +190,7 @@ class TestFallbackPluginBehavior:
         assert result.success is True
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_test_delegates_to_core(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_test_delegates_to_core(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.test_models() delegates to DBTCorePlugin."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -458,9 +452,7 @@ class TestFallbackEdgeCases:
     """Tests for edge cases in fallback behavior."""
 
     @pytest.mark.requirement("FR-021")
-    def test_fallback_plugin_lint_project_delegates(
-        self, temp_dbt_project: Path
-    ) -> None:
+    def test_fallback_plugin_lint_project_delegates(self, temp_dbt_project: Path) -> None:
         """FallbackPlugin.lint_project() delegates to core."""
         from floe_dbt_fusion.fallback import FallbackPlugin
 
@@ -487,9 +479,7 @@ class TestFallbackEdgeCases:
         from floe_dbt_fusion.fallback import FallbackPlugin
 
         mock_core_plugin = MagicMock()
-        mock_core_plugin.compile_project.side_effect = RuntimeError(
-            "Compilation failed"
-        )
+        mock_core_plugin.compile_project.side_effect = RuntimeError("Compilation failed")
 
         fallback = FallbackPlugin(core_plugin=mock_core_plugin)
 

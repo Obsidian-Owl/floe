@@ -55,9 +55,7 @@ if TYPE_CHECKING:
 # =============================================================================
 
 # Valid SHA256 digest for test layers (64 hex characters)
-TEST_LAYER_DIGEST = (
-    "sha256:abc123def456789012345678901234567890123456789012345678901234abcd"
-)
+TEST_LAYER_DIGEST = "sha256:abc123def456789012345678901234567890123456789012345678901234abcd"
 
 # Mock tag list for list operation tests (avoids duplication in multiple tests)
 MOCK_LIST_TAGS = ["v1.0.0", "v1.1.0", "latest-dev"]
@@ -331,9 +329,7 @@ class TestMutableTagPatterns:
 
         for tag, should_match in mutable_tags:
             matched = any(p.match(tag) for p in MUTABLE_TAG_PATTERNS)
-            assert (
-                matched == should_match
-            ), f"Tag '{tag}' match={matched}, expected={should_match}"
+            assert matched == should_match, f"Tag '{tag}' match={matched}, expected={should_match}"
 
 
 class TestOCIClientPush:
@@ -360,9 +356,7 @@ class TestOCIClientPush:
         # Mock tag_exists to return False (new tag)
         with (
             patch.object(oci_client, "tag_exists", return_value=False),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
         ):
             digest = oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
 
@@ -396,9 +390,7 @@ class TestOCIClientPush:
 
         with (
             patch.object(oci_client, "tag_exists", return_value=False),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
         ):
             digest = oci_client.push(
                 sample_compiled_artifacts,
@@ -456,9 +448,7 @@ class TestOCIClientPush:
         # Tag exists but is mutable
         with (
             patch.object(oci_client, "tag_exists", return_value=True),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
         ):
             # Should succeed for mutable tag even though it exists
             digest = oci_client.push(sample_compiled_artifacts, tag="latest-dev")
@@ -555,10 +545,7 @@ class TestOCIClientPull:
             result = oci_client.pull(tag="v1.0.0")
 
         assert isinstance(result, CompiledArtifacts)
-        assert (
-            result.metadata.product_name
-            == sample_compiled_artifacts.metadata.product_name
-        )
+        assert result.metadata.product_name == sample_compiled_artifacts.metadata.product_name
         mock_oras.pull.assert_called_once()
 
     @pytest.mark.requirement("8A-FR-002")
@@ -624,9 +611,9 @@ class TestOCIClientPull:
 
         assert isinstance(result, CompiledArtifacts)
         # Exact assertion: 1 failure + 1 success = 2 total calls
-        assert (
-            call_count == 2
-        ), f"Expected exactly 2 attempts (1 fail + 1 success), got {call_count}"
+        assert call_count == 2, (
+            f"Expected exactly 2 attempts (1 fail + 1 success), got {call_count}"
+        )
 
     @pytest.mark.requirement("8A-FR-002")
     def test_pull_validates_artifact_schema(
@@ -693,9 +680,7 @@ class TestOCIClientList:
 
             # Mock get_manifest for each tag to get digest and created_at
             # Note: ORAS uses container= parameter, not target=
-            def mock_get_manifest(
-                container: str | None = None, **_kwargs: Any
-            ) -> dict[str, Any]:
+            def mock_get_manifest(container: str | None = None, **_kwargs: Any) -> dict[str, Any]:
                 # Return mock manifest data (accepts **kwargs for ORAS client flexibility)
                 return {
                     "schemaVersion": 2,
@@ -755,9 +740,7 @@ class TestOCIClientList:
             mock_oras.get_tags.return_value = mock_tags_list
 
             # Note: ORAS uses container= parameter, not target=
-            def mock_get_manifest(
-                container: str | None = None, **_kwargs: Any
-            ) -> dict[str, Any]:
+            def mock_get_manifest(container: str | None = None, **_kwargs: Any) -> dict[str, Any]:
                 return {
                     "schemaVersion": 2,
                     "layers": [
@@ -892,9 +875,7 @@ artifacts:
             OCIClient.from_manifest(manifest_path)
 
     @pytest.mark.requirement("8A-FR-022")
-    def test_from_manifest_raises_on_missing_registry_section(
-        self, tmp_path: Path
-    ) -> None:
+    def test_from_manifest_raises_on_missing_registry_section(self, tmp_path: Path) -> None:
         """Test that from_manifest raises error when registry section missing."""
         from floe_core.oci.errors import OCIError
 
@@ -945,9 +926,7 @@ class TestOCIClientPushOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             span_created.append({"name": name, "attributes": attributes or {}})
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
@@ -957,9 +936,7 @@ class TestOCIClientPushOTelInstrumentation:
 
         with (
             patch.object(oci_client, "tag_exists", return_value=False),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
             patch.object(original_metrics, "create_span", side_effect=mock_create_span),
         ):
             oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
@@ -990,9 +967,7 @@ class TestOCIClientPushOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             span_attributes.update(attributes or {})
             mock_span = MagicMock()
 
@@ -1008,9 +983,7 @@ class TestOCIClientPushOTelInstrumentation:
 
         with (
             patch.object(oci_client, "tag_exists", return_value=False),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
             patch.object(original_metrics, "create_span", side_effect=mock_create_span),
         ):
             oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
@@ -1054,9 +1027,7 @@ class TestOCIClientPushOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
             mock_span.set_status = MagicMock()
@@ -1065,12 +1036,8 @@ class TestOCIClientPushOTelInstrumentation:
 
         with (
             patch.object(oci_client, "tag_exists", return_value=False),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
-            patch.object(
-                original_metrics, "record_duration", side_effect=mock_record_duration
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
+            patch.object(original_metrics, "record_duration", side_effect=mock_record_duration),
             patch.object(original_metrics, "create_span", side_effect=mock_create_span),
         ):
             oci_client.push(sample_compiled_artifacts, tag="v1.0.0")
@@ -1114,9 +1081,7 @@ class TestOCIClientPushOTelInstrumentation:
         from opentelemetry.trace import Status, StatusCode
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
 
@@ -1141,9 +1106,7 @@ class TestOCIClientPushOTelInstrumentation:
 
         with (
             patch.object(oci_client, "tag_exists", return_value=False),
-            patch.object(
-                oci_client, "_create_oras_client", return_value=mock_oras_client
-            ),
+            patch.object(oci_client, "_create_oras_client", return_value=mock_oras_client),
             patch.object(original_metrics, "create_span", side_effect=mock_create_span),
         ):
             with pytest.raises(RegistryUnavailableError):
@@ -1197,9 +1160,7 @@ class TestOCIClientPullOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             span_created.append({"name": name, "attributes": attributes or {}})
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
@@ -1249,9 +1210,7 @@ class TestOCIClientPullOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             span_attributes.update(attributes or {})
             mock_span = MagicMock()
             mock_span.set_attribute = lambda k, v: span_attributes.update({k: v})
@@ -1312,9 +1271,7 @@ class TestOCIClientPullOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
             mock_span.set_status = MagicMock()
@@ -1323,9 +1280,7 @@ class TestOCIClientPullOTelInstrumentation:
 
         with (
             patch.object(oci_client, "_create_oras_client", return_value=mock_oras),
-            patch.object(
-                original_metrics, "record_duration", side_effect=mock_record_duration
-            ),
+            patch.object(original_metrics, "record_duration", side_effect=mock_record_duration),
             patch.object(original_metrics, "create_span", side_effect=mock_create_span),
         ):
             oci_client.pull(tag="v1.0.0")
@@ -1392,9 +1347,7 @@ class TestOCIClientPullOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            _name: str, _attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(_name: str, _attributes: dict[str, Any] | None = None) -> Any:
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
             mock_span.set_status = MagicMock()
@@ -1467,9 +1420,7 @@ class TestOCIClientPullOTelInstrumentation:
         from contextlib import contextmanager
 
         @contextmanager
-        def mock_create_span(
-            _name: str, _attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(_name: str, _attributes: dict[str, Any] | None = None) -> Any:
             mock_span = MagicMock()
             mock_span.set_attribute = MagicMock()
             mock_span.set_status = MagicMock()
@@ -1564,9 +1515,7 @@ class TestOCIClientInspect:
         assert isinstance(manifest, ArtifactManifest)
 
         # Verify manifest properties
-        assert (
-            manifest.artifact_type == "application/vnd.floe.compiled-artifacts.v1+json"
-        )
+        assert manifest.artifact_type == "application/vnd.floe.compiled-artifacts.v1+json"
         assert len(manifest.layers) == 1
         assert manifest.layers[0].size == 12345
 
@@ -1588,9 +1537,7 @@ class TestOCIClientInspect:
         """
         # Mock ORAS client to raise 404-equivalent error
         mock_oras = MagicMock()
-        mock_oras.get_manifest.side_effect = Exception(
-            "MANIFEST_UNKNOWN: manifest unknown"
-        )
+        mock_oras.get_manifest.side_effect = Exception("MANIFEST_UNKNOWN: manifest unknown")
 
         with patch.object(oci_client, "_create_oras_client", return_value=mock_oras):
             with pytest.raises(ArtifactNotFoundError) as exc_info:
@@ -1643,9 +1590,7 @@ class TestOCIClientInspect:
         span_attributes: dict[str, Any] = {}
 
         @contextmanager
-        def mock_create_span(
-            name: str, attributes: dict[str, Any] | None = None
-        ) -> Any:
+        def mock_create_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
             nonlocal span_created, span_attributes
             span_created = True
             if attributes:
@@ -1661,9 +1606,7 @@ class TestOCIClientInspect:
 
         with (
             patch.object(oci_client, "_create_oras_client", return_value=mock_oras),
-            patch.object(
-                oci_client.metrics, "create_span", side_effect=mock_create_span
-            ),
+            patch.object(oci_client.metrics, "create_span", side_effect=mock_create_span),
         ):
             oci_client.inspect(tag="v1.0.0")
 
@@ -1739,9 +1682,7 @@ class TestOCIClientSigningAnnotations:
         assert metadata == mock_metadata
 
         # Verify _update_artifact_annotations was called with correct annotations
-        assert (
-            captured_annotations is not None
-        ), "_update_artifact_annotations was not called"
+        assert captured_annotations is not None, "_update_artifact_annotations was not called"
 
         # Verify all required annotation keys are present
         assert ANNOTATION_BUNDLE in captured_annotations
@@ -1753,10 +1694,7 @@ class TestOCIClientSigningAnnotations:
         # Verify annotation values match metadata
         assert captured_annotations[ANNOTATION_BUNDLE] == "dGVzdC1idW5kbGU="
         assert captured_annotations[ANNOTATION_MODE] == "keyless"
-        assert (
-            captured_annotations[ANNOTATION_SUBJECT]
-            == "repo:acme/floe:ref:refs/heads/main"
-        )
+        assert captured_annotations[ANNOTATION_SUBJECT] == "repo:acme/floe:ref:refs/heads/main"
 
     @pytest.mark.requirement("8B-FR-003")
     def test_sign_merges_with_existing_annotations(
@@ -1790,9 +1728,7 @@ class TestOCIClientSigningAnnotations:
         # Track the actual call to _push_internal to verify merged annotations
         push_calls: list[dict[str, str]] = []
 
-        def capture_push(
-            artifacts: Any, tag: str, annotations: dict[str, str], span: Any
-        ) -> str:
+        def capture_push(artifacts: Any, tag: str, annotations: dict[str, str], span: Any) -> str:
             push_calls.append(annotations)
             return "sha256:result"
 
@@ -1811,9 +1747,7 @@ class TestOCIClientSigningAnnotations:
             ),
             patch.object(SigningClient, "sign", return_value=mock_metadata),
             patch.object(oci_client, "_inspect_internal", return_value=mock_manifest),
-            patch.object(
-                oci_client, "_deserialize_artifacts", return_value=MagicMock()
-            ),
+            patch.object(oci_client, "_deserialize_artifacts", return_value=MagicMock()),
             patch.object(oci_client, "_push_internal", side_effect=capture_push),
         ):
             oci_client.sign("v1.0.0", signing_config=signing_config)

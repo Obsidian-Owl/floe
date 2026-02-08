@@ -41,9 +41,7 @@ class TestIntegrationTestBase:
         instance = TestClass()
 
         # Mock service check to fail
-        with patch(
-            "testing.base_classes.integration_test_base.check_infrastructure"
-        ) as mock_check:
+        with patch("testing.base_classes.integration_test_base.check_infrastructure") as mock_check:
             from testing.fixtures.services import (
                 ServiceEndpoint,
                 ServiceUnavailableError,

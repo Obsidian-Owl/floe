@@ -55,9 +55,7 @@ class MockRepository:
         self.violations.append(violation)
         return uuid.uuid4()
 
-    async def get_registered_contracts(
-        self, active_only: bool = True
-    ) -> list[dict[str, Any]]:
+    async def get_registered_contracts(self, active_only: bool = True) -> list[dict[str, Any]]:
         """Get registered contracts from repository.
 
         Args:
@@ -86,9 +84,7 @@ class MockRepository:
 
         # Delete old check results
         results_to_delete = [
-            r
-            for r in self.check_results
-            if r.get("timestamp") and r["timestamp"] < cutoff
+            r for r in self.check_results if r.get("timestamp") and r["timestamp"] < cutoff
         ]
         deleted_count += len(results_to_delete)
         for r in results_to_delete:
@@ -253,9 +249,7 @@ async def test_persist_error_does_not_propagate(
     """
     # Create a mock repository that raises on save
     failing_repository = AsyncMock()
-    failing_repository.save_check_result = AsyncMock(
-        side_effect=RuntimeError("DB error")
-    )
+    failing_repository.save_check_result = AsyncMock(side_effect=RuntimeError("DB error"))
 
     monitor = ContractMonitor(
         config=config,

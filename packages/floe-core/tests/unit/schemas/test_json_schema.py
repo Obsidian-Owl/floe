@@ -316,14 +316,11 @@ class TestJsonSchemaIdeCompatibility:
                 # For Optional types (anyOf/oneOf), check if any branch has description
                 branches = field_def.get("anyOf", field_def.get("oneOf", []))
                 has_info = any(
-                    "description" in b or "$ref" in b or b.get("type") == "null"
-                    for b in branches
+                    "description" in b or "$ref" in b or b.get("type") == "null" for b in branches
                 )
                 assert has_info, f"Field {field_name} should have description info"
             else:
-                raise AssertionError(
-                    f"Field {field_name} should have description or $ref"
-                )
+                raise AssertionError(f"Field {field_name} should have description or $ref")
 
     @pytest.mark.requirement("001-FR-009")
     def test_schema_referenced_definitions_have_descriptions(self) -> None:
@@ -344,6 +341,6 @@ class TestJsonSchemaIdeCompatibility:
         for def_name in expected_defs:
             if def_name in defs:
                 def_schema = defs[def_name]
-                assert (
-                    "description" in def_schema or "title" in def_schema
-                ), f"Definition {def_name} should have description or title"
+                assert "description" in def_schema or "title" in def_schema, (
+                    f"Definition {def_name} should have description or title"
+                )

@@ -230,9 +230,7 @@ class TestCompactionManagerCompactTable:
             mock_result.files_rewritten = 8
             mock_exec.return_value = mock_result
 
-            result = compaction_manager.compact_table(
-                table_for_compaction, strategy=sort_strategy
-            )
+            result = compaction_manager.compact_table(table_for_compaction, strategy=sort_strategy)
 
             assert result == 8
             # Verify SORT strategy was used

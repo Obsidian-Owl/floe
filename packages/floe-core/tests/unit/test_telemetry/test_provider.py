@@ -67,9 +67,7 @@ def telemetry_config() -> TelemetryConfig:
         floe_product_version="1.0.0",
         floe_mode="dev",
     )
-    return TelemetryConfig(
-        resource_attributes=attrs, otlp_endpoint="http://localhost:4317"
-    )
+    return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
 
 
 @pytest.fixture
@@ -289,9 +287,7 @@ class TestTelemetryProviderNoopModeEnvVar:
     Validates the provider correctly detects and handles no-op mode.
     """
 
-    def test_otel_sdk_disabled_true_enables_noop(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_true_enables_noop(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED=true enables no-op mode."""
         os.environ["OTEL_SDK_DISABLED"] = "true"
         try:
@@ -300,9 +296,7 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    def test_otel_sdk_disabled_one_enables_noop(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_one_enables_noop(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED=1 enables no-op mode."""
         os.environ["OTEL_SDK_DISABLED"] = "1"
         try:
@@ -311,9 +305,7 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    def test_otel_sdk_disabled_yes_enables_noop(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_yes_enables_noop(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED=yes enables no-op mode."""
         os.environ["OTEL_SDK_DISABLED"] = "yes"
         try:
@@ -322,9 +314,7 @@ class TestTelemetryProviderNoopModeEnvVar:
         finally:
             os.environ.pop("OTEL_SDK_DISABLED", None)
 
-    def test_otel_sdk_disabled_case_insensitive(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_otel_sdk_disabled_case_insensitive(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED is case-insensitive."""
         os.environ["OTEL_SDK_DISABLED"] = "TRUE"
         try:
@@ -416,9 +406,7 @@ class TestTelemetryProviderNoopModeBehavior:
             assert p.is_noop is True
         assert provider.state == ProviderState.SHUTDOWN
 
-    def test_noop_mode_env_var_takes_precedence(
-        self, telemetry_config: TelemetryConfig
-    ) -> None:
+    def test_noop_mode_env_var_takes_precedence(self, telemetry_config: TelemetryConfig) -> None:
         """Test OTEL_SDK_DISABLED takes precedence over config.enabled."""
         os.environ["OTEL_SDK_DISABLED"] = "true"
         try:
@@ -959,9 +947,7 @@ class TestTelemetryProviderAuthHeaderInjection:
         assert headers is not None
         assert headers == {"Authorization": "Bearer my-bearer-token"}
 
-    def test_build_auth_headers_returns_none_when_no_auth(
-        self, clean_env: None
-    ) -> None:
+    def test_build_auth_headers_returns_none_when_no_auth(self, clean_env: None) -> None:
         """Test _build_auth_headers returns None when no auth configured."""
         attrs = ResourceAttributes(
             service_name="test-service",
@@ -1113,9 +1099,7 @@ class TestTelemetryProviderAsyncExport:
             floe_product_version="1.0.0",
             floe_mode="dev",
         )
-        return TelemetryConfig(
-            resource_attributes=attrs, otlp_endpoint="http://localhost:4317"
-        )
+        return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
 
     def test_provider_uses_batch_span_processor(
         self,
@@ -1310,9 +1294,7 @@ class TestTelemetryProviderGracefulDegradation:
             floe_product_version="1.0.0",
             floe_mode="dev",
         )
-        return TelemetryConfig(
-            resource_attributes=attrs, otlp_endpoint="http://localhost:4317"
-        )
+        return TelemetryConfig(resource_attributes=attrs, otlp_endpoint="http://localhost:4317")
 
     def test_span_creation_continues_when_export_fails(
         self,

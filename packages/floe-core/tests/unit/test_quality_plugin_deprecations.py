@@ -96,9 +96,7 @@ class TestGetLineageEmitterDeprecation:
         """Verify deprecation warning mentions get_quality_facets() as replacement."""
         plugin = MockQualityPlugin()
 
-        with pytest.warns(
-            DeprecationWarning, match="Use get_quality_facets\\(\\) instead"
-        ):
+        with pytest.warns(DeprecationWarning, match="Use get_quality_facets\\(\\) instead"):
             plugin.get_lineage_emitter()
 
     @pytest.mark.requirement("REQ-524")

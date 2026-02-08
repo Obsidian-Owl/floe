@@ -52,9 +52,7 @@ class TestFusionCLIIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-018")
-    def test_fusion_plugin_supports_parallel_execution(
-        self, require_fusion: None
-    ) -> None:
+    def test_fusion_plugin_supports_parallel_execution(self, require_fusion: None) -> None:
         """DBTFusionPlugin correctly reports parallel execution support."""
 
         from floe_dbt_fusion import DBTFusionPlugin
@@ -214,9 +212,7 @@ class TestFallbackIntegration(IntegrationTestBase):
 
     @pytest.mark.integration
     @pytest.mark.requirement("FR-021")
-    def test_get_best_plugin_returns_fusion_for_snowflake(
-        self, require_fusion: None
-    ) -> None:
+    def test_get_best_plugin_returns_fusion_for_snowflake(self, require_fusion: None) -> None:
         """get_best_plugin() returns Fusion for supported adapter."""
 
         from floe_dbt_fusion import get_best_plugin

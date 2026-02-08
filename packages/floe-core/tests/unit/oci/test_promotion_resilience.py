@@ -91,9 +91,7 @@ class TestRegistryUnavailableMidPromotion:
             assert exc_info.value.exit_code == 5
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_no_partial_state_on_registry_failure(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_no_partial_state_on_registry_failure(self, controller: MagicMock) -> None:
         """Test promote() leaves no partial state when registry fails.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -135,9 +133,7 @@ class TestRegistryUnavailableMidPromotion:
             mock_store.assert_not_called()
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_registry_unavailable_error_is_actionable(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_registry_unavailable_error_is_actionable(self, controller: MagicMock) -> None:
         """Test RegistryUnavailableError message is actionable.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -177,15 +173,10 @@ class TestRegistryUnavailableMidPromotion:
             # Should contain registry identifier
             assert "harbor.example.com" in error_message
             # Should contain reason
-            assert (
-                "timed out" in error_message.lower()
-                or "connection" in error_message.lower()
-            )
+            assert "timed out" in error_message.lower() or "connection" in error_message.lower()
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_registry_fails_during_latest_tag_update(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_registry_fails_during_latest_tag_update(self, controller: MagicMock) -> None:
         """Test promote() handles registry failure during latest tag update.
 
         Scenario: Env tag created successfully, but registry fails during
@@ -251,9 +242,7 @@ class TestCircuitBreakerBehavior:
         return PromotionController(client=oci_client, promotion=promotion)
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_respects_circuit_breaker_open_state(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_respects_circuit_breaker_open_state(self, controller: MagicMock) -> None:
         """Test promote() fails fast when circuit breaker is open.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
@@ -292,9 +281,7 @@ class TestCircuitBreakerBehavior:
             assert exc_info.value.exit_code == 5
 
     @pytest.mark.requirement("8C-NFR-003")
-    def test_promote_circuit_breaker_error_includes_retry_info(
-        self, controller: MagicMock
-    ) -> None:
+    def test_promote_circuit_breaker_error_includes_retry_info(self, controller: MagicMock) -> None:
         """Test CircuitBreakerOpenError includes retry information.
 
         ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.

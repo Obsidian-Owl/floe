@@ -193,9 +193,7 @@ class TestPromoteCliDryRunTableOutput:
         """Test dry-run table output shows promotion ID."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -223,9 +221,7 @@ class TestPromoteCliDryRunTableOutput:
         """Test dry-run table output shows source and target environments."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -255,9 +251,7 @@ class TestPromoteCliDryRunTableOutput:
         """Test dry-run table output shows gate results."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -286,9 +280,7 @@ class TestPromoteCliDryRunTableOutput:
         """Test dry-run table output indicates it was a dry-run."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -316,9 +308,7 @@ class TestPromoteCliDryRunTableOutput:
         """Test dry-run table output shows 'Dry run complete' message."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -337,10 +327,7 @@ class TestPromoteCliDryRunTableOutput:
             )
 
             # Should show dry-run completion message
-            assert (
-                "Dry run complete" in result.output
-                or "dry run" in result.output.lower()
-            )
+            assert "Dry run complete" in result.output or "dry run" in result.output.lower()
 
     @pytest.mark.requirement("8C-FR-007")
     def test_dry_run_table_output_shows_failed_gate(
@@ -349,13 +336,9 @@ class TestPromoteCliDryRunTableOutput:
         """Test dry-run table output shows failed gate with error."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
-            mock_controller.promote.return_value = (
-                mock_promotion_record_with_failed_gate
-            )
+            mock_controller.promote.return_value = mock_promotion_record_with_failed_gate
             mock_controller_class.return_value = mock_controller
 
             result = runner.invoke(
@@ -387,9 +370,7 @@ class TestPromoteCliDryRunJsonOutput:
         """Test dry-run JSON output is valid JSON."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -419,9 +400,7 @@ class TestPromoteCliDryRunJsonOutput:
         """Test dry-run JSON output contains promotion_id."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -451,9 +430,7 @@ class TestPromoteCliDryRunJsonOutput:
         """Test dry-run JSON output has dry_run=true."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -483,9 +460,7 @@ class TestPromoteCliDryRunJsonOutput:
         """Test dry-run JSON output contains gate_results."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -516,9 +491,7 @@ class TestPromoteCliDryRunJsonOutput:
         """Test dry-run JSON output contains source and target environments."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -554,9 +527,7 @@ class TestPromoteCliDryRunWarnings:
         """Test dry-run table output shows warnings."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record_with_warnings
             mock_controller_class.return_value = mock_controller
@@ -585,9 +556,7 @@ class TestPromoteCliDryRunWarnings:
         """Test dry-run JSON output contains warnings list."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record_with_warnings
             mock_controller_class.return_value = mock_controller
@@ -622,9 +591,7 @@ class TestPromoteCliExitCodes:
         """Test dry-run success returns exit code 0."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_promotion_record
             mock_controller_class.return_value = mock_controller
@@ -654,13 +621,9 @@ class TestPromoteCliExitCodes:
         """
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
-            mock_controller.promote.return_value = (
-                mock_promotion_record_with_failed_gate
-            )
+            mock_controller.promote.return_value = mock_promotion_record_with_failed_gate
             mock_controller_class.return_value = mock_controller
 
             result = runner.invoke(
@@ -726,9 +689,7 @@ class TestPromoteCliSignatureVerificationMessages:
         """Table output shows '✓ Signature verified' when signature is verified."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_record_signature_verified
             mock_controller_class.return_value = mock_controller
@@ -755,9 +716,7 @@ class TestPromoteCliSignatureVerificationMessages:
         """Table output shows warning when signature is not verified."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_record_signature_not_verified
             mock_controller_class.return_value = mock_controller
@@ -785,9 +744,7 @@ class TestPromoteCliSignatureVerificationMessages:
         """JSON output includes signature_verified field but no extra messages."""
         runner = CliRunner()
 
-        with patch(
-            "floe_core.oci.promotion.PromotionController"
-        ) as mock_controller_class:
+        with patch("floe_core.oci.promotion.PromotionController") as mock_controller_class:
             mock_controller = MagicMock()
             mock_controller.promote.return_value = mock_record_signature_verified
             mock_controller_class.return_value = mock_controller

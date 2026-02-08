@@ -554,9 +554,7 @@ class TestAnalyzeCoverage:
 
     @pytest.mark.requirement("FR-019")
     @pytest.mark.asyncio
-    async def test_analyze_coverage_with_provided_indexed_files(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_analyze_coverage_with_provided_indexed_files(self, tmp_path: Path) -> None:
         """Test analyze_coverage accepts indexed_files parameter."""
         from unittest.mock import AsyncMock, MagicMock
 

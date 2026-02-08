@@ -313,9 +313,7 @@ class TestVendCredentialsExpiration:
         # Assert - expiration should be in the future but within 24h
         expiration_str = result["expiration"]
         if isinstance(expiration_str, str):
-            expiration_dt = datetime.fromisoformat(
-                expiration_str.replace("Z", "+00:00")
-            )
+            expiration_dt = datetime.fromisoformat(expiration_str.replace("Z", "+00:00"))
             # Should be in the future
             assert expiration_dt > now
             # Should be within 24 hours from now
@@ -484,9 +482,7 @@ class TestVendCredentialsOTelTracing:
             mock_span_context.return_value.__enter__ = MagicMock(return_value=mock_span)
             mock_span_context.return_value.__exit__ = MagicMock(return_value=False)
 
-            with patch(
-                "floe_catalog_polaris.plugin.set_error_attributes"
-            ) as mock_set_error:
+            with patch("floe_catalog_polaris.plugin.set_error_attributes") as mock_set_error:
                 # Act & Assert
                 with pytest.raises(NotFoundError):
                     connected_plugin.vend_credentials(

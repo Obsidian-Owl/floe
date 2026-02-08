@@ -460,10 +460,7 @@ class TestNamingValidatorValidate:
 
         assert len(violations) == 1
         # Expected should include the pattern regex or description
-        assert (
-            "bronze" in violations[0].expected
-            or "medallion" in violations[0].expected.lower()
-        )
+        assert "bronze" in violations[0].expected or "medallion" in violations[0].expected.lower()
 
 
 class TestRemediationSuggestions:
@@ -483,10 +480,7 @@ class TestRemediationSuggestions:
 
         assert len(violations) == 1
         # Suggestion should recommend renaming to bronze_
-        assert (
-            "bronze_" in violations[0].suggestion
-            or "Rename" in violations[0].suggestion
-        )
+        assert "bronze_" in violations[0].suggestion or "Rename" in violations[0].suggestion
 
     @pytest.mark.requirement("3A-US3-FR003")
     def test_medallion_suggestion_for_dim_prefix(self) -> None:
@@ -502,9 +496,7 @@ class TestRemediationSuggestions:
 
         assert len(violations) == 1
         # dim_ suggests a silver/gold layer transformation
-        assert (
-            "gold_" in violations[0].suggestion or "silver_" in violations[0].suggestion
-        )
+        assert "gold_" in violations[0].suggestion or "silver_" in violations[0].suggestion
 
     @pytest.mark.requirement("3A-US3-FR003")
     def test_kimball_suggestion_for_bronze_prefix(self) -> None:
@@ -661,18 +653,14 @@ class TestDataContractErrorCodeURLs:
         from floe_core.enforcement.patterns import DOCUMENTATION_URLS
 
         data_contract_urls = DOCUMENTATION_URLS.get("data_contracts", {})
-        assert isinstance(
-            data_contract_urls, dict
-        ), "data_contracts section must be a dict"
+        assert isinstance(data_contract_urls, dict), "data_contracts section must be a dict"
 
         missing_codes: list[str] = []
         for code in self.EXPECTED_ERROR_CODES:
             if code not in data_contract_urls:
                 missing_codes.append(code)
 
-        assert (
-            not missing_codes
-        ), f"Missing documentation URLs for error codes: {missing_codes}"
+        assert not missing_codes, f"Missing documentation URLs for error codes: {missing_codes}"
 
     @pytest.mark.requirement("3C-FR-034")
     def test_error_code_urls_are_valid_format(self) -> None:
@@ -689,9 +677,9 @@ class TestDataContractErrorCodeURLs:
             assert "#" in url, f"URL for {code} must have anchor tag: {url}"
             # Verify anchor matches error code (e.g., #e500 for FLOE-E500)
             expected_anchor = code.lower().replace("floe-", "")
-            assert (
-                expected_anchor in url.lower()
-            ), f"URL anchor for {code} should contain '{expected_anchor}': {url}"
+            assert expected_anchor in url.lower(), (
+                f"URL anchor for {code} should contain '{expected_anchor}': {url}"
+            )
 
     @pytest.mark.requirement("3C-FR-034")
     def test_get_data_contract_error_url_returns_valid_url(self) -> None:

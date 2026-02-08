@@ -146,9 +146,7 @@ class TestSLAStatus:
         now = datetime.now(tz=timezone.utc)
 
         # Below 0
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAStatus(
                 contract_name="orders_v1",
                 check_type=ViolationType.FRESHNESS,
@@ -159,9 +157,7 @@ class TestSLAStatus:
             )
 
         # Above 100
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 100"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 100"):
             SLAStatus(
                 contract_name="orders_v1",
                 check_type=ViolationType.FRESHNESS,
@@ -193,9 +189,7 @@ class TestSLAStatus:
         assert status.consecutive_failures == 5
 
         # Invalid: negative
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAStatus(
                 contract_name="orders_v1",
                 check_type=ViolationType.FRESHNESS,
@@ -228,9 +222,7 @@ class TestSLAStatus:
         assert status.violation_count_24h == 10
 
         # Invalid: negative
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAStatus(
                 contract_name="orders_v1",
                 check_type=ViolationType.FRESHNESS,
@@ -370,9 +362,7 @@ class TestCheckTypeSummary:
         assert summary.total_checks == 0
 
         # Invalid: negative
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=-1,
@@ -388,9 +378,7 @@ class TestCheckTypeSummary:
     def test_count_fields_validation(self) -> None:
         """Test CheckTypeSummary count fields must be >= 0."""
         # Test passed_checks
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -403,9 +391,7 @@ class TestCheckTypeSummary:
             )
 
         # Test failed_checks
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -418,9 +404,7 @@ class TestCheckTypeSummary:
             )
 
         # Test error_checks
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -433,9 +417,7 @@ class TestCheckTypeSummary:
             )
 
         # Test violation_count
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -477,9 +459,7 @@ class TestCheckTypeSummary:
         assert summary_100.compliance_pct == pytest.approx(100.0)
 
         # Invalid: below 0
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -492,9 +472,7 @@ class TestCheckTypeSummary:
             )
 
         # Invalid: above 100
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 100"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 100"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -523,9 +501,7 @@ class TestCheckTypeSummary:
         assert summary.avg_duration_seconds == pytest.approx(0.0)
 
         # Invalid: negative
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             CheckTypeSummary(
                 check_type=ViolationType.FRESHNESS,
                 total_checks=100,
@@ -709,9 +685,7 @@ class TestSLAComplianceReport:
         assert report_100.overall_compliance_pct == pytest.approx(100.0)
 
         # Invalid: below 0
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAComplianceReport(
                 contract_name="orders_v1",
                 period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -725,9 +699,7 @@ class TestSLAComplianceReport:
             )
 
         # Invalid: above 100
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 100"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 100"):
             SLAComplianceReport(
                 contract_name="orders_v1",
                 period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -772,9 +744,7 @@ class TestSLAComplianceReport:
         assert report_100.monitoring_coverage_pct == pytest.approx(100.0)
 
         # Invalid: below 0
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAComplianceReport(
                 contract_name="orders_v1",
                 period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -788,9 +758,7 @@ class TestSLAComplianceReport:
             )
 
         # Invalid: above 100
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 100"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 100"):
             SLAComplianceReport(
                 contract_name="orders_v1",
                 period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -807,9 +775,7 @@ class TestSLAComplianceReport:
     def test_count_fields_validation(self) -> None:
         """Test SLAComplianceReport count fields must be >= 0."""
         # Test total_violations
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAComplianceReport(
                 contract_name="orders_v1",
                 period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -823,9 +789,7 @@ class TestSLAComplianceReport:
             )
 
         # Test total_checks_executed
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             SLAComplianceReport(
                 contract_name="orders_v1",
                 period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -930,9 +894,7 @@ class TestCalculateCompliance:
 
         # Schema drift: 1/1 = 100%
         schema_summary = next(
-            s
-            for s in report.check_summaries
-            if s.check_type == ViolationType.SCHEMA_DRIFT
+            s for s in report.check_summaries if s.check_type == ViolationType.SCHEMA_DRIFT
         )
         assert schema_summary.compliance_pct == pytest.approx(100.0)
 

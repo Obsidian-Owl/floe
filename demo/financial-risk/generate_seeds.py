@@ -153,9 +153,7 @@ def generate_counterparties(output_path: Path, num_rows: int = 100) -> None:
             exposure_limit = random.randint(1000000, 500000000)
             loaded_at = "2026-01-15T00:00:00Z"
 
-            writer.writerow(
-                [counterparty_id, name, rating, country, exposure_limit, loaded_at]
-            )
+            writer.writerow([counterparty_id, name, rating, country, exposure_limit, loaded_at])
 
 
 if __name__ == "__main__":

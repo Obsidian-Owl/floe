@@ -204,9 +204,9 @@ class TestPromotion(IntegrationTestBase):
             )
         # Verify error message mentions backward transition
         error_msg = str(exc_info.value).lower()
-        assert (
-            "backward" in error_msg or "invalid" in error_msg or "prod" in error_msg
-        ), f"Error message should describe backward transition, got: {exc_info.value}"
+        assert "backward" in error_msg or "invalid" in error_msg or "prod" in error_msg, (
+            f"Error message should describe backward transition, got: {exc_info.value}"
+        )
 
         # Assert skip transition: dev -> prod is rejected
         with pytest.raises(InvalidTransitionError) as exc_info:
@@ -218,9 +218,9 @@ class TestPromotion(IntegrationTestBase):
             )
         # Verify error message mentions invalid transition
         error_msg = str(exc_info.value).lower()
-        assert (
-            "skip" in error_msg or "invalid" in error_msg or "staging" in error_msg
-        ), f"Error message should describe skip transition, got: {exc_info.value}"
+        assert "skip" in error_msg or "invalid" in error_msg or "staging" in error_msg, (
+            f"Error message should describe skip transition, got: {exc_info.value}"
+        )
 
     # =========================================================================
     # REWRITTEN: From structure-echo to behavior
@@ -308,9 +308,9 @@ class TestPromotion(IntegrationTestBase):
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected when OCI registry unavailable
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
@@ -337,9 +337,9 @@ class TestPromotion(IntegrationTestBase):
             assert result.target_environment == "staging"
         except (ConnectionError, OSError, Exception) as e:
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
 
         # Test get_status() executes
         try:
@@ -350,9 +350,7 @@ class TestPromotion(IntegrationTestBase):
             error_str = str(e).lower()
             # get_status may raise ArtifactNotFoundError which is expected
             assert (
-                "type" not in error_str
-                or "error" not in error_str
-                or "attribute" not in error_str
+                "type" not in error_str or "error" not in error_str or "attribute" not in error_str
             ), f"Got programming error instead of infrastructure error: {e}"
 
         # Test rollback() executes
@@ -367,9 +365,9 @@ class TestPromotion(IntegrationTestBase):
             assert rollback_result.environment == "staging"
         except (ConnectionError, OSError, Exception) as e:
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
@@ -404,18 +402,14 @@ class TestPromotion(IntegrationTestBase):
             error_msg = str(exc_info.value).lower()
             if reason_type == "backward":
                 assert (
-                    "backward" in error_msg
-                    or "invalid" in error_msg
-                    or "direction" in error_msg
+                    "backward" in error_msg or "invalid" in error_msg or "direction" in error_msg
                 ), (
                     f"Backward transition {from_env}->{to_env} should mention "
                     f"backward/invalid, got: {exc_info.value}"
                 )
             elif reason_type == "skip":
                 assert (
-                    "skip" in error_msg
-                    or "staging" in error_msg
-                    or "must promote" in error_msg
+                    "skip" in error_msg or "staging" in error_msg or "must promote" in error_msg
                 ), (
                     f"Skip transition {from_env}->{to_env} should mention "
                     f"skip/staging, got: {exc_info.value}"
@@ -442,18 +436,16 @@ class TestPromotion(IntegrationTestBase):
             )
 
             # Assert artifact_digest matches SHA256 format
-            assert record.artifact_digest.startswith(
-                "sha256:"
-            ), f"Digest must start with 'sha256:', got: {record.artifact_digest[:10]}"
+            assert record.artifact_digest.startswith("sha256:"), (
+                f"Digest must start with 'sha256:', got: {record.artifact_digest[:10]}"
+            )
             digest_hash = record.artifact_digest.split(":")[1]
-            assert (
-                len(digest_hash) == 64
-            ), f"SHA256 hash must be 64 hex chars, got {len(digest_hash)}"
+            assert len(digest_hash) == 64, (
+                f"SHA256 hash must be 64 hex chars, got {len(digest_hash)}"
+            )
 
             # Assert trace_id is populated (OTel correlation)
-            assert (
-                len(record.trace_id) > 0
-            ), "trace_id must be populated for OTel correlation"
+            assert len(record.trace_id) > 0, "trace_id must be populated for OTel correlation"
 
             # Assert timestamps
             assert record.promoted_at is not None, "promoted_at must be set"
@@ -464,16 +456,16 @@ class TestPromotion(IntegrationTestBase):
             # Assert promotion_id is valid UUID
             from uuid import UUID
 
-            assert isinstance(
-                record.promotion_id, UUID
-            ), f"promotion_id must be UUID, got {type(record.promotion_id)}"
+            assert isinstance(record.promotion_id, UUID), (
+                f"promotion_id must be UUID, got {type(record.promotion_id)}"
+            )
 
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected when OCI registry unavailable
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-074")
@@ -497,27 +489,27 @@ class TestPromotion(IntegrationTestBase):
             # If we get here, rollback succeeded -- validate the record
             from uuid import UUID
 
-            assert isinstance(
-                record.rollback_id, UUID
-            ), f"rollback_id must be UUID, got {type(record.rollback_id)}"
-            assert (
-                record.environment == "staging"
-            ), f"Environment must be staging, got {record.environment}"
-            assert (
-                record.reason == "Critical bug in latest release"
-            ), f"Reason mismatch, got: {record.reason}"
-            assert record.artifact_digest.startswith(
-                "sha256:"
-            ), f"Digest must start with sha256:, got: {record.artifact_digest[:10]}"
+            assert isinstance(record.rollback_id, UUID), (
+                f"rollback_id must be UUID, got {type(record.rollback_id)}"
+            )
+            assert record.environment == "staging", (
+                f"Environment must be staging, got {record.environment}"
+            )
+            assert record.reason == "Critical bug in latest release", (
+                f"Reason mismatch, got: {record.reason}"
+            )
+            assert record.artifact_digest.startswith("sha256:"), (
+                f"Digest must start with sha256:, got: {record.artifact_digest[:10]}"
+            )
             assert record.rolled_back_at is not None, "rolled_back_at must be set"
 
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected (registry or artifact not found)
             # VersionNotPromotedError is acceptable (artifact never promoted)
             # ArtifactNotFoundError is acceptable (registry unavailable)
-            assert isinstance(
-                e, Exception
-            ), f"Expected infrastructure or not-found error, got: {type(e).__name__}: {e}"
+            assert isinstance(e, Exception), (
+                f"Expected infrastructure or not-found error, got: {type(e).__name__}: {e}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-070")
@@ -569,9 +561,9 @@ class TestPromotion(IntegrationTestBase):
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected when OCI registry unavailable
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
 
     # =========================================================================
     # NEW: Additional behavioral tests
@@ -625,9 +617,9 @@ class TestPromotion(IntegrationTestBase):
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected -- this IS the gap
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
             logger.info(
                 "promotion_success_path_gap",
                 error=str(e),
@@ -659,17 +651,17 @@ class TestPromotion(IntegrationTestBase):
 
             # OTel trace IDs are 32 hex characters
             # The promote() method formats as: format(span_context.trace_id, "032x")
-            assert all(
-                c in "0123456789abcdef" for c in record.trace_id
-            ), f"trace_id must be hex string, got: {record.trace_id}"
+            assert all(c in "0123456789abcdef" for c in record.trace_id), (
+                f"trace_id must be hex string, got: {record.trace_id}"
+            )
 
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected when OCI registry unavailable
             # The important thing is that promote() attempted to create a span
             error_str = str(e).lower()
-            assert (
-                "invalid" not in error_str or "transition" not in error_str
-            ), f"Got logic error instead of infrastructure error: {e}"
+            assert "invalid" not in error_str or "transition" not in error_str, (
+                f"Got logic error instead of infrastructure error: {e}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-072")
@@ -711,22 +703,18 @@ class TestPromotion(IntegrationTestBase):
             )
 
             # If we get a record, check for failed gates
-            failed_gates = [
-                gr for gr in record.gate_results if gr.status == GateStatus.FAILED
-            ]
-            assert (
-                len(failed_gates) > 0
-            ), "At least one gate should have FAILED status with invalid scanner command"
+            failed_gates = [gr for gr in record.gate_results if gr.status == GateStatus.FAILED]
+            assert len(failed_gates) > 0, (
+                "At least one gate should have FAILED status with invalid scanner command"
+            )
 
             # Check failure details are populated
             for gate_result in failed_gates:
                 if gate_result.gate == PromotionGate.SECURITY_SCAN:
-                    assert (
-                        gate_result.error is not None
-                    ), "Failed security scan gate must have error details"
-                    assert (
-                        gate_result.duration_ms >= 0
-                    ), "Failed gate must record duration"
+                    assert gate_result.error is not None, (
+                        "Failed security scan gate must have error details"
+                    )
+                    assert gate_result.duration_ms >= 0, "Failed gate must record duration"
 
         except (ConnectionError, OSError, Exception) as e:
             # GateValidationError is acceptable -- means the gate correctly blocked
@@ -734,15 +722,15 @@ class TestPromotion(IntegrationTestBase):
 
             if isinstance(e, GateValidationError):
                 # Gate correctly blocked promotion
-                assert (
-                    "security_scan" in str(e).lower() or "gate" in str(e).lower()
-                ), f"GateValidationError should mention gate, got: {e}"
+                assert "security_scan" in str(e).lower() or "gate" in str(e).lower(), (
+                    f"GateValidationError should mention gate, got: {e}"
+                )
             else:
                 # Infrastructure error is also acceptable
                 error_str = str(e).lower()
-                assert (
-                    "invalid" not in error_str or "transition" not in error_str
-                ), f"Got logic error instead of infrastructure/gate error: {e}"
+                assert "invalid" not in error_str or "transition" not in error_str, (
+                    f"Got logic error instead of infrastructure/gate error: {e}"
+                )
 
 
 # Module exports

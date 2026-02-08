@@ -46,9 +46,7 @@ class TestResult(BaseModel):
 
     query: str = Field(..., description="Query that was executed")
     passed: bool = Field(default=False, description="Whether test passed")
-    found_keywords: list[str] = Field(
-        default_factory=list, description="Keywords found"
-    )
+    found_keywords: list[str] = Field(default_factory=list, description="Keywords found")
     missing_keywords: list[str] = Field(
         default_factory=list, description="Expected keywords not found"
     )
@@ -223,9 +221,7 @@ def create_default_test_queries() -> list[TestQuery]:
     return [
         TestQuery(
             query="What is the floe architecture?",
-            expected_keywords=[
-                "architecture"
-            ],  # Flexible - just needs to mention architecture
+            expected_keywords=["architecture"],  # Flexible - just needs to mention architecture
             description="Test architecture knowledge",
         ),
         TestQuery(

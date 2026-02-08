@@ -234,9 +234,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "jsonpath={.items[*].status.phase}",
             ]
         )
-        assert (
-            result.returncode == 0
-        ), f"Failed to check PostgreSQL pods: {result.stderr}"
+        assert result.returncode == 0, f"Failed to check PostgreSQL pods: {result.stderr}"
         phases = result.stdout.strip().split()
         assert phases and all(p == "Running" for p in phases), (
             f"PostgreSQL pods not running. Phases: {phases}\n"
@@ -257,9 +255,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "jsonpath={.items[*].metadata.name}",
             ]
         )
-        assert (
-            result.returncode == 0
-        ), f"Failed to check PostgreSQL service: {result.stderr}"
+        assert result.returncode == 0, f"Failed to check PostgreSQL service: {result.stderr}"
         services = result.stdout.strip().split()
         assert services, (
             "PostgreSQL service not found\n"
@@ -280,9 +276,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "jsonpath={.items[*].metadata.name}",
             ]
         )
-        assert (
-            result.returncode == 0
-        ), f"Failed to check PostgreSQL secret: {result.stderr}"
+        assert result.returncode == 0, f"Failed to check PostgreSQL secret: {result.stderr}"
         assert result.stdout.strip(), "PostgreSQL secret not found"
 
         # Get PostgreSQL pod name for query execution
@@ -326,9 +320,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 f"PostgreSQL not accepting queries: {query_result.stderr}\n"
                 f"Attempted user: {pg_user}. Database must be functional, not just running."
             )
-            assert (
-                "1" in query_result.stdout
-            ), "PostgreSQL SELECT 1 returned unexpected result"
+            assert "1" in query_result.stdout, "PostgreSQL SELECT 1 returned unexpected result"
 
             # Check expected databases exist (dagster needs a database)
             db_result = _run_kubectl(
@@ -346,9 +338,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 ],
                 timeout=30,
             )
-            assert (
-                db_result.returncode == 0
-            ), f"Failed to list databases: {db_result.stderr}"
+            assert db_result.returncode == 0, f"Failed to list databases: {db_result.stderr}"
             db_names = db_result.stdout
             assert "dagster" in db_names or "postgres" in db_names, (
                 f"Expected dagster or postgres database. Got: {db_names}\n"
@@ -557,9 +547,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         if jaeger_result.returncode == 0 and "Running" in jaeger_result.stdout:
             # Jaeger is deployed - verify span appears
-            jaeger_client = httpx.Client(
-                base_url="http://localhost:16686", timeout=10.0
-            )
+            jaeger_client = httpx.Client(base_url="http://localhost:16686", timeout=10.0)
 
             def check_span_in_jaeger() -> bool:
                 """Check if test span appears in Jaeger."""
@@ -642,17 +630,15 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
             # Verify Jaeger can list services (functional query, not just HTTP 200)
             services_response = client.get("http://localhost:16686/api/services")
-            assert (
-                services_response.status_code == 200
-            ), f"Jaeger services API failed: HTTP {services_response.status_code}"
+            assert services_response.status_code == 200, (
+                f"Jaeger services API failed: HTTP {services_response.status_code}"
+            )
             services_data = services_response.json()
-            assert (
-                "data" in services_data
-            ), "Jaeger services response missing 'data' key - API not functional"
+            assert "data" in services_data, (
+                "Jaeger services response missing 'data' key - API not functional"
+            )
             # data should be a list (even if empty)
-            assert isinstance(
-                services_data["data"], list
-            ), "Jaeger services data should be a list"
+            assert isinstance(services_data["data"], list), "Jaeger services data should be a list"
 
         # Grafana dashboards ConfigMap MUST exist
         result = _run_kubectl(
@@ -718,24 +704,24 @@ class TestPlatformBootstrap(IntegrationTestBase):
                     f"{dagster_url}/graphql",
                     json={"query": "{ version }"},
                 )
-                assert (
-                    response.status_code == 200
-                ), f"Dagster GraphQL failed: HTTP {response.status_code}"
+                assert response.status_code == 200, (
+                    f"Dagster GraphQL failed: HTTP {response.status_code}"
+                )
 
                 data = response.json()
                 assert "data" in data, (
                     f"Dagster GraphQL response missing 'data': {data}\n"
                     "GraphQL engine not functional."
                 )
-                assert (
-                    "version" in data["data"]
-                ), f"Dagster version query returned no version: {data}"
+                assert "version" in data["data"], (
+                    f"Dagster version query returned no version: {data}"
+                )
 
                 # Version should be a non-empty string
                 version = data["data"]["version"]
-                assert (
-                    isinstance(version, str) and len(version) > 0
-                ), f"Dagster version should be non-empty string, got: {version}"
+                assert isinstance(version, str) and len(version) > 0, (
+                    f"Dagster version should be non-empty string, got: {version}"
+                )
         except httpx.HTTPError as e:
             pytest.fail(
                 f"Dagster GraphQL not reachable at {dagster_url}: {e}\n"
@@ -762,14 +748,12 @@ class TestPlatformBootstrap(IntegrationTestBase):
         try:
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(f"{dagster_url}/server_info")
-                assert (
-                    response.status_code == 200
-                ), f"Dagster server info failed: HTTP {response.status_code}"
+                assert response.status_code == 200, (
+                    f"Dagster server info failed: HTTP {response.status_code}"
+                )
                 server_info = response.json()
                 # Dagster server_info should indicate healthy database connection
-                assert (
-                    "dagster_version" in server_info or "dagit_version" in server_info
-                ), (
+                assert "dagster_version" in server_info or "dagit_version" in server_info, (
                     f"Dagster server_info missing version: {server_info}\n"
                     "Dagster may not have connected to PostgreSQL."
                 )
@@ -837,9 +821,9 @@ class TestPlatformBootstrap(IntegrationTestBase):
                         "Marquez must support namespace queries for lineage tracking."
                     )
                     ns_data = ns_response.json()
-                    assert (
-                        "namespaces" in ns_data
-                    ), "Marquez response missing 'namespaces' key - API not functional"
+                    assert "namespaces" in ns_data, (
+                        "Marquez response missing 'namespaces' key - API not functional"
+                    )
             except httpx.HTTPError as e:
                 pytest.fail(
                     f"Marquez API not reachable at {marquez_url}: "

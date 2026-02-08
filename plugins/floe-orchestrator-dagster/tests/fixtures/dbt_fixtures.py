@@ -351,9 +351,7 @@ def temp_dagster_dbt_project(tmp_path: Path) -> Path:
     # Create marts models
     marts_dir = models_dir / "marts"
     marts_dir.mkdir()
-    (marts_dir / "dim_customers.sql").write_text(
-        "SELECT * FROM {{ ref('stg_customers') }}"
-    )
+    (marts_dir / "dim_customers.sql").write_text("SELECT * FROM {{ ref('stg_customers') }}")
     (marts_dir / "fct_orders.sql").write_text(
         "SELECT o.*, c.name AS customer_name\n"
         "FROM {{ ref('stg_orders') }} o\n"

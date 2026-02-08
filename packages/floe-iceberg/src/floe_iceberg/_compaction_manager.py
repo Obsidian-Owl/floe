@@ -111,9 +111,7 @@ class _IcebergCompactionManager:
         span = trace.get_current_span()
         span.set_attribute("table.identifier", table_identifier)
         span.set_attribute("strategy.type", strategy.strategy_type.value)
-        span.set_attribute(
-            "strategy.target_file_size_bytes", strategy.target_file_size_bytes
-        )
+        span.set_attribute("strategy.target_file_size_bytes", strategy.target_file_size_bytes)
         span.set_attribute(
             "strategy.max_concurrent_rewrites",
             strategy.max_concurrent_file_group_rewrites,

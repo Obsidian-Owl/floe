@@ -155,10 +155,7 @@ class TestArtifactPushValidation:
 
         # Should fail because file doesn't exist
         assert result.exit_code != 0
-        assert (
-            "not found" in result.output.lower()
-            or "does not exist" in result.output.lower()
-        )
+        assert "not found" in result.output.lower() or "does not exist" in result.output.lower()
 
 
 class TestArtifactPushExecution:
@@ -330,10 +327,7 @@ class TestArtifactPushAuthentication:
                     # Should fail with non-zero exit code
                     assert result.exit_code != 0
                     # Should show auth error message
-                    assert (
-                        "auth" in result.output.lower()
-                        or "failed" in result.output.lower()
-                    )
+                    assert "auth" in result.output.lower() or "failed" in result.output.lower()
 
 
 class TestArtifactPushErrors:
@@ -408,9 +402,7 @@ class TestArtifactPushErrors:
             # Should fail
             assert result.exit_code != 0
             # Should mention validation or parsing error
-            assert (
-                "error" in result.output.lower() or "invalid" in result.output.lower()
-            )
+            assert "error" in result.output.lower() or "invalid" in result.output.lower()
 
 
 __all__: list[str] = [

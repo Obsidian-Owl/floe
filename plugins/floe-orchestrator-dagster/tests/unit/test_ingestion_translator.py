@@ -61,9 +61,7 @@ class TestFloeIngestionTranslator:
             mock_resource.name = resource_name
 
             asset_key = translator.get_asset_key(mock_resource)
-            assert asset_key == AssetKey(
-                expected_key
-            ), f"Expected {expected_key}, got {asset_key}"
+            assert asset_key == AssetKey(expected_key), f"Expected {expected_key}, got {asset_key}"
 
     @pytest.mark.requirement("4F-FR-064")
     def test_translator_includes_metadata(self) -> None:

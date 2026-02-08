@@ -105,9 +105,7 @@ async def test_availability_ping_success() -> None:
     assert "latency_ms" in result.details
     assert result.details["latency_ms"] == pytest.approx(15.5)
     assert "availability_ratio" in result.details
-    assert result.details["availability_ratio"] == pytest.approx(
-        1.0
-    )  # 100% on first ping
+    assert result.details["availability_ratio"] == pytest.approx(1.0)  # 100% on first ping
 
 
 @pytest.mark.requirement("3D-FR-020")

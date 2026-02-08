@@ -73,12 +73,12 @@ class TestEntryPointRegistration:
         k8s_ep = next((ep for ep in eps if ep.name == "k8s"), None)
 
         assert k8s_ep is not None, "K8s entry point not found"
-        assert (
-            "floe_network_security_k8s" in k8s_ep.value
-        ), f"Entry point '{k8s_ep.value}' should reference 'floe_network_security_k8s'"
-        assert (
-            "K8sNetworkSecurityPlugin" in k8s_ep.value
-        ), f"Entry point value '{k8s_ep.value}' should reference 'K8sNetworkSecurityPlugin' class"
+        assert "floe_network_security_k8s" in k8s_ep.value, (
+            f"Entry point '{k8s_ep.value}' should reference 'floe_network_security_k8s'"
+        )
+        assert "K8sNetworkSecurityPlugin" in k8s_ep.value, (
+            f"Entry point value '{k8s_ep.value}' should reference 'K8sNetworkSecurityPlugin' class"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_exactly_one_k8s_entry_point(self) -> None:
@@ -92,9 +92,7 @@ class TestEntryPointRegistration:
         eps = entry_points(group=NETWORK_SECURITY_ENTRY_POINT_GROUP)
         k8s_eps = [ep for ep in eps if ep.name == "k8s"]
 
-        assert (
-            len(k8s_eps) == 1
-        ), f"Expected exactly one 'k8s' entry point, found {len(k8s_eps)}"
+        assert len(k8s_eps) == 1, f"Expected exactly one 'k8s' entry point, found {len(k8s_eps)}"
 
 
 class TestDiscoverPlugins:
@@ -108,9 +106,9 @@ class TestDiscoverPlugins:
         mapping plugin names to plugin classes.
         """
         plugins = discover_network_security_plugins()
-        assert isinstance(
-            plugins, dict
-        ), f"discover_network_security_plugins() should return dict, got {type(plugins)}"
+        assert isinstance(plugins, dict), (
+            f"discover_network_security_plugins() should return dict, got {type(plugins)}"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_discover_returns_non_empty_dict(self) -> None:
@@ -132,9 +130,7 @@ class TestDiscoverPlugins:
         plugins dictionary.
         """
         plugins = discover_network_security_plugins()
-        assert (
-            "k8s" in plugins
-        ), f"K8s plugin not discovered. Found: {list(plugins.keys())}"
+        assert "k8s" in plugins, f"K8s plugin not discovered. Found: {list(plugins.keys())}"
 
     @pytest.mark.requirement("FR-001")
     def test_discovered_plugin_is_class(self) -> None:
@@ -146,9 +142,9 @@ class TestDiscoverPlugins:
         plugins = discover_network_security_plugins()
         k8s_plugin = plugins["k8s"]
 
-        assert isinstance(
-            k8s_plugin, type
-        ), f"Discovered plugin should be a class, got {type(k8s_plugin)}"
+        assert isinstance(k8s_plugin, type), (
+            f"Discovered plugin should be a class, got {type(k8s_plugin)}"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_discovered_plugin_inherits_from_abc(self) -> None:
@@ -160,9 +156,9 @@ class TestDiscoverPlugins:
         plugins = discover_network_security_plugins()
         k8s_plugin = plugins["k8s"]
 
-        assert issubclass(
-            k8s_plugin, NetworkSecurityPlugin
-        ), f"Plugin '{k8s_plugin.__name__}' should inherit from NetworkSecurityPlugin"
+        assert issubclass(k8s_plugin, NetworkSecurityPlugin), (
+            f"Plugin '{k8s_plugin.__name__}' should inherit from NetworkSecurityPlugin"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_discovered_plugin_has_correct_name(self) -> None:
@@ -173,9 +169,9 @@ class TestDiscoverPlugins:
         plugins = discover_network_security_plugins()
         k8s_plugin = plugins["k8s"]
 
-        assert (
-            k8s_plugin.__name__ == "K8sNetworkSecurityPlugin"
-        ), f"Expected class name 'K8sNetworkSecurityPlugin', got '{k8s_plugin.__name__}'"
+        assert k8s_plugin.__name__ == "K8sNetworkSecurityPlugin", (
+            f"Expected class name 'K8sNetworkSecurityPlugin', got '{k8s_plugin.__name__}'"
+        )
 
 
 class TestGetPlugin:
@@ -191,9 +187,9 @@ class TestGetPlugin:
         plugin = get_network_security_plugin("k8s")
 
         assert plugin is not None, "get_network_security_plugin('k8s') returned None"
-        assert isinstance(
-            plugin, NetworkSecurityPlugin
-        ), f"Plugin should be instance of NetworkSecurityPlugin, got {type(plugin)}"
+        assert isinstance(plugin, NetworkSecurityPlugin), (
+            f"Plugin should be instance of NetworkSecurityPlugin, got {type(plugin)}"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_get_plugin_returns_correct_type(self) -> None:
@@ -204,9 +200,9 @@ class TestGetPlugin:
         """
         plugin = get_network_security_plugin("k8s")
 
-        assert (
-            plugin.__class__.__name__ == "K8sNetworkSecurityPlugin"
-        ), f"Expected K8sNetworkSecurityPlugin instance, got {plugin.__class__.__name__}"
+        assert plugin.__class__.__name__ == "K8sNetworkSecurityPlugin", (
+            f"Expected K8sNetworkSecurityPlugin instance, got {plugin.__class__.__name__}"
+        )
 
     @pytest.mark.requirement("FR-001")
     def test_get_plugin_has_metadata(self) -> None:
@@ -219,9 +215,7 @@ class TestGetPlugin:
 
         assert hasattr(plugin, "name"), "Plugin missing 'name' attribute"
         assert hasattr(plugin, "version"), "Plugin missing 'version' attribute"
-        assert hasattr(
-            plugin, "floe_api_version"
-        ), "Plugin missing 'floe_api_version' attribute"
+        assert hasattr(plugin, "floe_api_version"), "Plugin missing 'floe_api_version' attribute"
 
     @pytest.mark.requirement("FR-001")
     def test_get_plugin_metadata_values_not_none(self) -> None:
@@ -274,8 +268,8 @@ class TestGetPlugin:
         plugin2 = get_network_security_plugin("k8s")
 
         # Should be different instances
-        assert (
-            plugin1 is not plugin2
-        ), "get_network_security_plugin should return new instances, not cached"
+        assert plugin1 is not plugin2, (
+            "get_network_security_plugin should return new instances, not cached"
+        )
         # But same type
         assert type(plugin1) is type(plugin2)

@@ -57,9 +57,7 @@ class TestRBACPermissionAggregator:
     def test_add_permission_rule_and_aggregate(self) -> None:
         """Test adding permission rules and aggregating them."""
         aggregator = RBACPermissionAggregator()
-        aggregator.add_permission_rule(
-            "admin", "secret/db", {Permission.READ, Permission.WRITE}
-        )
+        aggregator.add_permission_rule("admin", "secret/db", {Permission.READ, Permission.WRITE})
 
         result = aggregator.aggregate_permissions("admin", "secret/db")
         assert Permission.READ in result
@@ -146,9 +144,7 @@ class TestRBACPermissionAggregator:
     def test_multiple_principals_and_resources(self) -> None:
         """Test handling multiple principals and resources."""
         aggregator = RBACPermissionAggregator()
-        aggregator.add_permission_rule(
-            "admin", "secret/db", {Permission.READ, Permission.WRITE}
-        )
+        aggregator.add_permission_rule("admin", "secret/db", {Permission.READ, Permission.WRITE})
         aggregator.add_permission_rule("reader", "secret/db", {Permission.READ})
         aggregator.add_permission_rule("admin", "secret/api", {Permission.READ})
 

@@ -94,9 +94,7 @@ class TestPortValidationError:
     def test_can_raise_with_port_message(self) -> None:
         """Test that PortValidationError can be raised with port-specific message."""
         message = "Port 70000 out of range (1-65535)"
-        with pytest.raises(
-            PortValidationError, match=r"Port 70000 out of range \(1-65535\)"
-        ):
+        with pytest.raises(PortValidationError, match=r"Port 70000 out of range \(1-65535\)"):
             raise PortValidationError(message)
 
     @pytest.mark.requirement("FR-070")

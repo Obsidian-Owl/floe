@@ -127,9 +127,7 @@ class TestCredentialVending(IntegrationTestBase):
         full_table_name = f"{namespace}.{table_name}"
         schema = Schema(
             NestedField(field_id=1, name="id", field_type=LongType(), required=True),
-            NestedField(
-                field_id=2, name="name", field_type=StringType(), required=False
-            ),
+            NestedField(field_id=2, name="name", field_type=StringType(), required=False),
         )
 
         plugin.create_table(full_table_name, schema)
@@ -391,9 +389,7 @@ class TestCredentialVending(IntegrationTestBase):
                     # Handle both "Z" suffix and "+00:00" format
                     datetime.fromisoformat(expiration.replace("Z", "+00:00"))
                 except ValueError:
-                    pytest.fail(
-                        f"expiration '{expiration}' is not valid ISO 8601 format"
-                    )
+                    pytest.fail(f"expiration '{expiration}' is not valid ISO 8601 format")
 
         finally:
             self._cleanup_test_resources(plugin, namespace, table_name)
@@ -420,9 +416,7 @@ class TestCredentialVending(IntegrationTestBase):
             # Assert - if expiration is set, it should be within 24 hours
             expiration = credentials.get("expiration", "")
             if expiration:
-                expiration_dt = datetime.fromisoformat(
-                    expiration.replace("Z", "+00:00")
-                )
+                expiration_dt = datetime.fromisoformat(expiration.replace("Z", "+00:00"))
                 now = datetime.now(timezone.utc)
 
                 # Expiration should be in the future
@@ -509,12 +503,8 @@ class TestCredentialVending(IntegrationTestBase):
             # Create first table
             table1_path = f"{namespace}.{table1}"
             schema = Schema(
-                NestedField(
-                    field_id=1, name="id", field_type=LongType(), required=True
-                ),
-                NestedField(
-                    field_id=2, name="name", field_type=StringType(), required=False
-                ),
+                NestedField(field_id=1, name="id", field_type=LongType(), required=True),
+                NestedField(field_id=2, name="name", field_type=StringType(), required=False),
             )
             plugin.create_table(table1_path, schema)
 
@@ -611,12 +601,8 @@ class TestCredentialVendingHierarchicalNamespace(IntegrationTestBase):
             # Full table identifier: "parent_ns.child.table_name"
             table_path = f"{child_ns}.{table_name}"
             schema = Schema(
-                NestedField(
-                    field_id=1, name="id", field_type=LongType(), required=True
-                ),
-                NestedField(
-                    field_id=2, name="name", field_type=StringType(), required=False
-                ),
+                NestedField(field_id=1, name="id", field_type=LongType(), required=True),
+                NestedField(field_id=2, name="name", field_type=StringType(), required=False),
             )
             plugin.create_table(table_path, schema)
 

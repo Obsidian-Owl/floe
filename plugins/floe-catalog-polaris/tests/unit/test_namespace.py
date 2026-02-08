@@ -128,9 +128,7 @@ class TestCreateNamespace:
         """Test that creating an existing namespace raises ConflictError."""
         from pyiceberg.exceptions import NamespaceAlreadyExistsError
 
-        mock_catalog.create_namespace.side_effect = NamespaceAlreadyExistsError(
-            "bronze"
-        )
+        mock_catalog.create_namespace.side_effect = NamespaceAlreadyExistsError("bronze")
 
         with pytest.raises(ConflictError) as exc_info:
             connected_plugin.create_namespace("bronze")
@@ -490,9 +488,7 @@ class TestNamespaceErrorMapping:
         """Test that PyIceberg errors are mapped to floe errors."""
         from pyiceberg.exceptions import NamespaceAlreadyExistsError
 
-        mock_catalog.create_namespace.side_effect = NamespaceAlreadyExistsError(
-            "bronze"
-        )
+        mock_catalog.create_namespace.side_effect = NamespaceAlreadyExistsError("bronze")
 
         with pytest.raises(ConflictError):
             connected_plugin.create_namespace("bronze")
@@ -506,9 +502,7 @@ class TestNamespaceErrorMapping:
         """Test that PyIceberg errors are mapped to floe errors."""
         from pyiceberg.exceptions import ServiceUnavailableError
 
-        mock_catalog.list_namespaces.side_effect = ServiceUnavailableError(
-            "Service down"
-        )
+        mock_catalog.list_namespaces.side_effect = ServiceUnavailableError("Service down")
 
         from floe_core.plugin_errors import CatalogUnavailableError
 

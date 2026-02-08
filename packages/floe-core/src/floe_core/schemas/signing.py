@@ -171,9 +171,7 @@ class EnvironmentPolicy(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enforcement: Literal["enforce", "warn", "off"] = Field(
-        description="Enforcement level override"
-    )
+    enforcement: Literal["enforce", "warn", "off"] = Field(description="Enforcement level override")
     require_sbom: bool | None = Field(
         default=None,
         description="Override SBOM requirement",
@@ -314,12 +312,8 @@ class SignatureMetadata(BaseModel):
     issuer: str | None = Field(default=None, description="OIDC issuer (keyless only)")
     subject: str = Field(description="Certificate subject / signer identity")
     signed_at: datetime = Field(description="Signing timestamp")
-    rekor_log_index: int | None = Field(
-        default=None, description="Rekor transparency log index"
-    )
-    certificate_fingerprint: str = Field(
-        description="SHA256 fingerprint of signing certificate"
-    )
+    rekor_log_index: int | None = Field(default=None, description="Rekor transparency log index")
+    certificate_fingerprint: str = Field(description="SHA256 fingerprint of signing certificate")
 
     def to_annotations(self) -> dict[str, str]:
         """Convert to OCI annotation dict."""
@@ -349,23 +343,17 @@ class SignatureMetadata(BaseModel):
 
         mode_str = annotations.get("dev.floe.signature.mode")
         if mode_str is None:
-            raise ValueError(
-                "Signed artifact missing 'dev.floe.signature.mode' annotation"
-            )
+            raise ValueError("Signed artifact missing 'dev.floe.signature.mode' annotation")
         if mode_str not in ("keyless", "key-based"):
             raise ValueError(f"Invalid signature mode: {mode_str}")
 
         subject = annotations.get("dev.floe.signature.subject")
         if not subject:
-            raise ValueError(
-                "Signed artifact missing 'dev.floe.signature.subject' annotation"
-            )
+            raise ValueError("Signed artifact missing 'dev.floe.signature.subject' annotation")
 
         signed_at_str = annotations.get("dev.floe.signature.signed-at")
         if not signed_at_str:
-            raise ValueError(
-                "Signed artifact missing 'dev.floe.signature.signed-at' annotation"
-            )
+            raise ValueError("Signed artifact missing 'dev.floe.signature.signed-at' annotation")
         try:
             signed_at = datetime.fromisoformat(signed_at_str)
         except ValueError as e:
@@ -414,18 +402,14 @@ class VerificationResult(BaseModel):
     status: Literal["valid", "invalid", "unsigned", "unknown"] = Field(
         description="Verification status"
     )
-    signer_identity: str | None = Field(
-        default=None, description="Verified signer identity"
-    )
+    signer_identity: str | None = Field(default=None, description="Verified signer identity")
     issuer: str | None = Field(default=None, description="OIDC issuer if keyless")
     verified_at: datetime = Field(description="Verification timestamp")
     rekor_verified: bool = Field(default=False, description="Transparency log verified")
     certificate_chain: list[str] = Field(
         default_factory=list, description="Certificate chain (PEM)"
     )
-    failure_reason: str | None = Field(
-        default=None, description="Reason if verification failed"
-    )
+    failure_reason: str | None = Field(default=None, description="Reason if verification failed")
     certificate_expired_at: datetime | None = Field(
         default=None, description="Certificate expiration time (FR-012 grace period)"
     )
@@ -462,9 +446,7 @@ class AttestationManifest(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    predicate_type: str = Field(
-        description="Attestation type (e.g., https://spdx.dev/Document)"
-    )
+    predicate_type: str = Field(description="Attestation type (e.g., https://spdx.dev/Document)")
     predicate: dict[str, object] = Field(description="Attestation payload")
     subject: list[Subject] = Field(description="Artifacts this attestation covers")
 
@@ -504,9 +486,7 @@ class VerificationAuditEvent(BaseModel):
         default_factory=list, description="Configured trusted issuers"
     )
     actual_issuer: str | None = Field(default=None, description="Actual signer issuer")
-    actual_subject: str | None = Field(
-        default=None, description="Actual signer identity"
-    )
+    actual_subject: str | None = Field(default=None, description="Actual signer identity")
     signature_status: Literal["valid", "invalid", "unsigned", "unknown"] = Field(
         description="Verification result status"
     )
@@ -515,9 +495,7 @@ class VerificationAuditEvent(BaseModel):
     trace_id: str = Field(description="W3C trace context ID")
     span_id: str = Field(description="W3C span ID")
     success: bool = Field(description="Verification passed")
-    failure_reason: str | None = Field(
-        default=None, description="Reason if verification failed"
-    )
+    failure_reason: str | None = Field(default=None, description="Reason if verification failed")
 
 
 class VerificationBundle(BaseModel):
@@ -540,9 +518,7 @@ class VerificationBundle(BaseModel):
     artifact_digest: str = Field(description="SHA256 of signed artifact")
     sigstore_bundle: dict[str, object] = Field(description="Full Sigstore bundle JSON")
     certificate_chain: list[str] = Field(description="PEM-encoded cert chain")
-    rekor_entry: dict[str, object] | None = Field(
-        default=None, description="Rekor log entry"
-    )
+    rekor_entry: dict[str, object] | None = Field(default=None, description="Rekor log entry")
     created_at: datetime = Field(description="Bundle creation timestamp")
 
 

@@ -153,9 +153,7 @@ class TestRollbackTagPatternContract:
         ]
 
         for tag in valid_tags:
-            assert re.match(
-                ROLLBACK_TAG_PATTERN, tag
-            ), f"Tag '{tag}' should match rollback pattern"
+            assert re.match(ROLLBACK_TAG_PATTERN, tag), f"Tag '{tag}' should match rollback pattern"
 
     @pytest.mark.requirement("8C-FR-014")
     def test_rollback_tag_pattern_rejects_invalid(self) -> None:
@@ -171,9 +169,9 @@ class TestRollbackTagPatternContract:
         ]
 
         for tag in invalid_tags:
-            assert not re.match(
-                ROLLBACK_TAG_PATTERN, tag
-            ), f"Tag '{tag}' should NOT match rollback pattern"
+            assert not re.match(ROLLBACK_TAG_PATTERN, tag), (
+                f"Tag '{tag}' should NOT match rollback pattern"
+            )
 
     @pytest.mark.requirement("8C-FR-014")
     def test_rollback_tag_sequential_numbers(self) -> None:
@@ -237,9 +235,9 @@ class TestRollbackRecordContract:
         }
 
         for field in core_fields:
-            assert (
-                field in required_fields
-            ), f"Required field '{field}' missing from RollbackRecord schema"
+            assert field in required_fields, (
+                f"Required field '{field}' missing from RollbackRecord schema"
+            )
 
     @pytest.mark.requirement("8C-FR-017")
     def test_rollback_record_serialization_round_trip(
@@ -279,9 +277,7 @@ class TestRollbackRecordContract:
         assert "undocumented_field" in str(exc_info.value)
 
     @pytest.mark.requirement("8C-FR-017")
-    def test_rollback_record_immutability(
-        self, minimal_rollback_record: RollbackRecord
-    ) -> None:
+    def test_rollback_record_immutability(self, minimal_rollback_record: RollbackRecord) -> None:
         """Contract: RollbackRecord is immutable (frozen=True)."""
         with pytest.raises(ValidationError):
             minimal_rollback_record.reason = "Modified reason"  # type: ignore[misc]
@@ -353,6 +349,6 @@ class TestRollbackExitCodeRangeContract:
         exit_codes = [err.exit_code for err in rollback_errors]
         unique_codes = set(exit_codes)
 
-        assert len(exit_codes) == len(
-            unique_codes
-        ), f"Duplicate exit codes found! Codes: {exit_codes}"
+        assert len(exit_codes) == len(unique_codes), (
+            f"Duplicate exit codes found! Codes: {exit_codes}"
+        )

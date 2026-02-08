@@ -77,9 +77,7 @@ class TestErrorFunction:
         assert "path=/path/to/file" in captured.err
 
     @pytest.mark.requirement("FR-005")
-    def test_error_with_multiple_context(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_error_with_multiple_context(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Test error() includes multiple context values."""
         from floe_core.cli.utils import error
 
@@ -126,9 +124,7 @@ class TestErrorExitFunction:
         assert exc_info.value.code == ExitCode.FILE_NOT_FOUND
 
     @pytest.mark.requirement("FR-005")
-    def test_error_exit_outputs_message(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_error_exit_outputs_message(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Test error_exit() outputs error message before exiting."""
         from floe_core.cli.utils import error_exit
 
@@ -176,9 +172,7 @@ class TestSuccessFunction:
     """Tests for the success() function."""
 
     @pytest.mark.requirement("FR-005")
-    def test_success_outputs_to_stdout(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_success_outputs_to_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Test success() outputs to stdout not stderr."""
         from floe_core.cli.utils import success
 
@@ -208,9 +202,7 @@ class TestValidateFileExists:
     """Tests for the validate_file_exists() function."""
 
     @pytest.mark.requirement("FR-005")
-    def test_validate_file_exists_passes_for_existing_file(
-        self, tmp_path: Path
-    ) -> None:
+    def test_validate_file_exists_passes_for_existing_file(self, tmp_path: Path) -> None:
         """Test validate_file_exists() passes for existing file."""
         from floe_core.cli.utils import validate_file_exists
 
@@ -262,9 +254,7 @@ class TestValidateDirectoryWritable:
     """Tests for the validate_directory_writable() function."""
 
     @pytest.mark.requirement("FR-005")
-    def test_validate_directory_writable_creates_directory(
-        self, tmp_path: Path
-    ) -> None:
+    def test_validate_directory_writable_creates_directory(self, tmp_path: Path) -> None:
         """Test validate_directory_writable() creates directory if needed."""
         from floe_core.cli.utils import validate_directory_writable
 
@@ -276,9 +266,7 @@ class TestValidateDirectoryWritable:
         assert new_dir.is_dir()
 
     @pytest.mark.requirement("FR-005")
-    def test_validate_directory_writable_creates_nested_directory(
-        self, tmp_path: Path
-    ) -> None:
+    def test_validate_directory_writable_creates_nested_directory(self, tmp_path: Path) -> None:
         """Test validate_directory_writable() creates nested directories."""
         from floe_core.cli.utils import validate_directory_writable
 
@@ -290,9 +278,7 @@ class TestValidateDirectoryWritable:
         assert nested_dir.is_dir()
 
     @pytest.mark.requirement("FR-005")
-    def test_validate_directory_writable_passes_for_existing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_validate_directory_writable_passes_for_existing(self, tmp_path: Path) -> None:
         """Test validate_directory_writable() passes for existing directory."""
         from floe_core.cli.utils import validate_directory_writable
 

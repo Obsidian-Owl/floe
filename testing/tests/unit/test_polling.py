@@ -176,9 +176,7 @@ class TestWaitForService:
     def test_no_raise_returns_false(self) -> None:
         """Test wait_for_service returns False when raise_on_timeout=False."""
         with patch("testing.fixtures.polling._tcp_check", return_value=False):
-            result = wait_for_service(
-                "unavailable", 9999, timeout=0.2, raise_on_timeout=False
-            )
+            result = wait_for_service("unavailable", 9999, timeout=0.2, raise_on_timeout=False)
             assert result is False
 
 
@@ -200,8 +198,6 @@ class TestTcpCheck:
         """Test _tcp_check returns False for failed connection."""
         from testing.fixtures.polling import _tcp_check
 
-        with patch(
-            "socket.create_connection", side_effect=OSError("Connection refused")
-        ):
+        with patch("socket.create_connection", side_effect=OSError("Connection refused")):
             result = _tcp_check("localhost", 8080, timeout=5.0)
             assert result is False

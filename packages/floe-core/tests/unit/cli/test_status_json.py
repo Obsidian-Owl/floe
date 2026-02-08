@@ -110,9 +110,7 @@ class TestStatusJsonOutputFields:
     """
 
     @pytest.mark.requirement("FR-031")
-    def test_json_output_contains_tag(
-        self, mock_status_response: PromotionStatusResponse
-    ) -> None:
+    def test_json_output_contains_tag(self, mock_status_response: PromotionStatusResponse) -> None:
         """JSON output contains tag field."""
         runner = CliRunner()
 

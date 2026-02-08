@@ -765,13 +765,9 @@ def create_auth_provider(
 
     if auth_type == AuthType.BASIC:
         if secrets_plugin is None:
-            raise AuthenticationError(
-                registry_uri, "SecretsPlugin required for basic auth"
-            )
+            raise AuthenticationError(registry_uri, "SecretsPlugin required for basic auth")
         if auth_config.credentials_ref is None:
-            raise AuthenticationError(
-                registry_uri, "credentials_ref required for basic auth"
-            )
+            raise AuthenticationError(registry_uri, "credentials_ref required for basic auth")
         return BasicAuthProvider(
             registry_uri=registry_uri,
             secrets_plugin=secrets_plugin,
@@ -780,13 +776,9 @@ def create_auth_provider(
 
     if auth_type == AuthType.TOKEN:
         if secrets_plugin is None:
-            raise AuthenticationError(
-                registry_uri, "SecretsPlugin required for token auth"
-            )
+            raise AuthenticationError(registry_uri, "SecretsPlugin required for token auth")
         if auth_config.credentials_ref is None:
-            raise AuthenticationError(
-                registry_uri, "credentials_ref required for token auth"
-            )
+            raise AuthenticationError(registry_uri, "credentials_ref required for token auth")
         return TokenAuthProvider(
             registry_uri=registry_uri,
             secrets_plugin=secrets_plugin,

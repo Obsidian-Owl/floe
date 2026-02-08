@@ -390,9 +390,7 @@ class TestBatchLoad:
 
         mock_client = AsyncMock()
         # Fail on third file to leave checkpoint
-        mock_client.add_content = AsyncMock(
-            side_effect=[None, None, Exception("Fail"), None, None]
-        )
+        mock_client.add_content = AsyncMock(side_effect=[None, None, Exception("Fail"), None, None])
 
         await batch_load(
             mock_config,
@@ -460,9 +458,7 @@ class TestBatchLoad:
 
     @pytest.mark.requirement("FR-018")
     @pytest.mark.asyncio
-    async def test_batch_load_clears_checkpoint_on_success(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_batch_load_clears_checkpoint_on_success(self, tmp_path: Path) -> None:
         """Test batch_load clears checkpoint when all files succeed."""
         from agent_memory.ops.batch import batch_load, load_checkpoint
 

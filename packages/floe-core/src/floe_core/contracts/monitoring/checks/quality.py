@@ -218,9 +218,7 @@ class QualityCheck(BaseCheck):
             severity = ViolationSeverity.CRITICAL
 
         # --- Build violation event ---
-        message = (
-            f"Quality score {overall_score:.2f} is below threshold {threshold:.2f}"
-        )
+        message = f"Quality score {overall_score:.2f} is below threshold {threshold:.2f}"
 
         violation = ContractViolationEvent(
             contract_name=contract.contract_name,
@@ -239,7 +237,9 @@ class QualityCheck(BaseCheck):
                 "severity_reason": (
                     "critical"
                     if overall_score < 0.5 * threshold
-                    else "error" if overall_score < 0.9 * threshold else "warning"
+                    else "error"
+                    if overall_score < 0.9 * threshold
+                    else "warning"
                 ),
             },
         )

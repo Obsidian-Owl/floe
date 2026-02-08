@@ -187,9 +187,7 @@ class TestCheckCogneeCloud:
 
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
-            mock_client.get = AsyncMock(
-                side_effect=httpx.ConnectError("Connection refused")
-            )
+            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
@@ -269,9 +267,7 @@ class TestCheckLocalState:
         result = check_local_state(tmp_path)
 
         assert result.status == "degraded"
-        assert (
-            "not found" in result.message.lower() or "missing" in result.message.lower()
-        )
+        assert "not found" in result.message.lower() or "missing" in result.message.lower()
 
 
 class TestHealthCheck:

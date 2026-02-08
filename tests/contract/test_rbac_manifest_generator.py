@@ -128,9 +128,7 @@ class TestRBACManifestGeneratorOutputContract:
                 RoleBindingConfig(
                     name="floe-test-binding",
                     namespace="default",
-                    subjects=[
-                        RoleBindingSubject(name="floe-test", namespace="default")
-                    ],
+                    subjects=[RoleBindingSubject(name="floe-test", namespace="default")],
                     role_name="floe-test-role",
                 ),
             ),
@@ -139,9 +137,9 @@ class TestRBACManifestGeneratorOutputContract:
 
         for kind, config in configs:
             manifest = config.to_k8s_manifest()
-            assert required_fields.issubset(
-                set(manifest.keys())
-            ), f"{kind} manifest missing required fields: {required_fields - set(manifest.keys())}"
+            assert required_fields.issubset(set(manifest.keys())), (
+                f"{kind} manifest missing required fields: {required_fields - set(manifest.keys())}"
+            )
             assert manifest["kind"] == kind
 
     @pytest.mark.requirement("FR-050")

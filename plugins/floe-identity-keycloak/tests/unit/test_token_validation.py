@@ -315,9 +315,7 @@ class TestTokenValidationInvalid:
 
             assert result.valid is False
             assert result.error is not None
-            assert (
-                "signature" in result.error.lower() or "invalid" in result.error.lower()
-            )
+            assert "signature" in result.error.lower() or "invalid" in result.error.lower()
 
     @pytest.mark.requirement("7A-FR-034")
     def test_missing_required_claims_returns_valid_false(
@@ -334,9 +332,7 @@ class TestTokenValidationInvalid:
             mock_jwt.exceptions = real_jwt.exceptions
 
             # Simulate MissingRequiredClaimError when 'sub' is required
-            mock_jwt.decode.side_effect = real_jwt.exceptions.MissingRequiredClaimError(
-                "sub"
-            )
+            mock_jwt.decode.side_effect = real_jwt.exceptions.MissingRequiredClaimError("sub")
             mock_jwt.get_unverified_header.return_value = {
                 "kid": TEST_KEY_ID,
                 "alg": "RS256",
@@ -370,9 +366,7 @@ class TestTokenValidationInvalid:
             # Use real exception classes for proper exception handling
             mock_jwt.exceptions = real_jwt.exceptions
 
-            mock_jwt.decode.side_effect = real_jwt.exceptions.InvalidIssuerError(
-                "Invalid issuer"
-            )
+            mock_jwt.decode.side_effect = real_jwt.exceptions.InvalidIssuerError("Invalid issuer")
             mock_jwt.get_unverified_header.return_value = {
                 "kid": TEST_KEY_ID,
                 "alg": "RS256",
@@ -440,9 +434,7 @@ class TestTokenValidationMalformed:
             from jwt.exceptions import DecodeError
 
             mock_jwt.decode.side_effect = DecodeError("Not enough segments")
-            mock_jwt.get_unverified_header.side_effect = DecodeError(
-                "Not enough segments"
-            )
+            mock_jwt.get_unverified_header.side_effect = DecodeError("Not enough segments")
             mock_jwt.exceptions = MagicMock()
             mock_jwt.exceptions.DecodeError = DecodeError
 

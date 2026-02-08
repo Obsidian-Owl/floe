@@ -215,9 +215,7 @@ class InheritanceValidator:
         violations.extend(sla_violations)
 
         # Validate classifications (FR-013)
-        classification_violations = self._validate_classification_inheritance(
-            parent, child
-        )
+        classification_violations = self._validate_classification_inheritance(parent, child)
         violations.extend(classification_violations)
 
         # Build result
@@ -472,9 +470,7 @@ class InheritanceValidator:
                         element_name=field_key,
                         expected=parent_class,
                         actual="none",
-                        suggestion=(
-                            f"Add classification '{parent_class}' to field '{field_key}'"
-                        ),
+                        suggestion=(f"Add classification '{parent_class}' to field '{field_key}'"),
                     )
                 )
                 continue

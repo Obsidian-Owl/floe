@@ -136,9 +136,7 @@ class TestDefaultDenyPolicyGeneration:
 
         for policy in policies:
             assert "labels" in policy["metadata"]
-            assert (
-                policy["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "floe"
-            )
+            assert policy["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "floe"
 
     @pytest.mark.requirement("FR-030")
     def test_default_deny_works_for_jobs_namespace(self) -> None:

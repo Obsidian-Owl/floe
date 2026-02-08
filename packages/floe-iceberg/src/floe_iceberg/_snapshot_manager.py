@@ -244,9 +244,7 @@ class _IcebergSnapshotManager:
         from opentelemetry import trace
 
         span = trace.get_current_span()
-        span.set_attribute(
-            "table.identifier", str(getattr(table, "identifier", "unknown"))
-        )
+        span.set_attribute("table.identifier", str(getattr(table, "identifier", "unknown")))
         span.set_attribute("retention.keep_last", min_to_keep)
 
         self._log.debug(

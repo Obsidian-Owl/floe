@@ -112,11 +112,7 @@ class SemanticVersion:
         Returns:
             True if only PATCH version was incremented.
         """
-        return (
-            self.major == other.major
-            and self.minor == other.minor
-            and self.patch > other.patch
-        )
+        return self.major == other.major and self.minor == other.minor and self.patch > other.patch
 
 
 class ChangeType:

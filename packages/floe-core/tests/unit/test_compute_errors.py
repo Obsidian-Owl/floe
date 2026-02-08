@@ -224,6 +224,4 @@ class TestExceptionCatching:
             try:
                 raise ComputeConnectionError("Connection failed")
             except ComputeTimeoutError:
-                pytest.fail(
-                    "Should not catch ComputeConnectionError as ComputeTimeoutError"
-                )
+                pytest.fail("Should not catch ComputeConnectionError as ComputeTimeoutError")

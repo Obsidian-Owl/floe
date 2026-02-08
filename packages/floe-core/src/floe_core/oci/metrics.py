@@ -361,9 +361,7 @@ class OCIMetrics:
         self.circuit_breaker_gauge.set(int(state), attributes=attributes)
 
         if failure_count is not None:
-            self.circuit_breaker_failures_gauge.set(
-                failure_count, attributes=attributes
-            )
+            self.circuit_breaker_failures_gauge.set(failure_count, attributes=attributes)
 
         logger.debug(
             "circuit_breaker_state_metric_recorded",

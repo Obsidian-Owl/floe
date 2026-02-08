@@ -122,9 +122,7 @@ def _format_table(report: SLAComplianceReport) -> str:
     lines.append("=" * 80)
     lines.append(f"SLA COMPLIANCE REPORT: {report.contract_name}")
     lines.append("=" * 80)
-    lines.append(
-        f"Period: {report.period_start.isoformat()} to {report.period_end.isoformat()}"
-    )
+    lines.append(f"Period: {report.period_start.isoformat()} to {report.period_end.isoformat()}")
     lines.append(f"Generated: {report.generated_at.isoformat()}")
     lines.append("")
     lines.append(f"Overall Compliance: {report.overall_compliance_pct:.1f}%")
@@ -135,8 +133,7 @@ def _format_table(report: SLAComplianceReport) -> str:
     lines.append("CHECK TYPE SUMMARY")
     lines.append("-" * 80)
     lines.append(
-        f"{'Check Type':<20} {'Total':>8} {'Pass':>8} {'Fail':>8} "
-        f"{'Compliance':>12} {'Trend':>12}"
+        f"{'Check Type':<20} {'Total':>8} {'Pass':>8} {'Fail':>8} {'Compliance':>12} {'Trend':>12}"
     )
     lines.append("-" * 80)
 
@@ -229,9 +226,7 @@ def report(
         if data_source is not None:
             compliance_report = data_source(contract_name=contract, window=window)
         else:
-            compliance_report = _generate_sample_report(
-                contract_name=contract, window=window
-            )
+            compliance_report = _generate_sample_report(contract_name=contract, window=window)
 
         # Format output
         if output_format == "json":

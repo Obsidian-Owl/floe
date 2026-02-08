@@ -68,9 +68,7 @@ def mock_status_with_locked_env() -> MagicMock:
     # Create mock response with environment_locks field (to be added to schema)
     mock_response = MagicMock()
     mock_response.tag = "v1.0.0"
-    mock_response.digest = (
-        "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
-    )
+    mock_response.digest = "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
     mock_response.environments = {
         "dev": EnvironmentStatus(
             promoted=True,
@@ -198,11 +196,7 @@ class TestStatusLockTableOutput:
 
             assert result.exit_code == 0
             # Look for lock indicator (could be 🔒, [LOCKED], or similar)
-            assert (
-                "🔒" in result.output
-                or "[LOCKED]" in result.output
-                or "LOCKED" in result.output
-            )
+            assert "🔒" in result.output or "[LOCKED]" in result.output or "LOCKED" in result.output
 
     @pytest.mark.requirement("FR-039")
     def test_locked_environment_shows_lock_reason(
@@ -234,10 +228,7 @@ class TestStatusLockTableOutput:
 
             assert result.exit_code == 0
             # Lock reason should be visible
-            assert (
-                "Incident #456" in result.output
-                or "Database migration" in result.output
-            )
+            assert "Incident #456" in result.output or "Database migration" in result.output
 
     @pytest.mark.requirement("FR-039")
     def test_locked_environment_shows_locked_by(
@@ -309,9 +300,7 @@ class TestStatusLockJsonOutput:
     """Tests for lock status in JSON output format (FR-039)."""
 
     @pytest.mark.requirement("FR-039")
-    def test_json_output_includes_lock_status(
-        self, mock_status_with_locked_env: MagicMock
-    ) -> None:
+    def test_json_output_includes_lock_status(self, mock_status_with_locked_env: MagicMock) -> None:
         """JSON output includes lock status for environments."""
         runner = CliRunner()
 
@@ -342,8 +331,7 @@ class TestStatusLockJsonOutput:
 
             # JSON should include environment_locks or lock info per environment
             assert "environment_locks" in data or any(
-                "lock" in str(env).lower()
-                for env in data.get("environments", {}).values()
+                "lock" in str(env).lower() for env in data.get("environments", {}).values()
             )
 
     @pytest.mark.requirement("FR-039")
@@ -384,9 +372,7 @@ class TestStatusLockJsonOutput:
             assert "Incident" in output_str or "migration" in output_str  # reason
 
     @pytest.mark.requirement("FR-039")
-    def test_json_output_unlocked_shows_false(
-        self, mock_status_all_unlocked: MagicMock
-    ) -> None:
+    def test_json_output_unlocked_shows_false(self, mock_status_all_unlocked: MagicMock) -> None:
         """JSON output shows locked=false for unlocked environments."""
         runner = CliRunner()
 
@@ -456,11 +442,7 @@ class TestStatusLockWithEnvFilter:
 
             assert result.exit_code == 0
             # Lock should be visible when filtering to locked environment
-            assert (
-                "🔒" in result.output
-                or "[LOCKED]" in result.output
-                or "LOCKED" in result.output
-            )
+            assert "🔒" in result.output or "[LOCKED]" in result.output or "LOCKED" in result.output
 
 
 __all__: list[str] = [

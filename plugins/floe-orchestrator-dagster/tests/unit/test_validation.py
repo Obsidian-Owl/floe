@@ -146,9 +146,7 @@ class TestValidateConnectionHTTPErrors:
     Validates FR-011: System MUST return actionable error messages.
     """
 
-    def test_validate_connection_http_404(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_validate_connection_http_404(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test validate_connection handles 404 Not Found."""
         with patch("httpx.Client") as mock_client_class:
             mock_response = MagicMock()
@@ -164,9 +162,7 @@ class TestValidateConnectionHTTPErrors:
             assert result.success is False
             assert "404" in result.message
 
-    def test_validate_connection_http_500(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_validate_connection_http_500(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test validate_connection handles 500 Internal Server Error."""
         with patch("httpx.Client") as mock_client_class:
             mock_response = MagicMock()
@@ -220,9 +216,7 @@ class TestValidateConnectionTimeout:
             mock_client.post.side_effect = httpx.TimeoutException("timed out")
             mock_client_class.return_value = mock_client
 
-            result = dagster_plugin.validate_connection(
-                "http://localhost:3000", timeout=1.0
-            )
+            result = dagster_plugin.validate_connection("http://localhost:3000", timeout=1.0)
 
             assert result.success is False
 
@@ -239,9 +233,7 @@ class TestValidateConnectionTimeout:
             mock_client.post.side_effect = httpx.TimeoutException("timed out")
             mock_client_class.return_value = mock_client
 
-            result = dagster_plugin.validate_connection(
-                "http://localhost:3000", timeout=5.0
-            )
+            result = dagster_plugin.validate_connection("http://localhost:3000", timeout=5.0)
 
             assert "5.0" in result.message
 
@@ -334,9 +326,7 @@ class TestValidateConnectionConnectError:
             mock_client.post.side_effect = httpx.ConnectError("Connection refused")
             mock_client_class.return_value = mock_client
 
-            result = dagster_plugin.validate_connection(
-                "http://dagster.example.com:3000"
-            )
+            result = dagster_plugin.validate_connection("http://dagster.example.com:3000")
 
             assert len(result.errors) == 1
             assert "http://dagster.example.com:3000" in result.errors[0]
@@ -364,9 +354,7 @@ class TestValidateConnectionURLHandling:
                 call_args = mock_client.post.call_args
                 assert call_args[0][0] == "http://localhost:3000/graphql"
 
-    def test_validate_connection_env_url(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_validate_connection_env_url(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test validate_connection uses DAGSTER_URL from environment."""
         with patch("httpx.Client") as mock_client_class:
             with patch.dict("os.environ", {"DAGSTER_URL": "http://dagster.local:8080"}):

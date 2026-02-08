@@ -137,9 +137,7 @@ class TestDltIngestionConfig:
                     IngestionSourceConfig(
                         name="duplicate",  # Duplicate name
                         source_type="sql_database",
-                        source_config={
-                            "connection_string": "postgresql://localhost/db"
-                        },
+                        source_config={"connection_string": "postgresql://localhost/db"},
                         destination_table="bronze.data_two",
                     ),
                 ]
@@ -401,21 +399,15 @@ class TestRetryConfig:
         assert config.initial_delay_seconds == pytest.approx(60.0)
 
         # Invalid max_retries (too high)
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 10"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 10"):
             RetryConfig(max_retries=11)
 
         # Invalid max_retries (negative)
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 0"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 0"):
             RetryConfig(max_retries=-1)
 
         # Invalid initial_delay_seconds (too high)
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 60"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 60"):
             RetryConfig(initial_delay_seconds=61.0)
 
         # Invalid initial_delay_seconds (zero)

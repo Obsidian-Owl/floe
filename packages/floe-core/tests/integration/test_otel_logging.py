@@ -32,9 +32,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def otel_provider() -> (
-    Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]
-):
+def otel_provider() -> Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]:
     """Set up a real OpenTelemetry TracerProvider with in-memory exporter.
 
     Yields:

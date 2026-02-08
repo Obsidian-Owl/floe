@@ -45,9 +45,7 @@ class TestJaegerPluginIntegration(IntegrationTestBase):
         endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
         if "://" in endpoint:
             endpoint = endpoint.split("://", 1)[1]
-        host, port_str = (
-            endpoint.rsplit(":", 1) if ":" in endpoint else (endpoint, "4317")
-        )
+        host, port_str = endpoint.rsplit(":", 1) if ":" in endpoint else (endpoint, "4317")
 
         try:
             with socket.create_connection((host, int(port_str)), timeout=5.0):
@@ -185,9 +183,9 @@ class TestJaegerPluginIntegration(IntegrationTestBase):
         try:
             # Health check should be healthy
             health = plugin.health_check()
-            assert (
-                health.state == HealthState.HEALTHY
-            ), f"Expected HEALTHY state after startup, got {health.state}"
+            assert health.state == HealthState.HEALTHY, (
+                f"Expected HEALTHY state after startup, got {health.state}"
+            )
         finally:
             # Shutdown should not raise
             plugin.shutdown()

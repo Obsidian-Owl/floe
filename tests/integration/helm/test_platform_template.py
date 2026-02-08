@@ -129,9 +129,9 @@ class TestPlatformChartTemplate:
 
         # We expect at least Deployment and Service for Polaris
         # Note: Actual resources depend on template implementation
-        assert (
-            "Deployment" in resource_kinds or "StatefulSet" in resource_kinds
-        ), "Expected Deployment or StatefulSet for Polaris"
+        assert "Deployment" in resource_kinds or "StatefulSet" in resource_kinds, (
+            "Expected Deployment or StatefulSet for Polaris"
+        )
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -215,9 +215,7 @@ class TestPlatformChartTemplate:
                 has_standard_labels = True
                 break
 
-        assert (
-            has_standard_labels
-        ), "No resources have standard app.kubernetes.io/name label"
+        assert has_standard_labels, "No resources have standard app.kubernetes.io/name label"
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -251,9 +249,7 @@ class TestPlatformChartTemplate:
         output = result.stdout.decode()
 
         # Release name should appear in the output
-        assert (
-            release_name in output
-        ), f"Release name '{release_name}' not found in template output"
+        assert release_name in output, f"Release name '{release_name}' not found in template output"
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -292,13 +288,11 @@ class TestPlatformChartTemplate:
 
         # Check that resources have the correct namespace
         namespaced_resources = [
-            doc
-            for doc in documents
-            if doc.get("metadata", {}).get("namespace") == namespace
+            doc for doc in documents if doc.get("metadata", {}).get("namespace") == namespace
         ]
 
         # Some resources should have the namespace set
         # Note: ClusterRole, ClusterRoleBinding don't have namespace
-        assert (
-            len(namespaced_resources) > 0 or len(documents) == 0
-        ), f"No resources have namespace '{namespace}'"
+        assert len(namespaced_resources) > 0 or len(documents) == 0, (
+            f"No resources have namespace '{namespace}'"
+        )

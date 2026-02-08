@@ -176,9 +176,7 @@ class TestCreateDefinitionsWithIcebergResources:
             mock_try_create.return_value = {"iceberg": mock_io_manager}
 
             # Execute
-            result = dagster_plugin.create_definitions(
-                valid_compiled_artifacts_with_iceberg
-            )
+            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
 
             # Verify result is Definitions
             assert isinstance(result, Definitions)
@@ -205,9 +203,7 @@ class TestCreateDefinitionsWithIcebergResources:
             mock_try_create.return_value = {"iceberg": mock_io_manager}
 
             # Execute
-            result = dagster_plugin.create_definitions(
-                valid_compiled_artifacts_with_iceberg
-            )
+            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
 
             # Verify has both assets and resources
             assert isinstance(result, Definitions)
@@ -416,8 +412,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
 
             # Verify error was logged before raising
             assert any(
-                "Failed to create Iceberg resources" in record.message
-                for record in caplog.records
+                "Failed to create Iceberg resources" in record.message for record in caplog.records
             )
 
     @pytest.mark.requirement("004d-FR-118")

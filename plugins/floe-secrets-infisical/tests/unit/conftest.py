@@ -49,9 +49,7 @@ def mock_infisical_sdk() -> Generator[dict[str, Any], None, None]:
             "infisical_client": MagicMock(),
         },
     ):
-        with patch(
-            "floe_secrets_infisical.plugin.InfisicalClient"
-        ) as mock_client_class:
+        with patch("floe_secrets_infisical.plugin.InfisicalClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client_class.return_value = mock_client
 

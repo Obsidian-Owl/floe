@@ -103,9 +103,7 @@ def validate_command(
         output: Output format (text or json).
     """
     # Default values
-    manifest_dir_path = (
-        manifest_dir if manifest_dir is not None else Path("target/rbac")
-    )
+    manifest_dir_path = manifest_dir if manifest_dir is not None else Path("target/rbac")
     output_format = output if output is not None else "text"
 
     info(f"Validating manifests in: {manifest_dir_path}")

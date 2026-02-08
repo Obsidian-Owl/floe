@@ -261,7 +261,9 @@ class TestGetQualityFacetsNewPath:
 
         facet = plugin.get_quality_facets(results)
 
-        expected_url = "https://openlineage.io/spec/facets/1-0-0/DataQualityAssertionsDatasetFacet.json"
+        expected_url = (
+            "https://openlineage.io/spec/facets/1-0-0/DataQualityAssertionsDatasetFacet.json"
+        )
         assert facet["_schemaURL"] == expected_url
 
     @pytest.mark.requirement("REQ-524")

@@ -29,9 +29,7 @@ def test_sync_delegates_to_semantic_plugin() -> None:
     ]
 
     # Create context using Dagster's build_op_context
-    context = build_op_context(
-        op_config=None, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
     # Call the asset - pass resource as second argument for testing
     result = sync_semantic_schemas(context, mock_plugin)
@@ -48,9 +46,7 @@ def test_sync_uses_default_paths_when_no_config() -> None:
     mock_plugin = MagicMock()
     mock_plugin.sync_from_dbt_manifest.return_value = []
 
-    context = build_op_context(
-        op_config=None, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
     sync_semantic_schemas(context, mock_plugin)
 
@@ -72,9 +68,7 @@ def test_sync_uses_config_paths_when_provided() -> None:
         "output_dir": "/custom/output",
     }
 
-    context = build_op_context(
-        op_config=op_config, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=op_config, resources={"semantic_layer": mock_plugin})
 
     sync_semantic_schemas(context, mock_plugin)
 
@@ -89,13 +83,9 @@ def test_sync_propagates_file_not_found_error() -> None:
     from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
 
     mock_plugin = MagicMock()
-    mock_plugin.sync_from_dbt_manifest.side_effect = FileNotFoundError(
-        "manifest.json not found"
-    )
+    mock_plugin.sync_from_dbt_manifest.side_effect = FileNotFoundError("manifest.json not found")
 
-    context = build_op_context(
-        op_config=None, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
     with pytest.raises(FileNotFoundError, match="manifest.json not found"):
         sync_semantic_schemas(context, mock_plugin)
@@ -109,9 +99,7 @@ def test_sync_returns_empty_list_when_no_models() -> None:
     mock_plugin = MagicMock()
     mock_plugin.sync_from_dbt_manifest.return_value = []
 
-    context = build_op_context(
-        op_config=None, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
     result = sync_semantic_schemas(context, mock_plugin)
 
@@ -130,9 +118,7 @@ def test_sync_converts_path_objects_to_strings() -> None:
         Path("cube/schema/products.yaml"),
     ]
 
-    context = build_op_context(
-        op_config=None, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
     result = sync_semantic_schemas(context, mock_plugin)
 
@@ -161,14 +147,10 @@ def test_sync_with_otel_tracing() -> None:
     mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
     mock_tracer.start_as_current_span.return_value.__exit__.return_value = None
 
-    with patch(
-        "floe_orchestrator_dagster.assets.semantic_sync._get_tracer"
-    ) as mock_get_tracer:
+    with patch("floe_orchestrator_dagster.assets.semantic_sync._get_tracer") as mock_get_tracer:
         mock_get_tracer.return_value = mock_tracer
 
-        context = build_op_context(
-            op_config=None, resources={"semantic_layer": mock_plugin}
-        )
+        context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
         result = sync_semantic_schemas(context, mock_plugin)
 
@@ -203,15 +185,11 @@ def test_sync_logs_info_messages(caplog: pytest.LogCaptureFixture) -> None:
     ]
 
     with caplog.at_level(logging.INFO):
-        context = build_op_context(
-            op_config=None, resources={"semantic_layer": mock_plugin}
-        )
+        context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
         sync_semantic_schemas(context, mock_plugin)
 
     # Verify structured logger
-    assert any(
-        "Semantic schema sync completed" in record.message for record in caplog.records
-    )
+    assert any("Semantic schema sync completed" in record.message for record in caplog.records)
 
 
 @pytest.mark.requirement("T049")
@@ -224,9 +202,7 @@ def test_sync_handles_partial_config() -> None:
 
     # Config with only manifest_path
     op_config = {"manifest_path": "/custom/manifest.json"}
-    context = build_op_context(
-        op_config=op_config, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=op_config, resources={"semantic_layer": mock_plugin})
 
     sync_semantic_schemas(context, mock_plugin)
 
@@ -237,9 +213,7 @@ def test_sync_handles_partial_config() -> None:
     # Reset and try with only output_dir
     mock_plugin.reset_mock()
     op_config = {"output_dir": "/custom/output"}
-    context = build_op_context(
-        op_config=op_config, resources={"semantic_layer": mock_plugin}
-    )
+    context = build_op_context(op_config=op_config, resources={"semantic_layer": mock_plugin})
 
     sync_semantic_schemas(context, mock_plugin)
 

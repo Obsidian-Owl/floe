@@ -142,9 +142,7 @@ def test_violation_event_serialization_round_trip() -> None:
     assert deserialized.actual_value == original.actual_value
     assert deserialized.timestamp == original.timestamp
     assert deserialized.affected_consumers == original.affected_consumers
-    assert deserialized.check_duration_seconds == pytest.approx(
-        original.check_duration_seconds
-    )
+    assert deserialized.check_duration_seconds == pytest.approx(original.check_duration_seconds)
     assert deserialized.metadata == original.metadata
 
 
@@ -589,9 +587,7 @@ def test_openlineage_facet_required_fields() -> None:
 
     # Verify required field values
     assert facet["_producer"] == "floe"
-    assert (
-        facet["_schemaURL"] == "https://floe.dev/schemas/contract-violation-facet.json"
-    )
+    assert facet["_schemaURL"] == "https://floe.dev/schemas/contract-violation-facet.json"
     assert facet["contractName"] == "orders_v1"
     assert facet["contractVersion"] == "1.0.0"
     assert facet["violationType"] == "freshness"
@@ -706,7 +702,5 @@ def test_openlineage_facet_rejects_extra_fields() -> None:
     }
 
     # Validation must fail
-    with pytest.raises(
-        jsonschema.ValidationError, match="Additional properties are not allowed"
-    ):
+    with pytest.raises(jsonschema.ValidationError, match="Additional properties are not allowed"):
         jsonschema.validate(instance=facet, schema=schema)

@@ -373,9 +373,7 @@ class TestRequiredDBTPackages:
 
         # Each package should have version constraint (>=, ==, etc.)
         for pkg in packages:
-            assert (
-                ">=" in pkg or "==" in pkg or "~=" in pkg
-            ), f"Missing version constraint: {pkg}"
+            assert ">=" in pkg or "==" in pkg or "~=" in pkg, f"Missing version constraint: {pkg}"
 
 
 class TestResourceRequirements:

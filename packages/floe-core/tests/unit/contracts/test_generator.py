@@ -89,9 +89,7 @@ class TestContractGeneratorFromPorts:
         assert contract.status == "active"
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_name_follows_convention(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_name_follows_convention(self, sample_floe_spec: FloeSpec) -> None:
         """Test that contract name is {data_product_name}-{port_name}."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -104,9 +102,7 @@ class TestContractGeneratorFromPorts:
         assert contract.id == expected_name
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_version_matches_product(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_version_matches_product(self, sample_floe_spec: FloeSpec) -> None:
         """Test that contract version matches data product version."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -117,9 +113,7 @@ class TestContractGeneratorFromPorts:
         assert contract.version == sample_floe_spec.metadata.version
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_schema_includes_columns(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_schema_includes_columns(self, sample_floe_spec: FloeSpec) -> None:
         """Test that generated contract schema includes all port columns."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -140,9 +134,7 @@ class TestContractGeneratorFromPorts:
         assert col_names == {"customer_id", "email", "created_at", "age"}
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_maps_types_correctly(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_maps_types_correctly(self, sample_floe_spec: FloeSpec) -> None:
         """Test that port types are mapped to ODCS logicalType."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -158,9 +150,7 @@ class TestContractGeneratorFromPorts:
         assert type_map["age"] == "integer"
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_preserves_required_flag(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_preserves_required_flag(self, sample_floe_spec: FloeSpec) -> None:
         """Test that required flag is preserved in generated contract."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -176,9 +166,7 @@ class TestContractGeneratorFromPorts:
         assert required_map["age"] is False or required_map["age"] is None
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_preserves_primary_key(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_preserves_primary_key(self, sample_floe_spec: FloeSpec) -> None:
         """Test that primaryKey flag is preserved in generated contract."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -193,9 +181,7 @@ class TestContractGeneratorFromPorts:
         assert pk_map.get("created_at") is not True
 
     @pytest.mark.requirement("3C-FR-003")
-    def test_generate_contract_preserves_classification(
-        self, sample_floe_spec: FloeSpec
-    ) -> None:
+    def test_generate_contract_preserves_classification(self, sample_floe_spec: FloeSpec) -> None:
         """Test that classification is preserved in generated contract."""
         from floe_core.contracts.generator import ContractGenerator
 
@@ -337,9 +323,7 @@ schema:
                     name="customers",
                     description="Full description from port",
                     schema=[
-                        OutputPortColumn(
-                            name="id", type="string", classification="pii"
-                        ),
+                        OutputPortColumn(name="id", type="string", classification="pii"),
                     ],
                 ),
             ],

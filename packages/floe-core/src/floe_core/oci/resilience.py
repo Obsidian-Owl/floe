@@ -522,9 +522,7 @@ class CircuitBreaker:
         if self._last_failure_time is None:
             return
 
-        elapsed_ms = (
-            datetime.now(timezone.utc) - self._last_failure_time
-        ).total_seconds() * 1000
+        elapsed_ms = (datetime.now(timezone.utc) - self._last_failure_time).total_seconds() * 1000
 
         if elapsed_ms >= self._config.recovery_timeout_ms:
             logger.info(

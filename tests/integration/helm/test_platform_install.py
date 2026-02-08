@@ -45,9 +45,7 @@ class TestPlatformChartInstall:
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_dry_run_install(
         self,
         platform_chart_path: Path,
@@ -82,15 +80,13 @@ class TestPlatformChartInstall:
         stdout = result.stdout.decode() if result.stdout else ""
         stderr = result.stderr.decode() if result.stderr else ""
 
-        assert (
-            result.returncode == 0
-        ), f"Dry-run install failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        assert result.returncode == 0, (
+            f"Dry-run install failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        )
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_install_minimal(
         self,
         platform_chart_path: Path,
@@ -137,9 +133,9 @@ class TestPlatformChartInstall:
             stdout = result.stdout.decode() if result.stdout else ""
             stderr = result.stderr.decode() if result.stderr else ""
 
-            assert (
-                result.returncode == 0
-            ), f"Minimal install failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            assert result.returncode == 0, (
+                f"Minimal install failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            )
 
             # Verify the release exists
             list_result = subprocess.run(
@@ -155,18 +151,16 @@ class TestPlatformChartInstall:
                 check=True,
             )
 
-            assert (
-                helm_release_name in list_result.stdout.decode()
-            ), f"Release {helm_release_name} not found after install"
+            assert helm_release_name in list_result.stdout.decode(), (
+                f"Release {helm_release_name} not found after install"
+            )
 
         finally:
             _helm_uninstall(helm_release_name, test_namespace)
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_upgrade_works(
         self,
         platform_chart_path: Path,
@@ -239,18 +233,16 @@ class TestPlatformChartInstall:
             stdout = upgrade_result.stdout.decode() if upgrade_result.stdout else ""
             stderr = upgrade_result.stderr.decode() if upgrade_result.stderr else ""
 
-            assert (
-                upgrade_result.returncode == 0
-            ), f"Upgrade failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            assert upgrade_result.returncode == 0, (
+                f"Upgrade failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            )
 
         finally:
             _helm_uninstall(helm_release_name, test_namespace)
 
     @pytest.mark.requirement("9b-FR-082")
     @pytest.mark.slow
-    @pytest.mark.usefixtures(
-        "kind_cluster", "helm_available", "update_helm_dependencies"
-    )
+    @pytest.mark.usefixtures("kind_cluster", "helm_available", "update_helm_dependencies")
     def test_chart_uninstall_clean(
         self,
         platform_chart_path: Path,
@@ -325,6 +317,6 @@ class TestPlatformChartInstall:
             check=True,
         )
 
-        assert (
-            helm_release_name not in list_result.stdout.decode()
-        ), f"Release {helm_release_name} still exists after uninstall"
+        assert helm_release_name not in list_result.stdout.decode(), (
+            f"Release {helm_release_name} still exists after uninstall"
+        )

@@ -356,8 +356,7 @@ class PlatformManifest(BaseModel):
         # C004: approved_plugins only for enterprise scope
         if self.approved_plugins is not None and self.scope != "enterprise":
             msg = (
-                f"approved_plugins is only valid for scope='enterprise', "
-                f"not scope={self.scope!r}."
+                f"approved_plugins is only valid for scope='enterprise', not scope={self.scope!r}."
             )
             raise ValueError(msg)
 
@@ -379,9 +378,7 @@ class PlatformManifest(BaseModel):
             ValueError: If any forbidden environment field is present.
         """
         if self.model_extra:
-            forbidden_found = (
-                set(self.model_extra.keys()) & FORBIDDEN_ENVIRONMENT_FIELDS
-            )
+            forbidden_found = set(self.model_extra.keys()) & FORBIDDEN_ENVIRONMENT_FIELDS
             if forbidden_found:
                 forbidden_str = ", ".join(sorted(forbidden_found))
                 msg = (
@@ -404,9 +401,7 @@ class PlatformManifest(BaseModel):
         if self.model_extra:
             # Filter out fields already handled by reject_environment_specific_fields
             unknown_fields = [
-                f
-                for f in self.model_extra.keys()
-                if f not in FORBIDDEN_ENVIRONMENT_FIELDS
+                f for f in self.model_extra.keys() if f not in FORBIDDEN_ENVIRONMENT_FIELDS
             ]
             if unknown_fields:
                 warnings.warn(

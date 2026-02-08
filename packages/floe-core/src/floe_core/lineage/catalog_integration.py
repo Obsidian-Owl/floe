@@ -211,23 +211,15 @@ class NamespaceResolver:
         self.default_namespace = default_namespace
 
         if strategy == "simple":
-            self.strategy: NamespaceStrategy = SimpleNamespaceStrategy(
-                namespace=default_namespace
-            )
+            self.strategy: NamespaceStrategy = SimpleNamespaceStrategy(namespace=default_namespace)
         elif strategy == "centralized":
             if environment is None or platform is None:
-                raise ValueError(
-                    "centralized strategy requires environment and platform"
-                )
-            self.strategy = CentralizedNamespaceStrategy(
-                environment=environment, platform=platform
-            )
+                raise ValueError("centralized strategy requires environment and platform")
+            self.strategy = CentralizedNamespaceStrategy(environment=environment, platform=platform)
         elif strategy == "data_mesh":
             if domain is None or product_name is None:
                 raise ValueError("data_mesh strategy requires domain and product_name")
-            self.strategy = DataMeshNamespaceStrategy(
-                domain=domain, product_name=product_name
-            )
+            self.strategy = DataMeshNamespaceStrategy(domain=domain, product_name=product_name)
         else:
             raise ValueError(
                 f"Unknown strategy: {strategy}. Must be one of: simple, centralized, data_mesh"
@@ -358,9 +350,7 @@ class CatalogDatasetResolver:
             >>> dataset.namespace
             'staging'
         """
-        resolved_namespace = (
-            namespace if namespace is not None else self.resolve_namespace()
-        )
+        resolved_namespace = namespace if namespace is not None else self.resolve_namespace()
         return LineageDataset(
             namespace=resolved_namespace,
             name=table_name,

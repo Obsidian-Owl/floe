@@ -130,9 +130,7 @@ class TestPluginMetadataCompliance:
         """Test metadata properties are defined as properties."""
         for prop_name in ["name", "version", "floe_api_version"]:
             prop = getattr(K8sNetworkSecurityPlugin, prop_name)
-            assert isinstance(
-                prop, property
-            ), f"{prop_name} should be a property, not {type(prop)}"
+            assert isinstance(prop, property), f"{prop_name} should be a property, not {type(prop)}"
 
 
 class TestAbstractMethodImplementation:
@@ -192,17 +190,13 @@ class TestAbstractMethodImplementation:
         for name, method in inspect.getmembers(NetworkSecurityPlugin):
             if getattr(method, "__isabstractmethod__", False):
                 # Skip properties - they're handled separately
-                if not isinstance(
-                    inspect.getattr_static(NetworkSecurityPlugin, name), property
-                ):
+                if not isinstance(inspect.getattr_static(NetworkSecurityPlugin, name), property):
                     abstract_methods.add(name)
 
         # Verify K8sNetworkSecurityPlugin implements all of them
         plugin = K8sNetworkSecurityPlugin()
         for method_name in abstract_methods:
-            assert hasattr(
-                plugin, method_name
-            ), f"Plugin missing abstract method: {method_name}"
+            assert hasattr(plugin, method_name), f"Plugin missing abstract method: {method_name}"
             method = getattr(plugin, method_name)
             assert callable(method), f"Plugin method {method_name} is not callable"
 
@@ -217,9 +211,7 @@ class TestAbstractMethodImplementation:
         for name, method in inspect.getmembers(K8sNetworkSecurityPlugin):
             # Check if it's marked as abstract
             is_abstract = getattr(method, "__isabstractmethod__", False)
-            assert (
-                not is_abstract
-            ), f"Plugin method {name} is still abstract (not implemented)"
+            assert not is_abstract, f"Plugin method {name} is still abstract (not implemented)"
 
     @pytest.mark.requirement("FR-001")
     def test_generate_network_policy_returns_dict(self) -> None:
@@ -316,14 +308,12 @@ class TestPluginEntryPoint:
             # Check that pyproject.toml has the entry point
             import pathlib
 
-            pyproject_path = (
-                pathlib.Path(__file__).parent.parent.parent / "pyproject.toml"
-            )
+            pyproject_path = pathlib.Path(__file__).parent.parent.parent / "pyproject.toml"
             assert pyproject_path.exists(), "pyproject.toml not found"
             content = pyproject_path.read_text()
-            assert (
-                "floe.network_security" in content
-            ), "Entry point group 'floe.network_security' not found in pyproject.toml"
+            assert "floe.network_security" in content, (
+                "Entry point group 'floe.network_security' not found in pyproject.toml"
+            )
         else:
             # Entry points are registered, verify we have at least one
             assert len(network_security_eps) > 0
@@ -357,13 +347,11 @@ class TestPluginEntryPoint:
             # Check that pyproject.toml has the entry point
             import pathlib
 
-            pyproject_path = (
-                pathlib.Path(__file__).parent.parent.parent / "pyproject.toml"
-            )
+            pyproject_path = pathlib.Path(__file__).parent.parent.parent / "pyproject.toml"
             content = pyproject_path.read_text()
-            assert (
-                'k8s = "floe_network_security_k8s:K8sNetworkSecurityPlugin"' in content
-            ), "Entry point 'k8s' not found in pyproject.toml"
+            assert 'k8s = "floe_network_security_k8s:K8sNetworkSecurityPlugin"' in content, (
+                "Entry point 'k8s' not found in pyproject.toml"
+            )
         else:
             # Entry point is registered, verify it's correct
             assert k8s_ep.name == "k8s"

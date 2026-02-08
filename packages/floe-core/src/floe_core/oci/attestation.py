@@ -266,9 +266,7 @@ def retrieve_attestations(
     """
     with tracer.start_as_current_span("floe.oci.attestation.retrieve") as span:
         span.set_attribute("floe.artifact.ref", artifact_ref)
-        span.set_attribute(
-            "floe.attestation.private_infrastructure", private_infrastructure
-        )
+        span.set_attribute("floe.attestation.private_infrastructure", private_infrastructure)
 
         if not check_cosign_available():
             raise CosignNotFoundError()
@@ -295,9 +293,7 @@ def retrieve_attestations(
             if result.returncode != 0:
                 if "no matching attestations" in result.stderr.lower():
                     return []
-                raise AttestationError(
-                    f"cosign verify-attestation failed: {result.stderr}"
-                )
+                raise AttestationError(f"cosign verify-attestation failed: {result.stderr}")
 
             attestations = _parse_attestation_output(result.stdout, artifact_ref)
             span.set_attribute("floe.attestation.count", len(attestations))

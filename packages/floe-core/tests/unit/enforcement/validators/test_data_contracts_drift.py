@@ -280,9 +280,7 @@ schema:
         assert len(result.violations) == 0
 
     @pytest.mark.requirement("3C-FR-021")
-    def test_drift_detection_unavailable_gracefully_handled(
-        self, tmp_path: Path
-    ) -> None:
+    def test_drift_detection_unavailable_gracefully_handled(self, tmp_path: Path) -> None:
         """Test that missing floe_iceberg doesn't cause hard failure."""
         from floe_core.enforcement.validators.data_contracts import ContractValidator
 

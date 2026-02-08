@@ -20,9 +20,7 @@ if TYPE_CHECKING:
 class TestResourceRequirementsSmall:
     """Test small workload resource requirements."""
 
-    def test_small_returns_resource_spec(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_small_returns_resource_spec(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test get_resource_requirements('small') returns ResourceSpec."""
         result = dagster_plugin.get_resource_requirements("small")
 
@@ -40,17 +38,13 @@ class TestResourceRequirementsSmall:
 
         assert result.cpu_limit == "500m"
 
-    def test_small_memory_request(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_small_memory_request(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test small workload has correct memory request."""
         result = dagster_plugin.get_resource_requirements("small")
 
         assert result.memory_request == "256Mi"
 
-    def test_small_memory_limit(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_small_memory_limit(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test small workload has correct memory limit."""
         result = dagster_plugin.get_resource_requirements("small")
 
@@ -60,17 +54,13 @@ class TestResourceRequirementsSmall:
 class TestResourceRequirementsMedium:
     """Test medium workload resource requirements."""
 
-    def test_medium_returns_resource_spec(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_medium_returns_resource_spec(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test get_resource_requirements('medium') returns ResourceSpec."""
         result = dagster_plugin.get_resource_requirements("medium")
 
         assert isinstance(result, ResourceSpec)
 
-    def test_medium_cpu_request(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_medium_cpu_request(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test medium workload has correct CPU request."""
         result = dagster_plugin.get_resource_requirements("medium")
 
@@ -82,17 +72,13 @@ class TestResourceRequirementsMedium:
 
         assert result.cpu_limit == "1000m"
 
-    def test_medium_memory_request(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_medium_memory_request(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test medium workload has correct memory request."""
         result = dagster_plugin.get_resource_requirements("medium")
 
         assert result.memory_request == "512Mi"
 
-    def test_medium_memory_limit(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_medium_memory_limit(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test medium workload has correct memory limit."""
         result = dagster_plugin.get_resource_requirements("medium")
 
@@ -102,9 +88,7 @@ class TestResourceRequirementsMedium:
 class TestResourceRequirementsLarge:
     """Test large workload resource requirements."""
 
-    def test_large_returns_resource_spec(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_large_returns_resource_spec(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test get_resource_requirements('large') returns ResourceSpec."""
         result = dagster_plugin.get_resource_requirements("large")
 
@@ -122,17 +106,13 @@ class TestResourceRequirementsLarge:
 
         assert result.cpu_limit == "2000m"
 
-    def test_large_memory_request(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_large_memory_request(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test large workload has correct memory request."""
         result = dagster_plugin.get_resource_requirements("large")
 
         assert result.memory_request == "1Gi"
 
-    def test_large_memory_limit(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_large_memory_limit(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test large workload has correct memory limit."""
         result = dagster_plugin.get_resource_requirements("large")
 
@@ -175,9 +155,7 @@ class TestResourceRequirementsInvalidSize:
         with pytest.raises(ValueError, match="Invalid workload_size"):
             dagster_plugin.get_resource_requirements("")
 
-    def test_none_raises_value_error(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_none_raises_value_error(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test None workload_size raises ValueError."""
         with pytest.raises(ValueError, match="Invalid workload_size"):
             dagster_plugin.get_resource_requirements(None)  # type: ignore[arg-type]
@@ -194,9 +172,7 @@ class TestResourceRequirementsInvalidSize:
 class TestResourceRequirementsConsistency:
     """Test consistency across resource requirement presets."""
 
-    def test_small_has_smallest_limits(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_small_has_smallest_limits(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test small preset has smallest resource limits."""
         small = dagster_plugin.get_resource_requirements("small")
         medium = dagster_plugin.get_resource_requirements("medium")
@@ -221,9 +197,7 @@ class TestResourceRequirementsConsistency:
 
         assert small_cpu < medium_cpu < large_cpu
 
-    def test_large_has_largest_limits(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_large_has_largest_limits(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test large preset has largest resource limits."""
         medium = dagster_plugin.get_resource_requirements("medium")
         large = dagster_plugin.get_resource_requirements("large")
@@ -233,9 +207,7 @@ class TestResourceRequirementsConsistency:
         large_cpu = int(large.cpu_limit.replace("m", ""))
         assert medium_cpu < large_cpu
 
-    def test_requests_less_than_limits(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_requests_less_than_limits(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Test resource requests are less than or equal to limits."""
         for size in ["small", "medium", "large"]:
             spec = dagster_plugin.get_resource_requirements(size)

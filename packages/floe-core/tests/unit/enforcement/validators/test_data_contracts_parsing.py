@@ -212,9 +212,7 @@ slaProperties:
         assert len(contract.slaProperties) == 2
 
         # Find freshness SLA
-        freshness = next(
-            (s for s in contract.slaProperties if s.property == "freshness"), None
-        )
+        freshness = next((s for s in contract.slaProperties if s.property == "freshness"), None)
         assert freshness is not None
         assert freshness.value == "PT6H"
         assert freshness.element == "updated_at"
@@ -287,9 +285,7 @@ class TestContractParserFileOperations:
         return ContractParser()
 
     @pytest.mark.requirement("3C-FR-001")
-    def test_load_contract_from_file(
-        self, parser: ContractParser, tmp_path: Path
-    ) -> None:
+    def test_load_contract_from_file(self, parser: ContractParser, tmp_path: Path) -> None:
         """Test loading contract from YAML file."""
         contract_file = tmp_path / "datacontract.yaml"
         contract_file.write_text("""
@@ -311,9 +307,7 @@ schema:
         assert len(contract.schema_) == 1
 
     @pytest.mark.requirement("3C-FR-010")
-    def test_load_invalid_yaml_file(
-        self, parser: ContractParser, tmp_path: Path
-    ) -> None:
+    def test_load_invalid_yaml_file(self, parser: ContractParser, tmp_path: Path) -> None:
         """Test error handling for invalid YAML file."""
         contract_file = tmp_path / "invalid.yaml"
         contract_file.write_text("invalid: yaml: content: [")

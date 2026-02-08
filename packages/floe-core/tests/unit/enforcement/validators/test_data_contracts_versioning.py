@@ -83,10 +83,7 @@ schema:
         assert len(result.violations) >= 1
         violation = result.violations[0]
         assert violation.error_code == "FLOE-E520"
-        assert (
-            "name" in violation.message.lower()
-            or "removed" in violation.message.lower()
-        )
+        assert "name" in violation.message.lower() or "removed" in violation.message.lower()
 
     @pytest.mark.requirement("3C-FR-016")
     def test_type_change_detected_as_breaking(self) -> None:

@@ -193,9 +193,7 @@ def generate_command(
             # Generate for all environments
             _dir = target_dir if target_dir.suffix == "" else target_dir.parent
             if dry_run:
-                info(
-                    f"Would generate values for environments: {', '.join(environments)}"
-                )
+                info(f"Would generate values for environments: {', '.join(environments)}")
                 for env in environments:
                     info(f"  {_dir}/values-{env}.yaml")
                 success("Dry-run complete.")

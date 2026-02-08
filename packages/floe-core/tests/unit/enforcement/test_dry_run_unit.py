@@ -142,9 +142,7 @@ class TestDryRunReportFormat:
         """Dry-run summary MUST correctly count warnings from all violation types."""
         from floe_core.enforcement import PolicyEnforcer
 
-        enforcer = PolicyEnforcer(
-            governance_config=strict_multi_policy_governance_config
-        )
+        enforcer = PolicyEnforcer(governance_config=strict_multi_policy_governance_config)
         result = enforcer.enforce(dbt_manifest_with_multi_violations, dry_run=True)
 
         # Summary should have naming + documentation violations (as warnings)

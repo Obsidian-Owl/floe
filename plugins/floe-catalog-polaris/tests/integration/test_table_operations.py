@@ -128,9 +128,7 @@ class TestTableOperations(IntegrationTestBase):
         """
         return Schema(
             NestedField(field_id=1, name="id", field_type=LongType(), required=True),
-            NestedField(
-                field_id=2, name="name", field_type=StringType(), required=False
-            ),
+            NestedField(field_id=2, name="name", field_type=StringType(), required=False),
         )
 
     # =========================================================================
@@ -454,9 +452,7 @@ class TestTableLifecycle(IntegrationTestBase):
         """Return a simple Iceberg schema for testing."""
         return Schema(
             NestedField(field_id=1, name="id", field_type=LongType(), required=True),
-            NestedField(
-                field_id=2, name="data", field_type=StringType(), required=False
-            ),
+            NestedField(field_id=2, name="data", field_type=StringType(), required=False),
         )
 
     @pytest.mark.requirement("FR-014")
@@ -675,21 +671,11 @@ class TestTableEdgeCases(IntegrationTestBase):
 
         complex_schema = Schema(
             NestedField(field_id=1, name="id", field_type=LongType(), required=True),
-            NestedField(
-                field_id=2, name="name", field_type=StringType(), required=True
-            ),
-            NestedField(
-                field_id=3, name="email", field_type=StringType(), required=False
-            ),
-            NestedField(
-                field_id=4, name="created_at", field_type=TimestampType(), required=True
-            ),
-            NestedField(
-                field_id=5, name="is_active", field_type=BooleanType(), required=False
-            ),
-            NestedField(
-                field_id=6, name="score", field_type=DoubleType(), required=False
-            ),
+            NestedField(field_id=2, name="name", field_type=StringType(), required=True),
+            NestedField(field_id=3, name="email", field_type=StringType(), required=False),
+            NestedField(field_id=4, name="created_at", field_type=TimestampType(), required=True),
+            NestedField(field_id=5, name="is_active", field_type=BooleanType(), required=False),
+            NestedField(field_id=6, name="score", field_type=DoubleType(), required=False),
         )
 
         try:

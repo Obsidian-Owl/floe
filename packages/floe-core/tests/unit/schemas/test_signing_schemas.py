@@ -191,9 +191,7 @@ class TestVerificationPolicyValidation:
         """Test that enabled policy requires trusted_issuers or public_key_ref."""
         with pytest.raises(ValidationError) as exc_info:
             VerificationPolicy(enabled=True)
-        assert "At least one of trusted_issuers or public_key_ref required" in str(
-            exc_info.value
-        )
+        assert "At least one of trusted_issuers or public_key_ref required" in str(exc_info.value)
 
     @pytest.mark.requirement("8B-FR-009")
     def test_disabled_policy_valid_without_issuers(self) -> None:
@@ -223,9 +221,7 @@ class TestVerificationPolicyValidation:
         policy = VerificationPolicy(
             enabled=True,
             enforcement="warn",
-            trusted_issuers=[
-                TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")
-            ],
+            trusted_issuers=[TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")],
             environments={
                 "prod": EnvironmentPolicy(enforcement="enforce", require_sbom=True),
                 "dev": EnvironmentPolicy(enforcement="off"),
@@ -241,9 +237,7 @@ class TestVerificationPolicyValidation:
         policy = VerificationPolicy(
             enabled=True,
             require_sbom=False,
-            trusted_issuers=[
-                TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")
-            ],
+            trusted_issuers=[TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")],
             environments={
                 "prod": EnvironmentPolicy(enforcement="enforce", require_sbom=True),
             },
@@ -256,9 +250,7 @@ class TestVerificationPolicyValidation:
         """Test that grace period defaults to 7 days."""
         policy = VerificationPolicy(
             enabled=True,
-            trusted_issuers=[
-                TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")
-            ],
+            trusted_issuers=[TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")],
         )
         assert policy.grace_period_days == 7
 
@@ -268,9 +260,7 @@ class TestVerificationPolicyValidation:
         policy = VerificationPolicy(
             enabled=True,
             grace_period_days=14,
-            trusted_issuers=[
-                TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")
-            ],
+            trusted_issuers=[TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")],
         )
         assert policy.grace_period_days == 14
 
@@ -314,9 +304,7 @@ class TestVerificationPolicyValidation:
         policy = VerificationPolicy(
             enabled=True,
             grace_period_days=7,
-            trusted_issuers=[
-                TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")
-            ],
+            trusted_issuers=[TrustedIssuer(issuer=HttpUrl("https://example.com"), subject="test")],
         )
 
         now = datetime.now(timezone.utc)
@@ -353,15 +341,10 @@ class TestSignatureMetadataSerialization:
             annotations["dev.floe.signature.issuer"]
             == "https://token.actions.githubusercontent.com"
         )
-        assert (
-            annotations["dev.floe.signature.subject"]
-            == "repo:acme/floe:ref:refs/heads/main"
-        )
+        assert annotations["dev.floe.signature.subject"] == "repo:acme/floe:ref:refs/heads/main"
         assert "2026-01-15" in annotations["dev.floe.signature.signed-at"]
         assert annotations["dev.floe.signature.rekor-index"] == "12345678"
-        assert (
-            annotations["dev.floe.signature.cert-fingerprint"] == "sha256:abc123def456"
-        )
+        assert annotations["dev.floe.signature.cert-fingerprint"] == "sha256:abc123def456"
 
     @pytest.mark.requirement("8B-FR-011")
     def test_to_annotations_minimal(self) -> None:

@@ -204,9 +204,7 @@ class IcebergTableManager:
         # Use config override if provided, otherwise use minimal defaults
         # for testing compatibility (e.g., in-memory catalog for unit tests)
         if self._config.catalog_connection_config is not None:
-            connect_config: dict[str, Any] = dict(
-                self._config.catalog_connection_config
-            )
+            connect_config: dict[str, Any] = dict(self._config.catalog_connection_config)
         else:
             # Default config for testing - production should configure via plugins
             connect_config = {
@@ -385,9 +383,7 @@ class IcebergTableManager:
             NoSuchNamespaceError: If namespace doesn't exist.
         """
         # Mock-specific attribute access for unit testing
-        namespaces: list[str] | None = getattr(
-            self._catalog_plugin, "_namespaces", None
-        )
+        namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
         if namespaces is not None and namespace not in namespaces:
             msg = f"Namespace '{namespace}' does not exist"
             raise NoSuchNamespaceError(msg)
@@ -403,9 +399,7 @@ class IcebergTableManager:
         """
         parts = identifier.rsplit(".", 1)
         if len(parts) < 2:
-            msg = (
-                f"Invalid identifier format: '{identifier}'. Expected 'namespace.table'"
-            )
+            msg = f"Invalid identifier format: '{identifier}'. Expected 'namespace.table'"
             raise ValidationError(msg)
 
     def _table_schema_to_dict(self, table_schema: Any) -> dict[str, Any]:
@@ -559,9 +553,7 @@ class IcebergTableManager:
             >>> # Demo mode: keep last 6 snapshots
             >>> expired_count = manager.expire_snapshots(table, keep_last=6)
         """
-        return self._snapshot_manager.expire_snapshots(
-            table, older_than_days, keep_last
-        )
+        return self._snapshot_manager.expire_snapshots(table, older_than_days, keep_last)
 
     # =========================================================================
     # Write Operations

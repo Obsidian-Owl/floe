@@ -251,9 +251,7 @@ def _build_key_based_verification_policy(
             exit_code=ExitCode.GENERAL_ERROR,
         )
 
-    is_kms = key_ref.startswith(
-        ("awskms://", "gcpkms://", "azurekms://", "hashivault://")
-    )
+    is_kms = key_ref.startswith(("awskms://", "gcpkms://", "azurekms://", "hashivault://"))
 
     if is_kms:
         os.environ["FLOE_VERIFY_KEY"] = key_ref
@@ -294,9 +292,7 @@ def _handle_verify_error(e: Exception) -> NoReturn:
     elif "NotFound" in error_type:
         error_exit(f"Artifact not found: {e}", exit_code=ExitCode.VALIDATION_ERROR)
     elif "Authentication" in error_type:
-        error_exit(
-            f"Registry authentication failed: {e}", exit_code=ExitCode.GENERAL_ERROR
-        )
+        error_exit(f"Registry authentication failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
     error_exit(f"Verify failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
@@ -333,9 +329,7 @@ def _verify_artifact(
             return
 
         artifact_ref = f"{registry}:{tag}"
-        content, digest = client._fetch_from_registry(
-            tag
-        )  # noqa: SLF001 - internal access needed
+        content, digest = client._fetch_from_registry(tag)  # noqa: SLF001 - internal access needed
 
         verification_client = VerificationClient(policy)
         result = verification_client.verify(
@@ -376,9 +370,7 @@ def _display_bundle_info(bundle_path: str) -> None:
 
         bundle = VerificationBundle.model_validate(bundle_data)
 
-        warning(
-            "NOTICE: This displays bundle info only - NO cryptographic verification performed"
-        )
+        warning("NOTICE: This displays bundle info only - NO cryptographic verification performed")
         info(f"Bundle path: {bundle_path}")
         click.echo(f"  Artifact digest: {bundle.artifact_digest}")
         click.echo(f"  Bundle version: {bundle.version}")
@@ -404,9 +396,7 @@ def _handle_unsigned_artifact(policy: VerificationPolicy) -> None:
         info("Artifact is not signed (enforcement=off)")
 
 
-def _handle_invalid_signature(
-    result: VerificationResult, policy: VerificationPolicy
-) -> None:
+def _handle_invalid_signature(result: VerificationResult, policy: VerificationPolicy) -> None:
     """Handle invalid signature based on enforcement level."""
     msg = f"Signature invalid: {result.failure_reason}"
     if policy.enforcement == "enforce":

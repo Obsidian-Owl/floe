@@ -218,9 +218,7 @@ class TestWritableVolumeMountsInContainerContext:
 
         mounts = [
             WritableVolumeMount(name="tmp", mount_path="/tmp", size_limit="100Mi"),
-            WritableVolumeMount(
-                name="fast-cache", mount_path="/cache", medium="Memory"
-            ),
+            WritableVolumeMount(name="fast-cache", mount_path="/cache", medium="Memory"),
         ]
 
         config = PodSecurityConfig(writable_volume_mounts=mounts)
@@ -231,10 +229,7 @@ class TestWritableVolumeMountsInContainerContext:
         # First volume: default medium with size limit
         assert volumes[0]["name"] == "tmp"
         assert volumes[0]["emptyDir"]["sizeLimit"] == "100Mi"
-        assert (
-            "medium" not in volumes[0]["emptyDir"]
-            or volumes[0]["emptyDir"].get("medium") == ""
-        )
+        assert "medium" not in volumes[0]["emptyDir"] or volumes[0]["emptyDir"].get("medium") == ""
 
         # Second volume: memory medium
         assert volumes[1]["name"] == "fast-cache"

@@ -180,9 +180,7 @@ class TestHtmlExporter:
 
         content = output_path.read_text()
         assert "<title>" in content
-        assert (
-            "Enforcement" in content or "Policy" in content or "floe" in content.lower()
-        )
+        assert "Enforcement" in content or "Policy" in content or "floe" in content.lower()
 
     @pytest.mark.requirement("003b-FR-022")
     def test_export_html_contains_summary_section(

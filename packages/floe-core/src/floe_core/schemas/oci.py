@@ -118,9 +118,7 @@ class RegistryAuth(BaseModel):
             )
             and v is not None
         ):
-            raise ValueError(
-                f"credentials_ref must be None for auth type '{auth_type}'"
-            )
+            raise ValueError(f"credentials_ref must be None for auth type '{auth_type}'")
         return v
 
 
@@ -381,9 +379,7 @@ class ArtifactLayer(BaseModel):
         ...,
         pattern=r"^sha256:[a-f0-9]{64}$",
         description="Layer content digest (SHA256)",
-        examples=[
-            "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        ],
+        examples=["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
     )
     media_type: str = Field(
         ...,
@@ -438,9 +434,7 @@ class ArtifactManifest(BaseModel):
         ...,
         pattern=r"^sha256:[a-f0-9]{64}$",
         description="Artifact manifest digest (SHA256)",
-        examples=[
-            "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        ],
+        examples=["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
     )
     artifact_type: str = Field(
         ...,
@@ -587,17 +581,13 @@ class CacheEntry(BaseModel):
         False
     """
 
-    model_config = ConfigDict(
-        frozen=False, extra="forbid"
-    )  # Mutable for last_accessed updates
+    model_config = ConfigDict(frozen=False, extra="forbid")  # Mutable for last_accessed updates
 
     digest: str = Field(
         ...,
         pattern=r"^sha256:[a-f0-9]{64}$",
         description="Artifact content digest (SHA256)",
-        examples=[
-            "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        ],
+        examples=["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
     )
     tag: str = Field(
         ...,

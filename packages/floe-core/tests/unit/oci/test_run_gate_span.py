@@ -59,9 +59,7 @@ class TestRunGateOpenTelemetrySpan:
             assert call_args[0][0] == "floe.oci.gate.tests"
 
     @pytest.mark.requirement("8C-FR-024")
-    def test_run_gate_span_includes_different_gate_types(
-        self, controller: MagicMock
-    ) -> None:
+    def test_run_gate_span_includes_different_gate_types(self, controller: MagicMock) -> None:
         """Test _run_gate() span name includes correct gate type."""
         with (
             patch("floe_core.oci.promotion.create_span") as mock_create_span,

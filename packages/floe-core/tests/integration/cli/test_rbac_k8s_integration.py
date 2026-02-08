@@ -102,9 +102,7 @@ class TestRbacAuditK8sIntegration:
         and query RBAC resources from a real cluster.
         """
         if not _cluster_available():
-            pytest.fail(
-                "Kubernetes cluster not available. Start Kind cluster: make test-k8s"
-            )
+            pytest.fail("Kubernetes cluster not available. Start Kind cluster: make test-k8s")
 
         from floe_core.cli.main import cli
 
@@ -141,9 +139,7 @@ class TestRbacAuditK8sIntegration:
         Validates JSON output structure for audit findings.
         """
         if not _cluster_available():
-            pytest.fail(
-                "Kubernetes cluster not available. Start Kind cluster: make test-k8s"
-            )
+            pytest.fail("Kubernetes cluster not available. Start Kind cluster: make test-k8s")
 
         from floe_core.cli.main import cli
 
@@ -186,9 +182,7 @@ class TestRbacDiffK8sIntegration:
         and compare RBAC resources against a real cluster.
         """
         if not _cluster_available():
-            pytest.fail(
-                "Kubernetes cluster not available. Start Kind cluster: make test-k8s"
-            )
+            pytest.fail("Kubernetes cluster not available. Start Kind cluster: make test-k8s")
 
         from floe_core.cli.main import cli
 
@@ -235,9 +229,7 @@ class TestRbacDiffK8sIntegration:
         appear in the 'added' section.
         """
         if not _cluster_available():
-            pytest.fail(
-                "Kubernetes cluster not available. Start Kind cluster: make test-k8s"
-            )
+            pytest.fail("Kubernetes cluster not available. Start Kind cluster: make test-k8s")
 
         from floe_core.cli.main import cli
 
@@ -281,9 +273,7 @@ rules:
             added_diffs = [d for d in data["diffs"] if d.get("change_type") == "added"]
             # Our test role should appear in added diffs
             role_names = [
-                d["resource_name"]
-                for d in added_diffs
-                if d.get("resource_kind") == "Role"
+                d["resource_name"] for d in added_diffs if d.get("resource_kind") == "Role"
             ]
             assert "floe-test-role-nonexistent" in role_names
 
@@ -307,9 +297,7 @@ class TestRbacK8sConnectionFailure:
         clear error message.
         """
         if not _kubernetes_available():
-            pytest.fail(
-                "kubernetes package not installed. Install with: pip install kubernetes"
-            )
+            pytest.fail("kubernetes package not installed. Install with: pip install kubernetes")
 
         from floe_core.cli.main import cli
 

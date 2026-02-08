@@ -30,9 +30,7 @@ class TestPolicyGenerationPerformance:
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_100_namespaces_under_5_seconds(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_100_namespaces_under_5_seconds(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test generating policies for 100 namespaces takes <5 seconds."""
         namespaces = [f"namespace-{i:03d}" for i in range(100)]
 
@@ -64,15 +62,11 @@ class TestPolicyGenerationPerformance:
         # 100 should take roughly 10x the time of 10, but small samples have
         # proportionally more overhead, so allow 2x-20x for variance
         actual_ratio = time_100 / time_10 if time_10 > 0 else float("inf")
-        assert (
-            2.0 < actual_ratio < 20.0
-        ), f"Expected near-linear scaling, got {actual_ratio:.1f}x"
+        assert 2.0 < actual_ratio < 20.0, f"Expected near-linear scaling, got {actual_ratio:.1f}x"
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_policy_generation_consistency(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_policy_generation_consistency(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test policy generation produces consistent output."""
         namespace = "test-consistency"
 
@@ -98,9 +92,7 @@ class TestPSSLabelPerformance:
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_1000_pss_labels_under_1_second(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_1000_pss_labels_under_1_second(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test 1000 PSS label generations take <1 second."""
         start_time = time.perf_counter()
 
@@ -116,9 +108,7 @@ class TestPSSLabelPerformance:
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_pss_label_generation_all_levels(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_pss_label_generation_all_levels(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test PSS label generation for all security levels."""
         levels = ["baseline", "restricted", "privileged"]
         audit_levels = ["baseline", "restricted"]
@@ -138,15 +128,11 @@ class TestPSSLabelPerformance:
         elapsed = time.perf_counter() - start_time
 
         # 3 * 2 * 2 = 12 combinations should be very fast
-        assert (
-            elapsed < 0.1
-        ), f"12 PSS label combinations took {elapsed:.3f}s (limit: 0.1s)"
+        assert elapsed < 0.1, f"12 PSS label combinations took {elapsed:.3f}s (limit: 0.1s)"
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_pss_label_output_consistency(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_pss_label_output_consistency(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test PSS label generation produces consistent output."""
         # Generate same labels multiple times
         labels_1 = plugin.generate_pss_labels(
@@ -174,9 +160,7 @@ class TestSecurityContextPerformance:
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_1000_security_contexts_under_1_second(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_1000_security_contexts_under_1_second(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test 1000 security context generations take <1 second."""
         start_time = time.perf_counter()
 
@@ -188,9 +172,7 @@ class TestSecurityContextPerformance:
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_security_context_all_configurations(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_security_context_all_configurations(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test security context generation for various configurations."""
         start_time = time.perf_counter()
 
@@ -201,15 +183,13 @@ class TestSecurityContextPerformance:
         elapsed = time.perf_counter() - start_time
 
         # 12 context generations should be very fast
-        assert (
-            elapsed < 0.05
-        ), f"12 security context configurations took {elapsed:.3f}s (limit: 0.05s)"
+        assert elapsed < 0.05, (
+            f"12 security context configurations took {elapsed:.3f}s (limit: 0.05s)"
+        )
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_security_context_output_consistency(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_security_context_output_consistency(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test security context generation produces consistent output."""
         # Generate same context multiple times
         context_1 = plugin.generate_container_security_context({})
@@ -220,9 +200,7 @@ class TestSecurityContextPerformance:
 
     @pytest.mark.performance
     @pytest.mark.requirement("Performance")
-    def test_combined_policy_generation_performance(
-        self, plugin: K8sNetworkSecurityPlugin
-    ) -> None:
+    def test_combined_policy_generation_performance(self, plugin: K8sNetworkSecurityPlugin) -> None:
         """Test combined policy, PSS, and security context generation."""
         start_time = time.perf_counter()
 
@@ -241,6 +219,6 @@ class TestSecurityContextPerformance:
         elapsed = time.perf_counter() - start_time
 
         # 50 namespaces with all artifacts should complete in <2 seconds
-        assert (
-            elapsed < 2.0
-        ), f"Combined generation for 50 namespaces took {elapsed:.2f}s (limit: 2s)"
+        assert elapsed < 2.0, (
+            f"Combined generation for 50 namespaces took {elapsed:.2f}s (limit: 2s)"
+        )

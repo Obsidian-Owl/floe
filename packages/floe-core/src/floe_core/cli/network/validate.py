@@ -88,9 +88,7 @@ def _validate_network_policy_schema(manifest: dict[str, Any]) -> tuple[bool, lis
     if not api_version:
         errors.append("Missing required field: apiVersion")
     elif api_version not in ("networking.k8s.io/v1",):
-        errors.append(
-            f"Invalid apiVersion: {api_version} (expected: networking.k8s.io/v1)"
-        )
+        errors.append(f"Invalid apiVersion: {api_version} (expected: networking.k8s.io/v1)")
 
     # Check kind
     kind = manifest.get("kind")

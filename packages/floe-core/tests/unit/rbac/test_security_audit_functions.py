@@ -80,9 +80,7 @@ class TestDetectWildcardPermissions:
         findings = detect_wildcard_permissions(rules, "test-role", "default")
 
         assert len(findings) == 3
-        assert all(
-            f.finding_type == AuditFindingType.WILDCARD_PERMISSION for f in findings
-        )
+        assert all(f.finding_type == AuditFindingType.WILDCARD_PERMISSION for f in findings)
 
     @pytest.mark.requirement("FR-070")
     def test_no_wildcards_detected(self) -> None:
@@ -175,10 +173,7 @@ class TestDetectWildcardPermissions:
 
         assert len(findings) == 1
         assert findings[0].recommendation != ""
-        assert (
-            "Replace" in findings[0].recommendation
-            or "specific" in findings[0].recommendation
-        )
+        assert "Replace" in findings[0].recommendation or "specific" in findings[0].recommendation
 
     @pytest.mark.requirement("FR-070")
     def test_empty_rules_list(self) -> None:
@@ -314,12 +309,8 @@ class TestAuditIntegration:
             },
         ]
 
-        wildcard_findings = detect_wildcard_permissions(
-            rules, "compliant-role", "floe-jobs"
-        )
-        resource_findings = check_missing_resource_names(
-            rules, "compliant-role", "floe-jobs"
-        )
+        wildcard_findings = detect_wildcard_permissions(rules, "compliant-role", "floe-jobs")
+        resource_findings = check_missing_resource_names(rules, "compliant-role", "floe-jobs")
 
         assert len(wildcard_findings) == 0
         assert len(resource_findings) == 0

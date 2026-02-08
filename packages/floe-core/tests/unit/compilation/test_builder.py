@@ -307,9 +307,7 @@ class TestComputeSourceHash:
         assert hash1 == hash2
 
     @pytest.mark.requirement("2B-FR-001")
-    def test_compute_source_hash_different_for_different_content(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compute_source_hash_different_for_different_content(self, tmp_path: Path) -> None:
         """Test that different content produces different hash."""
         from floe_core.compilation.builder import compute_source_hash
 
@@ -384,9 +382,7 @@ class TestComputeSourceHashEdgeCases:
         spec_path.write_text("spec content")
         manifest_path.write_text("manifest content")
 
-        hash_both = compute_source_hash(
-            spec_path=spec_path, manifest_path=manifest_path
-        )
+        hash_both = compute_source_hash(spec_path=spec_path, manifest_path=manifest_path)
         hash_spec_only = compute_source_hash(spec_path=spec_path)
         hash_manifest_only = compute_source_hash(manifest_path=manifest_path)
 

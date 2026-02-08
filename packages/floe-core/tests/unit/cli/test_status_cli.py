@@ -176,9 +176,7 @@ class TestStatusCliTableOutput:
         assert "prod" in result.output
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_table_shows_promoted_status(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_table_shows_promoted_status(self, mock_status_response: MagicMock) -> None:
         """Test table output shows promoted/not promoted status."""
         runner = CliRunner()
         with (
@@ -207,14 +205,10 @@ class TestStatusCliTableOutput:
         # Should indicate promoted environments
         output_lower = result.output.lower()
         # Dev and staging are promoted, prod is not
-        assert (
-            "promoted" in output_lower or "✓" in result.output or "yes" in output_lower
-        )
+        assert "promoted" in output_lower or "✓" in result.output or "yes" in output_lower
 
     @pytest.mark.requirement("8C-FR-023")
-    def test_status_table_shows_latest_marker(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_table_shows_latest_marker(self, mock_status_response: MagicMock) -> None:
         """Test table output shows latest marker for current environment."""
         runner = CliRunner()
         with (
@@ -325,9 +319,7 @@ class TestStatusCliJsonOutput:
         assert prod["promoted"] is False
 
     @pytest.mark.requirement("8C-FR-027")
-    def test_status_json_includes_history(
-        self, mock_status_response: MagicMock
-    ) -> None:
+    def test_status_json_includes_history(self, mock_status_response: MagicMock) -> None:
         """Test JSON output includes promotion history."""
         runner = CliRunner()
         with (

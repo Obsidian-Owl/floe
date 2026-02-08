@@ -185,9 +185,7 @@ def parse_markdown_file(path: Path) -> ParsedContent:
     )
 
 
-def parse_markdown_string(
-    content: str, source_path: Path | None = None
-) -> ParsedContent:
+def parse_markdown_string(content: str, source_path: Path | None = None) -> ParsedContent:
     """Parse markdown content from a string.
 
     Useful for testing or when content is already in memory.

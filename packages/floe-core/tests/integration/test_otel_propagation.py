@@ -41,9 +41,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def otel_provider() -> (
-    Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]
-):
+def otel_provider() -> Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]:
     """Set up a real OpenTelemetry TracerProvider with in-memory exporter.
 
     This fixture creates a complete OTel setup with:
@@ -246,9 +244,7 @@ class TestCrossServiceTracePropagation:
         traceparent_b = headers_b_to_c["traceparent"]
         trace_id_from_a = traceparent_a.split("-")[1]
         trace_id_from_b = traceparent_b.split("-")[1]
-        assert (
-            trace_id_from_a == trace_id_from_b
-        ), "Headers should propagate same trace_id"
+        assert trace_id_from_a == trace_id_from_b, "Headers should propagate same trace_id"
 
     @pytest.mark.requirement("FR-002")
     def test_get_trace_id_returns_hex_string(

@@ -335,9 +335,7 @@ class TestEgressRuleMutualExclusion:
     @pytest.mark.requirement("FR-070")
     def test_both_set_fails(self) -> None:
         """Test that egress rule with both to_namespace and to_cidr fails."""
-        with pytest.raises(
-            ValidationError, match="Exactly one of to_namespace or to_cidr"
-        ):
+        with pytest.raises(ValidationError, match="Exactly one of to_namespace or to_cidr"):
             EgressRule(
                 to_namespace="floe-platform",
                 to_cidr="10.0.0.0/8",
@@ -347,9 +345,7 @@ class TestEgressRuleMutualExclusion:
     @pytest.mark.requirement("FR-070")
     def test_neither_set_fails(self) -> None:
         """Test that egress rule with neither to_namespace nor to_cidr fails."""
-        with pytest.raises(
-            ValidationError, match="Exactly one of to_namespace or to_cidr"
-        ):
+        with pytest.raises(ValidationError, match="Exactly one of to_namespace or to_cidr"):
             EgressRule(
                 ports=(PortRule(port=443, protocol="TCP"),),
             )
@@ -403,9 +399,7 @@ class TestEgressAllowRuleMutualExclusion:
     @pytest.mark.requirement("FR-070")
     def test_both_set_fails(self) -> None:
         """Test that egress allow rule with both to_namespace and to_cidr fails."""
-        with pytest.raises(
-            ValidationError, match="Exactly one of to_namespace or to_cidr"
-        ):
+        with pytest.raises(ValidationError, match="Exactly one of to_namespace or to_cidr"):
             EgressAllowRule(
                 name="invalid-rule",
                 to_namespace="floe-platform",
@@ -417,9 +411,7 @@ class TestEgressAllowRuleMutualExclusion:
     @pytest.mark.requirement("FR-070")
     def test_neither_set_fails(self) -> None:
         """Test that egress allow rule with neither to_namespace nor to_cidr fails."""
-        with pytest.raises(
-            ValidationError, match="Exactly one of to_namespace or to_cidr"
-        ):
+        with pytest.raises(ValidationError, match="Exactly one of to_namespace or to_cidr"):
             EgressAllowRule(
                 name="invalid-rule",
                 port=443,

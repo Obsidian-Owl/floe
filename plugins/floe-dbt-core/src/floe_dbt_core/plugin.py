@@ -307,9 +307,7 @@ class DBTCorePlugin(DBTPlugin):
             # Parse run results for model count
             run_results = self._load_run_results(project_dir)
             models_run = len(run_results.get("results", []))
-            failures = sum(
-                1 for r in run_results.get("results", []) if r.get("status") == "error"
-            )
+            failures = sum(1 for r in run_results.get("results", []) if r.get("status") == "error")
 
             # Set result attributes on span
             set_result_attributes(
@@ -428,9 +426,7 @@ class DBTCorePlugin(DBTPlugin):
             # Parse run results for test count
             run_results = self._load_run_results(project_dir)
             tests_run = len(run_results.get("results", []))
-            failures = sum(
-                1 for r in run_results.get("results", []) if r.get("status") == "fail"
-            )
+            failures = sum(1 for r in run_results.get("results", []) if r.get("status") == "fail")
 
             # Set result attributes on span
             set_result_attributes(

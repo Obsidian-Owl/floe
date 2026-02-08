@@ -112,9 +112,9 @@ class TestIcebergIOManagerRealIntegration(IntegrationTestBase):
 
         # Verify via real table scan
         identifier = f"{unique_namespace}.test_customers"
-        assert real_table_manager.table_exists(
-            identifier
-        ), f"Table '{identifier}' should exist in Polaris"
+        assert real_table_manager.table_exists(identifier), (
+            f"Table '{identifier}' should exist in Polaris"
+        )
 
         table = real_table_manager.load_table(identifier)
         scanned = table.scan().to_arrow()
@@ -253,9 +253,7 @@ class TestIcebergIOManagerRealIntegration(IntegrationTestBase):
 
         table = real_table_manager.load_table(identifier)
         scanned = table.scan().to_arrow()
-        assert (
-            scanned.num_rows == 1
-        ), f"Expected 1 row after overwrite, got {scanned.num_rows}"
+        assert scanned.num_rows == 1, f"Expected 1 row after overwrite, got {scanned.num_rows}"
         assert scanned["name"].to_pylist() == ["replaced"]
 
     # =========================================================================
@@ -321,9 +319,7 @@ class TestIcebergIOManagerRealIntegration(IntegrationTestBase):
 
         table = real_table_manager.load_table(identifier)
         scanned = table.scan().to_arrow()
-        assert (
-            scanned.num_rows == 5
-        ), f"Expected 5 rows after append, got {scanned.num_rows}"
+        assert scanned.num_rows == 5, f"Expected 5 rows after append, got {scanned.num_rows}"
         assert set(scanned["value"].to_pylist()) == {"a", "b", "c", "d", "e"}
 
     # =========================================================================
@@ -349,9 +345,7 @@ class TestIcebergIOManagerRealIntegration(IntegrationTestBase):
         io_manager_def = IOManagerDefinition(resource_fn=_io_manager_resource)
 
         @asset(
-            partitions_def=StaticPartitionsDefinition(
-                ["2026-01-17", "2026-01-18", "2026-01-19"]
-            ),
+            partitions_def=StaticPartitionsDefinition(["2026-01-17", "2026-01-18", "2026-01-19"]),
         )
         def partitioned_orders() -> Output:
             """Partitioned asset with date partition column."""

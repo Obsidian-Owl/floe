@@ -198,9 +198,7 @@ class TestTraceContextInjectionExtraction:
     """
 
     @pytest.mark.requirement("FR-002")
-    def test_trace_context_can_be_injected(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_trace_context_can_be_injected(self, tracer_provider: TracerProvider) -> None:
         """Test trace context can be injected into a carrier."""
         propagator = TraceContextTextMapPropagator()
 
@@ -239,9 +237,7 @@ class TestTraceContextInjectionExtraction:
     def test_trace_context_can_be_extracted(self) -> None:
         """Test trace context can be extracted from carrier."""
         propagator = TraceContextTextMapPropagator()
-        carrier = {
-            "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-        }
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 
         ctx = propagator.extract(carrier)
         span_ctx = trace.get_current_span(ctx).get_span_context()
@@ -323,9 +319,7 @@ class TestTraceContextHelpers:
         assert span_ctx.trace_id == 0 or not span_ctx.is_valid
 
     @pytest.mark.requirement("FR-002")
-    def test_child_span_inherits_trace_id(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_child_span_inherits_trace_id(self, tracer_provider: TracerProvider) -> None:
         """Test child span inherits parent's trace_id."""
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("parent") as parent:
@@ -335,9 +329,7 @@ class TestTraceContextHelpers:
                 assert child_trace_id == parent_trace_id
 
     @pytest.mark.requirement("FR-002")
-    def test_child_span_has_different_span_id(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_child_span_has_different_span_id(self, tracer_provider: TracerProvider) -> None:
         """Test child span has different span_id from parent."""
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("parent") as parent:
@@ -410,9 +402,7 @@ class TestPropagationModuleFunctions:
         assert get_baggage_value(BAGGAGE_MODE, ctx) == "prod"
 
     @pytest.mark.requirement("001-FR-002")
-    def test_get_trace_id_with_active_span(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_get_trace_id_with_active_span(self, tracer_provider: TracerProvider) -> None:
         """Test get_trace_id returns valid ID within active span."""
         from floe_core.telemetry.propagation import get_trace_id
 
@@ -423,9 +413,7 @@ class TestPropagationModuleFunctions:
             assert len(trace_id) == 32
 
     @pytest.mark.requirement("001-FR-002")
-    def test_get_span_id_with_active_span(
-        self, tracer_provider: TracerProvider
-    ) -> None:
+    def test_get_span_id_with_active_span(self, tracer_provider: TracerProvider) -> None:
         """Test get_span_id returns valid ID within active span."""
         from floe_core.telemetry.propagation import get_span_id
 

@@ -156,9 +156,7 @@ class TestBinPackCompactionExecutor:
         mock_table.current_snapshot.side_effect = Exception("Test error")
 
         with pytest.raises(CompactionAnalysisError, match="Unexpected error"):
-            executor._analyze_files_for_compaction(
-                mock_table, target_file_size_bytes=134217728
-            )
+            executor._analyze_files_for_compaction(mock_table, target_file_size_bytes=134217728)
 
     @pytest.mark.requirement("FR-031")
     def test_analyze_files_raises_on_manifest_access_failure(self) -> None:
@@ -178,9 +176,7 @@ class TestBinPackCompactionExecutor:
         mock_table.current_snapshot.return_value = mock_snapshot
 
         with pytest.raises(CompactionAnalysisError, match="Cannot access manifests"):
-            executor._analyze_files_for_compaction(
-                mock_table, target_file_size_bytes=134217728
-            )
+            executor._analyze_files_for_compaction(mock_table, target_file_size_bytes=134217728)
 
     @pytest.mark.requirement("FR-031")
     def test_analyze_files_raises_on_entry_read_failure(self) -> None:
@@ -198,9 +194,7 @@ class TestBinPackCompactionExecutor:
         mock_table.current_snapshot.return_value = mock_snapshot
 
         with pytest.raises(CompactionAnalysisError, match="Cannot read manifest entry"):
-            executor._analyze_files_for_compaction(
-                mock_table, target_file_size_bytes=134217728
-            )
+            executor._analyze_files_for_compaction(mock_table, target_file_size_bytes=134217728)
 
     @pytest.mark.requirement("FR-031")
     def test_execute_logs_pyiceberg_limitation(self) -> None:

@@ -67,9 +67,7 @@ def _format_promotion_result(record: PromotionRecord, output_format: str) -> str
 
     for gate_result in record.gate_results:
         status_icon = "✓" if gate_result.status.value == "passed" else "✗"
-        lines.append(
-            f"  {status_icon} {gate_result.gate.value}: {gate_result.status.value}"
-        )
+        lines.append(f"  {status_icon} {gate_result.gate.value}: {gate_result.status.value}")
         if gate_result.error:
             lines.append(f"      Error: {gate_result.error}")
 
@@ -319,9 +317,7 @@ def promote_command(
 
     except GateValidationError as e:
         if output == "json":
-            click.echo(
-                json.dumps({"error": str(e), "gate": e.gate, "exit_code": e.exit_code})
-            )
+            click.echo(json.dumps({"error": str(e), "gate": e.gate, "exit_code": e.exit_code}))
         else:
             error(f"Gate validation failed: {e}")
         sys.exit(e.exit_code)

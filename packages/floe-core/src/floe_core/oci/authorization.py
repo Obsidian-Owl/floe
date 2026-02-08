@@ -191,9 +191,7 @@ class AuthorizationChecker:
         if allowed_groups:
             reason_parts.append(f"not in allowed groups: {sorted(allowed_groups)}")
         if allowed_operators:
-            reason_parts.append(
-                f"not in allowed operators: {sorted(allowed_operators)}"
-            )
+            reason_parts.append(f"not in allowed operators: {sorted(allowed_operators)}")
 
         reason = f"Operator '{operator}' " + " and ".join(reason_parts)
 

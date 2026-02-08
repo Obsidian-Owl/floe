@@ -106,9 +106,7 @@ class TestGovernance(IntegrationTestBase):
         templates = self._render_helm_templates(
             chart_root / "floe-platform", set_values={"networkPolicy.enabled": "true"}
         )
-        network_policies = [
-            doc for doc in templates if doc.get("kind") == "NetworkPolicy"
-        ]
+        network_policies = [doc for doc in templates if doc.get("kind") == "NetworkPolicy"]
 
         if not network_policies:
             pytest.fail(
@@ -242,9 +240,7 @@ class TestGovernance(IntegrationTestBase):
                 matches = re.findall(pattern, content, re.IGNORECASE)
                 if matches:
                     rel_path = py_file.relative_to(repo_root)
-                    python_violations.append(
-                        f"{rel_path}: {description} ({len(matches)} matches)"
-                    )
+                    python_violations.append(f"{rel_path}: {description} ({len(matches)} matches)")
 
         all_violations = violations + python_violations
 
@@ -378,9 +374,7 @@ class TestGovernance(IntegrationTestBase):
 
                     # Filter for HIGH and CRITICAL severity
                     high_critical = [
-                        r
-                        for r in results
-                        if r.get("issue_severity") in {"HIGH", "CRITICAL"}
+                        r for r in results if r.get("issue_severity") in {"HIGH", "CRITICAL"}
                     ]
 
                     if high_critical:
@@ -646,9 +640,9 @@ class TestGovernance(IntegrationTestBase):
                 "Governance policies must be checked during compilation.\n"
                 "enforcement_result being None means no policies were evaluated."
             )
-            assert hasattr(
-                artifacts.enforcement_result, "passed"
-            ), "Enforcement result must indicate pass/fail status"
+            assert hasattr(artifacts.enforcement_result, "passed"), (
+                "Enforcement result must indicate pass/fail status"
+            )
 
         except Exception as e:
             pytest.fail(
@@ -693,9 +687,9 @@ class TestGovernance(IntegrationTestBase):
             "Governance policies must be checked during compilation.\n"
             "enforcement_result being None means no policies were evaluated."
         )
-        assert hasattr(
-            artifacts.enforcement_result, "passed"
-        ), "Enforcement result must indicate pass/fail status"
+        assert hasattr(artifacts.enforcement_result, "passed"), (
+            "Enforcement result must indicate pass/fail status"
+        )
         assert artifacts.enforcement_result.models_validated > 0, (
             "Enforcement must validate at least one model.\n"
             f"Got models_validated={artifacts.enforcement_result.models_validated}\n"
@@ -730,11 +724,7 @@ class TestGovernance(IntegrationTestBase):
         ]
 
         for py_file in (repo_root / "packages").rglob("*.py"):
-            if (
-                ".venv" in str(py_file)
-                or "__pycache__" in str(py_file)
-                or "test" in str(py_file)
-            ):
+            if ".venv" in str(py_file) or "__pycache__" in str(py_file) or "test" in str(py_file):
                 continue
             content = py_file.read_text()
 

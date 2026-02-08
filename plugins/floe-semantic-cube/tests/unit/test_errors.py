@@ -143,9 +143,9 @@ class TestErrorHierarchy:
             CubeDatasourceError,
         ]
         for error_type in error_types:
-            assert issubclass(
-                error_type, CubeSemanticError
-            ), f"{error_type.__name__} should inherit from CubeSemanticError"
+            assert issubclass(error_type, CubeSemanticError), (
+                f"{error_type.__name__} should inherit from CubeSemanticError"
+            )
 
     @pytest.mark.requirement("FR-008")
     def test_all_errors_are_exceptions(self) -> None:
@@ -157,6 +157,6 @@ class TestErrorHierarchy:
             CubeDatasourceError,
         ]
         for error_type in error_types:
-            assert issubclass(
-                error_type, Exception
-            ), f"{error_type.__name__} should inherit from Exception"
+            assert issubclass(error_type, Exception), (
+                f"{error_type.__name__} should inherit from Exception"
+            )

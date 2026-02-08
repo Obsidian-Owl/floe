@@ -36,9 +36,7 @@ class TestDetectFusionBinary:
         # Mock both standard path checks (returns False) and shutil.which
         with (
             patch.object(Path, "exists", return_value=False),
-            patch(
-                "shutil.which", return_value="/usr/local/bin/dbt-sa-cli"
-            ) as mock_which,
+            patch("shutil.which", return_value="/usr/local/bin/dbt-sa-cli") as mock_which,
             patch(
                 "floe_dbt_fusion.detection._is_full_fusion_cli",
                 return_value=True,
@@ -497,9 +495,7 @@ class TestIsFullFusionCliExceptionHandling:
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = (
-            "dbt fusion CLI\n\nCommands:\n  compile  Compile project\n  run"
-        )
+        mock_result.stdout = "dbt fusion CLI\n\nCommands:\n  compile  Compile project\n  run"
 
         with patch("subprocess.run", return_value=mock_result):
             result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))
@@ -514,9 +510,7 @@ class TestIsFullFusionCliExceptionHandling:
         mock_result = MagicMock()
         mock_result.returncode = 0
         # dbt-core output contains "core" not "fusion"
-        mock_result.stdout = (
-            "dbt core CLI\n\nCommands:\n  compile  Compile project\n  run"
-        )
+        mock_result.stdout = "dbt core CLI\n\nCommands:\n  compile  Compile project\n  run"
 
         with patch("subprocess.run", return_value=mock_result):
             result = _is_full_fusion_cli(Path("/usr/local/bin/dbt"))

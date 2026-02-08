@@ -114,9 +114,7 @@ class AvailabilityCheck(BaseCheck):
                 status=CheckStatus.SKIPPED,
                 duration_seconds=duration,
                 timestamp=now,
-                details={
-                    "reason": "No compute plugin available for availability check"
-                },
+                details={"reason": "No compute plugin available for availability check"},
             )
 
         # --- Ping the data source ---
@@ -239,8 +237,7 @@ class AvailabilityCheck(BaseCheck):
         if ratio_breach:
             # Sustained SLA violation (many failures over time)
             message = (
-                f"Availability is {availability_pct:.1f}%, "
-                f"SLA threshold is {threshold_pct:.1f}%"
+                f"Availability is {availability_pct:.1f}%, SLA threshold is {threshold_pct:.1f}%"
             )
         elif not ping_success:
             # Active ping failure (connection issue)

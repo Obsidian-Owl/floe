@@ -118,9 +118,7 @@ class TestPolicyComplianceGate:
         mock_result = EnforcementResult(
             passed=False,
             violations=[violation],
-            summary=EnforcementSummary(
-                total_models=5, models_validated=5, naming_violations=1
-            ),
+            summary=EnforcementSummary(total_models=5, models_validated=5, naming_violations=1),
             enforcement_level="strict",
             manifest_version="1.8.0",
             timestamp=datetime.now(timezone.utc),
@@ -139,9 +137,7 @@ class TestPolicyComplianceGate:
             assert result.status == GateStatus.FAILED
             assert result.gate == PromotionGate.POLICY_COMPLIANCE
             assert result.error is not None
-            assert (
-                "violation" in result.error.lower() or "policy" in result.error.lower()
-            )
+            assert "violation" in result.error.lower() or "policy" in result.error.lower()
 
     @pytest.mark.requirement("8C-FR-010")
     def test_policy_compliance_gate_skipped_when_no_enforcer(

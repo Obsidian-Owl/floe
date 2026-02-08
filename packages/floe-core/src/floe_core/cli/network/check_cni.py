@@ -135,9 +135,7 @@ def _load_kubernetes_client(
         )
 
 
-def _detect_cni(
-    core_api: CoreV1Api, apps_api: AppsV1Api, verbose: bool = False
-) -> dict[str, Any]:
+def _detect_cni(core_api: CoreV1Api, apps_api: AppsV1Api, verbose: bool = False) -> dict[str, Any]:
     """Detect CNI plugin by checking DaemonSets and ConfigMaps.
 
     Args:

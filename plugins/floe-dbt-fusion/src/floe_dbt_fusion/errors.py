@@ -166,9 +166,7 @@ class DBTAdapterUnavailableError(DBTFusionError):
 
         if message is None:
             message = f"Rust adapter unavailable for '{adapter}'"
-            message += (
-                f"\n    Available Fusion adapters: {', '.join(self.available_adapters)}"
-            )
+            message += f"\n    Available Fusion adapters: {', '.join(self.available_adapters)}"
             fallback_status = "available" if fallback_available else "not installed"
             message += f"\n    Fallback to dbt-core: {fallback_status}"
 

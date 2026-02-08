@@ -110,10 +110,7 @@ class TestKeycloakAuthError:
             details="Invalid password",
         )
 
-        assert (
-            str(error)
-            == "Authentication failed: Invalid password (code: invalid_grant)"
-        )
+        assert str(error) == "Authentication failed: Invalid password (code: invalid_grant)"
         assert error.error_code == "invalid_grant"
         assert error.details == "Invalid password"
 
@@ -239,10 +236,7 @@ class TestKeycloakUnavailableError:
             details="After 30 retries",
         )
 
-        assert (
-            str(error)
-            == "Connection failed: After 30 retries (caused by: TimeoutError)"
-        )
+        assert str(error) == "Connection failed: After 30 retries (caused by: TimeoutError)"
 
 
 class TestExceptionImports:

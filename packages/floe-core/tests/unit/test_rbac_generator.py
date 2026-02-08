@@ -178,9 +178,7 @@ class TestValidateManifest:
 
             errors = validate_manifest(manifest)
             kind_errors = [e for e in errors if "kind" in e.lower()]
-            assert (
-                kind_errors == []
-            ), f"Kind {kind} should be valid but got: {kind_errors}"
+            assert kind_errors == [], f"Kind {kind} should be valid but got: {kind_errors}"
 
     @pytest.mark.requirement("FR-051")
     def test_validate_multiple_errors(self) -> None:

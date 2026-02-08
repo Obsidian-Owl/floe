@@ -133,9 +133,7 @@ def deduplicate_checks(
 
     # Filter floe checks that don't duplicate dbt checks
     unique_floe_checks = [
-        check
-        for check in floe_checks
-        if get_check_signature(check) not in dbt_signatures
+        check for check in floe_checks if get_check_signature(check) not in dbt_signatures
     ]
 
     # dbt checks come first (they take precedence)
@@ -165,9 +163,7 @@ def merge_model_checks(
     for test in dbt_tests:
         test_type = test.get("type") or test.get("test")
         column = test.get("column")
-        parameters = {
-            k: v for k, v in test.items() if k not in ("type", "test", "column")
-        }
+        parameters = {k: v for k, v in test.items() if k not in ("type", "test", "column")}
 
         if test_type:
             check = map_dbt_test_to_check(

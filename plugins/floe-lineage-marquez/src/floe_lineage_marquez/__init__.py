@@ -396,9 +396,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             if self._api_key:
                 req.add_header("Authorization", f"Bearer {self._api_key}")
 
-            with urllib.request.urlopen(
-                req, timeout=10
-            ) as response:  # noqa: S310  # nosec B310
+            with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310  # nosec B310
                 return bool(response.status == 200)
         except Exception:
             return False

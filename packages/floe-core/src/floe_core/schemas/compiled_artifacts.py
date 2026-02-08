@@ -674,9 +674,7 @@ class CompiledArtifacts(BaseModel):
             - to_yaml_file: Write artifacts to YAML
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(self.model_dump(mode="json", by_alias=True), indent=2)
-        )
+        path.write_text(json.dumps(self.model_dump(mode="json", by_alias=True), indent=2))
 
     def to_yaml_file(self, path: Path) -> None:
         """Write CompiledArtifacts to a YAML file.

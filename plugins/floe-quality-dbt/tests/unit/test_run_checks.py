@@ -28,9 +28,7 @@ class TestRunChecksBasicExecution:
     """Tests for run_checks() basic execution (T048)."""
 
     @pytest.mark.requirement("FR-004", "FR-027", "FR-037")
-    def test_run_checks_returns_suite_result(
-        self, dbt_plugin: DBTExpectationsPlugin
-    ) -> None:
+    def test_run_checks_returns_suite_result(self, dbt_plugin: DBTExpectationsPlugin) -> None:
         """run_checks returns QualitySuiteResult with correct structure."""
         result = dbt_plugin.run_checks(
             suite_name="test_suite",
@@ -84,9 +82,7 @@ class TestRunChecksBasicExecution:
         assert isinstance(result.checks, list)
 
     @pytest.mark.requirement("FR-004")
-    def test_run_suite_empty_checks_passes(
-        self, dbt_plugin: DBTExpectationsPlugin
-    ) -> None:
+    def test_run_suite_empty_checks_passes(self, dbt_plugin: DBTExpectationsPlugin) -> None:
         """run_suite with no checks returns passing result."""
         suite = QualitySuite(model_name="test_model", checks=[])
         connection_config: dict[str, Any] = {"dialect": "duckdb"}
@@ -101,9 +97,7 @@ class TestRunChecksFailures:
     """Tests for FLOE-DQ102 check failure handling."""
 
     @pytest.mark.requirement("FR-042")
-    def test_failed_checks_reported_in_results(
-        self, dbt_plugin: DBTExpectationsPlugin
-    ) -> None:
+    def test_failed_checks_reported_in_results(self, dbt_plugin: DBTExpectationsPlugin) -> None:
         """Failed checks are included in results with correct metadata."""
         suite = QualitySuite(
             model_name="test_model",
@@ -182,9 +176,7 @@ class TestValidateExpectations:
     """Tests for validate_expectations method."""
 
     @pytest.mark.requirement("FR-004")
-    def test_validate_expectations_returns_list(
-        self, dbt_plugin: DBTExpectationsPlugin
-    ) -> None:
+    def test_validate_expectations_returns_list(self, dbt_plugin: DBTExpectationsPlugin) -> None:
         """validate_expectations returns list of QualityCheckResult."""
         results = dbt_plugin.validate_expectations(
             data_source="staging.orders",
@@ -197,9 +189,7 @@ class TestValidateExpectations:
         assert isinstance(results, list)
 
     @pytest.mark.requirement("FR-004")
-    def test_validate_expectations_empty_list(
-        self, dbt_plugin: DBTExpectationsPlugin
-    ) -> None:
+    def test_validate_expectations_empty_list(self, dbt_plugin: DBTExpectationsPlugin) -> None:
         """validate_expectations handles empty expectations list."""
         results = dbt_plugin.validate_expectations(
             data_source="staging.orders",
@@ -220,9 +210,7 @@ class TestDbtIntegration:
         assert "dbt" in dbt_plugin.description.lower()
 
     @pytest.mark.requirement("FR-037")
-    def test_plugin_supports_dbt_dialects(
-        self, dbt_plugin: DBTExpectationsPlugin
-    ) -> None:
+    def test_plugin_supports_dbt_dialects(self, dbt_plugin: DBTExpectationsPlugin) -> None:
         """Plugin supports dialects compatible with dbt."""
         assert dbt_plugin.supports_dialect("duckdb")
         assert dbt_plugin.supports_dialect("postgresql")

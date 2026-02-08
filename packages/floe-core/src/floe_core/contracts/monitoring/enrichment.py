@@ -117,16 +117,12 @@ def build_root_cause_context(
     if check_results_history:
         metadata["recent_check_count"] = str(len(check_results_history))
 
-        failure_count = sum(
-            1 for result in check_results_history if result.get("status") == "fail"
-        )
+        failure_count = sum(1 for result in check_results_history if result.get("status") == "fail")
         metadata["recent_failure_count"] = str(failure_count)
 
         # Most recent check status (first in list assumed to be most recent)
         if check_results_history:
-            metadata["last_check_status"] = str(
-                check_results_history[0].get("status", "unknown")
-            )
+            metadata["last_check_status"] = str(check_results_history[0].get("status", "unknown"))
 
     # Connection configuration details
     catalog = contract.connection_config.get("catalog", "unknown")

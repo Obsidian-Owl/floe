@@ -57,9 +57,9 @@ class TestOCIErrorHierarchy:
         ]
 
         for error_class in error_classes:
-            assert issubclass(
-                error_class, OCIError
-            ), f"{error_class.__name__} should inherit from OCIError"
+            assert issubclass(error_class, OCIError), (
+                f"{error_class.__name__} should inherit from OCIError"
+            )
 
     @pytest.mark.requirement("FR-019")
     def test_oci_error_inherits_from_exception(self) -> None:
@@ -475,9 +475,7 @@ class TestInvalidTransitionError:
     @pytest.mark.requirement("8C-FR-009")
     def test_invalid_transition_error_exit_code(self) -> None:
         """InvalidTransitionError has exit code 9."""
-        assert (
-            InvalidTransitionError is not None
-        ), "InvalidTransitionError not implemented"
+        assert InvalidTransitionError is not None, "InvalidTransitionError not implemented"
         error = InvalidTransitionError(
             from_env="prod",
             to_env="dev",
@@ -568,9 +566,7 @@ class TestVersionNotPromotedError:
     @pytest.mark.requirement("8C-FR-011")
     def test_version_not_promoted_error_exit_code(self) -> None:
         """VersionNotPromotedError has exit code 11."""
-        assert (
-            VersionNotPromotedError is not None
-        ), "VersionNotPromotedError not implemented"
+        assert VersionNotPromotedError is not None, "VersionNotPromotedError not implemented"
         error = VersionNotPromotedError(
             tag="v1.0.0",
             environment="staging",
@@ -664,9 +660,7 @@ class TestEnvironmentLockedError:
     @pytest.mark.requirement("8C-FR-013")
     def test_environment_locked_error_exit_code(self) -> None:
         """EnvironmentLockedError has exit code 13."""
-        assert (
-            EnvironmentLockedError is not None
-        ), "EnvironmentLockedError not implemented"
+        assert EnvironmentLockedError is not None, "EnvironmentLockedError not implemented"
         error = EnvironmentLockedError(
             environment="prod",
             locked_by="sre@example.com",

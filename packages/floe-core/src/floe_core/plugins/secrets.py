@@ -88,9 +88,7 @@ class SecretsPlugin(PluginMetadata):
         ...
 
     @abstractmethod
-    def set_secret(
-        self, key: str, value: str, metadata: dict[str, Any] | None = None
-    ) -> None:
+    def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Store a secret.
 
         Stores the secret value at the given key. Creates the secret

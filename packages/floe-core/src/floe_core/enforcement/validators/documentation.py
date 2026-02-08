@@ -28,9 +28,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # Documentation URL for documentation violations
-DOCS_DOC_URL = (
-    f"{DOCUMENTATION_URLS.get('base', 'https://floe.dev/docs')}/documentation"
-)
+DOCS_DOC_URL = f"{DOCUMENTATION_URLS.get('base', 'https://floe.dev/docs')}/documentation"
 
 # Placeholder patterns to detect (case-insensitive)
 # Matches common placeholder text that indicates incomplete documentation:
@@ -142,9 +140,7 @@ class DocumentationValidator:
 
             # Check column descriptions if required
             if self.config.require_column_descriptions:
-                column_violations = self._validate_column_descriptions(
-                    model, model_name
-                )
+                column_violations = self._validate_column_descriptions(model, model_name)
                 violations.extend(column_violations)
 
         return violations

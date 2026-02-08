@@ -339,7 +339,4 @@ class TestServiceAccountManifestYamlCompatibility:
         assert restored["apiVersion"] == manifest["apiVersion"]
         assert restored["kind"] == manifest["kind"]
         assert restored["metadata"]["name"] == manifest["metadata"]["name"]
-        assert (
-            restored["automountServiceAccountToken"]
-            == manifest["automountServiceAccountToken"]
-        )
+        assert restored["automountServiceAccountToken"] == manifest["automountServiceAccountToken"]

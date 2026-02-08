@@ -271,9 +271,7 @@ def merge_manifests(
                 merged_plugins_data[category] = child_selection
 
     # Filter out None values before creating PluginsConfig
-    merged_plugins_filtered = {
-        k: v for k, v in merged_plugins_data.items() if v is not None
-    }
+    merged_plugins_filtered = {k: v for k, v in merged_plugins_data.items() if v is not None}
     merged_plugins = PluginsConfig(**cast(dict[str, Any], merged_plugins_filtered))
 
     # For governance, FORBID strategy means child cannot WEAKEN parent's policies.

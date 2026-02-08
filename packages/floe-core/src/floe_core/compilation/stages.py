@@ -235,9 +235,7 @@ def compile_pipeline(
             transforms = resolve_transform_compute(spec, resolved_manifest)
             # Add resolution details as span attributes
             resolve_span.set_attribute("compile.compute_plugin", plugins.compute.type)
-            resolve_span.set_attribute(
-                "compile.orchestrator_plugin", plugins.orchestrator.type
-            )
+            resolve_span.set_attribute("compile.orchestrator_plugin", plugins.orchestrator.type)
             resolve_span.set_attribute("compile.model_count", len(transforms.models))
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
@@ -329,9 +327,7 @@ def compile_pipeline(
 
         # Log total compilation time
         total_duration_ms = (time.perf_counter() - pipeline_start) * 1000
-        pipeline_span.set_attribute(
-            "compile.total_duration_ms", round(total_duration_ms, 2)
-        )
+        pipeline_span.set_attribute("compile.total_duration_ms", round(total_duration_ms, 2))
         log.info(
             "compilation_complete",
             product_name=spec.metadata.name,
@@ -425,9 +421,7 @@ def run_enforce_stage(
 
         # Set OTel span attributes (T076)
         enforce_span.set_attribute("enforcement.passed", result.passed)
-        enforce_span.set_attribute(
-            "enforcement.violation_count", len(result.violations)
-        )
+        enforce_span.set_attribute("enforcement.violation_count", len(result.violations))
         enforce_span.set_attribute("enforcement.error_count", result.error_count)
         enforce_span.set_attribute("enforcement.warning_count", result.warning_count)
         enforce_span.set_attribute("enforcement.duration_ms", round(duration_ms, 2))

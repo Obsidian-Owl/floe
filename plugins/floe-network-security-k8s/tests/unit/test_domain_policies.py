@@ -137,9 +137,7 @@ class TestDomainDefaultDenyPolicies:
 
         for policy in policies:
             assert "labels" in policy["metadata"]
-            assert (
-                policy["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "floe"
-            )
+            assert policy["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "floe"
 
 
 class TestDomainToPlatformEgress:
@@ -189,10 +187,7 @@ class TestDomainToPlatformEgress:
 
         # Find rule with port 8181
         polaris_found = any(
-            any(
-                p.get("port") == 8181 and p.get("protocol") == "TCP"
-                for p in rule.get("ports", [])
-            )
+            any(p.get("port") == 8181 and p.get("protocol") == "TCP" for p in rule.get("ports", []))
             for rule in rules
         )
         assert polaris_found, "Platform egress must include Polaris port 8181"
@@ -207,10 +202,7 @@ class TestDomainToPlatformEgress:
 
         # Find rule with port 4317
         otel_grpc_found = any(
-            any(
-                p.get("port") == 4317 and p.get("protocol") == "TCP"
-                for p in rule.get("ports", [])
-            )
+            any(p.get("port") == 4317 and p.get("protocol") == "TCP" for p in rule.get("ports", []))
             for rule in rules
         )
         assert otel_grpc_found, "Platform egress must include OTel gRPC port 4317"
@@ -225,10 +217,7 @@ class TestDomainToPlatformEgress:
 
         # Find rule with port 4318
         otel_http_found = any(
-            any(
-                p.get("port") == 4318 and p.get("protocol") == "TCP"
-                for p in rule.get("ports", [])
-            )
+            any(p.get("port") == 4318 and p.get("protocol") == "TCP" for p in rule.get("ports", []))
             for rule in rules
         )
         assert otel_http_found, "Platform egress must include OTel HTTP port 4318"
@@ -243,10 +232,7 @@ class TestDomainToPlatformEgress:
 
         # Find rule with port 9000
         minio_found = any(
-            any(
-                p.get("port") == 9000 and p.get("protocol") == "TCP"
-                for p in rule.get("ports", [])
-            )
+            any(p.get("port") == 9000 and p.get("protocol") == "TCP" for p in rule.get("ports", []))
             for rule in rules
         )
         assert minio_found, "Platform egress must include MinIO port 9000"
@@ -340,9 +326,7 @@ class TestCrossDomainIsolation:
 
         # Generate policies for two different domains
         sales_policies = plugin.generate_default_deny_policies("floe-sales-domain")
-        marketing_policies = plugin.generate_default_deny_policies(
-            "floe-marketing-domain"
-        )
+        marketing_policies = plugin.generate_default_deny_policies("floe-marketing-domain")
 
         # Each should target its own namespace
         assert sales_policies[0]["metadata"]["namespace"] == "floe-sales-domain"
@@ -412,9 +396,7 @@ class TestDomainIngressRules:
         assert "ports" in rule
 
         # Find HTTP port rule
-        http_found = any(
-            p.get("port") == 80 and p.get("protocol") == "TCP" for p in rule["ports"]
-        )
+        http_found = any(p.get("port") == 80 and p.get("protocol") == "TCP" for p in rule["ports"])
         assert http_found, "Ingress controller rule must allow HTTP port 80"
 
     @pytest.mark.requirement("FR-063")

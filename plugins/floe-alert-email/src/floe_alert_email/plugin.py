@@ -90,10 +90,7 @@ class EmailAlertPlugin(AlertChannelPlugin):
             return False
 
     def _build_message(self, event: ContractViolationEvent) -> MIMEMultipart:
-        subject = (
-            f"[{event.severity.value.upper()}] Contract Violation: "
-            f"{event.contract_name}"
-        )
+        subject = f"[{event.severity.value.upper()}] Contract Violation: {event.contract_name}"
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject

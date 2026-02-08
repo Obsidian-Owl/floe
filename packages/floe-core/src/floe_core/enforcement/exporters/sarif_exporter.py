@@ -28,7 +28,9 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # SARIF 2.1.0 schema URL
-SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+SARIF_SCHEMA = (
+    "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+)
 SARIF_VERSION = "2.1.0"
 
 # Tool information
@@ -189,14 +191,10 @@ def _build_sarif_document(result: EnforcementResult) -> dict[str, Any]:
                 "invocations": [
                     {
                         "executionSuccessful": result.passed,
-                        "endTimeUtc": result.timestamp.isoformat().replace(
-                            "+00:00", "Z"
-                        ),
+                        "endTimeUtc": result.timestamp.isoformat().replace("+00:00", "Z"),
                     }
                 ],
-                "results": [
-                    _build_result(violation) for violation in result.violations
-                ],
+                "results": [_build_result(violation) for violation in result.violations],
             }
         ],
     }

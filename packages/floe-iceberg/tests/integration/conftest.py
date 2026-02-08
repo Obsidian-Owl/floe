@@ -64,9 +64,7 @@ class CatalogPluginProtocol(Protocol):
         """Connect and return a PyIceberg Catalog."""
         ...
 
-    def create_namespace(
-        self, namespace: str, properties: dict[str, str] | None = None
-    ) -> None:
+    def create_namespace(self, namespace: str, properties: dict[str, str] | None = None) -> None:
         """Create a namespace in the catalog."""
         ...
 
@@ -125,9 +123,7 @@ class IntegrationPolarisCatalogPlugin:
                     type="rest",
                     uri=config.get("uri", self._config.uri),
                     warehouse=config.get("warehouse", self._config.warehouse),
-                    credential=config.get(
-                        "credential", self._config.credential.get_secret_value()
-                    ),
+                    credential=config.get("credential", self._config.credential.get_secret_value()),
                     scope=config.get("scope", self._config.scope),
                 )
             else:

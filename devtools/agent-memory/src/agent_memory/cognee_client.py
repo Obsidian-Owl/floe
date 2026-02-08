@@ -200,9 +200,7 @@ class CogneeClient:
             async with httpx.AsyncClient() as http_client:
                 response = await http_client.get(
                     f"{self._config.cognee_api_url}{self._endpoint('/health')}",
-                    headers={
-                        "X-Api-Key": self._config.cognee_api_key.get_secret_value()
-                    },
+                    headers={"X-Api-Key": self._config.cognee_api_key.get_secret_value()},
                     timeout=10.0,
                 )
                 latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -212,9 +210,7 @@ class CogneeClient:
                         "connection_validation_auth_failed",
                         status_code=response.status_code,
                     )
-                    raise CogneeAuthenticationError(
-                        "Authentication failed - check COGNEE_API_KEY"
-                    )
+                    raise CogneeAuthenticationError("Authentication failed - check COGNEE_API_KEY")
 
                 if response.status_code != 200:
                     self._log.error(
@@ -238,9 +234,7 @@ class CogneeClient:
             ) from e
         except httpx.ConnectError as e:
             self._log.error("connection_validation_unreachable", error=str(e))
-            raise CogneeConnectionError(
-                f"Cannot reach {self._config.cognee_api_url}: {e}"
-            ) from e
+            raise CogneeConnectionError(f"Cannot reach {self._config.cognee_api_url}: {e}") from e
 
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers with authentication.
@@ -313,9 +307,7 @@ class CogneeClient:
                     if response.status_code in RETRYABLE_STATUS_CODES:
                         # Honor Retry-After header for rate limiting (429)
                         if response.status_code == 429:
-                            retry_after = parse_retry_after(
-                                response.headers.get("Retry-After")
-                            )
+                            retry_after = parse_retry_after(response.headers.get("Retry-After"))
                             delay = retry_after or calculate_backoff(attempt, config)
                         else:
                             delay = calculate_backoff(attempt, config)
@@ -380,9 +372,7 @@ class CogneeClient:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self._config.cognee_api_url}{self._endpoint('/health')}",
-                    headers={
-                        "X-Api-Key": self._config.cognee_api_key.get_secret_value()
-                    },
+                    headers={"X-Api-Key": self._config.cognee_api_key.get_secret_value()},
                     timeout=10.0,
                 )
                 response_time = int((time.monotonic() - start_time) * 1000)
@@ -570,9 +560,7 @@ class CogneeClient:
         )
 
         # Use first 100 chars as search query to avoid long queries
-        search_query = (
-            content_sample[:100] if len(content_sample) > 100 else content_sample
-        )
+        search_query = content_sample[:100] if len(content_sample) > 100 else content_sample
 
         # Search for the content
         result = await self.search(
@@ -591,9 +579,7 @@ class CogneeClient:
                 reason="No search results returned",
                 query_preview=search_query[:50],
             )
-            raise VerificationError(
-                f"No search results for content in dataset '{dataset_name}'"
-            )
+            raise VerificationError(f"No search results for content in dataset '{dataset_name}'")
 
         self._log.debug(
             "verify_content_completed",
@@ -690,9 +676,7 @@ class CogneeClient:
         except CogneeClientError:
             raise
         except Exception as e:
-            self._log.error(
-                "get_dataset_status_failed", dataset=dataset_name, error=str(e)
-            )
+            self._log.error("get_dataset_status_failed", dataset=dataset_name, error=str(e))
             raise CogneeClientError(f"Failed to get dataset status: {e}") from e
 
     async def _wait_for_cognify_completion(
@@ -745,9 +729,7 @@ class CogneeClient:
                 return
             elif status == "FAILED":
                 error_msg = status_data.get("error", "Unknown error")
-                raise CogneeClientError(
-                    f"Cognify failed for dataset '{dataset_name}': {error_msg}"
-                )
+                raise CogneeClientError(f"Cognify failed for dataset '{dataset_name}': {error_msg}")
 
             await asyncio.sleep(poll_interval)
 
@@ -791,9 +773,7 @@ class CogneeClient:
 
         try:
             # Use Cognee Cloud SDK for memify
-            sdk_config = CogwitConfig(
-                api_key=self._config.cognee_api_key.get_secret_value()
-            )
+            sdk_config = CogwitConfig(api_key=self._config.cognee_api_key.get_secret_value())
             sdk = cogwit(sdk_config)
 
             result = await sdk.memify(dataset_name=effective_dataset)
@@ -938,9 +918,7 @@ class CogneeClient:
             if isinstance(results_data, list):
                 raw_results = results_data
             elif isinstance(results_data, dict):
-                raw_results = (
-                    results_data.get("results") or results_data.get("data") or []
-                )
+                raw_results = results_data.get("results") or results_data.get("data") or []
             else:
                 raw_results = []
 
@@ -1031,9 +1009,7 @@ class CogneeClient:
             if isinstance(datasets_data, list):
                 datasets_list = datasets_data
             elif isinstance(datasets_data, dict):
-                datasets_list = (
-                    datasets_data.get("datasets") or datasets_data.get("data") or []
-                )
+                datasets_list = datasets_data.get("datasets") or datasets_data.get("data") or []
             else:
                 datasets_list = []
 
@@ -1106,8 +1082,7 @@ class CogneeClient:
                 datasets_list = []
 
             dataset_names = [
-                d.get("name", str(d)) if isinstance(d, dict) else str(d)
-                for d in datasets_list
+                d.get("name", str(d)) if isinstance(d, dict) else str(d) for d in datasets_list
             ]
 
             self._log.info("list_datasets_completed", count=len(dataset_names))
@@ -1146,14 +1121,10 @@ class CogneeClient:
                 await self.delete_dataset(name)
                 deleted += 1
             except CogneeClientError as e:
-                self._log.warning(
-                    "delete_test_dataset_failed", dataset=name, error=str(e)
-                )
+                self._log.warning("delete_test_dataset_failed", dataset=name, error=str(e))
                 # Continue cleanup despite individual failures
 
-        self._log.info(
-            "delete_test_datasets_completed", deleted=deleted, total=len(test_datasets)
-        )
+        self._log.info("delete_test_datasets_completed", deleted=deleted, total=len(test_datasets))
         return deleted
 
     async def get_status(self, dataset_name: str | None = None) -> dict[str, Any]:

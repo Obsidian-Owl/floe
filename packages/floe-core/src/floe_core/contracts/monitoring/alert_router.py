@@ -54,9 +54,7 @@ class AlertRouter:
     ) -> None:
         self._config = config
         self._channels = channels
-        self._dedup_state: dict[str, float] = (
-            {}
-        )  # "contract:type" -> last_alert_timestamp
+        self._dedup_state: dict[str, float] = {}  # "contract:type" -> last_alert_timestamp
         self._rate_state: dict[str, list[float]] = {}  # "contract" -> [timestamps]
         self._log = logger.bind(component="alert_router")
 

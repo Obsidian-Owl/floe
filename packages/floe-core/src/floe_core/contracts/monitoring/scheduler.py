@@ -82,9 +82,7 @@ class CheckScheduler:
             self.cancel(task_name)
 
         # Create background task for periodic execution
-        task = asyncio.create_task(
-            self._run_periodic(task_name, callback, interval_seconds)
-        )
+        task = asyncio.create_task(self._run_periodic(task_name, callback, interval_seconds))
         self._tasks[task_name] = task
 
         self._logger.info(

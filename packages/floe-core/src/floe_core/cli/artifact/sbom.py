@@ -242,9 +242,7 @@ def _attach_sbom(
             exit_code=ExitCode.GENERAL_ERROR,
         )
     except AttestationAttachError as e:
-        error_exit(
-            f"Attestation attachment failed: {e}", exit_code=ExitCode.GENERAL_ERROR
-        )
+        error_exit(f"Attestation attachment failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
 
 def _generate_and_attach(
@@ -291,9 +289,7 @@ def _generate_and_attach(
         try:
             info(f"Attaching SBOM to {artifact_ref}...")
             attach_attestation(artifact_ref, temp_path, keyless=True)
-            success(
-                f"SBOM attestation attached to {artifact_ref} ({package_count} packages)"
-            )
+            success(f"SBOM attestation attached to {artifact_ref} ({package_count} packages)")
         finally:
             temp_path.unlink(missing_ok=True)
 
@@ -310,9 +306,7 @@ def _generate_and_attach(
             exit_code=ExitCode.GENERAL_ERROR,
         )
     except AttestationAttachError as e:
-        error_exit(
-            f"Attestation attachment failed: {e}", exit_code=ExitCode.GENERAL_ERROR
-        )
+        error_exit(f"Attestation attachment failed: {e}", exit_code=ExitCode.GENERAL_ERROR)
 
 
 def _show_sbom(

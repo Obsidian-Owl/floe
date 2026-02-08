@@ -32,9 +32,7 @@ if TYPE_CHECKING:
     from opentelemetry.sdk.metrics.export import MetricsData
 
 
-def get_metric_by_name(
-    metrics_data: MetricsData | None, name: str
-) -> dict[str, Any] | None:
+def get_metric_by_name(metrics_data: MetricsData | None, name: str) -> dict[str, Any] | None:
     """Extract a metric by name from MetricsData.
 
     Args:
@@ -660,9 +658,7 @@ class TestMetricLabelsIntegration:
         assert len(data_points) == 3
 
         # Verify each has different attributes
-        methods: list[str] = [
-            str(dict(p.attributes).get("method", "")) for p in data_points
-        ]
+        methods: list[str] = [str(dict(p.attributes).get("method", "")) for p in data_points]
         assert sorted(methods) == ["DELETE", "GET", "POST"]
 
     @pytest.mark.requirement("FR-012")

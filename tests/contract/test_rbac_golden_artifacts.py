@@ -101,8 +101,7 @@ class TestGoldenArtifactServiceAccount:
 
         # v1 contract: automountServiceAccountToken defaults to false
         assert (
-            generated["automountServiceAccountToken"]
-            == golden_v1["automountServiceAccountToken"]
+            generated["automountServiceAccountToken"] == golden_v1["automountServiceAccountToken"]
         )
         assert generated["automountServiceAccountToken"] is False
 

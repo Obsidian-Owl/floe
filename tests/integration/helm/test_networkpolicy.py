@@ -139,9 +139,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find default deny policy
         deny_policies = [
-            p
-            for p in policies
-            if "default-deny" in p.get("metadata", {}).get("name", "")
+            p for p in policies if "default-deny" in p.get("metadata", {}).get("name", "")
         ]
 
         assert len(deny_policies) > 0, "Default deny NetworkPolicy should exist"
@@ -163,9 +161,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find Dagster egress policy
         dagster_policies = [
-            p
-            for p in policies
-            if "dagster" in p.get("metadata", {}).get("name", "").lower()
+            p for p in policies if "dagster" in p.get("metadata", {}).get("name", "").lower()
         ]
 
         if not dagster_policies:
@@ -195,9 +191,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find Polaris policy
         polaris_policies = [
-            p
-            for p in policies
-            if "polaris" in p.get("metadata", {}).get("name", "").lower()
+            p for p in policies if "polaris" in p.get("metadata", {}).get("name", "").lower()
         ]
 
         # Polaris should have ingress allowed from Dagster
@@ -225,9 +219,7 @@ class TestNetworkPolicyEnforcement:
 
         # Find OTel collector policy
         otel_policies = [
-            p
-            for p in policies
-            if "otel" in p.get("metadata", {}).get("name", "").lower()
+            p for p in policies if "otel" in p.get("metadata", {}).get("name", "").lower()
         ]
 
         # OTel should allow ingress from namespace

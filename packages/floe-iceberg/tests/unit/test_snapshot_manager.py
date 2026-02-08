@@ -267,9 +267,7 @@ class TestSnapshotManagerRollback:
 
         assert result.identifier == table_with_snapshots.identifier
         # Verify set_current_snapshot was called with correct ID
-        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(
-            2000
-        )
+        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(2000)
 
     @pytest.mark.requirement("FR-019")
     def test_rollback_to_nonexistent_snapshot_raises(
@@ -293,9 +291,7 @@ class TestSnapshotManagerRollback:
         result = snapshot_manager.rollback_to_snapshot(table_with_snapshots, 1000)
 
         assert result.identifier == table_with_snapshots.identifier
-        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(
-            1000
-        )
+        table_with_snapshots.manage_snapshots().set_current_snapshot.assert_called_with(1000)
 
     @pytest.mark.requirement("FR-019")
     def test_rollback_returns_updated_table(
@@ -379,9 +375,7 @@ class TestSnapshotManagerExpireSnapshots:
             ],
         ]
 
-        result = snapshot_manager.expire_snapshots(
-            table_with_snapshots, older_than_days=30
-        )
+        result = snapshot_manager.expire_snapshots(table_with_snapshots, older_than_days=30)
 
         assert isinstance(result, int)
         # Verify expire_older_than was called
@@ -541,9 +535,7 @@ class TestSnapshotManagerEdgeCases:
             [new_snap],  # After (simulated expiration)
         ]
 
-        result = snapshot_manager.expire_snapshots(
-            table_with_snapshots, older_than_days=1
-        )
+        result = snapshot_manager.expire_snapshots(table_with_snapshots, older_than_days=1)
 
         # Should complete without error
         assert isinstance(result, int)

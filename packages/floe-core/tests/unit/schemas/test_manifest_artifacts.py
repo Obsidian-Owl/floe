@@ -266,10 +266,7 @@ class TestManifestWebhookConfiguration:
         assert manifest.artifacts.promotion is not None
         assert manifest.artifacts.promotion.webhooks is not None
         assert len(manifest.artifacts.promotion.webhooks) == 1
-        assert (
-            manifest.artifacts.promotion.webhooks[0].url
-            == "https://hooks.example.com/webhook"
-        )
+        assert manifest.artifacts.promotion.webhooks[0].url == "https://hooks.example.com/webhook"
         assert manifest.artifacts.promotion.webhooks[0].events == [
             "promote",
             "rollback",
@@ -317,9 +314,7 @@ class TestManifestWebhookConfiguration:
         assert len(manifest.artifacts.promotion.webhooks) == 2
         assert manifest.artifacts.promotion.webhooks[0].events == ["promote"]
         assert manifest.artifacts.promotion.webhooks[1].events == ["rollback"]
-        assert manifest.artifacts.promotion.webhooks[1].headers == {
-            "Authorization": "Bearer token"
-        }
+        assert manifest.artifacts.promotion.webhooks[1].headers == {"Authorization": "Bearer token"}
 
     @pytest.mark.requirement("FR-040")
     def test_manifest_webhook_with_custom_timeout_and_retry(self) -> None:

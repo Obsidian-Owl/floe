@@ -114,9 +114,7 @@ class TestViolation:
 
         from floe_core.enforcement.result import Violation
 
-        PolicyType = Literal[
-            "naming", "coverage", "documentation", "semantic", "custom"
-        ]
+        PolicyType = Literal["naming", "coverage", "documentation", "semantic", "custom"]
         for policy_type in get_args(PolicyType):
             violation = Violation(
                 error_code="FLOE-E201",
@@ -269,9 +267,7 @@ class TestEnforcementResult:
         result = EnforcementResult(
             passed=False,
             violations=violations,
-            summary=EnforcementSummary(
-                total_models=10, models_validated=10, naming_violations=1
-            ),
+            summary=EnforcementSummary(total_models=10, models_validated=10, naming_violations=1),
             enforcement_level="strict",
             manifest_version="1.0.0",
             timestamp=datetime.now(timezone.utc),
@@ -391,9 +387,7 @@ class TestEnforcementResult:
                     documentation_url="https://floe.dev",
                 ),
             ],
-            summary=EnforcementSummary(
-                total_models=10, models_validated=10, naming_violations=1
-            ),
+            summary=EnforcementSummary(total_models=10, models_validated=10, naming_violations=1),
             enforcement_level="strict",
             manifest_version="1.0.0",
             timestamp=datetime.now(timezone.utc),

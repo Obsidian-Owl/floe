@@ -421,9 +421,7 @@ class SignatureVerificationError(OCIError):
             msg += "  - Update trusted_issuers in verification config to include actual signer\n"
             msg += f"  - Or re-sign with authorized identity: floe artifact sign {artifact_ref}\n"
         elif "expired" in reason.lower():
-            msg += (
-                f"  - Re-sign the artifact: floe artifact sign --force {artifact_ref}\n"
-            )
+            msg += f"  - Re-sign the artifact: floe artifact sign --force {artifact_ref}\n"
         else:
             msg += f"  - Re-sign the artifact: floe artifact sign {artifact_ref}\n"
             msg += "  - Verify network connectivity to Rekor transparency log\n"
@@ -526,9 +524,7 @@ class InvalidTransitionError(OCIError):
         self.from_env = from_env
         self.to_env = to_env
         self.reason = reason
-        super().__init__(
-            f"Invalid transition from '{from_env}' to '{to_env}': {reason}"
-        )
+        super().__init__(f"Invalid transition from '{from_env}' to '{to_env}': {reason}")
 
 
 class TagExistsError(OCIError):
@@ -693,13 +689,9 @@ class AuthorizationError(OCIError):
                 "1. Request access to one of the required groups: "
                 f"{', '.join(self.required_groups)}"
             )
-            guidance.append(
-                "2. Contact your platform administrator for group membership"
-            )
+            guidance.append("2. Contact your platform administrator for group membership")
         elif self.allowed_operators:
-            guidance.append(
-                "1. Contact one of the allowed operators to perform this promotion"
-            )
+            guidance.append("1. Contact one of the allowed operators to perform this promotion")
             guidance.append("2. Request to be added to the allowed_operators list")
 
         if self.environment:

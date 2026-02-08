@@ -38,9 +38,7 @@ class TestPluginName:
         plugin = K8sNetworkSecurityPlugin()
         # Name should be lowercase alphanumeric with hyphens
         pattern = r"^[a-z0-9-]+$"
-        assert re.match(
-            pattern, plugin.name
-        ), f"Name '{plugin.name}' doesn't match pattern"
+        assert re.match(pattern, plugin.name), f"Name '{plugin.name}' doesn't match pattern"
 
     @pytest.mark.requirement("FR-001")
     def test_plugin_name_no_spaces(self) -> None:
@@ -85,9 +83,7 @@ class TestPluginVersion:
         plugin = K8sNetworkSecurityPlugin()
         # Semver format: X.Y.Z or X.Y.Z-prerelease
         pattern = r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$"
-        assert re.match(
-            pattern, plugin.version
-        ), f"Version '{plugin.version}' is not semver"
+        assert re.match(pattern, plugin.version), f"Version '{plugin.version}' is not semver"
 
     @pytest.mark.requirement("FR-001")
     def test_version_has_three_parts(self) -> None:
@@ -147,9 +143,7 @@ class TestFloeApiVersion:
         api_version = plugin.floe_api_version
         # API version format: X.Y
         pattern = r"^\d+\.\d+$"
-        assert re.match(
-            pattern, api_version
-        ), f"API version '{api_version}' is not X.Y format"
+        assert re.match(pattern, api_version), f"API version '{api_version}' is not X.Y format"
 
     @pytest.mark.requirement("FR-001")
     def test_floe_api_version_has_two_parts(self) -> None:

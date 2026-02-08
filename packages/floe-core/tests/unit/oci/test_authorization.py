@@ -118,10 +118,7 @@ class TestAuthorizationCheckerCheckAuthorization:
             groups=[],
         )
         assert result.authorized is False
-        assert (
-            "alice@example.com" in result.reason
-            or "not authorized" in result.reason.lower()
-        )
+        assert "alice@example.com" in result.reason or "not authorized" in result.reason.lower()
 
     @pytest.mark.requirement("FR-046")
     def test_check_authorization_no_restrictions_allows_all(self) -> None:

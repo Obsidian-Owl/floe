@@ -164,9 +164,7 @@ class TestHttpLineageTransport:
             elapsed = time.monotonic() - start
 
             # 1.0s is generous but still proves non-blocking (HTTP timeout is 30s+)
-            assert (
-                elapsed < 1.0
-            ), f"emit() took {elapsed:.4f}s, expected <1s (non-blocking)"
+            assert elapsed < 1.0, f"emit() took {elapsed:.4f}s, expected <1s (non-blocking)"
         finally:
             transport.close()
 
@@ -179,9 +177,9 @@ class TestHttpLineageTransport:
             _run(transport.emit(sample_event))
             final_size = transport._async_queue.qsize()
             # Event should be enqueued (or already being processed by consumer)
-            assert (
-                final_size >= initial_size
-            ), f"Event should be enqueued: queue size {initial_size} -> {final_size}"
+            assert final_size >= initial_size, (
+                f"Event should be enqueued: queue size {initial_size} -> {final_size}"
+            )
         finally:
             transport.close()
 
@@ -253,9 +251,7 @@ class TestCreateSslContext:
             mock_create_ctx.return_value = mock_ctx
 
             with patch("certifi.where", return_value="/path/to/cacert.pem"):
-                result = _create_ssl_context(
-                    "https://example.com/api", verify_ssl=False
-                )
+                result = _create_ssl_context("https://example.com/api", verify_ssl=False)
 
             assert result is mock_ctx, "Production should return secure context"
 
@@ -271,19 +267,15 @@ class TestCreateSslContext:
             mock_create_ctx.return_value = mock_ctx
 
             with patch("certifi.where", return_value="/path/to/cacert.pem"):
-                result = _create_ssl_context(
-                    "https://example.com/api", verify_ssl=False
-                )
+                result = _create_ssl_context("https://example.com/api", verify_ssl=False)
 
             assert result is mock_ctx, "Should return context"
             assert mock_ctx.check_hostname is False, "Should disable hostname check"
-            assert (
-                mock_ctx.verify_mode == ssl.CERT_NONE
-            ), "Should disable cert verification"
+            assert mock_ctx.verify_mode == ssl.CERT_NONE, "Should disable cert verification"
 
-        assert any(
-            "SSL verification DISABLED" in record.message for record in caplog.records
-        ), "Should log critical warning about disabled SSL"
+        assert any("SSL verification DISABLED" in record.message for record in caplog.records), (
+            "Should log critical warning about disabled SSL"
+        )
 
     def test_dev_without_insecure_env_var_returns_secure_context_with_warning(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -297,15 +289,12 @@ class TestCreateSslContext:
             mock_create_ctx.return_value = mock_ctx
 
             with patch("certifi.where", return_value="/path/to/cacert.pem"):
-                result = _create_ssl_context(
-                    "https://example.com/api", verify_ssl=False
-                )
+                result = _create_ssl_context("https://example.com/api", verify_ssl=False)
 
             assert result is mock_ctx, "Should return secure context"
 
         assert any(
-            "FLOE_ALLOW_INSECURE_SSL not set" in record.message
-            for record in caplog.records
+            "FLOE_ALLOW_INSECURE_SSL not set" in record.message for record in caplog.records
         ), "Should warn that verification remains enabled"
 
     def test_certifi_ca_bundle_is_used(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -316,9 +305,7 @@ class TestCreateSslContext:
             mock_ctx = MagicMock(spec=ssl.SSLContext)
             mock_create_ctx.return_value = mock_ctx
 
-            with patch(
-                "certifi.where", return_value="/custom/ca/bundle.pem"
-            ) as mock_where:
+            with patch("certifi.where", return_value="/custom/ca/bundle.pem") as mock_where:
                 _create_ssl_context("https://example.com/api", verify_ssl=True)
 
             mock_where.assert_called_once()
@@ -367,15 +354,11 @@ class TestApplyInsecureSettings:
     def test_sets_verify_mode_to_cert_none(self) -> None:
         """_apply_insecure_settings sets verify_mode to ssl.CERT_NONE."""
         context = ssl.create_default_context()
-        assert (
-            context.verify_mode == ssl.CERT_REQUIRED
-        ), "Default context should require certs"
+        assert context.verify_mode == ssl.CERT_REQUIRED, "Default context should require certs"
 
         _apply_insecure_settings(context)
 
-        assert (
-            context.verify_mode == ssl.CERT_NONE
-        ), "Should disable certificate verification"
+        assert context.verify_mode == ssl.CERT_NONE, "Should disable certificate verification"
 
     def test_both_settings_applied_together(self) -> None:
         """Both insecure settings are applied atomically."""
@@ -384,9 +367,7 @@ class TestApplyInsecureSettings:
         _apply_insecure_settings(context)
 
         assert context.check_hostname is False, "Hostname check should be disabled"
-        assert (
-            context.verify_mode == ssl.CERT_NONE
-        ), "Cert verification should be disabled"
+        assert context.verify_mode == ssl.CERT_NONE, "Cert verification should be disabled"
 
 
 class TestHttpLineageTransportSsl:
@@ -446,7 +427,7 @@ class TestHttpLineageTransportSsl:
             verify_ssl=False,
         )
 
-        assert (
-            transport._verify_ssl is False
-        ), "Parameter stored as passed, production enforces at emit time"
+        assert transport._verify_ssl is False, (
+            "Parameter stored as passed, production enforces at emit time"
+        )
         transport.close()

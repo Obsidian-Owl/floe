@@ -88,9 +88,9 @@ class TestObservability(IntegrationTestBase):
             "/api/traces",
             params={"service": service_name, "limit": 5},
         )
-        assert (
-            traces_response.status_code == 200
-        ), f"Jaeger traces query failed: {traces_response.status_code}"
+        assert traces_response.status_code == 200, (
+            f"Jaeger traces query failed: {traces_response.status_code}"
+        )
         traces_json = traces_response.json()
         assert "data" in traces_json, "Jaeger traces response missing 'data' key"
 
@@ -115,15 +115,15 @@ class TestObservability(IntegrationTestBase):
         # Validate spans have required attributes for pipeline debugging
         first_span = first_trace["spans"][0]
         assert "operationName" in first_span, "Span missing operationName"
-        assert (
-            len(first_span["operationName"]) > 0
-        ), "Span has empty operationName -- OTel instrumentation not setting span names"
+        assert len(first_span["operationName"]) > 0, (
+            "Span has empty operationName -- OTel instrumentation not setting span names"
+        )
 
         # Verify services list includes floe-platform
         response = jaeger_client.get("/api/services")
-        assert (
-            response.status_code == 200
-        ), f"Jaeger services endpoint failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Jaeger services endpoint failed: {response.status_code}"
+        )
         services_json = response.json()
         assert "data" in services_json, "Jaeger services response missing 'data' key"
         services = services_json["data"]
@@ -167,18 +167,16 @@ class TestObservability(IntegrationTestBase):
 
         # Verify Marquez API responds with namespaces list
         response = marquez_client.get("/api/v1/namespaces")
-        assert (
-            response.status_code == 200
-        ), f"Marquez namespaces endpoint failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Marquez namespaces endpoint failed: {response.status_code}"
+        )
 
         # Verify response structure
         response_json = response.json()
-        assert (
-            "namespaces" in response_json
-        ), "Marquez response missing 'namespaces' key"
-        assert isinstance(
-            response_json["namespaces"], list
-        ), f"Namespaces should be a list, got: {type(response_json['namespaces'])}"
+        assert "namespaces" in response_json, "Marquez response missing 'namespaces' key"
+        assert isinstance(response_json["namespaces"], list), (
+            f"Namespaces should be a list, got: {type(response_json['namespaces'])}"
+        )
 
         # Test creating a namespace (validates write capability)
         test_namespace = f"floe-test-{e2e_namespace}"
@@ -196,15 +194,13 @@ class TestObservability(IntegrationTestBase):
 
         # Verify namespace was created
         verify_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}")
-        assert (
-            verify_response.status_code == 200
-        ), f"Created namespace not found: {test_namespace}"
+        assert verify_response.status_code == 200, f"Created namespace not found: {test_namespace}"
 
         # Query for REAL jobs -- not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
-        assert (
-            jobs_response.status_code == 200
-        ), f"Jobs endpoint failed: {jobs_response.status_code}"
+        assert jobs_response.status_code == 200, (
+            f"Jobs endpoint failed: {jobs_response.status_code}"
+        )
 
         # Check for jobs in the default namespace (where pipeline would emit)
         default_jobs = marquez_client.get("/api/v1/namespaces/default/jobs")
@@ -233,8 +229,7 @@ class TestObservability(IntegrationTestBase):
         # Validate jobs are from THIS pipeline (match expected product names)
         job_names = [job.get("name", "") for job in all_jobs]
         has_pipeline_job = any(
-            "customer" in name.lower() or "pipeline" in name.lower()
-            for name in job_names
+            "customer" in name.lower() or "pipeline" in name.lower() for name in job_names
         )
         assert has_pipeline_job, (
             f"OBSERVABILITY GAP: Jobs found but none match expected pipeline products.\n"
@@ -281,9 +276,7 @@ class TestObservability(IntegrationTestBase):
         assert all_services_response.status_code == 200
         all_services = all_services_response.json().get("data", [])
 
-        floe_services = [
-            s for s in all_services if "floe" in s.lower() or "dagster" in s.lower()
-        ]
+        floe_services = [s for s in all_services if "floe" in s.lower() or "dagster" in s.lower()]
 
         # Query Marquez for REAL jobs
         all_namespaces_response = marquez_client.get("/api/v1/namespaces")
@@ -455,9 +448,9 @@ class TestObservability(IntegrationTestBase):
             "OTel Collector service exists but no pods are scheduled."
         )
         phases = pod_result.stdout.strip().split()
-        assert all(
-            p == "Running" for p in phases
-        ), f"OTel Collector pods not all running. Phases: {phases}"
+        assert all(p == "Running" for p in phases), (
+            f"OTel Collector pods not all running. Phases: {phases}"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-045")
@@ -535,9 +528,9 @@ class TestObservability(IntegrationTestBase):
 
         # Validate all found trace_ids match 32-hex-char format
         for tid in trace_ids_found:
-            assert re.match(
-                r"^[a-f0-9]{32}$", tid
-            ), f"Invalid trace_id format: '{tid}'. Expected 32 hex characters."
+            assert re.match(r"^[a-f0-9]{32}$", tid), (
+                f"Invalid trace_id format: '{tid}'. Expected 32 hex characters."
+            )
 
         # All trace_ids from a single compilation should be the same
         unique_trace_ids = set(trace_ids_found)
@@ -563,9 +556,9 @@ class TestObservability(IntegrationTestBase):
 
         try:
             result = dagster_client._execute(query)
-            assert (
-                "runsOrError" in result
-            ), f"Dagster query response missing 'runsOrError' key. Got: {result}"
+            assert "runsOrError" in result, (
+                f"Dagster query response missing 'runsOrError' key. Got: {result}"
+            )
         except Exception as e:
             pytest.fail(
                 f"Failed to query Dagster runs endpoint: {e}\n"
@@ -606,9 +599,7 @@ class TestObservability(IntegrationTestBase):
         # Observability failures must NOT block compilation
         original_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
         try:
-            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = (
-                "http://192.0.2.1:4317"  # RFC 5737 TEST-NET
-            )
+            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://192.0.2.1:4317"  # RFC 5737 TEST-NET
             artifacts = compile_pipeline(spec_path, manifest_path)
         finally:
             if original_endpoint is not None:
@@ -621,12 +612,12 @@ class TestObservability(IntegrationTestBase):
             "BLOCKING OBSERVABILITY: Compilation failed when OTel endpoint was unreachable.\n"
             "Observability must be non-blocking per FR-046."
         )
-        assert (
-            artifacts.version == COMPILED_ARTIFACTS_VERSION
-        ), "Compilation output should be valid even with unreachable OTel endpoint"
-        assert (
-            artifacts.metadata.product_name == "customer-360"
-        ), "Compilation should produce correct artifacts even without observability"
+        assert artifacts.version == COMPILED_ARTIFACTS_VERSION, (
+            "Compilation output should be valid even with unreachable OTel endpoint"
+        )
+        assert artifacts.metadata.product_name == "customer-360", (
+            "Compilation should produce correct artifacts even without observability"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-048")
@@ -747,9 +738,9 @@ class TestObservability(IntegrationTestBase):
                 "limit": 10,
             },
         )
-        assert (
-            response.status_code == 200
-        ), f"Jaeger trace query for {service_name} failed: {response.status_code}"
+        assert response.status_code == 200, (
+            f"Jaeger trace query for {service_name} failed: {response.status_code}"
+        )
 
         response_json = response.json()
         assert "data" in response_json, "Jaeger response missing 'data' key"
@@ -786,9 +777,7 @@ class TestObservability(IntegrationTestBase):
         # Validate tag structure
         for tag in tags:
             assert "key" in tag, "Tag missing 'key' field"
-            assert (
-                "value" in tag or "vStr" in tag or "vLong" in tag
-            ), "Tag missing value field"
+            assert "value" in tag or "vStr" in tag or "vLong" in tag, "Tag missing value field"
 
         # Check for floe-specific attributes across all spans in the trace
         all_tag_keys: set[str] = set()
@@ -851,9 +840,7 @@ class TestObservability(IntegrationTestBase):
         manifest_path = project_root / "demo" / "manifest.yaml"
 
         artifacts = compile_pipeline(spec_path, manifest_path)
-        assert (
-            artifacts is not None
-        ), "Compilation must succeed before checking emission points"
+        assert artifacts is not None, "Compilation must succeed before checking emission points"
 
         # Query Marquez for events emitted BY the platform after compilation
         # Check known namespaces where the platform would emit events
@@ -920,9 +907,7 @@ class TestObservability(IntegrationTestBase):
         )
 
         # Validate START and COMPLETE states exist (proving both emission points fired)
-        has_start = (
-            "RUNNING" in run_states or "NEW" in run_states or "START" in run_states
-        )
+        has_start = "RUNNING" in run_states or "NEW" in run_states or "START" in run_states
         has_complete = "COMPLETED" in run_states or "COMPLETE" in run_states
 
         assert has_start and has_complete, (
@@ -975,9 +960,9 @@ class TestObservability(IntegrationTestBase):
         # Run real compilation -- should emit OTel spans
         artifacts = compile_pipeline(spec_path, manifest_path)
         assert artifacts is not None, "Compilation must succeed"
-        assert (
-            artifacts.metadata.product_name == "customer-360"
-        ), "Compiled wrong product -- expected customer-360"
+        assert artifacts.metadata.product_name == "customer-360", (
+            "Compiled wrong product -- expected customer-360"
+        )
 
         # Poll for traces to appear in Jaeger (OTel exporter needs time to flush)
         def check_jaeger_traces() -> bool:
@@ -1017,9 +1002,9 @@ class TestObservability(IntegrationTestBase):
                 "limit": 20,
             },
         )
-        assert (
-            traces_response.status_code == 200 and traces_available
-        ), f"Jaeger traces query failed: {traces_response.status_code}"
+        assert traces_response.status_code == 200 and traces_available, (
+            f"Jaeger traces query failed: {traces_response.status_code}"
+        )
 
         traces_json = traces_response.json()
         assert "data" in traces_json, "Jaeger response missing 'data' key"
@@ -1042,9 +1027,9 @@ class TestObservability(IntegrationTestBase):
                 if op_name:
                     all_operation_names.append(op_name)
 
-        assert (
-            len(all_operation_names) > 0
-        ), "Traces found but all spans have empty operation names."
+        assert len(all_operation_names) > 0, (
+            "Traces found but all spans have empty operation names."
+        )
 
         # Check for compilation stage spans
         compilation_keywords = [
@@ -1056,8 +1041,7 @@ class TestObservability(IntegrationTestBase):
             "generate",
         ]
         has_compilation_span = any(
-            any(kw in op.lower() for kw in compilation_keywords)
-            for op in all_operation_names
+            any(kw in op.lower() for kw in compilation_keywords) for op in all_operation_names
         )
 
         assert has_compilation_span, (

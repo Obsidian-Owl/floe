@@ -119,9 +119,7 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
     # Validate kind if present
     kind = manifest.get("kind")
     if kind and kind not in VALID_RBAC_KINDS:
-        errors.append(
-            f"Unknown kind: {kind}. Expected one of: {sorted(VALID_RBAC_KINDS)}"
-        )
+        errors.append(f"Unknown kind: {kind}. Expected one of: {sorted(VALID_RBAC_KINDS)}")
 
     # Validate metadata has name
     metadata = manifest.get("metadata", {})
@@ -531,9 +529,7 @@ class RBACManifestGenerator:
         # Validate all manifests before writing (FR-051)
         with _get_tracer().start_as_current_span(
             "rbac_manifest_generator.validate",
-            attributes={
-                "rbac.manifest_count": sum(len(v) for v in all_manifests.values())
-            },
+            attributes={"rbac.manifest_count": sum(len(v) for v in all_manifests.values())},
         ):
             is_valid, validation_errors = validate_all_manifests(all_manifests)
         if not is_valid:

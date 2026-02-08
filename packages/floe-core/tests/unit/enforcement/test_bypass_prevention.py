@@ -260,9 +260,5 @@ class TestBypassPrevention:
         ]
 
         for pattern in bypass_patterns:
-            assert not hasattr(
-                enforcement_module, pattern
-            ), f"Found potential bypass: {pattern}"
-            assert not hasattr(
-                enforcer_module, pattern
-            ), f"Found potential bypass: {pattern}"
+            assert not hasattr(enforcement_module, pattern), f"Found potential bypass: {pattern}"
+            assert not hasattr(enforcer_module, pattern), f"Found potential bypass: {pattern}"

@@ -54,9 +54,7 @@ class TestManifestMetadataValidation:
     @pytest.mark.requirement("001-FR-002")
     def test_name_pattern_valid_with_hyphens(self) -> None:
         """Test that name with hyphens is valid."""
-        metadata = ManifestMetadata(
-            name="my-platform-v2", version="1.0.0", owner="test"
-        )
+        metadata = ManifestMetadata(name="my-platform-v2", version="1.0.0", owner="test")
         assert metadata.name == "my-platform-v2"
 
     @pytest.mark.requirement("001-FR-002")
@@ -139,9 +137,7 @@ class TestManifestMetadataValidation:
         """Test that description exceeding 500 characters is rejected."""
         long_desc = "a" * 501
         with pytest.raises(ValidationError) as exc_info:
-            ManifestMetadata(
-                name="test", version="1.0.0", owner="test", description=long_desc
-            )
+            ManifestMetadata(name="test", version="1.0.0", owner="test", description=long_desc)
         assert "description" in str(exc_info.value)
 
     @pytest.mark.requirement("001-FR-001")
