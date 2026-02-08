@@ -60,6 +60,7 @@ class ContractMonitor:
         alert_router: AlertRouter | None = None,
         quality_plugin: Any | None = None,
         compute_plugin: Any | None = None,
+        repository: Any | None = None,
     ) -> None:
         """Initialize the contract monitor.
 
@@ -73,11 +74,15 @@ class ContractMonitor:
             compute_plugin: Optional compute plugin implementing the ComputePlugin
                 protocol (duck-typed, has validate_connection() method). If None,
                 availability checks are SKIPPED.
+            repository: Optional repository for persistence (duck-typed to avoid
+                hard import dependency on SQLAlchemy in non-DB contexts). If None,
+                check results and violations are not persisted.
         """
         self._config = config
         self._alert_router = alert_router
         self._quality_plugin = quality_plugin
         self._compute_plugin = compute_plugin
+        self._repository = repository
         self._contracts: dict[str, RegisteredContract] = {}
         self._is_running: bool = False
         self._log = logger.bind(component="contract_monitor")
@@ -252,4 +257,95 @@ class ContractMonitor:
         if result.violation is not None and self._alert_router is not None:
             await self._alert_router.route(result.violation)
 
+        # Persist results if repository is available
+        if self._repository is not None:
+            try:
+                await self._persist_result(result)
+            except Exception as e:
+                self._log.error(
+                    "persist_result_failed",
+                    contract_name=contract_name,
+                    error=str(e),
+                )
+
         return result
+
+    async def _persist_result(self, result: CheckResult) -> None:
+        """Persist check result and any violation to the repository.
+
+        Fire-and-forget: errors are logged but never propagated.
+
+        Args:
+            result: CheckResult to persist.
+        """
+        # Type guard: caller already checked repository is not None
+        assert self._repository is not None
+
+        await self._repository.save_check_result({
+            "id": result.id,
+            "contract_name": result.contract_name,
+            "check_type": result.check_type.value,
+            "status": result.status.value,
+            "duration_seconds": result.duration_seconds,
+            "timestamp": result.timestamp,
+            "details": result.details,
+        })
+
+        if result.violation is not None:
+            await self._repository.save_violation({
+                "contract_name": result.violation.contract_name,
+                "contract_version": result.violation.contract_version,
+                "violation_type": result.violation.violation_type.value,
+                "severity": result.violation.severity.value,
+                "message": result.violation.message,
+                "element": result.violation.element,
+                "expected_value": result.violation.expected_value,
+                "actual_value": result.violation.actual_value,
+                "timestamp": result.violation.timestamp,
+                "affected_consumers": result.violation.affected_consumers,
+                "check_duration_seconds": result.violation.check_duration_seconds,
+                "metadata": dict(result.violation.metadata),
+            })
+
+    async def discover_contracts(self) -> int:
+        """Discover and register contracts on cold start.
+
+        Recovery strategy:
+        1. If repository available, load from database (primary source)
+        2. If DB empty or unavailable, log warning (catalog discovery
+           requires CatalogPlugin integration from a future phase)
+
+        Returns:
+            Number of contracts discovered and registered.
+        """
+        discovered = 0
+
+        if self._repository is not None:
+            try:
+                contracts = await self._repository.get_registered_contracts(active_only=True)
+                for contract_data in contracts:
+                    try:
+                        contract = RegisteredContract(
+                            contract_name=contract_data["contract_name"],
+                            contract_version=contract_data["contract_version"],
+                            contract_data=contract_data["contract_data"],
+                            connection_config=contract_data["connection_config"],
+                            monitoring_overrides=contract_data.get("monitoring_overrides"),
+                            registered_at=contract_data["registered_at"],
+                            last_check_times=contract_data.get("last_check_times", {}),
+                            active=contract_data.get("active", True),
+                        )
+                        if contract.contract_name not in self._contracts:
+                            self._contracts[contract.contract_name] = contract
+                            discovered += 1
+                    except Exception as e:
+                        self._log.warning(
+                            "contract_discovery_error",
+                            contract_name=contract_data.get("contract_name", "unknown"),
+                            error=str(e),
+                        )
+            except Exception as e:
+                self._log.error("contract_discovery_db_failed", error=str(e))
+
+        self._log.info("contract_discovery_completed", discovered=discovered)
+        return discovered
