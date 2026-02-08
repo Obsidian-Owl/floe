@@ -7,7 +7,7 @@ Requirements: FR-031, FR-032
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -32,6 +32,7 @@ class MockRepository:
         self.check_results: list[dict[str, Any]] = []
         self.violations: list[dict[str, Any]] = []
         self.registered: list[dict[str, Any]] = []
+        self.daily_aggregates: list[dict[str, Any]] = []
 
     async def save_check_result(self, result: dict[str, Any]) -> uuid.UUID:
         """Save a check result.
@@ -71,6 +72,42 @@ class MockRepository:
         if active_only:
             return [c for c in self.registered if c.get("active", True)]
         return list(self.registered)
+
+    async def cleanup_expired(self, retention_days: int = 90) -> int:
+        """Delete raw check results and violations older than retention period.
+
+        Daily aggregates are NEVER deleted (indefinite retention).
+
+        Args:
+            retention_days: Number of days to retain raw data.
+
+        Returns:
+            Total number of deleted records.
+        """
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
+        deleted_count: int = 0
+
+        # Delete old check results
+        results_to_delete = [
+            r
+            for r in self.check_results
+            if r.get("timestamp") and r["timestamp"] < cutoff
+        ]
+        deleted_count += len(results_to_delete)
+        for r in results_to_delete:
+            self.check_results.remove(r)
+
+        # Delete old violations
+        violations_to_delete = [
+            v
+            for v in self.violations
+            if v.get("timestamp") and v["timestamp"] < cutoff
+        ]
+        deleted_count += len(violations_to_delete)
+        for v in violations_to_delete:
+            self.violations.remove(v)
+
+        return deleted_count
 
 
 @pytest.fixture
@@ -425,3 +462,288 @@ async def test_discover_contracts_skips_already_registered(
     assert discovered == 0
     # Original contract should remain
     assert monitor.registered_contracts["orders_v1"].contract_version == "1.0.0"
+
+
+@pytest.mark.asyncio
+@pytest.mark.requirement("3D-FR-034")
+async def test_cleanup_expired_deletes_old_check_results(
+    mock_repository: MockRepository,
+) -> None:
+    """Test cleanup_expired deletes raw check results older than retention period.
+
+    Verifies that check results older than 90 days (default) are deleted,
+    while recent ones are preserved.
+    """
+    now = datetime.now(tz=timezone.utc)
+    old_timestamp = now - timedelta(days=91)  # Older than 90 days
+    recent_timestamp = now - timedelta(days=30)  # Within 90 days
+
+    # Add old and recent check results
+    mock_repository.check_results = [
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "check_type": "freshness",
+            "status": "pass",
+            "duration_seconds": 1.5,
+            "timestamp": old_timestamp,
+            "details": {},
+        },
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "check_type": "freshness",
+            "status": "pass",
+            "duration_seconds": 1.5,
+            "timestamp": recent_timestamp,
+            "details": {},
+        },
+    ]
+
+    # Run cleanup with default 90-day retention
+    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+
+    # Verify old result was deleted, recent one preserved
+    assert deleted_count == 1
+    assert len(mock_repository.check_results) == 1
+    assert mock_repository.check_results[0]["timestamp"] == recent_timestamp
+
+
+@pytest.mark.asyncio
+@pytest.mark.requirement("3D-FR-034")
+async def test_cleanup_expired_deletes_old_violations(
+    mock_repository: MockRepository,
+) -> None:
+    """Test cleanup_expired deletes raw violations older than retention period.
+
+    Verifies that violations older than 90 days (default) are deleted,
+    while recent ones are preserved.
+    """
+    now = datetime.now(tz=timezone.utc)
+    old_timestamp = now - timedelta(days=120)  # Older than 90 days
+    recent_timestamp = now - timedelta(days=14)  # Within 90 days
+
+    # Add old and recent violations
+    mock_repository.violations = [
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "contract_version": "1.0.0",
+            "violation_type": "freshness",
+            "severity": "high",
+            "message": "Data stale",
+            "element": None,
+            "expected_value": None,
+            "actual_value": None,
+            "timestamp": old_timestamp,
+            "affected_consumers": [],
+            "check_duration_seconds": 2.0,
+            "metadata": {},
+        },
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "contract_version": "1.0.0",
+            "violation_type": "freshness",
+            "severity": "high",
+            "message": "Data stale",
+            "element": None,
+            "expected_value": None,
+            "actual_value": None,
+            "timestamp": recent_timestamp,
+            "affected_consumers": [],
+            "check_duration_seconds": 2.0,
+            "metadata": {},
+        },
+    ]
+
+    # Run cleanup with 90-day retention
+    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+
+    # Verify old violation was deleted, recent one preserved
+    assert deleted_count == 1
+    assert len(mock_repository.violations) == 1
+    assert mock_repository.violations[0]["timestamp"] == recent_timestamp
+
+
+@pytest.mark.asyncio
+@pytest.mark.requirement("3D-FR-034")
+async def test_cleanup_expired_preserves_daily_aggregates(
+    mock_repository: MockRepository,
+) -> None:
+    """Test cleanup_expired does NOT delete daily aggregates (indefinite retention).
+
+    Verifies that daily aggregates are preserved regardless of age,
+    implementing the indefinite retention policy for aggregates.
+    """
+    now = datetime.now(tz=timezone.utc)
+    very_old_date = now - timedelta(days=365)  # 1 year old
+
+    # Add very old aggregate
+    mock_repository.daily_aggregates = [
+        {
+            "contract_name": "orders_v1",
+            "check_type": "freshness",
+            "date": very_old_date,
+            "total_checks": 100,
+            "passed_checks": 99,
+            "failed_checks": 1,
+            "error_checks": 0,
+            "avg_duration_seconds": 1.2,
+            "violation_count": 1,
+        },
+    ]
+
+    # Store initial count
+    initial_count = len(mock_repository.daily_aggregates)
+
+    # Run cleanup
+    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+
+    # Verify aggregate was NOT deleted
+    assert len(mock_repository.daily_aggregates) == initial_count
+    assert mock_repository.daily_aggregates[0]["date"] == very_old_date
+    # Only raw results and violations should be deleted (0 in this case)
+    assert deleted_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.requirement("3D-FR-034")
+async def test_cleanup_expired_deletes_both_results_and_violations(
+    mock_repository: MockRepository,
+) -> None:
+    """Test cleanup_expired deletes both old results and violations together.
+
+    Verifies that cleanup_expired correctly counts and deletes both
+    check results and violations in a single operation.
+    """
+    now = datetime.now(tz=timezone.utc)
+    old_timestamp = now - timedelta(days=100)
+
+    # Add both old results and violations
+    mock_repository.check_results = [
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "check_type": "freshness",
+            "status": "fail",
+            "duration_seconds": 2.0,
+            "timestamp": old_timestamp,
+            "details": {},
+        },
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "customers_v1",
+            "check_type": "quality",
+            "status": "pass",
+            "duration_seconds": 1.5,
+            "timestamp": old_timestamp,
+            "details": {},
+        },
+    ]
+
+    mock_repository.violations = [
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "contract_version": "1.0.0",
+            "violation_type": "freshness",
+            "severity": "high",
+            "message": "Stale data",
+            "element": None,
+            "expected_value": None,
+            "actual_value": None,
+            "timestamp": old_timestamp,
+            "affected_consumers": [],
+            "check_duration_seconds": 2.0,
+            "metadata": {},
+        },
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "customers_v1",
+            "contract_version": "2.0.0",
+            "violation_type": "quality",
+            "severity": "medium",
+            "message": "Quality issue",
+            "element": None,
+            "expected_value": None,
+            "actual_value": None,
+            "timestamp": old_timestamp,
+            "affected_consumers": [],
+            "check_duration_seconds": 1.5,
+            "metadata": {},
+        },
+    ]
+
+    # Run cleanup
+    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+
+    # Verify all old records were deleted
+    assert deleted_count == 4  # 2 check results + 2 violations
+    assert len(mock_repository.check_results) == 0
+    assert len(mock_repository.violations) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.requirement("3D-FR-034")
+async def test_cleanup_expired_with_custom_retention_days(
+    mock_repository: MockRepository,
+) -> None:
+    """Test cleanup_expired respects custom retention_days parameter.
+
+    Verifies that cleanup_expired can be configured with custom retention
+    periods different from the default 90 days.
+    """
+    now = datetime.now(tz=timezone.utc)
+    too_old_timestamp = now - timedelta(days=31)  # Older than 30 days
+    within_retention = now - timedelta(days=15)  # Within 30 days
+
+    # Add check results at different ages
+    mock_repository.check_results = [
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "check_type": "freshness",
+            "status": "pass",
+            "duration_seconds": 1.5,
+            "timestamp": too_old_timestamp,
+            "details": {},
+        },
+        {
+            "id": uuid.uuid4(),
+            "contract_name": "orders_v1",
+            "check_type": "freshness",
+            "status": "pass",
+            "duration_seconds": 1.5,
+            "timestamp": within_retention,
+            "details": {},
+        },
+    ]
+
+    # Run cleanup with 30-day retention (not default 90)
+    deleted_count = await mock_repository.cleanup_expired(retention_days=30)
+
+    # Verify only the too-old result was deleted
+    assert deleted_count == 1
+    assert len(mock_repository.check_results) == 1
+    assert mock_repository.check_results[0]["timestamp"] == within_retention
+
+
+@pytest.mark.asyncio
+@pytest.mark.requirement("3D-FR-034")
+async def test_cleanup_expired_empty_database(
+    mock_repository: MockRepository,
+) -> None:
+    """Test cleanup_expired handles empty database gracefully.
+
+    Verifies that cleanup_expired returns 0 when there are no records to delete.
+    """
+    # Start with empty repository
+    assert len(mock_repository.check_results) == 0
+    assert len(mock_repository.violations) == 0
+
+    # Run cleanup
+    deleted_count = await mock_repository.cleanup_expired(retention_days=90)
+
+    # Verify it handled empty case
+    assert deleted_count == 0
