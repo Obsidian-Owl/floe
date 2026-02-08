@@ -19,6 +19,7 @@ from typing import Any
 import structlog
 
 from floe_core.contracts.monitoring.checks.freshness import FreshnessCheck
+from floe_core.contracts.monitoring.checks.schema_drift import SchemaDriftCheck
 from floe_core.contracts.monitoring.config import MonitoringConfig, RegisteredContract
 from floe_core.contracts.monitoring.violations import (
     CheckResult,
@@ -188,6 +189,10 @@ class ContractMonitor:
         # Dispatch to appropriate check implementation
         if check_type == ViolationType.FRESHNESS:
             check = FreshnessCheck()
+            return await check.execute(contract=contract, config=check_config)
+
+        if check_type == ViolationType.SCHEMA_DRIFT:
+            check = SchemaDriftCheck()
             return await check.execute(contract=contract, config=check_config)
 
         # Unimplemented check types return ERROR
