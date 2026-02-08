@@ -240,7 +240,7 @@ Synthesize all reports into a unified strategic assessment.
 
 - **Linting/style**: ruff handles this
 - **Type safety**: mypy handles this
-- **Security**: Aikido/SonarQube handle this
+- **Security**: Aikido/bandit handle this
 - **Coverage %**: pytest-cov handles this
 
 ## When to Use

@@ -15,7 +15,6 @@ The project already has Stage 1 CI in `.github/workflows/ci.yml`:
 | lint-typecheck  | Complete | Ruff + mypy --strict                     |
 | unit-tests      | Complete | Python 3.10-3.12 matrix, 80% coverage    |
 | contract-tests  | Complete | Cross-package validation                 |
-| sonarcloud      | Complete | Quality gate + coverage                  |
 | ci-success      | Complete | Branch protection gate                   |
 
 See `.github/CI.md` for full CI strategy documentation.
@@ -190,7 +189,6 @@ Makefile                            # Test targets
 **Existing (Stage 1 - Complete)**:
 - [x] Unit tests in CI (fast) - `.github/workflows/ci.yml`
 - [x] Contract tests in CI
-- [x] SonarCloud quality gate
 
 **Acceptance Criteria (Stage 2 - This Epic)**:
 - [ ] Security job added (Bandit, pip-audit)
@@ -243,7 +241,7 @@ Makefile                            # Test targets
 - `testing/`
 
 ### Related Existing Code
-- `.github/workflows/ci.yml` - Stage 1 CI (lint, unit tests, contract tests, SonarCloud)
+- `.github/workflows/ci.yml` - Stage 1 CI (lint, unit tests, contract tests)
 - `.github/CI.md` - CI strategy documentation
 - `.pre-commit-config.yaml` - Pre-commit and pre-push hooks
 

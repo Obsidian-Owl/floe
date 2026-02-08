@@ -405,7 +405,7 @@ Starting Score: 100
 
 - **Linting/style**: ruff handles this
 - **Type safety**: mypy handles this
-- **Security**: Aikido/SonarQube handle this (except dependency CVEs)
+- **Security**: Aikido/bandit handle this (except dependency CVEs)
 - **Runtime bugs**: Testing handles this
 
 ## When to Use

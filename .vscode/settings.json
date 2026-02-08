@@ -1,8 +1,4 @@
 {
-    "sonarlint.connectedMode.project": {
-        "connectionId": "obsidian-owl",
-        "projectKey": "Obsidian-Owl_floe"
-    },
     "python.languageServer": "Pylance",
     "python.analysis.typeCheckingMode": "strict",
     "python.analysis.extraPaths": [

@@ -1,30 +1,27 @@
-# SonarQube Code Quality Standards
+# Code Quality Standards
 
 ## Overview
 
-This project uses SonarQube Cloud for code quality and security analysis. All code MUST pass
-the Quality Gate before merging. AI-generated code is held to the same standards as
-human-written code.
+This project enforces code quality standards through automated tooling and code review. AI-generated code is held to the same standards as human-written code.
 
-**Quality Gate Requirements:**
-- Security Rating: A (no new vulnerabilities)
-- Reliability Rating: A (no new bugs)
-- Maintainability Rating: A (no new code smells exceeding threshold)
-- Security Hotspots Reviewed: 100%
-- Duplicated Lines: < 3%
+**These standards are enforced by:**
+- ruff (linting and formatting)
+- mypy --strict (type checking)
+- bandit (security scanning)
+- Code review process
 
 ---
 
-## Common SonarQube Issues (PREVENT THESE)
+## Common Quality Issues (PREVENT THESE)
 
-The following rules are frequently triggered. ALWAYS follow these patterns to avoid issues.
+The following patterns are frequently problematic. ALWAYS follow these patterns to avoid issues.
 
-### S6437: Credentials in Code (BLOCKER)
+### Credentials in Code (BLOCKER)
 
 **Problem**: Hardcoded passwords, API keys, or secrets in source code.
 
 ```python
-# ❌ FORBIDDEN - Triggers S6437
+# ❌ FORBIDDEN
 # password = "<hardcoded-value>"  # NEVER DO THIS
 # wrong_password = "<test-credential>"  # ALSO FORBIDDEN
 
@@ -37,12 +34,12 @@ test_password = os.environ.get("TEST_INVALID_PASSWORD", "placeholder")
 
 ---
 
-### S1192: Duplicate String Literals (CRITICAL)
+### Duplicate String Literals (CRITICAL)
 
 **Problem**: Same string literal appears 3+ times in a file.
 
 ```python
-# ❌ FORBIDDEN - Triggers S1192
+# ❌ FORBIDDEN
 class Model1(BaseModel):
     name: str = Field(..., pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")  # Duplicate 1
 
@@ -70,12 +67,12 @@ class Model3(BaseModel):
 
 ---
 
-### S1244: Float Equality Comparison (MAJOR)
+### Float Equality Comparison (MAJOR)
 
 **Problem**: Using `==` to compare floating-point numbers.
 
 ```python
-# ❌ FORBIDDEN - Triggers S1244
+# ❌ FORBIDDEN
 assert timeout == 1.0
 assert ratio == 0.5
 
@@ -91,12 +88,12 @@ assert math.isclose(ratio, 0.5, rel_tol=1e-9)
 
 ---
 
-### S108: Empty Code Blocks (MAJOR)
+### Empty Code Blocks (MAJOR)
 
 **Problem**: Empty blocks that serve no purpose.
 
 ```python
-# ❌ FORBIDDEN - Triggers S108
+# ❌ FORBIDDEN
 if TYPE_CHECKING:
     pass  # Empty block
 
@@ -124,14 +121,14 @@ except SpecificException as e:
 
 ---
 
-### S5727: Identity Check Always True/False (CRITICAL)
+### Identity Check Always True/False (CRITICAL)
 
 **Problem**: Using `is not None` on a value just created that can never be None.
 
 ```python
-# ❌ FORBIDDEN - Triggers S5727
+# ❌ FORBIDDEN
 span = create_span(name="test")  # Always returns a Span
-assert span is not None  # Trivially true, SonarQube flags it
+assert span is not None  # Trivially true
 
 # ✅ CORRECT - Assert meaningful properties
 span = create_span(name="test")
@@ -143,12 +140,12 @@ assert span.trace_id is not None  # This IS meaningful if trace_id can be None
 
 ---
 
-### S5655: Type Mismatch (CRITICAL)
+### Type Mismatch (CRITICAL)
 
 **Problem**: Passing wrong types to functions (e.g., None when type hint doesn't allow it).
 
 ```python
-# ❌ FORBIDDEN - Triggers S5655
+# ❌ FORBIDDEN
 def create_child_span(parent: Span, name: str) -> Span:
     ...
 
@@ -169,12 +166,12 @@ child = create_child_span(None, "test")  # Now type-safe
 
 ---
 
-### S1481: Unused Local Variables (MINOR)
+### Unused Local Variables (MINOR)
 
 **Problem**: Variables assigned but never used.
 
 ```python
-# ❌ FORBIDDEN - Triggers S1481
+# ❌ FORBIDDEN
 total = 0
 for item in items:
     process(item)
@@ -192,14 +189,14 @@ _, second, _ = get_triple()  # Use underscore prefix
 
 ---
 
-### S7688/S7677: Shell Script Issues (MAJOR)
+### Shell Script Issues (MAJOR)
 
 **Problem**: Using `[` instead of `[[` and not redirecting errors to stderr.
 
 ```bash
-# ❌ FORBIDDEN - Triggers S7688
+# ❌ FORBIDDEN
 if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-    echo "ERROR: Something failed"  # S7677: Errors should go to stderr
+    echo "ERROR: Something failed"  # Errors should go to stderr
 fi
 
 # ✅ CORRECT - Use [[ and redirect errors to stderr
@@ -216,7 +213,7 @@ fi
 
 Security hotspots require manual review. Address these proactively:
 
-### Hard-coded Credentials (S6418)
+### Hard-coded Credentials
 
 ```python
 # ❌ Security hotspot
@@ -227,7 +224,7 @@ from pydantic import SecretStr
 api_key: SecretStr = SecretStr(os.environ["API_KEY"])
 ```
 
-### Command Injection (S6350, S4721)
+### Command Injection
 
 ```python
 # ❌ Security hotspot
@@ -237,7 +234,7 @@ subprocess.run(f"ls {user_input}", shell=True)
 subprocess.run(["ls", user_input], shell=False, check=True)
 ```
 
-### Weak Cryptography (S4790)
+### Weak Cryptography
 
 ```python
 # ❌ Security hotspot
@@ -264,43 +261,3 @@ Before committing, mentally verify:
 7. **No unused variables** - All variables used or prefixed with `_`
 8. **Bash uses [[** - Double brackets for conditionals
 9. **Errors to stderr** - Error messages redirect with `>&2`
-
----
-
-## Running SonarQube Locally
-
-```bash
-# Use the SonarQube MCP server for real-time feedback
-# The MCP server is already configured in this project
-
-# Check issues for a project
-mcp__sonarqube__search_sonar_issues_in_projects
-
-# Check quality gate status for PR
-mcp__sonarqube__get_project_quality_gate_status --projectKey Obsidian-Owl_floe-runtime --pullRequest <PR_NUMBER>
-```
-
----
-
-## AI Code Quality Profile
-
-Per SonarQube recommendations for AI-generated code:
-
-1. **Use "Sonar way" profile** - Contains optimal rules for AI code
-2. **Review all issues** - AI code is not exempt from quality standards
-3. **Check security hotspots** - 100% must be reviewed
-4. **Verify no false positives** - Don't blindly suppress warnings
-
-**Remember**: AI-generated code often exhibits:
-- Overly verbose comments (remove unnecessary ones)
-- Uniform coding styles (good, but watch for repetition)
-- Complex solutions to simple problems (simplify)
-- Repetitive structures (extract to functions/constants)
-
----
-
-## References
-
-- [SonarQube Python Rules](https://rules.sonarsource.com/python/)
-- [SonarQube AI Code Assurance](https://www.sonarsource.com/solutions/ai/ai-code-assurance/)
-- [SonarQube Quality Profiles for AI Code](https://docs.sonarsource.com/sonarqube-server/2025.5/quality-standards-administration/ai-code-assurance/quality-profiles-for-ai-code)

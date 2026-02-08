@@ -116,7 +116,7 @@ Pre-PR:     test-review → wiring-check → merge-check → /speckit.pr
 - Ruff linting, >80% coverage
 - No `eval`, `exec`, `shell=True`, hardcoded secrets
 
-**See**: `.claude/rules/python-standards.md`, `.claude/rules/sonarqube-quality.md`
+**See**: `.claude/rules/python-standards.md`, `.claude/rules/code-quality.md`
 
 ---
 

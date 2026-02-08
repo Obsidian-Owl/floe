@@ -32,7 +32,7 @@
 |------|-------|-------------------|
 | **testing-standards.md** | Tests FAIL never skip, no hardcoded sleep, requirement traceability | Before writing any test |
 | **test-organization.md** | Where to place tests (package vs root), tier selection (unit/contract/integration/E2E) | When creating new test files |
-| **sonarqube-quality.md** | SonarQube-specific rules (S6437, S1192, S1244, etc.) | When fixing SonarQube issues |
+| **code-quality.md** | Code quality standards (credentials, duplicates, floats, etc.) | When writing Python code |
 | **security.md** | Input validation, dangerous constructs, secret management, error handling | Before handling user input or secrets |
 
 **Core Principle**: Tests are production code. No skips, no sleeps, full traceability. >80% coverage required.
