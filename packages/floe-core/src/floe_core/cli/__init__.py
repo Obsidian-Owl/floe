@@ -6,6 +6,7 @@ Command Groups:
     floe platform: Platform team commands (compile, test, publish, deploy, status)
     floe rbac: RBAC management commands (generate, validate, audit, diff)
     floe artifact: OCI registry artifact commands (push)
+    floe sla: SLA compliance reporting commands (report)
 
 Data Team Commands (root level):
     floe compile: Data team spec validation (stub)

@@ -834,3 +834,463 @@ class TestSLAComplianceReport:
                 monitoring_coverage_pct=100.0,
                 generated_at=datetime.now(tz=timezone.utc),
             )
+
+
+# Import calculation functions for testing
+from floe_core.contracts.monitoring.sla import (
+    aggregate_daily,
+    calculate_compliance,
+    compute_trend,
+)
+
+
+class TestCalculateCompliance:
+    """Test suite for calculate_compliance function."""
+
+    @pytest.mark.requirement("3D-FR-036")
+    def test_calculate_compliance_100_percent(self) -> None:
+        """Test calculate_compliance returns 100% when all checks pass."""
+        period_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        assert report.overall_compliance_pct == pytest.approx(100.0)
+        assert report.total_checks_executed == 2
+        assert report.total_violations == 0
+        assert len(report.check_summaries) == 1
+        assert report.check_summaries[0].compliance_pct == pytest.approx(100.0)
+
+    @pytest.mark.requirement("3D-FR-036")
+    def test_calculate_compliance_partial(self) -> None:
+        """Test calculate_compliance with partial compliance (some violations)."""
+        period_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "fail",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "schema_drift",
+                "status": "pass",
+                "duration_seconds": 0.4,
+                "timestamp": datetime(2026, 1, 1, 13, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        # Overall: 2/3 = 66.67%
+        assert report.overall_compliance_pct == pytest.approx(66.67, abs=0.01)
+        assert report.total_checks_executed == 3
+        assert report.total_violations == 1
+
+        # Freshness: 1/2 = 50%
+        freshness_summary = next(
+            s for s in report.check_summaries if s.check_type == ViolationType.FRESHNESS
+        )
+        assert freshness_summary.compliance_pct == pytest.approx(50.0)
+        assert freshness_summary.passed_checks == 1
+        assert freshness_summary.failed_checks == 1
+
+        # Schema drift: 1/1 = 100%
+        schema_summary = next(
+            s
+            for s in report.check_summaries
+            if s.check_type == ViolationType.SCHEMA_DRIFT
+        )
+        assert schema_summary.compliance_pct == pytest.approx(100.0)
+
+    @pytest.mark.requirement("3D-FR-036")
+    def test_calculate_compliance_zero_percent(self) -> None:
+        """Test calculate_compliance returns 0% when all checks fail."""
+        period_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "fail",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "fail",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        assert report.overall_compliance_pct == pytest.approx(0.0)
+        assert report.total_checks_executed == 2
+        assert report.total_violations == 2
+        assert report.check_summaries[0].compliance_pct == pytest.approx(0.0)
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_calculate_compliance_filters_by_contract_name(self) -> None:
+        """Test calculate_compliance filters results by contract_name."""
+        period_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "customers_v1",
+                "check_type": "freshness",
+                "status": "fail",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 13, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        # Should only include orders_v1 check
+        assert report.contract_name == "orders_v1"
+        assert report.total_checks_executed == 1
+        assert report.overall_compliance_pct == pytest.approx(100.0)
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_calculate_compliance_filters_by_time_window(self) -> None:
+        """Test calculate_compliance filters results by time window."""
+        period_start = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),  # Before
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "fail",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 14, 0, tzinfo=timezone.utc),  # During
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.7,
+                "timestamp": datetime(2026, 1, 1, 20, 0, tzinfo=timezone.utc),  # After
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        # Should only include the check at 14:00
+        assert report.total_checks_executed == 1
+        assert report.overall_compliance_pct == pytest.approx(0.0)
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_calculate_compliance_includes_error_checks(self) -> None:
+        """Test calculate_compliance counts error status as failed."""
+        period_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "error",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        assert report.total_checks_executed == 2
+        assert report.check_summaries[0].error_checks == 1
+        assert report.check_summaries[0].compliance_pct == pytest.approx(50.0)
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_calculate_compliance_computes_avg_duration(self) -> None:
+        """Test calculate_compliance computes average check duration."""
+        period_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        period_end = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 1.0,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 3.0,
+                "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        report = calculate_compliance(
+            check_results=check_results,
+            period_start=period_start,
+            period_end=period_end,
+            contract_name="orders_v1",
+        )
+
+        # Average: (1.0 + 3.0) / 2 = 2.0
+        assert report.check_summaries[0].avg_duration_seconds == pytest.approx(2.0)
+
+
+class TestComputeTrend:
+    """Test suite for compute_trend function."""
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_compute_trend_improving(self) -> None:
+        """Test compute_trend returns IMPROVING for increasing compliance."""
+        # Compliance increasing from 90% to 98%
+        daily_compliance = [90.0, 92.0, 94.0, 96.0, 98.0]
+
+        trend = compute_trend(daily_compliance=daily_compliance, threshold=2.0)
+
+        assert trend == TrendDirection.IMPROVING
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_compute_trend_degrading(self) -> None:
+        """Test compute_trend returns DEGRADING for decreasing compliance."""
+        # Compliance decreasing from 98% to 90%
+        daily_compliance = [98.0, 96.0, 94.0, 92.0, 90.0]
+
+        trend = compute_trend(daily_compliance=daily_compliance, threshold=2.0)
+
+        assert trend == TrendDirection.DEGRADING
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_compute_trend_stable(self) -> None:
+        """Test compute_trend returns STABLE for flat compliance."""
+        # Compliance stable around 95%
+        daily_compliance = [95.0, 95.5, 94.8, 95.2, 95.0]
+
+        trend = compute_trend(daily_compliance=daily_compliance, threshold=2.0)
+
+        assert trend == TrendDirection.STABLE
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_compute_trend_slight_increase_is_stable(self) -> None:
+        """Test compute_trend returns STABLE when increase is below threshold."""
+        # Compliance increasing but slope < 2.0
+        daily_compliance = [95.0, 95.5, 96.0]
+
+        trend = compute_trend(daily_compliance=daily_compliance, threshold=2.0)
+
+        assert trend == TrendDirection.STABLE
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_compute_trend_single_value(self) -> None:
+        """Test compute_trend returns STABLE for single value."""
+        daily_compliance = [95.0]
+
+        trend = compute_trend(daily_compliance=daily_compliance, threshold=2.0)
+
+        assert trend == TrendDirection.STABLE
+
+    @pytest.mark.requirement("3D-FR-038")
+    def test_compute_trend_empty_list(self) -> None:
+        """Test compute_trend returns STABLE for empty list."""
+        daily_compliance: list[float] = []
+
+        trend = compute_trend(daily_compliance=daily_compliance, threshold=2.0)
+
+        assert trend == TrendDirection.STABLE
+
+
+class TestAggregateDaily:
+    """Test suite for aggregate_daily function."""
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_aggregate_daily_single_day_single_check_type(self) -> None:
+        """Test aggregate_daily aggregates checks by day and check_type."""
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "fail",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        daily_agg = aggregate_daily(check_results)
+
+        assert "2026-01-01" in daily_agg
+        assert "freshness" in daily_agg["2026-01-01"]
+        assert daily_agg["2026-01-01"]["freshness"]["total"] == 2
+        assert daily_agg["2026-01-01"]["freshness"]["passed"] == 1
+        assert daily_agg["2026-01-01"]["freshness"]["failed"] == 1
+        assert daily_agg["2026-01-01"]["freshness"]["error"] == 0
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_aggregate_daily_multiple_days(self) -> None:
+        """Test aggregate_daily separates results by day."""
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        daily_agg = aggregate_daily(check_results)
+
+        assert "2026-01-01" in daily_agg
+        assert "2026-01-02" in daily_agg
+        assert daily_agg["2026-01-01"]["freshness"]["total"] == 1
+        assert daily_agg["2026-01-02"]["freshness"]["total"] == 1
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_aggregate_daily_multiple_check_types(self) -> None:
+        """Test aggregate_daily separates results by check_type."""
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+            {
+                "contract_name": "orders_v1",
+                "check_type": "schema_drift",
+                "status": "fail",
+                "duration_seconds": 0.6,
+                "timestamp": datetime(2026, 1, 1, 13, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        daily_agg = aggregate_daily(check_results)
+
+        assert "freshness" in daily_agg["2026-01-01"]
+        assert "schema_drift" in daily_agg["2026-01-01"]
+        assert daily_agg["2026-01-01"]["freshness"]["total"] == 1
+        assert daily_agg["2026-01-01"]["schema_drift"]["total"] == 1
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_aggregate_daily_error_status(self) -> None:
+        """Test aggregate_daily counts error status."""
+        check_results = [
+            {
+                "contract_name": "orders_v1",
+                "check_type": "freshness",
+                "status": "error",
+                "duration_seconds": 0.5,
+                "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+            },
+        ]
+
+        daily_agg = aggregate_daily(check_results)
+
+        assert daily_agg["2026-01-01"]["freshness"]["error"] == 1
+        assert daily_agg["2026-01-01"]["freshness"]["total"] == 1
+
+    @pytest.mark.requirement("3D-FR-037")
+    def test_aggregate_daily_empty_list(self) -> None:
+        """Test aggregate_daily handles empty check results list."""
+        check_results: list[dict[str, object]] = []
+
+        daily_agg = aggregate_daily(check_results)
+
+        assert daily_agg == {}

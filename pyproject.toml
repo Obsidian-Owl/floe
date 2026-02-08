@@ -59,6 +59,10 @@ dependencies = [
     # Ingestion plugins (Epic 4F)
     "floe-ingestion-dlt",
     "dagster-dlt>=0.25.0",
+    # Alert channel plugins (Epic 3D)
+    "floe-alert-slack",
+    "floe-alert-email",
+    "floe-alert-alertmanager",
 ]
 
 [tool.uv]
@@ -91,6 +95,9 @@ floe-network-security-k8s = { path = "plugins/floe-network-security-k8s", editab
 floe-quality-gx = { path = "plugins/floe-quality-gx", editable = true }
 floe-quality-dbt = { path = "plugins/floe-quality-dbt", editable = true }
 floe-ingestion-dlt = { path = "plugins/floe-ingestion-dlt", editable = true }
+floe-alert-slack = { path = "plugins/floe-alert-slack", editable = true }
+floe-alert-email = { path = "plugins/floe-alert-email", editable = true }
+floe-alert-alertmanager = { path = "plugins/floe-alert-alertmanager", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -112,6 +119,9 @@ pythonpath = [
     "plugins/floe-semantic-cube/src",
     "plugins/floe-lineage-marquez/src",
     "plugins/floe-ingestion-dlt/src",
+    "plugins/floe-alert-slack/src",
+    "plugins/floe-alert-email/src",
+    "plugins/floe-alert-alertmanager/src",
     ".",
 ]
 python_files = ["test_*.py"]

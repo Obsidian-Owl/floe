@@ -6,14 +6,21 @@ This module defines models for tracking SLA compliance and generating reports:
 - CheckTypeSummary: Summary statistics for a single check type
 - SLAComplianceReport: Full compliance report for a contract over a time window
 
-Tasks: T009 (Epic 3D)
-Requirements: FR-037, FR-038, FR-039
+Also provides calculation functions:
+- calculate_compliance: Generate SLA compliance report from check results
+- aggregate_daily: Aggregate check results by day and check type
+- compute_trend: Compute trend direction from daily compliance percentages
+
+Tasks: T009, T061, T063, T064 (Epic 3D)
+Requirements: FR-036, FR-037, FR-038
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -144,3 +151,229 @@ class SLAComplianceReport(BaseModel):
     total_checks_executed: int = Field(ge=0)
     monitoring_coverage_pct: float = Field(ge=0.0, le=100.0)
     generated_at: datetime
+
+
+def aggregate_daily(
+    check_results: list[dict[str, Any]],
+) -> dict[str, dict[str, dict[str, int]]]:
+    """Aggregate check results by day and check type.
+
+    Groups check results by date (ISO format) and check_type, counting total,
+    passed, failed, and error checks.
+
+    Args:
+        check_results: List of check result dicts with keys: contract_name,
+            check_type, status, duration_seconds, timestamp
+
+    Returns:
+        Dict of date_str -> {check_type -> {total, passed, failed, error}}
+
+    Example:
+        >>> results = [
+        ...     {"check_type": "freshness", "status": "pass",
+        ...      "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc), ...},
+        ...     {"check_type": "freshness", "status": "fail",
+        ...      "timestamp": datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc), ...},
+        ... ]
+        >>> agg = aggregate_daily(results)
+        >>> agg["2026-01-01"]["freshness"]
+        {'total': 2, 'passed': 1, 'failed': 1, 'error': 0}
+    """
+    daily_agg: dict[str, dict[str, dict[str, int]]] = defaultdict(
+        lambda: defaultdict(lambda: {"total": 0, "passed": 0, "failed": 0, "error": 0})
+    )
+
+    for result in check_results:
+        timestamp = result["timestamp"]
+        if isinstance(timestamp, datetime):
+            date_str = timestamp.date().isoformat()
+        else:
+            # Handle string timestamps
+            date_str = str(timestamp).split("T")[0]
+
+        check_type = result["check_type"]
+        status = result["status"]
+
+        daily_agg[date_str][check_type]["total"] += 1
+
+        if status == "pass":
+            daily_agg[date_str][check_type]["passed"] += 1
+        elif status == "fail":
+            daily_agg[date_str][check_type]["failed"] += 1
+        elif status == "error":
+            daily_agg[date_str][check_type]["error"] += 1
+
+    # Convert defaultdict to regular dict for return
+    return {
+        date: {check_type: dict(counts) for check_type, counts in checks.items()}
+        for date, checks in daily_agg.items()
+    }
+
+
+def compute_trend(
+    daily_compliance: list[float],
+    threshold: float = 2.0,
+) -> TrendDirection:
+    """Compute trend direction from daily compliance percentages.
+
+    Uses simple linear regression to compute the slope of compliance over time.
+    If slope >= threshold → IMPROVING, slope <= -threshold → DEGRADING,
+    else STABLE.
+
+    Args:
+        daily_compliance: List of daily compliance percentages (oldest first)
+        threshold: Minimum absolute slope to consider trending (default 2.0)
+
+    Returns:
+        TrendDirection enum value (IMPROVING, DEGRADING, or STABLE)
+
+    Example:
+        >>> compute_trend([90.0, 92.0, 94.0, 96.0, 98.0], threshold=2.0)
+        <TrendDirection.IMPROVING: 'improving'>
+        >>> compute_trend([95.0, 95.5, 94.8, 95.2, 95.0], threshold=2.0)
+        <TrendDirection.STABLE: 'stable'>
+    """
+    # Handle edge cases
+    if len(daily_compliance) < 2:
+        return TrendDirection.STABLE
+
+    # Compute linear regression slope using least squares
+    n = len(daily_compliance)
+    x = list(range(n))  # Days as 0, 1, 2, ...
+    y = daily_compliance
+
+    # Calculate means
+    x_mean = sum(x) / n
+    y_mean = sum(y) / n
+
+    # Calculate slope: sum((x_i - x_mean)(y_i - y_mean)) / sum((x_i - x_mean)^2)
+    numerator = sum((x[i] - x_mean) * (y[i] - y_mean) for i in range(n))
+    denominator = sum((x[i] - x_mean) ** 2 for i in range(n))
+
+    # Avoid division by zero (all x values same — shouldn't happen with range)
+    if denominator == 0:
+        return TrendDirection.STABLE
+
+    slope = numerator / denominator
+
+    # Classify based on slope (inclusive boundaries)
+    if slope >= threshold:
+        return TrendDirection.IMPROVING
+    elif slope <= -threshold:
+        return TrendDirection.DEGRADING
+    else:
+        return TrendDirection.STABLE
+
+
+def calculate_compliance(
+    check_results: list[dict[str, Any]],
+    period_start: datetime,
+    period_end: datetime,
+    contract_name: str,
+) -> SLAComplianceReport:
+    """Calculate SLA compliance for a contract over a time window.
+
+    Filters check results by contract name and time window, then computes
+    per-check-type summaries and overall compliance percentage.
+
+    Args:
+        check_results: List of check result dicts with keys: contract_name,
+            check_type, status, duration_seconds, timestamp
+        period_start: Start of reporting period
+        period_end: End of reporting period
+        contract_name: Name of contract to report on
+
+    Returns:
+        SLAComplianceReport with per-check-type summaries and overall compliance
+
+    Example:
+        >>> results = [
+        ...     {"contract_name": "orders_v1", "check_type": "freshness",
+        ...      "status": "pass", "duration_seconds": 0.5,
+        ...      "timestamp": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)},
+        ... ]
+        >>> report = calculate_compliance(
+        ...     results, datetime(2026, 1, 1, tzinfo=timezone.utc),
+        ...     datetime(2026, 1, 2, tzinfo=timezone.utc), "orders_v1"
+        ... )
+        >>> report.overall_compliance_pct
+        100.0
+    """
+    # Filter by contract name and time window
+    filtered_results = [
+        r
+        for r in check_results
+        if r["contract_name"] == contract_name
+        and period_start <= r["timestamp"] < period_end
+    ]
+
+    # Group by check_type
+    by_check_type: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for result in filtered_results:
+        check_type = result["check_type"]
+        by_check_type[check_type].append(result)
+
+    # Compute per-check-type summaries
+    check_summaries: list[CheckTypeSummary] = []
+    total_checks = 0
+    total_passed = 0
+    total_violations = 0
+
+    for check_type_str, results in by_check_type.items():
+        # Convert string to ViolationType enum
+        check_type = ViolationType(check_type_str)
+
+        # Count statuses
+        passed = sum(1 for r in results if r["status"] == "pass")
+        failed = sum(1 for r in results if r["status"] == "fail")
+        error = sum(1 for r in results if r["status"] == "error")
+        total = len(results)
+
+        # Calculate compliance percentage (passed / total)
+        compliance_pct = (passed / total * 100.0) if total > 0 else 0.0
+
+        # Calculate average duration
+        durations = [r["duration_seconds"] for r in results]
+        avg_duration = sum(durations) / len(durations) if durations else 0.0
+
+        # Compute trend (stub for now - would need historical data)
+        trend = TrendDirection.STABLE
+
+        summary = CheckTypeSummary(
+            check_type=check_type,
+            total_checks=total,
+            passed_checks=passed,
+            failed_checks=failed,
+            error_checks=error,
+            compliance_pct=compliance_pct,
+            avg_duration_seconds=avg_duration,
+            violation_count=failed,  # Violations are failed checks
+            trend=trend,
+        )
+        check_summaries.append(summary)
+
+        # Accumulate totals
+        total_checks += total
+        total_passed += passed
+        total_violations += failed
+
+    # Calculate overall compliance
+    overall_compliance_pct = (
+        (total_passed / total_checks * 100.0) if total_checks > 0 else 0.0
+    )
+
+    # For monitoring_coverage_pct, assume 100% for now
+    # (would require expected check count to calculate properly)
+    monitoring_coverage_pct = 100.0 if total_checks > 0 else 0.0
+
+    return SLAComplianceReport(
+        contract_name=contract_name,
+        period_start=period_start,
+        period_end=period_end,
+        overall_compliance_pct=overall_compliance_pct,
+        check_summaries=check_summaries,
+        total_violations=total_violations,
+        total_checks_executed=total_checks,
+        monitoring_coverage_pct=monitoring_coverage_pct,
+        generated_at=datetime.now(),
+    )
