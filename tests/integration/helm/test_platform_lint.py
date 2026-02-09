@@ -63,7 +63,13 @@ class TestPlatformChartLint:
         # NOTE: --skip-schema-validation required because Dagster subchart
         # references external JSON schema URL that returns 404
         result = subprocess.run(
-            ["helm", "lint", "--strict", "--skip-schema-validation", str(platform_chart_path)],
+            [
+                "helm",
+                "lint",
+                "--strict",
+                "--skip-schema-validation",
+                str(platform_chart_path),
+            ],
             capture_output=True,
             timeout=60,
             check=False,

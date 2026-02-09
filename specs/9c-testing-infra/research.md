@@ -288,7 +288,7 @@ jobs:
         run: kubectl logs job/test-runner -n floe-test > test-results.log
 
   ci-success:
-    needs: [lint-typecheck, unit-tests, contract-tests, sonarcloud, security, integration-tests]
+    needs: [lint-typecheck, unit-tests, contract-tests, security, integration-tests]
     runs-on: ubuntu-latest
     steps:
       - run: echo "All CI checks passed"

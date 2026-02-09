@@ -33,7 +33,9 @@ def valid_2tier_manifest_dict(valid_metadata_dict: dict[str, str]) -> dict[str, 
 
 
 @pytest.fixture
-def valid_enterprise_manifest_dict(valid_metadata_dict: dict[str, str]) -> dict[str, object]:
+def valid_enterprise_manifest_dict(
+    valid_metadata_dict: dict[str, str],
+) -> dict[str, object]:
     """Return a valid enterprise (3-tier) PlatformManifest dictionary."""
     return {
         "apiVersion": "floe.dev/v1",

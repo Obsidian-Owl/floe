@@ -32,6 +32,9 @@ from floe_core.schemas.promotion import (
 if TYPE_CHECKING:
     pass
 
+# Test constant
+TEST_DIGEST = "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
+
 
 @pytest.fixture
 def mock_oci_client() -> MagicMock:
@@ -40,12 +43,10 @@ def mock_oci_client() -> MagicMock:
     mock.registry_uri = "oci://primary.registry.com/repo"
     mock.get_manifest.return_value = {
         "schemaVersion": 2,
-        "digest": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+        "digest": TEST_DIGEST,
         "annotations": {},
     }
-    mock.get_artifact_digest.return_value = (
-        "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-    )
+    mock.get_artifact_digest.return_value = TEST_DIGEST
     return mock
 
 
@@ -56,12 +57,10 @@ def mock_secondary_client() -> MagicMock:
     mock.registry_uri = "oci://secondary.registry.com/repo"
     mock.get_manifest.return_value = {
         "schemaVersion": 2,
-        "digest": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+        "digest": TEST_DIGEST,
         "annotations": {},
     }
-    mock.get_artifact_digest.return_value = (
-        "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-    )
+    mock.get_artifact_digest.return_value = TEST_DIGEST
     return mock
 
 
@@ -114,9 +113,7 @@ class TestMultiRegistryPromotionSuccess:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
@@ -156,9 +153,7 @@ class TestMultiRegistryPromotionSuccess:
         # Mock promote() to return a valid record
         with patch.object(controller, "promote") as mock_promote:
             mock_record = MagicMock()
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
@@ -207,18 +202,14 @@ class TestMultiRegistryDigestVerification:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
 
             # Mock secondary client - digest matches
             mock_secondary_client.copy_tag = MagicMock()
-            mock_secondary_client.get_artifact_digest.return_value = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_secondary_client.get_artifact_digest.return_value = TEST_DIGEST
 
             result = controller.promote_multi(
                 tag="v1.0.0",
@@ -260,9 +251,7 @@ class TestMultiRegistryDigestVerification:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
             mock_record.model_copy.return_value = mock_record
             mock_promote.return_value = mock_record
@@ -309,9 +298,7 @@ class TestMultiRegistryPartialFailure:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
 
             # Create a proper mock for model_copy that returns updated record
@@ -364,9 +351,7 @@ class TestMultiRegistryPartialFailure:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
 
             # Create a proper mock for model_copy that returns updated record
@@ -418,9 +403,7 @@ class TestMultiRegistrySyncStatus:
             from floe_core.schemas.promotion import PromotionRecord
 
             mock_record = MagicMock(spec=PromotionRecord)
-            mock_record.artifact_digest = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_record.artifact_digest = TEST_DIGEST
             mock_record.warnings = []
 
             # Create a proper mock for model_copy that returns updated record
@@ -435,9 +418,7 @@ class TestMultiRegistrySyncStatus:
 
             # Mock secondary client
             mock_secondary_client.copy_tag = MagicMock()
-            mock_secondary_client.get_artifact_digest.return_value = (
-                "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
-            )
+            mock_secondary_client.get_artifact_digest.return_value = TEST_DIGEST
 
             result = controller.promote_multi(
                 tag="v1.0.0",
@@ -520,7 +501,7 @@ class TestRegistrySyncStatusSchema:
         status = RegistrySyncStatus(
             registry_uri="oci://secondary.registry.com/repo",
             synced=True,
-            digest="sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abcd",
+            digest=TEST_DIGEST,
             synced_at=datetime.now(timezone.utc),
         )
         assert status.synced is True

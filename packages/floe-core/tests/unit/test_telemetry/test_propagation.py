@@ -444,7 +444,10 @@ class TestPropagationModuleFunctions:
     @pytest.mark.requirement("001-FR-002")
     def test_inject_headers(self, reset_propagators: None) -> None:
         """Test inject_headers creates carrier dict."""
-        from floe_core.telemetry.propagation import configure_propagators, inject_headers
+        from floe_core.telemetry.propagation import (
+            configure_propagators,
+            inject_headers,
+        )
 
         configure_propagators()
         headers = inject_headers()
@@ -492,7 +495,10 @@ class TestPropagationModuleFunctions:
     @pytest.mark.requirement("001-FR-002")
     def test_configure_propagators(self, reset_propagators: None) -> None:
         """Test configure_propagators sets up global propagator."""
-        from floe_core.telemetry.propagation import configure_propagators, get_propagator
+        from floe_core.telemetry.propagation import (
+            configure_propagators,
+            get_propagator,
+        )
 
         result = configure_propagators()
         assert isinstance(result, CompositePropagator)

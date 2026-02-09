@@ -246,7 +246,9 @@ def assert_golden_match(
         pytest.fail(diff_msg)
 
 
-def golden_test(fixture_path: str | Path) -> Callable[[Callable[..., Any]], Callable[..., None]]:
+def golden_test(
+    fixture_path: str | Path,
+) -> Callable[[Callable[..., Any]], Callable[..., None]]:
     """Decorator for creating golden tests.
 
     The decorated function should return the output to compare against the fixture.

@@ -494,7 +494,10 @@ class RBACManifestGenerator:
 
         # Generate manifests using Strategy pattern (T023: Reduced CC from 24 to ~12)
         sa_manifests = self._generate_manifests_for_type(
-            service_accounts, self.plugin.generate_service_account, "ServiceAccount", errors
+            service_accounts,
+            self.plugin.generate_service_account,
+            "ServiceAccount",
+            errors,
         )
         role_manifests = self._generate_manifests_for_type(
             roles, self.plugin.generate_role, "Role", errors

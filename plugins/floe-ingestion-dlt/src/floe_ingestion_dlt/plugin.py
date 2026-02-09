@@ -26,9 +26,17 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
-from floe_core.plugins.ingestion import IngestionConfig, IngestionPlugin, IngestionResult
+from floe_core.plugins.ingestion import (
+    IngestionConfig,
+    IngestionPlugin,
+    IngestionResult,
+)
 
-from floe_ingestion_dlt.config import VALID_SCHEMA_CONTRACTS, VALID_SOURCE_TYPES, VALID_WRITE_MODES
+from floe_ingestion_dlt.config import (
+    VALID_SCHEMA_CONTRACTS,
+    VALID_SOURCE_TYPES,
+    VALID_WRITE_MODES,
+)
 from floe_ingestion_dlt.errors import (
     PipelineConfigurationError,
     SchemaContractViolation,

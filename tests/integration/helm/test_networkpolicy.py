@@ -33,7 +33,13 @@ def render_helm_templates(
     """
     # NOTE: --skip-schema-validation required because Dagster subchart
     # references external JSON schema URL that returns 404
-    cmd = ["helm", "template", "--skip-schema-validation", "test-release", str(chart_path)]
+    cmd = [
+        "helm",
+        "template",
+        "--skip-schema-validation",
+        "test-release",
+        str(chart_path),
+    ]
 
     if values:
         for key, value in values.items():

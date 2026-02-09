@@ -343,7 +343,10 @@ class TestComputeRbacDiff:
 
         # Create lists that together exceed the limit
         expected = [
-            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            {
+                "kind": "ServiceAccount",
+                "metadata": {"name": f"sa{i}", "namespace": "ns"},
+            }
             for i in range(6)
         ]
         actual = [
@@ -360,7 +363,10 @@ class TestComputeRbacDiff:
         from floe_core.rbac.diff import compute_rbac_diff
 
         expected = [
-            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            {
+                "kind": "ServiceAccount",
+                "metadata": {"name": f"sa{i}", "namespace": "ns"},
+            }
             for i in range(5)
         ]
         actual = [
@@ -377,7 +383,10 @@ class TestComputeRbacDiff:
         from floe_core.rbac.diff import compute_rbac_diff
 
         expected = [
-            {"kind": "ServiceAccount", "metadata": {"name": f"sa{i}", "namespace": "ns"}}
+            {
+                "kind": "ServiceAccount",
+                "metadata": {"name": f"sa{i}", "namespace": "ns"},
+            }
             for i in range(100)
         ]
         actual: list[dict[str, Any]] = []

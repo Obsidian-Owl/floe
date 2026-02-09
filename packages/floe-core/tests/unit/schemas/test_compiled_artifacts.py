@@ -55,7 +55,9 @@ def sample_telemetry_config() -> TelemetryConfig:
 
 
 @pytest.fixture
-def sample_observability_config(sample_telemetry_config: TelemetryConfig) -> ObservabilityConfig:
+def sample_observability_config(
+    sample_telemetry_config: TelemetryConfig,
+) -> ObservabilityConfig:
     """Create a sample ObservabilityConfig for testing."""
     return ObservabilityConfig(
         telemetry=sample_telemetry_config,

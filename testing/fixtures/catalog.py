@@ -586,9 +586,8 @@ def create_polaris_catalog_plugin(
 
         # Derive token URL from catalog URI
         # Default: {uri}/v1/oauth/tokens (PyIceberg convention)
-        token_url = (
-            f"{config.uri.rstrip('/').rsplit('/api/catalog', 1)[0]}/api/catalog/v1/oauth/tokens"
-        )
+        base_uri = config.uri.rstrip("/").rsplit("/api/catalog", 1)[0]
+        token_url = f"{base_uri}/api/catalog/v1/oauth/tokens"
 
         polaris_config = PolarisCatalogConfig(
             uri=config.uri,

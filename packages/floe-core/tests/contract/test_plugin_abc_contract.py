@@ -226,9 +226,10 @@ class TestPluginMetadataContract:
         assert hints.get("return") is HealthStatus
         sig = inspect.signature(PluginMetadata.health_check)
         params = list(sig.parameters.keys())
-        assert params == ["self", "timeout"], (
-            f"health_check params should be ['self', 'timeout'], got {params}"
-        )
+        assert params == [
+            "self",
+            "timeout",
+        ], f"health_check params should be ['self', 'timeout'], got {params}"
 
 
 class TestPluginMetadataImplementation:

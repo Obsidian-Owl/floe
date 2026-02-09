@@ -224,7 +224,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         resources.update(semantic_resources)
 
         if "semantic_layer" in semantic_resources:
-            from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
+            from floe_orchestrator_dagster.assets.semantic_sync import (
+                sync_semantic_schemas,
+            )
 
             assets.append(sync_semantic_schemas)
 
@@ -234,7 +236,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         # T034: Wire ingestion assets if ingestion resource is available
         if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
-            from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+            from floe_orchestrator_dagster.assets.ingestion import (
+                create_ingestion_assets,
+            )
 
             ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
             assets.extend(ingestion_assets)
@@ -274,7 +278,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             T110: Instantiate IcebergTableManager
             T111: Wire IcebergIOManager
         """
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         return try_create_iceberg_resources(plugins)
 
@@ -298,7 +304,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             T047: Create semantic resource factory
             T048: Wire into plugin.py
         """
-        from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
+        from floe_orchestrator_dagster.resources.semantic import (
+            try_create_semantic_resources,
+        )
 
         return try_create_semantic_resources(plugins)
 
@@ -321,7 +329,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             T033: Create ingestion resource factory
             T035: Wire into plugin.py
         """
-        from floe_orchestrator_dagster.resources.ingestion import try_create_ingestion_resources
+        from floe_orchestrator_dagster.resources.ingestion import (
+            try_create_ingestion_resources,
+        )
 
         return try_create_ingestion_resources(plugins)
 

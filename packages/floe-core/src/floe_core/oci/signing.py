@@ -625,7 +625,12 @@ class SigningClient:
         Raises:
             IdentityError: On token acquisition failure
         """
-        from sigstore.oidc import IdentityError, IdentityToken, Issuer, detect_credential
+        from sigstore.oidc import (
+            IdentityError,
+            IdentityToken,
+            Issuer,
+            detect_credential,
+        )
 
         try:
             credential = detect_credential()
@@ -643,7 +648,7 @@ class SigningClient:
             raise OIDCTokenError(
                 "No ambient OIDC credential found and browser OAuth is disabled. "
                 "Set FLOE_DISABLE_BROWSER_OAUTH=false or ensure CI/CD OIDC is configured.",
-                issuer=str(self.config.oidc_issuer) if self.config.oidc_issuer else None,
+                issuer=(str(self.config.oidc_issuer) if self.config.oidc_issuer else None),
             )
 
         from sigstore.models import ClientTrustConfig

@@ -43,8 +43,9 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
-# Pyright
+# Linters / formatters
 .pyright/
+.ruff_cache/
 
 # IDEs
 .idea/
@@ -73,6 +74,15 @@ pip-delete-this-directory.txt
 *.local
 .agent/
 .omc/
+.pre-commit.log
+
+# Local tool state (rebuilt on demand)
+.beads/
+.cognee/
+.sisyphus/
+.agentlint/
+.aikido
+.deepeval/
 
 # Testing artifacts
 target/

@@ -255,7 +255,7 @@ plugins:
 **Traceability**:
 - ADR-0023 lines 24-30 (Secrets Management Strategy)
 - .claude/rules/security.md
-- .claude/rules/sonarqube-quality.md (S6437)
+- .claude/rules/code-quality.md (credentials in code section)
 
 ---
 

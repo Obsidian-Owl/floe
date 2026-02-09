@@ -900,8 +900,8 @@ class VerificationClient:
             signature_status=result.status,
             rekor_verified=result.rekor_verified,
             timestamp=datetime.now(timezone.utc),
-            trace_id=format(span_context.trace_id, "032x") if span_context.is_valid else "",
-            span_id=format(span_context.span_id, "016x") if span_context.is_valid else "",
+            trace_id=(format(span_context.trace_id, "032x") if span_context.is_valid else ""),
+            span_id=(format(span_context.span_id, "016x") if span_context.is_valid else ""),
             success=success,
             failure_reason=result.failure_reason,
         )
@@ -979,7 +979,9 @@ def export_verification_bundle(
     )
 
 
-def load_verification_policy_from_manifest(manifest_path: Path) -> VerificationPolicy | None:
+def load_verification_policy_from_manifest(
+    manifest_path: Path,
+) -> VerificationPolicy | None:
     """Load verification policy from manifest.yaml file.
 
     This function extracts the verification policy configuration from a

@@ -306,21 +306,17 @@ class TestRbacValidateManifestHandling:
         manifest_dir.mkdir(parents=True, exist_ok=True)
 
         # Create valid manifest files
-        (manifest_dir / "namespaces.yaml").write_text(
-            """apiVersion: v1
+        (manifest_dir / "namespaces.yaml").write_text("""apiVersion: v1
 kind: Namespace
 metadata:
   name: floe-jobs
-"""
-        )
-        (manifest_dir / "serviceaccounts.yaml").write_text(
-            """apiVersion: v1
+""")
+        (manifest_dir / "serviceaccounts.yaml").write_text("""apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: floe-sa
   namespace: floe-jobs
-"""
-        )
+""")
         (manifest_dir / "roles.yaml").write_text(
             """apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -507,16 +503,14 @@ subjects:
 
         # Create config with expected resources
         config_path = temp_dir / "config.yaml"
-        config_path.write_text(
-            """rbac:
+        config_path.write_text("""rbac:
   service_accounts:
     - name: expected-sa
       namespace: floe-jobs
   roles:
     - name: expected-role
       namespace: floe-jobs
-"""
-        )
+""")
 
         result = cli_runner.invoke(
             cli,

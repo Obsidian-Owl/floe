@@ -214,7 +214,11 @@ class TestHealthCheck:
         """Test health_check state is one of the valid HealthState values."""
         plugin = K8sNetworkSecurityPlugin()
         result = plugin.health_check()
-        valid_states = {HealthState.HEALTHY, HealthState.DEGRADED, HealthState.UNHEALTHY}
+        valid_states = {
+            HealthState.HEALTHY,
+            HealthState.DEGRADED,
+            HealthState.UNHEALTHY,
+        }
         assert result.state in valid_states
 
     @pytest.mark.requirement("FR-001")
@@ -327,7 +331,13 @@ class TestPluginMetadataProtocol:
     @pytest.mark.requirement("FR-001")
     def test_plugin_metadata_properties_are_properties(self) -> None:
         """Test metadata properties are defined as properties."""
-        for prop_name in ["name", "version", "floe_api_version", "description", "dependencies"]:
+        for prop_name in [
+            "name",
+            "version",
+            "floe_api_version",
+            "description",
+            "dependencies",
+        ]:
             prop = getattr(K8sNetworkSecurityPlugin, prop_name)
             assert isinstance(prop, property), f"{prop_name} should be a property"
 

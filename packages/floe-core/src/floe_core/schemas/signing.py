@@ -19,7 +19,14 @@ import re
 from datetime import datetime, timedelta
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    field_validator,
+    model_validator,
+)
 
 from floe_core.schemas.secrets import SecretReference
 
@@ -128,7 +135,10 @@ class TrustedIssuer(BaseModel):
         if v is None:
             return v
 
-        from floe_core.enforcement.patterns import InvalidPatternError, _check_redos_safety
+        from floe_core.enforcement.patterns import (
+            InvalidPatternError,
+            _check_redos_safety,
+        )
 
         try:
             _check_redos_safety(v)
@@ -404,7 +414,8 @@ class VerificationResult(BaseModel):
         default=None, description="Certificate expiration time (FR-012 grace period)"
     )
     within_grace_period: bool = Field(
-        default=False, description="True if expired cert accepted via grace period (FR-012)"
+        default=False,
+        description="True if expired cert accepted via grace period (FR-012)",
     )
 
     @property

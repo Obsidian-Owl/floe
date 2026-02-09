@@ -200,7 +200,11 @@ def _handle_pull_error(e: Exception) -> NoReturn:
         ("Authentication", f"Authentication failed: {e}", ExitCode.GENERAL_ERROR),
         ("Unavailable", f"Registry unavailable: {e}", ExitCode.GENERAL_ERROR),
         ("NotFound", f"Artifact not found: {e}", ExitCode.FILE_NOT_FOUND),
-        ("SignatureVerification", f"Signature verification failed: {e}", ExitCode.VALIDATION_ERROR),
+        (
+            "SignatureVerification",
+            f"Signature verification failed: {e}",
+            ExitCode.VALIDATION_ERROR,
+        ),
     ]
 
     for keyword, message, exit_code in error_mappings:

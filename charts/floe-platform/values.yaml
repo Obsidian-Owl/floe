@@ -811,3 +811,67 @@ observability:
 cube:
   # Cube is disabled by default - enable in environment-specific values
   enabled: false
+
+# =============================================================================
+# Contract Monitor Configuration
+# =============================================================================
+contractMonitor:
+  # Enable/disable contract monitoring service
+  enabled: false
+
+  # Container image
+  image:
+    repository: ghcr.io/obsidian-owl/floe-contract-monitor
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # Replica count
+  replicaCount: 1
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8080
+
+  # Service account
+  serviceAccount:
+    create: true
+    annotations: {}
+
+  # Database connection
+  database:
+    name: floe_monitoring
+
+  # Monitoring configuration
+  monitoring:
+    enabled: true
+    mode: scheduled
+    checkIntervals:
+      freshnessMinutes: 15
+      schemaDriftMinutes: 60
+      qualityMinutes: 360
+      availabilityMinutes: 5
+    retentionDays: 90
+    checkTimeoutSeconds: 30
+
+  # OpenTelemetry
+  otel:
+    endpoint: "http://otel-collector:4317"
+
+  # Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Node selector
+  nodeSelector: {}
+
+  # Affinity rules
+  affinity: {}
+
+  # Tolerations
+  tolerations: {}

@@ -204,7 +204,10 @@ class TestQuickstartExamples:
             (CatalogError, ["test message"]),  # CatalogError takes message
             (CatalogUnavailableError, ["http://test-catalog:8181"]),  # takes URI
             (AuthenticationError, ["test message"]),  # takes message
-            (NotSupportedError, ["test_operation", "test_catalog"]),  # operation, catalog
+            (
+                NotSupportedError,
+                ["test_operation", "test_catalog"],
+            ),  # operation, catalog
             (ConflictError, ["namespace", "test_ns"]),  # resource_type, identifier
             (NotFoundError, ["namespace", "test_ns"]),  # resource_type, identifier
         ]

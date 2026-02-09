@@ -13,7 +13,13 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from floe_core.lineage import LineageDataset, LineageEvent, LineageJob, LineageRun, RunState
+from floe_core.lineage import (
+    LineageDataset,
+    LineageEvent,
+    LineageJob,
+    LineageRun,
+    RunState,
+)
 from floe_core.lineage.events import EventBuilder, to_openlineage_event
 
 
@@ -561,7 +567,14 @@ class TestLineageEventEdgeCases:
         )
 
         assert event.event_type == state
-        assert event.event_type.value in ["START", "RUNNING", "COMPLETE", "ABORT", "FAIL", "OTHER"]
+        assert event.event_type.value in [
+            "START",
+            "RUNNING",
+            "COMPLETE",
+            "ABORT",
+            "FAIL",
+            "OTHER",
+        ]
 
     def test_event_with_multiple_inputs_outputs(self) -> None:
         """Event can have multiple input and output datasets."""
@@ -767,12 +780,16 @@ class TestEventSerialization:
 class TestEventBuilderEdgeCases:
     """Tests for edge cases in EventBuilder methods."""
 
-    def test_builder_with_empty_producer_creates_event_with_empty_producer(self) -> None:
+    def test_builder_with_empty_producer_creates_event_with_empty_producer(
+        self,
+    ) -> None:
         """EventBuilder accepts empty producer string (validation happens at event creation)."""
         builder = EventBuilder(producer="")
         assert builder.producer == ""
 
-    def test_builder_with_empty_namespace_creates_event_with_empty_namespace(self) -> None:
+    def test_builder_with_empty_namespace_creates_event_with_empty_namespace(
+        self,
+    ) -> None:
         """EventBuilder accepts empty default_namespace (validation happens at event creation)."""
         builder = EventBuilder(default_namespace="")
         assert builder.default_namespace == ""

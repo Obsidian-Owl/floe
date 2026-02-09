@@ -21,7 +21,10 @@ class TestValidationIssue:
     @pytest.mark.requirement("FR-061")
     def test_validation_issue_creation(self) -> None:
         """Test ValidationIssue can be created with required fields."""
-        from floe_core.schemas.rbac_validation import ValidationIssue, ValidationIssueType
+        from floe_core.schemas.rbac_validation import (
+            ValidationIssue,
+            ValidationIssueType,
+        )
 
         issue = ValidationIssue(
             issue_type=ValidationIssueType.MISSING_ROLE,
@@ -38,7 +41,10 @@ class TestValidationIssue:
     @pytest.mark.requirement("FR-061")
     def test_validation_issue_with_all_fields(self) -> None:
         """Test ValidationIssue with all optional fields populated."""
-        from floe_core.schemas.rbac_validation import ValidationIssue, ValidationIssueType
+        from floe_core.schemas.rbac_validation import (
+            ValidationIssue,
+            ValidationIssueType,
+        )
 
         issue = ValidationIssue(
             issue_type=ValidationIssueType.SCHEMA_MISMATCH,
@@ -57,7 +63,10 @@ class TestValidationIssue:
     @pytest.mark.requirement("FR-061")
     def test_validation_issue_immutable(self) -> None:
         """Test ValidationIssue is immutable (frozen model)."""
-        from floe_core.schemas.rbac_validation import ValidationIssue, ValidationIssueType
+        from floe_core.schemas.rbac_validation import (
+            ValidationIssue,
+            ValidationIssueType,
+        )
 
         issue = ValidationIssue(
             issue_type=ValidationIssueType.MISSING_ROLE,
@@ -102,7 +111,10 @@ class TestRBACValidationResult:
     @pytest.mark.requirement("FR-061")
     def test_validation_result_creation(self) -> None:
         """Test RBACValidationResult can be created."""
-        from floe_core.schemas.rbac_validation import RBACValidationResult, ValidationStatus
+        from floe_core.schemas.rbac_validation import (
+            RBACValidationResult,
+            ValidationStatus,
+        )
 
         result = RBACValidationResult(
             status=ValidationStatus.VALID,
@@ -146,7 +158,10 @@ class TestRBACValidationResult:
     @pytest.mark.requirement("FR-061")
     def test_is_valid_property(self) -> None:
         """Test is_valid property returns correct value."""
-        from floe_core.schemas.rbac_validation import RBACValidationResult, ValidationStatus
+        from floe_core.schemas.rbac_validation import (
+            RBACValidationResult,
+            ValidationStatus,
+        )
 
         valid_result = RBACValidationResult(
             status=ValidationStatus.VALID,
@@ -172,7 +187,10 @@ class TestRBACValidationResult:
     @pytest.mark.requirement("FR-061")
     def test_has_errors_property(self) -> None:
         """Test has_errors property returns correct value."""
-        from floe_core.schemas.rbac_validation import RBACValidationResult, ValidationStatus
+        from floe_core.schemas.rbac_validation import (
+            RBACValidationResult,
+            ValidationStatus,
+        )
 
         valid_result = RBACValidationResult(
             status=ValidationStatus.VALID,

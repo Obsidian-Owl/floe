@@ -160,7 +160,11 @@ def _handle_push_error(e: Exception) -> NoReturn:
     error_mappings: list[tuple[str, str, ExitCode]] = [
         ("Authentication", f"Authentication failed: {e}", ExitCode.GENERAL_ERROR),
         ("Unavailable", f"Registry unavailable: {e}", ExitCode.GENERAL_ERROR),
-        ("Immutability", f"Cannot overwrite immutable tag: {e}", ExitCode.VALIDATION_ERROR),
+        (
+            "Immutability",
+            f"Cannot overwrite immutable tag: {e}",
+            ExitCode.VALIDATION_ERROR,
+        ),
     ]
 
     for keyword, message, exit_code in error_mappings:

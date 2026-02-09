@@ -187,9 +187,10 @@ class TestObservability(IntegrationTestBase):
                 "description": "E2E test namespace for OpenLineage validation",
             },
         )
-        assert create_response.status_code in (200, 201), (
-            f"Failed to create namespace: {create_response.status_code} - {create_response.text}"
-        )
+        assert create_response.status_code in (
+            200,
+            201,
+        ), f"Failed to create namespace: {create_response.status_code} - {create_response.text}"
 
         # Verify namespace was created
         verify_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}")
@@ -658,9 +659,10 @@ class TestObservability(IntegrationTestBase):
                 "description": "Lineage graph test namespace",
             },
         )
-        assert ns_response.status_code in (200, 201), (
-            f"Failed to create namespace: {ns_response.status_code}"
-        )
+        assert ns_response.status_code in (
+            200,
+            201,
+        ), f"Failed to create namespace: {ns_response.status_code}"
 
         # Query ALL namespaces for real lineage data
         all_ns_response = marquez_client.get("/api/v1/namespaces")
@@ -1030,7 +1032,14 @@ class TestObservability(IntegrationTestBase):
         )
 
         # Check for compilation stage spans
-        compilation_keywords = ["compile", "load", "validate", "resolve", "enforce", "generate"]
+        compilation_keywords = [
+            "compile",
+            "load",
+            "validate",
+            "resolve",
+            "enforce",
+            "generate",
+        ]
         has_compilation_span = any(
             any(kw in op.lower() for kw in compilation_keywords) for op in all_operation_names
         )

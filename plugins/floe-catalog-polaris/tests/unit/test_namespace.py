@@ -190,7 +190,11 @@ class TestListNamespaces:
         mock_catalog: MagicMock,
     ) -> None:
         """Test that list_namespaces returns a list of namespace names."""
-        mock_catalog.list_namespaces.return_value = [("bronze",), ("silver",), ("gold",)]
+        mock_catalog.list_namespaces.return_value = [
+            ("bronze",),
+            ("silver",),
+            ("gold",),
+        ]
 
         result = connected_plugin.list_namespaces()
 

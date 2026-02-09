@@ -8,7 +8,7 @@ floe uses three GitHub Actions workflows optimized for speed and reliability.
 
 | Trigger | Workflow | Duration | What Runs |
 |---------|----------|----------|-----------|
-| **PR / Push to main** | `ci.yml` | ~3 min | Lint, type check, unit tests, contract tests, security, SonarCloud |
+| **PR / Push to main** | `ci.yml` | ~3 min | Lint, type check, unit tests, contract tests, security |
 | **Tag v\*.\*.\*** | `release.yml` | ~15 min | Validate, integration tests (K8s), GitHub Release |
 | **2am UTC daily** | `nightly.yml` | ~10 min | Integration tests (K8s), dependency audit |
 
@@ -36,10 +36,6 @@ flowchart TB
         T["Traceability"]
     end
 
-    subgraph ANALYSIS ["Stage 3: Analysis"]
-        SC["SonarCloud"]
-    end
-
     subgraph GATE ["Gate"]
         SUCCESS["CI Success"]
     end
@@ -48,12 +44,10 @@ flowchart TB
     L --> C
     L --> S
     L --> T
-    U --> SC
     U --> SUCCESS
     C --> SUCCESS
     S --> SUCCESS
     T --> SUCCESS
-    SC --> SUCCESS
 ```
 
 ### Jobs
@@ -65,7 +59,6 @@ flowchart TB
 | **unit-tests** | pytest across Python versions | ~60s |
 | **contract-tests** | Cross-package schema validation | ~20s |
 | **traceability** | Requirement marker coverage | ~10s |
-| **sonarcloud** | Code quality + coverage | ~60s |
 
 ---
 
@@ -202,16 +195,12 @@ Required checks before merging to `main`:
 | Check | Required | Description |
 |-------|----------|-------------|
 | **ci-success** | Yes | All PR CI jobs must pass |
-| **SonarCloud** | Yes | Quality gate must pass |
 
 ### Quality Gates
 
 | Metric | Requirement |
 |--------|-------------|
 | Unit Test Coverage | > 80% |
-| Security Rating | A (no vulnerabilities) |
-| Reliability Rating | A (no bugs) |
-| Duplications | < 3% on new code |
 
 ---
 

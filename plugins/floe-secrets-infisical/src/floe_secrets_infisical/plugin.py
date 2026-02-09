@@ -321,7 +321,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         if tracer:
             span = tracer.start_span(
                 "infisical.get_secret",
-                attributes={_SPAN_SECRET_KEY: key, _SPAN_SECRET_PATH: self._config.secret_path},
+                attributes={
+                    _SPAN_SECRET_KEY: key,
+                    _SPAN_SECRET_PATH: self._config.secret_path,
+                },
             )
 
         try:
@@ -387,7 +390,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         if tracer:
             span = tracer.start_span(
                 "infisical.set_secret",
-                attributes={_SPAN_SECRET_KEY: key, _SPAN_SECRET_PATH: self._config.secret_path},
+                attributes={
+                    _SPAN_SECRET_KEY: key,
+                    _SPAN_SECRET_PATH: self._config.secret_path,
+                },
             )
 
         try:
@@ -588,7 +594,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         if tracer:
             span = tracer.start_span(
                 "infisical.delete_secret",
-                attributes={_SPAN_SECRET_KEY: key, _SPAN_SECRET_PATH: self._config.secret_path},
+                attributes={
+                    _SPAN_SECRET_KEY: key,
+                    _SPAN_SECRET_PATH: self._config.secret_path,
+                },
             )
 
         try:

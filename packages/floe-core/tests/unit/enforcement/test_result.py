@@ -548,7 +548,11 @@ class TestViolationEpic3BFields:
             downstream_impact=["dim_customers", "fct_orders", "rpt_sales"],
         )
 
-        assert violation.downstream_impact == ["dim_customers", "fct_orders", "rpt_sales"]
+        assert violation.downstream_impact == [
+            "dim_customers",
+            "fct_orders",
+            "rpt_sales",
+        ]
 
     @pytest.mark.requirement("003b-FR-018")
     def test_violation_downstream_impact_empty_list(self) -> None:

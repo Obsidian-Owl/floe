@@ -85,7 +85,11 @@ class TestDuckDBImplementsComputePluginContract:
     def test_validate_connection_returns_connection_result(self) -> None:
         """Test validate_connection returns ConnectionResult model."""
         from floe_compute_duckdb import DuckDBComputePlugin
-        from floe_core.compute_config import ComputeConfig, ConnectionResult, ConnectionStatus
+        from floe_core.compute_config import (
+            ComputeConfig,
+            ConnectionResult,
+            ConnectionStatus,
+        )
 
         plugin = DuckDBComputePlugin()
         config = ComputeConfig(

@@ -275,42 +275,12 @@ jobs:
           uv run python -m testing.traceability --all --threshold 80
 
   # ============================================================
-  # Stage 3: SonarCloud Analysis
-  # ============================================================
-  sonarcloud:
-    name: SonarCloud Analysis
-    runs-on: ubuntu-latest
-    needs: unit-tests
-    # Only run on main branch and PRs (not forks for security)
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-        with:
-          fetch-depth: 0  # Full history for SonarCloud
-
-      - name: Download coverage artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-        with:
-          name: coverage-report
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@ba3875ecf642b2129de2b589510c81a8b53dbf4e  # master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.python.coverage.reportPaths=coverage-3.10.xml
-
-  # ============================================================
   # Summary Job (for branch protection)
   # ============================================================
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, security, unit-tests, contract-tests, traceability, sonarcloud]
+    needs: [lint-typecheck, security, unit-tests, contract-tests, traceability]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -320,7 +290,6 @@ jobs:
           UNIT_RESULT: ${{ needs.unit-tests.result }}
           CONTRACT_RESULT: ${{ needs.contract-tests.result }}
           TRACEABILITY_RESULT: ${{ needs.traceability.result }}
-          SONAR_RESULT: ${{ needs.sonarcloud.result }}
         run: |
           if [[ "$LINT_RESULT" != "success" ]]; then
             echo "lint-typecheck failed" >&2
@@ -340,11 +309,6 @@ jobs:
           fi
           if [[ "$TRACEABILITY_RESULT" != "success" ]]; then
             echo "traceability check failed" >&2
-            exit 1
-          fi
-          # SonarCloud is optional for forks
-          if [[ "$SONAR_RESULT" != "success" && "$SONAR_RESULT" != "skipped" ]]; then
-            echo "sonarcloud failed" >&2
             exit 1
           fi
           echo "All CI checks passed!"

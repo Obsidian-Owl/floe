@@ -94,7 +94,10 @@ class TestResolveSecretReferences:
         config = {
             "connections": [
                 {"name": "primary", "password": SecretReference(name="primary-pass")},
-                {"name": "secondary", "password": SecretReference(name="secondary-pass")},
+                {
+                    "name": "secondary",
+                    "password": SecretReference(name="secondary-pass"),
+                },
             ],
         }
         result = resolve_secret_references(config)
@@ -175,7 +178,9 @@ class TestCheckStringForSecretPattern:
     def test_detects_jwt_token(self) -> None:
         """Test detection of base64-encoded JWT pattern."""
         result = _check_string_for_secret_pattern(
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "config.token", SECRET_VALUE_PATTERNS
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            "config.token",
+            SECRET_VALUE_PATTERNS,
         )
         assert result is not None
         assert "eyJ" in result

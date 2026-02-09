@@ -203,7 +203,10 @@ class TestJsonSchemaIdeCompatibility:
         When validating against the exported schema,
         Then validation passes.
         """
-        from floe_core.schemas.json_schema import export_json_schema, validate_against_schema
+        from floe_core.schemas.json_schema import (
+            export_json_schema,
+            validate_against_schema,
+        )
 
         schema = export_json_schema()
 

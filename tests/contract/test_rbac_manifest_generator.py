@@ -111,7 +111,10 @@ class TestRBACManifestGeneratorOutputContract:
         required_fields = {"apiVersion", "kind", "metadata"}
 
         configs: list[tuple[str, Any]] = [
-            ("ServiceAccount", ServiceAccountConfig(name="floe-test", namespace="default")),
+            (
+                "ServiceAccount",
+                ServiceAccountConfig(name="floe-test", namespace="default"),
+            ),
             (
                 "Role",
                 RoleConfig(

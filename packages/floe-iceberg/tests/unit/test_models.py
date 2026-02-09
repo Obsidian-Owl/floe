@@ -1001,7 +1001,11 @@ class TestTableConfig:
                 table_schema=TableSchema(
                     fields=[
                         SchemaField(field_id=1, name="event_date", field_type=FieldType.DATE),
-                        SchemaField(field_id=2, name="created_at", field_type=FieldType.TIMESTAMP),
+                        SchemaField(
+                            field_id=2,
+                            name="created_at",
+                            field_type=FieldType.TIMESTAMP,
+                        ),
                     ]
                 ),
                 partition_spec=PartitionSpec(

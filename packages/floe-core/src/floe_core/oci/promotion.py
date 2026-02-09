@@ -334,7 +334,10 @@ class PromotionController:
         Raises:
             AuthorizationError: If operator is not authorized.
         """
-        from floe_core.oci.authorization import AuthorizationChecker, AuthorizationResult
+        from floe_core.oci.authorization import (
+            AuthorizationChecker,
+            AuthorizationResult,
+        )
 
         # Get environment config for target
         env_config = self._get_environment(environment)

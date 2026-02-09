@@ -22,7 +22,6 @@ The project already has Stage 1 CI in `.github/workflows/ci.yml`:
 | lint-typecheck  | Complete | Ruff + mypy --strict                     |
 | unit-tests      | Complete | Python 3.10-3.12 matrix, 80% coverage    |
 | contract-tests  | Complete | Cross-package validation                 |
-| sonarcloud      | Complete | Quality gate + coverage                  |
 | ci-success      | Complete | Branch protection gate                   |
 
 This feature adds Stage 2 capabilities (security scanning, integration tests with Kind cluster).

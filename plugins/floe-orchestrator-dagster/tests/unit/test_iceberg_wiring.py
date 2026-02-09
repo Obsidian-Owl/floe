@@ -221,7 +221,9 @@ class TestGracefulDegradation:
     @pytest.mark.requirement("004d-FR-117")
     def test_try_create_with_no_plugins_returns_empty_dict(self) -> None:
         """Test try_create_iceberg_resources() returns {} when plugins is None."""
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         result = try_create_iceberg_resources(plugins=None)
 
@@ -232,7 +234,9 @@ class TestGracefulDegradation:
         """Test try_create_iceberg_resources() returns {} when storage is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -250,7 +254,9 @@ class TestGracefulDegradation:
         """Test try_create_iceberg_resources() returns {} when catalog is None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -268,7 +274,9 @@ class TestGracefulDegradation:
         """Test try_create_iceberg_resources() returns {} when both catalog and storage are None."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -290,7 +298,9 @@ class TestGracefulDegradation:
         """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -341,7 +351,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
         """Test try_create_iceberg_resources() returns dict with "iceberg" key when successful."""
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -378,7 +390,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
 
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -410,7 +424,9 @@ class TestTryCreateIcebergResourcesEdgeCases:
         """
         from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
-        from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+        from floe_orchestrator_dagster.resources.iceberg import (
+            try_create_iceberg_resources,
+        )
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),

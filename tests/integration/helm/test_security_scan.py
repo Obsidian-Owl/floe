@@ -23,7 +23,14 @@ import yaml
 MIN_KUBESEC_SCORE = 7
 
 # Workload kinds to scan
-WORKLOAD_KINDS: set[str] = {"Deployment", "StatefulSet", "DaemonSet", "Pod", "Job", "CronJob"}
+WORKLOAD_KINDS: set[str] = {
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "Pod",
+    "Job",
+    "CronJob",
+}
 
 
 def render_helm_templates(
@@ -40,7 +47,13 @@ def render_helm_templates(
     """
     # NOTE: --skip-schema-validation required because Dagster subchart
     # references external JSON schema URL that returns 404
-    cmd = ["helm", "template", "--skip-schema-validation", "test-release", str(chart_path)]
+    cmd = [
+        "helm",
+        "template",
+        "--skip-schema-validation",
+        "test-release",
+        str(chart_path),
+    ]
     if values_path:
         cmd.extend(["--values", str(values_path)])
 

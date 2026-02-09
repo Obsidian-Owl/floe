@@ -123,7 +123,10 @@ class TestNetworkPolicyManifestGenerator:
     @pytest.mark.requirement("FR-070")
     def test_generate_returns_result(self, mock_plugin: MagicMock) -> None:
         """Test generate() returns NetworkPolicyGenerationResult."""
-        from floe_core.network import NetworkPolicyGenerationResult, NetworkPolicyManifestGenerator
+        from floe_core.network import (
+            NetworkPolicyGenerationResult,
+            NetworkPolicyManifestGenerator,
+        )
 
         generator = NetworkPolicyManifestGenerator(plugin=mock_plugin)
         result = generator.generate(namespaces=["floe-jobs"])
@@ -595,7 +598,10 @@ class TestPluginDiscovery:
                             }
                         }
                     ],
-                    "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+                    "ports": [
+                        {"protocol": "UDP", "port": 53},
+                        {"protocol": "TCP", "port": 53},
+                    ],
                 },
                 "generate_network_policy": lambda self, config: {},
                 "generate_pod_security_context": lambda self, config=None: {},

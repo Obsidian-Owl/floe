@@ -639,7 +639,8 @@ class TestBatchSpanProcessorConfigValidation:
     def test_batch_processor_config_batch_size_le_queue_size(self) -> None:
         """Test max_export_batch_size cannot exceed max_queue_size."""
         with pytest.raises(
-            ValidationError, match="max_export_batch_size.*cannot exceed.*max_queue_size"
+            ValidationError,
+            match="max_export_batch_size.*cannot exceed.*max_queue_size",
         ):
             BatchSpanProcessorConfig(
                 max_queue_size=256,

@@ -20,7 +20,11 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from floe_core.plugin_errors import AuthenticationError, NotFoundError, NotSupportedError
+from floe_core.plugin_errors import (
+    AuthenticationError,
+    NotFoundError,
+    NotSupportedError,
+)
 from pyiceberg.exceptions import ForbiddenError, NoSuchTableError
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig

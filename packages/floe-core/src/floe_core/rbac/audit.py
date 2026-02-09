@@ -433,7 +433,11 @@ def detect_wildcard_permissions(
                     resource_namespace=namespace,
                     message=f"Rule {i} contains wildcard in apiGroups",
                     recommendation="Replace '*' with specific API groups",
-                    details={"rule_index": i, "field": "apiGroups", "value": api_groups},
+                    details={
+                        "rule_index": i,
+                        "field": "apiGroups",
+                        "value": api_groups,
+                    },
                 )
             )
 

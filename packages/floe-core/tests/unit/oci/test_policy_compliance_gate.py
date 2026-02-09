@@ -76,7 +76,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ):
             result = controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},
@@ -123,7 +125,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ):
             result = controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},
@@ -168,7 +172,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ) as mock_enforce:
             controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},
@@ -219,7 +225,9 @@ class TestPolicyComplianceGate:
         )
 
         with patch.object(
-            controller_with_enforcer.policy_enforcer, "enforce", return_value=mock_result
+            controller_with_enforcer.policy_enforcer,
+            "enforce",
+            return_value=mock_result,
         ):
             result = controller_with_enforcer._run_policy_compliance_gate(
                 manifest={"nodes": {}},

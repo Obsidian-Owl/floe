@@ -503,7 +503,10 @@ class PlatformRef(BaseModel):
         Field(
             min_length=1,
             description="OCI URI or local path to manifest",
-            examples=["oci://registry.acme.com/manifests/platform:1.0", "./manifest.yaml"],
+            examples=[
+                "oci://registry.acme.com/manifests/platform:1.0",
+                "./manifest.yaml",
+            ],
         ),
     ]
 

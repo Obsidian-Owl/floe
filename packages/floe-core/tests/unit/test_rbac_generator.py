@@ -607,8 +607,16 @@ class TestWriteManifests:
 
         manifests: dict[str, list[dict[str, Any]]] = {
             "serviceaccounts.yaml": [
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "sa-1"}},
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "sa-2"}},
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "sa-1"},
+                },
+                {
+                    "apiVersion": "v1",
+                    "kind": "ServiceAccount",
+                    "metadata": {"name": "sa-2"},
+                },
             ],
         }
 

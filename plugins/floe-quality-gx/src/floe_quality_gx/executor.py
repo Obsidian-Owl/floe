@@ -244,7 +244,7 @@ def run_validation_with_timeout(
     enabled_checks = [c for c in suite.checks if c.enabled]
     for _i, (check, gx_exp_result) in enumerate(zip(enabled_checks, gx_expectations, strict=False)):
         check_result = _convert_gx_result_to_check_result(
-            gx_exp_result.to_json_dict() if hasattr(gx_exp_result, "to_json_dict") else {},
+            (gx_exp_result.to_json_dict() if hasattr(gx_exp_result, "to_json_dict") else {}),
             check,
         )
         check_results.append(check_result)
@@ -269,7 +269,8 @@ def run_validation_with_timeout(
                 "successful_expectations", sum(1 for r in check_results if r.passed)
             ),
             "failed": stats.get(
-                "unsuccessful_expectations", sum(1 for r in check_results if not r.passed)
+                "unsuccessful_expectations",
+                sum(1 for r in check_results if not r.passed),
             ),
             "success_percent": stats.get("success_percent", 0.0),
         },

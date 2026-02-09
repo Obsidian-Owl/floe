@@ -410,7 +410,13 @@ class BaseSecretsPluginTests(ABC):
         Args:
             event: The audit event dictionary to validate.
         """
-        required_fields = ["timestamp", "requester_id", "secret_path", "operation", "result"]
+        required_fields = [
+            "timestamp",
+            "requester_id",
+            "secret_path",
+            "operation",
+            "result",
+        ]
 
         for field in required_fields:
             assert field in event, f"Audit event missing required field: {field}"

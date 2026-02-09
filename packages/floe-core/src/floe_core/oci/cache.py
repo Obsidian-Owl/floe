@@ -198,7 +198,7 @@ class CacheManager:
                             "cache_expired",
                             registry=registry,
                             tag=tag,
-                            expires_at=entry.expires_at.isoformat() if entry.expires_at else None,
+                            expires_at=(entry.expires_at.isoformat() if entry.expires_at else None),
                         )
                         return None
 

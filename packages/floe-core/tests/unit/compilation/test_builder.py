@@ -42,7 +42,11 @@ def sample_manifest() -> PlatformManifest:
     return PlatformManifest(
         api_version="floe.dev/v1",
         kind="Manifest",
-        metadata={"name": "test-platform", "version": "1.0.0", "owner": "test@example.com"},
+        metadata={
+            "name": "test-platform",
+            "version": "1.0.0",
+            "owner": "test@example.com",
+        },
         plugins={
             "compute": {"type": "duckdb", "version": "0.9.0"},
             "orchestrator": {"type": "dagster", "version": "1.5.0"},

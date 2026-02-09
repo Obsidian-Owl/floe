@@ -380,7 +380,13 @@ class TestDemoMode(IntegrationTestBase):
 
         # Render Helm templates with --skip-schema-validation to avoid external URL fetch
         result = subprocess.run(
-            ["helm", "template", "test-release", str(chart_path), "--skip-schema-validation"],
+            [
+                "helm",
+                "template",
+                "test-release",
+                str(chart_path),
+                "--skip-schema-validation",
+            ],
             cwd=project_root,
             capture_output=True,
             text=True,

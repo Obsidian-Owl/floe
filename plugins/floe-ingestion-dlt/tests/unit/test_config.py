@@ -304,7 +304,12 @@ class TestIngestionSourceConfig:
             assert config.name == name
 
         # Invalid names (contain characters other than alphanumeric, underscore, hyphen)
-        invalid_names = ["invalid@name", "name with space", "name.with.dots", "name$special"]
+        invalid_names = [
+            "invalid@name",
+            "name with space",
+            "name.with.dots",
+            "name$special",
+        ]
         for name in invalid_names:
             with pytest.raises(ValidationError, match="contains invalid characters"):
                 IngestionSourceConfig(

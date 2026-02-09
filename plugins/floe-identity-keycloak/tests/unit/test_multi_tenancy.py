@@ -18,7 +18,10 @@ class TestMultiTenancyProperties:
     @pytest.mark.requirement("7A-FR-032")
     def test_realm_property(self) -> None:
         """Test that realm property returns configured realm."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -34,7 +37,10 @@ class TestMultiTenancyProperties:
     @pytest.mark.requirement("7A-FR-032")
     def test_server_url_property(self) -> None:
         """Test that server_url property returns configured URL."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -54,7 +60,10 @@ class TestGetOIDCConfigMultiRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_get_oidc_config_default_realm(self) -> None:
         """Test get_oidc_config returns config for default realm."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -72,7 +81,10 @@ class TestGetOIDCConfigMultiRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_get_oidc_config_different_realm(self) -> None:
         """Test get_oidc_config with realm override."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -91,7 +103,10 @@ class TestGetOIDCConfigMultiRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_get_oidc_config_multiple_realms(self) -> None:
         """Test get_oidc_config for multiple different realms."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -117,7 +132,10 @@ class TestGetAvailableRealms:
     @pytest.mark.requirement("7A-FR-032")
     def test_initial_realms_contains_configured(self) -> None:
         """Test that available realms includes configured realm."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -138,7 +156,10 @@ class TestValidateTokenForRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_validate_token_for_realm_not_started(self) -> None:
         """Test that validate_token_for_realm raises if not started."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -155,7 +176,10 @@ class TestValidateTokenForRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_validate_token_for_realm_caches_validators(self) -> None:
         """Test that validators are cached per realm."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -188,7 +212,10 @@ class TestValidateTokenForRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_validate_token_for_default_realm_uses_main_validator(self) -> None:
         """Test that validating for default realm uses main validator."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -213,7 +240,10 @@ class TestAuthenticateForRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_authenticate_for_realm_not_started(self) -> None:
         """Test that authenticate_for_realm raises if not started."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -230,7 +260,10 @@ class TestAuthenticateForRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_authenticate_for_realm_uses_correct_endpoint(self) -> None:
         """Test that authenticate_for_realm uses realm-specific endpoint."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -264,7 +297,10 @@ class TestAuthenticateForRealm:
     @pytest.mark.requirement("7A-FR-032")
     def test_authenticate_for_realm_with_custom_client(self) -> None:
         """Test authenticate_for_realm with custom client credentials."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -306,7 +342,10 @@ class TestShutdownClearsRealmValidators:
     @pytest.mark.requirement("7A-FR-032")
     def test_shutdown_clears_realm_validators(self) -> None:
         """Test that shutdown clears cached realm validators."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",

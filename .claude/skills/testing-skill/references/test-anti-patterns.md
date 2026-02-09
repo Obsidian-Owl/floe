@@ -406,7 +406,7 @@ def test_ratio():
 
 **Problems**:
 - Flaky failures due to floating point precision
-- SonarQube rule S1244 flags this
+- Code quality tools flag this pattern
 - Non-deterministic behavior
 
 ### ✅ CORRECT
@@ -430,7 +430,7 @@ def test_with_custom_tolerance():
 **Benefits**:
 - Reliable comparisons
 - Configurable tolerance
-- SonarQube compliant
+- Follows best practices
 
 ---
 

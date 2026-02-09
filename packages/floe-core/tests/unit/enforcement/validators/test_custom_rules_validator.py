@@ -48,7 +48,10 @@ def valid_manifest() -> dict[str, Any]:
                 "tags": ["tested", "documented"],
                 "meta": {"owner": "data-team@example.com"},
                 "columns": {
-                    "customer_id": {"name": "customer_id", "description": "Primary key"},
+                    "customer_id": {
+                        "name": "customer_id",
+                        "description": "Primary key",
+                    },
                     "email": {"name": "email", "description": "Customer email"},
                 },
                 "depends_on": {"nodes": []},
@@ -228,7 +231,10 @@ class TestRequireTagsForPrefixRule:
 
         rule = RequireTagsForPrefix(
             prefix="gold_",
-            required_tags=["production", "certified"],  # gold_customers doesn't have these
+            required_tags=[
+                "production",
+                "certified",
+            ],  # gold_customers doesn't have these
         )
 
         validator = CustomRuleValidator(custom_rules=[rule])

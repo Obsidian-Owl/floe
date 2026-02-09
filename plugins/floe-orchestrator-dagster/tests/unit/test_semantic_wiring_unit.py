@@ -98,7 +98,9 @@ class TestSemanticResourceFactory:
         self,
     ) -> None:
         """Test try_create_semantic_resources returns empty dict when plugins is None."""
-        from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
+        from floe_orchestrator_dagster.resources.semantic import (
+            try_create_semantic_resources,
+        )
 
         resources = try_create_semantic_resources(plugins=None)
 
@@ -109,7 +111,9 @@ class TestSemanticResourceFactory:
         self,
     ) -> None:
         """Test try_create_semantic_resources returns empty dict when semantic is not configured."""
-        from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
+        from floe_orchestrator_dagster.resources.semantic import (
+            try_create_semantic_resources,
+        )
 
         # Create ResolvedPlugins with no semantic configured (compute and orchestrator required)
         plugins = ResolvedPlugins(
@@ -127,7 +131,9 @@ class TestSemanticResourceFactory:
     @pytest.mark.requirement("FR-055")
     def test_try_create_semantic_resources_produces_valid_resource_dict(self) -> None:
         """Test try_create_semantic_resources produces valid resource dict."""
-        from floe_orchestrator_dagster.resources.semantic import try_create_semantic_resources
+        from floe_orchestrator_dagster.resources.semantic import (
+            try_create_semantic_resources,
+        )
 
         # Create ResolvedPlugins with semantic configured
         semantic_ref = PluginRef(

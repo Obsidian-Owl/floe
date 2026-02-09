@@ -74,7 +74,14 @@ class TestArtifactPushValidation:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["artifact", "push", "--registry", "oci://example.com/repo", "--tag", "v1.0.0"],
+            [
+                "artifact",
+                "push",
+                "--registry",
+                "oci://example.com/repo",
+                "--tag",
+                "v1.0.0",
+            ],
         )
 
         # Should fail with usage error
@@ -91,7 +98,14 @@ class TestArtifactPushValidation:
 
             result = runner.invoke(
                 cli,
-                ["artifact", "push", "--artifact", "compiled_artifacts.json", "--tag", "v1.0.0"],
+                [
+                    "artifact",
+                    "push",
+                    "--artifact",
+                    "compiled_artifacts.json",
+                    "--tag",
+                    "v1.0.0",
+                ],
             )
 
             # Should fail with usage error

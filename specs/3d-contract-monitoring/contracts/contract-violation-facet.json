@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://floe.dev/schemas/contract-violation-facet.json",
+  "title": "ContractViolationFacet",
+  "description": "OpenLineage facet for contract violation events emitted by the floe ContractMonitor",
+  "type": "object",
+  "required": [
+    "_producer",
+    "_schemaURL",
+    "contractName",
+    "contractVersion",
+    "violationType",
+    "severity",
+    "message",
+    "timestamp"
+  ],
+  "properties": {
+    "_producer": {
+      "type": "string",
+      "const": "floe",
+      "description": "Producer identifier"
+    },
+    "_schemaURL": {
+      "type": "string",
+      "const": "https://floe.dev/schemas/contract-violation-facet.json",
+      "description": "Schema URL for this facet"
+    },
+    "contractName": {
+      "type": "string",
+      "description": "Name of the violated data contract"
+    },
+    "contractVersion": {
+      "type": "string",
+      "description": "Semantic version of the violated contract",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "violationType": {
+      "type": "string",
+      "enum": ["freshness", "schema_drift", "quality", "availability", "deprecation"],
+      "description": "Type of contract violation detected"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "error", "critical"],
+      "description": "Violation severity level"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable violation description (no PII)"
+    },
+    "element": {
+      "type": ["string", "null"],
+      "description": "Specific column or field affected, if applicable"
+    },
+    "expectedValue": {
+      "type": ["string", "null"],
+      "description": "Expected value per the contract"
+    },
+    "actualValue": {
+      "type": ["string", "null"],
+      "description": "Actual observed value"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of violation detection"
+    }
+  },
+  "additionalProperties": false
+}

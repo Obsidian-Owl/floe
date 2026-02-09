@@ -41,7 +41,11 @@ class TestPermissionAggregationBasics:
         # Should produce one rule with all resourceNames
         assert len(rules) == 1
         rule = rules[0]
-        assert set(rule.resource_names or []) == {"snowflake-creds", "catalog-creds", "api-key"}
+        assert set(rule.resource_names or []) == {
+            "snowflake-creds",
+            "catalog-creds",
+            "api-key",
+        }
         assert rule.resources == ["secrets"]
         assert rule.verbs == ["get"]
 

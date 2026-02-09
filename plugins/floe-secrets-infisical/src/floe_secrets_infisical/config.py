@@ -109,7 +109,10 @@ class InfisicalSecretsConfig(BaseModel):
         Field(
             default=INFISICAL_CLOUD_URL,
             description="Infisical site URL. Defaults to Infisical Cloud.",
-            examples=["https://app.infisical.com", "https://infisical.company.internal"],
+            examples=[
+                "https://app.infisical.com",
+                "https://infisical.company.internal",
+            ],
         ),
     ]
 

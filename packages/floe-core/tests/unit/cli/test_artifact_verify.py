@@ -221,7 +221,10 @@ class TestArtifactVerifyKeyless:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -273,7 +276,10 @@ class TestArtifactVerifyKeyless:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -325,7 +331,10 @@ class TestArtifactVerifyKeyless:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -391,7 +400,10 @@ class TestArtifactVerifyKeyBased:
                         "cosign.sigstore.dev/signature": "sig_data",
                     }
                     mock_client.inspect.return_value = mock_manifest
-                    mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+                    mock_client._fetch_from_registry.return_value = (
+                        b"content",
+                        "sha256:abc123",
+                    )
                     mock_client_class.from_registry_config.return_value = mock_client
 
                     with patch(
@@ -443,7 +455,10 @@ class TestArtifactVerifyKeyBased:
                     "cosign.sigstore.dev/signature": "sig_data",
                 }
                 mock_client.inspect.return_value = mock_manifest
-                mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+                mock_client._fetch_from_registry.return_value = (
+                    b"content",
+                    "sha256:abc123",
+                )
                 mock_client_class.from_registry_config.return_value = mock_client
 
                 with patch(
@@ -694,7 +709,10 @@ class TestArtifactVerifyEnforcement:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -745,7 +763,10 @@ class TestArtifactVerifyEnforcement:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -796,7 +817,10 @@ class TestArtifactVerifyEnforcement:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -855,7 +879,10 @@ class TestArtifactVerifyBundleExport:
                     "cosign.sigstore.dev/certificate": "cert_data",
                 }
                 mock_client.inspect.return_value = mock_manifest
-                mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+                mock_client._fetch_from_registry.return_value = (
+                    b"content",
+                    "sha256:abc123",
+                )
                 mock_client_class.from_registry_config.return_value = mock_client
 
                 with patch(
@@ -1040,7 +1067,10 @@ class TestArtifactVerifyErrors:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1190,7 +1220,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1242,7 +1275,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1297,7 +1333,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(
@@ -1349,7 +1388,10 @@ class TestArtifactVerifyRegistryConfig:
                 "cosign.sigstore.dev/certificate": "cert_data",
             }
             mock_client.inspect.return_value = mock_manifest
-            mock_client._fetch_from_registry.return_value = (b"content", "sha256:abc123")
+            mock_client._fetch_from_registry.return_value = (
+                b"content",
+                "sha256:abc123",
+            )
             mock_client_class.from_registry_config.return_value = mock_client
 
             with patch(

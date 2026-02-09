@@ -259,7 +259,8 @@ class EgressAllowRule(BaseModel):
         default=None, description="Target namespace (mutually exclusive with to_cidr)"
     )
     to_cidr: str | None = Field(
-        default=None, description="Target CIDR block (mutually exclusive with to_namespace)"
+        default=None,
+        description="Target CIDR block (mutually exclusive with to_namespace)",
     )
     port: int = Field(..., ge=1, le=65535, description="Target port")
     protocol: Literal["TCP", "UDP"] = Field(default="TCP", description="Protocol")
@@ -295,13 +296,16 @@ class NetworkPoliciesConfig(BaseModel):
         default=True, description="Allow egress to external HTTPS (port 443)"
     )
     ingress_controller_namespace: str = Field(
-        default="ingress-nginx", description="Namespace where ingress controller is deployed"
+        default="ingress-nginx",
+        description="Namespace where ingress controller is deployed",
     )
     jobs_egress_allow: tuple[EgressAllowRule, ...] = Field(
-        default_factory=tuple, description="Additional egress rules for floe-jobs namespace"
+        default_factory=tuple,
+        description="Additional egress rules for floe-jobs namespace",
     )
     platform_egress_allow: tuple[EgressAllowRule, ...] = Field(
-        default_factory=tuple, description="Additional egress rules for floe-platform namespace"
+        default_factory=tuple,
+        description="Additional egress rules for floe-platform namespace",
     )
 
     @field_validator("ingress_controller_namespace", mode="after")

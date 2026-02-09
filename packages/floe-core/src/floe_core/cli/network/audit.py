@@ -136,7 +136,10 @@ def audit_command(
             import traceback
 
             traceback.print_exc()
-        error_exit(f"Network audit failed: {type(e).__name__}", exit_code=ExitCode.GENERAL_ERROR)
+        error_exit(
+            f"Network audit failed: {type(e).__name__}",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
 
 
 def _validate_audit_inputs(namespace: tuple[str, ...], all_namespaces: bool) -> None:

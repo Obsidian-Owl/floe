@@ -106,7 +106,15 @@ class TestK8sSecretsOperations(IntegrationTestBase):
     def _delete_k8s_secret(self, name: str, namespace: str) -> None:
         """Delete a K8s Secret using kubectl."""
         subprocess.run(
-            ["kubectl", "delete", "secret", name, "-n", namespace, "--ignore-not-found"],
+            [
+                "kubectl",
+                "delete",
+                "secret",
+                name,
+                "-n",
+                namespace,
+                "--ignore-not-found",
+            ],
             capture_output=True,
             check=False,
         )

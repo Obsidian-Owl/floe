@@ -160,7 +160,10 @@ class TestGenerateRole:
 
         manifest = plugin.generate_role(config)
 
-        assert manifest["rules"][0]["resourceNames"] == ["snowflake-creds", "catalog-creds"]
+        assert manifest["rules"][0]["resourceNames"] == [
+            "snowflake-creds",
+            "catalog-creds",
+        ]
 
 
 class TestGenerateRoleBinding:

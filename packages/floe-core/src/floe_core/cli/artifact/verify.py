@@ -305,7 +305,10 @@ def _verify_artifact(
 ) -> None:
     """Verify artifact signature."""
     from floe_core.oci import OCIClient
-    from floe_core.oci.verification import VerificationClient, export_verification_bundle
+    from floe_core.oci.verification import (
+        VerificationClient,
+        export_verification_bundle,
+    )
     from floe_core.schemas.signing import SignatureMetadata
 
     try:

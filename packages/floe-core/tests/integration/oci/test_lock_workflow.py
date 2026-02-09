@@ -119,7 +119,11 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
-        from floe_core.schemas.promotion import EnvironmentConfig, PromotionConfig, PromotionGate
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
 
         # Check infrastructure
         self.check_infrastructure("registry", 5000)
@@ -232,7 +236,11 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
-        from floe_core.schemas.promotion import EnvironmentConfig, PromotionConfig, PromotionGate
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
 
         # Check infrastructure
         self.check_infrastructure("registry", 5000)
@@ -289,7 +297,11 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
-        from floe_core.schemas.promotion import EnvironmentConfig, PromotionConfig, PromotionGate
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
 
         # Check infrastructure
         self.check_infrastructure("registry", 5000)
@@ -344,7 +356,11 @@ class TestLockErrorHandling(IntegrationTestBase):
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
         from floe_core.schemas.oci import AuthType, RegistryAuth, RegistryConfig
-        from floe_core.schemas.promotion import EnvironmentConfig, PromotionConfig, PromotionGate
+        from floe_core.schemas.promotion import (
+            EnvironmentConfig,
+            PromotionConfig,
+            PromotionGate,
+        )
 
         # Check infrastructure
         self.check_infrastructure("registry", 5000)

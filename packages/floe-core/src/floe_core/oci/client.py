@@ -680,7 +680,11 @@ class OCIClient:
                 self._update_artifact_annotations(tag, metadata.to_annotations())
 
                 duration = time.monotonic() - start_time
-                log.info("sign_completed", duration=duration, rekor_index=metadata.rekor_log_index)
+                log.info(
+                    "sign_completed",
+                    duration=duration,
+                    rekor_index=metadata.rekor_log_index,
+                )
                 span.set_attribute("floe.signing.rekor_index", metadata.rekor_log_index or 0)
                 self._record_operation_metrics("sign", start_time, success=True)
                 return metadata
@@ -706,7 +710,10 @@ class OCIClient:
         artifacts = self._deserialize_artifacts(content)
 
         existing_manifest = self._inspect_internal(tag)
-        merged_annotations = {**(existing_manifest.annotations or {}), **new_annotations}
+        merged_annotations = {
+            **(existing_manifest.annotations or {}),
+            **new_annotations,
+        }
 
         self._push_internal(artifacts, tag, merged_annotations, span=None)
 
@@ -1064,7 +1071,11 @@ class OCIClient:
                 manifest = self._inspect_internal(tag)
                 self._finalize_inspect(manifest, span, log, start_time)
                 return manifest
-            except (ArtifactNotFoundError, CircuitBreakerOpenError, AuthenticationError):
+            except (
+                ArtifactNotFoundError,
+                CircuitBreakerOpenError,
+                AuthenticationError,
+            ):
                 self._record_operation_metrics("inspect", start_time, success=False)
                 raise
             except Exception as e:
@@ -1180,7 +1191,11 @@ class OCIClient:
         try:
             result = self._list_internal(filter_pattern, log)
             duration = self._record_operation_metrics("list", start_time, success=True)
-            log.info("list_completed", tag_count=len(result), duration_ms=int(duration * 1000))
+            log.info(
+                "list_completed",
+                tag_count=len(result),
+                duration_ms=int(duration * 1000),
+            )
             return result
         except (CircuitBreakerOpenError, AuthenticationError):
             self._record_operation_metrics("list", start_time, success=False)
@@ -1432,7 +1447,7 @@ class OCIClient:
             log.debug(
                 "registry_auth_validated",
                 auth_type=self._config.auth.type.value,
-                expires_at=credentials.expires_at.isoformat() if credentials.expires_at else None,
+                expires_at=(credentials.expires_at.isoformat() if credentials.expires_at else None),
             )
         except AuthenticationError:
             log.warning("registry_auth_failed", auth_type=self._config.auth.type.value)

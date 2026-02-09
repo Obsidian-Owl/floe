@@ -46,12 +46,16 @@ dependencies = [
     "datacontract-cli>=0.10.0,<1.0",  # Hard dependency per spec; pin upper bound (3C-T001)
     # Artifact signing (Epic 8B) - Sigstore Python SDK for keyless signing
     "sigstore>=4.2.0",  # Keyless signing via Sigstore; GHSA-hm8f-75xx-w2vr fix
+    # Async database access for contract monitoring (Epic 3D)
+    "sqlalchemy[asyncio]>=2.0,<3.0",  # Async ORM for monitoring state persistence (3D-T002)
+    "asyncpg>=0.29.0,<1.0",  # PostgreSQL async driver (3D-T002)
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23",  # Async test support for contract monitoring (3D-T002)
     "mypy>=1.8",
     "ruff>=0.3",
     "jsonschema>=4.0",  # For JSON Schema validation in tests

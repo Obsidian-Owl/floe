@@ -267,7 +267,14 @@ class TestCompilation:
             - No stage errors occur
         """
         # Verify all stages exist
-        expected_stages = {"LOAD", "VALIDATE", "RESOLVE", "ENFORCE", "COMPILE", "GENERATE"}
+        expected_stages = {
+            "LOAD",
+            "VALIDATE",
+            "RESOLVE",
+            "ENFORCE",
+            "COMPILE",
+            "GENERATE",
+        }
         actual_stages = {stage.value for stage in CompilationStage}
         assert actual_stages == expected_stages, "Expected 6 compilation stages"
 
@@ -293,9 +300,11 @@ class TestCompilation:
         validated = artifacts.enforcement_result.models_validated
         assert validated > 0, f"Enforcement must validate at least one model, got {validated}"
         level = artifacts.enforcement_result.enforcement_level
-        assert level in ("off", "warn", "strict"), (
-            f"Enforcement level must be off/warn/strict, got {level}"
-        )
+        assert level in (
+            "off",
+            "warn",
+            "strict",
+        ), f"Enforcement level must be off/warn/strict, got {level}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-012")
@@ -338,9 +347,10 @@ class TestCompilation:
         assert len(first_ancestor.name) > 0, (
             f"First ancestor must have a name, got {first_ancestor.name!r}"
         )
-        assert first_ancestor.scope in ("enterprise", "domain"), (
-            f"Manifest scope must be enterprise or domain, got {first_ancestor.scope!r}"
-        )
+        assert first_ancestor.scope in (
+            "enterprise",
+            "domain",
+        ), f"Manifest scope must be enterprise or domain, got {first_ancestor.scope!r}"
 
         # Plugins must be resolved from manifest (not empty)
         assert artifacts.plugins is not None, "Plugins must be resolved from manifest"

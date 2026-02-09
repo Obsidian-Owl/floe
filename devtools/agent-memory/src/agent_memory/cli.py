@@ -504,7 +504,8 @@ def sync(
     verify: Annotated[
         bool,
         typer.Option(
-            "--verify/--no-verify", help="Verify content is searchable after sync (FR-011)"
+            "--verify/--no-verify",
+            help="Verify content is searchable after sync (FR-011)",
         ),
     ] = False,
 ) -> None:
@@ -1400,7 +1401,7 @@ def test(
             typer.secho(
                 f"Tests: {report.passed_tests}/{report.total_tests} passed "
                 f"({report.pass_rate:.1f}%)",
-                fg=typer.colors.YELLOW if report.pass_rate >= threshold else typer.colors.RED,
+                fg=(typer.colors.YELLOW if report.pass_rate >= threshold else typer.colors.RED),
             )
 
         return report

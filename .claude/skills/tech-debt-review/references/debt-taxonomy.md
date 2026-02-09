@@ -323,5 +323,4 @@ Certain combinations indicate systemic issues:
 ## References
 
 - [Code Climate Technical Debt Assessment](https://codeclimate.com/blog/10-point-technical-debt-assessment)
-- [SonarQube Technical Debt Guide](https://www.sonarsource.com/learn/measuring-and-identifying-code-level-technical-debt-a-practical-guide/)
 - [CodeScene Technical Debt Analysis](https://codescene.com/technical-debt)

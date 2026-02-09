@@ -113,7 +113,8 @@ class _IcebergCompactionManager:
         span.set_attribute("strategy.type", strategy.strategy_type.value)
         span.set_attribute("strategy.target_file_size_bytes", strategy.target_file_size_bytes)
         span.set_attribute(
-            "strategy.max_concurrent_rewrites", strategy.max_concurrent_file_group_rewrites
+            "strategy.max_concurrent_rewrites",
+            strategy.max_concurrent_file_group_rewrites,
         )
 
         self._log.debug(

@@ -477,7 +477,10 @@ class TestPerEnvironmentPolicyE2E(IntegrationTestBase):
                         ],
                         "environment_policies": {
                             "production": {"require_sbom": True, "enforcement": "warn"},
-                            "development": {"require_sbom": False, "enforcement": "off"},
+                            "development": {
+                                "require_sbom": False,
+                                "enforcement": "off",
+                            },
                         },
                     },
                 }

@@ -387,7 +387,9 @@ def polaris_catalog(polaris_config: PolarisConfig) -> Catalog:
 
 
 @pytest.fixture(scope="function")
-def integration_catalog_plugin(polaris_config: PolarisConfig) -> IntegrationPolarisCatalogPlugin:
+def integration_catalog_plugin(
+    polaris_config: PolarisConfig,
+) -> IntegrationPolarisCatalogPlugin:
     """Get real CatalogPlugin wrapping Polaris.
 
     Yields plugin and cleans up created namespaces after test.

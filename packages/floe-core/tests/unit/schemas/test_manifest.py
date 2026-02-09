@@ -630,7 +630,13 @@ class TestEnvironmentAgnosticConfiguration:
         data = manifest.model_dump(exclude_none=True)
 
         # No environment keys should exist in serialized output
-        forbidden_keys = {"environment", "env", "environments", "env_overrides", "floe_env"}
+        forbidden_keys = {
+            "environment",
+            "env",
+            "environments",
+            "env_overrides",
+            "floe_env",
+        }
         all_keys = set(data.keys())
         assert not all_keys.intersection(forbidden_keys), (
             f"Serialized manifest should not contain environment keys. "

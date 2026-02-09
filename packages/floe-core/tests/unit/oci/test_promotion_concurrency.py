@@ -230,9 +230,8 @@ class TestConcurrentPromotionSameEnvironment:
             mock_gates.return_value = []
             mock_verify.return_value = Mock(status="valid")
             mock_create_tag.return_value = TEST_DIGEST
-            mock_get_digest.return_value = (
-                "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
-            )
+            test_digest = "sha256:b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3"
+            mock_get_digest.return_value = test_digest
 
             def run_promotion(index: int) -> PromotionRecord | Exception:
                 """Run a promotion with unique tag."""

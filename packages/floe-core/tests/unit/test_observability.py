@@ -74,7 +74,10 @@ class TestRecordValidationDuration:
     @pytest.mark.requirement("001-FR-024")
     def test_record_validation_duration_creates_histogram(self) -> None:
         """Test recording duration creates histogram metric."""
-        from floe_core.observability import record_validation_duration, reset_for_testing
+        from floe_core.observability import (
+            record_validation_duration,
+            reset_for_testing,
+        )
 
         reset_for_testing()
 
@@ -84,7 +87,10 @@ class TestRecordValidationDuration:
     @pytest.mark.requirement("001-FR-024")
     def test_record_validation_duration_with_various_statuses(self) -> None:
         """Test recording duration with different status values."""
-        from floe_core.observability import record_validation_duration, reset_for_testing
+        from floe_core.observability import (
+            record_validation_duration,
+            reset_for_testing,
+        )
 
         reset_for_testing()
 

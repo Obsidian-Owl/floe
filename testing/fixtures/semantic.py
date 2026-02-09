@@ -43,7 +43,9 @@ def cube_config() -> CubeSemanticConfig:
 
 
 @pytest.fixture
-def cube_plugin(cube_config: CubeSemanticConfig) -> Generator[CubeSemanticPlugin, None, None]:
+def cube_plugin(
+    cube_config: CubeSemanticConfig,
+) -> Generator[CubeSemanticPlugin, None, None]:
     """Function-scoped CubeSemanticPlugin instance.
 
     Creates a plugin, runs startup, yields it, then runs shutdown.

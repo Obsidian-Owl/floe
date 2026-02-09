@@ -516,7 +516,7 @@ def test_dbt_runtime_compile_and_run(tmp_path: Path):
 
 **Enforcement**:
 - CI pipeline runs contract tests on every PR
-- SonarQube quality gate requires >80% coverage
+- Code coverage requires >80%
 
 **Traceability**: ADR-0043 Section "Testing Strategy"
 

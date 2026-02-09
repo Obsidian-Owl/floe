@@ -196,7 +196,10 @@ class TestSecurityContextIntegration:
 
         # PSS restricted requirements at pod level
         assert pod_ctx.get("runAsNonRoot") is True
-        assert pod_ctx.get("seccompProfile", {}).get("type") in ["RuntimeDefault", "Localhost"]
+        assert pod_ctx.get("seccompProfile", {}).get("type") in [
+            "RuntimeDefault",
+            "Localhost",
+        ]
 
         # PSS restricted requirements at container level
         assert container_ctx.get("allowPrivilegeEscalation") is False

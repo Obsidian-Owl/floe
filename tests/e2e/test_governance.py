@@ -181,7 +181,13 @@ class TestGovernance(IntegrationTestBase):
 
         # Check Helm templates for hardcoded secrets
         for doc in templates:
-            if doc.get("kind") not in {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}:
+            if doc.get("kind") not in {
+                "Deployment",
+                "StatefulSet",
+                "DaemonSet",
+                "Job",
+                "CronJob",
+            }:
                 continue
 
             name = doc.get("metadata", {}).get("name", "unknown")
@@ -212,9 +218,18 @@ class TestGovernance(IntegrationTestBase):
 
         # Patterns that indicate hardcoded secrets (common in config files)
         secret_patterns = [
-            (r'(?:password|passwd|pwd)\s*=\s*["\'][^"\']{3,}["\']', "hardcoded password"),
-            (r'(?:api_key|apikey|api_token)\s*=\s*["\'][^"\']{3,}["\']', "hardcoded API key"),
-            (r'(?:secret|token)\s*=\s*["\'][A-Za-z0-9+/=]{20,}["\']', "hardcoded secret/token"),
+            (
+                r'(?:password|passwd|pwd)\s*=\s*["\'][^"\']{3,}["\']',
+                "hardcoded password",
+            ),
+            (
+                r'(?:api_key|apikey|api_token)\s*=\s*["\'][^"\']{3,}["\']',
+                "hardcoded API key",
+            ),
+            (
+                r'(?:secret|token)\s*=\s*["\'][A-Za-z0-9+/=]{20,}["\']',
+                "hardcoded secret/token",
+            ),
         ]
 
         for py_file in (repo_root / "packages").rglob("*.py"):
@@ -273,9 +288,10 @@ class TestGovernance(IntegrationTestBase):
                     "Expected 401 Unauthorized or 403 Forbidden."
                 )
 
-            assert read_response.status_code in {401, 403}, (
-                f"Expected 401/403 for unauthorized read, got {read_response.status_code}"
-            )
+            assert read_response.status_code in {
+                401,
+                403,
+            }, f"Expected 401/403 for unauthorized read, got {read_response.status_code}"
 
         except httpx.HTTPError as e:
             pytest.fail(
@@ -289,7 +305,11 @@ class TestGovernance(IntegrationTestBase):
             write_response = httpx.post(
                 f"{polaris_url}/api/management/v1/catalogs",
                 headers={"Authorization": "Bearer invalid-token"},
-                json={"name": "rbac-test-catalog", "type": "INTERNAL", "properties": {}},
+                json={
+                    "name": "rbac-test-catalog",
+                    "type": "INTERNAL",
+                    "properties": {},
+                },
                 timeout=10.0,
             )
             if write_response.status_code in {200, 201}:
@@ -299,9 +319,10 @@ class TestGovernance(IntegrationTestBase):
                     "Write operations MUST be denied for "
                     "unauthorized principals."
                 )
-            assert write_response.status_code in {401, 403}, (
-                f"Expected 401/403 for unauthorized write, got {write_response.status_code}"
-            )
+            assert write_response.status_code in {
+                401,
+                403,
+            }, f"Expected 401/403 for unauthorized write, got {write_response.status_code}"
         except httpx.HTTPError as e:
             pytest.fail(f"Failed to test RBAC write protection: {e}")
 
@@ -576,9 +597,10 @@ class TestGovernance(IntegrationTestBase):
                 timeout=10.0,
             )
 
-            assert response.status_code in {401, 403}, (
-                f"Expected auth failure (401/403), got {response.status_code}"
-            )
+            assert response.status_code in {
+                401,
+                403,
+            }, f"Expected auth failure (401/403), got {response.status_code}"
 
         except httpx.HTTPError as e:
             pytest.fail(

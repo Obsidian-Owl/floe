@@ -169,7 +169,10 @@ class TestNetworkPolicyConfigSchema:
             namespace="floe-jobs",
             policy_types=["Egress"],
             egress_rules=[
-                EgressRule(to_namespace="kube-system", ports=[PortRule(port=53, protocol="UDP")])
+                EgressRule(
+                    to_namespace="kube-system",
+                    ports=[PortRule(port=53, protocol="UDP")],
+                )
             ],
         )
 

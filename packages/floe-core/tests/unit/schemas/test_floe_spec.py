@@ -149,7 +149,13 @@ class TestTransformSpec:
     @pytest.mark.requirement("2B-C005")
     def test_name_dbt_pattern_valid(self) -> None:
         """Test that dbt-compatible names are accepted (C005)."""
-        valid_names = ["stg_customers", "fct_orders", "dim_products", "Model1", "_internal"]
+        valid_names = [
+            "stg_customers",
+            "fct_orders",
+            "dim_products",
+            "Model1",
+            "_internal",
+        ]
         for name in valid_names:
             transform = TransformSpec(name=name)
             assert transform.name == name

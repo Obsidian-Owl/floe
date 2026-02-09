@@ -207,10 +207,15 @@ def compile_pipeline(
         ):
             log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
             if manifest.plugins.quality is not None:
-                from floe_core.validation.quality_validation import validate_quality_provider
+                from floe_core.validation.quality_validation import (
+                    validate_quality_provider,
+                )
 
                 validate_quality_provider(manifest.plugins.quality.provider)
-                log.debug("quality_provider_validated", provider=manifest.plugins.quality.provider)
+                log.debug(
+                    "quality_provider_validated",
+                    provider=manifest.plugins.quality.provider,
+                )
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
                 "compilation_stage_complete",

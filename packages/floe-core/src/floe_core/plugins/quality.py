@@ -422,9 +422,9 @@ class QualityPlugin(PluginMetadata):
             {
                 "name": r.check_name,
                 "passed": r.passed,
-                "dimension": r.dimension.value
-                if hasattr(r.dimension, "value")
-                else str(r.dimension),
+                "dimension": (
+                    r.dimension.value if hasattr(r.dimension, "value") else str(r.dimension)
+                ),
             }
             for r in results
         ]

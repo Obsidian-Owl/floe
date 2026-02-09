@@ -84,7 +84,9 @@ def sample_telemetry_config() -> TelemetryConfig:
 
 
 @pytest.fixture
-def sample_observability_config(sample_telemetry_config: TelemetryConfig) -> ObservabilityConfig:
+def sample_observability_config(
+    sample_telemetry_config: TelemetryConfig,
+) -> ObservabilityConfig:
     """Create a sample ObservabilityConfig for testing."""
     return ObservabilityConfig(
         telemetry=sample_telemetry_config,
@@ -1663,11 +1665,15 @@ class TestOCIClientSigningAnnotations:
         # Mock dependencies
         with (
             patch.object(
-                oci_client, "_fetch_from_registry", return_value=(b"test-content", "sha256:abc123")
+                oci_client,
+                "_fetch_from_registry",
+                return_value=(b"test-content", "sha256:abc123"),
             ),
             patch.object(SigningClient, "sign", return_value=mock_metadata),
             patch.object(
-                oci_client, "_update_artifact_annotations", side_effect=capture_annotations
+                oci_client,
+                "_update_artifact_annotations",
+                side_effect=capture_annotations,
             ),
         ):
             metadata = oci_client.sign("v1.0.0", signing_config=signing_config)
@@ -1735,7 +1741,9 @@ class TestOCIClientSigningAnnotations:
 
         with (
             patch.object(
-                oci_client, "_fetch_from_registry", return_value=(b"test-content", "sha256:abc123")
+                oci_client,
+                "_fetch_from_registry",
+                return_value=(b"test-content", "sha256:abc123"),
             ),
             patch.object(SigningClient, "sign", return_value=mock_metadata),
             patch.object(oci_client, "_inspect_internal", return_value=mock_manifest),

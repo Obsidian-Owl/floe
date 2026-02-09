@@ -25,7 +25,9 @@ from floe_core.schemas.data_contract import (
 )
 
 
-def _install_fake_floe_iceberg(mock_drift_detector_cls: MagicMock) -> dict[str, ModuleType]:
+def _install_fake_floe_iceberg(
+    mock_drift_detector_cls: MagicMock,
+) -> dict[str, ModuleType]:
     """Install a fake ``floe_iceberg.drift_detector`` into ``sys.modules``.
 
     Returns the mapping of injected module names so the caller can clean up.

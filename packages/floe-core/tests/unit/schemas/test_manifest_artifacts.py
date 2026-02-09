@@ -267,7 +267,10 @@ class TestManifestWebhookConfiguration:
         assert manifest.artifacts.promotion.webhooks is not None
         assert len(manifest.artifacts.promotion.webhooks) == 1
         assert manifest.artifacts.promotion.webhooks[0].url == "https://hooks.example.com/webhook"
-        assert manifest.artifacts.promotion.webhooks[0].events == ["promote", "rollback"]
+        assert manifest.artifacts.promotion.webhooks[0].events == [
+            "promote",
+            "rollback",
+        ]
 
     @pytest.mark.requirement("FR-040")
     def test_manifest_with_multiple_webhooks(self) -> None:

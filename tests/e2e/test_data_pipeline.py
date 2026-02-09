@@ -380,7 +380,10 @@ class TestDataPipeline(IntegrationTestBase):
         for result_entry in results:
             status = result_entry.get("status")
             uid = result_entry.get("unique_id", "unknown")
-            assert status in ("pass", "success"), f"Model {uid} should succeed, got status={status}"
+            assert status in (
+                "pass",
+                "success",
+            ), f"Model {uid} should succeed, got status={status}"
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-021")

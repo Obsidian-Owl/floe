@@ -477,7 +477,9 @@ def mock_storage_plugin() -> MockStoragePlugin:
 
 
 @pytest.fixture
-def connected_catalog_plugin(mock_catalog_plugin: MockCatalogPlugin) -> MockCatalogPlugin:
+def connected_catalog_plugin(
+    mock_catalog_plugin: MockCatalogPlugin,
+) -> MockCatalogPlugin:
     """Create a MockCatalogPlugin that is already connected.
 
     Args:

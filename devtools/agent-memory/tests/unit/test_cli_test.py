@@ -351,7 +351,11 @@ class TestDefaultTestQueries:
     def test_uses_default_queries(self) -> None:
         """Test that test command uses default queries from quality module."""
         from agent_memory.cli import app
-        from agent_memory.ops.quality import QualityReport, TestResult, create_default_test_queries
+        from agent_memory.ops.quality import (
+            QualityReport,
+            TestResult,
+            create_default_test_queries,
+        )
 
         default_queries = create_default_test_queries()
 

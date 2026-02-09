@@ -121,7 +121,10 @@ class TestNetworkPolicyGeneratorOutputContract:
     @pytest.mark.requirement("FR-070")
     def test_generate_returns_result_object(self, mock_plugin: MagicMock) -> None:
         """Test that generate() returns a NetworkPolicyGenerationResult."""
-        from floe_core.network import NetworkPolicyGenerationResult, NetworkPolicyManifestGenerator
+        from floe_core.network import (
+            NetworkPolicyGenerationResult,
+            NetworkPolicyManifestGenerator,
+        )
 
         generator = NetworkPolicyManifestGenerator(plugin=mock_plugin)
         result = generator.generate(namespaces=["floe-jobs"])

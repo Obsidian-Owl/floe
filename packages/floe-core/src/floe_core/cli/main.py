@@ -6,6 +6,7 @@ Command Groups:
     floe platform: Platform team commands (compile, test, publish, deploy, status)
     floe rbac: RBAC management commands (generate, validate, audit, diff)
     floe artifact: OCI registry artifact commands (push)
+    floe sla: SLA compliance reporting commands (report)
 
 Data Team Commands (root level):
     floe compile: Data team spec compilation (stub)
@@ -43,6 +44,7 @@ from floe_core.cli.helm import helm
 from floe_core.cli.network import network
 from floe_core.cli.platform import platform
 from floe_core.cli.rbac import rbac
+from floe_core.cli.sla.report import report as sla_report
 
 if TYPE_CHECKING:
     pass
@@ -90,6 +92,20 @@ cli.add_command(rbac)
 cli.add_command(network)
 cli.add_command(artifact)
 cli.add_command(helm)
+
+
+# Register SLA command group
+@cli.group(name="sla", help="SLA compliance reporting commands.")
+def sla() -> None:
+    """SLA compliance reporting command group.
+
+    Provides commands for generating SLA compliance reports from
+    contract monitoring data (Epic 3D).
+    """
+    pass
+
+
+sla.add_command(sla_report)
 
 # Register Data Team stub commands (root level)
 cli.add_command(compile_command)

@@ -556,7 +556,9 @@ class TestCompactionEdgeCases:
             )
 
     @pytest.mark.requirement("FR-016")
-    def test_bin_pack_executor_raises_compaction_error_on_analysis_failure(self) -> None:
+    def test_bin_pack_executor_raises_compaction_error_on_analysis_failure(
+        self,
+    ) -> None:
         """Test BinPackCompactionExecutor raises CompactionError when analysis fails.
 
         When _analyze_files_for_compaction raises CompactionAnalysisError,

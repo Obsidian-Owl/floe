@@ -302,7 +302,11 @@ class TestDiffCommandGolden:
         from floe_core.rbac.diff import compute_rbac_diff
 
         result = compute_rbac_diff(
-            expected_resources=[SAMPLE_SERVICE_ACCOUNT, SAMPLE_ROLE, SAMPLE_ROLE_BINDING],
+            expected_resources=[
+                SAMPLE_SERVICE_ACCOUNT,
+                SAMPLE_ROLE,
+                SAMPLE_ROLE_BINDING,
+            ],
             actual_resources=[],
             expected_source="test/manifests",
             actual_source="cluster:empty",

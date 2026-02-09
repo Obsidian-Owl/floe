@@ -197,7 +197,12 @@ class TestHelmValuesConsistency:
         """Test all components have an enabled flag."""
         result = dagster_plugin.get_helm_values()
 
-        for component in ["dagster-webserver", "dagster-daemon", "dagster-user-code", "postgresql"]:
+        for component in [
+            "dagster-webserver",
+            "dagster-daemon",
+            "dagster-user-code",
+            "postgresql",
+        ]:
             assert "enabled" in result[component], f"{component} missing enabled flag"
 
     def test_dagster_services_have_replica_count(

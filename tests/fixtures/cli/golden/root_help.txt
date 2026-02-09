@@ -14,6 +14,7 @@ Commands:
   platform  Platform team commands for governance and deployment.
   rbac      RBAC management commands for Kubernetes security.
   run       Run Data Team pipeline (FR-042).
+  sla       SLA compliance reporting commands.
   test      Run dbt tests (FR-043).
   validate  Validate Data Team floe.yaml (FR-041).
 

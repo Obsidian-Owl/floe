@@ -18,7 +18,10 @@ class TestOTelTracingAvailability:
     @pytest.mark.requirement("OB-005")
     def test_tracing_works_without_otel(self) -> None:
         """Test that plugin works when OpenTelemetry is not installed."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -43,7 +46,10 @@ class TestAuthenticateTracing:
     @pytest.mark.requirement("OB-005")
     def test_authenticate_creates_span_when_otel_available(self) -> None:
         """Test that authenticate creates a span when OTel is available."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
         from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
@@ -83,7 +89,10 @@ class TestAuthenticateTracing:
     @pytest.mark.requirement("OB-005")
     def test_authenticate_sets_span_attributes(self) -> None:
         """Test that authenticate sets proper span attributes."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
         from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
@@ -131,7 +140,10 @@ class TestValidateTokenTracing:
     @pytest.mark.requirement("OB-005")
     def test_validate_token_creates_span(self) -> None:
         """Test that validate_token creates a span when OTel is available."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
         from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
@@ -180,7 +192,10 @@ class TestValidateTokenForRealmTracing:
     @pytest.mark.requirement("OB-005")
     def test_validate_token_for_realm_sets_multi_tenant_attribute(self) -> None:
         """Test that validate_token_for_realm sets multi_tenant attribute."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
         from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
@@ -235,7 +250,10 @@ class TestTracingWithNoOpTracer:
     @pytest.mark.requirement("OB-005")
     def test_authenticate_works_with_noop_tracer(self) -> None:
         """Test that authenticate works with NoOpTracer (no tracing configured)."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -264,7 +282,10 @@ class TestTracingWithNoOpTracer:
     @pytest.mark.requirement("OB-005")
     def test_validate_token_works_with_noop_tracer(self) -> None:
         """Test that validate_token works with NoOpTracer (no tracing configured)."""
-        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",

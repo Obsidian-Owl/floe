@@ -61,7 +61,7 @@ def _log_retry_attempt(retry_state: RetryCallState) -> None:
         attempt=attempt,
         error_type=error_type,
         error_message=error_msg,
-        next_wait_seconds=retry_state.next_action.sleep if retry_state.next_action else 0,
+        next_wait_seconds=(retry_state.next_action.sleep if retry_state.next_action else 0),
     )
 
 

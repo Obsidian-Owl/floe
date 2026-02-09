@@ -233,7 +233,9 @@ class DbtLineageExtractor:
 
         return datasets
 
-    def extract_all_models(self) -> dict[str, tuple[list[LineageDataset], list[LineageDataset]]]:
+    def extract_all_models(
+        self,
+    ) -> dict[str, tuple[list[LineageDataset], list[LineageDataset]]]:
         """Extract lineage for all model nodes in the manifest.
 
         Returns:

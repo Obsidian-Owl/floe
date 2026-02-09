@@ -519,26 +519,22 @@ class TestLoadExpectedPolicies:
         manifest_dir.mkdir()
 
         # Create mixed resource types
-        (manifest_dir / "policy.yaml").write_text(
-            """apiVersion: networking.k8s.io/v1
+        (manifest_dir / "policy.yaml").write_text("""apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: test-policy
   namespace: default
 spec:
   podSelector: {}
-"""
-        )
-        (manifest_dir / "configmap.yaml").write_text(
-            """apiVersion: v1
+""")
+        (manifest_dir / "configmap.yaml").write_text("""apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test-config
   namespace: default
 data:
   key: value
-"""
-        )
+""")
 
         result = _load_expected_policies(manifest_dir)
 
@@ -556,15 +552,13 @@ data:
         manifest_dir = tmp_path / "manifests"
         manifest_dir.mkdir()
 
-        (manifest_dir / "policy.yaml").write_text(
-            """apiVersion: networking.k8s.io/v1
+        (manifest_dir / "policy.yaml").write_text("""apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: no-namespace-policy
 spec:
   podSelector: {}
-"""
-        )
+""")
 
         result = _load_expected_policies(manifest_dir)
 

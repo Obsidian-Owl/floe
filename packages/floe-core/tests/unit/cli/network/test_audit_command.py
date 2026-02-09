@@ -995,7 +995,10 @@ class TestPerformAudit:
         # Need to import after patching to get the patched version
         with patch.dict(
             "sys.modules",
-            {"kubernetes": mock_k8s_module, "kubernetes.client": mock_k8s_module.client},
+            {
+                "kubernetes": mock_k8s_module,
+                "kubernetes.client": mock_k8s_module.client,
+            },
         ):
             from floe_core.cli.network.audit import _perform_audit
 

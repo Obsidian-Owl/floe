@@ -206,7 +206,9 @@ def resolve_transform_compute(
                 compute=compute,
                 tags=transform.tags,
                 depends_on=transform.depends_on,
-                quality_checks=list(transform.quality_checks) if transform.quality_checks else None,
+                quality_checks=(
+                    list(transform.quality_checks) if transform.quality_checks else None
+                ),
                 quality_tier=transform.tier,
             )
         )

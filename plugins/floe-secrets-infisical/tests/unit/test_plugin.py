@@ -231,7 +231,10 @@ class TestInfisicalSecretsPluginSetSecret:
         mock_infisical_sdk.getSecret.side_effect = Exception("Not found")
         mock_infisical_sdk.createSecret.return_value = MagicMock()
 
-        metadata: dict[str, Any] = {"description": "Database password", "owner": "platform-team"}
+        metadata: dict[str, Any] = {
+            "description": "Database password",
+            "owner": "platform-team",
+        }
         plugin.set_secret("db-password", "secret-value", metadata=metadata)
 
         mock_infisical_sdk.createSecret.assert_called_once()

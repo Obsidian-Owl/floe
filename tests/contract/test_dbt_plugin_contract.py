@@ -343,14 +343,12 @@ def temp_dbt_project(tmp_path: Path) -> Path:
     project_dir.mkdir()
 
     # dbt_project.yml
-    (project_dir / "dbt_project.yml").write_text(
-        """
+    (project_dir / "dbt_project.yml").write_text("""
 name: contract_test
 version: '1.0.0'
 profile: contract_test
 model-paths: ['models']
-"""
-    )
+""")
 
     # models directory
     (project_dir / "models").mkdir()

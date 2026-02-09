@@ -58,7 +58,13 @@ class TestSecretReferenceSchemaContract:
         If new sources are added, this test will still pass.
         If sources are removed, downstream users may break.
         """
-        expected_sources = {"env", "kubernetes", "vault", "external-secrets", "infisical"}
+        expected_sources = {
+            "env",
+            "kubernetes",
+            "vault",
+            "external-secrets",
+            "infisical",
+        }
         actual_sources = {s.value for s in SecretSource}
 
         # All expected sources must exist (backward compatibility)

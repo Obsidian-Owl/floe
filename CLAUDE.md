@@ -116,7 +116,7 @@ Pre-PR:     test-review → wiring-check → merge-check → /speckit.pr
 - Ruff linting, >80% coverage
 - No `eval`, `exec`, `shell=True`, hardcoded secrets
 
-**See**: `.claude/rules/python-standards.md`, `.claude/rules/sonarqube-quality.md`
+**See**: `.claude/rules/python-standards.md`, `.claude/rules/code-quality.md`
 
 ---
 
@@ -209,6 +209,8 @@ Read when working on specific domain:
 - N/A (Cube handles data access via ComputePlugin delegation) (4e-semantic-layer)
 - Python 3.11 + dlt[iceberg]>=1.20.0 (framework), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), tenacity>=8.0 (retry), httpx>=0.25.0 (health checks) (4f-ingestion-plugin)
 - Iceberg tables via Polaris REST catalog, MinIO/S3 for data files (dlt handles destination config) (4f-ingestion-plugin)
+- Python 3.11 + pydantic>=2.0, opentelemetry-api>=1.39.0, opentelemetry-sdk>=1.20.0, structlog>=24.0, httpx>=0.25.0, sqlalchemy[asyncio]>=2.0, asyncpg>=0.29.0, click>=8.0 (3d-contract-monitoring)
+- PostgreSQL (asyncpg + SQLAlchemy async) for monitoring state, 90-day raw retention + indefinite aggregates (3d-contract-monitoring)
 
 ## Recent Changes
 - 9b-helm-deployment: Added Python 3.11 (CLI), Go templating (Helm) + Helm 3.12+, Dagster Helm chart 1.12.x, OTel Collector chart 0.85.x

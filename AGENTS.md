@@ -573,9 +573,8 @@ floe/
 **Automated Enforcement**:
 - Pre-commit hooks (formatting, linting)
 - CI pipeline (type checking, security scans, tests)
-- SonarQube quality gates
 
-**See**: `.claude/rules/python-standards.md`, `.claude/rules/sonarqube-quality.md`
+**See**: `.claude/rules/python-standards.md`, `.claude/rules/code-quality.md`
 
 ---
 
