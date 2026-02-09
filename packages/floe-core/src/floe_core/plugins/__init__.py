@@ -113,6 +113,13 @@ from floe_core.plugins.secrets import SecretsPlugin
 # Semantic layer plugin
 from floe_core.plugins.semantic import SemanticLayerPlugin
 
+# Sink/Egress plugin (Epic 4G)
+from floe_core.plugins.sink import (
+    EgressResult,
+    SinkConfig,
+    SinkConnector,
+)
+
 # Storage plugin
 from floe_core.plugins.storage import (
     FileIO,
@@ -165,6 +172,10 @@ __all__ = [
     "SecretsPlugin",
     # Semantic
     "SemanticLayerPlugin",
+    # Sink/Egress (Epic 4G)
+    "EgressResult",
+    "SinkConfig",
+    "SinkConnector",
     # Storage
     "FileIO",
     "StoragePlugin",
