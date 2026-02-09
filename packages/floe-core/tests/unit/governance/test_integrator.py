@@ -880,6 +880,120 @@ def test_integrator_with_no_governance_config(
         assert len(result.violations) == 0
 
 
+@pytest.mark.requirement("003e-FR-015")
+@pytest.mark.requirement("003e-FR-019")
+def test_integrator_delegates_custom_rules_to_policy_enforcer(
+    mock_identity_plugin: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test GovernanceIntegrator forwards custom_rules config to PolicyEnforcer.
+
+    Given GovernanceConfig with custom_rules and a dbt_manifest
+    When run_checks() is called
+    Then PolicyEnforcer receives governance_config with custom_rules
+    And enforce() receives the dbt_manifest.
+    """
+    from floe_core.schemas.governance import RequireTagsForPrefix
+
+    custom_rule = RequireTagsForPrefix(
+        type="require_tags_for_prefix",
+        prefix="gold_",
+        required_tags=["tested", "documented"],
+    )
+    config_with_rules = GovernanceConfig(
+        policy_enforcement_level="strict",
+        custom_rules=[custom_rule],
+    )
+
+    dbt_manifest = {
+        "metadata": {"dbt_version": "1.8.0"},
+        "nodes": {
+            "model.project.gold_customers": {
+                "name": "gold_customers",
+                "resource_type": "model",
+                "tags": [],
+                "meta": {},
+            }
+        },
+    }
+
+    custom_violation = Violation(
+        error_code="FLOE-E400",
+        severity="error",
+        policy_type="custom",
+        model_name="gold_customers",
+        message="Model gold_customers missing required tags: tested, documented",
+        expected="Tags: tested, documented",
+        actual="Tags: (none)",
+        suggestion="Add required tags to the model",
+        documentation_url="https://floe.dev/docs/errors/FLOE-E400",
+    )
+
+    with (
+        patch(
+            "floe_core.governance.integrator.RBACChecker",
+        ) as mock_rbac_cls,
+        patch(
+            "floe_core.governance.integrator.SecretScanner",
+        ) as mock_scanner_cls,
+        patch(
+            "floe_core.governance.integrator.PolicyEnforcer",
+        ) as mock_policy_enforcer_cls,
+    ):
+        mock_rbac = MagicMock()
+        mock_rbac.check.return_value = []
+        mock_rbac_cls.return_value = mock_rbac
+
+        mock_scanner = MagicMock()
+        mock_scanner.scan.return_value = []
+        mock_scanner_cls.return_value = mock_scanner
+
+        mock_policy_enforcer = MagicMock()
+        mock_policy_enforcer.enforce.return_value = EnforcementResult(
+            passed=False,
+            violations=[custom_violation],
+            summary=EnforcementSummary(
+                total_models=1,
+                models_validated=1,
+                custom_rule_violations=1,
+            ),
+            enforcement_level="strict",
+            manifest_version="1.8.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+        mock_policy_enforcer_cls.return_value = mock_policy_enforcer
+
+        integrator = GovernanceIntegrator(
+            governance_config=config_with_rules,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token=None,
+            principal=None,
+            dry_run=False,
+            enforcement_level="strict",
+            dbt_manifest=dbt_manifest,
+        )
+
+        # Verify PolicyEnforcer received the config with custom_rules
+        mock_policy_enforcer_cls.assert_called_once_with(
+            governance_config=config_with_rules,
+        )
+        assert len(config_with_rules.custom_rules) == 1
+
+        # Verify enforce() received the dbt_manifest
+        mock_policy_enforcer.enforce.assert_called_once_with(dbt_manifest)
+
+        # Verify custom rule violations flow through to final result
+        assert len(result.violations) == 1
+        assert result.violations[0].error_code == "FLOE-E400"
+        assert result.violations[0].policy_type == "custom"
+        assert result.violations[0].model_name == "gold_customers"
+        assert result.passed is False
+
+
 # T024 Test Scenarios: OTel Span Emission
 
 
