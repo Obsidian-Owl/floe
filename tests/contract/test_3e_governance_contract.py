@@ -125,12 +125,12 @@ class TestGovernanceConfig3EBackwardCompat:
         from floe_core.schemas.manifest import GovernanceConfig
 
         # Config without 3E fields MUST work
-        config = GovernanceConfig(pii_encryption="required")  # type: ignore[call-arg]
+        config = GovernanceConfig(pii_encryption="required", data_retention_days=None)
 
         # TDD: Will pass after T010 implements schema changes
-        assert config.rbac is None  # type: ignore[attr-defined]
-        assert config.secret_scanning is None  # type: ignore[attr-defined]
-        assert config.network_policies is None  # type: ignore[attr-defined]
+        assert config.rbac is None
+        assert config.secret_scanning is None
+        assert config.network_policies is None
 
     @pytest.mark.requirement("3E-FR-031")
     @pytest.mark.requirement("3E-FR-032")
@@ -163,7 +163,7 @@ class TestGovernanceConfig3EBackwardCompat:
 
         TDD: This will FAIL until T010 adds RBACConfig.
         """
-        from floe_core.schemas.governance import RBACConfig  # type: ignore[attr-defined]
+        from floe_core.schemas.governance import RBACConfig
 
         # TDD: Will pass after T010 implements schema changes
         config = RBACConfig()
@@ -193,7 +193,7 @@ class TestGovernanceConfig3EBackwardCompat:
 
         TDD: This will FAIL until T010 adds SecretScanningConfig.
         """
-        from floe_core.schemas.governance import SecretScanningConfig  # type: ignore[attr-defined]
+        from floe_core.schemas.governance import SecretScanningConfig
 
         # TDD: Will pass after T010 implements schema changes
         config = SecretScanningConfig()
@@ -223,9 +223,7 @@ class TestGovernanceConfig3EBackwardCompat:
 
         TDD: This will FAIL until T010 adds NetworkPoliciesConfig.
         """
-        from typing import Any  # noqa: F401
-
-        from floe_core.schemas.governance import NetworkPoliciesConfig  # type: ignore[attr-defined]
+        from floe_core.schemas.governance import NetworkPoliciesConfig
 
         # TDD: Will pass after T010 implements schema changes
         config = NetworkPoliciesConfig()
@@ -420,7 +418,7 @@ class TestEnforcementResultSummary3EExtension:
         )
 
         # TDD: Will pass after T011 implements schema changes
-        assert summary.rbac_principal is None  # type: ignore[attr-defined]
+        assert summary.rbac_principal is None
 
         # Summary WITH rbac_principal
         summary_with_principal = EnforcementResultSummary(
@@ -430,9 +428,9 @@ class TestEnforcementResultSummary3EExtension:
             policy_types_checked=["rbac"],
             models_validated=10,
             enforcement_level="strict",
-            rbac_principal="user@example.com",  # type: ignore[call-arg]
+            rbac_principal="user@example.com",
         )
-        assert summary_with_principal.rbac_principal == "user@example.com"  # type: ignore[attr-defined]
+        assert summary_with_principal.rbac_principal == "user@example.com"
 
     @pytest.mark.requirement("3E-FR-005")
     @pytest.mark.requirement("3E-FR-032")
@@ -456,7 +454,7 @@ class TestEnforcementResultSummary3EExtension:
         )
 
         # TDD: Will pass after T011 implements schema changes
-        assert summary.secrets_scanned == 0  # type: ignore[attr-defined]
+        assert summary.secrets_scanned == 0
 
         # Summary WITH secrets_scanned
         summary_with_scan = EnforcementResultSummary(
@@ -466,9 +464,9 @@ class TestEnforcementResultSummary3EExtension:
             policy_types_checked=["secret_scanning"],
             models_validated=10,
             enforcement_level="strict",
-            secrets_scanned=42,  # type: ignore[call-arg]
+            secrets_scanned=42,
         )
-        assert summary_with_scan.secrets_scanned == 42  # type: ignore[attr-defined]
+        assert summary_with_scan.secrets_scanned == 42
 
     @pytest.mark.requirement("3E-FR-032")
     def test_enforcement_summary_new_violation_counters(self) -> None:
@@ -490,22 +488,22 @@ class TestEnforcementResultSummary3EExtension:
         )
 
         # TDD: Will pass after T009 implements schema changes
-        assert summary.rbac_violations == 0  # type: ignore[attr-defined]
-        assert summary.secret_violations == 0  # type: ignore[attr-defined]
-        assert summary.network_policy_violations == 0  # type: ignore[attr-defined]
+        assert summary.rbac_violations == 0
+        assert summary.secret_violations == 0
+        assert summary.network_policy_violations == 0
 
         # Summary WITH 3E counters
         # TDD: Will pass after T009 implements schema changes
-        summary_with_3e = EnforcementSummary(  # type: ignore[call-arg]
+        summary_with_3e = EnforcementSummary(
             total_models=100,
             models_validated=100,
             rbac_violations=3,
             secret_violations=5,
             network_policy_violations=2,
         )
-        assert summary_with_3e.rbac_violations == 3  # type: ignore[attr-defined]
-        assert summary_with_3e.secret_violations == 5  # type: ignore[attr-defined]
-        assert summary_with_3e.network_policy_violations == 2  # type: ignore[attr-defined]
+        assert summary_with_3e.rbac_violations == 3
+        assert summary_with_3e.secret_violations == 5
+        assert summary_with_3e.network_policy_violations == 2
 
     @pytest.mark.requirement("3E-FR-032")
     def test_version_bump_to_0_7_0(self) -> None:

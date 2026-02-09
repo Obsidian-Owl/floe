@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -591,8 +591,184 @@ class DataContractsConfig(BaseModel):
     )
 
 
+# ==============================================================================
+# Epic 3E: Governance Integration Configuration
+# ==============================================================================
+
+
+class RBACConfig(BaseModel):
+    """Configuration for compile-time RBAC checking.
+
+    Controls whether and how RBAC is enforced during compilation.
+    When enabled, the compiler validates that the caller has the required
+    role before proceeding.
+
+    Attributes:
+        enabled: Enable compile-time RBAC checking. Default: False
+        required_role: Role the caller must have (e.g., "platform-engineer").
+        allow_principal_fallback: Allow --principal / FLOE_PRINCIPAL when no OIDC.
+
+    Example:
+        >>> config = RBACConfig(enabled=True, required_role="platform-engineer")
+
+    See Also:
+        - data-model.md: RBACConfig entity specification
+        - spec.md: FR-031
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable compile-time RBAC checking",
+    )
+    required_role: str | None = Field(
+        default=None,
+        description="Role the caller must have (e.g., 'platform-engineer')",
+    )
+    allow_principal_fallback: bool = Field(
+        default=True,
+        description="Allow --principal / FLOE_PRINCIPAL when no OIDC token",
+    )
+
+
+class SecretPattern(BaseModel):
+    """Custom secret detection pattern.
+
+    Defines a regex pattern for detecting custom secrets beyond the
+    built-in patterns.
+
+    Attributes:
+        name: Pattern name (e.g., "Custom API Token").
+        pattern: Regex pattern for detection.
+        severity: Severity for matches.
+
+    Example:
+        >>> pattern = SecretPattern(
+        ...     name="Internal API Token",
+        ...     pattern="MYCO-[A-Za-z0-9]{32}",
+        ...     severity="error",
+        ... )
+
+    See Also:
+        - data-model.md: SecretPattern model specification
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        description="Pattern name (e.g., 'Custom API Token')",
+    )
+    pattern: str = Field(
+        ...,
+        min_length=1,
+        description="Regex pattern for secret detection",
+    )
+    severity: Literal["error", "warning"] = Field(
+        default="error",
+        description="Severity for matched secrets",
+    )
+
+
+class SecretScanningConfig(BaseModel):
+    """Configuration for secret scanning during compilation.
+
+    Controls whether and how secret scanning is performed as part of
+    governance validation.
+
+    Attributes:
+        enabled: Enable secret scanning during compilation. Default: False
+        exclude_patterns: Glob patterns to exclude (e.g., "**/tests/**").
+        custom_patterns: Additional regex patterns beyond built-in.
+        severity: Default severity for detected secrets. Default: "error"
+
+    Example:
+        >>> config = SecretScanningConfig(
+        ...     enabled=True,
+        ...     exclude_patterns=["**/tests/**"],
+        ...     severity="error",
+        ... )
+
+    See Also:
+        - data-model.md: SecretScanningConfig entity specification
+        - spec.md: FR-031
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable secret scanning during compilation",
+    )
+    exclude_patterns: list[str] = Field(
+        default_factory=list,
+        description="Glob patterns to exclude from scanning",
+    )
+    custom_patterns: list[SecretPattern] | None = Field(
+        default=None,
+        description="Additional regex patterns beyond built-in",
+    )
+    severity: Literal["error", "warning"] = Field(
+        default="error",
+        description="Default severity for detected secrets",
+    )
+
+
+class NetworkPoliciesConfig(BaseModel):
+    """Configuration for network policy generation.
+
+    Controls whether and how Kubernetes NetworkPolicy resources are
+    generated during compilation.
+
+    Attributes:
+        enabled: Enable network policy generation. Default: False
+        default_deny: Generate default-deny policy. Default: True
+        custom_egress_rules: Additional egress rules to merge.
+
+    Example:
+        >>> config = NetworkPoliciesConfig(
+        ...     enabled=True,
+        ...     default_deny=True,
+        ... )
+
+    See Also:
+        - data-model.md: NetworkPoliciesConfig entity specification
+        - spec.md: FR-031
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable network policy generation",
+    )
+    default_deny: bool = Field(
+        default=True,
+        description="Generate default-deny NetworkPolicy",
+    )
+    custom_egress_rules: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Additional egress rules to merge into generated policies",
+    )
+
+
 # Valid policy types for override filtering
 # Epic 3C: Added "data_contract" for data contract validation
+# Epic 3E: Added "rbac", "secret_scanning", "network_policy" for governance integration
 VALID_POLICY_TYPES = frozenset(
     {
         "naming",
@@ -601,6 +777,9 @@ VALID_POLICY_TYPES = frozenset(
         "semantic",
         "custom",
         "data_contract",  # Epic 3C: Data contract validation
+        "rbac",  # Epic 3E: RBAC policy violations
+        "secret_scanning",  # Epic 3E: Secret scanning violations
+        "network_policy",  # Epic 3E: Network policy violations
     }
 )
 
@@ -722,4 +901,9 @@ __all__ = [
     "AutoGenerationConfig",
     "DriftDetectionConfig",
     "DataContractsConfig",
+    # Epic 3E: Governance integration config
+    "RBACConfig",
+    "SecretPattern",
+    "SecretScanningConfig",
+    "NetworkPoliciesConfig",
 ]
