@@ -64,6 +64,14 @@
     "network_policies": {
       "$ref": "#/$defs/NetworkPoliciesConfig",
       "description": "Network policy generation configuration (Epic 3E)"
+    },
+    "policies": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/PolicyDefinitionConfig"
+      },
+      "default": null,
+      "description": "Custom governance policy definitions (Epic 3E, FR-015)"
     }
   },
   "additionalProperties": false,
@@ -465,6 +473,39 @@
           "description": "Custom egress rules"
         }
       },
+      "additionalProperties": false
+    },
+    "PolicyDefinitionConfig": {
+      "type": "object",
+      "description": "Policy-as-code definition for manifest.yaml (Epic 3E, FR-015)",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable policy name"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["required_tags", "naming_convention", "max_transforms", "custom"],
+          "description": "Policy type"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["warn", "error", "block"],
+          "description": "Enforcement action"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Description of the policy violation"
+        },
+        "config": {
+          "type": "object",
+          "default": {},
+          "description": "Type-specific configuration dictionary"
+        }
+      },
+      "required": ["name", "type", "action", "message"],
       "additionalProperties": false
     }
   },
