@@ -25,13 +25,18 @@ Usage:
 
 from __future__ import annotations
 
+from floe_core.governance.types import GovernanceCheckResult, SecretFinding
+
 # Public API - will be populated as modules are implemented
-__all__: list[str] = []
+__all__: list[str] = [
+    "GovernanceCheckResult",
+    "SecretFinding",
+]
 
 # Future exports (uncomment as modules are created):
-# Phase 1 - Types (T002):
-# - "GovernanceCheckResult"
-# - "SecretFinding"
+# Phase 1 - Types (T002): ✅ DONE
+# - "GovernanceCheckResult" ✅
+# - "SecretFinding" ✅
 #
 # Phase 3 - Secret Scanning (T018-T020):
 # - "BuiltinSecretScanner"
