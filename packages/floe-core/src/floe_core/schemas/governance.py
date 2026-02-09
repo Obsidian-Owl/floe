@@ -886,6 +886,64 @@ class PolicyOverride(BaseModel):
         return v
 
 
+# ==============================================================================
+# Epic 3E: Policy-as-Code Configuration (FR-015)
+# ==============================================================================
+
+
+class PolicyDefinitionConfig(BaseModel):
+    """Policy-as-code definition for manifest.yaml (FR-015).
+
+    This is the YAML-facing config model. The GovernanceIntegrator converts
+    these into PolicyDefinition domain objects for evaluation.
+
+    Attributes:
+        name: Human-readable policy name.
+        type: Policy type (required_tags, naming_convention, max_transforms, custom).
+        action: Enforcement action (warn, error, block).
+        message: Description of the policy violation.
+        config: Type-specific configuration dictionary.
+
+    Example:
+        >>> policy = PolicyDefinitionConfig(
+        ...     name="require_quality_tags",
+        ...     type="required_tags",
+        ...     action="error",
+        ...     message="Models must have tested and documented tags",
+        ...     config={"required_tags": ["tested", "documented"]},
+        ... )
+
+    See Also:
+        - spec.md: FR-015
+        - PolicyDefinition in policy_evaluator.py (domain model)
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        description="Human-readable policy name",
+    )
+    type: Literal["required_tags", "naming_convention", "max_transforms", "custom"] = Field(
+        ...,
+        description="Policy type",
+    )
+    action: Literal["warn", "error", "block"] = Field(
+        ...,
+        description="Enforcement action (warn, error, block)",
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="Description of the policy violation",
+    )
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Type-specific configuration dictionary",
+    )
+
+
 __all__ = [
     "LayerThresholds",
     "NamingConfig",
@@ -907,4 +965,5 @@ __all__ = [
     "SecretPatternConfig",
     "SecretScanningConfig",
     "NetworkPoliciesConfig",
+    "PolicyDefinitionConfig",
 ]

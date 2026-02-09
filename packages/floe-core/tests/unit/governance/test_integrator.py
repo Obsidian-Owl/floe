@@ -1445,3 +1445,240 @@ def test_integrator_handles_policy_enforcement_exception(
         assert result.passed is False
         # Summary should still be valid (empty summary fallback)
         assert result.summary is not None
+
+
+@pytest.mark.requirement("3E-FR-015")
+@pytest.mark.requirement("3E-FR-019")
+def test_integrator_runs_policy_evaluation_when_policies_configured(
+    mock_identity_plugin: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test PolicyEvaluator invoked when policies configured in GovernanceConfig.
+
+    Given GovernanceConfig with policies list
+    When run_checks() is called with a dbt_manifest
+    Then PolicyEvaluator is instantiated with converted PolicyDefinitions
+    And violations from PolicyEvaluator are merged into the final result.
+    """
+    from floe_core.schemas.governance import PolicyDefinitionConfig
+
+    # Create GovernanceConfig with policies
+    governance_config = GovernanceConfig(
+        policy_enforcement_level="strict",
+        pii_encryption="optional",
+        policies=[
+            PolicyDefinitionConfig(
+                name="test_required_tags",
+                type="required_tags",
+                action="error",
+                message="Models must have required tags",
+                config={"required_tags": ["tested", "pii"]},
+            )
+        ],
+    )
+
+    # dbt manifest with a model missing tags
+    dbt_manifest = {
+        "nodes": {
+            "model.my_project.my_model": {
+                "name": "my_model",
+                "resource_type": "model",
+                "tags": [],  # Missing required tags
+            }
+        }
+    }
+
+    # Mock PolicyEvaluator to return a violation
+    mock_evaluator_violation = Violation(
+        error_code="FLOE-E600",
+        severity="error",
+        policy_type="custom",
+        model_name="model.my_project.my_model",
+        message="Model missing required tags",
+        expected="tags=['tested', 'pii']",
+        actual="tags=[]",
+        suggestion="Add required tags to model YAML",
+        documentation_url="https://docs.floe.dev/governance/policies#required-tags",
+    )
+
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_enforcer_cls,
+        patch("floe_core.governance.integrator.RBACChecker"),
+        patch("floe_core.governance.integrator.SecretScanner"),
+        patch("floe_core.governance.integrator.PolicyEvaluator") as mock_evaluator_cls,
+    ):
+        # PolicyEnforcer returns empty violations
+        mock_enforcer = MagicMock()
+        mock_enforcer.enforce.return_value = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(
+                total_models=1,
+                models_validated=1,
+            ),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+        mock_enforcer_cls.return_value = mock_enforcer
+
+        # PolicyEvaluator returns one violation
+        mock_evaluator = MagicMock()
+        mock_evaluator.evaluate.return_value = [mock_evaluator_violation]
+        mock_evaluator_cls.return_value = mock_evaluator
+
+        integrator = GovernanceIntegrator(
+            governance_config=governance_config,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token="valid-token",
+            principal="user@example.com",
+            dry_run=False,
+            enforcement_level="strict",
+            dbt_manifest=dbt_manifest,
+        )
+
+        # Assert PolicyEvaluator was instantiated
+        mock_evaluator_cls.assert_called_once()
+        # Assert evaluate was called with the manifest
+        mock_evaluator.evaluate.assert_called_once()
+        call_kwargs = mock_evaluator.evaluate.call_args[1]
+        assert call_kwargs["manifest"] == dbt_manifest
+
+        # Assert violations are in the result
+        assert len(result.violations) == 1
+        assert result.violations[0].error_code == "FLOE-E600"
+        assert result.violations[0].policy_type == "custom"
+        assert result.passed is False
+
+
+@pytest.mark.requirement("3E-FR-015")
+def test_integrator_skips_policy_evaluation_when_no_policies(
+    minimal_governance_config: GovernanceConfig,
+    mock_identity_plugin: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test PolicyEvaluator NOT invoked when policies is None.
+
+    Given GovernanceConfig with policies=None (default)
+    When run_checks() is called
+    Then PolicyEvaluator is never instantiated.
+    """
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_enforcer_cls,
+        patch("floe_core.governance.integrator.RBACChecker"),
+        patch("floe_core.governance.integrator.SecretScanner"),
+        patch("floe_core.governance.integrator.PolicyEvaluator") as mock_evaluator_cls,
+    ):
+        # PolicyEnforcer returns empty violations
+        mock_enforcer = MagicMock()
+        mock_enforcer.enforce.return_value = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(
+                total_models=0,
+                models_validated=0,
+            ),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+        mock_enforcer_cls.return_value = mock_enforcer
+
+        integrator = GovernanceIntegrator(
+            governance_config=minimal_governance_config,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token="valid-token",
+            principal="user@example.com",
+            dry_run=False,
+            enforcement_level="strict",
+            dbt_manifest=None,
+        )
+
+        # Assert PolicyEvaluator was NEVER instantiated
+        mock_evaluator_cls.assert_not_called()
+        assert result.passed is True
+
+
+@pytest.mark.requirement("3E-FR-015")
+@pytest.mark.requirement("3E-FR-031")
+def test_integrator_handles_policy_evaluation_exception(
+    mock_identity_plugin: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test integrator handles PolicyEvaluator exception gracefully.
+
+    Given PolicyEvaluator.evaluate() raises RuntimeError
+    When run_checks() is called
+    Then FLOE-E450 violation produced, policy_type="custom", and result.passed is False.
+    """
+    from floe_core.schemas.governance import PolicyDefinitionConfig
+
+    # Create GovernanceConfig with policies
+    governance_config = GovernanceConfig(
+        policy_enforcement_level="strict",
+        pii_encryption="optional",
+        policies=[
+            PolicyDefinitionConfig(
+                name="test_policy",
+                type="custom",
+                action="error",
+                message="Test policy",
+                config={},
+            )
+        ],
+    )
+
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_enforcer_cls,
+        patch("floe_core.governance.integrator.RBACChecker"),
+        patch("floe_core.governance.integrator.SecretScanner"),
+        patch("floe_core.governance.integrator.PolicyEvaluator") as mock_evaluator_cls,
+    ):
+        # PolicyEnforcer returns empty violations
+        mock_enforcer = MagicMock()
+        mock_enforcer.enforce.return_value = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(
+                total_models=0,
+                models_validated=0,
+            ),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+        mock_enforcer_cls.return_value = mock_enforcer
+
+        # PolicyEvaluator raises RuntimeError
+        mock_evaluator = MagicMock()
+        mock_evaluator.evaluate.side_effect = RuntimeError("Policy evaluation crashed")
+        mock_evaluator_cls.return_value = mock_evaluator
+
+        integrator = GovernanceIntegrator(
+            governance_config=governance_config,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token="valid-token",
+            principal="user@example.com",
+            dry_run=False,
+            enforcement_level="strict",
+            dbt_manifest={},
+        )
+
+        # Assert FLOE-E450 violation produced
+        e450_violations = [v for v in result.violations if v.error_code == "FLOE-E450"]
+        assert len(e450_violations) == 1
+        assert e450_violations[0].policy_type == "custom"
+        assert "Policy evaluation crashed" in e450_violations[0].message
+        assert result.passed is False

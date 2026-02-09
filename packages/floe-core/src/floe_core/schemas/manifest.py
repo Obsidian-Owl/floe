@@ -25,6 +25,7 @@ from floe_core.schemas.governance import (
     DataContractsConfig,
     NamingConfig,
     NetworkPoliciesConfig,
+    PolicyDefinitionConfig,
     PolicyOverride,
     QualityGatesConfig,
     RBACConfig,
@@ -133,6 +134,7 @@ class GovernanceConfig(BaseModel):
         rbac: RBAC configuration for compile-time access control (NEW in Epic 3E)
         secret_scanning: Secret scanning configuration (NEW in Epic 3E)
         network_policies: Network policy generation configuration (NEW in Epic 3E)
+        policies: Custom governance policy definitions (NEW in Epic 3E, FR-015)
 
     Example:
         >>> governance = GovernanceConfig(
@@ -230,6 +232,12 @@ class GovernanceConfig(BaseModel):
     network_policies: NetworkPoliciesConfig | None = Field(
         default=None,
         description="Network policy generation configuration (NEW in Epic 3E)",
+    )
+
+    # NEW in Epic 3E: Policy-as-code definitions (FR-015)
+    policies: list[PolicyDefinitionConfig] | None = Field(
+        default=None,
+        description="Custom governance policy definitions (NEW in Epic 3E, FR-015)",
     )
 
 

@@ -25,6 +25,7 @@ from floe_core.enforcement.result import (
     EnforcementSummary,
     Violation,
 )
+from floe_core.governance.policy_evaluator import PolicyDefinition, PolicyEvaluator
 from floe_core.governance.rbac_checker import RBACChecker
 from floe_core.governance.secrets import BuiltinSecretScanner as SecretScanner
 from floe_core.governance.types import SecretFinding, SecretPattern
@@ -110,6 +111,11 @@ class GovernanceIntegrator:
         # 3. Run policy enforcement
         policy_result = self._run_policy_enforcement(dbt_manifest)
         all_violations.extend(policy_result.violations)
+
+        # 3.5. Run policy-as-code evaluation (FR-015)
+        if self.governance_config.policies:
+            policy_eval_violations = self._run_policy_evaluation(dbt_manifest)
+            all_violations.extend(policy_eval_violations)
 
         # 4. Run network policy check
         if (
@@ -424,6 +430,72 @@ class GovernanceIntegrator:
                 span.set_status(
                     trace.Status(
                         trace.StatusCode.ERROR, f"{len(violations)} violations found"
+                    )
+                )
+
+            return violations
+
+    def _run_policy_evaluation(
+        self, dbt_manifest: dict[str, Any] | None
+    ) -> list[Violation]:
+        """Run policy-as-code evaluation with OpenTelemetry tracing (FR-015).
+
+        Converts PolicyDefinitionConfig from governance config into PolicyDefinition
+        domain objects and evaluates them against the dbt manifest.
+
+        Args:
+            dbt_manifest: dbt manifest.json for policy evaluation.
+
+        Returns:
+            List of policy evaluation violations.
+        """
+        tracer = trace.get_tracer("floe.governance")
+        with tracer.start_as_current_span("governance.policy_evaluation") as span:
+            start = time.monotonic()
+
+            try:
+                # Convert config models → domain models
+                policy_configs = self.governance_config.policies or []
+                policies = [
+                    PolicyDefinition(
+                        name=p.name,
+                        type=p.type,
+                        action=p.action,
+                        message=p.message,
+                        config=p.config,
+                    )
+                    for p in policy_configs
+                ]
+
+                evaluator = PolicyEvaluator(policies=policies)
+                violations = evaluator.evaluate(manifest=dbt_manifest or {})
+
+            except Exception as e:
+                violations = [
+                    Violation(
+                        error_code="FLOE-E450",
+                        severity="error",
+                        policy_type="custom",
+                        model_name="policy_evaluation",
+                        message=f"Policy evaluation failed: {e}",
+                        expected="Policy evaluation to succeed",
+                        actual=str(e),
+                        suggestion="Verify policy definitions in manifest.yaml",
+                        documentation_url="https://floe.dev/docs/governance/policies",
+                    )
+                ]
+
+            duration_ms = (time.monotonic() - start) * 1000
+            span.set_attribute("governance.check_type", "policy_evaluation")
+            span.set_attribute("governance.violations_count", len(violations))
+            span.set_attribute("governance.duration_ms", duration_ms)
+            span.set_attribute("governance.policies_evaluated", len(policy_configs))
+
+            if violations:
+                span.set_status(
+                    trace.Status(
+                        trace.StatusCode.ERROR,
+                        f"{len(violations)} violations found",
                     )
                 )
 

@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 from floe_core.governance.integrator import GovernanceIntegrator
+from floe_core.governance.policy_evaluator import PolicyDefinition, PolicyEvaluator
 from floe_core.governance.rbac_checker import RBACChecker
 from floe_core.governance.secrets import BuiltinSecretScanner
 from floe_core.governance.types import GovernanceCheckResult, SecretFinding, SecretPattern
@@ -34,6 +35,8 @@ __all__: list[str] = [
     "BuiltinSecretScanner",
     "GovernanceCheckResult",
     "GovernanceIntegrator",
+    "PolicyDefinition",
+    "PolicyEvaluator",
     "RBACChecker",
     "SecretFinding",
     "SecretPattern",

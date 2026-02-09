@@ -518,3 +518,86 @@ class TestEnforcementResultSummary3EExtension:
 
         # TDD: Will pass after T012 implements version bump
         assert COMPILED_ARTIFACTS_VERSION == "0.7.0"
+
+
+class TestPolicyDefinitionConfig3EContract:
+    """Contract tests for PolicyDefinitionConfig schema (FR-015).
+
+    These tests verify that the policies field and PolicyDefinitionConfig
+    model are correctly defined in the governance schema.
+
+    Task: T032-wiring
+    Requirements: FR-015 (Custom policy definitions)
+    """
+
+    @pytest.mark.requirement("3E-FR-015")
+    def test_policies_field_optional_default_none(self) -> None:
+        """Test policies field is optional and defaults to None.
+
+        Validates backward compatibility: existing GovernanceConfig instances
+        without policies field continue to work.
+        """
+        from floe_core.schemas.manifest import GovernanceConfig
+
+        config = GovernanceConfig(
+            policy_enforcement_level="strict",
+            pii_encryption="optional",
+        )
+
+        assert config.policies is None
+
+    @pytest.mark.requirement("3E-FR-015")
+    def test_policies_field_present_in_json_schema(self) -> None:
+        """Test policies field exists in GovernanceConfig JSON Schema.
+
+        Validates that the policies field is exposed in the schema
+        for IDE autocomplete and validation tooling.
+        """
+        from floe_core.schemas.manifest import GovernanceConfig
+
+        schema = GovernanceConfig.model_json_schema()
+
+        assert "policies" in schema["properties"]
+        policies_schema = schema["properties"]["policies"]
+        assert policies_schema.get("anyOf") or policies_schema.get("type") == "array"
+
+    @pytest.mark.requirement("3E-FR-015")
+    def test_policy_definition_config_structure(self) -> None:
+        """Test PolicyDefinitionConfig model structure and validation.
+
+        Validates:
+        1. All required fields are enforced
+        2. config field defaults to empty dict
+        3. Model is frozen (immutable)
+        """
+        from pydantic import ValidationError
+
+        from floe_core.schemas.governance import PolicyDefinitionConfig
+
+        # Test with all required fields
+        config = PolicyDefinitionConfig(
+            name="test_policy",
+            type="required_tags",
+            action="error",
+            message="Test message",
+            config={"required_tags": ["tested"]},
+        )
+
+        assert config.name == "test_policy"
+        assert config.type == "required_tags"
+        assert config.action == "error"
+        assert config.message == "Test message"
+        assert config.config == {"required_tags": ["tested"]}
+
+        # Test config defaults to empty dict
+        config_minimal = PolicyDefinitionConfig(
+            name="minimal",
+            type="custom",
+            action="warn",
+            message="msg",
+        )
+        assert config_minimal.config == {}
+
+        # Test frozen (immutable)
+        with pytest.raises(ValidationError):
+            config_minimal.name = "changed"  # type: ignore[misc]
