@@ -482,3 +482,297 @@ class TestSarifExporter:
         result = export_sarif(sample_enforcement_result, output_path)
 
         assert result == output_path
+
+
+# ==============================================================================
+# T050: Tests for Governance SARIF Rule Definitions (FR-014)
+# ==============================================================================
+
+
+class TestGovernanceSarifRules:
+    """Tests for governance-related SARIF rule definitions.
+
+    FR-014: Secret scan results (and all governance violations) MUST export
+    in SARIF v2.1.0 format with proper rule definitions.
+    """
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_rbac_rule_definitions_present(self) -> None:
+        """Test that RBAC rule definitions (E501-E503) are in RULE_DEFINITIONS.
+
+        Given: The SARIF exporter RULE_DEFINITIONS dict
+        When: Checking for RBAC error codes
+        Then: E501, E502, E503 are all defined
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import RULE_DEFINITIONS
+
+        assert "FLOE-E501" in RULE_DEFINITIONS
+        assert "FLOE-E502" in RULE_DEFINITIONS
+        assert "FLOE-E503" in RULE_DEFINITIONS
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_secret_rule_definitions_present(self) -> None:
+        """Test that secret scanning rule definitions (E601-E605) are in RULE_DEFINITIONS.
+
+        Given: The SARIF exporter RULE_DEFINITIONS dict
+        When: Checking for secret scanning error codes
+        Then: E601 through E605 are all defined
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import RULE_DEFINITIONS
+
+        assert "FLOE-E601" in RULE_DEFINITIONS
+        assert "FLOE-E602" in RULE_DEFINITIONS
+        assert "FLOE-E603" in RULE_DEFINITIONS
+        assert "FLOE-E604" in RULE_DEFINITIONS
+        assert "FLOE-E605" in RULE_DEFINITIONS
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_policy_rule_definition_present(self) -> None:
+        """Test that policy-as-code rule definition (E600) is in RULE_DEFINITIONS.
+
+        Given: The SARIF exporter RULE_DEFINITIONS dict
+        When: Checking for policy error code
+        Then: E600 is defined
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import RULE_DEFINITIONS
+
+        assert "FLOE-E600" in RULE_DEFINITIONS
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_network_rule_definition_present(self) -> None:
+        """Test that network policy rule definition (E700) is in RULE_DEFINITIONS.
+
+        Given: The SARIF exporter RULE_DEFINITIONS dict
+        When: Checking for network error code
+        Then: E700 is defined
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import RULE_DEFINITIONS
+
+        assert "FLOE-E700" in RULE_DEFINITIONS
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_governance_rules_have_required_fields(self) -> None:
+        """Test that all governance rule definitions have required SARIF fields.
+
+        Given: The SARIF exporter RULE_DEFINITIONS dict
+        When: Checking governance rule definitions
+        Then: Each has name, shortDescription, helpUri
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import RULE_DEFINITIONS
+
+        governance_codes = [
+            "FLOE-E501",
+            "FLOE-E502",
+            "FLOE-E503",  # RBAC
+            "FLOE-E600",  # Policy
+            "FLOE-E601",
+            "FLOE-E602",
+            "FLOE-E603",
+            "FLOE-E604",
+            "FLOE-E605",  # Secrets
+            "FLOE-E700",  # Network
+        ]
+        for code in governance_codes:
+            rule = RULE_DEFINITIONS[code]
+            assert "name" in rule, f"{code} missing 'name'"
+            assert "shortDescription" in rule, f"{code} missing 'shortDescription'"
+            assert "helpUri" in rule, f"{code} missing 'helpUri'"
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_rbac_violation_exports_to_sarif(self, tmp_path: Path) -> None:
+        """Test that an RBAC violation exports correctly in SARIF format.
+
+        Given: An EnforcementResult with an RBAC violation (E501)
+        When: export_sarif is called
+        Then: SARIF output contains the violation with correct rule reference
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import export_sarif
+
+        result = EnforcementResult(
+            passed=False,
+            violations=[
+                Violation(
+                    error_code="FLOE-E501",
+                    severity="error",
+                    policy_type="rbac",
+                    model_name="global",
+                    message="RBAC check failed: token required",
+                    expected="Valid OIDC token or --principal fallback",
+                    actual="No token or principal provided",
+                    suggestion="Set FLOE_TOKEN or use --principal flag",
+                    documentation_url="https://floe.dev/docs/enforcement/rbac",
+                ),
+            ],
+            summary=EnforcementSummary(total_models=1, models_validated=1),
+            enforcement_level="strict",
+            manifest_version="1.8.0",
+            timestamp=datetime(2026, 1, 20, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+        output_path = tmp_path / "rbac.sarif"
+        export_sarif(result, output_path)
+
+        data = json.loads(output_path.read_text())
+        results = data["runs"][0]["results"]
+        assert len(results) == 1
+        assert results[0]["ruleId"] == "FLOE-E501"
+        assert results[0]["level"] == "error"
+
+        # Rule should use the defined name, not the fallback
+        rules = data["runs"][0]["tool"]["driver"]["rules"]
+        assert len(rules) == 1
+        assert rules[0]["id"] == "FLOE-E501"
+        assert rules[0]["name"] != "FLOEE501"  # Not the fallback name
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_secret_violation_exports_to_sarif(self, tmp_path: Path) -> None:
+        """Test that a secret scanning violation exports correctly in SARIF format.
+
+        Given: An EnforcementResult with a secret violation (E601)
+        When: export_sarif is called
+        Then: SARIF output contains the violation with correct rule reference
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import export_sarif
+
+        result = EnforcementResult(
+            passed=False,
+            violations=[
+                Violation(
+                    error_code="FLOE-E601",
+                    severity="error",
+                    policy_type="secret_scanning",
+                    model_name="stg_config",
+                    message="AWS Access Key ID detected in config file",
+                    expected="No secret patterns in source files",
+                    actual="AKIA pattern found at line 42",
+                    suggestion="Remove hardcoded key; use environment variable",
+                    documentation_url="https://floe.dev/docs/enforcement/secrets",
+                ),
+            ],
+            summary=EnforcementSummary(total_models=1, models_validated=1),
+            enforcement_level="strict",
+            manifest_version="1.8.0",
+            timestamp=datetime(2026, 1, 20, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+        output_path = tmp_path / "secrets.sarif"
+        export_sarif(result, output_path)
+
+        data = json.loads(output_path.read_text())
+        results = data["runs"][0]["results"]
+        assert len(results) == 1
+        assert results[0]["ruleId"] == "FLOE-E601"
+
+        rules = data["runs"][0]["tool"]["driver"]["rules"]
+        assert rules[0]["name"] != "FLOEE601"  # Not the fallback name
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_network_violation_exports_to_sarif(self, tmp_path: Path) -> None:
+        """Test that a network policy violation exports correctly in SARIF format.
+
+        Given: An EnforcementResult with a network violation (E700)
+        When: export_sarif is called
+        Then: SARIF output contains the violation with correct rule reference
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import export_sarif
+
+        result = EnforcementResult(
+            passed=False,
+            violations=[
+                Violation(
+                    error_code="FLOE-E700",
+                    severity="error",
+                    policy_type="network_policy",
+                    model_name="global",
+                    message="Network policy check failed",
+                    expected="Network policies applied successfully",
+                    actual="NetworkPolicy plugin returned errors",
+                    suggestion="Review network policy configuration",
+                    documentation_url="https://floe.dev/docs/enforcement/network",
+                ),
+            ],
+            summary=EnforcementSummary(total_models=1, models_validated=1),
+            enforcement_level="strict",
+            manifest_version="1.8.0",
+            timestamp=datetime(2026, 1, 20, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+        output_path = tmp_path / "network.sarif"
+        export_sarif(result, output_path)
+
+        data = json.loads(output_path.read_text())
+        results = data["runs"][0]["results"]
+        assert len(results) == 1
+        assert results[0]["ruleId"] == "FLOE-E700"
+
+        rules = data["runs"][0]["tool"]["driver"]["rules"]
+        assert rules[0]["name"] != "FLOEE700"  # Not the fallback name
+
+    @pytest.mark.requirement("003e-FR-014")
+    def test_mixed_governance_violations_export(self, tmp_path: Path) -> None:
+        """Test that mixed governance violations all export correctly.
+
+        Given: An EnforcementResult with RBAC, secret, and network violations
+        When: export_sarif is called
+        Then: All violations export with proper rule definitions
+        """
+        from floe_core.enforcement.exporters.sarif_exporter import export_sarif
+
+        result = EnforcementResult(
+            passed=False,
+            violations=[
+                Violation(
+                    error_code="FLOE-E501",
+                    severity="error",
+                    policy_type="rbac",
+                    model_name="global",
+                    message="Token required",
+                    expected="Valid OIDC token",
+                    actual="No token provided",
+                    suggestion="Set FLOE_TOKEN",
+                    documentation_url="https://floe.dev/docs/enforcement/rbac",
+                ),
+                Violation(
+                    error_code="FLOE-E601",
+                    severity="error",
+                    policy_type="secret_scanning",
+                    model_name="stg_config",
+                    message="AWS key detected",
+                    expected="No secret patterns",
+                    actual="AKIA pattern found",
+                    suggestion="Remove hardcoded key",
+                    documentation_url="https://floe.dev/docs/enforcement/secrets",
+                ),
+                Violation(
+                    error_code="FLOE-E700",
+                    severity="error",
+                    policy_type="network_policy",
+                    model_name="global",
+                    message="Network policy failed",
+                    expected="Policies applied",
+                    actual="Plugin returned errors",
+                    suggestion="Review network config",
+                    documentation_url="https://floe.dev/docs/enforcement/network",
+                ),
+            ],
+            summary=EnforcementSummary(total_models=5, models_validated=5),
+            enforcement_level="strict",
+            manifest_version="1.8.0",
+            timestamp=datetime(2026, 1, 20, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+        output_path = tmp_path / "mixed.sarif"
+        export_sarif(result, output_path)
+
+        data = json.loads(output_path.read_text())
+        results = data["runs"][0]["results"]
+        assert len(results) == 3
+
+        rule_ids = {r["ruleId"] for r in results}
+        assert rule_ids == {"FLOE-E501", "FLOE-E601", "FLOE-E700"}
+
+        # All rules should have proper definitions (not fallback)
+        rules = data["runs"][0]["tool"]["driver"]["rules"]
+        assert len(rules) == 3
+        for rule in rules:
+            assert rule["name"] != rule["id"].replace("-", "")  # Not fallback
