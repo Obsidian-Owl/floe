@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-from floe_core.cli.governance import governance_group
 
+from floe_core.cli.governance import governance_group
 from floe_core.enforcement.result import (
     EnforcementResult,
     EnforcementSummary,
