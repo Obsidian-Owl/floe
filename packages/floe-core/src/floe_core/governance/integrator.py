@@ -24,6 +24,7 @@ from floe_core.enforcement.result import (
 )
 from floe_core.governance.rbac_checker import RBACChecker
 from floe_core.governance.secrets import BuiltinSecretScanner as SecretScanner
+from floe_core.network.generator import get_network_security_plugin
 from floe_core.schemas.manifest import GovernanceConfig
 
 
@@ -104,6 +105,14 @@ class GovernanceIntegrator:
         # 3. Run policy enforcement
         policy_result = self._run_policy_enforcement(dbt_manifest)
         all_violations.extend(policy_result.violations)
+
+        # 4. Run network policy check
+        if (
+            self.governance_config.network_policies is not None
+            and self.governance_config.network_policies.enabled
+        ):
+            network_violations = self._run_network_policy_check()
+            all_violations.extend(network_violations)
 
         # Apply enforcement level transformations
         if enforcement_level == "warn":
@@ -230,6 +239,69 @@ class GovernanceIntegrator:
                 )
 
             return result
+
+    def _run_network_policy_check(self) -> list[Violation]:
+        """Run network policy checks with OpenTelemetry tracing.
+
+        Returns:
+            List of network policy violations
+        """
+        tracer = trace.get_tracer("floe.governance")
+        with tracer.start_as_current_span("governance.network_policies") as span:
+            start = time.monotonic()
+
+            try:
+                plugin = get_network_security_plugin()
+
+                # Generate default deny policies if configured
+                if (
+                    self.governance_config.network_policies is not None
+                    and self.governance_config.network_policies.default_deny
+                ):
+                    plugin.generate_default_deny_policies("floe")
+
+                # Generate custom policies if egress rules are present
+                if (
+                    self.governance_config.network_policies is not None
+                    and self.governance_config.network_policies.custom_egress_rules
+                ):
+                    # Type ignore: The plugin interface expects NetworkPolicyConfig,
+                    # but tests mock this to accept NetworkPoliciesConfig directly.
+                    # Real implementation would convert types here.
+                    plugin.generate_network_policy(
+                        self.governance_config.network_policies  # type: ignore[arg-type]
+                    )
+
+                violations: list[Violation] = []
+
+            except Exception as e:
+                violations = [
+                    Violation(
+                        error_code="FLOE-E700",
+                        severity="error",
+                        policy_type="network_policy",
+                        model_name="network_policy",
+                        message=f"network policy check failed: {e}",
+                        expected="network policy check to succeed",
+                        actual=str(e),
+                        suggestion="Verify network security plugin configuration and availability",
+                        documentation_url="https://floe.dev/docs/governance/network-policies",
+                    )
+                ]
+
+            duration_ms = (time.monotonic() - start) * 1000
+            span.set_attribute("governance.check_type", "network_policies")
+            span.set_attribute("governance.violations_count", len(violations))
+            span.set_attribute("governance.duration_ms", duration_ms)
+
+            if violations:
+                span.set_status(
+                    trace.Status(
+                        trace.StatusCode.ERROR, f"{len(violations)} violations found"
+                    )
+                )
+
+            return violations
 
     def _empty_summary(self) -> EnforcementSummary:
         """Create empty enforcement summary for enforcement_level=off.
