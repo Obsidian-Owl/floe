@@ -167,9 +167,9 @@ class GovernanceIntegrator:
             assert rbac_config is not None
 
             try:
-                assert (
-                    self.identity_plugin is not None
-                ), "identity_plugin must not be None when RBAC is enabled"
+                assert self.identity_plugin is not None, (
+                    "identity_plugin must not be None when RBAC is enabled"
+                )
                 checker = RBACChecker(
                     rbac_config=rbac_config,
                     identity_plugin=self.identity_plugin,

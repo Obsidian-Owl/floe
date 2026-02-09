@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Literal, cast
 
 import click
 
@@ -69,7 +70,7 @@ def audit_command(
         token=token,
         principal=principal,
         dry_run=dry_run,
-        enforcement_level=enforcement_level,
+        enforcement_level=cast(Literal["off", "warn", "strict"], enforcement_level),
     )
 
     # Display results

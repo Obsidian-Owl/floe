@@ -45,9 +45,9 @@ def test_secret_scanner_plugin_inherits_plugin_metadata() -> None:
         SecretScannerPlugin,
     )
 
-    assert issubclass(
-        SecretScannerPlugin, PluginMetadata
-    ), "SecretScannerPlugin must inherit from PluginMetadata"
+    assert issubclass(SecretScannerPlugin, PluginMetadata), (
+        "SecretScannerPlugin must inherit from PluginMetadata"
+    )
 
 
 @pytest.mark.requirement("3E-FR-009")
@@ -92,9 +92,9 @@ def test_get_supported_patterns_is_abstract_method() -> None:
 
     # Check that get_supported_patterns is in abstract methods
     abstract_methods: set[str] = getattr(SecretScannerPlugin, "__abstractmethods__", set())
-    assert (
-        "get_supported_patterns" in abstract_methods
-    ), "get_supported_patterns must be an abstract method"
+    assert "get_supported_patterns" in abstract_methods, (
+        "get_supported_patterns must be an abstract method"
+    )
 
 
 @pytest.mark.requirement("3E-FR-009")

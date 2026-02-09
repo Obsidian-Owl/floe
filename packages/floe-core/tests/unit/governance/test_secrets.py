@@ -34,9 +34,9 @@ def test_builtin_scanner_inherits_secret_scanner_plugin() -> None:
         SecretScannerPlugin,
     )
 
-    assert issubclass(
-        BuiltinSecretScanner, SecretScannerPlugin
-    ), "BuiltinSecretScanner must inherit from SecretScannerPlugin"
+    assert issubclass(BuiltinSecretScanner, SecretScannerPlugin), (
+        "BuiltinSecretScanner must inherit from SecretScannerPlugin"
+    )
 
 
 @pytest.mark.requirement("3E-FR-008")
@@ -268,9 +268,9 @@ def test_exclude_patterns_respected(tmp_path: Path) -> None:
     # Only the non-excluded file should produce findings
     finding_paths = {f.file_path for f in findings}
     assert "config.py" in finding_paths, "Should find secrets in non-excluded files"
-    assert not any(
-        "tests/" in fp for fp in finding_paths
-    ), "Should not find secrets in excluded files"
+    assert not any("tests/" in fp for fp in finding_paths), (
+        "Should not find secrets in excluded files"
+    )
 
 
 @pytest.mark.requirement("3E-FR-011")
@@ -414,9 +414,9 @@ aws_key = AKIAIOSFODNN7EXAMPLE
     # Check that all findings have severity 'warning' when allow_secrets is True
     for finding in findings:
         assert finding.allow_secrets is True, "allow_secrets flag should be set"
-        assert (
-            finding.severity == "warning"
-        ), "With allow_secrets=True, severity should be 'warning'"
+        assert finding.severity == "warning", (
+            "With allow_secrets=True, severity should be 'warning'"
+        )
 
 
 @pytest.mark.requirement("3E-FR-013")
@@ -480,9 +480,9 @@ def test_scan_directory_walks_tree(tmp_path: Path) -> None:
     # Should find secrets from both files
     finding_paths = {f.file_path for f in findings}
     assert "settings.py" in finding_paths, "Should find secret in root file"
-    assert any(
-        "src/config/database.py" in fp for fp in finding_paths
-    ), "Should find secret in nested file"
+    assert any("src/config/database.py" in fp for fp in finding_paths), (
+        "Should find secret in nested file"
+    )
     assert len(findings) >= 2, "Should have findings from both files"
 
 
