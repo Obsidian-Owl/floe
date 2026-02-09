@@ -148,14 +148,15 @@ pytest packages/floe-core/tests/integration/contracts/monitoring/ -v
 
 # All governance tests
 pytest packages/floe-core/tests/unit/governance/ -v
-pytest tests/contract/test_governance_contract.py -v
+pytest tests/contract/test_3e_governance_contract.py -v
 ```
 
 ## 7. Developing a Secret Scanner Plugin
 
 ```python
 # my_scanner/plugin.py
-from floe_core.plugins.secret_scanner import SecretScannerPlugin, SecretFinding
+from floe_core.plugins.secret_scanner import SecretScannerPlugin
+from floe_core.governance.types import SecretFinding
 from pathlib import Path
 
 class GitleaksPlugin(SecretScannerPlugin):
