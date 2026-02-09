@@ -25,28 +25,16 @@ Usage:
 
 from __future__ import annotations
 
+from floe_core.governance.integrator import GovernanceIntegrator
+from floe_core.governance.rbac_checker import RBACChecker
 from floe_core.governance.secrets import BuiltinSecretScanner
 from floe_core.governance.types import GovernanceCheckResult, SecretFinding, SecretPattern
 
-# Public API - will be populated as modules are implemented
 __all__: list[str] = [
     "BuiltinSecretScanner",
     "GovernanceCheckResult",
+    "GovernanceIntegrator",
+    "RBACChecker",
     "SecretFinding",
     "SecretPattern",
 ]
-
-# Future exports (uncomment as modules are created):
-# Phase 1 - Types (T002): ✅ DONE
-# - "GovernanceCheckResult" ✅
-# - "SecretFinding" ✅
-#
-# Phase 3 - Secret Scanning (T018-T020): ✅ DONE
-# - "BuiltinSecretScanner" ✅
-# - "SecretPattern" ✅
-#
-# Phase 4 - RBAC (T025):
-# - "RBACChecker"
-#
-# Phase 4 - Integration (T026):
-# - "GovernanceIntegrator"
