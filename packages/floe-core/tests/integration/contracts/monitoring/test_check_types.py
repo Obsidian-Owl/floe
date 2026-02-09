@@ -19,6 +19,7 @@ from floe_core.contracts.monitoring.config import MonitoringConfig, RegisteredCo
 from floe_core.contracts.monitoring.violations import (
     CheckStatus,
     ViolationSeverity,
+    ViolationType,
 )
 
 
@@ -126,7 +127,7 @@ async def test_freshness_check_fail_stale_data() -> None:
 
     assert result.status == CheckStatus.FAIL
     assert result.violation is not None
-    assert result.violation.violation_type == "FRESHNESS"
+    assert result.violation.violation_type == ViolationType.FRESHNESS
     assert result.violation.severity == ViolationSeverity.ERROR
 
 
