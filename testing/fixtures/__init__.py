@@ -89,6 +89,29 @@ from testing.fixtures.duckdb import (
     get_connection_info as get_duckdb_connection_info,
 )
 
+# Governance fixtures
+from testing.fixtures.governance import (
+    create_api_token_finding,
+    create_aws_key_finding,
+    create_expired_token_result,
+    create_failing_enforcement_result,
+    create_governance_check_result,
+    create_governance_config_all_disabled,
+    create_governance_config_all_enabled,
+    create_governance_config_network_enabled,
+    create_governance_config_rbac_enabled,
+    create_governance_config_scanning_enabled,
+    create_invalid_token_result,
+    create_network_violation,
+    create_passing_enforcement_result,
+    create_password_finding,
+    create_policy_violation,
+    create_rbac_violation,
+    create_secret_violation,
+    create_valid_token_result,
+    create_valid_user_info,
+)
+
 # Ingestion fixtures
 from testing.fixtures.ingestion import (
     create_dlt_ingestion_config,
@@ -242,6 +265,26 @@ __all__ = [
     "materialize_asset",
     "materialize_to_memory",
     "wait_for_run_completion",
+    # Governance fixtures
+    "create_api_token_finding",
+    "create_aws_key_finding",
+    "create_expired_token_result",
+    "create_failing_enforcement_result",
+    "create_governance_check_result",
+    "create_governance_config_all_disabled",
+    "create_governance_config_all_enabled",
+    "create_governance_config_network_enabled",
+    "create_governance_config_rbac_enabled",
+    "create_governance_config_scanning_enabled",
+    "create_invalid_token_result",
+    "create_network_violation",
+    "create_passing_enforcement_result",
+    "create_password_finding",
+    "create_policy_violation",
+    "create_rbac_violation",
+    "create_secret_violation",
+    "create_valid_token_result",
+    "create_valid_user_info",
     # Data generation helpers
     "create_model_instance",
     "generate_random_string",
