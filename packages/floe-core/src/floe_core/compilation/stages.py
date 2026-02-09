@@ -343,6 +343,10 @@ def run_enforce_stage(
     dbt_manifest: dict[str, Any],
     *,
     dry_run: bool = False,
+    token: str | None = None,
+    principal: str | None = None,
+    identity_plugin: Any = None,
+    project_dir: Path | None = None,
 ) -> EnforcementResult:
     """Run the ENFORCE stage of the compilation pipeline.
 
@@ -358,6 +362,10 @@ def run_enforce_stage(
             If None or policy_enforcement_level is 'off', enforcement is skipped.
         dbt_manifest: The compiled dbt manifest.json as a dictionary.
         dry_run: If True, violations are reported but don't block compilation.
+        token: Authentication token for RBAC checks.
+        principal: Principal identifier for RBAC checks.
+        identity_plugin: Identity plugin for RBAC checks.
+        project_dir: Project directory for secret scanning.
 
     Returns:
         EnforcementResult containing pass/fail status and all violations.
@@ -373,7 +381,6 @@ def run_enforce_stage(
         True
     """
     # Local imports to avoid circular dependency
-    from floe_core.enforcement import PolicyEnforcer
     from floe_core.enforcement.errors import PolicyEnforcementError
 
     log = logger.bind(
@@ -412,9 +419,21 @@ def run_enforce_stage(
             model_count=len(dbt_manifest.get("nodes", {})),
         )
 
-        # Create PolicyEnforcer and run enforcement
-        enforcer = PolicyEnforcer(governance_config=governance_config)
-        result = enforcer.enforce(dbt_manifest, dry_run=dry_run)
+        # Create GovernanceIntegrator and run all governance checks
+        from floe_core.governance.integrator import GovernanceIntegrator
+
+        integrator = GovernanceIntegrator(
+            governance_config=governance_config,
+            identity_plugin=identity_plugin,
+        )
+        result = integrator.run_checks(
+            project_dir=project_dir or Path.cwd(),
+            token=token,
+            principal=principal,
+            dry_run=dry_run,
+            enforcement_level=enforcement_level,
+            dbt_manifest=dbt_manifest,
+        )
 
         # Calculate duration
         duration_ms = (time.perf_counter() - start_time) * 1000

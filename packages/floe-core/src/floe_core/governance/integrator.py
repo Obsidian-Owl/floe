@@ -56,6 +56,7 @@ class GovernanceIntegrator:
         principal: str | None,
         dry_run: bool,
         enforcement_level: str,
+        dbt_manifest: dict[str, Any] | None = None,
     ) -> EnforcementResult:
         """Run all governance checks and return unified result.
 
@@ -66,6 +67,7 @@ class GovernanceIntegrator:
             dry_run: If True, return passed=True regardless of violations
             enforcement_level: "off" (skip all), "warn" (downgrade errors),
                 "strict" (fail on errors)
+            dbt_manifest: dbt manifest.json for policy enforcement (optional)
 
         Returns:
             EnforcementResult with merged violations from all checks
@@ -100,7 +102,7 @@ class GovernanceIntegrator:
             all_violations.extend(secret_violations)
 
         # 3. Run policy enforcement
-        policy_result = self._run_policy_enforcement()
+        policy_result = self._run_policy_enforcement(dbt_manifest)
         all_violations.extend(policy_result.violations)
 
         # Apply enforcement level transformations
@@ -196,8 +198,13 @@ class GovernanceIntegrator:
 
             return violations
 
-    def _run_policy_enforcement(self) -> EnforcementResult:
+    def _run_policy_enforcement(
+        self, dbt_manifest: dict[str, Any] | None = None
+    ) -> EnforcementResult:
         """Run policy enforcement with OpenTelemetry tracing.
+
+        Args:
+            dbt_manifest: dbt manifest.json for policy enforcement
 
         Returns:
             EnforcementResult from policy enforcer
@@ -206,8 +213,8 @@ class GovernanceIntegrator:
         with tracer.start_as_current_span("governance.policies") as span:
             start = time.monotonic()
 
-            enforcer = PolicyEnforcer()
-            result = enforcer.enforce()
+            enforcer = PolicyEnforcer(governance_config=self.governance_config)
+            result = enforcer.enforce(dbt_manifest or {})
 
             duration_ms = (time.monotonic() - start) * 1000
             span.set_attribute("governance.check_type", "policies")
