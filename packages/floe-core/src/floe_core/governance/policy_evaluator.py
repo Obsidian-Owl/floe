@@ -19,6 +19,10 @@ import ast
 import re
 from typing import Any, Literal, cast
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.enforcement.result import Violation
@@ -336,8 +340,14 @@ class PolicyEvaluator:
                             documentation_url="https://floe.dev/docs/governance/custom-policies",
                         )
                     )
-            except Exception:
-                # If condition evaluation fails, skip this model (no violation)
+            except Exception as exc:
+                logger.warning(
+                    "condition_evaluation_failed",
+                    policy_name=policy.name,
+                    condition=condition,
+                    model_name=model_name,
+                    error=str(exc),
+                )
                 continue
 
         return violations

@@ -31,7 +31,8 @@ def load_governance_config() -> GovernanceConfig:
     """
     from floe_core.schemas.manifest import GovernanceConfig
 
-    # Default empty config when no manifest is found
+    # TODO: Implement manifest discovery (walk up from cwd to find manifest.yaml)
+    # For now, return default empty config
     return GovernanceConfig(data_retention_days=None)
 
 
@@ -44,6 +45,7 @@ def load_last_enforcement_result() -> EnforcementResult | None:
     Returns:
         Last EnforcementResult, or None if no previous result exists.
     """
+    # TODO: Load from target/governance-result.json when result caching is implemented
     return None
 
 

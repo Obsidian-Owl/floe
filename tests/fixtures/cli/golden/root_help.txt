@@ -7,15 +7,16 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  artifact  OCI artifact management commands.
-  compile   Compile Data Team floe.yaml (FR-040).
-  helm      Helm chart management commands for floe deployment.
-  network   Network security management commands for Kubernetes...
-  platform  Platform team commands for governance and deployment.
-  rbac      RBAC management commands for Kubernetes security.
-  run       Run Data Team pipeline (FR-042).
-  sla       SLA compliance reporting commands.
-  test      Run dbt tests (FR-043).
-  validate  Validate Data Team floe.yaml (FR-041).
+  artifact    OCI artifact management commands.
+  compile     Compile Data Team floe.yaml (FR-040).
+  governance  Governance management commands for policy enforcement,...
+  helm        Helm chart management commands for floe deployment.
+  network     Network security management commands for Kubernetes...
+  platform    Platform team commands for governance and deployment.
+  rbac        RBAC management commands for Kubernetes security.
+  run         Run Data Team pipeline (FR-042).
+  sla         SLA compliance reporting commands.
+  test        Run dbt tests (FR-043).
+  validate    Validate Data Team floe.yaml (FR-041).
 
   Use 'floe <command> --help' for command-specific help.

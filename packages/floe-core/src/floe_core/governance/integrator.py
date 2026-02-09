@@ -12,9 +12,12 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
+
+if TYPE_CHECKING:
+    from floe_core.plugins.identity import IdentityPlugin
 
 from floe_core.enforcement.policy_enforcer import PolicyEnforcer
 from floe_core.enforcement.result import (
@@ -24,6 +27,7 @@ from floe_core.enforcement.result import (
 )
 from floe_core.governance.rbac_checker import RBACChecker
 from floe_core.governance.secrets import BuiltinSecretScanner as SecretScanner
+from floe_core.governance.types import SecretFinding, SecretPattern
 from floe_core.network.generator import get_network_security_plugin
 from floe_core.schemas.manifest import GovernanceConfig
 
@@ -39,13 +43,14 @@ class GovernanceIntegrator:
     def __init__(
         self,
         governance_config: GovernanceConfig,
-        identity_plugin: Any,
+        identity_plugin: IdentityPlugin | None,
     ) -> None:
         """Initialize integrator with governance configuration.
 
         Args:
             governance_config: Governance configuration with RBAC, secret scanning, policy settings
-            identity_plugin: Identity plugin for RBAC checks (typed loosely for test mocking)
+            identity_plugin: Identity plugin for RBAC token validation, or None
+                when OIDC is unavailable (principal fallback only).
         """
         self.governance_config = governance_config
         self.identity_plugin = identity_plugin
@@ -99,7 +104,7 @@ class GovernanceIntegrator:
             self.governance_config.secret_scanning is not None
             and self.governance_config.secret_scanning.enabled
         ):
-            secret_violations = self._run_secret_scan()
+            secret_violations = self._run_secret_scan(project_dir)
             all_violations.extend(secret_violations)
 
         # 3. Run policy enforcement
@@ -160,8 +165,12 @@ class GovernanceIntegrator:
         with tracer.start_as_current_span("governance.rbac") as span:
             start = time.monotonic()
 
+            # Narrowing: guarded by `rbac is not None and rbac.enabled` above
+            rbac_config = self.governance_config.rbac
+            assert rbac_config is not None
+
             checker = RBACChecker(
-                rbac_config=self.governance_config.rbac,  # type: ignore[arg-type]
+                rbac_config=rbac_config,
                 identity_plugin=self.identity_plugin,
             )
             violations = checker.check(token=token, principal=principal)
@@ -180,8 +189,11 @@ class GovernanceIntegrator:
 
             return violations
 
-    def _run_secret_scan(self) -> list[Violation]:
+    def _run_secret_scan(self, project_dir: Path) -> list[Violation]:
         """Run secret scanning with OpenTelemetry tracing.
+
+        Args:
+            project_dir: Project directory to scan for secrets.
 
         Returns:
             List of secret scanning violations
@@ -190,8 +202,42 @@ class GovernanceIntegrator:
         with tracer.start_as_current_span("governance.secrets") as span:
             start = time.monotonic()
 
-            scanner = SecretScanner()
-            violations = scanner.scan()
+            # Convert config SecretPatternConfig → internal SecretPattern (C-02 fix)
+            config = self.governance_config.secret_scanning
+            custom_patterns: list[SecretPattern] | None = None
+            if config is not None and config.custom_patterns:
+                custom_patterns = [
+                    SecretPattern(
+                        name=p.name,
+                        regex=p.pattern,
+                        description=p.name,
+                        error_code="E699",
+                    )
+                    for p in config.custom_patterns
+                ]
+
+            # Determine allow_secrets from severity config
+            allow_secrets = (
+                config is not None and config.severity == "warning"
+            )
+
+            scanner = SecretScanner(
+                custom_patterns=custom_patterns,
+                allow_secrets=allow_secrets,
+            )
+
+            # Get exclude patterns from config
+            exclude_patterns: list[str] | None = None
+            if config is not None and config.exclude_patterns:
+                exclude_patterns = config.exclude_patterns
+
+            # Call scan_directory (C-01 fix: was calling non-existent scan())
+            findings: list[SecretFinding] = scanner.scan_directory(
+                project_dir, exclude_patterns=exclude_patterns
+            )
+
+            # Convert SecretFinding → Violation
+            violations = [self._finding_to_violation(f) for f in findings]
 
             duration_ms = (time.monotonic() - start) * 1000
             span.set_attribute("governance.check_type", "secrets")
@@ -206,6 +252,32 @@ class GovernanceIntegrator:
                 )
 
             return violations
+
+    @staticmethod
+    def _finding_to_violation(finding: SecretFinding) -> Violation:
+        """Convert a SecretFinding to a Violation.
+
+        Args:
+            finding: Secret detection finding from the scanner.
+
+        Returns:
+            Violation instance for the enforcement result.
+        """
+        return Violation(
+            error_code=f"FLOE-{finding.error_code}",
+            severity=finding.severity,
+            policy_type="secret_scanning",
+            model_name=finding.file_path,
+            message=(
+                f"Secret detected: {finding.pattern_name} "
+                f"at {finding.file_path}:{finding.line_number}"
+            ),
+            expected="No hardcoded secrets in source files",
+            actual=f"Pattern '{finding.pattern_name}' matched",
+            suggestion="Remove the secret and use environment variables or a secrets manager",
+            documentation_url="https://floe.dev/docs/governance/secret-scanning",
+            column_name=None,
+        )
 
     def _run_policy_enforcement(
         self, dbt_manifest: dict[str, Any] | None = None
@@ -265,9 +337,11 @@ class GovernanceIntegrator:
                     self.governance_config.network_policies is not None
                     and self.governance_config.network_policies.custom_egress_rules
                 ):
-                    # Type ignore: The plugin interface expects NetworkPolicyConfig,
-                    # but tests mock this to accept NetworkPoliciesConfig directly.
-                    # Real implementation would convert types here.
+                    # TODO: Convert NetworkPoliciesConfig → NetworkPolicyConfig
+                    # The plugin expects NetworkPolicyConfig (detailed K8s policy),
+                    # but we have NetworkPoliciesConfig (high-level governance config).
+                    # Currently works because tests mock the plugin. Needs proper
+                    # conversion when network policy generation is wired end-to-end.
                     plugin.generate_network_policy(
                         self.governance_config.network_policies  # type: ignore[arg-type]
                     )

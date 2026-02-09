@@ -26,6 +26,7 @@ from floe_core.enforcement.result import (
     EnforcementSummary,
     Violation,
 )
+from floe_core.governance.types import SecretFinding
 from floe_core.schemas.governance import RBACConfig, SecretScanningConfig
 from floe_core.schemas.manifest import GovernanceConfig
 
@@ -60,7 +61,7 @@ def mock_rbac_checker() -> MagicMock:
 def mock_secret_scanner() -> MagicMock:
     """Create mock SecretScanner."""
     scanner = MagicMock()
-    scanner.scan.return_value = []
+    scanner.scan_directory.return_value = []
     return scanner
 
 
@@ -161,7 +162,7 @@ def test_integrator_runs_all_checks(
 
     Given RBAC + secrets enabled in GovernanceConfig
     When run_checks() is called
-    Then both RBACChecker.check() and SecretScanner.scan() are invoked
+    Then both RBACChecker.check() and SecretScanner.scan_directory() are invoked
     (collect-all pattern).
     """
     with (
@@ -206,7 +207,7 @@ def test_integrator_runs_all_checks(
 
         # Assert both checkers were invoked
         mock_rbac_checker.check.assert_called_once()
-        mock_secret_scanner.scan.assert_called_once()
+        mock_secret_scanner.scan_directory.assert_called_once()
         mock_policy_enforcer.enforce.assert_called_once()
 
         # Result should pass (no violations)
@@ -241,32 +242,26 @@ def test_integrator_merges_violations(
         documentation_url="https://docs.example.com/rbac",
     )
 
-    secret_violation_1 = Violation(
-        error_code="SECRET-001",
+    secret_finding_1 = SecretFinding(
+        file_path="config.py",
+        line_number=10,
+        pattern_name="aws_access_key",
+        error_code="E601",
+        matched_content="AKIAIOSFODNN7EXAMPLE",
         severity="error",
-        policy_type="secret_scanning",
-        model_name="test_model",
-        message="AWS access key detected",
-        expected="No secrets in code",
-        actual="AKIAIOSFODNN7EXAMPLE",
-        suggestion="Use environment variables",
-        documentation_url="https://docs.example.com/secrets",
     )
 
-    secret_violation_2 = Violation(
-        error_code="SECRET-002",
+    secret_finding_2 = SecretFinding(
+        file_path="settings.py",
+        line_number=25,
+        pattern_name="api_token",
+        error_code="E603",
+        matched_content="api_key=sk-test123",
         severity="error",
-        policy_type="secret_scanning",
-        model_name="test_model",
-        message="API key detected",
-        expected="No secrets in code",
-        actual="api_key=sk-test123",
-        suggestion="Use secret manager",
-        documentation_url="https://docs.example.com/secrets",
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = [secret_violation_1, secret_violation_2]
+    mock_secret_scanner.scan_directory.return_value = [secret_finding_1, secret_finding_2]
 
     with (
         patch(
@@ -308,11 +303,13 @@ def test_integrator_merges_violations(
             enforcement_level="strict",
         )
 
-        # Assert exactly 3 violations merged
+        # Assert exactly 3 violations merged (1 RBAC + 2 secret findings converted)
         assert len(result.violations) == 3
         assert result.violations[0].error_code == "RBAC-001"
-        assert result.violations[1].error_code == "SECRET-001"
-        assert result.violations[2].error_code == "SECRET-002"
+        assert result.violations[1].error_code == "FLOE-E601"
+        assert result.violations[2].error_code == "FLOE-E603"
+        assert result.violations[1].policy_type == "secret_scanning"
+        assert result.violations[2].policy_type == "secret_scanning"
         assert result.passed is False  # Errors present
         assert result.error_count == 3
 
@@ -330,7 +327,7 @@ def test_integrator_collect_all_pattern(
 
     Given RBAC check fails but secret scan hasn't run yet
     When run_checks() is called
-    Then SecretScanner.scan() still executes (collect-all pattern).
+    Then SecretScanner.scan_directory() still executes (collect-all pattern).
     """
     rbac_violation = Violation(
         error_code="RBAC-001",
@@ -345,7 +342,7 @@ def test_integrator_collect_all_pattern(
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = []  # No secrets found
+    mock_secret_scanner.scan_directory.return_value = []  # No secrets found
 
     with (
         patch(
@@ -389,7 +386,7 @@ def test_integrator_collect_all_pattern(
 
         # Both checks MUST have been invoked despite RBAC failure
         mock_rbac_checker.check.assert_called_once()
-        mock_secret_scanner.scan.assert_called_once()
+        mock_secret_scanner.scan_directory.assert_called_once()
 
         # Only 1 violation from RBAC
         assert len(result.violations) == 1
@@ -425,7 +422,7 @@ def test_dry_run_mode_reports_but_passes(
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = []
+    mock_secret_scanner.scan_directory.return_value = []
 
     with (
         patch(
@@ -521,7 +518,7 @@ def test_enforcement_level_off(
 
         # No checks should have been invoked
         mock_rbac_checker.check.assert_not_called()
-        mock_secret_scanner.scan.assert_not_called()
+        mock_secret_scanner.scan_directory.assert_not_called()
         mock_policy_enforcer.enforce.assert_not_called()
 
         # Result passes
@@ -557,7 +554,7 @@ def test_enforcement_level_warn(
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = []
+    mock_secret_scanner.scan_directory.return_value = []
 
     with (
         patch(
@@ -637,7 +634,7 @@ def test_enforcement_level_strict(
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = []
+    mock_secret_scanner.scan_directory.return_value = []
 
     with (
         patch(
@@ -746,7 +743,7 @@ def test_rbac_disabled_skips_rbac_check(
         mock_rbac_checker.check.assert_not_called()
 
         # Secret scan WAS invoked
-        mock_secret_scanner.scan.assert_called_once()
+        mock_secret_scanner.scan_directory.assert_called_once()
 
         assert result.passed is True
 
@@ -763,7 +760,7 @@ def test_secret_scanning_disabled_skips_secret_check(
 
     Given SecretScanningConfig.enabled=False
     When run_checks() is called
-    Then SecretScanner.scan() is NOT invoked.
+    Then SecretScanner.scan_directory() is NOT invoked.
     """
     with (
         patch(
@@ -806,7 +803,7 @@ def test_secret_scanning_disabled_skips_secret_check(
         )
 
         # Secret scan NOT invoked
-        mock_secret_scanner.scan.assert_not_called()
+        mock_secret_scanner.scan_directory.assert_not_called()
 
         # RBAC check WAS invoked
         mock_rbac_checker.check.assert_called_once()
@@ -870,7 +867,7 @@ def test_integrator_with_no_governance_config(
 
         # Neither RBAC nor secret scan invoked
         mock_rbac_checker.check.assert_not_called()
-        mock_secret_scanner.scan.assert_not_called()
+        mock_secret_scanner.scan_directory.assert_not_called()
 
         # Only policy enforcement runs
         mock_policy_enforcer.enforce.assert_called_once()
@@ -945,7 +942,7 @@ def test_integrator_delegates_custom_rules_to_policy_enforcer(
         mock_rbac_cls.return_value = mock_rbac
 
         mock_scanner = MagicMock()
-        mock_scanner.scan.return_value = []
+        mock_scanner.scan_directory.return_value = []
         mock_scanner_cls.return_value = mock_scanner
 
         mock_policy_enforcer = MagicMock()
@@ -1095,7 +1092,7 @@ def test_otel_span_includes_timing_attributes(
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = []
+    mock_secret_scanner.scan_directory.return_value = []
 
     with (
         patch(
@@ -1186,7 +1183,7 @@ def test_otel_span_records_errors_on_failure(
     )
 
     mock_rbac_checker.check.return_value = [rbac_violation]
-    mock_secret_scanner.scan.return_value = []
+    mock_secret_scanner.scan_directory.return_value = []
 
     with (
         patch(

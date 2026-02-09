@@ -635,11 +635,12 @@ class RBACConfig(BaseModel):
     )
 
 
-class SecretPattern(BaseModel):
-    """Custom secret detection pattern.
+class SecretPatternConfig(BaseModel):
+    """Custom secret detection pattern configuration (YAML-facing).
 
     Defines a regex pattern for detecting custom secrets beyond the
-    built-in patterns.
+    built-in patterns. This is the user-facing config model from manifest.yaml.
+    See ``floe_core.governance.types.SecretPattern`` for the internal scanner model.
 
     Attributes:
         name: Pattern name (e.g., "Custom API Token").
@@ -647,7 +648,7 @@ class SecretPattern(BaseModel):
         severity: Severity for matches.
 
     Example:
-        >>> pattern = SecretPattern(
+        >>> pattern = SecretPatternConfig(
         ...     name="Internal API Token",
         ...     pattern="MYCO-[A-Za-z0-9]{32}",
         ...     severity="error",
@@ -715,7 +716,7 @@ class SecretScanningConfig(BaseModel):
         default_factory=list,
         description="Glob patterns to exclude from scanning",
     )
-    custom_patterns: list[SecretPattern] | None = Field(
+    custom_patterns: list[SecretPatternConfig] | None = Field(
         default=None,
         description="Additional regex patterns beyond built-in",
     )
@@ -903,7 +904,7 @@ __all__ = [
     "DataContractsConfig",
     # Epic 3E: Governance integration config
     "RBACConfig",
-    "SecretPattern",
+    "SecretPatternConfig",
     "SecretScanningConfig",
     "NetworkPoliciesConfig",
 ]

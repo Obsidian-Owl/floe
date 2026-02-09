@@ -188,7 +188,7 @@ class TestGovernanceConfig3EBackwardCompat:
         Verifies that SecretScanningConfig has:
         - enabled: bool (default False)
         - exclude_patterns: list[str] (default [])
-        - custom_patterns: list[SecretPattern] | None (default None)
+        - custom_patterns: list[SecretPatternConfig] | None (default None)
         - severity: Literal["error", "warning"] (default "error")
 
         TDD: This will FAIL until T010 adds SecretScanningConfig.
