@@ -170,9 +170,11 @@ from floe_core.schemas.plugins import (
     PluginsConfig,
     PluginSelection,
     PluginWhitelistError,
+    SinkWhitelistError,
     get_available_plugins,
     validate_domain_plugin_whitelist,
     validate_plugin_selection,
+    validate_sink_whitelist,
 )
 
 # Promotion schemas (Epic 8C)
@@ -394,10 +396,12 @@ __all__: list[str] = [
     "PluginSelection",
     "PluginsConfig",
     "PluginWhitelistError",
+    "SinkWhitelistError",
     "PLUGIN_REGISTRY",
     "get_available_plugins",
     "validate_plugin_selection",
     "validate_domain_plugin_whitelist",
+    "validate_sink_whitelist",
     # Manifest (Phase 3, Epic 8C)
     "ArtifactsConfig",
     "FORBIDDEN_ENVIRONMENT_FIELDS",

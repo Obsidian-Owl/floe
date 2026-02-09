@@ -260,6 +260,7 @@ class PlatformManifest(BaseModel):
         plugins: Plugin selections for all 12 categories
         governance: Security and compliance settings
         approved_plugins: Enterprise whitelist of approved plugins per category
+        approved_sinks: Enterprise whitelist of approved sink types for reverse ETL
         approved_products: Domain list of approved data products
 
     Example:
@@ -283,6 +284,7 @@ class PlatformManifest(BaseModel):
         - C003: scope=None → parent_manifest=None
         - C004: approved_plugins only for scope=enterprise
         - C005: approved_products only for scope=domain
+        - C006: approved_sinks only for scope=enterprise
 
     See Also:
         - data-model.md: PlatformManifest entity specification
@@ -341,6 +343,10 @@ class PlatformManifest(BaseModel):
         default=None,
         description="Enterprise whitelist of approved plugins per category",
     )
+    approved_sinks: list[str] | None = Field(
+        default=None,
+        description="Enterprise whitelist of approved sink types for reverse ETL",
+    )
     approved_products: list[str] | None = Field(
         default=None,
         description="Domain list of approved data products",
@@ -364,6 +370,7 @@ class PlatformManifest(BaseModel):
             - C003: scope=None → parent_manifest must be None
             - C004: approved_plugins only valid for scope=enterprise
             - C005: approved_products only valid for scope=domain
+            - C006: approved_sinks only valid for scope=enterprise
         """
         # C001, C003: enterprise and None scopes cannot have parent_manifest
         if self.scope in (None, "enterprise") and self.parent_manifest is not None:
@@ -391,6 +398,13 @@ class PlatformManifest(BaseModel):
         # C005: approved_products only for domain scope
         if self.approved_products is not None and self.scope != "domain":
             msg = f"approved_products is only valid for scope='domain', not scope={self.scope!r}."
+            raise ValueError(msg)
+
+        # C006: approved_sinks only for enterprise scope
+        if self.approved_sinks is not None and self.scope != "enterprise":
+            msg = (
+                f"approved_sinks is only valid for scope='enterprise', not scope={self.scope!r}."
+            )
             raise ValueError(msg)
 
         return self

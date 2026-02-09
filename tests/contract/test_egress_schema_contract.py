@@ -10,6 +10,8 @@ from floe_core.schemas.floe_spec import (
     FloeSpec,
     TransformSpec,
 )
+from floe_core.schemas.manifest import PlatformManifest
+from floe_core.schemas.plugins import SinkWhitelistError
 
 
 class TestEgressSchemaContract:
@@ -78,3 +80,34 @@ class TestEgressSchemaContract:
         assert minimal_spec.metadata.version == "1.0.0"
         # destinations should be None (not provided)
         assert minimal_spec.destinations is None
+
+    @pytest.mark.requirement("4G-SC-005")
+    def test_manifest_json_schema_includes_approved_sinks(self) -> None:
+        """Test PlatformManifest schema includes approved_sinks field.
+
+        This test ensures PlatformManifest schema properly exposes the
+        approved_sinks field for IDE autocomplete and JSON schema validation.
+        The field should be optional (not required) for backwards compatibility.
+        """
+        schema = PlatformManifest.model_json_schema()
+        props = schema["properties"]
+
+        # Verify approved_sinks field exists
+        assert "approved_sinks" in props
+
+        # Verify approved_sinks is optional (not required)
+        required = schema.get("required", [])
+        assert "approved_sinks" not in required
+
+    @pytest.mark.requirement("4G-SC-005")
+    def test_sink_whitelist_error_importable(self) -> None:
+        """Test SinkWhitelistError is importable and is an Exception.
+
+        This test ensures the SinkWhitelistError exception is properly
+        exposed in the public API for error handling in egress validation.
+        """
+        # Should be importable (already imported above)
+        assert SinkWhitelistError is not None
+
+        # Should be an Exception subclass
+        assert issubclass(SinkWhitelistError, Exception)

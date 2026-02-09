@@ -86,6 +86,44 @@ class PluginWhitelistError(Exception):
         super().__init__(message)
 
 
+class SinkWhitelistError(Exception):
+    """Raised when a sink selection violates the enterprise whitelist.
+
+    In 3-tier mode, enterprise manifests can restrict which sinks
+    domains are allowed to use via approved_sinks.
+
+    Attributes:
+        sink_type: The sink type that was rejected
+        approved_sinks: List of sinks that are approved
+
+    Example:
+        >>> raise SinkWhitelistError(
+        ...     sink_type="salesforce",
+        ...     approved_sinks=["postgres", "snowflake"]
+        ... )
+    """
+
+    def __init__(
+        self,
+        sink_type: str,
+        approved_sinks: list[str],
+    ) -> None:
+        """Initialize SinkWhitelistError.
+
+        Args:
+            sink_type: The sink type that was rejected
+            approved_sinks: List of sinks that are approved
+        """
+        self.sink_type = sink_type
+        self.approved_sinks = approved_sinks
+        approved_str = ", ".join(approved_sinks)
+        message = (
+            f"Sink type '{sink_type}' is not in the approved whitelist. "
+            f"Approved sinks: [{approved_str}]"
+        )
+        super().__init__(message)
+
+
 class PluginSelection(BaseModel):
     """A choice of specific plugin for a platform capability.
 
@@ -406,12 +444,48 @@ def validate_domain_plugin_whitelist(
         )
 
 
+def validate_sink_whitelist(
+    sink_type: str,
+    approved_sinks: list[str],
+) -> None:
+    """Validate that a sink selection is within enterprise whitelist.
+
+    In 3-tier mode, enterprise manifests can restrict which sinks
+    domains are allowed to use via the approved_sinks field.
+
+    Args:
+        sink_type: The sink type being selected
+        approved_sinks: Enterprise whitelist of allowed sinks
+
+    Raises:
+        SinkWhitelistError: If sink is not in whitelist
+
+    Example:
+        >>> validate_sink_whitelist(
+        ...     sink_type="postgres",
+        ...     approved_sinks=["postgres", "snowflake"]
+        ... )  # OK
+
+        >>> validate_sink_whitelist(
+        ...     sink_type="salesforce",
+        ...     approved_sinks=["postgres", "snowflake"]
+        ... )  # Raises SinkWhitelistError
+    """
+    if sink_type not in approved_sinks:
+        raise SinkWhitelistError(
+            sink_type=sink_type,
+            approved_sinks=approved_sinks,
+        )
+
+
 __all__ = [
     "PluginSelection",
     "PluginsConfig",
     "PluginWhitelistError",
+    "SinkWhitelistError",
     "PLUGIN_REGISTRY",
     "get_available_plugins",
     "validate_plugin_selection",
     "validate_domain_plugin_whitelist",
+    "validate_sink_whitelist",
 ]
