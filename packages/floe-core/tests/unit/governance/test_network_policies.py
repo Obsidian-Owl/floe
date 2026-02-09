@@ -15,6 +15,7 @@ import pytest
 
 from floe_core.enforcement.result import EnforcementResult, EnforcementSummary, Violation
 from floe_core.governance.integrator import GovernanceIntegrator
+from floe_core.network.schemas import NetworkPolicyConfig
 from floe_core.schemas.governance import NetworkPoliciesConfig, RBACConfig
 from floe_core.schemas.manifest import GovernanceConfig
 
@@ -330,7 +331,7 @@ def test_network_policy_custom_egress_rules_passed_to_plugin(
     """
     custom_egress: list[dict[str, Any]] = [
         {
-            "to": [{"podSelector": {"matchLabels": {"app": "external-api"}}}],
+            "to_cidr": "10.0.0.0/8",
             "ports": [{"protocol": "TCP", "port": 443}],
         }
     ]
@@ -375,10 +376,14 @@ def test_network_policy_custom_egress_rules_passed_to_plugin(
             enforcement_level="strict",
         )
 
-        # Verify plugin was called with network config that includes custom egress
-        mock_network_security_plugin.generate_network_policy.assert_called()
+        # Verify plugin was called with a properly typed NetworkPolicyConfig
+        mock_network_security_plugin.generate_network_policy.assert_called_once()
         call_args = mock_network_security_plugin.generate_network_policy.call_args
-        assert call_args is not None
+        config_arg = call_args[0][0]
+        assert isinstance(config_arg, NetworkPolicyConfig)
+        assert config_arg.policy_types == ("Egress",)
+        assert len(config_arg.egress_rules) == 1
+        assert config_arg.egress_rules[0].to_cidr == "10.0.0.0/8"
 
         # Verify result is successful
         assert result.passed is True

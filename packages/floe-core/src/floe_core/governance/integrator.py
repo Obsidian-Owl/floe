@@ -30,6 +30,7 @@ from floe_core.governance.rbac_checker import RBACChecker
 from floe_core.governance.secrets import BuiltinSecretScanner as SecretScanner
 from floe_core.governance.types import SecretFinding, SecretPattern
 from floe_core.network.generator import get_network_security_plugin
+from floe_core.network.schemas import EgressRule, NetworkPolicyConfig, PortRule
 from floe_core.schemas.manifest import GovernanceConfig
 
 
@@ -303,6 +304,48 @@ class GovernanceIntegrator:
             column_name=None,
         )
 
+    @staticmethod
+    def _convert_egress_rules(
+        custom_egress_rules: list[dict[str, Any]],
+    ) -> NetworkPolicyConfig:
+        """Convert governance egress rule dicts to a typed NetworkPolicyConfig.
+
+        Each dict in custom_egress_rules should have:
+            - to_namespace (str) or to_cidr (str): exactly one required
+            - ports (list[dict]): each with "port" (int) and optional "protocol" (str)
+
+        Args:
+            custom_egress_rules: Egress rule dicts from governance config.
+
+        Returns:
+            NetworkPolicyConfig with Egress policy type and converted rules.
+        """
+        egress_rules: list[EgressRule] = []
+        for rule_dict in custom_egress_rules:
+            port_dicts: list[dict[str, Any]] = rule_dict.get("ports", [])
+            ports = tuple(
+                PortRule(
+                    port=p["port"],
+                    protocol=p.get("protocol", "TCP"),
+                )
+                for p in port_dicts
+            )
+            egress_rules.append(
+                EgressRule(
+                    to_namespace=rule_dict.get("to_namespace"),
+                    to_cidr=rule_dict.get("to_cidr"),
+                    ports=ports,
+                )
+            )
+
+        return NetworkPolicyConfig(
+            name="floe-custom-egress",
+            namespace="floe",
+            pod_selector={},
+            policy_types=("Egress",),
+            egress_rules=tuple(egress_rules),
+        )
+
     def _run_policy_enforcement(
         self, dbt_manifest: dict[str, Any] | None = None
     ) -> EnforcementResult:
@@ -383,14 +426,10 @@ class GovernanceIntegrator:
                     self.governance_config.network_policies is not None
                     and self.governance_config.network_policies.custom_egress_rules
                 ):
-                    # TODO: Convert NetworkPoliciesConfig → NetworkPolicyConfig
-                    # The plugin expects NetworkPolicyConfig (detailed K8s policy),
-                    # but we have NetworkPoliciesConfig (high-level governance config).
-                    # Currently works because tests mock the plugin. Needs proper
-                    # conversion when network policy generation is wired end-to-end.
-                    plugin.generate_network_policy(
-                        self.governance_config.network_policies  # type: ignore[arg-type]
+                    network_policy_config = self._convert_egress_rules(
+                        self.governance_config.network_policies.custom_egress_rules
                     )
+                    plugin.generate_network_policy(network_policy_config)
 
                 violations: list[Violation] = []
 
