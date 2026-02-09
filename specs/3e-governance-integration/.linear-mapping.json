@@ -1,0 +1,404 @@
+{
+  "metadata": {
+    "feature": "3e-governance-integration",
+    "project": "Epic 3E: Governance Integration",
+    "project_id": "9ea9a472-7745-4ed1-841c-c45797776b82",
+    "epic_label": "epic:3e",
+    "created_at": "2026-02-09T02:19:31.324Z",
+    "last_sync": "2026-02-09T02:23:41.378Z"
+  },
+  "mappings": {
+    "T001": {
+      "linear_id": "193ece93-aa9e-45d8-a076-e72b0efb3e2f",
+      "linear_identifier": "FLO-2585",
+      "title": "T001: Create governance module structure",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2585/t001-create-governance-module-structure",
+      "status": "Backlog"
+    },
+    "T002": {
+      "linear_id": "ca4892c1-fb61-4f5d-aa12-25c97ec108e2",
+      "linear_identifier": "FLO-2586",
+      "title": "T002: Create governance types module",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2586/t002-create-governance-types-module",
+      "status": "Backlog"
+    },
+    "T003": {
+      "linear_id": "9a25953f-00d7-45a5-8273-0843dbeaeaf5",
+      "linear_identifier": "FLO-2587",
+      "title": "T003: Create governance test directory structure",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2587/t003-create-governance-test-directory-structure",
+      "status": "Backlog"
+    },
+    "T004": {
+      "linear_id": "69fde01e-76c7-4963-9bd6-f3a6fab0f1f5",
+      "linear_identifier": "FLO-2588",
+      "title": "T004: Contract test GovernanceConfig backward compat",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2588/t004-contract-test-governanceconfig-backward-compat",
+      "status": "Backlog"
+    },
+    "T005": {
+      "linear_id": "4f54c1a6-d822-47ab-b08d-e5832ac56eb0",
+      "linear_identifier": "FLO-2589",
+      "title": "T005: Contract test Violation.policy_type extension",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2589/t005-contract-test-violationpolicy-type-extension",
+      "status": "Backlog"
+    },
+    "T006": {
+      "linear_id": "616b4b88-c832-456b-b64e-c6ab17047ab8",
+      "linear_identifier": "FLO-2590",
+      "title": "T006: Contract test EnforcementResultSummary ext",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2590/t006-contract-test-enforcementresultsummary-ext",
+      "status": "Backlog"
+    },
+    "T007": {
+      "linear_id": "5207172b-9726-4faa-b2b6-59251e3f306e",
+      "linear_identifier": "FLO-2591",
+      "title": "T007: Extend Violation.policy_type Literal",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2591/t007-extend-violationpolicy-type-literal",
+      "status": "Backlog"
+    },
+    "T008": {
+      "linear_id": "a333523f-c321-4cb6-a6c6-d98bdd061233",
+      "linear_identifier": "FLO-2592",
+      "title": "T008: Extend VALID_POLICY_TYPES frozenset",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2592/t008-extend-valid-policy-types-frozenset",
+      "status": "Backlog"
+    },
+    "T009": {
+      "linear_id": "19d8801e-de71-4550-84cb-44efd51d76fc",
+      "linear_identifier": "FLO-2593",
+      "title": "T009: Add violation counters to EnforcementSummary",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2593/t009-add-violation-counters-to-enforcementsummary",
+      "status": "Backlog"
+    },
+    "T010": {
+      "linear_id": "40d15676-54f3-4507-a6ff-274fd975cf60",
+      "linear_identifier": "FLO-2594",
+      "title": "T010: Add RBAC/Secret/Network config models",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2594/t010-add-rbacsecretnetwork-config-models",
+      "status": "Backlog"
+    },
+    "T011": {
+      "linear_id": "ad8701a9-99b4-4796-a88e-908a78917533",
+      "linear_identifier": "FLO-2595",
+      "title": "T011: Extend EnforcementResultSummary fields",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2595/t011-extend-enforcementresultsummary-fields",
+      "status": "Backlog"
+    },
+    "T012": {
+      "linear_id": "acc46d66-f254-44cf-9c93-0c015a8bdbc4",
+      "linear_identifier": "FLO-2596",
+      "title": "T012: Bump COMPILED_ARTIFACTS_VERSION minor",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2596/t012-bump-compiled-artifacts-version-minor",
+      "status": "Backlog"
+    },
+    "T013": {
+      "linear_id": "c98b27e7-c382-4c0e-9bc7-016b3cfb8573",
+      "linear_identifier": "FLO-2597",
+      "title": "T013: Update create_enforcement_summary() helper",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2597/t013-update-create-enforcement-summary-helper",
+      "status": "Backlog"
+    },
+    "T014": {
+      "linear_id": "7570a0f6-3c29-409a-868e-7cce312a87c8",
+      "linear_identifier": "FLO-2598",
+      "title": "T014: Run contract tests and verify schema stable",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2598/t014-run-contract-tests-and-verify-schema-stable",
+      "status": "Backlog"
+    },
+    "T015": {
+      "linear_id": "59a6c0dd-ee15-41c4-a179-a82890f47444",
+      "linear_identifier": "FLO-2599",
+      "title": "T015: Unit tests for SecretScannerPlugin ABC",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2599/t015-unit-tests-for-secretscannerplugin-abc",
+      "status": "Backlog"
+    },
+    "T016": {
+      "linear_id": "b75043ef-21e1-4eb0-acfb-89e09ad8f17e",
+      "linear_identifier": "FLO-2600",
+      "title": "T016: Unit tests for built-in regex secret scanner",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2600/t016-unit-tests-for-built-in-regex-secret-scanner",
+      "status": "Backlog"
+    },
+    "T017": {
+      "linear_id": "e4d7b52c-b251-45a0-a56c-ef18447df6fd",
+      "linear_identifier": "FLO-2601",
+      "title": "T017: Unit test for --allow-secrets flag",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2601/t017-unit-test-for-allow-secrets-flag",
+      "status": "Backlog"
+    },
+    "T018": {
+      "linear_id": "84546658-ca56-400b-9d38-272607236673",
+      "linear_identifier": "FLO-2602",
+      "title": "T018: Create SecretScannerPlugin ABC",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2602/t018-create-secretscannerplugin-abc",
+      "status": "Backlog"
+    },
+    "T019": {
+      "linear_id": "1b878359-5646-495e-bef1-b9715472aaef",
+      "linear_identifier": "FLO-2603",
+      "title": "T019: Implement BuiltinSecretScanner",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2603/t019-implement-builtinsecretscanner",
+      "status": "Backlog"
+    },
+    "T020": {
+      "linear_id": "9f5e3430-7ba2-4d42-9bb5-86a2578a316a",
+      "linear_identifier": "FLO-2604",
+      "title": "T020: Add --allow-secrets support to scanner",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2604/t020-add-allow-secrets-support-to-scanner",
+      "status": "Backlog"
+    },
+    "T021": {
+      "linear_id": "086fb8f5-357e-4bc4-92dd-9d9eed323a34",
+      "linear_identifier": "FLO-2605",
+      "title": "T021: Run US2 tests and verify all pass",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2605/t021-run-us2-tests-and-verify-all-pass",
+      "status": "Backlog"
+    },
+    "T022": {
+      "linear_id": "41df278a-b575-4934-ac3d-44286a556dd0",
+      "linear_identifier": "FLO-2606",
+      "title": "T022: Unit tests for RBACChecker",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2606/t022-unit-tests-for-rbacchecker",
+      "status": "Backlog"
+    },
+    "T023": {
+      "linear_id": "e6b1f126-1140-49a1-9f4b-ef695f839715",
+      "linear_identifier": "FLO-2607",
+      "title": "T023: Unit tests for GovernanceIntegrator",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2607/t023-unit-tests-for-governanceintegrator",
+      "status": "Backlog"
+    },
+    "T024": {
+      "linear_id": "2e8066de-af48-4b50-972d-cadb6320c33e",
+      "linear_identifier": "FLO-2608",
+      "title": "T024: Unit test for OTel span emission",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2608/t024-unit-test-for-otel-span-emission",
+      "status": "Backlog"
+    },
+    "T025": {
+      "linear_id": "510f68a6-d59c-4beb-aaab-270c06e79534",
+      "linear_identifier": "FLO-2609",
+      "title": "T025: Implement RBACChecker",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2609/t025-implement-rbacchecker",
+      "status": "Backlog"
+    },
+    "T026": {
+      "linear_id": "c09dc902-d509-44ce-95d5-f7bde3b7fdeb",
+      "linear_identifier": "FLO-2610",
+      "title": "T026: Implement GovernanceIntegrator",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2610/t026-implement-governanceintegrator",
+      "status": "Backlog"
+    },
+    "T027": {
+      "linear_id": "61d832a9-37f7-4afb-887f-7d48dbaf5935",
+      "linear_identifier": "FLO-2611",
+      "title": "T027: Wire GovernanceIntegrator into enforce stage",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2611/t027-wire-governanceintegrator-into-enforce-stage",
+      "status": "Backlog"
+    },
+    "T028": {
+      "linear_id": "70532812-b12b-456c-af98-6b708a6f25a1",
+      "linear_identifier": "FLO-2612",
+      "title": "T028: Export GovernanceIntegrator public API",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2612/t028-export-governanceintegrator-public-api",
+      "status": "Backlog"
+    },
+    "T029": {
+      "linear_id": "04bf8e65-9094-4876-ac19-32cca5a6d516",
+      "linear_identifier": "FLO-2613",
+      "title": "T029: Run US1 tests and verify all pass",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2613/t029-run-us1-tests-and-verify-all-pass",
+      "status": "Backlog"
+    },
+    "T030": {
+      "linear_id": "2d6f3f5a-0012-4fd2-9216-d978451125c6",
+      "linear_identifier": "FLO-2614",
+      "title": "T030: Unit tests for policy-as-code evaluation",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2614/t030-unit-tests-for-policy-as-code-evaluation",
+      "status": "Backlog"
+    },
+    "T031": {
+      "linear_id": "34469f3c-2051-4a82-b5a3-79a9417467e7",
+      "linear_identifier": "FLO-2615",
+      "title": "T031: Verify GovernanceIntegrator policy delegation",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2615/t031-verify-governanceintegrator-policy-delegation",
+      "status": "Backlog"
+    },
+    "T032": {
+      "linear_id": "426ee811-09f8-412c-9f4d-1e32ae37cae7",
+      "linear_identifier": "FLO-2616",
+      "title": "T032: Implement safe condition evaluator for policies",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2616/t032-implement-safe-condition-evaluator-for-policies",
+      "status": "Backlog"
+    },
+    "T033": {
+      "linear_id": "839d6344-c6cd-4259-8eea-1f6fa1a0e9c1",
+      "linear_identifier": "FLO-2617",
+      "title": "T033: Run US3 tests and verify all pass",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2617/t033-run-us3-tests-and-verify-all-pass",
+      "status": "Backlog"
+    },
+    "T034": {
+      "linear_id": "5740164a-7922-4da6-ba5a-01a2dff01714",
+      "linear_identifier": "FLO-2618",
+      "title": "T034: Unit tests for network policy integration",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2618/t034-unit-tests-for-network-policy-integration",
+      "status": "Backlog"
+    },
+    "T035": {
+      "linear_id": "8cabb4a9-9383-4a10-95bc-79b2051947e1",
+      "linear_identifier": "FLO-2619",
+      "title": "T035: Implement network policy check in integrator",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2619/t035-implement-network-policy-check-in-integrator",
+      "status": "Backlog"
+    },
+    "T036": {
+      "linear_id": "f9b143ab-0b96-43a7-8e37-b3c1f6f289b6",
+      "linear_identifier": "FLO-2620",
+      "title": "T036: Run US4 tests and verify all pass",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2620/t036-run-us4-tests-and-verify-all-pass",
+      "status": "Backlog"
+    },
+    "T037": {
+      "linear_id": "ca6d92b3-ea50-4737-b60a-1c194841e82b",
+      "linear_identifier": "FLO-2621",
+      "title": "T037: Integration test conftest with PostgreSQL fixtures",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2621/t037-integration-test-conftest-with-postgresql-fixtures",
+      "status": "Backlog"
+    },
+    "T038": {
+      "linear_id": "fc440365-19e8-4414-b178-56e9a4f09134",
+      "linear_identifier": "FLO-2622",
+      "title": "T038: ContractMonitor orchestrator integration test",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2622/t038-contractmonitor-orchestrator-integration-test",
+      "status": "Backlog"
+    },
+    "T039": {
+      "linear_id": "9f86be2a-f3a2-47df-ab30-536cb25d4f36",
+      "linear_identifier": "FLO-2623",
+      "title": "T039: Check type integration tests",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2623/t039-check-type-integration-tests",
+      "status": "Backlog"
+    },
+    "T040": {
+      "linear_id": "20adaf5f-ee5e-434e-91cc-fd3fa5734ddf",
+      "linear_identifier": "FLO-2624",
+      "title": "T040: SLA compliance integration test",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2624/t040-sla-compliance-integration-test",
+      "status": "Backlog"
+    },
+    "T041": {
+      "linear_id": "f57e98c3-aacf-427f-9bfe-df760735c125",
+      "linear_identifier": "FLO-2625",
+      "title": "T041: AlertRouter integration test",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2625/t041-alertrouter-integration-test",
+      "status": "Backlog"
+    },
+    "T042": {
+      "linear_id": "db498da2-db90-4b65-9083-4ba57218920b",
+      "linear_identifier": "FLO-2626",
+      "title": "T042: Run US6 integration tests against Kind",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2626/t042-run-us6-integration-tests-against-kind",
+      "status": "Backlog"
+    },
+    "T043": {
+      "linear_id": "91d5ac0a-c14b-4e0f-a76c-231070d17a2f",
+      "linear_identifier": "FLO-2627",
+      "title": "T043: Unit tests for governance CLI commands",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2627/t043-unit-tests-for-governance-cli-commands",
+      "status": "Backlog"
+    },
+    "T044": {
+      "linear_id": "62237a2d-5fbe-4d86-9045-a05fd0392ad5",
+      "linear_identifier": "FLO-2628",
+      "title": "T044: Create governance CLI group",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2628/t044-create-governance-cli-group",
+      "status": "Backlog"
+    },
+    "T045": {
+      "linear_id": "ff9d2a00-bf23-4a8c-b141-32a37fc702e2",
+      "linear_identifier": "FLO-2629",
+      "title": "T045: Implement floe governance status command",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2629/t045-implement-floe-governance-status-command",
+      "status": "Backlog"
+    },
+    "T046": {
+      "linear_id": "51567277-5151-4e73-937f-2703f0dd22e9",
+      "linear_identifier": "FLO-2630",
+      "title": "T046: Implement floe governance audit command",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2630/t046-implement-floe-governance-audit-command",
+      "status": "Backlog"
+    },
+    "T047": {
+      "linear_id": "629b5c7f-e865-4daf-922d-00e255e0ec38",
+      "linear_identifier": "FLO-2631",
+      "title": "T047: Implement floe governance report command",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2631/t047-implement-floe-governance-report-command",
+      "status": "Backlog"
+    },
+    "T048": {
+      "linear_id": "20e87130-e70a-4653-ac7b-cc41a1de8aaf",
+      "linear_identifier": "FLO-2632",
+      "title": "T048: Register governance group in CLI main",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2632/t048-register-governance-group-in-cli-main",
+      "status": "Backlog"
+    },
+    "T049": {
+      "linear_id": "40f30872-4225-4d3c-b7d4-3c9e227be004",
+      "linear_identifier": "FLO-2633",
+      "title": "T049: Run US5 tests and verify all pass",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2633/t049-run-us5-tests-and-verify-all-pass",
+      "status": "Backlog"
+    },
+    "T050": {
+      "linear_id": "c4429bb9-b251-4615-b9b6-cf4a574ea285",
+      "linear_identifier": "FLO-2634",
+      "title": "T050: Unit tests for SARIF E5xx/E6xx rule defs",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2634/t050-unit-tests-for-sarif-e5xxe6xx-rule-defs",
+      "status": "Backlog"
+    },
+    "T051": {
+      "linear_id": "ac7a8f6e-43b6-45c6-8780-91bb1239fba9",
+      "linear_identifier": "FLO-2635",
+      "title": "T051: Extend SARIF rule definitions for governance",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2635/t051-extend-sarif-rule-definitions-for-governance",
+      "status": "Backlog"
+    },
+    "T052": {
+      "linear_id": "dd187dc4-2a38-47e1-88e8-f1e17eb7ac60",
+      "linear_identifier": "FLO-2636",
+      "title": "T052: Create reusable governance test fixtures",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2636/t052-create-reusable-governance-test-fixtures",
+      "status": "Backlog"
+    },
+    "T053": {
+      "linear_id": "10abb28f-33da-4a70-8717-8f336c7f413a",
+      "linear_identifier": "FLO-2637",
+      "title": "T053: Run full unit test suite, verify >80% coverage",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2637/t053-run-full-unit-test-suite-verify-80percent-coverage",
+      "status": "Backlog"
+    },
+    "T054": {
+      "linear_id": "43298e87-6405-4d9d-b18a-343f58a80b3d",
+      "linear_identifier": "FLO-2638",
+      "title": "T054: Run full contract test suite",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2638/t054-run-full-contract-test-suite",
+      "status": "Backlog"
+    },
+    "T055": {
+      "linear_id": "b5022f0f-5bcf-4806-88f2-68481531aeb0",
+      "linear_identifier": "FLO-2639",
+      "title": "T055: Run quickstart.md validation",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2639/t055-run-quickstartmd-validation",
+      "status": "Backlog"
+    },
+    "T056": {
+      "linear_id": "7c789ea6-4fc3-48b6-8558-4cc69dd301de",
+      "linear_identifier": "FLO-2640",
+      "title": "T056: Verify requirement traceability 100%",
+      "url": "https://linear.app/obsidianowl/issue/FLO-2640/t056-verify-requirement-traceability-100percent",
+      "status": "Backlog"
+    }
+  }
+}

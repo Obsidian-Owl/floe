@@ -7,6 +7,7 @@ Command Groups:
     floe rbac: RBAC management commands (generate, validate, audit, diff)
     floe artifact: OCI registry artifact commands (push)
     floe sla: SLA compliance reporting commands (report)
+    floe governance: Governance management commands (status, audit, report)
 
 Data Team Commands (root level):
     floe compile: Data team spec compilation (stub)
@@ -40,6 +41,7 @@ from floe_core.cli.data import (
     test_command,
     validate_command,
 )
+from floe_core.cli.governance import governance_group
 from floe_core.cli.helm import helm
 from floe_core.cli.network import network
 from floe_core.cli.platform import platform
@@ -92,6 +94,7 @@ cli.add_command(rbac)
 cli.add_command(network)
 cli.add_command(artifact)
 cli.add_command(helm)
+cli.add_command(governance_group)
 
 
 # Register SLA command group

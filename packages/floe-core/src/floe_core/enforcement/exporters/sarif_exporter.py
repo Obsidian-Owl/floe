@@ -110,6 +110,60 @@ RULE_DEFINITIONS: dict[str, dict[str, str]] = {
         "shortDescription": "Model missing required test type",
         "helpUri": "https://floe.dev/docs/enforcement/custom#tests",
     },
+    # RBAC violations (E5xx)
+    "FLOE-E501": {
+        "name": "RBACTokenMissing",
+        "shortDescription": "No identity token or principal provided",
+        "helpUri": "https://floe.dev/docs/enforcement/rbac#token",
+    },
+    "FLOE-E502": {
+        "name": "RBACTokenInvalid",
+        "shortDescription": "OIDC token expired or invalid",
+        "helpUri": "https://floe.dev/docs/enforcement/rbac#validation",
+    },
+    "FLOE-E503": {
+        "name": "RBACInsufficientRole",
+        "shortDescription": "Principal lacks required role",
+        "helpUri": "https://floe.dev/docs/enforcement/rbac#roles",
+    },
+    # Policy-as-code violations (E6xx)
+    "FLOE-E600": {
+        "name": "CustomPolicyViolation",
+        "shortDescription": "Custom governance policy violated",
+        "helpUri": "https://floe.dev/docs/enforcement/policies",
+    },
+    # Secret scanning violations (E6xx)
+    "FLOE-E601": {
+        "name": "AWSAccessKeyDetected",
+        "shortDescription": "AWS Access Key ID detected in source",
+        "helpUri": "https://floe.dev/docs/enforcement/secrets#aws",
+    },
+    "FLOE-E602": {
+        "name": "HardcodedPasswordDetected",
+        "shortDescription": "Hardcoded password detected in source",
+        "helpUri": "https://floe.dev/docs/enforcement/secrets#passwords",
+    },
+    "FLOE-E603": {
+        "name": "APITokenDetected",
+        "shortDescription": "API token or key detected in source",
+        "helpUri": "https://floe.dev/docs/enforcement/secrets#tokens",
+    },
+    "FLOE-E604": {
+        "name": "PrivateKeyDetected",
+        "shortDescription": "Private key detected in source",
+        "helpUri": "https://floe.dev/docs/enforcement/secrets#keys",
+    },
+    "FLOE-E605": {
+        "name": "HighEntropyStringDetected",
+        "shortDescription": "High-entropy string suggesting embedded secret",
+        "helpUri": "https://floe.dev/docs/enforcement/secrets#entropy",
+    },
+    # Network policy violations (E7xx)
+    "FLOE-E700": {
+        "name": "NetworkPolicyViolation",
+        "shortDescription": "Network policy check failed",
+        "helpUri": "https://floe.dev/docs/enforcement/network",
+    },
 }
 
 

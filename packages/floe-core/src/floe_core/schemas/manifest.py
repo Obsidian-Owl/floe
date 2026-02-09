@@ -24,8 +24,12 @@ from floe_core.schemas.governance import (
     CustomRule,
     DataContractsConfig,
     NamingConfig,
+    NetworkPoliciesConfig,
+    PolicyDefinitionConfig,
     PolicyOverride,
     QualityGatesConfig,
+    RBACConfig,
+    SecretScanningConfig,
 )
 from floe_core.schemas.metadata import ManifestMetadata
 from floe_core.schemas.oci import RegistryConfig
@@ -127,6 +131,10 @@ class GovernanceConfig(BaseModel):
         custom_rules: Custom validation rules (NEW in Epic 3B)
         policy_overrides: Override rules for legacy/migration (NEW in Epic 3B)
         data_contracts: Data contract validation settings (NEW in Epic 3C)
+        rbac: RBAC configuration for compile-time access control (NEW in Epic 3E)
+        secret_scanning: Secret scanning configuration (NEW in Epic 3E)
+        network_policies: Network policy generation configuration (NEW in Epic 3E)
+        policies: Custom governance policy definitions (NEW in Epic 3E, FR-015)
 
     Example:
         >>> governance = GovernanceConfig(
@@ -210,6 +218,26 @@ class GovernanceConfig(BaseModel):
     data_contracts: DataContractsConfig | None = Field(
         default=None,
         description="Data contract validation settings (NEW in Epic 3C)",
+    )
+
+    # NEW in Epic 3E: Governance integration configuration
+    rbac: RBACConfig | None = Field(
+        default=None,
+        description="RBAC configuration for compile-time access control (NEW in Epic 3E)",
+    )
+    secret_scanning: SecretScanningConfig | None = Field(
+        default=None,
+        description="Secret scanning configuration (NEW in Epic 3E)",
+    )
+    network_policies: NetworkPoliciesConfig | None = Field(
+        default=None,
+        description="Network policy generation configuration (NEW in Epic 3E)",
+    )
+
+    # NEW in Epic 3E: Policy-as-code definitions (FR-015)
+    policies: list[PolicyDefinitionConfig] | None = Field(
+        default=None,
+        description="Custom governance policy definitions (NEW in Epic 3E, FR-015)",
     )
 
 

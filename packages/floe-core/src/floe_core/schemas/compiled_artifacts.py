@@ -443,7 +443,7 @@ class EnforcementResultSummary(BaseModel):
     This summary contains only the essential metrics for downstream consumption.
     Full violation details are exported separately (SARIF/JSON/HTML).
 
-    Contract Version: 0.3.0 (Epic 3B addition)
+    Contract Version: 0.7.0 (Epic 3E additions)
 
     Attributes:
         passed: Overall pass/fail status.
@@ -452,6 +452,8 @@ class EnforcementResultSummary(BaseModel):
         policy_types_checked: List of policy types that were enforced.
         models_validated: Number of models that were validated.
         enforcement_level: Applied enforcement level (off, warn, strict).
+        rbac_principal: Authenticated principal name from RBAC validation (Epic 3E).
+        secrets_scanned: Number of files scanned for secrets (Epic 3E).
 
     Example:
         >>> summary = EnforcementResultSummary(
@@ -498,6 +500,16 @@ class EnforcementResultSummary(BaseModel):
     enforcement_level: Literal["off", "warn", "strict"] = Field(
         ...,
         description="Applied enforcement level",
+    )
+    # Epic 3E: Governance integration fields
+    rbac_principal: str | None = Field(
+        default=None,
+        description="Authenticated principal name from RBAC validation",
+    )
+    secrets_scanned: int = Field(
+        default=0,
+        ge=0,
+        description="Number of files scanned for secrets",
     )
 
 

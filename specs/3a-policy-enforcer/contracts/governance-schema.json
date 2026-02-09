@@ -52,6 +52,26 @@
     "data_contracts": {
       "$ref": "#/$defs/DataContractsConfig",
       "description": "Data contract validation configuration (Epic 3C)"
+    },
+    "rbac": {
+      "$ref": "#/$defs/RBACConfig",
+      "description": "RBAC configuration for compile-time access control (Epic 3E)"
+    },
+    "secret_scanning": {
+      "$ref": "#/$defs/SecretScanningConfig",
+      "description": "Secret scanning configuration (Epic 3E)"
+    },
+    "network_policies": {
+      "$ref": "#/$defs/NetworkPoliciesConfig",
+      "description": "Network policy generation configuration (Epic 3E)"
+    },
+    "policies": {
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/$defs/PolicyDefinitionConfig"
+      },
+      "default": null,
+      "description": "Custom governance policy definitions (Epic 3E, FR-015)"
     }
   },
   "additionalProperties": false,
@@ -354,6 +374,138 @@
           "description": "Warn on extra columns in table"
         }
       },
+      "additionalProperties": false
+    },
+    "RBACConfig": {
+      "type": "object",
+      "description": "RBAC configuration for compile-time access control (Epic 3E)",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable RBAC validation"
+        },
+        "required_role": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Required RBAC role for model access"
+        },
+        "allow_principal_fallback": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow principal fallback when role not found"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SecretPattern": {
+      "type": "object",
+      "description": "Custom secret detection pattern",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pattern name"
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Regex pattern for detection"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"],
+          "default": "error",
+          "description": "Severity level"
+        }
+      },
+      "required": ["name", "pattern"],
+      "additionalProperties": false
+    },
+    "SecretScanningConfig": {
+      "type": "object",
+      "description": "Secret scanning configuration (Epic 3E)",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable secret scanning"
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "File patterns to exclude from scanning"
+        },
+        "custom_patterns": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/$defs/SecretPattern" },
+          "default": null,
+          "description": "Custom detection patterns"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"],
+          "default": "error",
+          "description": "Default severity for findings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NetworkPoliciesConfig": {
+      "type": "object",
+      "description": "Network policy generation configuration (Epic 3E)",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable network policy generation"
+        },
+        "default_deny": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default deny all egress"
+        },
+        "custom_egress_rules": {
+          "type": "array",
+          "items": { "type": "object" },
+          "default": [],
+          "description": "Custom egress rules"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PolicyDefinitionConfig": {
+      "type": "object",
+      "description": "Policy-as-code definition for manifest.yaml (Epic 3E, FR-015)",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable policy name"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["required_tags", "naming_convention", "max_transforms", "custom"],
+          "description": "Policy type"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["warn", "error", "block"],
+          "description": "Enforcement action"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Description of the policy violation"
+        },
+        "config": {
+          "type": "object",
+          "default": {},
+          "description": "Type-specific configuration dictionary"
+        }
+      },
+      "required": ["name", "type", "action", "message"],
       "additionalProperties": false
     }
   },

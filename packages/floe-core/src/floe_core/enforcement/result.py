@@ -9,7 +9,7 @@ This module defines the result types returned by PolicyEnforcer.enforce():
 
 These models form the contract between PolicyEnforcer and the compilation pipeline.
 
-Task: T025, T026, T027, T047, T061
+Task: T025, T026, T027, T047, T061, T007, T009 (Epic 3E: Governance integration)
 Requirements: FR-002 (Pipeline Integration), US1 (Compile-time Enforcement),
               FR-016 (Enhanced Context), FR-024 (Pipeline Integration)
 """
@@ -35,7 +35,8 @@ class Violation(BaseModel):
         error_code: FLOE-EXXX format error code for lookup.
         severity: "error" (blocks compilation) or "warning" (advisory).
         policy_type: Category of policy violated
-            (naming, coverage, documentation, semantic, custom).
+            (naming, coverage, documentation, semantic, custom, data_contract,
+            rbac, secret_scanning, network_policy).
         model_name: dbt model where violation occurred.
         column_name: Column if applicable (None for model-level violations).
         message: Human-readable description of the violation.
@@ -82,7 +83,15 @@ class Violation(BaseModel):
         description="Severity level: error (blocks compilation) or warning (advisory)",
     )
     policy_type: Literal[
-        "naming", "coverage", "documentation", "semantic", "custom", "data_contract"
+        "naming",
+        "coverage",
+        "documentation",
+        "semantic",
+        "custom",
+        "data_contract",
+        "rbac",
+        "secret_scanning",
+        "network_policy",
     ] = Field(
         ...,
         description="Category of policy violated",
@@ -155,6 +164,9 @@ class EnforcementSummary(BaseModel):
         custom_rule_violations: Count of custom rule violations (Epic 3B).
         overrides_applied: Count of policy overrides applied (Epic 3B).
         contract_violations: Count of data contract violations (Epic 3C).
+        rbac_violations: Count of RBAC policy violations (Epic 3E).
+        secret_violations: Count of secret scanning violations (Epic 3E).
+        network_policy_violations: Count of network policy violations (Epic 3E).
         duration_ms: Enforcement duration in milliseconds.
 
     Example:
@@ -226,6 +238,22 @@ class EnforcementSummary(BaseModel):
         default=0,
         ge=0,
         description="Count of data contract violations (ODCS, SLA, drift)",
+    )
+    # Epic 3E: Governance integration violation counters
+    rbac_violations: int = Field(
+        default=0,
+        ge=0,
+        description="Count of RBAC policy violations",
+    )
+    secret_violations: int = Field(
+        default=0,
+        ge=0,
+        description="Count of secret scanning violations",
+    )
+    network_policy_violations: int = Field(
+        default=0,
+        ge=0,
+        description="Count of network policy violations",
     )
     duration_ms: float = Field(
         default=0.0,
@@ -536,4 +564,6 @@ def create_enforcement_summary(result: EnforcementResult) -> EnforcementResultSu
         policy_types_checked=policy_types_checked,
         models_validated=result.summary.models_validated,
         enforcement_level=result.enforcement_level,
+        # Epic 3E: Populate governance integration fields from summary counters
+        secrets_scanned=result.summary.secret_violations,
     )

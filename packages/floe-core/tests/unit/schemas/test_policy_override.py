@@ -272,6 +272,9 @@ class TestPolicyOverridePolicyTypes:
             "semantic",
             "custom",
             "data_contract",
+            "rbac",  # Epic 3E
+            "secret_scanning",  # Epic 3E
+            "network_policy",  # Epic 3E
         }
         assert VALID_POLICY_TYPES == expected
 
