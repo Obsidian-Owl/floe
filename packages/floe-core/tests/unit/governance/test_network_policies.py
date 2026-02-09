@@ -82,7 +82,7 @@ def test_network_policy_check_runs_when_enabled(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
 
         integrator = GovernanceIntegrator(
@@ -139,7 +139,7 @@ def test_network_policy_disabled_skips_check(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
 
         integrator = GovernanceIntegrator(
             governance_config=governance_config,
@@ -197,7 +197,7 @@ def test_network_policy_none_config_skips_check(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
 
         integrator = GovernanceIntegrator(
             governance_config=governance_config,
@@ -256,7 +256,7 @@ def test_network_policy_default_deny_generated(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
 
         integrator = GovernanceIntegrator(
@@ -272,8 +272,8 @@ def test_network_policy_default_deny_generated(
             enforcement_level="strict",
         )
 
-        # Verify default-deny policy generation was called
-        mock_network_security_plugin.generate_default_deny_policies.assert_called_once()
+        # Verify default-deny policy generation was called with namespace
+        mock_network_security_plugin.generate_default_deny_policies.assert_called_once_with("floe")
 
         # Verify result is successful
         assert result.passed is True
@@ -313,7 +313,7 @@ def test_network_policy_default_deny_false_skips_deny(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
 
         integrator = GovernanceIntegrator(
@@ -381,7 +381,7 @@ def test_network_policy_custom_egress_rules_passed_to_plugin(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
 
         integrator = GovernanceIntegrator(
@@ -440,7 +440,7 @@ def test_network_policy_violation_on_plugin_failure(
             _create_mock_enforcement_result()
         )
         mock_rbac_checker.return_value.check.return_value = []
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
 
         # Plugin raises exception
         mock_network_security_plugin.generate_default_deny_policies.side_effect = (
@@ -522,7 +522,7 @@ def test_network_policy_violations_merged_with_other_checks(
             documentation_url="https://floe.dev/docs/rbac",
         )
         mock_rbac_checker.return_value.check.return_value = [rbac_violation]
-        mock_secret_scanner.return_value.scan.return_value = []
+        mock_secret_scanner.return_value.scan_directory.return_value = []
 
         # Network policy check produces a violation
         mock_network_security_plugin.generate_default_deny_policies.side_effect = (

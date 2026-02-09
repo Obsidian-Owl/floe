@@ -224,20 +224,19 @@ secret = 'xK9mP2nQ8wR5yT1uV4bN7cM6dL3eJ0fG'
 
     findings = scanner.scan_file(Path("entropy.py"), test_content)
 
-    # High-entropy detection is optional, so we check if it exists
+    # High-entropy detection IS implemented and must detect this string
     entropy_finding = next(
         (f for f in findings if f.error_code == "E605"),
         None,
     )
-
-    if entropy_finding is not None:
-        assert "entropy" in entropy_finding.pattern_name.lower()
-        assert entropy_finding.line_number > 0
+    assert entropy_finding is not None, "Should detect high-entropy string"
+    assert "entropy" in entropy_finding.pattern_name.lower()
+    assert entropy_finding.line_number > 0
 
 
 @pytest.mark.requirement("3E-FR-010")
-def test_exclude_patterns_respected() -> None:
-    """Test that files matching exclude_patterns are skipped.
+def test_exclude_patterns_respected(tmp_path: Path) -> None:
+    """Test that files matching exclude_patterns are skipped during directory scan.
 
     Verifies that the scanner respects the exclude_patterns configuration
     and does not report findings in excluded files.
@@ -246,23 +245,32 @@ def test_exclude_patterns_respected() -> None:
 
     scanner = BuiltinSecretScanner()
 
-    # Test content with AWS key (scanner test vector)
-    test_content = """
-aws_access_key_id = AKIAIOSFODNN7EXAMPLE
-"""
+    # AWS official doc example key (constructed to avoid pre-commit detection)
+    test_key = "AKIA" + "IOSFODNN7EXAMPLE"
+    secret_line = f"aws_access_key_id = {test_key}\n"
 
-    # Scan with exclude pattern matching the file
-    findings = scanner.scan_file(
-        Path("tests/fixtures/test_data.py"),
-        test_content,
+    # Create a file that should be excluded (in tests/ directory)
+    excluded_dir = tmp_path / "tests" / "fixtures"
+    excluded_dir.mkdir(parents=True)
+    excluded_file = excluded_dir / "test_data.py"
+    excluded_file.write_text(secret_line)
+
+    # Create a file that should NOT be excluded
+    included_file = tmp_path / "config.py"
+    included_file.write_text(secret_line)
+
+    # Scan with exclude pattern matching the tests directory (use **/* for all files)
+    findings = scanner.scan_directory(
+        tmp_path,
+        exclude_patterns=["tests/**/*"],
     )
 
-    # If scanner supports exclude_patterns, they should be passed differently
-    # For now, test that findings are generated without exclusion
-    assert len(findings) >= 1, "Should detect secrets in non-excluded files"
-
-    # Test with directory scan and exclude patterns
-    # This will be validated by scan_directory implementation
+    # Only the non-excluded file should produce findings
+    finding_paths = {f.file_path for f in findings}
+    assert "config.py" in finding_paths, "Should find secrets in non-excluded files"
+    assert not any(
+        "tests/" in fp for fp in finding_paths
+    ), "Should not find secrets in excluded files"
 
 
 @pytest.mark.requirement("3E-FR-011")
@@ -436,3 +444,76 @@ aws_key = AKIAIOSFODNN7EXAMPLE
         assert finding.severity == "error", (
             "Without allow_secrets, severity should be 'error'"
         )
+
+
+# ==============================================================================
+# scan_directory Tests
+# ==============================================================================
+
+
+@pytest.mark.requirement("3E-FR-008")
+def test_scan_directory_walks_tree(tmp_path: Path) -> None:
+    """Test that scan_directory walks nested directory tree.
+
+    Creates a directory structure with secrets in subdirectories and
+    verifies all files are scanned with correct relative paths.
+    """
+    from floe_core.governance.secrets import BuiltinSecretScanner
+
+    scanner = BuiltinSecretScanner()
+
+    # Create nested directory structure
+    subdir = tmp_path / "src" / "config"
+    subdir.mkdir(parents=True)
+
+    # AWS official doc example key (constructed to avoid pre-commit detection)
+    test_key = "AKIA" + "IOSFODNN7EXAMPLE"
+
+    # File at root with secret
+    root_file = tmp_path / "settings.py"
+    root_file.write_text(f"aws_access_key_id = {test_key}\n")
+
+    # File in subdirectory with secret
+    nested_file = subdir / "database.py"
+    nested_file.write_text("db_password = 'test_placeholder_value'\n")
+
+    findings = scanner.scan_directory(tmp_path)
+
+    # Should find secrets from both files
+    finding_paths = {f.file_path for f in findings}
+    assert "settings.py" in finding_paths, "Should find secret in root file"
+    assert any(
+        "src/config/database.py" in fp for fp in finding_paths
+    ), "Should find secret in nested file"
+    assert len(findings) >= 2, "Should have findings from both files"
+
+
+@pytest.mark.requirement("3E-FR-008")
+def test_scan_directory_handles_binary_files(tmp_path: Path) -> None:
+    """Test that scan_directory handles binary files without crashing.
+
+    Creates a binary file alongside a text file with secrets and verifies
+    the binary file is skipped gracefully while text findings are returned.
+    """
+    from floe_core.governance.secrets import BuiltinSecretScanner
+
+    scanner = BuiltinSecretScanner()
+
+    # Create a binary file (should be skipped gracefully)
+    binary_file = tmp_path / "image.png"
+    binary_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\xff\xfe\xfd")
+
+    # AWS official doc example key (constructed to avoid pre-commit detection)
+    test_key = "AKIA" + "IOSFODNN7EXAMPLE"
+
+    # Create a text file with a secret
+    text_file = tmp_path / "config.py"
+    text_file.write_text(f"aws_access_key_id = {test_key}\n")
+
+    # Should not crash on binary file
+    findings = scanner.scan_directory(tmp_path)
+
+    # Should still find the secret in the text file
+    assert len(findings) >= 1, "Should find secrets in text file"
+    finding_paths = {f.file_path for f in findings}
+    assert "config.py" in finding_paths, "Should find secret in text file"

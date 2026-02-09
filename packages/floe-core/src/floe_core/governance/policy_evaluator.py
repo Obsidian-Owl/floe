@@ -197,7 +197,10 @@ class PolicyEvaluator:
                         severity=severity,
                         policy_type="custom",
                         model_name=model_name,
-                        message=f"{policy.message} (Missing tags: {missing_tags_str})",
+                        message=(
+                            f"[{policy.name}] {policy.message} "
+                            f"(Missing tags: {missing_tags_str})"
+                        ),
                         expected=f"Tags: {', '.join(required_tags)}",
                         actual=f"Tags: {', '.join(sorted(model_tags))}",
                         suggestion=f"Add missing tags to {model_name}: {missing_tags_str}",
@@ -242,7 +245,7 @@ class PolicyEvaluator:
                         severity=severity,
                         policy_type="custom",
                         model_name=model_name,
-                        message=f"{policy.message} (Pattern: {pattern})",
+                        message=f"[{policy.name}] {policy.message} (Pattern: {pattern})",
                         expected=f"Pattern: {pattern}",
                         actual=f"Name: {model_name}",
                         suggestion=f"Rename {model_name} to match pattern {pattern}",
@@ -284,7 +287,10 @@ class PolicyEvaluator:
                     severity=severity,
                     policy_type="custom",
                     model_name="project",
-                    message=f"{policy.message} (Actual: {model_count}, Threshold: {threshold})",
+                    message=(
+                        f"[{policy.name}] {policy.message} "
+                        f"(Actual: {model_count}, Threshold: {threshold})"
+                    ),
                     expected=f"<= {threshold} models",
                     actual=f"{model_count} models",
                     suggestion=f"Reduce model count to {threshold} or below",
@@ -333,7 +339,7 @@ class PolicyEvaluator:
                             severity=severity,
                             policy_type="custom",
                             model_name=model_name,
-                            message=f"{policy.message} (Condition: {condition})",
+                            message=f"[{policy.name}] {policy.message} (Condition: {condition})",
                             expected=f"Condition true: {condition}",
                             actual=f"Condition false for {model_name}",
                             suggestion=f"Ensure {model_name} satisfies: {condition}",

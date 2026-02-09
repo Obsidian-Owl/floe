@@ -95,7 +95,22 @@ class RBACChecker:
             ]
 
         # Token provided - validate it
-        result = self.identity_plugin.validate_token(token)
+        try:
+            result = self.identity_plugin.validate_token(token)
+        except Exception as e:
+            return [
+                Violation(
+                    error_code="FLOE-E503",
+                    severity="error",
+                    message=f"Identity plugin error: {e}",
+                    policy_type="rbac",
+                    model_name="__rbac__",
+                    expected="Identity plugin to validate token",
+                    actual=str(e),
+                    suggestion="Verify identity provider configuration and connectivity",
+                    documentation_url="https://floe.dev/docs/governance/rbac#identity-plugin-error",
+                )
+            ]
 
         if not result.valid:
             return [

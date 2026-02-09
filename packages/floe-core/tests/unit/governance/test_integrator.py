@@ -1055,11 +1055,12 @@ def test_otel_spans_created_for_each_check(
         # Get finished spans
         spans = exporter.get_finished_spans()
 
-        # Assert spans were created for each check type
+        # Assert exactly 3 spans created for each check type
         span_names = {span.name for span in spans}
         assert "governance.rbac" in span_names
         assert "governance.secrets" in span_names
         assert "governance.policies" in span_names
+        assert len(spans) == 3, f"Expected 3 spans, got {len(spans)}: {[s.name for s in spans]}"
 
 
 @pytest.mark.requirement("3E-FR-007")
@@ -1239,3 +1240,208 @@ def test_otel_span_records_errors_on_failure(
 
         assert rbac_span.status.status_code == StatusCode.ERROR
         assert "violations" in rbac_span.status.description.lower()
+
+
+@pytest.mark.requirement("3E-FR-001")
+@pytest.mark.requirement("3E-FR-031")
+def test_integrator_handles_rbac_exception(
+    full_governance_config: GovernanceConfig,
+    mock_identity_plugin: MagicMock,
+    mock_rbac_checker: MagicMock,
+    mock_secret_scanner: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test integrator handles RBACChecker exception gracefully.
+
+    Given RBAC check raises RuntimeError
+    When run_checks() is called
+    Then secret scan still runs, FLOE-E500 violation produced, result.passed is False.
+    """
+    mock_rbac_checker.check.side_effect = RuntimeError("RBAC service unavailable")
+    mock_secret_scanner.scan_directory.return_value = []
+
+    with (
+        patch(
+            "floe_core.governance.integrator.RBACChecker",
+            return_value=mock_rbac_checker,
+        ),
+        patch(
+            "floe_core.governance.integrator.SecretScanner",
+            return_value=mock_secret_scanner,
+        ),
+        patch(
+            "floe_core.governance.integrator.PolicyEnforcer",
+        ) as mock_policy_enforcer_cls,
+    ):
+        mock_policy_enforcer = MagicMock()
+        mock_policy_enforcer.enforce.return_value = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(
+                total_models=5,
+                models_validated=5,
+            ),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+        mock_policy_enforcer_cls.return_value = mock_policy_enforcer
+
+        integrator = GovernanceIntegrator(
+            governance_config=full_governance_config,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token="valid-oidc-token",
+            principal="user@example.com",
+            dry_run=False,
+            enforcement_level="strict",
+        )
+
+        # Secret scan still runs (collect-all preserved)
+        mock_secret_scanner.scan_directory.assert_called_once()
+
+        # FLOE-E500 violation produced
+        rbac_error_violations = [
+            v for v in result.violations if v.error_code == "FLOE-E500"
+        ]
+        assert len(rbac_error_violations) == 1
+        assert rbac_error_violations[0].policy_type == "rbac"
+        assert "RBAC service unavailable" in rbac_error_violations[0].message
+
+        assert result.passed is False
+
+
+@pytest.mark.requirement("3E-FR-001")
+@pytest.mark.requirement("3E-FR-031")
+def test_integrator_handles_secret_scan_exception(
+    full_governance_config: GovernanceConfig,
+    mock_identity_plugin: MagicMock,
+    mock_rbac_checker: MagicMock,
+    mock_secret_scanner: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test integrator handles SecretScanner exception gracefully.
+
+    Given secret scan raises RuntimeError
+    When run_checks() is called
+    Then policy enforcer still runs, FLOE-E600 violation produced.
+    """
+    mock_rbac_checker.check.return_value = []
+    mock_secret_scanner.scan_directory.side_effect = RuntimeError("Scanner crashed")
+
+    with (
+        patch(
+            "floe_core.governance.integrator.RBACChecker",
+            return_value=mock_rbac_checker,
+        ),
+        patch(
+            "floe_core.governance.integrator.SecretScanner",
+            return_value=mock_secret_scanner,
+        ),
+        patch(
+            "floe_core.governance.integrator.PolicyEnforcer",
+        ) as mock_policy_enforcer_cls,
+    ):
+        mock_policy_enforcer = MagicMock()
+        mock_policy_enforcer.enforce.return_value = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(
+                total_models=5,
+                models_validated=5,
+            ),
+            enforcement_level="strict",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+        mock_policy_enforcer_cls.return_value = mock_policy_enforcer
+
+        integrator = GovernanceIntegrator(
+            governance_config=full_governance_config,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token="valid-oidc-token",
+            principal="user@example.com",
+            dry_run=False,
+            enforcement_level="strict",
+        )
+
+        # Policy enforcer still runs
+        mock_policy_enforcer.enforce.assert_called_once()
+
+        # FLOE-E600 violation produced with policy_type secret_scanning
+        secret_error_violations = [
+            v for v in result.violations
+            if v.error_code == "FLOE-E600" and v.policy_type == "secret_scanning"
+        ]
+        assert len(secret_error_violations) == 1
+        assert "Scanner crashed" in secret_error_violations[0].message
+
+        assert result.passed is False
+
+
+@pytest.mark.requirement("3E-FR-001")
+@pytest.mark.requirement("3E-FR-031")
+def test_integrator_handles_policy_enforcement_exception(
+    full_governance_config: GovernanceConfig,
+    mock_identity_plugin: MagicMock,
+    mock_rbac_checker: MagicMock,
+    mock_secret_scanner: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test integrator handles PolicyEnforcer exception gracefully.
+
+    Given policy enforcement raises ValueError
+    When run_checks() is called
+    Then FLOE-E400 violation produced and result has valid summary.
+    """
+    mock_rbac_checker.check.return_value = []
+    mock_secret_scanner.scan_directory.return_value = []
+
+    with (
+        patch(
+            "floe_core.governance.integrator.RBACChecker",
+            return_value=mock_rbac_checker,
+        ),
+        patch(
+            "floe_core.governance.integrator.SecretScanner",
+            return_value=mock_secret_scanner,
+        ),
+        patch(
+            "floe_core.governance.integrator.PolicyEnforcer",
+        ) as mock_policy_enforcer_cls,
+    ):
+        mock_policy_enforcer = MagicMock()
+        mock_policy_enforcer.enforce.side_effect = ValueError("Invalid manifest format")
+        mock_policy_enforcer_cls.return_value = mock_policy_enforcer
+
+        integrator = GovernanceIntegrator(
+            governance_config=full_governance_config,
+            identity_plugin=mock_identity_plugin,
+        )
+
+        result = integrator.run_checks(
+            project_dir=tmp_path,
+            token="valid-oidc-token",
+            principal="user@example.com",
+            dry_run=False,
+            enforcement_level="strict",
+        )
+
+        # FLOE-E400 violation produced
+        policy_error_violations = [
+            v for v in result.violations if v.error_code == "FLOE-E400"
+        ]
+        assert len(policy_error_violations) == 1
+        assert policy_error_violations[0].policy_type == "custom"
+        assert "Invalid manifest format" in policy_error_violations[0].message
+
+        assert result.passed is False
+        # Summary should still be valid (empty summary fallback)
+        assert result.summary is not None

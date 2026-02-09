@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from floe_core.governance.policy_evaluator import PolicyDefinition, PolicyEvaluator
 
 
@@ -377,9 +378,11 @@ def test_multiple_policies_combined(policy_manifest: dict[str, Any]) -> None:
     violations = evaluator.evaluate(manifest=policy_manifest)
 
     # Should have violations from both policies
-    # required_tags: bronze_events, LEGACY_Users missing "tested"
-    # naming_convention: LEGACY_Users invalid
-    assert len(violations) >= 2
+    # required_tags: silver_orders (missing "tested"), bronze_events (missing "tested"),
+    #   LEGACY_Users (missing "tested") = 3
+    # naming_convention: LEGACY_Users invalid = 1
+    # Total = 4
+    assert len(violations) == 4
 
     violation_types = {v.severity for v in violations}
     assert "error" in violation_types  # from required_tags
@@ -411,13 +414,12 @@ def test_policy_violation_includes_policy_name_in_message(
     # At least one violation should exist
     assert len(violations) > 0
 
-    # Check that policy name appears in violation context
-    # (either in message or in a dedicated field)
+    # Check that policy name appears in violation message
     for violation in violations:
-        # Implementation may include policy name in message or separate field
-        # For now, just verify violation has required attributes
         assert violation.model_name
-        assert violation.message
+        assert "unique_policy_name_12345" in violation.message, (
+            f"Policy name should appear in violation message, got: {violation.message}"
+        )
 
 
 @pytest.mark.requirement("003e-FR-015")
@@ -480,3 +482,90 @@ def test_custom_condition_policy(policy_manifest: dict[str, Any]) -> None:
     assert violations[0].severity == "error"
     assert violations[0].policy_type == "custom"
     assert "owner" in violations[0].message.lower()
+
+
+# ==============================================================================
+# FR-018: Sandbox Escape Security Tests
+# ==============================================================================
+
+
+@pytest.mark.requirement("003e-FR-018")
+def test_sandbox_blocks_import_builtin() -> None:
+    """Test sandbox blocks __import__ builtin function.
+
+    Validates that __import__('os') raises ValueError because __import__
+    is not in the evaluation context.
+    """
+    from floe_core.governance.policy_evaluator import SafeConditionEvaluator
+
+    evaluator = SafeConditionEvaluator("__import__('os')")
+    with pytest.raises(ValueError, match="Undefined variable"):
+        evaluator.evaluate({"model": {}})
+
+
+@pytest.mark.requirement("003e-FR-018")
+def test_sandbox_blocks_dangerous_builtins() -> None:
+    """Test sandbox blocks dangerous builtin functions like globals().
+
+    Validates that calling undefined dangerous functions raises ValueError
+    because they are not in the evaluation context.
+    """
+    from floe_core.governance.policy_evaluator import SafeConditionEvaluator
+
+    evaluator = SafeConditionEvaluator("globals()")
+    with pytest.raises(ValueError, match="Undefined variable"):
+        evaluator.evaluate({"model": {}})
+
+
+@pytest.mark.requirement("003e-FR-018")
+def test_sandbox_blocks_compile_builtin() -> None:
+    """Test sandbox blocks compile() builtin function.
+
+    Validates that compile() is not available in the evaluation context.
+    """
+    from floe_core.governance.policy_evaluator import SafeConditionEvaluator
+
+    evaluator = SafeConditionEvaluator("compile('1', '', 'single')")
+    with pytest.raises(ValueError, match="Undefined variable"):
+        evaluator.evaluate({"model": {}})
+
+
+@pytest.mark.requirement("003e-FR-018")
+def test_sandbox_blocks_lambda() -> None:
+    """Test sandbox blocks lambda expressions.
+
+    Validates that lambda is rejected as an unsafe AST node type
+    (Lambda is not in the AST whitelist).
+    """
+    from floe_core.governance.policy_evaluator import SafeConditionEvaluator
+
+    evaluator = SafeConditionEvaluator("(lambda: 1)()")
+    with pytest.raises(ValueError, match="Unsafe AST node"):
+        evaluator.evaluate({"model": {}})
+
+
+@pytest.mark.requirement("003e-FR-018")
+def test_sandbox_blocks_list_comprehension() -> None:
+    """Test sandbox blocks list comprehensions.
+
+    Validates that list comprehensions are rejected as unsafe AST node types
+    (ListComp is not in the AST whitelist).
+    """
+    from floe_core.governance.policy_evaluator import SafeConditionEvaluator
+
+    evaluator = SafeConditionEvaluator("[x for x in [1]]")
+    with pytest.raises(ValueError, match="Unsafe AST node"):
+        evaluator.evaluate({"model": {}})
+
+
+@pytest.mark.requirement("003e-FR-018")
+def test_sandbox_blocks_import_statement() -> None:
+    """Test sandbox blocks import statements.
+
+    Validates that import statements cause SyntaxError since
+    ast.parse(mode='eval') rejects statements (only allows expressions).
+    """
+    from floe_core.governance.policy_evaluator import SafeConditionEvaluator
+
+    with pytest.raises(SyntaxError):
+        SafeConditionEvaluator("import os")

@@ -445,3 +445,33 @@ def test_token_validation_error_message_propagated(
     assert len(violations) == 1
     violation = violations[0]
     assert violation.actual == "Invalid issuer: expected https://auth.example.com"
+
+
+@pytest.mark.requirement("3E-FR-002")
+def test_rbac_checker_handles_identity_plugin_exception(
+    mock_identity_plugin: MagicMock,
+    rbac_config_enabled: RBACConfig,
+) -> None:
+    """Test that identity plugin exception produces FLOE-E503 violation.
+
+    Given the identity plugin raises RuntimeError during validate_token,
+    When RBACChecker.check() is called,
+    Then it should return a Violation with error_code="FLOE-E503".
+    """
+    mock_identity_plugin.validate_token.side_effect = RuntimeError(
+        "Identity provider connection failed"
+    )
+
+    checker = RBACChecker(
+        rbac_config=rbac_config_enabled,
+        identity_plugin=mock_identity_plugin,
+    )
+
+    violations = checker.check(token="some-token", principal=None)
+
+    assert len(violations) == 1
+    violation = violations[0]
+    assert violation.error_code == "FLOE-E503"
+    assert violation.severity == "error"
+    assert violation.policy_type == "rbac"
+    assert "Identity provider connection failed" in violation.message

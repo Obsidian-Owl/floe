@@ -169,11 +169,26 @@ class GovernanceIntegrator:
             rbac_config = self.governance_config.rbac
             assert rbac_config is not None
 
-            checker = RBACChecker(
-                rbac_config=rbac_config,
-                identity_plugin=self.identity_plugin,
-            )
-            violations = checker.check(token=token, principal=principal)
+            try:
+                checker = RBACChecker(
+                    rbac_config=rbac_config,
+                    identity_plugin=self.identity_plugin,
+                )
+                violations = checker.check(token=token, principal=principal)
+            except Exception as e:
+                violations = [
+                    Violation(
+                        error_code="FLOE-E500",
+                        severity="error",
+                        policy_type="rbac",
+                        model_name="__rbac__",
+                        message=f"RBAC check failed: {e}",
+                        expected="RBAC check to succeed",
+                        actual=str(e),
+                        suggestion="Verify identity plugin configuration and availability",
+                        documentation_url="https://floe.dev/docs/governance/rbac",
+                    )
+                ]
 
             duration_ms = (time.monotonic() - start) * 1000
             span.set_attribute("governance.check_type", "rbac")
@@ -202,42 +217,57 @@ class GovernanceIntegrator:
         with tracer.start_as_current_span("governance.secrets") as span:
             start = time.monotonic()
 
-            # Convert config SecretPatternConfig → internal SecretPattern (C-02 fix)
-            config = self.governance_config.secret_scanning
-            custom_patterns: list[SecretPattern] | None = None
-            if config is not None and config.custom_patterns:
-                custom_patterns = [
-                    SecretPattern(
-                        name=p.name,
-                        regex=p.pattern,
-                        description=p.name,
-                        error_code="E699",
+            try:
+                # Convert config SecretPatternConfig → internal SecretPattern (C-02 fix)
+                config = self.governance_config.secret_scanning
+                custom_patterns: list[SecretPattern] | None = None
+                if config is not None and config.custom_patterns:
+                    custom_patterns = [
+                        SecretPattern(
+                            name=p.name,
+                            regex=p.pattern,
+                            description=p.name,
+                            error_code="E699",
+                        )
+                        for p in config.custom_patterns
+                    ]
+
+                # Determine allow_secrets from severity config
+                allow_secrets = (
+                    config is not None and config.severity == "warning"
+                )
+
+                scanner = SecretScanner(
+                    custom_patterns=custom_patterns,
+                    allow_secrets=allow_secrets,
+                )
+
+                # Get exclude patterns from config
+                exclude_patterns: list[str] | None = None
+                if config is not None and config.exclude_patterns:
+                    exclude_patterns = config.exclude_patterns
+
+                # Call scan_directory (C-01 fix: was calling non-existent scan())
+                findings: list[SecretFinding] = scanner.scan_directory(
+                    project_dir, exclude_patterns=exclude_patterns
+                )
+
+                # Convert SecretFinding → Violation
+                violations = [self._finding_to_violation(f) for f in findings]
+            except Exception as e:
+                violations = [
+                    Violation(
+                        error_code="FLOE-E600",
+                        severity="error",
+                        policy_type="secret_scanning",
+                        model_name="secret_scanning",
+                        message=f"Secret scan failed: {e}",
+                        expected="Secret scan to succeed",
+                        actual=str(e),
+                        suggestion="Verify secret scanner configuration",
+                        documentation_url="https://floe.dev/docs/governance/secret-scanning",
                     )
-                    for p in config.custom_patterns
                 ]
-
-            # Determine allow_secrets from severity config
-            allow_secrets = (
-                config is not None and config.severity == "warning"
-            )
-
-            scanner = SecretScanner(
-                custom_patterns=custom_patterns,
-                allow_secrets=allow_secrets,
-            )
-
-            # Get exclude patterns from config
-            exclude_patterns: list[str] | None = None
-            if config is not None and config.exclude_patterns:
-                exclude_patterns = config.exclude_patterns
-
-            # Call scan_directory (C-01 fix: was calling non-existent scan())
-            findings: list[SecretFinding] = scanner.scan_directory(
-                project_dir, exclude_patterns=exclude_patterns
-            )
-
-            # Convert SecretFinding → Violation
-            violations = [self._finding_to_violation(f) for f in findings]
 
             duration_ms = (time.monotonic() - start) * 1000
             span.set_attribute("governance.check_type", "secrets")
@@ -294,8 +324,30 @@ class GovernanceIntegrator:
         with tracer.start_as_current_span("governance.policies") as span:
             start = time.monotonic()
 
-            enforcer = PolicyEnforcer(governance_config=self.governance_config)
-            result = enforcer.enforce(dbt_manifest or {})
+            try:
+                enforcer = PolicyEnforcer(governance_config=self.governance_config)
+                result = enforcer.enforce(dbt_manifest or {})
+            except Exception as e:
+                result = EnforcementResult(
+                    passed=False,
+                    violations=[
+                        Violation(
+                            error_code="FLOE-E400",
+                            severity="error",
+                            policy_type="custom",
+                            model_name="policy_enforcement",
+                            message=f"Policy enforcement failed: {e}",
+                            expected="Policy enforcement to succeed",
+                            actual=str(e),
+                            suggestion="Verify policy configuration and manifest format",
+                            documentation_url="https://floe.dev/docs/governance/policies",
+                        )
+                    ],
+                    summary=self._empty_summary(),
+                    enforcement_level="strict",
+                    manifest_version="",
+                    timestamp=datetime.now(timezone.utc),
+                )
 
             duration_ms = (time.monotonic() - start) * 1000
             span.set_attribute("governance.check_type", "policies")
