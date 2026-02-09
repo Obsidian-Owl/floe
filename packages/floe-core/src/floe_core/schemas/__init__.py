@@ -96,6 +96,9 @@ from floe_core.schemas.data_contract import (
     TypeMismatch,
 )
 
+# FloeSpec egress models (Epic 4G)
+from floe_core.schemas.floe_spec import DestinationConfig
+
 # Governance models (T011-T013, Epic 3A, Epic 3C)
 from floe_core.schemas.governance import (
     AutoGenerationConfig,
@@ -491,6 +494,8 @@ __all__: list[str] = [
     "SecurityGateConfig",
     "SecurityScanResult",
     "WebhookConfig",
+    # Egress / Reverse ETL schemas (Epic 4G)
+    "DestinationConfig",
     # Quality schemas
     "CalculationParameters",
     "Dimension",
