@@ -273,8 +273,7 @@ def test_custom_patterns_detected() -> None:
     provided in SecretScanningConfig.custom_patterns.
     """
     from floe_core.governance.secrets import BuiltinSecretScanner
-
-    from floe_core.schemas.governance import SecretPattern
+    from floe_core.governance.types import SecretPattern
 
     # Custom pattern for detecting FLOE-specific tokens (scanner test vector)
     custom_pattern = SecretPattern(

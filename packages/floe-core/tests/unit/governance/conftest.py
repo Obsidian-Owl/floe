@@ -34,6 +34,8 @@ def sample_secret_finding() -> SecretFinding:
         file_path="src/config/database.py",
         line_number=42,
         pattern_name="aws_access_key_id",
+        error_code="E601",
+        matched_content="AWS_ACCESS_KEY_ID = 'AKIA***'",
         severity="error",
         match_context="AWS_ACCESS_KEY_ID = 'AKIA***************'",
         confidence="high",

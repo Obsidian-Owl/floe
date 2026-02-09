@@ -23,9 +23,12 @@ class SecretFinding(BaseModel):
         file_path: Relative path to file containing potential secret
         line_number: Line number where secret was detected (1-indexed)
         pattern_name: Name of the detection pattern that matched
+        error_code: Error code for the violation (E601-E699)
+        matched_content: Redacted or truncated matched content
         severity: Severity level of the finding (error or warning)
         match_context: Redacted context around the match for verification
         confidence: Confidence level of the detection (high, medium, or low)
+        allow_secrets: Whether secrets are allowed (downgrades to warning)
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -33,9 +36,34 @@ class SecretFinding(BaseModel):
     file_path: str = Field(..., description="Relative path to file")
     line_number: int = Field(..., ge=1, description="Line number")
     pattern_name: str = Field(..., description="Pattern that matched")
+    error_code: str = Field(..., description="Error code (E601-E699)")
+    matched_content: str = Field(..., description="Matched content (redacted)")
     severity: Literal["error", "warning"] = Field(default="error")
     match_context: str = Field(default="", description="Redacted context")
     confidence: Literal["high", "medium", "low"] = Field(default="high")
+    allow_secrets: bool = Field(default=False, description="Allow secrets flag")
+
+
+class SecretPattern(BaseModel):
+    """A custom secret detection pattern for the scanner.
+
+    Defines a regex pattern for detecting custom secrets beyond the
+    built-in patterns. Used by BuiltinSecretScanner's custom_patterns
+    parameter.
+
+    Attributes:
+        name: Pattern name (e.g., 'floe_token')
+        regex: Regular expression pattern to match
+        description: Human-readable description
+        error_code: Error code for violations (E6XX format)
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(..., description="Pattern name")
+    regex: str = Field(..., description="Regex pattern")
+    description: str = Field(..., description="Pattern description")
+    error_code: str = Field(..., pattern=r"^E6\d{2}$", description="Error code")
 
 
 class GovernanceCheckResult(BaseModel):
