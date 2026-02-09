@@ -227,3 +227,35 @@ class TestDltSinkConnector:
         # Test get_source_config
         with pytest.raises(RuntimeError, match="start"):
             unstarted_plugin.get_source_config({})
+
+    @pytest.mark.requirement("4G-SC-007")
+    def test_write_completes_within_5s_for_1000_rows(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Test write() completes within 5 seconds for 1000-row dataset.
+
+        Performance smoke test validating that the write path can handle
+        a moderately-sized dataset within acceptable latency bounds.
+        Uses a mock sink to isolate write-path overhead from network I/O.
+        """
+        import time
+
+        import pyarrow as pa
+
+        # Create 1000-row Arrow table
+        table = pa.table(
+            {
+                "id": list(range(1000)),
+                "name": [f"row_{i}" for i in range(1000)],
+                "value": [float(i) * 1.5 for i in range(1000)],
+            }
+        )
+
+        mock_sink = MagicMock()
+
+        start = time.monotonic()
+        result = dlt_plugin.write(mock_sink, table)
+        elapsed = time.monotonic() - start
+
+        assert result.success is True
+        assert elapsed < 5.0, f"write() took {elapsed:.2f}s, exceeding 5s limit"

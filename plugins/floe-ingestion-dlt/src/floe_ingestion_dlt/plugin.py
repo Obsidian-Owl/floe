@@ -44,7 +44,6 @@ from floe_ingestion_dlt.errors import (
     PipelineConfigurationError,
     SchemaContractViolation,
     SinkConfigurationError,
-    SinkConnectionError,
     SinkWriteError,
 )
 from floe_ingestion_dlt.retry import categorize_error
