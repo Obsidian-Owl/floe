@@ -81,11 +81,7 @@ class GovernanceCheckResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    check_type: str = Field(
-        ..., description="Type: rbac, secrets, policies, network"
-    )
+    check_type: str = Field(..., description="Type: rbac, secrets, policies, network")
     violations: list[Violation] = Field(default_factory=list)
     duration_ms: float = Field(..., ge=0, description="Check execution time")
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Check-specific metadata"
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Check-specific metadata")

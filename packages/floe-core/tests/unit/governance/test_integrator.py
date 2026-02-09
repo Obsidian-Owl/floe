@@ -11,9 +11,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# This import will fail until T026 implements the GovernanceIntegrator
-from floe_core.governance.integrator import GovernanceIntegrator
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -26,6 +23,9 @@ from floe_core.enforcement.result import (
     EnforcementSummary,
     Violation,
 )
+
+# This import will fail until T026 implements the GovernanceIntegrator
+from floe_core.governance.integrator import GovernanceIntegrator
 from floe_core.governance.types import SecretFinding
 from floe_core.schemas.governance import RBACConfig, SecretScanningConfig
 from floe_core.schemas.manifest import GovernanceConfig
@@ -1304,9 +1304,7 @@ def test_integrator_handles_rbac_exception(
         mock_secret_scanner.scan_directory.assert_called_once()
 
         # FLOE-E500 violation produced
-        rbac_error_violations = [
-            v for v in result.violations if v.error_code == "FLOE-E500"
-        ]
+        rbac_error_violations = [v for v in result.violations if v.error_code == "FLOE-E500"]
         assert len(rbac_error_violations) == 1
         assert rbac_error_violations[0].policy_type == "rbac"
         assert "RBAC service unavailable" in rbac_error_violations[0].message
@@ -1377,7 +1375,8 @@ def test_integrator_handles_secret_scan_exception(
 
         # FLOE-E600 violation produced with policy_type secret_scanning
         secret_error_violations = [
-            v for v in result.violations
+            v
+            for v in result.violations
             if v.error_code == "FLOE-E600" and v.policy_type == "secret_scanning"
         ]
         assert len(secret_error_violations) == 1
@@ -1435,9 +1434,7 @@ def test_integrator_handles_policy_enforcement_exception(
         )
 
         # FLOE-E400 violation produced
-        policy_error_violations = [
-            v for v in result.violations if v.error_code == "FLOE-E400"
-        ]
+        policy_error_violations = [v for v in result.violations if v.error_code == "FLOE-E400"]
         assert len(policy_error_violations) == 1
         assert policy_error_violations[0].policy_type == "custom"
         assert "Invalid manifest format" in policy_error_violations[0].message

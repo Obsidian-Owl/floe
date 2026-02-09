@@ -38,7 +38,7 @@ A security engineer configures secret scanning in the platform manifest and runs
 **Acceptance Scenarios**:
 
 1. **Given** a project with a Python file containing `AKIA` followed by 16 alphanumeric characters, **When** the secret scanner runs, **Then** it reports an "AWS Access Key ID" violation with file path and line number.
-2. **Given** a project with a SQL file containing `password = 'mysecret'`, **When** the secret scanner runs, **Then** it reports a "Hardcoded password" violation.
+2. **Given** a project with a SQL file containing `password = 'mysecret'`, **When** the secret scanner runs, **Then** it reports a "Hardcoded password" violation.  <!-- pragma: allowlist secret -->
 3. **Given** `governance.secret_scanning.exclude_patterns: ["**/tests/**"]`, **When** test files contain secret-like patterns, **Then** those files are excluded from scanning.
 4. **Given** a custom SecretScannerPlugin registered via entry points, **When** `floe compile` runs, **Then** both the built-in scanner and the plugin scanner execute, merging results.
 5. **Given** `floe compile --allow-secrets`, **When** secrets are detected, **Then** violations are reported as warnings but compilation proceeds.

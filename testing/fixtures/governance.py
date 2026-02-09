@@ -62,6 +62,7 @@ def create_governance_config_rbac_enabled() -> GovernanceConfig:
     """
     return GovernanceConfig(
         policy_enforcement_level="strict",
+        data_retention_days=None,
         rbac=RBACConfig(
             enabled=True,
             required_role="platform-engineer",
@@ -78,6 +79,7 @@ def create_governance_config_scanning_enabled() -> GovernanceConfig:
     """
     return GovernanceConfig(
         policy_enforcement_level="strict",
+        data_retention_days=None,
         secret_scanning=SecretScanningConfig(
             enabled=True,
             severity="error",
@@ -93,6 +95,7 @@ def create_governance_config_network_enabled() -> GovernanceConfig:
     """
     return GovernanceConfig(
         policy_enforcement_level="strict",
+        data_retention_days=None,
         network_policies=NetworkPoliciesConfig(
             enabled=True,
             default_deny=True,
@@ -146,6 +149,7 @@ def create_governance_config_all_disabled() -> GovernanceConfig:
     """
     return GovernanceConfig(
         policy_enforcement_level="off",
+        data_retention_days=None,
     )
 
 
@@ -503,7 +507,7 @@ def create_password_finding(
         error_code="FLOE-E602",
         matched_content="test_placeholder_value",
         severity="error",
-        match_context='password = "test_placeholder_value"',
+        match_context='password = "test_placeholder_value"',  # pragma: allowlist secret
         confidence="high",
         allow_secrets=False,
     )

@@ -40,15 +40,14 @@ def test_secret_scanner_plugin_inherits_plugin_metadata() -> None:
     Verifies that SecretScannerPlugin is a subclass of the PluginMetadata ABC,
     ensuring consistent plugin interface across all floe plugin types.
     """
+    from floe_core.plugin_metadata import PluginMetadata
     from floe_core.plugins.secret_scanner import (
         SecretScannerPlugin,
     )
 
-    from floe_core.plugin_metadata import PluginMetadata
-
-    assert issubclass(SecretScannerPlugin, PluginMetadata), (
-        "SecretScannerPlugin must inherit from PluginMetadata"
-    )
+    assert issubclass(
+        SecretScannerPlugin, PluginMetadata
+    ), "SecretScannerPlugin must inherit from PluginMetadata"
 
 
 @pytest.mark.requirement("3E-FR-009")
@@ -62,9 +61,7 @@ def test_scan_file_is_abstract_method() -> None:
     )
 
     # Check that scan_file is in abstract methods
-    abstract_methods: set[str] = getattr(
-        SecretScannerPlugin, "__abstractmethods__", set()
-    )
+    abstract_methods: set[str] = getattr(SecretScannerPlugin, "__abstractmethods__", set())
     assert "scan_file" in abstract_methods, "scan_file must be an abstract method"
 
 
@@ -79,12 +76,8 @@ def test_scan_directory_is_abstract_method() -> None:
     )
 
     # Check that scan_directory is in abstract methods
-    abstract_methods: set[str] = getattr(
-        SecretScannerPlugin, "__abstractmethods__", set()
-    )
-    assert "scan_directory" in abstract_methods, (
-        "scan_directory must be an abstract method"
-    )
+    abstract_methods: set[str] = getattr(SecretScannerPlugin, "__abstractmethods__", set())
+    assert "scan_directory" in abstract_methods, "scan_directory must be an abstract method"
 
 
 @pytest.mark.requirement("3E-FR-009")
@@ -98,12 +91,10 @@ def test_get_supported_patterns_is_abstract_method() -> None:
     )
 
     # Check that get_supported_patterns is in abstract methods
-    abstract_methods: set[str] = getattr(
-        SecretScannerPlugin, "__abstractmethods__", set()
-    )
-    assert "get_supported_patterns" in abstract_methods, (
-        "get_supported_patterns must be an abstract method"
-    )
+    abstract_methods: set[str] = getattr(SecretScannerPlugin, "__abstractmethods__", set())
+    assert (
+        "get_supported_patterns" in abstract_methods
+    ), "get_supported_patterns must be an abstract method"
 
 
 @pytest.mark.requirement("3E-FR-009")

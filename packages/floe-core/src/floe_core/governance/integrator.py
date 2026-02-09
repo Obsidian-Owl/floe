@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from opentelemetry import trace
 
@@ -62,7 +62,7 @@ class GovernanceIntegrator:
         token: str | None,
         principal: str | None,
         dry_run: bool,
-        enforcement_level: str,
+        enforcement_level: Literal["off", "warn", "strict"],
         dbt_manifest: dict[str, Any] | None = None,
     ) -> EnforcementResult:
         """Run all governance checks and return unified result.
@@ -93,10 +93,7 @@ class GovernanceIntegrator:
         all_violations: list[Violation] = []
 
         # 1. Run RBAC checks
-        if (
-            self.governance_config.rbac is not None
-            and self.governance_config.rbac.enabled
-        ):
+        if self.governance_config.rbac is not None and self.governance_config.rbac.enabled:
             rbac_violations = self._run_rbac_check(token, principal)
             all_violations.extend(rbac_violations)
 
@@ -129,11 +126,7 @@ class GovernanceIntegrator:
         if enforcement_level == "warn":
             # Downgrade all errors to warnings
             all_violations = [
-                (
-                    v.model_copy(update={"severity": "warning"})
-                    if v.severity == "error"
-                    else v
-                )
+                (v.model_copy(update={"severity": "warning"}) if v.severity == "error" else v)
                 for v in all_violations
             ]
 
@@ -155,9 +148,7 @@ class GovernanceIntegrator:
             timestamp=datetime.now(timezone.utc),
         )
 
-    def _run_rbac_check(
-        self, token: str | None, principal: str | None
-    ) -> list[Violation]:
+    def _run_rbac_check(self, token: str | None, principal: str | None) -> list[Violation]:
         """Run RBAC checks with OpenTelemetry tracing.
 
         Args:
@@ -176,6 +167,9 @@ class GovernanceIntegrator:
             assert rbac_config is not None
 
             try:
+                assert (
+                    self.identity_plugin is not None
+                ), "identity_plugin must not be None when RBAC is enabled"
                 checker = RBACChecker(
                     rbac_config=rbac_config,
                     identity_plugin=self.identity_plugin,
@@ -203,9 +197,7 @@ class GovernanceIntegrator:
 
             if violations:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, f"{len(violations)} violations found"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, f"{len(violations)} violations found")
                 )
 
             return violations
@@ -239,9 +231,7 @@ class GovernanceIntegrator:
                     ]
 
                 # Determine allow_secrets from severity config
-                allow_secrets = (
-                    config is not None and config.severity == "warning"
-                )
+                allow_secrets = config is not None and config.severity == "warning"
 
                 scanner = SecretScanner(
                     custom_patterns=custom_patterns,
@@ -282,9 +272,7 @@ class GovernanceIntegrator:
 
             if violations:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, f"{len(violations)} violations found"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, f"{len(violations)} violations found")
                 )
 
             return violations
@@ -428,16 +416,12 @@ class GovernanceIntegrator:
 
             if violations:
                 span.set_status(
-                    trace.Status(
-                        trace.StatusCode.ERROR, f"{len(violations)} violations found"
-                    )
+                    trace.Status(trace.StatusCode.ERROR, f"{len(violations)} violations found")
                 )
 
             return violations
 
-    def _run_policy_evaluation(
-        self, dbt_manifest: dict[str, Any] | None
-    ) -> list[Violation]:
+    def _run_policy_evaluation(self, dbt_manifest: dict[str, Any] | None) -> list[Violation]:
         """Run policy-as-code evaluation with OpenTelemetry tracing (FR-015).
 
         Converts PolicyDefinitionConfig from governance config into PolicyDefinition

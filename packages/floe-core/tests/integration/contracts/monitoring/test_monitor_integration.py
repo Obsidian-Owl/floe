@@ -95,9 +95,7 @@ async def test_monitor_register_and_run_freshness_check(
 
     # Register and run check
     contract_monitor.register_contract(fresh_contract)
-    result = await contract_monitor.run_check(
-        fresh_contract.contract_name, ViolationType.FRESHNESS
-    )
+    result = await contract_monitor.run_check(fresh_contract.contract_name, ViolationType.FRESHNESS)
 
     # Assert check passed
     assert result.status == CheckStatus.PASS
@@ -123,9 +121,7 @@ async def test_monitor_run_check_persists_result_to_postgres(
         contract_data={
             "sla": {"freshness": {"threshold_minutes": 30}},
             "dataset": {
-                "last_updated": (
-                    datetime.now(timezone.utc) - timedelta(hours=2)
-                ).isoformat()
+                "last_updated": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
             },
         },
         connection_config={"catalog": "test"},
@@ -133,15 +129,11 @@ async def test_monitor_run_check_persists_result_to_postgres(
     )
 
     # Create monitor with repository
-    monitor = ContractMonitor(
-        config=monitoring_config, repository=monitoring_repository
-    )
+    monitor = ContractMonitor(config=monitoring_config, repository=monitoring_repository)
 
     # Register contract and run check
     monitor.register_contract(stale_contract)
-    result = await monitor.run_check(
-        stale_contract.contract_name, ViolationType.FRESHNESS
-    )
+    result = await monitor.run_check(stale_contract.contract_name, ViolationType.FRESHNESS)
 
     # Assert check failed with violation
     assert result.status == CheckStatus.FAIL
@@ -184,9 +176,7 @@ async def test_monitor_run_check_routes_violation_to_alert_channel(
     )
 
     # Create alert router
-    alert_router = AlertRouter(
-        config=alert_config, channels={"test_channel": mock_channel}
-    )
+    alert_router = AlertRouter(config=alert_config, channels={"test_channel": mock_channel})
 
     # Create monitor with alert router and repository
     monitor = ContractMonitor(
@@ -202,9 +192,7 @@ async def test_monitor_run_check_routes_violation_to_alert_channel(
         contract_data={
             "sla": {"freshness": {"threshold_minutes": 30}},
             "dataset": {
-                "last_updated": (
-                    datetime.now(timezone.utc) - timedelta(hours=2)
-                ).isoformat()
+                "last_updated": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
             },
         },
         connection_config={"catalog": "test"},

@@ -4,8 +4,8 @@ These tests verify the BuiltinSecretScanner implementation of SecretScannerPlugi
 Written before implementation (TDD) - tests will fail until T019-T020 implement the scanner.
 
 Test content strings use published examples and obvious placeholders:
-- AWS key ID: AKIAIOSFODNN7EXAMPLE (AWS's official documentation example)
-- Passwords: 'test_placeholder_value' (clearly a test fixture)
+- AWS key ID: AKIAIOSFODNN7EXAMPLE (AWS docs example)  # pragma: allowlist secret
+- Passwords: 'test_placeholder_value' (test fixture)  # pragma: allowlist secret
 - These are scanner test vectors, not actual credentials.
 
 Requirements:
@@ -34,9 +34,9 @@ def test_builtin_scanner_inherits_secret_scanner_plugin() -> None:
         SecretScannerPlugin,
     )
 
-    assert issubclass(BuiltinSecretScanner, SecretScannerPlugin), (
-        "BuiltinSecretScanner must inherit from SecretScannerPlugin"
-    )
+    assert issubclass(
+        BuiltinSecretScanner, SecretScannerPlugin
+    ), "BuiltinSecretScanner must inherit from SecretScannerPlugin"
 
 
 @pytest.mark.requirement("3E-FR-008")
@@ -140,7 +140,7 @@ def test_detect_api_token() -> None:
     # Test content with API token patterns (scanner test vector)
     test_content = """
 # API configuration (scanner test vector)
-api_key = 'test_api_token_12345'
+api_key = 'test_api_token_12345'  # pragma: allowlist secret
 api_token = 'test_api_token_12345'
 API_KEY = 'test_api_token_12345'
 """
@@ -179,7 +179,7 @@ def test_detect_private_key() -> None:
     test_content = """
 # Private key example (scanner test vector)
 private_key = '''
------BEGIN RSA PRIVATE KEY-----
+-----BEGIN RSA PRIVATE KEY-----  # pragma: allowlist secret
 MIIEpAIBAAKCAQEA... (truncated test data)
 -----END RSA PRIVATE KEY-----
 '''
@@ -219,7 +219,7 @@ def test_detect_high_entropy_string() -> None:
     # Test content with high-entropy string (scanner test vector)
     test_content = """
 # High entropy example (scanner test vector)
-secret = 'xK9mP2nQ8wR5yT1uV4bN7cM6dL3eJ0fG'
+secret = 'xK9mP2nQ8wR5yT1uV4bN7cM6dL3eJ0fG'  # pragma: allowlist secret
 """
 
     findings = scanner.scan_file(Path("entropy.py"), test_content)
@@ -414,9 +414,9 @@ aws_key = AKIAIOSFODNN7EXAMPLE
     # Check that all findings have severity 'warning' when allow_secrets is True
     for finding in findings:
         assert finding.allow_secrets is True, "allow_secrets flag should be set"
-        assert finding.severity == "warning", (
-            "With allow_secrets=True, severity should be 'warning'"
-        )
+        assert (
+            finding.severity == "warning"
+        ), "With allow_secrets=True, severity should be 'warning'"
 
 
 @pytest.mark.requirement("3E-FR-013")
@@ -441,9 +441,7 @@ aws_key = AKIAIOSFODNN7EXAMPLE
     # Check that all findings have severity 'error' when allow_secrets is False
     for finding in findings:
         assert finding.allow_secrets is False, "allow_secrets flag should not be set"
-        assert finding.severity == "error", (
-            "Without allow_secrets, severity should be 'error'"
-        )
+        assert finding.severity == "error", "Without allow_secrets, severity should be 'error'"
 
 
 # ==============================================================================

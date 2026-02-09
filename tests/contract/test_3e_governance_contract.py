@@ -570,9 +570,8 @@ class TestPolicyDefinitionConfig3EContract:
         2. config field defaults to empty dict
         3. Model is frozen (immutable)
         """
-        from pydantic import ValidationError
-
         from floe_core.schemas.governance import PolicyDefinitionConfig
+        from pydantic import ValidationError
 
         # Test with all required fields
         config = PolicyDefinitionConfig(

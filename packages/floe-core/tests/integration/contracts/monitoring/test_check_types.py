@@ -98,10 +98,12 @@ def _make_contract(contract_data: dict[str, Any]) -> RegisteredContract:
 @pytest.mark.requirement("003e-FR-028")
 async def test_freshness_check_pass_fresh_data() -> None:
     """Test freshness check passes with fresh data."""
-    contract = _make_contract({
-        "sla": {"freshness": {"threshold_minutes": 60}},
-        "dataset": {"last_updated": datetime.now(timezone.utc).isoformat()},
-    })
+    contract = _make_contract(
+        {
+            "sla": {"freshness": {"threshold_minutes": 60}},
+            "dataset": {"last_updated": datetime.now(timezone.utc).isoformat()},
+        }
+    )
     config = MonitoringConfig()
     check = FreshnessCheck()
 
@@ -116,10 +118,12 @@ async def test_freshness_check_pass_fresh_data() -> None:
 async def test_freshness_check_fail_stale_data() -> None:
     """Test freshness check fails with stale data and creates violation."""
     stale_time = datetime.now(timezone.utc) - timedelta(hours=2)
-    contract = _make_contract({
-        "sla": {"freshness": {"threshold_minutes": 30}},
-        "dataset": {"last_updated": stale_time.isoformat()},
-    })
+    contract = _make_contract(
+        {
+            "sla": {"freshness": {"threshold_minutes": 30}},
+            "dataset": {"last_updated": stale_time.isoformat()},
+        }
+    )
     config = MonitoringConfig()
     check = FreshnessCheck()
 
@@ -135,9 +139,11 @@ async def test_freshness_check_fail_stale_data() -> None:
 @pytest.mark.requirement("003e-FR-028")
 async def test_freshness_check_error_missing_config() -> None:
     """Test freshness check returns ERROR when SLA config is missing."""
-    contract = _make_contract({
-        "dataset": {"last_updated": datetime.now(timezone.utc).isoformat()},
-    })
+    contract = _make_contract(
+        {
+            "dataset": {"last_updated": datetime.now(timezone.utc).isoformat()},
+        }
+    )
     config = MonitoringConfig()
     check = FreshnessCheck()
 
@@ -158,10 +164,12 @@ async def test_schema_drift_check_pass_matching_schemas() -> None:
         {"name": "id", "type": "integer", "nullable": False},
         {"name": "name", "type": "string", "nullable": True},
     ]
-    contract = _make_contract({
-        "schema": {"columns": schema_columns},
-        "actual_schema": {"columns": schema_columns},
-    })
+    contract = _make_contract(
+        {
+            "schema": {"columns": schema_columns},
+            "actual_schema": {"columns": schema_columns},
+        }
+    )
     config = MonitoringConfig()
     check = SchemaDriftCheck()
 
@@ -183,10 +191,12 @@ async def test_schema_drift_check_fail_column_removed() -> None:
         {"name": "id", "type": "integer", "nullable": False},
         {"name": "name", "type": "string", "nullable": True},
     ]
-    contract = _make_contract({
-        "schema": {"columns": expected_columns},
-        "actual_schema": {"columns": actual_columns},
-    })
+    contract = _make_contract(
+        {
+            "schema": {"columns": expected_columns},
+            "actual_schema": {"columns": actual_columns},
+        }
+    )
     config = MonitoringConfig()
     check = SchemaDriftCheck()
 
@@ -207,10 +217,12 @@ async def test_schema_drift_check_fail_type_changed() -> None:
     actual_columns = [
         {"name": "age", "type": "string", "nullable": False},
     ]
-    contract = _make_contract({
-        "schema": {"columns": expected_columns},
-        "actual_schema": {"columns": actual_columns},
-    })
+    contract = _make_contract(
+        {
+            "schema": {"columns": expected_columns},
+            "actual_schema": {"columns": actual_columns},
+        }
+    )
     config = MonitoringConfig()
     check = SchemaDriftCheck()
 
@@ -229,12 +241,14 @@ async def test_schema_drift_check_fail_type_changed() -> None:
 async def test_quality_check_pass_above_threshold() -> None:
     """Test quality check passes when score is above threshold."""
     mock_plugin = MockQualityPlugin(scores={"completeness": 0.95})
-    contract = _make_contract({
-        "quality": {
-            "threshold": 0.8,
-            "expectations": [{"name": "completeness", "weight": 1.0}],
-        },
-    })
+    contract = _make_contract(
+        {
+            "quality": {
+                "threshold": 0.8,
+                "expectations": [{"name": "completeness", "weight": 1.0}],
+            },
+        }
+    )
     config = MonitoringConfig()
     check = QualityCheck(quality_plugin=mock_plugin)
 
@@ -249,12 +263,14 @@ async def test_quality_check_pass_above_threshold() -> None:
 async def test_quality_check_fail_below_threshold() -> None:
     """Test quality check fails when score is below threshold."""
     mock_plugin = MockQualityPlugin(scores={"completeness": 0.3})
-    contract = _make_contract({
-        "quality": {
-            "threshold": 0.8,
-            "expectations": [{"name": "completeness", "weight": 1.0}],
-        },
-    })
+    contract = _make_contract(
+        {
+            "quality": {
+                "threshold": 0.8,
+                "expectations": [{"name": "completeness", "weight": 1.0}],
+            },
+        }
+    )
     config = MonitoringConfig()
     check = QualityCheck(quality_plugin=mock_plugin)
 
@@ -268,12 +284,14 @@ async def test_quality_check_fail_below_threshold() -> None:
 @pytest.mark.requirement("003e-FR-028")
 async def test_quality_check_skipped_no_plugin() -> None:
     """Test quality check returns SKIPPED when no plugin is provided."""
-    contract = _make_contract({
-        "quality": {
-            "threshold": 0.8,
-            "expectations": [{"name": "completeness", "weight": 1.0}],
-        },
-    })
+    contract = _make_contract(
+        {
+            "quality": {
+                "threshold": 0.8,
+                "expectations": [{"name": "completeness", "weight": 1.0}],
+            },
+        }
+    )
     config = MonitoringConfig()
     check = QualityCheck(quality_plugin=None)
 
@@ -290,9 +308,11 @@ async def test_quality_check_skipped_no_plugin() -> None:
 async def test_availability_check_pass_source_reachable() -> None:
     """Test availability check passes when source is reachable."""
     mock_plugin = MockComputePlugin(success=True, latency_ms=10.0)
-    contract = _make_contract({
-        "sla": {"availability": {"threshold_pct": 95.0}},
-    })
+    contract = _make_contract(
+        {
+            "sla": {"availability": {"threshold_pct": 95.0}},
+        }
+    )
     config = MonitoringConfig()
     check = AvailabilityCheck(compute_plugin=mock_plugin)
 
@@ -306,9 +326,11 @@ async def test_availability_check_pass_source_reachable() -> None:
 async def test_availability_check_fail_source_unreachable() -> None:
     """Test availability check fails when source is unreachable."""
     mock_plugin = MockComputePlugin(success=False)
-    contract = _make_contract({
-        "sla": {"availability": {"threshold_pct": 95.0}},
-    })
+    contract = _make_contract(
+        {
+            "sla": {"availability": {"threshold_pct": 95.0}},
+        }
+    )
     config = MonitoringConfig()
     check = AvailabilityCheck(compute_plugin=mock_plugin)
 
@@ -322,9 +344,11 @@ async def test_availability_check_fail_source_unreachable() -> None:
 @pytest.mark.requirement("003e-FR-028")
 async def test_availability_check_skipped_no_plugin() -> None:
     """Test availability check returns SKIPPED when no plugin is provided."""
-    contract = _make_contract({
-        "sla": {"availability": {"threshold_pct": 95.0}},
-    })
+    contract = _make_contract(
+        {
+            "sla": {"availability": {"threshold_pct": 95.0}},
+        }
+    )
     config = MonitoringConfig()
     check = AvailabilityCheck(compute_plugin=None)
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+
 from floe_core.governance.rbac_checker import RBACChecker
 
 # This import will FAIL until RBACChecker is implemented in T025

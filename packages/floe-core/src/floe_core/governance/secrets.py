@@ -72,10 +72,7 @@ def _shannon_entropy(data: str) -> float:
     for char in data:
         freq[char] = freq.get(char, 0) + 1
     length = len(data)
-    return -sum(
-        (count / length) * math.log2(count / length)
-        for count in freq.values()
-    )
+    return -sum((count / length) * math.log2(count / length) for count in freq.values())
 
 
 class BuiltinSecretScanner(SecretScannerPlugin):
@@ -138,9 +135,7 @@ class BuiltinSecretScanner(SecretScannerPlugin):
         """
         findings: list[SecretFinding] = []
         lines = content.split("\n")
-        severity: Literal["error", "warning"] = (
-            "warning" if self._allow_secrets else "error"
-        )
+        severity: Literal["error", "warning"] = "warning" if self._allow_secrets else "error"
 
         # Check built-in patterns
         for pattern_name, regex, error_code in _BUILTIN_PATTERNS:
@@ -180,9 +175,7 @@ class BuiltinSecretScanner(SecretScannerPlugin):
 
         # Check high-entropy strings
         for line_idx, line in enumerate(lines, start=1):
-            entropy_match = re.search(
-                r"""=\s*['"]([\w/+=]{20,})['\"]""", line
-            )
+            entropy_match = re.search(r"""=\s*['"]([\w/+=]{20,})['\"]""", line)
             if entropy_match:
                 candidate = entropy_match.group(1)
                 if (
@@ -229,9 +222,7 @@ class BuiltinSecretScanner(SecretScannerPlugin):
 
             # Check exclude patterns
             relative = str(file_path.relative_to(directory))
-            if any(
-                file_path.match(pattern) for pattern in exclude
-            ):
+            if any(file_path.match(pattern) for pattern in exclude):
                 continue
 
             try:
@@ -239,9 +230,7 @@ class BuiltinSecretScanner(SecretScannerPlugin):
             except (UnicodeDecodeError, PermissionError):
                 continue
 
-            file_findings = self.scan_file(
-                Path(relative), content
-            )
+            file_findings = self.scan_file(Path(relative), content)
             findings.extend(file_findings)
 
         return findings

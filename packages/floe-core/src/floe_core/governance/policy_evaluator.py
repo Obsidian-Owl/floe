@@ -20,12 +20,11 @@ import re
 from typing import Any, Literal, cast
 
 import structlog
-
-logger = structlog.get_logger(__name__)
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.enforcement.result import Violation
+
+logger = structlog.get_logger(__name__)
 
 
 class PolicyDefinition(BaseModel):
@@ -198,8 +197,7 @@ class PolicyEvaluator:
                         policy_type="custom",
                         model_name=model_name,
                         message=(
-                            f"[{policy.name}] {policy.message} "
-                            f"(Missing tags: {missing_tags_str})"
+                            f"[{policy.name}] {policy.message} (Missing tags: {missing_tags_str})"
                         ),
                         expected=f"Tags: {', '.join(required_tags)}",
                         actual=f"Tags: {', '.join(sorted(model_tags))}",

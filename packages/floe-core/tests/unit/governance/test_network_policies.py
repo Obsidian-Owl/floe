@@ -67,20 +67,17 @@ def test_network_policy_check_runs_when_enabled(
         network_policies=NetworkPoliciesConfig(enabled=True, default_deny=True),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
@@ -124,20 +121,17 @@ def test_network_policy_disabled_skips_check(
         network_policies=NetworkPoliciesConfig(enabled=False),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
 
@@ -158,9 +152,7 @@ def test_network_policy_disabled_skips_check(
         mock_get_plugin.assert_not_called()
 
         # Verify no network policy violations
-        network_violations = [
-            v for v in result.violations if v.policy_type == "network_policy"
-        ]
+        network_violations = [v for v in result.violations if v.policy_type == "network_policy"]
         assert len(network_violations) == 0
 
 
@@ -182,20 +174,17 @@ def test_network_policy_none_config_skips_check(
         network_policies=None,
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
 
@@ -216,9 +205,7 @@ def test_network_policy_none_config_skips_check(
         mock_get_plugin.assert_not_called()
 
         # Verify no network policy violations
-        network_violations = [
-            v for v in result.violations if v.policy_type == "network_policy"
-        ]
+        network_violations = [v for v in result.violations if v.policy_type == "network_policy"]
         assert len(network_violations) == 0
 
 
@@ -241,20 +228,17 @@ def test_network_policy_default_deny_generated(
         network_policies=NetworkPoliciesConfig(enabled=True, default_deny=True),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
@@ -298,20 +282,17 @@ def test_network_policy_default_deny_false_skips_deny(
         network_policies=NetworkPoliciesConfig(enabled=True, default_deny=False),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
@@ -366,20 +347,17 @@ def test_network_policy_custom_egress_rules_passed_to_plugin(
         ),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
         mock_get_plugin.return_value = mock_network_security_plugin
@@ -425,26 +403,23 @@ def test_network_policy_violation_on_plugin_failure(
         network_policies=NetworkPoliciesConfig(enabled=True, default_deny=True),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
         mock_rbac_checker.return_value.check.return_value = []
         mock_secret_scanner.return_value.scan_directory.return_value = []
 
         # Plugin raises exception
-        mock_network_security_plugin.generate_default_deny_policies.side_effect = (
-            Exception("Network policy generation failed")
+        mock_network_security_plugin.generate_default_deny_policies.side_effect = Exception(
+            "Network policy generation failed"
         )
         mock_get_plugin.return_value = mock_network_security_plugin
 
@@ -462,9 +437,7 @@ def test_network_policy_violation_on_plugin_failure(
         )
 
         # Verify we have a network_policy violation
-        network_violations = [
-            v for v in result.violations if v.policy_type == "network_policy"
-        ]
+        network_violations = [v for v in result.violations if v.policy_type == "network_policy"]
         assert len(network_violations) > 0
         assert result.passed is False
 
@@ -494,20 +467,17 @@ def test_network_policy_violations_merged_with_other_checks(
         network_policies=NetworkPoliciesConfig(enabled=True, default_deny=True),
     )
 
-    with patch(
-        "floe_core.governance.integrator.PolicyEnforcer"
-    ) as mock_policy_enforcer, patch(
-        "floe_core.governance.integrator.RBACChecker"
-    ) as mock_rbac_checker, patch(
-        "floe_core.governance.integrator.SecretScanner"
-    ) as mock_secret_scanner, patch(
-        "floe_core.governance.integrator.get_network_security_plugin",
-        create=True,
-    ) as mock_get_plugin:
+    with (
+        patch("floe_core.governance.integrator.PolicyEnforcer") as mock_policy_enforcer,
+        patch("floe_core.governance.integrator.RBACChecker") as mock_rbac_checker,
+        patch("floe_core.governance.integrator.SecretScanner") as mock_secret_scanner,
+        patch(
+            "floe_core.governance.integrator.get_network_security_plugin",
+            create=True,
+        ) as mock_get_plugin,
+    ):
         # Setup mocks
-        mock_policy_enforcer.return_value.enforce.return_value = (
-            _create_mock_enforcement_result()
-        )
+        mock_policy_enforcer.return_value.enforce.return_value = _create_mock_enforcement_result()
 
         # RBAC check produces a violation
         rbac_violation = Violation(
@@ -525,8 +495,8 @@ def test_network_policy_violations_merged_with_other_checks(
         mock_secret_scanner.return_value.scan_directory.return_value = []
 
         # Network policy check produces a violation
-        mock_network_security_plugin.generate_default_deny_policies.side_effect = (
-            Exception("Network policy failed")
+        mock_network_security_plugin.generate_default_deny_policies.side_effect = Exception(
+            "Network policy failed"
         )
         mock_get_plugin.return_value = mock_network_security_plugin
 
