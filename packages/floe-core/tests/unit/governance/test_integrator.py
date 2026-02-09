@@ -247,7 +247,7 @@ def test_integrator_merges_violations(
         line_number=10,
         pattern_name="aws_access_key",
         error_code="E601",
-        matched_content="AKIAIOSFODNN7EXAMPLE",
+        matched_content="AKIA_REDACTED_EXAMPLE",
         severity="error",
     )
 
