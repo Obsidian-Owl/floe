@@ -17,7 +17,9 @@ from floe_core.governance.integrator import GovernanceIntegrator
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory import InMemorySpanExporter
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
 
 from floe_core.enforcement.result import (
     EnforcementResult,
@@ -73,11 +75,19 @@ def mock_identity_plugin() -> MagicMock:
 @pytest.fixture
 def otel_tracer_setup() -> tuple[TracerProvider, InMemorySpanExporter]:
     """Set up OTel tracer with in-memory exporter for testing."""
+    # Reset global tracer provider to allow multiple tests
+    from opentelemetry.util._once import Once
+
+    trace._TRACER_PROVIDER_SET_ONCE = Once()
+    trace._TRACER_PROVIDER = None  # type: ignore[assignment]
+
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
-    return provider, exporter
+    yield provider, exporter
+    # Clear spans after each test
+    exporter.clear()
 
 
 @pytest.fixture
