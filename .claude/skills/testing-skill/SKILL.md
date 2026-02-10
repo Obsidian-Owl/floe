@@ -130,6 +130,14 @@ rg "assert.*==.*\d+\.\d+" --type py packages/<package>/tests/
 
 # Check for missing negative path tests
 rg "def test_.*_invalid|def test_.*_failure" --type py packages/<package>/tests/
+
+# Check for accomplishment simulator (side-effect tests without mock assertions)
+rg "def test.*write|def test.*send|def test.*publish|def test.*deploy" --type py packages/<package>/tests/ -l | \
+  xargs -I{} sh -c 'rg "assert_called" {} > /dev/null || echo "WARNING: {} may have Accomplishment Simulator — side-effect tests without mock invocation assertions"'
+
+# Check for import-satisfying-only mocks (MagicMock never asserted on)
+rg "MagicMock\(\)" --type py packages/<package>/tests/ -l | head -5
+# For each file: verify MagicMock has corresponding assert_called* somewhere
 ```
 
 **Read**: [references/test-anti-patterns.md](references/test-anti-patterns.md)
@@ -143,6 +151,7 @@ rg "def test_.*_invalid|def test_.*_failure" --type py packages/<package>/tests/
 3. **Type Hints**: All test functions and fixtures MUST have type hints
 4. **Negative Path Coverage**: Every positive test (`test_X`) MUST have negative test (`test_X_invalid`)
 5. **Unique Namespaces**: Integration tests MUST use unique namespaces for isolation
+6. **Side-Effect Verification**: Tests for write/send/publish/deploy methods MUST include `mock.assert_called*()` — not just check return value shape (see `.claude/rules/testing-standards.md` "Side-Effect Verification" section)
 
 **Read**: `TESTING.md` - Full testing guide with all standards
 
@@ -293,6 +302,7 @@ While writing tests:
 - [ ] Generating unique namespaces for isolation
 - [ ] Both positive AND negative paths tested
 - [ ] Edge cases covered (empty, None, max bounds)
+- [ ] Side-effect methods (write/send/publish) have mock invocation assertions
 
 ### Post-Implementation Checklist
 
@@ -304,6 +314,8 @@ After writing tests:
 - [ ] No hardcoded sleeps detected (`rg "time\.sleep\(" tests/`)
 - [ ] No floating point equality (`rg "assert.*==.*\d+\.\d+" tests/`)
 - [ ] Test coverage >80% for unit tests, >70% for integration
+- [ ] Side-effect tests verify mock invocations, not just return values
+- [ ] No import-satisfying-only mocks (`MagicMock()` without `assert_called*()`)
 
 ---
 

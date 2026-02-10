@@ -82,6 +82,85 @@ Always use the strongest possible assertion:
 
 ---
 
+## Side-Effect Verification (NON-NEGOTIABLE)
+
+**YOU MUST verify side effects for any method whose primary purpose is an action (write, send, publish, deploy, delete).**
+
+Return values alone NEVER prove a side effect occurred. A function can compute metrics, build a well-formed result object, and return `success=True` — all without performing its core action. This is the **"Accomplishment Simulator"** anti-pattern.
+
+### The Accomplishment Simulator Anti-Pattern
+
+**Named after the Epic 4G incident**: A `write()` method computed checksums, logged success, emitted OTel spans, returned a perfectly-formed `EgressResult(success=True, rows_delivered=100)` — but never called `dlt.pipeline.run()`. It passed 122 unit tests, security review, architecture review, contract tests, and 20 pre-push hooks.
+
+```python
+# ❌ THE ACCOMPLISHMENT SIMULATOR - Tests only check return value shape
+def test_write_returns_egress_result(plugin):
+    """LOOKS like it tests write, but only tests result shape."""
+    result = plugin.write(mock_sink, mock_data)
+    assert isinstance(result, EgressResult)  # Shape check
+    assert result.success is True            # Shape check
+    assert result.rows_delivered >= 0        # Shape check
+    # MISSING: Did write() actually WRITE anything?
+
+# ✅ SIDE-EFFECT VERIFICATION - Tests prove the action happened
+def test_write_invokes_dlt_pipeline(plugin):
+    """Proves write() actually delegates to dlt pipeline."""
+    import sys
+    mock_dlt = sys.modules["dlt"]
+
+    plugin.write(sink, mock_data)
+
+    mock_dlt.pipeline.assert_called_once()           # Pipeline created
+    mock_dlt.pipeline.return_value.run.assert_called_once()  # Pipeline executed
+```
+
+### REQUIRED: Side-Effect Test Checklist
+
+For ANY method whose primary purpose is a side effect, tests MUST include:
+
+| Verb in Spec | Required Assertion | Assertion Type |
+|--------------|-------------------|----------------|
+| **write/push/send** | `mock_target.write.assert_called_once()` | Mock invocation |
+| **delete/remove** | `mock_store.delete.assert_called_with(key)` | Mock invocation |
+| **publish/emit** | `mock_bus.publish.assert_called_once()` | Mock invocation |
+| **deploy/create** | `mock_client.create.assert_called_once()` | Mock invocation |
+| **update/modify** | `mock_store.update.assert_called_with(...)` | Mock invocation |
+
+### FORBIDDEN: Return-Value-as-Proxy
+
+```python
+# ❌ FORBIDDEN - Assumes return value proves side effect
+result = plugin.write(sink, data)
+assert result.success is True
+assert result.rows_delivered == 100
+# "Tests pass" but write() might be a no-op!
+
+# ❌ FORBIDDEN - Tests only error handling, not happy path behavior
+def test_write_raises_on_failure(plugin):
+    """Only tests failure mode — doesn't prove success mode works."""
+    with pytest.raises(SinkWriteError):
+        plugin.write(bad_sink, data)
+```
+
+### Mock Invocation Audit Rule
+
+Every `MagicMock()` in a test fixture MUST have at least one corresponding `assert_called*()` in the test suite. A mock that is never asserted on is an **import-satisfying mock** — it prevents ImportError but proves nothing about behavior.
+
+```python
+# ❌ IMPORT-SATISFYING MOCK - Exists only to prevent ImportError
+mock_dlt = MagicMock()
+mock_dlt.__version__ = "1.20.0"
+# Never: mock_dlt.pipeline.assert_called_once()
+
+# ✅ INVOCATION-VERIFYING MOCK - Proves behavior
+mock_dlt = MagicMock()
+mock_dlt.__version__ = "1.20.0"
+# In test: mock_dlt.pipeline.assert_called_once()
+# In test: mock_dlt.pipeline.return_value.run.assert_called_once()
+```
+
+---
+
 ## Tests FAIL, Never Skip (NON-NEGOTIABLE)
 
 **YOU MUST NEVER use `pytest.skip()` or `@pytest.mark.skip`:**
@@ -456,6 +535,17 @@ uv run python -m testing.traceability --all --threshold 100
 # 7. Tests pass
 make test-unit
 # Expected: All pass
+
+# 8. Side-effect methods have invocation assertions
+# For every test of a write/send/publish/deploy method, verify mock.assert_called*()
+rg "def test.*write|def test.*send|def test.*publish|def test.*deploy" --type py tests/ -l | \
+  xargs -I{} sh -c 'rg "assert_called" {} || echo "WARNING: {} has side-effect tests without mock invocation assertions"'
+# Expected: No warnings
+
+# 9. No import-satisfying-only mocks
+# Mocks in fixtures should have corresponding assert_called* in tests
+rg "MagicMock\(\)" --type py tests/ -l | head -5
+# Manual review: Each MagicMock must have assert_called* somewhere in the test file
 ```
 
 ---
@@ -469,6 +559,8 @@ make test-unit
 3. **Type Check**: `mypy --strict floe-*/tests/ plugins/*/tests/` MUST pass
 4. **Anti-Pattern Detection**: Pre-commit hook blocks hardcoded sleeps, skipped tests
 5. **Coverage Gate**: Unit tests >80%, integration tests >70%
+6. **Side-Effect Verification**: Tests for side-effect methods (write, send, publish, deploy) MUST include `assert_called*()` on mocked dependencies
+7. **Mock Invocation Audit**: Pre-commit hook flags `MagicMock()` in fixtures without corresponding `assert_called*()` in tests
 
 ---
 

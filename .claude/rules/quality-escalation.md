@@ -102,6 +102,27 @@ Making assumptions about infrastructure availability, configuration, or behavior
 - Assuming bucket/namespace/catalog exists
 - Assuming K8s DNS resolution works from host
 
+### 6. Side-Effect Method Without Behavioral Test
+
+A method whose primary purpose is a side effect (write, send, publish, deploy, delete) is implemented but tests only verify return value shape, not that the side effect occurred.
+
+**Indicators:**
+- Test asserts `result.success is True` but never asserts `mock_target.write.assert_called()`
+- All tests for a write method check `isinstance(result, EgressResult)` but no test checks `mock_dlt.pipeline.run.assert_called_once()`
+- Mock objects in fixtures are never verified with `assert_called*()` in any test
+- TDD tests written before implementation only test interface shape, not behavioral contract
+
+```
+REQUIRED: Escalate to user
+AskUserQuestion: "The write() method tests only verify return value shape
+  (EgressResult with success=True), but no test asserts that the underlying
+  dlt pipeline was actually invoked. This means write() could be a no-op
+  and all tests would pass. Should I:
+  (A) Add mock invocation assertions (mock_dlt.pipeline.assert_called_once())
+  (B) Add an integration test that verifies actual data delivery
+  (C) Both — mock assertions for unit tests, integration test for E2E"
+```
+
 ---
 
 ## Decision Authority Matrix
@@ -143,6 +164,7 @@ These degrade quality or hide problems:
 | **Replace real services with mocks** | Escalate with rationale |
 | **Skip quality gates** | Escalate — explain what's blocking |
 | **Architectural deviation** | Escalate with constitution reference |
+| **Ship side-effect method without behavioral test** | Escalate — tests MUST verify the action occurred, not just the return value |
 
 ---
 
@@ -238,6 +260,44 @@ Solving a hard problem with complex code instead of escalating the underlying de
 # Instead of asking: "The server overrides client S3 config — is this the right architecture?"
 # Writes 30 lines of monkey-patching to work around it
 ```
+
+### The Accomplishment Simulator
+
+Building a function that computes metrics, logs success, emits OTel spans, and returns a well-formed result — but never performs the core action. Named after Epic 4G where `write()` returned `EgressResult(success=True, rows_delivered=100)` without calling `dlt.pipeline.run()`.
+
+This is the **most insidious** anti-pattern because it passes ALL structural quality gates: type checks, lint, security scan, contract tests, and even "unit tests" that only verify return value shape.
+
+```python
+# THE ACCOMPLISHMENT SIMULATOR
+def write(self, sink, data):
+    num_rows = data.num_rows
+    checksum = compute_checksum(data)  # Real computation
+    elapsed = time.perf_counter() - start  # Real timing
+    logger.info("egress_write_completed", rows=num_rows)  # Real logging
+    record_egress_result(span, result)  # Real OTel span
+    return EgressResult(success=True, rows_delivered=num_rows)  # Looks great!
+    # BUT: Never called dlt.pipeline.run() — data was never delivered
+```
+
+**Detection**: For every method whose spec says "MUST write/send/publish/deploy", verify tests include `mock_target.assert_called*()`, not just `result.success is True`.
+
+### The Return-Value-as-Proxy
+
+Assuming a correct return value proves the underlying action occurred. Tests check `result.success is True` and `result.rows_delivered == 100` but never verify the delivery mechanism was invoked.
+
+```python
+# Tests "pass" but prove nothing about behavior:
+result = plugin.write(sink, data)
+assert result.success is True          # write() hardcodes this
+assert result.rows_delivered == 100    # write() reads data.num_rows
+assert isinstance(result, EgressResult)  # write() constructs this
+
+# What's missing:
+mock_dlt.pipeline.assert_called_once()  # Was pipeline created?
+mock_dlt.pipeline.return_value.run.assert_called_once()  # Was data sent?
+```
+
+**Root cause**: TDD tests written before implementation verify the interface contract (return type) but not the behavioral contract (side effects). When implementation fills in the method body, it satisfies the shape tests without performing the action.
 
 ---
 

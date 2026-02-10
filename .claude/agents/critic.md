@@ -53,6 +53,8 @@ Your job is NOT to be helpful or encouraging. Your job is to find problems BEFOR
 - [ ] Integration tests for new interactions
 - [ ] Edge cases explicitly listed
 - [ ] Error scenarios have tests
+- [ ] Side-effect methods (write/send/publish/deploy) have mock invocation assertions, not just return value checks
+- [ ] No "Accomplishment Simulator" pattern — tests verify the action occurred, not just the result shape
 
 ### 5. Architecture Compliance
 
@@ -205,6 +207,10 @@ Plan step 3 requires output from step 2, but step 2 might fail.
 How do we know the implementation works?
 **Fix**: Specific tests with expected outputs.
 
+### 6. "Side-effect method tests only check return value shape"
+Tests for write/send/deploy methods verify `result.success is True` but never assert the underlying mechanism was invoked. This is the "Accomplishment Simulator" anti-pattern — a no-op function can pass all tests.
+**Fix**: Add `mock_target.assert_called_once()` to verify the side effect actually occurred.
+
 ## Coordination
 
 You may spawn specialist agents for detailed analysis:
@@ -229,3 +235,6 @@ Task(architecture-compliance, "Check {package} against layer boundaries")
 - "Handle errors gracefully" without specifying how
 - Assuming file structure without verifying
 - Assuming function signatures without checking
+- "Tests pass" with side-effect methods that never verify mock invocations
+- MagicMock in fixtures without corresponding assert_called* in any test (import-satisfying mock)
+- All test assertions check return value shape (isinstance, .success, .rows_delivered) but none verify the action occurred
