@@ -18,6 +18,13 @@ from floe_core.contracts.monitoring.violations import (
 )
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 
+from floe_alert_email.tracing import (
+    ATTR_DELIVERY_STATUS,
+    TRACER_NAME,
+    alert_span,
+    get_tracer,
+)
+
 logger = structlog.get_logger(__name__)
 
 
@@ -58,36 +65,58 @@ class EmailAlertPlugin(AlertChannelPlugin):
     def floe_api_version(self) -> str:
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str:
+        return TRACER_NAME
+
     def validate_config(self) -> list[str]:
-        errors: list[str] = []
-        if not self._smtp_host:
-            errors.append("smtp_host is required")
-        if not self._from_address:
-            errors.append("from_address is required")
-        if not self._to_addresses:
-            errors.append("to_addresses is required (at least one recipient)")
-        return errors
+        tracer = get_tracer()
+        destination = ", ".join(self._to_addresses) if self._to_addresses else ""
+        with alert_span(
+            tracer,
+            "validate_config",
+            channel="email",
+            destination=destination,
+        ):
+            errors: list[str] = []
+            if not self._smtp_host:
+                errors.append("smtp_host is required")
+            if not self._from_address:
+                errors.append("from_address is required")
+            if not self._to_addresses:
+                errors.append("to_addresses is required (at least one recipient)")
+            return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
-        message = self._build_message(event)
-        try:
-            await aiosmtplib.send(
-                message,
-                hostname=self._smtp_host,
-                port=self._smtp_port,
-                username=self._username or None,
-                password=self._password or None,
-                use_tls=self._use_tls,
-                timeout=self._timeout_seconds,
-            )
-            return True
-        except Exception as e:
-            self._log.error(
-                "email_send_error",
-                error=str(e),
-                contract_name=event.contract_name,
-            )
-            return False
+        tracer = get_tracer()
+        destination = ", ".join(self._to_addresses)
+        with alert_span(
+            tracer,
+            "send_alert",
+            channel="email",
+            destination=destination,
+        ) as span:
+            message = self._build_message(event)
+            try:
+                await aiosmtplib.send(
+                    message,
+                    hostname=self._smtp_host,
+                    port=self._smtp_port,
+                    username=self._username or None,
+                    password=self._password or None,
+                    use_tls=self._use_tls,
+                    timeout=self._timeout_seconds,
+                )
+                span.set_attribute(ATTR_DELIVERY_STATUS, "delivered")
+                return True
+            except Exception as e:
+                self._log.error(
+                    "email_send_error",
+                    error=str(e),
+                    contract_name=event.contract_name,
+                )
+                span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                return False
 
     def _build_message(self, event: ContractViolationEvent) -> MIMEMultipart:
         subject = f"[{event.severity.value.upper()}] Contract Violation: {event.contract_name}"

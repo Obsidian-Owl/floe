@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 from floe_core.plugins.lineage import LineageBackendPlugin
 from pydantic import BaseModel, Field, field_validator
 
+from .tracing import TRACER_NAME, get_tracer, lineage_span
+
 __all__ = ["MarquezLineageBackendPlugin", "MarquezConfig"]
 
 logger = logging.getLogger(__name__)
@@ -218,6 +220,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         self._api_key = validated_config.api_key
         self._environment = validated_config.environment
         self._verify_ssl = validated_config.verify_ssl
+        self._tracer = get_tracer()
 
     @property
     def name(self) -> str:
@@ -246,6 +249,15 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         """
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str:
+        """OpenTelemetry tracer name for this plugin.
+
+        Returns:
+            "floe.lineage.marquez"
+        """
+        return TRACER_NAME
+
     def get_transport_config(self) -> dict[str, Any]:
         """Generate OpenLineage HTTP transport configuration for Marquez.
 
@@ -267,12 +279,13 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 'api_key': None
             }
         """
-        return {
-            "type": "http",
-            "url": f"{self._url}/api/v1/lineage",
-            "timeout": 5.0,
-            "api_key": self._api_key,
-        }
+        with lineage_span(self._tracer, "get_transport_config"):
+            return {
+                "type": "http",
+                "url": f"{self._url}/api/v1/lineage",
+                "timeout": 5.0,
+                "api_key": self._api_key,
+            }
 
     def get_namespace_strategy(self) -> dict[str, Any]:
         """Define namespace strategy for lineage events.
@@ -292,11 +305,14 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             >>> strategy["strategy"]
             'centralized'
         """
-        return {
-            "strategy": "centralized",
-            "environment": self._environment,
-            "platform": "floe",
-        }
+        with lineage_span(
+            self._tracer, "get_namespace_strategy", namespace=self._environment
+        ):
+            return {
+                "strategy": "centralized",
+                "environment": self._environment,
+                "platform": "floe",
+            }
 
     def get_helm_values(self) -> dict[str, Any]:
         """Generate Helm values for deploying Marquez.
@@ -313,51 +329,18 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             >>> values["marquez"]["enabled"]
             True
         """
-        return {
-            "marquez": {
-                "enabled": True,
-                "image": {
-                    "repository": "marquezproject/marquez",
-                    "tag": "0.20.0",
-                    "pullPolicy": "IfNotPresent",
-                },
-                "service": {
-                    "type": "ClusterIP",
-                    "port": 5000,
-                },
-                "resources": {
-                    "limits": {
-                        "cpu": "500m",
-                        "memory": "512Mi",
+        with lineage_span(self._tracer, "get_helm_values"):
+            return {
+                "marquez": {
+                    "enabled": True,
+                    "image": {
+                        "repository": "marquezproject/marquez",
+                        "tag": "0.20.0",
+                        "pullPolicy": "IfNotPresent",
                     },
-                    "requests": {
-                        "cpu": "250m",
-                        "memory": "256Mi",
-                    },
-                },
-                "env": {
-                    "MARQUEZ_PORT": "5000",
-                    "MARQUEZ_ADMIN_PORT": "5001",
-                },
-            },
-            "postgresql": {
-                "enabled": True,
-                "auth": {
-                    "username": "marquez",
-                    # SECURITY: Use Kubernetes Secret for credentials (Bitnami pattern)
-                    # Secret must contain the keys specified in secretKeys
-                    # See: https://github.com/bitnami/charts/tree/main/bitnami/postgresql
-                    "existingSecret": "marquez-postgresql-credentials",  # pragma: allowlist secret
-                    "secretKeys": {  # pragma: allowlist secret
-                        "adminPasswordKey": "postgres-password",  # pragma: allowlist secret
-                        "userPasswordKey": "password",  # pragma: allowlist secret
-                    },
-                    "database": "marquez",
-                },
-                "primary": {
-                    "persistence": {
-                        "enabled": True,
-                        "size": "8Gi",
+                    "service": {
+                        "type": "ClusterIP",
+                        "port": 5000,
                     },
                     "resources": {
                         "limits": {
@@ -369,9 +352,43 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                             "memory": "256Mi",
                         },
                     },
+                    "env": {
+                        "MARQUEZ_PORT": "5000",
+                        "MARQUEZ_ADMIN_PORT": "5001",
+                    },
                 },
-            },
-        }
+                "postgresql": {
+                    "enabled": True,
+                    "auth": {
+                        "username": "marquez",
+                        # SECURITY: Use Kubernetes Secret for credentials
+                        # (Bitnami pattern). Secret must contain keys in secretKeys.
+                        # See: https://github.com/bitnami/charts/tree/main/bitnami/postgresql
+                        "existingSecret": "marquez-postgresql-credentials",  # pragma: allowlist secret  # noqa: E501
+                        "secretKeys": {  # pragma: allowlist secret
+                            "adminPasswordKey": "postgres-password",  # pragma: allowlist secret
+                            "userPasswordKey": "password",  # pragma: allowlist secret
+                        },
+                        "database": "marquez",
+                    },
+                    "primary": {
+                        "persistence": {
+                            "enabled": True,
+                            "size": "8Gi",
+                        },
+                        "resources": {
+                            "limits": {
+                                "cpu": "500m",
+                                "memory": "512Mi",
+                            },
+                            "requests": {
+                                "cpu": "250m",
+                                "memory": "256Mi",
+                            },
+                        },
+                    },
+                },
+            }
 
     def validate_connection(self) -> bool:
         """Validate connection to Marquez backend.
@@ -389,17 +406,21 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             ... else:
             ...     print("Marquez is unreachable")
         """
-        try:
-            url = f"{self._url}/api/v1/namespaces"
-            req = urllib.request.Request(url, method="GET")
+        with lineage_span(self._tracer, "validate_connection") as span:
+            try:
+                url = f"{self._url}/api/v1/namespaces"
+                req = urllib.request.Request(url, method="GET")
 
-            if self._api_key:
-                req.add_header("Authorization", f"Bearer {self._api_key}")
+                if self._api_key:
+                    req.add_header("Authorization", f"Bearer {self._api_key}")
 
-            with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310  # nosec B310
-                return bool(response.status == 200)
-        except Exception:
-            return False
+                with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310  # nosec B310
+                    is_valid = bool(response.status == 200)
+                    span.set_attribute("connection.valid", is_valid)
+                    return is_valid
+            except Exception:
+                span.set_attribute("connection.valid", False)
+                return False
 
     def get_config_schema(self) -> type[MarquezConfig]:
         """Return the Pydantic configuration schema for this plugin."""

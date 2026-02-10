@@ -19,6 +19,8 @@ from floe_core.contracts.monitoring.violations import (
 )
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 
+from .tracing import TRACER_NAME, alert_span, get_tracer
+
 logger = structlog.get_logger(__name__)
 
 SEVERITY_EMOJI: dict[ViolationSeverity, str] = {
@@ -41,6 +43,7 @@ class SlackAlertPlugin(AlertChannelPlugin):
         self._webhook_url = webhook_url
         self._timeout_seconds = timeout_seconds
         self._log = logger.bind(component="slack_alert")
+        self._tracer = get_tracer()
 
     @property
     def name(self) -> str:
@@ -54,35 +57,51 @@ class SlackAlertPlugin(AlertChannelPlugin):
     def floe_api_version(self) -> str:
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str:
+        return TRACER_NAME
+
     def validate_config(self) -> list[str]:
-        errors: list[str] = []
-        if not self._webhook_url:
-            errors.append("webhook_url is required")
-        return errors
+        with alert_span(
+            self._tracer,
+            "validate_config",
+            channel="slack",
+        ):
+            errors: list[str] = []
+            if not self._webhook_url:
+                errors.append("webhook_url is required")
+            return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
-        payload = self._build_payload(event)
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self._webhook_url,
-                    json=payload,
-                    timeout=self._timeout_seconds,
-                )
-                if response.status_code >= 400:
-                    self._log.warning(
-                        "slack_http_error",
-                        status_code=response.status_code,
-                        contract_name=event.contract_name,
+        with alert_span(
+            self._tracer,
+            "send",
+            channel="slack",
+            destination="webhook",
+            extra_attributes={"contract.name": event.contract_name},
+        ):
+            payload = self._build_payload(event)
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        self._webhook_url,
+                        json=payload,
+                        timeout=self._timeout_seconds,
                     )
-                    return False
-                return True
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            self._log.warning("slack_connection_error", error=str(e))
-            return False
-        except Exception as e:
-            self._log.error("slack_unexpected_error", error=str(e))
-            return False
+                    if response.status_code >= 400:
+                        self._log.warning(
+                            "slack_http_error",
+                            status_code=response.status_code,
+                            contract_name=event.contract_name,
+                        )
+                        return False
+                    return True
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                self._log.warning("slack_connection_error", error=str(e))
+                return False
+            except Exception as e:
+                self._log.error("slack_unexpected_error", error=str(e))
+                return False
 
     def _build_payload(self, event: ContractViolationEvent) -> dict[str, Any]:
         emoji = SEVERITY_EMOJI.get(event.severity, ":grey_question:")
