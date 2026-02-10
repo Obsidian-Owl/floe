@@ -46,6 +46,7 @@ class TestHelmValuesGenerator:
         generator = HelmValuesGenerator(config)
         values = generator.generate()
 
+        assert values["fullnameOverride"] == "floe-platform"
         assert values["global"]["environment"] == "dev"
         assert "namespace" in values
         assert "autoscaling" in values

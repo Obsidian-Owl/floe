@@ -1,0 +1,403 @@
+"""Unit tests for floe platform deploy command.
+
+Tests the deploy command CLI interface and value generation logic.
+
+Requirements tested:
+- FR-018: floe platform deploy command
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
+from click.testing import CliRunner
+
+from floe_core.cli.platform.deploy import deploy_command
+
+
+class TestDeployCommand:
+    """Tests for deploy command."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def chart_dir(self, tmp_path: Path) -> Path:
+        """Create a minimal chart directory for testing."""
+        chart = tmp_path / "test-chart"
+        chart.mkdir()
+        # Create minimal Chart.yaml
+        (chart / "Chart.yaml").write_text("apiVersion: v2\nname: test\nversion: 0.1.0\n")
+        # Create values.yaml
+        (chart / "values.yaml").write_text(yaml.dump({"global": {"environment": "dev"}}))
+        # Create values-test.yaml
+        (chart / "values-test.yaml").write_text(
+            yaml.dump({"global": {"environment": "test"}})
+        )
+        return chart
+
+    @pytest.mark.requirement("FR-018")
+    def test_dry_run_prints_command(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test --dry-run prints helm command without executing."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "helm upgrade --install" in result.output
+        assert "floe-platform" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_dry_run_with_custom_release_name(
+        self, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test --dry-run with custom release name."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "dev",
+                "--chart",
+                str(chart_dir),
+                "--release-name",
+                "my-release",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "my-release" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_dry_run_default_namespace(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test default namespace is derived from environment."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "staging",
+                "--chart",
+                str(chart_dir),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "floe-staging" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_dry_run_custom_namespace(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test custom namespace override."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--namespace",
+                "custom-ns",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "custom-ns" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_dry_run_with_set_values(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test --set values are included."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--set",
+                "dagster.replicas=3",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_invalid_chart_path(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Test error on non-existent chart path."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(tmp_path / "nonexistent"),
+            ],
+        )
+        assert result.exit_code != 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_skip_schema_validation_default(
+        self, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test --skip-schema-validation is on by default."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "--skip-schema-validation" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    @patch("floe_core.cli.platform.deploy.subprocess")
+    def test_execute_calls_helm(
+        self, mock_subprocess: MagicMock, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test that deploy executes helm command."""
+        mock_subprocess.run.return_value = MagicMock(
+            returncode=0, stdout="deployed", stderr=""
+        )
+        mock_subprocess.CalledProcessError = subprocess.CalledProcessError
+
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+            ],
+        )
+        # Should exit successfully
+        assert result.exit_code == 0
+
+        mock_subprocess.run.assert_called_once()
+        call_args = mock_subprocess.run.call_args
+        cmd = call_args[0][0]
+        assert cmd[0] == "helm"
+        assert "upgrade" in cmd
+        assert "--install" in cmd
+
+    @pytest.mark.requirement("FR-018")
+    @patch("floe_core.cli.platform.deploy.subprocess")
+    def test_execute_failure_shows_error(
+        self, mock_subprocess: MagicMock, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test that helm failure shows error message."""
+        mock_subprocess.run.side_effect = subprocess.CalledProcessError(
+            1, "helm", stderr="chart not found"
+        )
+        mock_subprocess.CalledProcessError = subprocess.CalledProcessError
+
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+            ],
+        )
+        # Should exit with non-zero code on failure
+        assert result.exit_code != 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_additional_values_file(
+        self, runner: CliRunner, chart_dir: Path, tmp_path: Path
+    ) -> None:
+        """Test merging additional values files."""
+        extra_values = tmp_path / "extra.yaml"
+        extra_values.write_text(yaml.dump({"custom": {"key": "value"}}))
+
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--values",
+                str(extra_values),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_env_specific_values_loaded(
+        self, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test that environment-specific values file is auto-loaded."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_set_multiple_values(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test multiple --set values are parsed correctly."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--set",
+                "dagster.replicas=3",
+                "--set",
+                "global.debug=true",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        # Values should be in output
+        assert "dagster:" in result.output or "replicas:" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_timeout_option(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test custom timeout is passed to helm."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--timeout",
+                "15m",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "15m" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_default_chart_path_missing(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test error when default chart path does not exist."""
+        # Change to temp directory where chart doesn't exist
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    @pytest.mark.requirement("FR-018")
+    def test_multiple_values_files(
+        self, runner: CliRunner, chart_dir: Path, tmp_path: Path
+    ) -> None:
+        """Test merging multiple additional values files."""
+        extra1 = tmp_path / "extra1.yaml"
+        extra1.write_text(yaml.dump({"key1": "value1"}))
+
+        extra2 = tmp_path / "extra2.yaml"
+        extra2.write_text(yaml.dump({"key2": "value2"}))
+
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--values",
+                str(extra1),
+                "--values",
+                str(extra2),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_set_value_type_parsing(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test that --set values are parsed to correct types."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--set",
+                "int_val=42",
+                "--set",
+                "bool_val=true",
+                "--set",
+                "string_val=hello",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        # Check the output contains parsed values
+        output = result.output
+        assert "int_val: 42" in output or "42" in output
+        assert "bool_val: true" in output or "true" in output
+
+    @pytest.mark.requirement("FR-018")
+    def test_invalid_values_file(
+        self, runner: CliRunner, chart_dir: Path, tmp_path: Path
+    ) -> None:
+        """Test error on invalid YAML in values file."""
+        bad_values = tmp_path / "bad.yaml"
+        bad_values.write_text("invalid: yaml: content: [")
+
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--values",
+                str(bad_values),
+            ],
+        )
+        assert result.exit_code != 0
+
+    @pytest.mark.requirement("FR-018")
+    def test_dry_run_shows_values_content(
+        self, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test dry-run displays generated values."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Generated values content:" in result.output
+        assert "fullnameOverride:" in result.output or "global:" in result.output

@@ -265,6 +265,10 @@ class HelmValuesConfig(BaseModel):
         default=False,
         description="Enable PodDisruptionBudget",
     )
+    fullname_override: str = Field(
+        default="floe-platform",
+        description="Helm fullnameOverride to decouple service names from release name",
+    )
 
     @classmethod
     def with_defaults(cls, environment: str = "dev") -> HelmValuesConfig:
@@ -328,6 +332,7 @@ class HelmValuesConfig(BaseModel):
         )
 
         return {
+            "fullnameOverride": self.fullname_override,
             "global": {
                 "environment": self.environment,
             },

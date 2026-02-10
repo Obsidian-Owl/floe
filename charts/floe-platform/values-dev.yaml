@@ -17,6 +17,9 @@ global:
   imagePullSecrets: []
   storageClass: ""
 
+# Override fullname to decouple service names from Helm release name
+fullnameOverride: floe-platform
+
 # Dagster - enabled with minimal resources
 dagster:
   enabled: true

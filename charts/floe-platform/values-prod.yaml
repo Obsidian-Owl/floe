@@ -21,6 +21,9 @@ namespace:
   name: floe-prod
   create: true
 
+# Override fullname to decouple service names from Helm release name
+fullnameOverride: floe-platform
+
 # =============================================================================
 # Resource Configuration (Large preset for production)
 # =============================================================================

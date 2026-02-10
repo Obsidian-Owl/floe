@@ -172,9 +172,11 @@ deploy_services_helm() {
 
     # Install floe-platform with test values
     log_info "Installing floe-platform chart..."
-    helm upgrade --install floe-test "${PROJECT_ROOT}/charts/floe-platform" \
+    # --skip-schema-validation: Dagster subchart references dead kubernetesjsonschema.dev URLs (Helm 4.x)
+    helm upgrade --install floe-platform "${PROJECT_ROOT}/charts/floe-platform" \
         --namespace "${NAMESPACE}" --create-namespace \
         --values "${PROJECT_ROOT}/charts/floe-platform/values-test.yaml" \
+        --skip-schema-validation \
         --wait \
         --timeout 10m
 

@@ -291,6 +291,7 @@ class TestHelmValuesConfig:
         config = HelmValuesConfig.with_defaults(environment="staging")
         values = config.to_values_dict()
 
+        assert values["fullnameOverride"] == "floe-platform"
         assert values["global"]["environment"] == "staging"
         assert values["namespace"]["name"] == "floe-staging"
         assert values["autoscaling"]["enabled"] is False
@@ -330,3 +331,27 @@ class TestHelmValuesConfig:
 
         # Frozen Pydantic models have model_config["frozen"] = True
         assert config.model_config.get("frozen") is True
+
+    @pytest.mark.requirement("9b-FR-050")
+    def test_fullname_override_default(self) -> None:
+        """Test that fullname_override defaults to floe-platform."""
+        config = HelmValuesConfig.with_defaults(environment="dev")
+        assert config.fullname_override == "floe-platform"
+
+    @pytest.mark.requirement("9b-FR-050")
+    def test_fullname_override_custom(self) -> None:
+        """Test that fullname_override can be customized."""
+        config = HelmValuesConfig(
+            environment="dev",
+            fullname_override="custom-name",
+        )
+        values = config.to_values_dict()
+        assert values["fullnameOverride"] == "custom-name"
+
+    @pytest.mark.requirement("9b-FR-050")
+    def test_fullname_override_in_values_dict(self) -> None:
+        """Test that fullnameOverride appears in generated values dict."""
+        config = HelmValuesConfig.with_defaults(environment="prod")
+        values = config.to_values_dict()
+        assert "fullnameOverride" in values
+        assert values["fullnameOverride"] == "floe-platform"

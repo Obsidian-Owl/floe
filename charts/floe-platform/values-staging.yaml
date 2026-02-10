@@ -21,6 +21,9 @@ namespace:
   name: floe-staging
   create: true
 
+# Override fullname to decouple service names from Helm release name
+fullnameOverride: floe-platform
+
 # =============================================================================
 # Resource Configuration (Medium preset for staging)
 # =============================================================================

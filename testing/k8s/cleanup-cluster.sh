@@ -54,7 +54,7 @@ uninstall_helm_releases() {
         # Uninstall floe-jobs first (depends on floe-platform)
         helm uninstall floe-jobs-test --namespace "${NAMESPACE}" 2>/dev/null || true
         # Uninstall floe-platform
-        helm uninstall floe-test --namespace "${NAMESPACE}" 2>/dev/null || true
+        helm uninstall floe-platform --namespace "${NAMESPACE}" 2>/dev/null || true
         log_info "Helm releases uninstalled"
     else
         log_warn "Helm not found, skipping Helm uninstall"
