@@ -60,6 +60,7 @@ from floe_core.schemas.signing import (
     VerificationPolicy,
     VerificationResult,
 )
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 if TYPE_CHECKING:
     from sigstore.models import Bundle
@@ -299,8 +300,10 @@ class VerificationClient:
                 return result
 
             except Exception as e:
-                span.record_exception(e)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                sanitized_msg = sanitize_error_message(str(e))
+                span.set_attribute("exception.type", type(e).__name__)
+                span.set_attribute("exception.message", sanitized_msg)
+                span.set_status(trace.Status(trace.StatusCode.ERROR, sanitized_msg))
 
                 # Create failure result
                 result = VerificationResult(

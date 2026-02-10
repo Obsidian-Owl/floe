@@ -35,6 +35,7 @@ from floe_core.rbac.audit import (
 )
 from floe_core.rbac.result import GenerationResult
 from floe_core.schemas.rbac import RoleRule
+from floe_core.telemetry.sanitization import sanitize_error_message
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 
 
@@ -568,7 +569,9 @@ class RBACManifestGenerator:
 
             # Record write failure on span
             if span:
-                span.record_exception(e)
+                sanitized_msg = sanitize_error_message(str(e))
+                span.set_attribute("exception.type", type(e).__name__)
+                span.set_attribute("exception.message", sanitized_msg)
                 span.set_attribute("rbac.success", False)
 
             # Log write error audit event (FR-072)

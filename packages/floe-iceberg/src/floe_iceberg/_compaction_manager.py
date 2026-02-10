@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 from floe_iceberg.errors import CompactionError
 from floe_iceberg.models import CompactionStrategy
@@ -145,8 +146,10 @@ class _IcebergCompactionManager:
             # Record error on OTel span and re-raise
             from opentelemetry.trace import Status, StatusCode
 
+            sanitized_msg = sanitize_error_message(str(e))
             span.set_status(Status(StatusCode.ERROR, "Compaction failed"))
-            span.record_exception(e)
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
 
             self._log.error(
                 "compact_table_failed",
