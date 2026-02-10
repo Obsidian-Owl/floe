@@ -48,6 +48,7 @@ from floe_ingestion_dlt.errors import (
 )
 from floe_ingestion_dlt.retry import categorize_error
 from floe_ingestion_dlt.tracing import (
+    TRACER_NAME,
     egress_span,
     get_tracer,
     ingestion_span,
@@ -126,6 +127,15 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             "dlt-based data ingestion plugin for loading from REST APIs, "
             "SQL databases, and filesystems into Iceberg tables"
         )
+
+    @property
+    def tracer_name(self) -> str:
+        """Return the OpenTelemetry tracer name.
+
+        Returns:
+            The tracer name for this plugin's operations.
+        """
+        return TRACER_NAME
 
     @property
     def is_external(self) -> bool:

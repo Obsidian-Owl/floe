@@ -26,12 +26,14 @@ import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.semantic import SemanticLayerPlugin
 
+from floe_core.telemetry.sanitization import sanitize_error_message
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 from floe_semantic_cube.tracing import (
     ATTR_DURATION_MS,
     ATTR_MODEL_COUNT,
     ATTR_SCHEMA_PATH,
+    TRACER_NAME,
     get_tracer,
     semantic_span,
 )
@@ -88,6 +90,15 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
     def description(self) -> str:
         """Human-readable plugin description."""
         return "Cube semantic layer plugin for business intelligence APIs"
+
+    @property
+    def tracer_name(self) -> str:
+        """Return the OpenTelemetry tracer name.
+
+        Returns:
+            The tracer name for this plugin's operations.
+        """
+        return TRACER_NAME
 
     def get_config_schema(self) -> type:
         """Return the configuration schema class.
@@ -314,7 +325,9 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 span.set_attribute(ATTR_DURATION_MS, elapsed_ms)
                 span.set_attribute("semantic.health_status", "timeout")
-                span.record_exception(exc)
+                sanitized = sanitize_error_message(str(exc))
+                span.set_attribute("exception.type", type(exc).__name__)
+                span.set_attribute("exception.message", sanitized)
                 logger.warning(
                     "health_check_timeout",
                     server_url=self._config.server_url,
@@ -334,7 +347,9 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 span.set_attribute(ATTR_DURATION_MS, elapsed_ms)
                 span.set_attribute("semantic.health_status", "error")
-                span.record_exception(exc)
+                sanitized = sanitize_error_message(str(exc))
+                span.set_attribute("exception.type", type(exc).__name__)
+                span.set_attribute("exception.message", sanitized)
                 logger.warning(
                     "health_check_error",
                     server_url=self._config.server_url,

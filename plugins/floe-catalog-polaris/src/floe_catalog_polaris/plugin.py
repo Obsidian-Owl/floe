@@ -43,7 +43,12 @@ from pyiceberg.schema import Schema as IcebergSchema
 from floe_catalog_polaris.config import PolarisCatalogConfig
 from floe_catalog_polaris.errors import PYICEBERG_EXCEPTION_TYPES, map_pyiceberg_error
 from floe_catalog_polaris.retry import with_retry
-from floe_catalog_polaris.tracing import catalog_span, get_tracer, set_error_attributes
+from floe_catalog_polaris.tracing import (
+    TRACER_NAME,
+    catalog_span,
+    get_tracer,
+    set_error_attributes,
+)
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -129,6 +134,15 @@ class PolarisCatalogPlugin(CatalogPlugin):
             Human-readable description of the plugin.
         """
         return "Apache Polaris catalog plugin for Iceberg table management"
+
+    @property
+    def tracer_name(self) -> str:
+        """Return the OpenTelemetry tracer name.
+
+        Returns:
+            The tracer name for this plugin's operations.
+        """
+        return TRACER_NAME
 
     @property
     def dependencies(self) -> list[str]:
