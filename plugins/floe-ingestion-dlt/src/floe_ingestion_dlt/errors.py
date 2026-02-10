@@ -32,6 +32,9 @@ __all__ = [
     "IngestionError",
     "PipelineConfigurationError",
     "SchemaContractViolation",
+    "SinkConfigurationError",
+    "SinkConnectionError",
+    "SinkWriteError",
     "SourceConnectionError",
 ]
 
@@ -246,6 +249,123 @@ class PipelineConfigurationError(IngestionError):
         >>> raise PipelineConfigurationError(
         ...     "Source package 'dlt-rest-api' is not installed",
         ...     source_type="rest_api",
+        ... )
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        source_type: str | None = None,
+        destination_table: str | None = None,
+        pipeline_name: str | None = None,
+        category: ErrorCategory = ErrorCategory.CONFIGURATION,
+    ) -> None:
+        super().__init__(
+            message,
+            source_type=source_type,
+            destination_table=destination_table,
+            pipeline_name=pipeline_name,
+            category=category,
+        )
+
+
+class SinkConnectionError(IngestionError):
+    """Error connecting to the reverse ETL sink destination.
+
+    Raised when the sink destination is unreachable during sink creation
+    or write operations. Typically categorized as TRANSIENT (network issues)
+    or PERMANENT (authentication failures).
+
+    Args:
+        message: Human-readable error description.
+        source_type: Type of data source.
+        destination_table: Target Iceberg table path.
+        pipeline_name: dlt pipeline name.
+        category: Error category (default: TRANSIENT for connection issues).
+
+    Example:
+        >>> raise SinkConnectionError(
+        ...     "Destination API returned 503",
+        ...     source_type="rest_api",
+        ...     category=ErrorCategory.TRANSIENT,
+        ... )
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        source_type: str | None = None,
+        destination_table: str | None = None,
+        pipeline_name: str | None = None,
+        category: ErrorCategory = ErrorCategory.TRANSIENT,
+    ) -> None:
+        super().__init__(
+            message,
+            source_type=source_type,
+            destination_table=destination_table,
+            pipeline_name=pipeline_name,
+            category=category,
+        )
+
+
+class SinkWriteError(IngestionError):
+    """Error writing data to the reverse ETL sink destination.
+
+    Raised when the write operation fails due to rate limiting, timeout,
+    or partial failure. The plugin wraps the failure; destination-specific
+    rollback is the responsibility of the sink connector implementation.
+
+    Args:
+        message: Human-readable error description.
+        source_type: Type of data source.
+        destination_table: Target Iceberg table path.
+        pipeline_name: dlt pipeline name.
+        category: Error category (default: TRANSIENT for write failures).
+
+    Example:
+        >>> raise SinkWriteError(
+        ...     "Rate limit exceeded (HTTP 429)",
+        ...     destination_table="gold.customers",
+        ... )
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        source_type: str | None = None,
+        destination_table: str | None = None,
+        pipeline_name: str | None = None,
+        category: ErrorCategory = ErrorCategory.TRANSIENT,
+    ) -> None:
+        super().__init__(
+            message,
+            source_type=source_type,
+            destination_table=destination_table,
+            pipeline_name=pipeline_name,
+            category=category,
+        )
+
+
+class SinkConfigurationError(IngestionError):
+    """Invalid sink configuration for reverse ETL.
+
+    Raised when the sink cannot be configured due to invalid settings,
+    unsupported sink types, or missing connection details.
+
+    Args:
+        message: Human-readable error description.
+        source_type: Type of data source.
+        destination_table: Target Iceberg table path.
+        pipeline_name: dlt pipeline name.
+        category: Error category (default: CONFIGURATION).
+
+    Example:
+        >>> raise SinkConfigurationError(
+        ...     "Unsupported sink type 'ftp'",
+        ...     source_type="ftp",
         ... )
     """
 

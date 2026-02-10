@@ -33,6 +33,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from floe_core.schemas.quality_score import QualityCheck
+from floe_core.schemas.secrets import SECRET_NAME_PATTERN
 
 # Validation patterns
 FLOE_NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
@@ -469,6 +470,129 @@ class OutputPort(BaseModel):
     ]
 
 
+class DestinationConfig(BaseModel):
+    """Configuration for a reverse ETL destination in floe.yaml (Epic 4G).
+
+    Defines a single reverse ETL destination, specifying the sink type,
+    connection secret reference, and optional configuration for field
+    mapping and batching.
+
+    Attributes:
+        name: Destination identifier (unique within FloeSpec).
+        sink_type: Sink type matching a SinkConnector-supported type.
+        connection_secret_ref: K8s Secret name for credentials (FR-018).
+        source_table: Optional Iceberg Gold table to read from.
+        config: Destination-specific configuration.
+        field_mapping: Column name translation (source -> destination).
+        batch_size: Optional batch size override (ge=1).
+
+    Example:
+        >>> dest = DestinationConfig(
+        ...     name="crm-sync",
+        ...     sink_type="rest_api",
+        ...     connection_secret_ref="crm-api-key",
+        ...     source_table="gold.customers",
+        ...     batch_size=100,
+        ... )
+        >>> dest.name
+        'crm-sync'
+
+    Validation Rules:
+        - FR-011: All required fields present and valid
+        - FR-018: connection_secret_ref matches K8s secret naming
+
+    See Also:
+        - specs/4g-reverse-etl-sink/spec.md: Feature specification
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "crm-sync",
+                    "sink_type": "rest_api",
+                    "connection_secret_ref": "crm-api-key",
+                    "source_table": "gold.customers",
+                    "batch_size": 100,
+                }
+            ]
+        },
+    )
+
+    name: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=100,
+            description="Destination identifier (unique within FloeSpec)",
+            examples=["crm-sync", "hubspot-contacts"],
+        ),
+    ]
+    sink_type: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description="Sink type (must match SinkConnector-supported type)",
+            examples=["rest_api", "sql_database"],
+        ),
+    ]
+    connection_secret_ref: Annotated[  # pragma: allowlist secret
+        str,
+        Field(
+            pattern=SECRET_NAME_PATTERN,
+            max_length=253,
+            description="K8s Secret name for connection credentials (FR-018)",
+            examples=["crm-api-key", "salesforce-credentials"],
+        ),
+    ]
+    source_table: str | None = Field(
+        default=None,
+        description="Optional Iceberg Gold table to read from",
+        examples=["gold.customers", "gold.orders"],
+    )
+    config: dict[str, Any] | None = Field(
+        default=None,
+        description="Destination-specific configuration",
+    )
+    field_mapping: dict[str, str] | None = Field(
+        default=None,
+        description="Column name translation (source -> destination)",
+        examples=[{"email": "Email", "name": "Name"}],
+    )
+    batch_size: int | None = Field(
+        default=None,
+        ge=1,
+        le=100_000,
+        description="Batch size override for write operations (1-100,000)",
+    )
+
+    @field_validator("config")
+    @classmethod
+    def validate_config_depth(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Validate config dict is not excessively large.
+
+        Limits the number of keys to prevent resource exhaustion
+        from unbounded configuration dicts.
+
+        Args:
+            v: Configuration dict or None.
+
+        Returns:
+            Validated configuration dict.
+
+        Raises:
+            ValueError: If config has more than 50 keys.
+        """
+        if v is None:
+            return v
+        if len(v) > 50:
+            msg = f"config has {len(v)} keys, max 50 allowed"
+            raise ValueError(msg)
+        return v
+
+
 class PlatformRef(BaseModel):
     """Reference to a platform manifest.
 
@@ -606,6 +730,10 @@ class FloeSpec(BaseModel):
             description="Output ports for auto-generation of data contracts (Epic 3C)",
         ),
     ]
+    destinations: list[DestinationConfig] | None = Field(
+        default=None,
+        description="Optional reverse ETL destinations (Epic 4G)",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -635,6 +763,31 @@ class FloeSpec(BaseModel):
             )
             raise ValueError(msg)
         return data
+
+    @field_validator("destinations")
+    @classmethod
+    def validate_unique_destination_names(
+        cls, v: list[DestinationConfig] | None
+    ) -> list[DestinationConfig] | None:
+        """Validate that destination names are unique.
+
+        Args:
+            v: List of DestinationConfig objects or None
+
+        Returns:
+            Validated list or None
+
+        Raises:
+            ValueError: If duplicate destination names are found
+        """
+        if v is None:
+            return v
+        names = [d.name for d in v]
+        duplicates = {n for n in names if names.count(n) > 1}
+        if duplicates:
+            msg = f"Duplicate destination names are not allowed: {', '.join(sorted(duplicates))}"
+            raise ValueError(msg)
+        return v
 
     @field_validator("transforms")
     @classmethod
@@ -705,6 +858,7 @@ def _find_forbidden_fields(
 
 
 __all__ = [
+    "DestinationConfig",
     "FloeMetadata",
     "TransformSpec",
     "ScheduleSpec",

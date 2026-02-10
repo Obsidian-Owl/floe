@@ -20,7 +20,9 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import hashlib
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +33,7 @@ from floe_core.plugins.ingestion import (
     IngestionPlugin,
     IngestionResult,
 )
+from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
 
 from floe_ingestion_dlt.config import (
     VALID_SCHEMA_CONTRACTS,
@@ -40,13 +43,19 @@ from floe_ingestion_dlt.config import (
 from floe_ingestion_dlt.errors import (
     PipelineConfigurationError,
     SchemaContractViolation,
+    SinkConfigurationError,
+    SinkWriteError,
 )
 from floe_ingestion_dlt.retry import categorize_error
 from floe_ingestion_dlt.tracing import (
+    egress_span,
     get_tracer,
     ingestion_span,
+    record_egress_error,
+    record_egress_result,
     record_ingestion_error,
     record_ingestion_result,
+    sanitize_error_message,
 )
 
 if TYPE_CHECKING:
@@ -61,12 +70,18 @@ _MIN_TIMEOUT: float = 0.1
 _MAX_TIMEOUT: float = 10.0
 _DEFAULT_TIMEOUT: float = 5.0
 
+# Supported sink types for reverse ETL (FR-006)
+_SUPPORTED_SINKS: list[str] = ["rest_api", "sql_database"]
 
-class DltIngestionPlugin(IngestionPlugin):
+
+class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     """dlt-based ingestion plugin for the floe data platform.
 
     Implements the IngestionPlugin ABC using dlt (data load tool) v1.21+
     for loading data from external sources into Iceberg tables.
+
+    Also implements SinkConnector for reverse ETL — pushing curated data
+    from Iceberg Gold layer to external SaaS APIs and databases (Epic 4G).
 
     Features:
         - REST API, SQL database, and filesystem source support
@@ -509,7 +524,7 @@ class DltIngestionPlugin(IngestionPlugin):
 
             except Exception as e:
                 elapsed = time.perf_counter() - start_time
-                error_msg = str(e)[:500]  # Truncate for safety
+                error_msg = sanitize_error_message(str(e))
 
                 # Check if this is a schema contract violation
                 # dlt raises exceptions containing "schema" and "contract" when
@@ -602,6 +617,11 @@ class DltIngestionPlugin(IngestionPlugin):
             if "s3_endpoint" in catalog_config:
                 dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
             if "s3_access_key" in catalog_config:
+                logger.warning(
+                    "s3_credentials_in_config",
+                    message="S3 credentials should use environment variables "
+                    "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
+                )
                 dest_config["s3_access_key"] = catalog_config["s3_access_key"]
             if "s3_secret_key" in catalog_config:
                 dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
@@ -617,3 +637,278 @@ class DltIngestionPlugin(IngestionPlugin):
             )
 
             return dest_config
+
+    # -----------------------------------------------------------------------
+    # SinkConnector ABC implementation (Epic 4G - Reverse ETL)
+    # -----------------------------------------------------------------------
+
+    def list_available_sinks(self) -> list[str]:
+        """List sink types supported by this connector (FR-006).
+
+        Returns identifiers for the destination types this plugin can
+        write to via dlt's destination API.
+
+        Returns:
+            List of supported sink type identifiers.
+
+        Raises:
+            RuntimeError: If plugin not started.
+        """
+        if not self._started:
+            raise RuntimeError("Plugin must be started before listing sinks — call startup() first")
+
+        tracer = get_tracer()
+        with egress_span(tracer, "list_available_sinks"):
+            logger.info("list_available_sinks", sinks=_SUPPORTED_SINKS)
+            return list(_SUPPORTED_SINKS)
+
+    def create_sink(self, config: SinkConfig) -> Any:
+        """Create a configured sink destination from SinkConfig (FR-007).
+
+        Validates the configuration and returns a destination configuration
+        dict ready for writing. Raises SinkConfigurationError if the sink
+        type is not supported.
+
+        Args:
+            config: Sink destination configuration.
+
+        Returns:
+            Configured destination dict (used by write()).
+
+        Raises:
+            RuntimeError: If plugin not started.
+            SinkConfigurationError: If config is invalid.
+        """
+        if not self._started:
+            raise RuntimeError(
+                "Plugin must be started before creating sinks — call startup() first"
+            )
+
+        tracer = get_tracer()
+        with egress_span(tracer, "create_sink", sink_type=config.sink_type):
+            if config.sink_type not in _SUPPORTED_SINKS:
+                raise SinkConfigurationError(
+                    f"Unsupported sink type '{config.sink_type}'. "
+                    f"Must be one of: {sorted(_SUPPORTED_SINKS)}",
+                    source_type=config.sink_type,
+                )
+
+            sink_config: dict[str, Any] = {
+                "sink_type": config.sink_type,
+                "connection_config": config.connection_config,
+            }
+
+            if config.field_mapping is not None:
+                sink_config["field_mapping"] = config.field_mapping
+            if config.retry_config is not None:
+                sink_config["retry_config"] = config.retry_config
+            if config.batch_size is not None:
+                sink_config["batch_size"] = config.batch_size
+
+            logger.info(
+                "sink_created",
+                sink_type=config.sink_type,
+                has_field_mapping=config.field_mapping is not None,
+                has_retry_config=config.retry_config is not None,
+                batch_size=config.batch_size,
+            )
+
+            return sink_config
+
+    def write(self, sink: Any, data: Any, **kwargs: Any) -> EgressResult:
+        """Push data to the configured sink destination (FR-008).
+
+        Writes data to the destination via a dlt egress pipeline.
+        The ``data`` parameter is a ``pyarrow.Table`` at runtime
+        (typed as Any to avoid a hard dependency on pyarrow in floe-core).
+
+        Args:
+            sink: Configured destination dict from create_sink().
+            data: Data to write (pyarrow.Table at runtime).
+            **kwargs: Additional write options (table_name, write_disposition).
+
+        Returns:
+            EgressResult with delivery metrics and receipt.
+
+        Raises:
+            RuntimeError: If plugin not started.
+            SinkWriteError: If write operation fails or dlt reports failed jobs.
+            SinkConnectionError: If destination is unreachable.
+        """
+        if not self._started:
+            raise RuntimeError("Plugin must be started before writing — call startup() first")
+
+        tracer = get_tracer()
+        sink_type = sink.get("sink_type", "unknown") if isinstance(sink, dict) else "unknown"
+        connection_config = sink.get("connection_config", {}) if isinstance(sink, dict) else {}
+        start_time = time.perf_counter()
+
+        with egress_span(tracer, "write", sink_type=sink_type) as span:
+            try:
+                # Get row count from data (pyarrow.Table has num_rows)
+                num_rows = getattr(data, "num_rows", 0)
+
+                # Handle empty dataset
+                if num_rows == 0:
+                    elapsed = time.perf_counter() - start_time
+                    result = EgressResult(
+                        success=True,
+                        rows_delivered=0,
+                        bytes_transmitted=0,
+                        duration_seconds=elapsed,
+                        idempotency_key=str(uuid.uuid4()),
+                    )
+                    record_egress_result(span, result)
+                    logger.info(
+                        "egress_write_completed",
+                        sink_type=sink_type,
+                        rows_delivered=0,
+                        duration_seconds=elapsed,
+                    )
+                    return result
+
+                # Compute checksum via Arrow IPC wire format (safe, reproducible)
+                import pyarrow as pa
+
+                if isinstance(data, pa.Table):
+                    hasher = hashlib.sha256()
+                    sink_buf = pa.BufferOutputStream()
+                    writer = pa.ipc.new_stream(sink_buf, data.schema)
+                    for batch in data.to_batches():
+                        writer.write_batch(batch)
+                    writer.close()
+                    ipc_bytes = sink_buf.getvalue()
+                    hasher.update(ipc_bytes)
+                    checksum = f"sha256:{hasher.hexdigest()}"
+                    data_bytes_len = len(ipc_bytes)
+                else:
+                    # Fallback for non-Arrow data
+                    data_bytes = str(data).encode("utf-8")
+                    checksum = f"sha256:{hashlib.sha256(data_bytes).hexdigest()}"
+                    data_bytes_len = len(data_bytes)
+
+                # Execute dlt egress pipeline to deliver data to destination
+                import dlt
+
+                table_name = kwargs.get("table_name", "egress_output")
+                write_disposition = kwargs.get("write_disposition", "append")
+
+                pipeline = dlt.pipeline(
+                    pipeline_name=f"floe_egress_{sink_type}",
+                    destination=sink_type,
+                    credentials=connection_config or None,
+                )
+
+                load_info = pipeline.run(
+                    data,
+                    table_name=table_name,
+                    write_disposition=write_disposition,
+                )
+
+                # Verify delivery — dlt marks failed jobs on load_info
+                if getattr(load_info, "has_failed_jobs", False):
+                    raise SinkWriteError(
+                        f"dlt egress pipeline reported failed jobs for sink '{sink_type}'",
+                        source_type=sink_type,
+                    )
+
+                elapsed = time.perf_counter() - start_time
+
+                result = EgressResult(
+                    success=True,
+                    rows_delivered=num_rows,
+                    bytes_transmitted=data_bytes_len,
+                    duration_seconds=elapsed,
+                    checksum=checksum,
+                    delivery_timestamp=datetime.now(timezone.utc).isoformat(),
+                    idempotency_key=str(uuid.uuid4()),
+                )
+
+                record_egress_result(span, result)
+
+                logger.info(
+                    "egress_write_completed",
+                    sink_type=sink_type,
+                    rows_delivered=result.rows_delivered,
+                    bytes_transmitted=result.bytes_transmitted,
+                    duration_seconds=result.duration_seconds,
+                    checksum=result.checksum,
+                )
+
+                return result
+
+            except Exception as e:
+                elapsed = time.perf_counter() - start_time
+                error_msg = sanitize_error_message(str(e))
+
+                record_egress_error(span, e, category="transient")
+
+                logger.error(
+                    "egress_write_failed",
+                    sink_type=sink_type,
+                    error=error_msg,
+                    duration_seconds=elapsed,
+                )
+
+                raise SinkWriteError(
+                    f"Write to sink '{sink_type}' failed: {error_msg}",
+                    source_type=sink_type,
+                ) from e
+
+    def get_source_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
+        """Generate source configuration for reading from Iceberg Gold layer (FR-009).
+
+        Creates configuration for reading from the Iceberg Gold layer
+        via the Polaris catalog. This is the inverse of
+        get_destination_config().
+
+        Args:
+            catalog_config: Catalog connection configuration.
+
+        Returns:
+            Source configuration dict for reading from Iceberg.
+
+        Raises:
+            RuntimeError: If plugin not started.
+        """
+        if not self._started:
+            raise RuntimeError(
+                "Plugin must be started before getting source config — call startup() first"
+            )
+
+        tracer = get_tracer()
+        with egress_span(tracer, "get_source_config"):
+            source_config: dict[str, Any] = {
+                "source": "iceberg",
+                "catalog_type": "rest",
+            }
+
+            if "uri" in catalog_config:
+                source_config["catalog_uri"] = catalog_config["uri"]
+
+            if "warehouse" in catalog_config:
+                source_config["warehouse"] = catalog_config["warehouse"]
+
+            if "s3_endpoint" in catalog_config:
+                source_config["s3_endpoint"] = catalog_config["s3_endpoint"]
+            if "s3_access_key" in catalog_config:
+                logger.warning(
+                    "s3_credentials_in_config",
+                    message="S3 credentials should use environment variables "
+                    "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
+                )
+                source_config["s3_access_key"] = catalog_config["s3_access_key"]
+            if "s3_secret_key" in catalog_config:
+                source_config["s3_secret_key"] = catalog_config["s3_secret_key"]
+            if "s3_region" in catalog_config:
+                source_config["s3_region"] = catalog_config["s3_region"]
+
+            logger.info(
+                "source_config_generated",
+                catalog_type="rest",
+                has_uri="uri" in catalog_config,
+                has_warehouse="warehouse" in catalog_config,
+                has_s3="s3_endpoint" in catalog_config,
+            )
+
+            return source_config

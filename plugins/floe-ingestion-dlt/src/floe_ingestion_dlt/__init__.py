@@ -11,13 +11,14 @@ Example:
     >>> result = ingestion.run(pipeline)
 
 Public API:
-    - DltIngestionPlugin: Main plugin class (implements IngestionPlugin ABC)
+    - DltIngestionPlugin: Main plugin class (implements IngestionPlugin + SinkConnector)
     - DltIngestionConfig: Configuration model for dlt ingestion
     - IngestionSourceConfig: Per-source configuration
     - RetryConfig: Retry behavior configuration
     - ErrorCategory: Error categorization enum
     - IngestionError: Base exception class
-    - Error subclasses: SourceConnectionError, DestinationWriteError, etc.
+    - Error subclasses: SourceConnectionError, DestinationWriteError,
+      SinkConnectionError, SinkWriteError, SinkConfigurationError
 """
 
 from __future__ import annotations
@@ -41,6 +42,9 @@ from floe_ingestion_dlt.errors import (
     IngestionError,
     PipelineConfigurationError,
     SchemaContractViolation,
+    SinkConfigurationError,
+    SinkConnectionError,
+    SinkWriteError,
     SourceConnectionError,
 )
 
@@ -56,8 +60,11 @@ from floe_ingestion_dlt.retry import (
 
 # Tracing utilities
 from floe_ingestion_dlt.tracing import (
+    egress_span,
     get_tracer,
     ingestion_span,
+    record_egress_error,
+    record_egress_result,
     record_ingestion_error,
     record_ingestion_result,
 )
@@ -77,6 +84,9 @@ __all__ = [
     "IngestionError",
     "PipelineConfigurationError",
     "SchemaContractViolation",
+    "SinkConfigurationError",
+    "SinkConnectionError",
+    "SinkWriteError",
     "SourceConnectionError",
     # Plugin
     "DltIngestionPlugin",
@@ -85,8 +95,11 @@ __all__ = [
     "create_retry_decorator",
     "is_retryable",
     # Tracing
+    "egress_span",
     "get_tracer",
     "ingestion_span",
+    "record_egress_error",
+    "record_egress_result",
     "record_ingestion_error",
     "record_ingestion_result",
 ]

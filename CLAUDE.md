@@ -211,6 +211,8 @@ Read when working on specific domain:
 - Iceberg tables via Polaris REST catalog, MinIO/S3 for data files (dlt handles destination config) (4f-ingestion-plugin)
 - Python 3.11 + pydantic>=2.0, opentelemetry-api>=1.39.0, opentelemetry-sdk>=1.20.0, structlog>=24.0, httpx>=0.25.0, sqlalchemy[asyncio]>=2.0, asyncpg>=0.29.0, click>=8.0 (3d-contract-monitoring)
 - PostgreSQL (asyncpg + SQLAlchemy async) for monitoring state, 90-day raw retention + indefinite aggregates (3d-contract-monitoring)
+- Python 3.11 + pydantic>=2.0, pyarrow, dlt[iceberg]>=1.20.0, structlog>=24.0, opentelemetry-api>=1.0, tenacity>=8.0 (4g-reverse-etl-sink)
+- Iceberg Gold layer tables (read-side via Polaris catalog) (4g-reverse-etl-sink)
 
 ## Recent Changes
 - 9b-helm-deployment: Added Python 3.11 (CLI), Go templating (Helm) + Helm 3.12+, Dagster Helm chart 1.12.x, OTel Collector chart 0.85.x

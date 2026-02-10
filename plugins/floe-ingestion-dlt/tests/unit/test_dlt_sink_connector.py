@@ -1,0 +1,386 @@
+"""Unit tests for DltIngestionPlugin SinkConnector mixin implementation.
+
+Epic 4G: Reverse ETL Sink Plugin
+Tests the SinkConnector interface implementation on DltIngestionPlugin,
+which enables writing data from Iceberg Gold layer to external destinations.
+
+These tests follow TDD - they will FAIL until the SinkConnector methods
+are implemented on DltIngestionPlugin.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
+
+import pytest
+from floe_core.plugins.ingestion import IngestionPlugin
+from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
+
+from floe_ingestion_dlt.errors import SinkConfigurationError
+from floe_ingestion_dlt.plugin import DltIngestionPlugin
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+@pytest.fixture
+def dlt_plugin() -> Generator[DltIngestionPlugin, None, None]:
+    """Create started DltIngestionPlugin instance for testing.
+
+    Mocks the dlt import during startup since dlt is a runtime
+    dependency not available in the unit test environment.
+    Configures mock pipeline to simulate successful egress delivery.
+
+    Yields:
+        Started DltIngestionPlugin instance
+
+    Cleanup:
+        Shuts down plugin after test
+    """
+    mock_dlt = MagicMock()
+    mock_dlt.__version__ = "1.20.0"
+    # Configure egress pipeline mock: pipeline.run() returns load_info
+    # with has_failed_jobs=False (simulates successful delivery)
+    mock_load_info = MagicMock()
+    mock_load_info.has_failed_jobs = False
+    mock_dlt.pipeline.return_value.run.return_value = mock_load_info
+    with patch.dict("sys.modules", {"dlt": mock_dlt}):
+        plugin = DltIngestionPlugin()
+        plugin.startup()
+        yield plugin
+        plugin.shutdown()
+
+
+class TestDltSinkConnector:
+    """Tests for DltIngestionPlugin SinkConnector interface implementation."""
+
+    @pytest.mark.requirement("4G-FR-005")
+    def test_isinstance_sink_connector(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test DltIngestionPlugin implements both SinkConnector and IngestionPlugin.
+
+        Validates that the plugin correctly implements the dual interface
+        pattern required for reverse ETL functionality.
+        """
+        assert isinstance(dlt_plugin, SinkConnector)
+        assert isinstance(dlt_plugin, IngestionPlugin)
+
+    @pytest.mark.requirement("4G-FR-006")
+    def test_list_available_sinks_returns_list(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test list_available_sinks returns list containing expected sink types.
+
+        Validates that the plugin exposes rest_api and sql_database sinks
+        as specified in the architecture.
+        """
+        result = dlt_plugin.list_available_sinks()
+
+        assert isinstance(result, list)
+        assert len(result) >= 2
+        assert "rest_api" in result
+        assert "sql_database" in result
+
+    @pytest.mark.requirement("4G-FR-006")
+    def test_list_available_sinks_returns_strings(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test all items in list_available_sinks are strings.
+
+        Validates type safety of the available sinks list.
+        """
+        result = dlt_plugin.list_available_sinks()
+
+        for sink_type in result:
+            assert isinstance(sink_type, str)
+
+    @pytest.mark.requirement("4G-FR-007")
+    def test_create_sink_with_valid_config(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test create_sink succeeds with valid configuration.
+
+        Validates that sink creation works for the rest_api destination
+        with proper connection configuration.
+        """
+        config = SinkConfig(
+            sink_type="rest_api",
+            connection_config={"base_url": "https://api.example.com"},
+        )
+
+        sink = dlt_plugin.create_sink(config)
+
+        assert sink is not None
+
+    @pytest.mark.requirement("4G-FR-007")
+    def test_create_sink_with_invalid_config_raises_error(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Test create_sink raises SinkConfigurationError for invalid sink type.
+
+        Validates proper error handling when an unsupported sink type
+        is requested.
+        """
+        config = SinkConfig(
+            sink_type="invalid_type_xyz",
+            connection_config={},
+        )
+
+        with pytest.raises(SinkConfigurationError):
+            dlt_plugin.create_sink(config)
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_with_mock_data_returns_egress_result(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Test write method returns EgressResult with mock data.
+
+        Validates that data writing succeeds and returns proper metrics
+        including success status and row count.
+        """
+        mock_sink = MagicMock()
+        mock_data = MagicMock()
+        mock_data.num_rows = 100
+
+        result = dlt_plugin.write(mock_sink, mock_data)
+
+        assert isinstance(result, EgressResult)
+        assert result.success is True
+        assert result.rows_delivered >= 0
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_with_empty_table_succeeds(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write succeeds with empty table (0 rows).
+
+        Validates that writing an empty table is handled correctly
+        and returns appropriate metrics.
+        """
+        mock_sink = MagicMock()
+        mock_data = MagicMock()
+        mock_data.num_rows = 0
+
+        result = dlt_plugin.write(mock_sink, mock_data)
+
+        assert result.success is True
+        assert result.rows_delivered == 0
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_returns_egress_result_type(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write returns exactly an EgressResult instance.
+
+        Validates type safety - result must be EgressResult,
+        not a subclass or dict-like object.
+        """
+        mock_sink = MagicMock()
+        mock_data = MagicMock()
+        mock_data.num_rows = 50
+
+        result = dlt_plugin.write(mock_sink, mock_data)
+
+        assert type(result) is EgressResult
+
+    @pytest.mark.requirement("4G-FR-009")
+    def test_get_source_config_returns_iceberg_config(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test get_source_config returns Iceberg catalog configuration.
+
+        Validates that the plugin generates proper source configuration
+        for reading from the Iceberg Gold layer via Polaris catalog.
+        """
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+        }
+
+        result = dlt_plugin.get_source_config(catalog_config)
+
+        assert isinstance(result, dict)
+        # Check for expected keys (exact keys depend on implementation)
+        assert len(result) > 0
+        # At minimum, should contain catalog connection info
+        assert "uri" in result or "catalog_uri" in result
+
+    @pytest.mark.requirement("4G-FR-005")
+    def test_sink_methods_require_started_state(self) -> None:
+        """Test sink methods raise RuntimeError when plugin not started.
+
+        Validates that all SinkConnector methods enforce the startup
+        lifecycle requirement before allowing operations.
+        """
+        unstarted_plugin = DltIngestionPlugin()
+
+        # Test list_available_sinks
+        with pytest.raises(RuntimeError, match="start"):
+            unstarted_plugin.list_available_sinks()
+
+        # Test create_sink
+        config = SinkConfig(sink_type="rest_api", connection_config={})
+        with pytest.raises(RuntimeError, match="start"):
+            unstarted_plugin.create_sink(config)
+
+        # Test write
+        mock_sink = MagicMock()
+        mock_data = MagicMock()
+        with pytest.raises(RuntimeError, match="start"):
+            unstarted_plugin.write(mock_sink, mock_data)
+
+        # Test get_source_config
+        with pytest.raises(RuntimeError, match="start"):
+            unstarted_plugin.get_source_config({})
+
+    @pytest.mark.requirement("4G-SC-007")
+    def test_write_completes_within_5s_for_1000_rows(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write() completes within 5 seconds for 1000-row dataset.
+
+        Performance smoke test validating that the write path can handle
+        a moderately-sized dataset within acceptable latency bounds.
+        Uses a mock sink to isolate write-path overhead from network I/O.
+        """
+        import time
+
+        import pyarrow as pa
+
+        # Create 1000-row Arrow table
+        table = pa.table(
+            {
+                "id": list(range(1000)),
+                "name": [f"row_{i}" for i in range(1000)],
+                "value": [float(i) * 1.5 for i in range(1000)],
+            }
+        )
+
+        mock_sink = MagicMock()
+
+        start = time.monotonic()
+        result = dlt_plugin.write(mock_sink, table)
+        elapsed = time.monotonic() - start
+
+        assert result.success is True
+        assert elapsed < 5.0, f"write() took {elapsed:.2f}s, exceeding 5s limit"
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_checksum_is_deterministic(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write checksum is deterministic for same data.
+
+        Validates that writing the same Arrow table twice produces
+        the same SHA-256 checksum, ensuring reproducibility.
+        """
+        import pyarrow as pa
+
+        table = pa.table({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+        mock_sink = MagicMock()
+
+        result1 = dlt_plugin.write(mock_sink, table)
+        result2 = dlt_plugin.write(mock_sink, table)
+
+        assert result1.checksum == result2.checksum
+        assert result1.checksum.startswith("sha256:")
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_checksum_uses_sha256_prefix(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write checksum has sha256: prefix.
+
+        Validates the checksum format for load assurance verification.
+        """
+        import pyarrow as pa
+
+        table = pa.table({"id": [1], "value": [42.0]})
+        mock_sink = MagicMock()
+
+        result = dlt_plugin.write(mock_sink, table)
+
+        assert result.checksum.startswith("sha256:")
+        # sha256 hex digest is 64 characters
+        assert len(result.checksum) == len("sha256:") + 64
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_invokes_dlt_pipeline(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write() creates and runs a dlt egress pipeline.
+
+        Validates that write() actually delegates data delivery to dlt
+        rather than silently succeeding without writing data.
+        """
+        import sys
+
+        mock_dlt = sys.modules["dlt"]
+
+        sink = dlt_plugin.create_sink(
+            SinkConfig(
+                sink_type="rest_api",
+                connection_config={"base_url": "https://api.example.com"},
+            )
+        )
+        mock_data = MagicMock()
+        mock_data.num_rows = 10
+
+        dlt_plugin.write(sink, mock_data)
+
+        mock_dlt.pipeline.assert_called_once()  # type: ignore[union-attr]
+        mock_dlt.pipeline.return_value.run.assert_called_once()  # type: ignore[union-attr]
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_raises_on_dlt_failed_jobs(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write() raises SinkWriteError when dlt reports failed jobs.
+
+        Validates that delivery failures from the dlt pipeline are
+        propagated as SinkWriteError, not swallowed.
+        """
+        import sys
+
+        mock_dlt = sys.modules["dlt"]
+        # Simulate dlt reporting failed jobs
+        mock_load_info = MagicMock()
+        mock_load_info.has_failed_jobs = True
+        mock_dlt.pipeline.return_value.run.return_value = mock_load_info  # type: ignore[union-attr]
+
+        mock_sink = MagicMock()
+        mock_data = MagicMock()
+        mock_data.num_rows = 10
+
+        from floe_ingestion_dlt.errors import SinkWriteError
+
+        with pytest.raises(SinkWriteError, match="failed jobs"):
+            dlt_plugin.write(mock_sink, mock_data)
+
+    @pytest.mark.requirement("4G-FR-018")
+    def test_get_source_config_warns_on_s3_credentials(
+        self, dlt_plugin: DltIngestionPlugin, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test get_source_config emits warning when S3 credentials are in config.
+
+        Validates that passing S3 credentials through config dicts
+        triggers a deprecation warning recommending environment variables.
+        """
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+            "s3_access_key": "AKIAEXAMPLE",  # pragma: allowlist secret
+            "s3_secret_key": "secret",  # pragma: allowlist secret
+        }
+
+        result = dlt_plugin.get_source_config(catalog_config)
+
+        # Verify config is still passed through (backwards compat)
+        assert result["s3_access_key"] == "AKIAEXAMPLE"
+
+        # Verify warning was actually emitted (structlog writes to stdout)
+        assert "s3_credentials_in_config" in capsys.readouterr().out, (
+            "Expected S3 credential deprecation warning in output"
+        )
+
+    @pytest.mark.requirement("4G-FR-018")
+    def test_get_destination_config_warns_on_s3_credentials(
+        self, dlt_plugin: DltIngestionPlugin, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test get_destination_config emits warning for S3 credentials in config.
+
+        Validates that passing S3 credentials through config dicts
+        triggers a deprecation warning.
+        """
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "s3_access_key": "AKIAEXAMPLE",  # pragma: allowlist secret
+            "s3_secret_key": "secret",  # pragma: allowlist secret
+        }
+
+        result = dlt_plugin.get_destination_config(catalog_config)
+
+        assert result["s3_access_key"] == "AKIAEXAMPLE"
+
+        # Verify warning was actually emitted (structlog writes to stdout)
+        assert "s3_credentials_in_config" in capsys.readouterr().out, (
+            "Expected S3 credential deprecation warning in output"
+        )

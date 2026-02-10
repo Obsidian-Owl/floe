@@ -1,0 +1,5 @@
+# Aikido scanner ignore patterns
+# https://help.aikido.dev/ide-plugins/aikido-mcp#configuring-paths-to-ignore
+
+# Baseline file contains hashes, not actual secrets
+.secrets.baseline
