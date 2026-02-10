@@ -84,6 +84,11 @@ from floe_core.telemetry.propagation import (
 # Provider
 from floe_core.telemetry.provider import ProviderState, TelemetryProvider
 
+# Sanitization utilities
+from floe_core.telemetry.sanitization import (
+    sanitize_error_message as sanitize_error_message,
+)
+
 # Tracing utilities
 from floe_core.telemetry.tracing import (
     create_span,
@@ -140,4 +145,6 @@ __all__: list[str] = [
     "get_tracer",
     "set_tracer",
     "reset_tracer",
+    # Sanitization
+    "sanitize_error_message",
 ]
