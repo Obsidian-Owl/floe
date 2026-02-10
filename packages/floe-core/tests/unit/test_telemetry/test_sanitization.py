@@ -48,8 +48,8 @@ class TestSanitizeErrorMessage:
         """
         # pragma: allowlist secret
         msg = (
-            "Config error: access_key=AKIAIOSFODNN7EXAMPLE "
-            "secret_key=wJalrXUtnFEMI/K7MDENG invalid"
+            "Config error: access_key=AKIAIOSFODNN7EXAMPLE "  # pragma: allowlist secret
+            "secret_key=wJalrXUtnFEMI/K7MDENG invalid"  # pragma: allowlist secret
         )
         result = sanitize_error_message(msg)
 
@@ -160,7 +160,7 @@ class TestSanitizeErrorMessage:
         """
         # pragma: allowlist secret
         msg = (
-            "API request failed: api_key=sk-1234567890abcdef "
+            "API request failed: api_key=sk-1234567890abcdef "  # pragma: allowlist secret
             "endpoint=/v1/data"
         )
         result = sanitize_error_message(msg)
@@ -189,7 +189,7 @@ class TestSanitizeErrorMessage:
         credential=<REDACTED>.
         """
         # pragma: allowlist secret
-        msg = "S3 error: credential=ASIATESTACCESSKEY123 region=us-east-1"
+        msg = "S3 error: credential=ASIATESTACCESSKEY123 region=us-east-1"  # pragma: allowlist secret
         result = sanitize_error_message(msg)
 
         assert result == "S3 error: credential=<REDACTED> region=us-east-1"
