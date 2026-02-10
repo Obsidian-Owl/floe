@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from floe_core.schemas.floe_spec import (
     DestinationConfig,
     FloeMetadata,

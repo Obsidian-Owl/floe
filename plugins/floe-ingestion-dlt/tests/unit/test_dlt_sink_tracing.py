@@ -197,7 +197,7 @@ class TestSanitizeErrorMessage:
         """Test URL credential patterns are redacted."""
         from floe_ingestion_dlt.tracing import sanitize_error_message
 
-        msg = "Failed to connect to http://user:secret@host:5432/db"
+        msg = "Failed to connect to http://user:secret@host:5432/db"  # pragma: allowlist secret
         result = sanitize_error_message(msg)
         assert "secret" not in result
         assert "<REDACTED>" in result

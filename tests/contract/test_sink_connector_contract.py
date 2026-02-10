@@ -26,14 +26,12 @@ from abc import ABC
 from typing import Any
 
 import pytest
-
 from floe_core.plugins.ingestion import (
     IngestionConfig,
     IngestionPlugin,
     IngestionResult,
 )
 from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
-
 
 # ---------------------------------------------------------------------------
 # Expected contract field definitions
@@ -269,9 +267,7 @@ class TestSinkConnectorMixinContract:
                 _ = pipeline, kwargs
                 return IngestionResult(success=True)
 
-            def get_destination_config(
-                self, catalog_config: dict[str, Any]
-            ) -> dict[str, Any]:
+            def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
                 _ = catalog_config
                 return {}
 
@@ -282,15 +278,11 @@ class TestSinkConnectorMixinContract:
                 _ = config
                 return {}
 
-            def write(
-                self, sink: Any, data: Any, **kwargs: Any
-            ) -> EgressResult:
+            def write(self, sink: Any, data: Any, **kwargs: Any) -> EgressResult:
                 _ = sink, data, kwargs
                 return EgressResult(success=True)
 
-            def get_source_config(
-                self, catalog_config: dict[str, Any]
-            ) -> dict[str, Any]:
+            def get_source_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
                 _ = catalog_config
                 return {}
 

@@ -72,10 +72,7 @@ class SinkConfig:
 
         # connection_config depth/size limits
         if len(self.connection_config) > 50:
-            msg = (
-                f"connection_config has {len(self.connection_config)} keys, "
-                "max 50"
-            )
+            msg = f"connection_config has {len(self.connection_config)} keys, max 50"
             raise ValueError(msg)
 
         # field_mapping values must be valid identifiers (prevent injection)

@@ -538,7 +538,7 @@ class DestinationConfig(BaseModel):
             examples=["rest_api", "sql_database"],
         ),
     ]
-    connection_secret_ref: Annotated[
+    connection_secret_ref: Annotated[  # pragma: allowlist secret
         str,
         Field(
             pattern=SECRET_NAME_PATTERN,
@@ -570,9 +570,7 @@ class DestinationConfig(BaseModel):
 
     @field_validator("config")
     @classmethod
-    def validate_config_depth(
-        cls, v: dict[str, Any] | None
-    ) -> dict[str, Any] | None:
+    def validate_config_depth(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         """Validate config dict is not excessively large.
 
         Limits the number of keys to prevent resource exhaustion

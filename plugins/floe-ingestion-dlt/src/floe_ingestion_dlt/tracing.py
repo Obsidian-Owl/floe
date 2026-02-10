@@ -83,7 +83,7 @@ _URL_CREDENTIAL_PATTERN = re.compile(
 def sanitize_error_message(msg: str, max_length: int = 500) -> str:
     """Sanitize an error message by redacting credentials and truncating.
 
-    Strips URL credential patterns (e.g., ``://user:pass@host``) and
+    Strips URL credential patterns (e.g., ``://user:pass@host``) and  # pragma: allowlist secret
     key-value patterns for known sensitive keys (password=, secret_key=,
     etc.) before truncating to max_length.
 
@@ -193,9 +193,7 @@ def ingestion_span(
         except Exception as e:
             span.set_status(Status(StatusCode.ERROR, type(e).__name__))
             span.set_attribute("exception.type", type(e).__name__)
-            span.set_attribute(
-                "exception.message", sanitize_error_message(str(e))
-            )
+            span.set_attribute("exception.message", sanitize_error_message(str(e)))
             raise
 
 
@@ -299,9 +297,7 @@ def egress_span(
         except Exception as e:
             span.set_status(Status(StatusCode.ERROR, type(e).__name__))
             span.set_attribute("exception.type", type(e).__name__)
-            span.set_attribute(
-                "exception.message", sanitize_error_message(str(e))
-            )
+            span.set_attribute("exception.message", sanitize_error_message(str(e)))
             raise
 
 

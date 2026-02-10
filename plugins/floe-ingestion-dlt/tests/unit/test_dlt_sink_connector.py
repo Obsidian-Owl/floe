@@ -60,9 +60,7 @@ class TestDltSinkConnector:
         assert isinstance(dlt_plugin, IngestionPlugin)
 
     @pytest.mark.requirement("4G-FR-006")
-    def test_list_available_sinks_returns_list(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_list_available_sinks_returns_list(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test list_available_sinks returns list containing expected sink types.
 
         Validates that the plugin exposes rest_api and sql_database sinks
@@ -76,9 +74,7 @@ class TestDltSinkConnector:
         assert "sql_database" in result
 
     @pytest.mark.requirement("4G-FR-006")
-    def test_list_available_sinks_returns_strings(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_list_available_sinks_returns_strings(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test all items in list_available_sinks are strings.
 
         Validates type safety of the available sinks list.
@@ -89,9 +85,7 @@ class TestDltSinkConnector:
             assert isinstance(sink_type, str)
 
     @pytest.mark.requirement("4G-FR-007")
-    def test_create_sink_with_valid_config(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_create_sink_with_valid_config(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test create_sink succeeds with valid configuration.
 
         Validates that sink creation works for the rest_api destination
@@ -143,9 +137,7 @@ class TestDltSinkConnector:
         assert result.rows_delivered >= 0
 
     @pytest.mark.requirement("4G-FR-008")
-    def test_write_with_empty_table_succeeds(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_write_with_empty_table_succeeds(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test write succeeds with empty table (0 rows).
 
         Validates that writing an empty table is handled correctly
@@ -161,9 +153,7 @@ class TestDltSinkConnector:
         assert result.rows_delivered == 0
 
     @pytest.mark.requirement("4G-FR-008")
-    def test_write_returns_egress_result_type(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_write_returns_egress_result_type(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test write returns exactly an EgressResult instance.
 
         Validates type safety - result must be EgressResult,
@@ -178,9 +168,7 @@ class TestDltSinkConnector:
         assert type(result) is EgressResult
 
     @pytest.mark.requirement("4G-FR-009")
-    def test_get_source_config_returns_iceberg_config(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_get_source_config_returns_iceberg_config(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test get_source_config returns Iceberg catalog configuration.
 
         Validates that the plugin generates proper source configuration
@@ -228,9 +216,7 @@ class TestDltSinkConnector:
             unstarted_plugin.get_source_config({})
 
     @pytest.mark.requirement("4G-SC-007")
-    def test_write_completes_within_5s_for_1000_rows(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_write_completes_within_5s_for_1000_rows(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test write() completes within 5 seconds for 1000-row dataset.
 
         Performance smoke test validating that the write path can handle
@@ -260,9 +246,7 @@ class TestDltSinkConnector:
         assert elapsed < 5.0, f"write() took {elapsed:.2f}s, exceeding 5s limit"
 
     @pytest.mark.requirement("4G-FR-008")
-    def test_write_checksum_is_deterministic(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_write_checksum_is_deterministic(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test write checksum is deterministic for same data.
 
         Validates that writing the same Arrow table twice produces
@@ -280,9 +264,7 @@ class TestDltSinkConnector:
         assert result1.checksum.startswith("sha256:")
 
     @pytest.mark.requirement("4G-FR-008")
-    def test_write_checksum_uses_sha256_prefix(
-        self, dlt_plugin: DltIngestionPlugin
-    ) -> None:
+    def test_write_checksum_uses_sha256_prefix(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test write checksum has sha256: prefix.
 
         Validates the checksum format for load assurance verification.
@@ -310,8 +292,8 @@ class TestDltSinkConnector:
         catalog_config = {
             "uri": "http://polaris:8181/api/catalog",
             "warehouse": "floe_warehouse",
-            "s3_access_key": "AKIAEXAMPLE",
-            "s3_secret_key": "secret",
+            "s3_access_key": "AKIAEXAMPLE",  # pragma: allowlist secret
+            "s3_secret_key": "secret",  # pragma: allowlist secret
         }
 
         result = dlt_plugin.get_source_config(catalog_config)
@@ -335,8 +317,8 @@ class TestDltSinkConnector:
         """
         catalog_config = {
             "uri": "http://polaris:8181/api/catalog",
-            "s3_access_key": "AKIAEXAMPLE",
-            "s3_secret_key": "secret",
+            "s3_access_key": "AKIAEXAMPLE",  # pragma: allowlist secret
+            "s3_secret_key": "secret",  # pragma: allowlist secret
         }
 
         result = dlt_plugin.get_destination_config(catalog_config)

@@ -88,23 +88,22 @@ class TestSinkWhitelistEnforcement:
             validate_sink_whitelist,
         )
 
-        spec = _make_spec_with_destinations([
-            {
-                "name": "any-sink",
-                "sink_type": "anything_exotic",
-                "connection_secret_ref": "secret-ref",
-            }
-        ])
+        spec = _make_spec_with_destinations(
+            [
+                {
+                    "name": "any-sink",
+                    "sink_type": "anything_exotic",
+                    "connection_secret_ref": "secret-ref",  # pragma: allowlist secret
+                }
+            ]
+        )
 
         manifest_mock = MagicMock()
         manifest_mock.approved_sinks = None
 
         # Exercise the same guard condition as compile_pipeline:
         # if manifest.approved_sinks is not None and spec.destinations is not None
-        if (
-            manifest_mock.approved_sinks is not None
-            and spec.destinations is not None
-        ):
+        if manifest_mock.approved_sinks is not None and spec.destinations is not None:
             for destination in spec.destinations:
                 validate_sink_whitelist(
                     sink_type=destination.sink_type,
@@ -135,10 +134,7 @@ class TestSinkWhitelistEnforcement:
         # Exercise the same guard condition as compile_pipeline:
         # if manifest.approved_sinks is not None and spec.destinations is not None
         validated_count = 0
-        if (
-            manifest_mock.approved_sinks is not None
-            and spec.destinations is not None
-        ):
+        if manifest_mock.approved_sinks is not None and spec.destinations is not None:
             for destination in spec.destinations:
                 validate_sink_whitelist(
                     sink_type=destination.sink_type,

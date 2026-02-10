@@ -262,10 +262,7 @@ def compile_pipeline(
                 dry_run=dry_run,
             )
             # Validate sink destinations against enterprise whitelist
-            if (
-                manifest.approved_sinks is not None
-                and spec.destinations is not None
-            ):
+            if manifest.approved_sinks is not None and spec.destinations is not None:
                 from floe_core.schemas.plugins import validate_sink_whitelist
 
                 for destination in spec.destinations:

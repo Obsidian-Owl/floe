@@ -402,9 +402,7 @@ class PlatformManifest(BaseModel):
 
         # C006: approved_sinks only for enterprise scope
         if self.approved_sinks is not None and self.scope != "enterprise":
-            msg = (
-                f"approved_sinks is only valid for scope='enterprise', not scope={self.scope!r}."
-            )
+            msg = f"approved_sinks is only valid for scope='enterprise', not scope={self.scope!r}."
             raise ValueError(msg)
 
         return self

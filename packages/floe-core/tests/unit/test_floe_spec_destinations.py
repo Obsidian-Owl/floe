@@ -17,9 +17,7 @@ from pydantic import ValidationError
 
 from floe_core.schemas.floe_spec import (
     DestinationConfig,
-    FloeMetadata,
     FloeSpec,
-    TransformSpec,
 )
 
 
@@ -40,7 +38,7 @@ def valid_destination_data() -> dict[str, Any]:
     return {
         "name": "crm-sync",
         "sink_type": "rest_api",
-        "connection_secret_ref": "crm-api-key",
+        "connection_secret_ref": "crm-api-key",  # pragma: allowlist secret
     }
 
 
@@ -76,7 +74,7 @@ class TestDestinationConfig:
         destination = DestinationConfig(
             name="salesforce-sync",
             sink_type="salesforce",
-            connection_secret_ref="sf-credentials",
+            connection_secret_ref="sf-credentials",  # pragma: allowlist secret
             source_table="gold.customers",
             config={"object_type": "Contact", "operation": "upsert"},
             field_mapping={"email": "Email", "name": "Name"},
@@ -117,9 +115,7 @@ class TestDestinationConfig:
         """
         invalid_data = {**valid_destination_data, "name": ""}
 
-        with pytest.raises(
-            ValidationError, match="String should have at least 1 character"
-        ):
+        with pytest.raises(ValidationError, match="String should have at least 1 character"):
             DestinationConfig(**invalid_data)
 
     @pytest.mark.requirement("4G-FR-018")
@@ -133,7 +129,7 @@ class TestDestinationConfig:
         """
         invalid_data = {
             **valid_destination_data,
-            "connection_secret_ref": "INVALID!!ref",
+            "connection_secret_ref": "INVALID!!ref",  # pragma: allowlist secret
         }
 
         with pytest.raises(ValidationError, match="String should match pattern"):
@@ -154,9 +150,9 @@ class TestDestinationConfig:
                 {
                     "name": "crm-sync",
                     "sink_type": "rest_api",
-                    "connection_secret_ref": "crm-api-key",
+                    "connection_secret_ref": "crm-api-key",  # pragma: allowlist secret
                     "config": {
-                        "password": "secret123",
+                        "password": "secret123",  # pragma: allowlist secret
                     },
                 }
             ],
@@ -175,9 +171,7 @@ class TestDestinationConfig:
         """
         invalid_data = {**valid_destination_data, "batch_size": 0}
 
-        with pytest.raises(
-            ValidationError, match="Input should be greater than or equal to 1"
-        ):
+        with pytest.raises(ValidationError, match="Input should be greater than or equal to 1"):
             DestinationConfig(**invalid_data)
 
     @pytest.mark.requirement("4G-SEC-010")
@@ -261,7 +255,7 @@ class TestFloeSpecDestinations:
                 {
                     "name": "hubspot-sync",
                     "sink_type": "hubspot",
-                    "connection_secret_ref": "hubspot-api-key",
+                    "connection_secret_ref": "hubspot-api-key",  # pragma: allowlist secret
                 },
             ],
         }
@@ -291,7 +285,7 @@ class TestFloeSpecDestinations:
                 {
                     "name": "crm-sync",  # Duplicate name
                     "sink_type": "different_sink",
-                    "connection_secret_ref": "other-secret",
+                    "connection_secret_ref": "other-secret",  # pragma: allowlist secret
                 },
             ],
         }
@@ -310,7 +304,5 @@ class TestFloeSpecDestinations:
         """
         invalid_data = {**valid_destination_data, "batch_size": 100_001}
 
-        with pytest.raises(
-            ValidationError, match="Input should be less than or equal to 100000"
-        ):
+        with pytest.raises(ValidationError, match="Input should be less than or equal to 100000"):
             DestinationConfig(**invalid_data)

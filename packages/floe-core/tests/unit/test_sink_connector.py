@@ -28,7 +28,6 @@ from floe_core.plugins.ingestion import (
 )
 from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
 
-
 # ---------------------------------------------------------------------------
 # Mock implementations for testing
 # ---------------------------------------------------------------------------

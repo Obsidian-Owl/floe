@@ -655,9 +655,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             RuntimeError: If plugin not started.
         """
         if not self._started:
-            raise RuntimeError(
-                "Plugin must be started before listing sinks — call startup() first"
-            )
+            raise RuntimeError("Plugin must be started before listing sinks — call startup() first")
 
         tracer = get_tracer()
         with egress_span(tracer, "list_available_sinks"):
@@ -738,9 +736,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             SinkConnectionError: If destination is unreachable.
         """
         if not self._started:
-            raise RuntimeError(
-                "Plugin must be started before writing — call startup() first"
-            )
+            raise RuntimeError("Plugin must be started before writing — call startup() first")
 
         tracer = get_tracer()
         sink_type = sink.get("sink_type", "unknown") if isinstance(sink, dict) else "unknown"
